@@ -379,36 +379,41 @@ case class KeyGroupedPartitioning(
     expressions: Seq[Expression],
     numPartitions: Int,
     partitionValues: Seq[InternalRow] = Seq.empty,
-    originalPartitionValues: Seq[InternalRow] = Seq.empty) extends HashPartitioningLike {
+    originalPartitionValues: Seq[InternalRow] = Seq.empty,
+    isPartiallyClustered: Boolean = false) extends HashPartitioningLike {
 
+  // See SPARK-55848. We must check ClusteredDistribution BEFORE delegating to
+  // super.satisfies0(), because HashPartitioningLike.satisfies0() also matches
+  // ClusteredDistribution and returns true, which would short-circuit the
+  // isPartiallyClustered guard.
   override def satisfies0(required: Distribution): Boolean = {
-    super.satisfies0(required) || {
-      required match {
-        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
-          if (requireAllClusterKeys) {
-            // Checks whether this partitioning is partitioned on exactly same clustering keys of
-            // `ClusteredDistribution`.
-            c.areAllClusterKeysMatched(expressions)
-          } else {
-            // We'll need to find leaf attributes from the partition expressions first.
-            val attributes = expressions.flatMap(_.collectLeaves())
-
-            if (SQLConf.get.v2BucketingAllowJoinKeysSubsetOfPartitionKeys) {
-              // check that join keys (required clustering keys)
-              // overlap with partition keys (KeyGroupedPartitioning attributes)
-              requiredClustering.exists(x => attributes.exists(_.semanticEquals(x))) &&
-                  expressions.forall(_.collectLeaves().size == 1)
-            } else {
-              attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))
-            }
-          }
-
-        case o @ OrderedDistribution(_) if SQLConf.get.v2BucketingAllowSorting =>
-          o.areAllClusterKeysMatched(expressions)
-
-        case _ =>
+    required match {
+      case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
+        if (isPartiallyClustered) {
           false
-      }
+        } else if (requireAllClusterKeys) {
+          // Checks whether this partitioning is partitioned on exactly same clustering keys of
+          // `ClusteredDistribution`.
+          c.areAllClusterKeysMatched(expressions)
+        } else {
+          // We'll need to find leaf attributes from the partition expressions first.
+          val attributes = expressions.flatMap(_.collectLeaves())
+
+          if (SQLConf.get.v2BucketingAllowJoinKeysSubsetOfPartitionKeys) {
+            // check that join keys (required clustering keys)
+            // overlap with partition keys (KeyGroupedPartitioning attributes)
+            requiredClustering.exists(x => attributes.exists(_.semanticEquals(x))) &&
+                expressions.forall(_.collectLeaves().size == 1)
+          } else {
+            attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+          }
+        }
+
+      case o @ OrderedDistribution(_) if SQLConf.get.v2BucketingAllowSorting =>
+        o.areAllClusterKeysMatched(expressions)
+
+      case _ =>
+        super.satisfies0(required)
     }
   }
 
@@ -420,7 +425,7 @@ case class KeyGroupedPartitioning(
       // the returned shuffle spec.
       val joinKeyPositions = result.keyPositions.map(_.nonEmpty).zipWithIndex.filter(_._1).map(_._2)
       val projectedPartitioning = KeyGroupedPartitioning(expressions, joinKeyPositions,
-          partitionValues, originalPartitionValues)
+          partitionValues, originalPartitionValues, isPartiallyClustered)
       result.copy(partitioning = projectedPartitioning, joinKeyPositions = Some(joinKeyPositions))
     } else {
       result
@@ -435,7 +440,7 @@ case class KeyGroupedPartitioning(
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
-    copy(expressions = newChildren)
+    copy(expressions = newChildren, isPartiallyClustered = isPartiallyClustered)
 }
 
 object KeyGroupedPartitioning {
@@ -443,7 +448,8 @@ object KeyGroupedPartitioning {
       expressions: Seq[Expression],
       projectionPositions: Seq[Int],
       partitionValues: Seq[InternalRow],
-      originalPartitionValues: Seq[InternalRow]): KeyGroupedPartitioning = {
+      originalPartitionValues: Seq[InternalRow],
+      isPartiallyClustered: Boolean): KeyGroupedPartitioning = {
     val projectedExpressions = projectionPositions.map(expressions(_))
     val projectedPartitionValues = partitionValues.map(project(expressions, projectionPositions, _))
     val projectedOriginalPartitionValues =
@@ -455,7 +461,7 @@ object KeyGroupedPartitioning {
         .map(_.row)
 
     KeyGroupedPartitioning(projectedExpressions, finalPartitionValues.length,
-      finalPartitionValues, projectedOriginalPartitionValues)
+      finalPartitionValues, projectedOriginalPartitionValues, isPartiallyClustered)
   }
 
   def project(
@@ -823,7 +829,10 @@ case class KeyGroupedShuffleSpec(
     //        transform functions.
     //  4. the partition values from both sides are following the same order.
     case otherSpec @ KeyGroupedShuffleSpec(otherPartitioning, otherDistribution, _) =>
-      distribution.clustering.length == otherDistribution.clustering.length &&
+      // SPARK-55848: partially-clustered partitioning is not compatible for SPJ
+      !partitioning.isPartiallyClustered &&
+        !otherPartitioning.isPartiallyClustered &&
+        distribution.clustering.length == otherDistribution.clustering.length &&
         numPartitions == other.numPartitions && areKeysCompatible(otherSpec) &&
           partitioning.partitionValues.zip(otherPartitioning.partitionValues).forall {
             case (left, right) =>
