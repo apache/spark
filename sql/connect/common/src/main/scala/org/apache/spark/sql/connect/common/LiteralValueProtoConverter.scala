@@ -528,7 +528,8 @@ object LiteralValueProtoConverter {
       if (literal.getLiteralTypeCase == proto.Expression.Literal.LiteralTypeCase.NULL) {
         literal.getNull
       } else {
-        ProtoTypeOps.getProtoDataTypeFromLiteral(literal)
+        ProtoTypeOps
+          .getProtoDataTypeFromLiteral(literal)
           .getOrElse(getProtoDataTypeDefault(literal))
       }
     }
@@ -622,9 +623,7 @@ object LiteralValueProtoConverter {
               .setValueContainsNull(true)
               .build())
         } else {
-          throw InvalidPlanInput(
-            "CONNECT_INVALID_PLAN.MAP_LITERAL_MISSING_DATA_TYPE",
-            Map.empty)
+          throw InvalidPlanInput("CONNECT_INVALID_PLAN.MAP_LITERAL_MISSING_DATA_TYPE", Map.empty)
         }
       case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
         if (literal.getStruct.hasStructType) {

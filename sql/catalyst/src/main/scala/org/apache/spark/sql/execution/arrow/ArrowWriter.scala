@@ -59,61 +59,62 @@ object ArrowWriter {
   }
 
   private[sql] def createFieldWriterDefault(
-      dt: DataType, vector: ValueVector): ArrowFieldWriter = (dt, vector) match {
-    case (BooleanType, vector: BitVector) => new BooleanWriter(vector)
-    case (ByteType, vector: TinyIntVector) => new ByteWriter(vector)
-    case (ShortType, vector: SmallIntVector) => new ShortWriter(vector)
-    case (IntegerType, vector: IntVector) => new IntegerWriter(vector)
-    case (LongType, vector: BigIntVector) => new LongWriter(vector)
-    case (FloatType, vector: Float4Vector) => new FloatWriter(vector)
-    case (DoubleType, vector: Float8Vector) => new DoubleWriter(vector)
-    case (DecimalType.Fixed(precision, scale), vector: DecimalVector) =>
-      new DecimalWriter(vector, precision, scale)
-    case (StringType, vector: VarCharVector) => new StringWriter(vector)
-    case (StringType, vector: LargeVarCharVector) => new LargeStringWriter(vector)
-    case (BinaryType, vector: VarBinaryVector) => new BinaryWriter(vector)
-    case (BinaryType, vector: LargeVarBinaryVector) => new LargeBinaryWriter(vector)
-    case (DateType, vector: DateDayVector) => new DateWriter(vector)
-    case (TimestampType, vector: TimeStampMicroTZVector) => new TimestampWriter(vector)
-    case (TimestampNTZType, vector: TimeStampMicroVector) => new TimestampNTZWriter(vector)
-    case (_: TimeType, vector: TimeNanoVector) => new TimeWriter(vector)
-    case (ArrayType(_, _), vector: ListVector) =>
-      val elementVector = createFieldWriter(vector.getDataVector())
-      new ArrayWriter(vector, elementVector)
-    case (MapType(_, _, _), vector: MapVector) =>
-      val structVector = vector.getDataVector.asInstanceOf[StructVector]
-      val keyWriter = createFieldWriter(structVector.getChild(MapVector.KEY_NAME))
-      val valueWriter = createFieldWriter(structVector.getChild(MapVector.VALUE_NAME))
-      new MapWriter(vector, structVector, keyWriter, valueWriter)
-    case (StructType(_), vector: StructVector) =>
-      val children = (0 until vector.size()).map { ordinal =>
-        createFieldWriter(vector.getChildByOrdinal(ordinal))
-      }
-      new StructWriter(vector, children.toArray)
-    case (NullType, vector: NullVector) => new NullWriter(vector)
-    case (_: YearMonthIntervalType, vector: IntervalYearVector) =>
-      new IntervalYearWriter(vector)
-    case (_: DayTimeIntervalType, vector: DurationVector) => new DurationWriter(vector)
-    case (CalendarIntervalType, vector: IntervalMonthDayNanoVector) =>
-      new IntervalMonthDayNanoWriter(vector)
-    case (VariantType, vector: StructVector) =>
-      val children = (0 until vector.size()).map { ordinal =>
-        createFieldWriter(vector.getChildByOrdinal(ordinal))
-      }
-      new StructWriter(vector, children.toArray)
-    case (dt: GeometryType, vector: StructVector) =>
-      val children = (0 until vector.size()).map { ordinal =>
-        createFieldWriter(vector.getChildByOrdinal(ordinal))
-      }
-      new GeometryWriter(dt, vector, children.toArray)
-    case (dt: GeographyType, vector: StructVector) =>
-      val children = (0 until vector.size()).map { ordinal =>
-        createFieldWriter(vector.getChildByOrdinal(ordinal))
-      }
-      new GeographyWriter(dt, vector, children.toArray)
-    case (dt, _) =>
-      throw ExecutionErrors.unsupportedDataTypeError(dt)
-  }
+      dt: DataType, vector: ValueVector): ArrowFieldWriter =
+    (dt, vector) match {
+      case (BooleanType, vector: BitVector) => new BooleanWriter(vector)
+      case (ByteType, vector: TinyIntVector) => new ByteWriter(vector)
+      case (ShortType, vector: SmallIntVector) => new ShortWriter(vector)
+      case (IntegerType, vector: IntVector) => new IntegerWriter(vector)
+      case (LongType, vector: BigIntVector) => new LongWriter(vector)
+      case (FloatType, vector: Float4Vector) => new FloatWriter(vector)
+      case (DoubleType, vector: Float8Vector) => new DoubleWriter(vector)
+      case (DecimalType.Fixed(precision, scale), vector: DecimalVector) =>
+        new DecimalWriter(vector, precision, scale)
+      case (StringType, vector: VarCharVector) => new StringWriter(vector)
+      case (StringType, vector: LargeVarCharVector) => new LargeStringWriter(vector)
+      case (BinaryType, vector: VarBinaryVector) => new BinaryWriter(vector)
+      case (BinaryType, vector: LargeVarBinaryVector) => new LargeBinaryWriter(vector)
+      case (DateType, vector: DateDayVector) => new DateWriter(vector)
+      case (TimestampType, vector: TimeStampMicroTZVector) => new TimestampWriter(vector)
+      case (TimestampNTZType, vector: TimeStampMicroVector) => new TimestampNTZWriter(vector)
+      case (_: TimeType, vector: TimeNanoVector) => new TimeWriter(vector)
+      case (ArrayType(_, _), vector: ListVector) =>
+        val elementVector = createFieldWriter(vector.getDataVector())
+        new ArrayWriter(vector, elementVector)
+      case (MapType(_, _, _), vector: MapVector) =>
+        val structVector = vector.getDataVector.asInstanceOf[StructVector]
+        val keyWriter = createFieldWriter(structVector.getChild(MapVector.KEY_NAME))
+        val valueWriter = createFieldWriter(structVector.getChild(MapVector.VALUE_NAME))
+        new MapWriter(vector, structVector, keyWriter, valueWriter)
+      case (StructType(_), vector: StructVector) =>
+        val children = (0 until vector.size()).map { ordinal =>
+          createFieldWriter(vector.getChildByOrdinal(ordinal))
+        }
+        new StructWriter(vector, children.toArray)
+      case (NullType, vector: NullVector) => new NullWriter(vector)
+      case (_: YearMonthIntervalType, vector: IntervalYearVector) =>
+        new IntervalYearWriter(vector)
+      case (_: DayTimeIntervalType, vector: DurationVector) => new DurationWriter(vector)
+      case (CalendarIntervalType, vector: IntervalMonthDayNanoVector) =>
+        new IntervalMonthDayNanoWriter(vector)
+      case (VariantType, vector: StructVector) =>
+        val children = (0 until vector.size()).map { ordinal =>
+          createFieldWriter(vector.getChildByOrdinal(ordinal))
+        }
+        new StructWriter(vector, children.toArray)
+      case (dt: GeometryType, vector: StructVector) =>
+        val children = (0 until vector.size()).map { ordinal =>
+          createFieldWriter(vector.getChildByOrdinal(ordinal))
+        }
+        new GeometryWriter(dt, vector, children.toArray)
+      case (dt: GeographyType, vector: StructVector) =>
+        val children = (0 until vector.size()).map { ordinal =>
+          createFieldWriter(vector.getChildByOrdinal(ordinal))
+        }
+        new GeographyWriter(dt, vector, children.toArray)
+      case (dt, _) =>
+        throw ExecutionErrors.unsupportedDataTypeError(dt)
+    }
 }
 
 class ArrowWriter(val root: VectorSchemaRoot, fields: Array[ArrowFieldWriter]) {

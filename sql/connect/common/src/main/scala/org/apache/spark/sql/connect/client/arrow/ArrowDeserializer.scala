@@ -99,7 +99,7 @@ object ArrowDeserializers {
   private def deserializerForDefault(
       encoder: AgnosticEncoder[_],
       data: AnyRef,
-      timeZoneId: String): Deserializer[Any] =
+      timeZoneId: String): Deserializer[Any] = {
     (encoder, data) match {
       case (PrimitiveBooleanEncoder | BoxedBooleanEncoder, v: FieldVector) =>
         new LeafFieldDeserializer[Boolean](encoder, v, timeZoneId) {
@@ -423,6 +423,7 @@ object ArrowDeserializers {
         throw new RuntimeException(
           s"Unsupported Encoder($encoder)/Vector(${data.getClass}) combination.")
     }
+  }
 
   private val methodLookup = MethodHandles.lookup()
 

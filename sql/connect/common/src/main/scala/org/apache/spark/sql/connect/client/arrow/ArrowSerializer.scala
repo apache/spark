@@ -245,7 +245,7 @@ object ArrowSerializer {
       .map(_.createArrowSerializer(v).asInstanceOf[Serializer])
       .getOrElse(serializerForDefault(encoder, v))
 
-  private def serializerForDefault[E](encoder: AgnosticEncoder[E], v: AnyRef): Serializer =
+  private def serializerForDefault[E](encoder: AgnosticEncoder[E], v: AnyRef): Serializer = {
     (encoder, v) match {
       case (PrimitiveBooleanEncoder | BoxedBooleanEncoder, v: BitVector) =>
         new FieldSerializer[Boolean, BitVector](v) {
@@ -523,6 +523,7 @@ object ArrowSerializer {
       case _ =>
         throw new RuntimeException(s"Unsupported Encoder($encoder)/Vector($v) combination.")
     }
+  }
 
   private val methodLookup = MethodHandles.lookup()
 

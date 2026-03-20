@@ -33,7 +33,7 @@ object DataTypeProtoConverter {
   def toCatalystType(t: proto.DataType): DataType =
     ProtoTypeOps.toCatalystType(t).getOrElse(toCatalystTypeDefault(t))
 
-  private def toCatalystTypeDefault(t: proto.DataType): DataType =
+  private def toCatalystTypeDefault(t: proto.DataType): DataType = {
     t.getKindCase match {
       case proto.DataType.KindCase.NULL => NullType
 
@@ -97,6 +97,7 @@ object DataTypeProtoConverter {
           "CONNECT_INVALID_PLAN.DATA_TYPE_UNSUPPORTED_PROTO_TO_CATALYST",
           Map("kindCase" -> t.getKindCase.toString))
     }
+  }
 
   private def toCatalystDecimalType(t: proto.DataType.Decimal): DecimalType = {
     (t.hasPrecision, t.hasScale) match {
@@ -182,7 +183,7 @@ object DataTypeProtoConverter {
       .map(_.toConnectProtoType)
       .getOrElse(toConnectProtoTypeDefault(t, bytesToBinary))
 
-  private def toConnectProtoTypeDefault(t: DataType, bytesToBinary: Boolean): proto.DataType =
+  private def toConnectProtoTypeDefault(t: DataType, bytesToBinary: Boolean): proto.DataType = {
     t match {
       case NullType => ProtoDataTypes.NullType
 
@@ -402,4 +403,5 @@ object DataTypeProtoConverter {
           "CONNECT_INVALID_PLAN.DATA_TYPE_UNSUPPORTED_CATALYST_TO_PROTO",
           Map("typeName" -> t.typeName))
     }
+  }
 }

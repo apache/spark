@@ -112,8 +112,7 @@ object ProtoTypeOps {
    * Reverse lookup: returns the proto DataType inferred from a proto literal's type case, if the
    * literal type belongs to a framework-managed type.
    */
-  def getProtoDataTypeFromLiteral(
-      literal: proto.Expression.Literal): Option[proto.DataType] = {
+  def getProtoDataTypeFromLiteral(literal: proto.Expression.Literal): Option[proto.DataType] = {
     if (!SqlApiConf.get.typesFrameworkEnabled) return None
     literal.getLiteralTypeCase match {
       case proto.Expression.Literal.LiteralTypeCase.TIME =>
