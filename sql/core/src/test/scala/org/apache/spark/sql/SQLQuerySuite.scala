@@ -5100,6 +5100,15 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(sql("SELECT 1L UNION SELECT 1"), Row(1L))
     }
   }
+
+  test("SPARK-56035: Introduce `AggregationValidator` for single-pass `Aggregate` validation") {
+    withSQLConf(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "true") {
+      sql("SELECT col1 + rand() FROM VALUES(1) GROUP BY ALL")
+      sql("SELECT col1 + rand() FROM VALUES(1) GROUP BY 1")
+      sql("SELECT rand() FROM VALUES(1) GROUP BY ALL")
+      sql("SELECT col1 - rand() FROM VALUES(1) GROUP BY ALL")
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
