@@ -234,7 +234,7 @@ private[spark] object HistorySnapshotStore extends Logging {
    * Any failure while deleting is logged and suppressed so snapshot invalidation does not mask the
    * original restore failure.
    */
-  def invalidateSnapshot(
+  def deleteInvalidSnapshot(
       conf: SparkConf,
       appId: String,
       manifestPath: Path): Unit = {

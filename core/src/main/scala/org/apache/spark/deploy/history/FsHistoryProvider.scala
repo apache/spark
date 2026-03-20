@@ -1504,7 +1504,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       } catch {
         case e: InvalidHistorySnapshotException =>
           logInfo(s"Failed to import invalid snapshot for appId: $appId.", e)
-          HistorySnapshotStore.invalidateSnapshot(conf, appId, snapshot)
+          HistorySnapshotStore.deleteInvalidSnapshot(conf, appId, snapshot)
         case e: Exception =>
           logInfo(s"Failed to import snapshot for appId: $appId.", e)
       }
@@ -1700,7 +1700,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           Utils.tryLogNonFatalError {
             store.close()
           }
-          HistorySnapshotStore.invalidateSnapshot(conf, appId, snapshot)
+          HistorySnapshotStore.deleteInvalidSnapshot(conf, appId, snapshot)
       }
     }
 
