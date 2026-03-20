@@ -112,9 +112,9 @@ class ArrowUDTFTestsMixin:
         @arrow_udtf(returnType="batch_id int, name string, count int")
         class RecordBatchUDTF:
             def eval(self, batch_size: "pa.Array") -> Iterator["pa.RecordBatch"]:
-                assert isinstance(
-                    batch_size, pa.Array
-                ), f"Expected pa.Array, got {type(batch_size)}"
+                assert isinstance(batch_size, pa.Array), (
+                    f"Expected pa.Array, got {type(batch_size)}"
+                )
 
                 size = batch_size[0].as_py()
 
@@ -373,9 +373,8 @@ class ArrowUDTFTestsMixin:
         # Should fail with Arrow cast exception since string cannot be cast to int
         with self.assertRaisesRegex(
             PythonException,
-            "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF\\] "
-            "Column names of the returned pyarrow.Table or pyarrow.RecordBatch do not match "
-            "specified schema. Expected: int32 Actual: string",
+            "PySparkTypeError: Result type of column 'id' does not match the expected type. "
+            "Expected: int32, got: string.",
         ):
             result_df = StringToIntUDTF()
             result_df.collect()
@@ -519,9 +518,9 @@ class ArrowUDTFTestsMixin:
         @arrow_udtf(returnType="filtered_id bigint")  # Use bigint to match int64
         class TableArgUDTF:
             def eval(self, table_data: "pa.RecordBatch") -> Iterator["pa.Table"]:
-                assert isinstance(
-                    table_data, pa.RecordBatch
-                ), f"Expected pa.RecordBatch, got {type(table_data)}"
+                assert isinstance(table_data, pa.RecordBatch), (
+                    f"Expected pa.RecordBatch, got {type(table_data)}"
+                )
 
                 # Convert record batch to table to work with it more easily
                 table = pa.table(table_data)
@@ -556,12 +555,12 @@ class ArrowUDTFTestsMixin:
             def eval(
                 self, table_data: "pa.RecordBatch", threshold: "pa.Array"
             ) -> Iterator["pa.Table"]:
-                assert isinstance(
-                    threshold, pa.Array
-                ), f"Expected pa.Array for threshold, got {type(threshold)}"
-                assert isinstance(
-                    table_data, pa.RecordBatch
-                ), f"Expected pa.RecordBatch for table_data, got {type(table_data)}"
+                assert isinstance(threshold, pa.Array), (
+                    f"Expected pa.Array for threshold, got {type(threshold)}"
+                )
+                assert isinstance(table_data, pa.RecordBatch), (
+                    f"Expected pa.RecordBatch for table_data, got {type(table_data)}"
+                )
 
                 threshold_val = threshold[0].as_py()
 
@@ -752,9 +751,9 @@ class ArrowUDTFTestsMixin:
             def eval(self, table_data: "pa.RecordBatch") -> Iterator["pa.Table"]:
                 table = pa.table(table_data)
                 partition_key = pc.unique(table["partition_key"]).to_pylist()
-                assert (
-                    len(partition_key) == 1
-                ), f"Expected exactly one partition key, got {partition_key}"
+                assert len(partition_key) == 1, (
+                    f"Expected exactly one partition key, got {partition_key}"
+                )
                 self._partition_key = partition_key[0]
                 self._sum += pc.sum(table["value"]).as_py()
                 # Don't yield here - accumulate and yield in terminate
@@ -1026,9 +1025,9 @@ class ArrowUDTFTestsMixin:
                 if self._product is None:
                     self._product = product
                 else:
-                    assert (
-                        self._product == product
-                    ), f"Mixed products {self._product} and {product} in partition"
+                    assert self._product == product, (
+                        f"Mixed products {self._product} and {product} in partition"
+                    )
 
                 self._batches.append(table)
                 self._seen += table.num_rows
@@ -1125,7 +1124,8 @@ class ArrowUDTFTestsMixin:
         # Create DataFrame with 5 input partitions but all data will map to partition_key=1
         # range(1, 10, 1, 5) creates ids from 1 to 9 with 5 partitions
         input_df = self.spark.range(1, 10, 1, 5).selectExpr(
-            "1 as partition_key", "id"  # constant partition key
+            "1 as partition_key",
+            "id",  # constant partition key
         )
 
         self.spark.udtf.register("single_partition_udtf", SinglePartitionUDTF)
@@ -1512,12 +1512,12 @@ class ArrowUDTFTestsMixin:
             def eval(
                 self, threshold: "pa.Array", table_data: "pa.RecordBatch"
             ) -> Iterator["pa.Table"]:
-                assert isinstance(
-                    threshold, pa.Array
-                ), f"Expected pa.Array for threshold, got {type(threshold)}"
-                assert isinstance(
-                    table_data, pa.RecordBatch
-                ), f"Expected pa.RecordBatch for table_data, got {type(table_data)}"
+                assert isinstance(threshold, pa.Array), (
+                    f"Expected pa.Array for threshold, got {type(threshold)}"
+                )
+                assert isinstance(table_data, pa.RecordBatch), (
+                    f"Expected pa.RecordBatch for table_data, got {type(table_data)}"
+                )
 
                 threshold_val = threshold[0].as_py()
 
@@ -1558,15 +1558,15 @@ class ArrowUDTFTestsMixin:
                 table_data: "pa.RecordBatch",
                 max_threshold: "pa.Array",
             ) -> Iterator["pa.Table"]:
-                assert isinstance(
-                    min_threshold, pa.Array
-                ), f"Expected pa.Array for min_threshold, got {type(min_threshold)}"
-                assert isinstance(
-                    table_data, pa.RecordBatch
-                ), f"Expected pa.RecordBatch for table_data, got {type(table_data)}"
-                assert isinstance(
-                    max_threshold, pa.Array
-                ), f"Expected pa.Array for max_threshold, got {type(max_threshold)}"
+                assert isinstance(min_threshold, pa.Array), (
+                    f"Expected pa.Array for min_threshold, got {type(min_threshold)}"
+                )
+                assert isinstance(table_data, pa.RecordBatch), (
+                    f"Expected pa.RecordBatch for table_data, got {type(table_data)}"
+                )
+                assert isinstance(max_threshold, pa.Array), (
+                    f"Expected pa.Array for max_threshold, got {type(max_threshold)}"
+                )
 
                 min_val = min_threshold[0].as_py()
                 max_val = max_threshold[0].as_py()
@@ -1607,12 +1607,12 @@ class ArrowUDTFTestsMixin:
             def eval(
                 self, table_data: "pa.RecordBatch", multiplier: "pa.Array"
             ) -> Iterator["pa.Table"]:
-                assert isinstance(
-                    table_data, pa.RecordBatch
-                ), f"Expected pa.RecordBatch for table_data, got {type(table_data)}"
-                assert isinstance(
-                    multiplier, pa.Array
-                ), f"Expected pa.Array for multiplier, got {type(multiplier)}"
+                assert isinstance(table_data, pa.RecordBatch), (
+                    f"Expected pa.RecordBatch for table_data, got {type(table_data)}"
+                )
+                assert isinstance(multiplier, pa.Array), (
+                    f"Expected pa.Array for multiplier, got {type(multiplier)}"
+                )
 
                 multiplier_val = multiplier[0].as_py()
 
@@ -1674,9 +1674,9 @@ class ArrowUDTFTestsMixin:
         @arrow_udtf(returnType="id bigint, doubled bigint")
         class TestArrowUDTFWithLogging:
             def eval(self, table_data: "pa.RecordBatch") -> Iterator["pa.Table"]:
-                assert isinstance(
-                    table_data, pa.RecordBatch
-                ), f"Expected pa.RecordBatch, got {type(table_data)}"
+                assert isinstance(table_data, pa.RecordBatch), (
+                    f"Expected pa.RecordBatch, got {type(table_data)}"
+                )
 
                 logger = logging.getLogger("test_arrow_udtf")
                 logger.warning(f"arrow udtf: {table_data.to_pydict()}")

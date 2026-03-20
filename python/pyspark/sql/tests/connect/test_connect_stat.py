@@ -213,7 +213,7 @@ class SparkConnectStatTests(SparkConnectSQLTestCase):
             },
         )
         with self.assertRaises(ValueError) as context:
-            self.connect.read.table(self.tbl_name2).stat.corr("col1", "col3", "spearman"),
+            (self.connect.read.table(self.tbl_name2).stat.corr("col1", "col3", "spearman"),)
             self.assertTrue(
                 "Currently only the calculation of the Pearson Correlation "
                 + "coefficient is supported."

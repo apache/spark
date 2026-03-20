@@ -1728,9 +1728,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         self, func: Callable[..., ParentDataFrame], *args: Any, **kwargs: Any
     ) -> ParentDataFrame:
         result = func(self, *args, **kwargs)
-        assert isinstance(
-            result, DataFrame
-        ), "Func returned an instance of type [%s], " "should have been DataFrame." % type(result)
+        assert isinstance(result, DataFrame), (
+            "Func returned an instance of type [%s], should have been DataFrame." % type(result)
+        )
         return result
 
     def sameSemantics(self, other: ParentDataFrame) -> bool:

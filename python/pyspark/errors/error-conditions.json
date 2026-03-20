@@ -40,11 +40,6 @@
       "Not supported to call `<func_name>` before initialize <object>."
     ]
   },
-  "CANNOT_ACCEPT_OBJECT_IN_TYPE": {
-    "message": [
-      "`<data_type>` can not accept object `<obj_name>` in type `<obj_type>`."
-    ]
-  },
   "CANNOT_ACCESS_TO_DUNDER": {
     "message": [
       "Dunder(double underscore) attribute is for internal use only."
@@ -182,11 +177,6 @@
       "so specifying individual datasets with <conflicting_option> is not allowed."
     ]
   },
-  "CONNECT_URL_ALREADY_DEFINED": {
-    "message": [
-      "Only one Spark Connect client URL can be set; however, got a different URL [<new_url>] from the existing [<existing_url>]."
-    ]
-  },
   "CONNECT_URL_NOT_SET": {
     "message": [
       "Cannot create a Spark Connect session because the Spark Connect remote URL has not been set. Please define the remote URL by setting either the 'spark.remote' option or the 'SPARK_REMOTE' environment variable."
@@ -225,11 +215,6 @@
   "DATA_SOURCE_TYPE_MISMATCH": {
     "message": [
       "Expected <expected>, but got <actual>."
-    ]
-  },
-  "DATA_SOURCE_UNSUPPORTED_FILTER": {
-    "message": [
-      "Unexpected filter <name>."
     ]
   },
   "DECORATOR_ARGUMENT_NOT_CALLABLE": {
@@ -653,12 +638,6 @@
     ],
     "sqlState": "42K09"
   },
-  "NOT_BOOL_OR_LIST": {
-    "message": [
-      "Argument `<arg_name>` should be a bool or list, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
   "NOT_BOOL_OR_STR": {
     "message": [
       "Argument `<arg_name>` should be a bool or str, got <arg_type>."
@@ -704,12 +683,6 @@
   "NOT_COLUMN_OR_INT_OR_STR": {
     "message": [
       "Argument `<arg_name>` should be a Column, int or str, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_COLUMN_OR_LIST_OR_STR": {
-    "message": [
-      "Argument `<arg_name>` should be a Column, list or str, got <arg_type>."
     ],
     "sqlState": "42K09"
   },
@@ -1050,11 +1023,6 @@
   "RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDF": {
     "message": [
       "Column names of the returned pyarrow.Table do not match specified schema.<missing><extra>"
-    ]
-  },
-  "RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF": {
-    "message": [
-      "Column names of the returned pyarrow.Table or pyarrow.RecordBatch do not match specified schema. Expected: <expected> Actual: <actual>"
     ]
   },
   "RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF": {

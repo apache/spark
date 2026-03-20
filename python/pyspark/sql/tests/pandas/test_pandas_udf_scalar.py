@@ -688,7 +688,7 @@ class ScalarPandasUDFTestsMixin:
                 yield pd.Series(1)
 
         with self.assertRaisesRegex(
-            Exception, "The length of output in Scalar iterator.*" "the length of output was 1"
+            Exception, "The length of output in Scalar iterator.*the length of output was 1"
         ):
             df.select(iter_udf_wong_output_size(col("id"))).collect()
 

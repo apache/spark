@@ -2476,6 +2476,13 @@
           "Single-pass analyzer output schema:",
           "<singlePassOutputSchema>"
         ]
+      },
+      "SINGLE_PASS_FAILED_FIXED_POINT_SUCCEEDED" : {
+        "message" : [
+          "Single-pass resolution failed, but fixed-point resolution succeeded.",
+          "Fixed-point analyzer output:",
+          "<fixedPointOutput>"
+        ]
       }
     },
     "sqlState" : "XX000"
@@ -3082,6 +3089,44 @@
       "The expected format is ByteString, but was <unsupported> (<class>)."
     ],
     "sqlState" : "22P03"
+  },
+  "INVALID_CDC_OPTION" : {
+    "message" : [
+      "Invalid Change Data Capture (CDC) option."
+    ],
+    "subClass" : {
+      "CONFLICTING_RANGE_TYPES" : {
+        "message" : [
+          "Cannot specify both version and timestamp ranges for CDC queries. Use either `startingVersion`/`endingVersion` or `startingTimestamp`/`endingTimestamp`."
+        ]
+      },
+      "INVALID_DEDUPLICATION_MODE" : {
+        "message" : [
+          "Invalid `deduplicationMode`: '<mode>'. Expected one of: none, dropCarryovers, netChanges."
+        ]
+      },
+      "INVALID_TIMESTAMP" : {
+        "message" : [
+          "The timestamp '<timestamp>' cannot be cast to TIMESTAMP type for CDC queries."
+        ]
+      },
+      "INVALID_TIMESTAMP_EXPR" : {
+        "message" : [
+          "The timestamp expression for CDC queries must not contain subqueries."
+        ]
+      },
+      "MISSING_STARTING_TIMESTAMP" : {
+        "message" : [
+          "`startingTimestamp` is required when `endingTimestamp` is specified for CDC queries."
+        ]
+      },
+      "MISSING_STARTING_VERSION" : {
+        "message" : [
+          "`startingVersion` is required when `endingVersion` is specified for CDC queries."
+        ]
+      }
+    },
+    "sqlState" : "42K03"
   },
   "INVALID_CLONE_SESSION_REQUEST" : {
     "message" : [
@@ -7364,6 +7409,16 @@
       "CATALOG_OPERATION" : {
         "message" : [
           "Catalog <catalogName> does not support <operation>."
+        ]
+      },
+      "CHANGE_DATA_CAPTURE" : {
+        "message" : [
+          "Catalog <catalogName> does not support Change Data Capture (CDC)."
+        ]
+      },
+      "CHANGE_DATA_CAPTURE_ON_RELATION" : {
+        "message" : [
+          "Relation <relationId> does not support Change Data Capture (CDC)."
         ]
       },
       "CLAUSE_WITH_PIPE_OPERATORS" : {

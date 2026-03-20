@@ -28,7 +28,7 @@ from decimal import Decimal
 from typing import Callable, Iterable, List, Union, Iterator, Tuple
 
 from pyspark.errors import AnalysisException, PythonException
-from pyspark.profiler import has_memory_profiler
+from pyspark.memory_profiler_ext import has_memory_profiler
 from pyspark.sql.datasource import (
     CaseInsensitiveDict,
     DataSource,
@@ -88,7 +88,7 @@ class BasePythonDataSourceTestsMixin:
     def test_basic_data_source_reader_class(self):
         class MyDataSourceReader(DataSourceReader):
             def read(self, partition):
-                yield None,
+                yield (None,)
 
         reader = MyDataSourceReader()
         self.assertEqual(list(reader.read(None)), [(None,)])
@@ -895,7 +895,7 @@ class BasePythonDataSourceTestsMixin:
                     class TestReader2(DataSourceReader):
                         def read(self, partition):
                             ctypes.string_at(0)
-                            yield "x",
+                            yield ("x",)
 
                     self.spark.dataSource.register(TestDataSource)
 
@@ -1363,6 +1363,18 @@ class PythonDataSourceTestsWithSimpleWorker(PythonDataSourceTests):
     @classmethod
     def conf(self):
         return super().conf().set("spark.python.use.daemon", "false")
+
+    # Simple Worker is super slow because there's no reuse of workers
+    # so we skip some tests that create many workers
+
+    def test_filter_type(self):
+        pass
+
+    def test_unsupported_filter(self):
+        pass
+
+    def test_filter_value_type(self):
+        pass
 
 
 if __name__ == "__main__":

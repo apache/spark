@@ -935,7 +935,10 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
 
         # LogisticRegressionWithSGD does only binary classification.
         self._model = LogisticRegressionModel(
-            initialWeights, 0, initialWeights.size, 2  # type: ignore[attr-defined]
+            initialWeights,
+            0,
+            initialWeights.size,  # type: ignore[attr-defined]
+            2,
         )
         return self
 

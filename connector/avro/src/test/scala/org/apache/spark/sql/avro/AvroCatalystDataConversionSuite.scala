@@ -386,4 +386,53 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
     checkDeserialization(avroSchema, avroRecord, Some(expected))
     checkDeserialization(avroSchema, avroRecord, Some(expected))
   }
+
+  test("SPARK-56043: AvroDataToCatalyst with unresolvable schema reference") {
+    // Avro 1.12.x throws NPE from ParseContext.resolve() for undefined named types.
+    // Our fix wraps the NPE in SchemaParseException so the existing parseMode error
+    // handling works correctly (FAILFAST -> MALFORMED_AVRO_MESSAGE).
+    val invalidSchema =
+      """
+        |{
+        |  "type": "record",
+        |  "name": "TestRecord",
+        |  "fields": [
+        |    {"name": "value", "type": "UndefinedType"}
+        |  ]
+        |}
+      """.stripMargin
+
+    val data = Literal(Array[Byte](1, 2, 3))
+    intercept[SparkException] {
+      AvroDataToCatalyst(data, invalidSchema, Map("mode" -> "FAILFAST")).eval()
+    }
+  }
+
+  test("SPARK-56043: AvroDataToCatalyst with malformed JSON schema") {
+    val malformedSchema = "not valid json"
+    val data = Literal(Array[Byte](1, 2, 3))
+    intercept[SparkException] {
+      AvroDataToCatalyst(data, malformedSchema, Map("mode" -> "FAILFAST")).eval()
+    }
+  }
+
+  test("SPARK-56043: bare string schema reference triggers NPE in Avro 1.12.x") {
+    // This is the exact pattern that triggers NPE from ParseContext.resolve() in 1.12.x.
+    // In 1.11.x this threw SchemaParseException. Our fix wraps NPE in SchemaParseException.
+    val bareStringRef = "\"com.test.Missing\""
+
+    // Verify raw Avro 1.12.x parser throws NPE for bare string references
+    val rawException = intercept[Exception] {
+      new Schema.Parser().setValidateDefaults(false).parse(bareStringRef)
+    }
+    assert(rawException.isInstanceOf[NullPointerException],
+      s"Expected NullPointerException from Avro 1.12.x ParseContext.resolve(), " +
+      s"but got ${rawException.getClass.getName}: ${rawException.getMessage}")
+
+    // Verify our fix wraps it in SchemaParseException
+    val wrappedException = intercept[org.apache.avro.SchemaParseException] {
+      AvroUtils.parseAvroSchema(bareStringRef)
+    }
+    assert(wrappedException.getCause.isInstanceOf[NullPointerException])
+  }
 }
