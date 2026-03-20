@@ -318,7 +318,8 @@ test("range with invalid long value") {
     val rowCount = Some(plan.rowCount * childrenSize)
     val attributeStats = AttributeMap(
       Seq(
-        attribute -> ColumnStat(min = Some(1), max = Some(10), nullCount = Some(0))))
+        attribute -> ColumnStat(
+          distinctCount = Some(10), min = Some(1), max = Some(10), nullCount = Some(0))))
     checkStats(
       union,
       expectedStatsCboOn = Statistics(sizeInBytes = sizeInBytes,
