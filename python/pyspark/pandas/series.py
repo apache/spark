@@ -54,6 +54,7 @@ from pandas.api.extensions import no_default
 from pandas.api.types import (
     is_list_like,
     is_hashable,
+    is_numeric_dtype,
     CategoricalDtype,
 )
 from pandas.tseries.frequencies import DateOffset  # type: ignore[attr-defined]
@@ -1092,9 +1093,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         if not isinstance(other, Series):
             raise TypeError("unsupported type: %s" % type(other))
-        if not np.issubdtype(self.dtype, np.number):  # type: ignore[arg-type]
+        if not is_numeric_dtype(self.dtype):
             raise TypeError("unsupported dtype: %s" % self.dtype)
-        if not np.issubdtype(other.dtype, np.number):  # type: ignore[arg-type]
+        if not is_numeric_dtype(other.dtype):
             raise TypeError("unsupported dtype: %s" % other.dtype)
         if not isinstance(ddof, int):
             raise TypeError("ddof must be integer")
