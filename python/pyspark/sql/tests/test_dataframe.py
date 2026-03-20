@@ -885,9 +885,7 @@ class DataFrameTestsMixin:
                         [(1, "Alice"), (2, "Bob")], ["id", "name"]
                     ).write.mode("overwrite").saveAsTable("testcat.ns1.target")
 
-                source = self.spark.createDataFrame(
-                    [(1, "Charlie"), (3, "David")], ["id", "name"]
-                )  # type: DataFrame
+                source = self.spark.createDataFrame([(1, "Charlie"), (3, "David")], ["id", "name"])  # type: DataFrame
 
                 from pyspark.sql.functions import col
 

@@ -220,6 +220,38 @@ abstract class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAn
     assert(store.read(classOf[ApplicationStoreInfo], dstC.getAbsolutePath).size === 2)
   }
 
+  test("SPARK-56044: release with delete cleans up store when app is not in active map") {
+    val manager = mockManager()
+    val leaseA = manager.lease(2)
+    doReturn(2L).when(manager).sizeOf(meq(leaseA.tmpPath))
+    val dstPathA = manager.appStorePath("app1", None)
+    doReturn(2L).when(manager).sizeOf(meq(dstPathA))
+    val dst = leaseA.commit("app1", None)
+    assert(dst.exists())
+    assert(manager.committed() === 2)
+
+    // Release without deleting; the store remains on disk and in the listing.
+    doReturn(2L).when(manager).sizeOf(meq(dst))
+    manager.release("app1", None)
+    assert(dst.exists())
+    assert(manager.committed() === 2)
+
+    // Simulate: service restarts, new disk manager is initialized with an empty active map.
+    val manager2 = mockManager()
+    doReturn(2L).when(manager2).sizeOf(meq(dst))
+    doReturn(2L).when(manager2).sizeOf(meq(new File(testDir, "apps")))
+    manager2.initialize()
+    assert(dst.exists())
+    assert(store.read(classOf[ApplicationStoreInfo], dst.getAbsolutePath).size === 2)
+
+    // Delete via release; the app was never opened in manager2 so it is not in the active map.
+    manager2.release("app1", None, delete = true)
+    assert(!dst.exists())
+    assert(!store.view(classOf[ApplicationStoreInfo]).iterator().hasNext)
+    assert(manager2.committed() === 0)
+    assert(manager2.free() === MAX_USAGE)
+  }
+
   test("SPARK-38095: appStorePath should use backend extensions") {
     val conf = new SparkConf().set(HYBRID_STORE_DISK_BACKEND, backend.toString)
     val manager = new HistoryServerDiskManager(conf, testDir, store, new ManualClock())

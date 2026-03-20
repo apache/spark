@@ -33,7 +33,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  *
  * Change rows can be pre-populated via [[addChangeRows()]] before querying.
  */
-class InMemoryChangelogCatalog extends InMemoryTableCatalog {
+class InMemoryChangelogCatalog extends InMemoryCatalog {
 
   // tableName -> list of change rows (each row: Array[Any] matching changelog schema)
   private val changeData: mutable.Map[String, mutable.ArrayBuffer[InternalRow]] =

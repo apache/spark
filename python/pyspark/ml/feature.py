@@ -1961,8 +1961,7 @@ class _ImputerParams(HasInputCol, HasInputCols, HasOutputCol, HasOutputCols, Has
     missingValue: Param[float] = Param(
         Params._dummy(),
         "missingValue",
-        "The placeholder for the missing values. All occurrences of missingValue "
-        "will be imputed.",
+        "The placeholder for the missing values. All occurrences of missingValue will be imputed.",
         typeConverter=TypeConverters.toFloat,
     )
 
@@ -3824,7 +3823,7 @@ class _RobustScalerParams(HasInputCol, HasOutputCol, HasRelativeError):
     withScaling: Param[bool] = Param(
         Params._dummy(),
         "withScaling",
-        "Whether to scale the data to " "quantile range",
+        "Whether to scale the data to quantile range",
         typeConverter=TypeConverters.toBoolean,
     )
 

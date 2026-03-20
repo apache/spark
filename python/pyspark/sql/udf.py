@@ -221,7 +221,7 @@ class UserDefinedFunction:
                 raise PySparkNotImplementedError(
                     errorClass="NOT_IMPLEMENTED",
                     messageParameters={
-                        "feature": f"Invalid return type with scalar Pandas UDFs: " f"{returnType}"
+                        "feature": f"Invalid return type with scalar Pandas UDFs: {returnType}"
                     },
                 )
         elif (
@@ -234,7 +234,7 @@ class UserDefinedFunction:
                 raise PySparkNotImplementedError(
                     errorClass="NOT_IMPLEMENTED",
                     messageParameters={
-                        "feature": f"Invalid return type with scalar Arrow UDFs: " f"{returnType}"
+                        "feature": f"Invalid return type with scalar Arrow UDFs: {returnType}"
                     },
                 )
         elif (
@@ -274,7 +274,7 @@ class UserDefinedFunction:
                     raise PySparkNotImplementedError(
                         errorClass="NOT_IMPLEMENTED",
                         messageParameters={
-                            "feature": f"Invalid return type in mapInPandas: " f"{returnType}"
+                            "feature": f"Invalid return type in mapInPandas: {returnType}"
                         },
                     )
             else:
@@ -316,8 +316,7 @@ class UserDefinedFunction:
                     raise PySparkNotImplementedError(
                         errorClass="NOT_IMPLEMENTED",
                         messageParameters={
-                            "feature": f"Invalid return type in cogroup.applyInPandas: "
-                            f"{returnType}"
+                            "feature": f"Invalid return type in cogroup.applyInPandas: {returnType}"
                         },
                     )
             else:
@@ -336,8 +335,7 @@ class UserDefinedFunction:
                     raise PySparkNotImplementedError(
                         errorClass="NOT_IMPLEMENTED",
                         messageParameters={
-                            "feature": "Invalid return type in cogroup.applyInArrow: "
-                            f"{returnType}"
+                            "feature": f"Invalid return type in cogroup.applyInArrow: {returnType}"
                         },
                     )
             else:
@@ -484,7 +482,11 @@ class UserDefinedFunction:
                 def func(*args: Any, **kwargs: Any) -> Any:
                     assert memory_profiler is not None
                     return memory_profiler.profile(
-                        sub_lines, start_line, f, *args, **kwargs  # type: ignore[arg-type]
+                        sub_lines,  # type: ignore[arg-type]
+                        start_line,
+                        f,
+                        *args,
+                        **kwargs,
                     )
 
                 func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]

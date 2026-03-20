@@ -1004,8 +1004,7 @@ class MultiIndex(Index):
             if level < 0:
                 if (level + nlevels) < 0:
                     raise IndexError(
-                        "Too many levels: Index has only %d levels, "
-                        "not %d" % (nlevels, level + 1)
+                        "Too many levels: Index has only %d levels, not %d" % (nlevels, level + 1)
                     )
                 level = level + nlevels
         else:

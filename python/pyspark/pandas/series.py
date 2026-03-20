@@ -1050,7 +1050,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             rmask = self < right
         else:
             raise ValueError(
-                "Inclusive has to be either string of 'both'," "'left', 'right', or 'neither'."
+                "Inclusive has to be either string of 'both','left', 'right', or 'neither'."
             )
 
         return lmask & rmask
@@ -2206,7 +2206,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             method = None
 
         return self._fillna_with_method(
-            value=value, method=method, axis=axis, inplace=inplace, limit=limit  # type: ignore[arg-type]
+            value=value,
+            method=method,  # type: ignore[arg-type]
+            axis=axis,
+            inplace=inplace,
+            limit=limit,
         )
 
     def _fillna_with_method(
@@ -2290,7 +2294,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         return DataFrame(
             self._psdf._internal.with_new_spark_column(
-                self._column_label, scol.alias(name_like_string(self.name))  # TODO: dtype?
+                self._column_label,
+                scol.alias(name_like_string(self.name)),  # TODO: dtype?
             )
         )._psser_for(self._column_label)
 
@@ -4528,14 +4533,20 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if len(results) == 0:
             raise ValueError("attempt to get idxmin of an empty sequence")
         if results[0][0] is None:
-            # This will only happen when skipna is False because we will
-            # place nulls first.
-            warnings.warn(
-                "The behavior of Series.idxmax with all-NA values, or any-NA and skipna=False, "
-                "is deprecated. In a future version this will raise ValueError",
-                FutureWarning,
-            )
-            return np.nan
+            if LooseVersion(pd.__version__) < "3.0.0":
+                # This will only happen when skipna is False because we will
+                # place nulls first.
+                warnings.warn(
+                    "The behavior of Series.idxmax with all-NA values, or any-NA and skipna=False, "
+                    "is deprecated. In a future version this will raise ValueError",
+                    FutureWarning,
+                )
+                return np.nan
+            else:
+                if skipna:
+                    raise ValueError("Encountered all NA values")
+                else:
+                    raise ValueError("Encountered an NA value with skipna=False")
         values = list(results[0][1:])
         if len(values) == 1:
             return values[0]
@@ -4641,14 +4652,20 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if len(results) == 0:
             raise ValueError("attempt to get idxmin of an empty sequence")
         if results[0][0] is None:
-            # This will only happen when skipna is False because we will
-            # place nulls first.
-            warnings.warn(
-                "The behavior of Series.idxmin with all-NA values, or any-NA and skipna=False, "
-                "is deprecated. In a future version this will raise ValueError",
-                FutureWarning,
-            )
-            return np.nan
+            if LooseVersion(pd.__version__) < "3.0.0":
+                # This will only happen when skipna is False because we will
+                # place nulls first.
+                warnings.warn(
+                    "The behavior of Series.idxmin with all-NA values, or any-NA and skipna=False, "
+                    "is deprecated. In a future version this will raise ValueError",
+                    FutureWarning,
+                )
+                return np.nan
+            else:
+                if skipna:
+                    raise ValueError("Encountered all NA values")
+                else:
+                    raise ValueError("Encountered an NA value with skipna=False")
         values = list(results[0][1:])
         if len(values) == 1:
             return values[0]
@@ -5182,9 +5199,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         elif not isinstance(regex, bool):
             raise NotImplementedError("'regex' of %s type is not supported" % type(regex).__name__)
         elif regex is True:
-            assert isinstance(
-                to_replace, str
-            ), "If 'regex' is True then 'to_replace' must be a string"
+            assert isinstance(to_replace, str), (
+                "If 'regex' is True then 'to_replace' must be a string"
+            )
 
         if to_replace is None:
             if LooseVersion(pd.__version__) < "3.0.0":
@@ -5354,7 +5371,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 .alias(self._psdf._internal.spark_column_name_for(self._column_label))
             )
             internal = self._psdf._internal.with_new_spark_column(
-                self._column_label, scol  # TODO: dtype?
+                self._column_label,
+                scol,  # TODO: dtype?
             )
             self._update_internal_frame(internal)
         else:
@@ -5370,7 +5388,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             )
 
             internal = combined["this"]._internal.with_new_spark_column(
-                self._column_label, scol  # TODO: dtype?
+                self._column_label,
+                scol,  # TODO: dtype?
             )
 
             self._update_internal_frame(internal.resolved_copy, check_same_anchor=False)
@@ -5750,7 +5769,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             *index_scols, cond.alias(self._internal.data_spark_column_names[0])
         ).distinct()
         internal = self._internal.with_new_sdf(
-            sdf, index_fields=combined._internal.index_fields, data_fields=[None]  # TODO: dtype?
+            sdf,
+            index_fields=combined._internal.index_fields,
+            data_fields=[None],  # TODO: dtype?
         )
         return first_series(DataFrame(internal))
 
@@ -6535,13 +6556,19 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             max_value = results[0]
             # If the maximum is achieved in multiple locations, the first row position is returned.
             if max_value[0] is None:
-                warnings.warn(
-                    "The behavior of Series.argmax/argmin "
-                    "with skipna=False and NAs, or with all-NAs is deprecated. "
-                    "In a future version this will raise ValueError.",
-                    FutureWarning,
-                )
-                return -1
+                if LooseVersion(pd.__version__) < "3.0.0":
+                    warnings.warn(
+                        "The behavior of Series.argmax/argmin "
+                        "with skipna=False and NAs, or with all-NAs is deprecated. "
+                        "In a future version this will raise ValueError.",
+                        FutureWarning,
+                    )
+                    return -1
+                else:
+                    if skipna:
+                        raise ValueError("Encountered all NA values")
+                    else:
+                        raise ValueError("Encountered an NA value with skipna=False")
             else:
                 return max_value[1]
 
@@ -6604,13 +6631,19 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             min_value = results[0]
             # If the maximum is achieved in multiple locations, the first row position is returned.
             if min_value[0] is None:
-                warnings.warn(
-                    "The behavior of Series.argmax/argmin "
-                    "with skipna=False and NAs, or with all-NAs is deprecated. "
-                    "In a future version this will raise ValueError.",
-                    FutureWarning,
-                )
-                return -1
+                if LooseVersion(pd.__version__) < "3.0.0":
+                    warnings.warn(
+                        "The behavior of Series.argmax/argmin "
+                        "with skipna=False and NAs, or with all-NAs is deprecated. "
+                        "In a future version this will raise ValueError.",
+                        FutureWarning,
+                    )
+                    return -1
+                else:
+                    if skipna:
+                        raise ValueError("Encountered all NA values")
+                    else:
+                        raise ValueError("Encountered an NA value with skipna=False")
             else:
                 return min_value[1]
 
@@ -7443,8 +7476,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     )
                 else:
                     footer = (
-                        "\nName: {name}, dtype: {dtype}"
-                        "\nShowing only the first {length}".format(
+                        "\nName: {name}, dtype: {dtype}\nShowing only the first {length}".format(
                             length=length, name=self.name, dtype=pprint_thing(dtype_name)
                         )
                     )

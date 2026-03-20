@@ -826,9 +826,7 @@ def predict_batch_udf(
                     raise ValueError(msg.format(num_expected_cols, num_input_cols))
 
                 # return transformed predictions to Spark
-                yield _validate_and_transform_prediction_result(
-                    preds, num_input_rows, return_type
-                )  # type: ignore
+                yield _validate_and_transform_prediction_result(preds, num_input_rows, return_type)  # type: ignore
 
     return pandas_udf(predict, return_type)  # type: ignore[call-overload]
 

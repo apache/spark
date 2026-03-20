@@ -114,9 +114,12 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
               "SnapshotLastUploaded.partition_0_default", "rocksdbChangeLogWriterCommitLatencyMs",
               "rocksdbSaveZipFilesLatencyMs", "rocksdbLoadFromSnapshotLatencyMs",
               "rocksdbLoadLatencyMs", "rocksdbReplayChangeLogLatencyMs",
-              "rocksdbNumReplayChangelogFiles", "rocksdbForceSnapshotCount"))
+              "rocksdbNumReplayChangelogFiles", "rocksdbForceSnapshotCount",
+              "rocksdbNumLoadedFromDfs"))
             assert(stateOperatorMetrics.customMetrics.get("rocksdbNumSnapshotsAutoRepaired") == 0,
               "Should be 0 since we didn't repair any snapshot")
+            assert(stateOperatorMetrics.customMetrics.get("rocksdbNumLoadedFromDfs") == 0,
+              "Should be 0 since state is served from local cache")
           }
         } finally {
           query.stop()
