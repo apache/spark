@@ -3333,7 +3333,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
                  |ORDER BY id, item_id
                  |""".stripMargin).collect()
           }
-          assert(e.getMessage.startsWith(
+          assert(e.getMessage.contains(
             "Storage-partition join partition transforms produced incompatible reduced types"))
         }
       }

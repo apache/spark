@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.exchange
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -28,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions.Reducer
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.v2.GroupPartitionsExec
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
@@ -518,9 +518,11 @@ case class EnsureRequirements(
           (rightPartitioning.expressionDataTypes, rightPartitioning.partitionKeys)
         )(rightPartitioning.reduceKeys)
         if (leftReducedDataTypes != rightReducedDataTypes) {
-          throw new SparkException("Storage-partition join partition transforms produced " +
-            s"incompatible reduced types, left: $leftReducedDataTypes, right: " +
-            s"$rightReducedDataTypes")
+          throw QueryExecutionErrors.storagePartitionJoinIncompatibleReducedTypesError(
+            leftReducers = leftReducers,
+            leftReducedDataTypes = leftReducedDataTypes,
+            rightReducers = rightReducers,
+            rightReducedDataTypes = rightReducedDataTypes)
         }
 
         // merge values on both sides
