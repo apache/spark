@@ -944,4 +944,78 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       }
     }
   }
+
+  test("ArrayTransform should be included in WholeStageCodegen") {
+    withClue("basic transform") {
+      val df = spark.range(1).selectExpr("transform(array(1, 2, 3), x -> x + 1) as arr")
+      val plan = df.queryExecution.executedPlan
+      assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+        s"Expected WholeStageCodegenExec in plan:\n$plan")
+      checkAnswer(df, Row(Seq(2, 3, 4)))
+    }
+
+    withClue("nested transform") {
+      val df2 = spark.range(1).selectExpr(
+        "transform(transform(array(1, 2, 3), x -> x + 1), y -> y * 2) as arr")
+      val plan2 = df2.queryExecution.executedPlan
+      assert(plan2.exists(_.isInstanceOf[WholeStageCodegenExec]),
+        s"Expected WholeStageCodegenExec in plan:\n$plan2")
+      checkAnswer(df2, Row(Seq(4, 6, 8)))
+    }
+
+    withClue("transform with index: x+i => 10+0=10, 20+1=21, 30+2=32") {
+      val df3 = spark.range(1).selectExpr(
+        "transform(array(10, 20, 30), (x, i) -> x + i) as arr")
+      checkAnswer(df3, Row(Seq(10, 21, 32)))
+    }
+
+    withClue("transform with nullable elements") {
+      val df4 = spark.range(1).selectExpr(
+        "transform(array(1, cast(null as int), 3), x -> x + 1) as arr")
+      checkAnswer(df4, Row(Seq(2, null, 4)))
+    }
+
+    withClue("empty array") {
+      val df5 = spark.range(1).selectExpr(
+        "transform(array(), x -> x + 1) as arr")
+      checkAnswer(df5, Row(Seq.empty))
+    }
+
+    withClue("nested CodegenFallback HOF (filter) in lambda body") {
+      // ArrayFilter still uses CodegenFallback, but ArrayTransform's codegen handles
+      // this via AtomicReference dual-write: the filter sub-expression calls eval()
+      // at runtime, while the outer transform runs in codegen. The whole stage still
+      // uses WholeStageCodegenExec because ArrayTransform itself supports codegen.
+      val df6 = spark.range(1).selectExpr(
+        "transform(array(array(1, 2, 3), array(4, 5, 6)), x -> filter(x, y -> y > 2)) as arr")
+      val plan6 = df6.queryExecution.executedPlan
+      assert(plan6.exists(_.isInstanceOf[WholeStageCodegenExec]),
+        s"Expected WholeStageCodegenExec in plan:\n$plan6")
+      // filter(array(1,2,3), y -> y > 2) => [3]
+      // filter(array(4,5,6), y -> y > 2) => [4, 5, 6]
+      checkAnswer(df6, Row(Seq(Seq(3), Seq(4, 5, 6))))
+    }
+
+    withClue("null argument") {
+      val df7 = spark.range(1).selectExpr(
+        "transform(cast(null as array<int>), x -> x + 1) as arr")
+      val plan7 = df7.queryExecution.executedPlan
+      assert(plan7.exists(_.isInstanceOf[WholeStageCodegenExec]),
+        s"Expected WholeStageCodegenExec in plan:\n$plan7")
+      checkAnswer(df7, Row(null))
+    }
+
+    withClue("struct (non-primitive) element type") {
+      val df8 = spark.range(1).selectExpr(
+        "transform(array(named_struct('a', 1, 'b', 'x'), " +
+        "named_struct('a', 2, 'b', 'y')), s -> named_struct('a', s.a + 10, 'b', s.b)) as arr")
+      checkAnswer(df8, Row(Seq(Row(11, "x"), Row(12, "y"))))
+    }
+
+    withClue("string (non-primitive) element type") {
+      val df9 = spark.range(1).selectExpr(
+        "transform(array('hello', 'world'), x -> upper(x)) as arr")
+      checkAnswer(df9, Row(Seq("HELLO", "WORLD")))
+    }
+  }
 }

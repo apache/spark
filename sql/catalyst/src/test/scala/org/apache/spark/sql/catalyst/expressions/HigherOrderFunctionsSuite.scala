@@ -885,4 +885,19 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
         "actualType" -> toSQLType(StringType)
       )))
   }
+
+  test("LambdaFunction.doGenCode requires bindings for all lambda variables") {
+    import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+
+    val lv = NamedLambdaVariable("x", IntegerType, nullable = false)
+    val lf = LambdaFunction(lv + Literal(1), Seq(lv))
+    val ctx = new CodegenContext()
+
+    // genCode without registering bindings should fail with SparkException
+    val e = intercept[SparkException] {
+      lf.genCode(ctx)
+    }
+    assert(e.getMessage.contains("has no codegen binding"))
+    assert(e.getMessage.contains("x#"), "Error message should include the variable name")
+  }
 }

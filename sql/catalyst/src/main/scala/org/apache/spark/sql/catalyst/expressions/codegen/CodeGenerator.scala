@@ -176,6 +176,35 @@ class CodegenContext extends Logging {
   var currentVars: Seq[ExprCode] = null
 
   /**
+   * A mapping from [[ExprId]] to [[ExprCode]] for lambda variables that are currently in scope.
+   * This is used by [[NamedLambdaVariable]] to look up pre-computed variable bindings set by
+   * enclosing higher-order functions during code generation.
+   *
+   * The enclosing higher-order function registers entries before generating the lambda body code,
+   * and restores the previous state after. This follows the same save/restore pattern as
+   * `currentVars`/`INPUT_ROW`.
+   *
+   * Note: Like other mutable state in CodegenContext (e.g., `currentVars`, `INPUT_ROW`),
+   * this is not thread-safe. Callers must ensure single-threaded access during code generation.
+   */
+  var lambdaVariableMap: Map[ExprId, ExprCode] = Map.empty
+
+  /**
+   * Registers lambda variable bindings, executes the given block,
+   * then restores the previous bindings. This ensures lambda variable scoping is correct
+   * for nested higher-order functions.
+   *
+   * Note: bindings from inner HOFs take precedence over outer ones via `Map.++`.
+   * This is safe because [[ExprId]]s are globally unique; inner and outer lambda
+   * variables will never share the same ExprId.
+   */
+  def withLambdaVariableBindings[T](bindings: Map[ExprId, ExprCode])(f: => T): T = {
+    val oldBindings = lambdaVariableMap
+    lambdaVariableMap = lambdaVariableMap ++ bindings
+    try f finally { lambdaVariableMap = oldBindings }
+  }
+
+  /**
    * Holding expressions' inlined mutable states like `MonotonicallyIncreasingID.count` as a
    * 2-tuple: java type, variable name.
    * As an example, ("int", "count") will produce code:
