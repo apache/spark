@@ -6,7 +6,9 @@ Before the first edit in a session, ensure a clean working environment. DO NOT s
 
 1. Run `git remote -v` to identify the personal fork and upstream (`apache/spark`). If unclear, ask the user to configure their remotes following the standard convention (`origin` for the fork, `upstream` for `apache/spark`).
 2. If the latest commit on `<upstream>/master` is more than a day old (check with `git log -1 --format="%ci" <upstream>/master`), run `git fetch <upstream> master`.
-3. If the current branch has uncommitted changes or commits not in upstream `master` (check with `git log <upstream>/master..HEAD`), suggest creating a new git worktree from `<upstream>/master` (recommended), or ask the user to clean up by creating a new branch from `<upstream>/master` or stashing changes.
+3. If the current branch has uncommitted changes (check with `git status`) or commits not in upstream `master` (check with `git log <upstream>/master..HEAD`), ask the user to pick one:
+   - Create a new git worktree from `<upstream>/master` (recommended) and work from there.
+   - For uncommitted changes: stash them. For unmerged commits: create and switch to a new branch from `<upstream>/master`.
 4. Otherwise, proceed on the current branch.
 
 ## Development Notes
@@ -71,5 +73,7 @@ Run a single test case:
 PR title requires a JIRA ticket ID (e.g., `[SPARK-xxxx][SQL] Title`). Ask the user to create a new ticket or provide an existing one if not given. Follow the template in `.github/PULL_REQUEST_TEMPLATE` for the PR description.
 
 DO NOT push to the upstream repo. Always push to the personal fork. Open PRs against `master` on the upstream repo.
+
+DO NOT force push unless the user explicitly asks. Avoid `--amend` on commits that have been pushed. If the remote branch has new commits, fetch and rebase before pushing.
 
 Always get user approval before external operations such as pushing commits, creating PRs, or posting comments. Use `gh pr create` to open PRs. If `gh` is not installed, generate the GitHub PR URL for the user and recommend installing the GitHub CLI.
