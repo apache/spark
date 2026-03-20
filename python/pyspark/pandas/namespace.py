@@ -18,6 +18,7 @@
 """
 Wrappers around spark that correspond to common pandas functions.
 """
+
 from typing import (
     Any,
     Callable,
@@ -436,7 +437,7 @@ def read_csv(
                 )
             if len(missing) > 0:
                 raise ValueError(
-                    "Usecols do not match columns, columns expected but not " "found: %s" % missing
+                    "Usecols do not match columns, columns expected but not found: %s" % missing
                 )
 
             if len(column_labels) > 0:
@@ -2280,11 +2281,13 @@ def get_dummies(
                     raise KeyError(name_like_string(columns))
                 if prefix is None:
                     prefix = [
-                        str(label[len(columns) :])
-                        if len(label) > len(columns) + 1
-                        else label[len(columns)]
-                        if len(label) == len(columns) + 1
-                        else ""
+                        (
+                            str(label[len(columns) :])
+                            if len(label) > len(columns) + 1
+                            else label[len(columns)]
+                            if len(label) == len(columns) + 1
+                            else ""
+                        )
                         for label in column_labels
                     ]
             elif any(isinstance(col, tuple) for col in columns) and any(
@@ -2567,9 +2570,11 @@ def concat(
 
         level: int = min(psdf._internal.column_labels_level for psdf in psdfs)
         psdfs = [
-            DataFrame._index_normalized_frame(level, psdf)
-            if psdf._internal.column_labels_level > level
-            else psdf
+            (
+                DataFrame._index_normalized_frame(level, psdf)
+                if psdf._internal.column_labels_level > level
+                else psdf
+            )
             for psdf in psdfs
         ]
 
@@ -2651,6 +2656,10 @@ def concat(
             num_series += 1
             series_names.add(obj.name)
             if not ignore_index and not should_return_series:
+                new_objs.append(obj.to_frame())
+            elif LooseVersion(pd.__version__) >= "3.0.0" and not should_return_series:
+                # pandas 3 preserves a named Series as its own column during
+                # row-wise concat with ignore_index=True instead of renaming it to 0.
                 new_objs.append(obj.to_frame())
             else:
                 new_objs.append(obj.to_frame(DEFAULT_SERIES_NAME))
@@ -3941,7 +3950,7 @@ def _test() -> None:
     path = tempfile.mkdtemp()
     globs["path"] = path
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.namespace,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

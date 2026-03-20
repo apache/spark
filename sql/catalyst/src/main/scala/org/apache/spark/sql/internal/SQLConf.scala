@@ -35,7 +35,7 @@ import org.slf4j.event.Level
 
 import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.{ConfigBindingPolicy, _}
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network.util.ByteUnit
@@ -88,7 +88,7 @@ object SQLConf {
     sqlConfEntries.get(key)
   }
 
-  private[internal] def getConfigEntries(): util.Collection[ConfigEntry[_]] = {
+  private[sql] def getConfigEntries(): util.Collection[ConfigEntry[_]] = {
     sqlConfEntries.values()
   }
 
@@ -544,6 +544,7 @@ object SQLConf {
       s"plan after a rule or batch is applied. The value can be " +
       s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("3.1.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .enumConf(classOf[Level])
     .createWithDefault(Level.TRACE)
 
@@ -577,6 +578,7 @@ object SQLConf {
       "the resolved expression tree in the single-pass bottom-up Resolver. The value can be " +
       s"${VALID_LOG_LEVELS.mkString(", ")}.")
     .version("4.0.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .enumConf(classOf[Level])
     .createWithDefault(Level.TRACE)
 
@@ -1668,6 +1670,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION =
+    buildConf("spark.sql.parquet.reader.respectUnknownTypeAnnotation.enabled")
+      .internal()
+      .doc("When enabled, respects the UNKNOWN type annotation in Parquet files during schema " +
+        "inference and infers NullType. When disabled, ignores the UNKNOWN annotation " +
+        "and uses the physical type instead.")
+      .version("4.1.2")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val PARQUET_FIELD_ID_READ_ENABLED =
     buildConf("spark.sql.parquet.fieldId.read.enabled")
       .doc("Field ID is a native field of the Parquet schema spec. When enabled, Parquet readers " +
@@ -2075,11 +2088,11 @@ object SQLConf {
   val V2_BUCKETING_PUSH_PART_VALUES_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.pushPartValues.enabled")
       .doc(s"Whether to pushdown common partition values when ${V2_BUCKETING_ENABLED.key} is " +
-        "enabled. When turned on, if both sides of a join are of KeyGroupedPartitioning and if " +
+        "enabled. When turned on, if both sides of a join are of KeyedPartitioning and if " +
         "they share compatible partition keys, even if they don't have the exact same partition " +
         "values, Spark will calculate a superset of partition values and pushdown that info to " +
-        "scan nodes, which will use empty partitions for the missing partition values on either " +
-        "side. This could help to eliminate unnecessary shuffles")
+        "group partition nodes, which will use empty partitions for the missing partition values " +
+        "on either side. This could help to eliminate unnecessary shuffles")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
@@ -2087,7 +2100,7 @@ object SQLConf {
   val V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled")
       .doc("During a storage-partitioned join, whether to allow input partitions to be " +
-        "partially clustered, when both sides of the join are of KeyGroupedPartitioning. At " +
+        "partially clustered, when both sides of the join are of KeyedPartitioning. At " +
         "planning time, Spark will pick the side with less data size based on table " +
         "statistics, group and replicate them to match the other side. This is an optimization " +
         "on skew join and can help to reduce data skewness when certain partitions are assigned " +
@@ -2100,7 +2113,7 @@ object SQLConf {
   val V2_BUCKETING_SHUFFLE_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.shuffle.enabled")
       .doc("During a storage-partitioned join, whether to allow to shuffle only one side. " +
-        "When only one side is KeyGroupedPartitioning, if the conditions are met, spark will " +
+        "When only one side is KeyedPartitioning, if the conditions are met, spark will " +
         "only shuffle the other side. This optimization will reduce the amount of data that " +
         s"needs to be shuffle. This config requires ${V2_BUCKETING_ENABLED.key} to be enabled")
       .version("4.0.0")
@@ -2258,6 +2271,7 @@ object SQLConf {
         "when the underlying table schema evolves. When disabled, view comments will be " +
         "overwritten with table comments on every schema sync.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -2360,6 +2374,17 @@ object SQLConf {
       .stringConf
       .checkValues(Set("first", "second", "last"))
       .createWithDefault("second")
+
+  val PERSISTENT_CATALOG_FIRST =
+    buildConf("spark.sql.legacy.persistentCatalogFirst")
+      .internal()
+      .version("4.2.0")
+      .doc("When true (legacy), partially qualified function names like 'builtin.func' or " +
+        "'session.func' resolve to the persistent catalog first. When false (default), the " +
+        "system catalog is prioritized (system.builtin.func or system.session.func).")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
 
   // Whether to retain group by columns or not in GroupedData.agg.
   val DATAFRAME_RETAIN_GROUP_COLUMNS = buildConf("spark.sql.retainGroupColumns")
@@ -2714,7 +2739,7 @@ object SQLConf {
       .version("4.1.0")
       .intConf
       .checkValue(k => k > 0, "Must allow at least 1 change file replay")
-      .createWithDefault(50)
+      .createWithDefault(500)
 
   val STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT =
     buildConf("spark.sql.streaming.stateStore.numStateStoreInstanceMetricsToReport")
@@ -3130,13 +3155,22 @@ object SQLConf {
         "State between versions are tend to be incompatible, so state format version shouldn't " +
         "be modified after running. Version 3 uses a single state store with virtual column " +
         "families instead of four stores and is only supported with RocksDB. NOTE: version " +
-        "1 is DEPRECATED and should not be explicitly set by users.")
+        "1 is DEPRECATED and should not be explicitly set by users. " +
+        "Version 4 is under development and only available for testing.")
       .version("3.0.0")
       .intConf
-      // TODO: [SPARK-55628] Add version 4 once we integrate the state format version 4 into
-      //  stream-stream join operator.
-      .checkValue(v => Set(1, 2, 3).contains(v), "Valid versions are 1, 2, and 3")
+      .checkValue(v => Set(1, 2, 3, 4).contains(v), "Valid versions are 1, 2, 3, and 4")
       .createWithDefault(2)
+
+  val STREAMING_JOIN_STATE_FORMAT_V4_ENABLED =
+    buildConf("spark.sql.streaming.join.stateFormatV4.enabled")
+      .internal()
+      .doc("When true, enables state format version 4 for stream-stream joins. " +
+        "This config will be removed once V4 is complete.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefaultFunction(() => Utils.isTesting)
 
   val STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION =
     buildConf("spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition")
@@ -3728,6 +3762,19 @@ object SQLConf {
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
+
+  val STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE =
+    buildConf("spark.sql.streaming.stateStore.fileChecksumThreadPoolSize")
+      .internal()
+      .doc("Number of threads used to read/write files and their corresponding checksum files " +
+        "concurrently. Set to 0 to disable the thread pool and run operations sequentially on " +
+        "the calling thread. WARNING: Reducing below the default value of 4 may have " +
+        "performance impact.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .intConf
+      .checkValue(x => x >= 0, "Must be a non-negative integer (0 to disable thread pool)")
+      .createWithDefault(4)
 
   val PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION =
     buildConf("spark.sql.statistics.parallelFileListingInStatsComputation.enabled")
@@ -7250,6 +7297,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def checkpointFileChecksumSkipCreationIfFileMissingChecksum: Boolean =
     getConf(STREAMING_CHECKPOINT_FILE_CHECKSUM_SKIP_CREATION_IF_FILE_MISSING_CHECKSUM)
 
+  def stateStoreFileChecksumThreadPoolSize: Int =
+    getConf(STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE)
+
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
 
   def useDeprecatedKafkaOffsetFetching: Boolean = getConf(USE_DEPRECATED_KAFKA_OFFSET_FETCHING)
@@ -8126,6 +8176,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def parquetIgnoreVariantAnnotation: Boolean = getConf(SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION)
 
+  def parquetReaderRespectUnknownTypeAnnotation: Boolean =
+    getConf(SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION)
+
   def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
 
   def legacyParquetNanosAsLong: Boolean = getConf(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG)
@@ -8173,6 +8226,12 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def sessionFunctionResolutionOrder: String =
     getConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER)
+
+  /**
+   * Returns true when the system catalog is prioritized for 2-part builtin/session resolution.
+   * This is the inverse of [[SQLConf.PERSISTENT_CATALOG_FIRST]].
+   */
+  def prioritizeSystemCatalog: Boolean = !getConf(SQLConf.PERSISTENT_CATALOG_FIRST)
 
   /**
    * Returns the resolution search path for error messages and resolution order.

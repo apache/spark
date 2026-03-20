@@ -21,7 +21,7 @@ import decimal
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, Union, overload
 
 import pyspark
-from pyspark.errors import PySparkRuntimeError, PySparkValueError
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.pandas.types import (
     _dedup_names,
     _deduplicate_field_names,
@@ -117,10 +117,6 @@ class ArrowBatchTransformer:
         """
         Enforce target schema on a RecordBatch by reordering columns and coercing types.
 
-        .. note::
-            Currently this function is only used by UDTF. The error messages
-            are UDTF-specific (see SPARK-55723).
-
         Parameters
         ----------
         batch : pa.RecordBatch
@@ -157,16 +153,11 @@ class ArrowBatchTransformer:
             if arr.type != field.type:
                 try:
                     arr = arr.cast(target_type=field.type, safe=safecheck)
-                except (pa.ArrowInvalid, pa.ArrowTypeError):
-                    # TODO(SPARK-55723): Unify error messages for all UDF types,
-                    #  not just UDTF.
-                    raise PySparkRuntimeError(
-                        errorClass="RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF",
-                        messageParameters={
-                            "expected": str(field.type),
-                            "actual": str(arr.type),
-                        },
-                    )
+                except (pa.ArrowInvalid, pa.ArrowTypeError) as e:
+                    raise PySparkTypeError(
+                        f"Result type of column '{field.name}' does not match "
+                        f"the expected type. Expected: {field.type}, got: {arr.type}."
+                    ) from e
             coerced_arrays.append(arr)
 
         return pa.RecordBatch.from_arrays(coerced_arrays, names=target_names)
@@ -1030,9 +1021,11 @@ class ArrowTableToRowsConversion:
                     assert isinstance(value, dict)
 
                     _values = [
-                        field_convs[i](value.get(name, None))  # type: ignore[misc]
-                        if field_convs[i] is not None
-                        else value.get(name, None)
+                        (
+                            field_convs[i](value.get(name, None))  # type: ignore[misc]
+                            if field_convs[i] is not None
+                            else value.get(name, None)
+                        )
                         for i, name in enumerate(dedup_field_names)
                     ]
                     return _create_row(field_names, _values)
@@ -1044,9 +1037,9 @@ class ArrowTableToRowsConversion:
                 dataType.elementType, none_on_identity=True, binary_as_bytes=binary_as_bytes
             )
 
-            assert (
-                element_conv is not None
-            ), f"_need_converter() returned True for ArrayType of {dataType.elementType}"
+            assert element_conv is not None, (
+                f"_need_converter() returned True for ArrayType of {dataType.elementType}"
+            )
 
             def convert_array(value: Any) -> Any:
                 if value is None:
@@ -1787,11 +1780,9 @@ class ArrowArrayToPandasConversion:
             udt: UserDefinedType = spark_type
             series = arr.to_pandas()
             series = series.apply(
-                lambda v: v
-                if hasattr(v, "__UDT__")
-                else udt.deserialize(v)
-                if v is not None
-                else None
+                lambda v: (
+                    v if hasattr(v, "__UDT__") else udt.deserialize(v) if v is not None else None
+                )
             )
         elif isinstance(spark_type, VariantType):
             series = arr.to_pandas()

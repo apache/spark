@@ -18,6 +18,7 @@
 """
 A wrapper class for Spark Column to behave like pandas Series.
 """
+
 import datetime
 import re
 import inspect
@@ -1049,7 +1050,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             rmask = self < right
         else:
             raise ValueError(
-                "Inclusive has to be either string of 'both'," "'left', 'right', or 'neither'."
+                "Inclusive has to be either string of 'both','left', 'right', or 'neither'."
             )
 
         return lmask & rmask
@@ -2205,7 +2206,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             method = None
 
         return self._fillna_with_method(
-            value=value, method=method, axis=axis, inplace=inplace, limit=limit  # type: ignore[arg-type]
+            value=value,
+            method=method,  # type: ignore[arg-type]
+            axis=axis,
+            inplace=inplace,
+            limit=limit,
         )
 
     def _fillna_with_method(
@@ -2289,7 +2294,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         return DataFrame(
             self._psdf._internal.with_new_spark_column(
-                self._column_label, scol.alias(name_like_string(self.name))  # TODO: dtype?
+                self._column_label,
+                scol.alias(name_like_string(self.name)),  # TODO: dtype?
             )
         )._psser_for(self._column_label)
 
@@ -2554,6 +2560,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         columns: Optional[Union[Name, List[Name]]] = None,
         level: Optional[int] = None,
         inplace: bool = False,
+        errors: str = "raise",
     ) -> "Series":
         """
         Return Series with specified index labels removed.
@@ -2577,6 +2584,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             If True, do operation inplace and return None
 
             .. versionadded:: 3.4.0
+        errors : {{'ignore', 'raise'}}, default 'raise'
+            If 'ignore', suppress error and only existing labels are dropped.
+
+            .. versionadded:: 4.1.0
 
         Returns
         -------
@@ -2685,6 +2696,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 length      0.3
         dtype: float64
         """
+        if errors not in ("raise", "ignore"):
+            raise ValueError("errors must be either 'raise' or 'ignore'")
         dropped = self._drop(
             labels=labels, index=index, level=level, inplace=inplace, columns=columns
         )
@@ -4520,14 +4533,20 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if len(results) == 0:
             raise ValueError("attempt to get idxmin of an empty sequence")
         if results[0][0] is None:
-            # This will only happen when skipna is False because we will
-            # place nulls first.
-            warnings.warn(
-                "The behavior of Series.idxmax with all-NA values, or any-NA and skipna=False, "
-                "is deprecated. In a future version this will raise ValueError",
-                FutureWarning,
-            )
-            return np.nan
+            if LooseVersion(pd.__version__) < "3.0.0":
+                # This will only happen when skipna is False because we will
+                # place nulls first.
+                warnings.warn(
+                    "The behavior of Series.idxmax with all-NA values, or any-NA and skipna=False, "
+                    "is deprecated. In a future version this will raise ValueError",
+                    FutureWarning,
+                )
+                return np.nan
+            else:
+                if skipna:
+                    raise ValueError("Encountered all NA values")
+                else:
+                    raise ValueError("Encountered an NA value with skipna=False")
         values = list(results[0][1:])
         if len(values) == 1:
             return values[0]
@@ -4633,14 +4652,20 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if len(results) == 0:
             raise ValueError("attempt to get idxmin of an empty sequence")
         if results[0][0] is None:
-            # This will only happen when skipna is False because we will
-            # place nulls first.
-            warnings.warn(
-                "The behavior of Series.idxmin with all-NA values, or any-NA and skipna=False, "
-                "is deprecated. In a future version this will raise ValueError",
-                FutureWarning,
-            )
-            return np.nan
+            if LooseVersion(pd.__version__) < "3.0.0":
+                # This will only happen when skipna is False because we will
+                # place nulls first.
+                warnings.warn(
+                    "The behavior of Series.idxmin with all-NA values, or any-NA and skipna=False, "
+                    "is deprecated. In a future version this will raise ValueError",
+                    FutureWarning,
+                )
+                return np.nan
+            else:
+                if skipna:
+                    raise ValueError("Encountered all NA values")
+                else:
+                    raise ValueError("Encountered an NA value with skipna=False")
         values = list(results[0][1:])
         if len(values) == 1:
             return values[0]
@@ -5174,12 +5199,20 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         elif not isinstance(regex, bool):
             raise NotImplementedError("'regex' of %s type is not supported" % type(regex).__name__)
         elif regex is True:
-            assert isinstance(
-                to_replace, str
-            ), "If 'regex' is True then 'to_replace' must be a string"
+            assert isinstance(to_replace, str), (
+                "If 'regex' is True then 'to_replace' must be a string"
+            )
 
         if to_replace is None:
-            return self._fillna_with_method(method="ffill")
+            if LooseVersion(pd.__version__) < "3.0.0":
+                return self._fillna_with_method(method="ffill")
+            else:
+                if value is None and regex is False:
+                    raise ValueError(
+                        "Series.replace must specify either 'value', a dict-like "
+                        "'to_replace', or dict-like 'regex'."
+                    )
+
         if not isinstance(to_replace, (str, list, tuple, dict, int, float)):
             raise TypeError("'to_replace' should be one of str, list, tuple, dict, int, float")
 
@@ -5338,7 +5371,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 .alias(self._psdf._internal.spark_column_name_for(self._column_label))
             )
             internal = self._psdf._internal.with_new_spark_column(
-                self._column_label, scol  # TODO: dtype?
+                self._column_label,
+                scol,  # TODO: dtype?
             )
             self._update_internal_frame(internal)
         else:
@@ -5354,7 +5388,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             )
 
             internal = combined["this"]._internal.with_new_spark_column(
-                self._column_label, scol  # TODO: dtype?
+                self._column_label,
+                scol,  # TODO: dtype?
             )
 
             self._update_internal_frame(internal.resolved_copy, check_same_anchor=False)
@@ -5734,7 +5769,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             *index_scols, cond.alias(self._internal.data_spark_column_names[0])
         ).distinct()
         internal = self._internal.with_new_sdf(
-            sdf, index_fields=combined._internal.index_fields, data_fields=[None]  # TODO: dtype?
+            sdf,
+            index_fields=combined._internal.index_fields,
+            data_fields=[None],  # TODO: dtype?
         )
         return first_series(DataFrame(internal))
 
@@ -6013,12 +6050,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             F.max_by(
                 spark_column,
                 F.when(
-                    (index_scol <= F.lit(index).cast(index_type)) & spark_column.isNotNull()
-                    if pd.notna(index)
-                    # If index is nan and the value of the col is not null
-                    # then return monotonically_increasing_id. This will let max by
-                    # to return last index value, which is the behaviour of pandas
-                    else spark_column.isNotNull(),
+                    (
+                        (index_scol <= F.lit(index).cast(index_type)) & spark_column.isNotNull()
+                        if pd.notna(index)
+                        # If index is nan and the value of the col is not null
+                        # then return monotonically_increasing_id. This will let max by
+                        # to return last index value, which is the behaviour of pandas
+                        else spark_column.isNotNull()
+                    ),
                     F.col(monotonically_increasing_id_column),
                 ),
             )
@@ -6517,13 +6556,19 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             max_value = results[0]
             # If the maximum is achieved in multiple locations, the first row position is returned.
             if max_value[0] is None:
-                warnings.warn(
-                    "The behavior of Series.argmax/argmin "
-                    "with skipna=False and NAs, or with all-NAs is deprecated. "
-                    "In a future version this will raise ValueError.",
-                    FutureWarning,
-                )
-                return -1
+                if LooseVersion(pd.__version__) < "3.0.0":
+                    warnings.warn(
+                        "The behavior of Series.argmax/argmin "
+                        "with skipna=False and NAs, or with all-NAs is deprecated. "
+                        "In a future version this will raise ValueError.",
+                        FutureWarning,
+                    )
+                    return -1
+                else:
+                    if skipna:
+                        raise ValueError("Encountered all NA values")
+                    else:
+                        raise ValueError("Encountered an NA value with skipna=False")
             else:
                 return max_value[1]
 
@@ -6586,13 +6631,19 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             min_value = results[0]
             # If the maximum is achieved in multiple locations, the first row position is returned.
             if min_value[0] is None:
-                warnings.warn(
-                    "The behavior of Series.argmax/argmin "
-                    "with skipna=False and NAs, or with all-NAs is deprecated. "
-                    "In a future version this will raise ValueError.",
-                    FutureWarning,
-                )
-                return -1
+                if LooseVersion(pd.__version__) < "3.0.0":
+                    warnings.warn(
+                        "The behavior of Series.argmax/argmin "
+                        "with skipna=False and NAs, or with all-NAs is deprecated. "
+                        "In a future version this will raise ValueError.",
+                        FutureWarning,
+                    )
+                    return -1
+                else:
+                    if skipna:
+                        raise ValueError("Encountered all NA values")
+                    else:
+                        raise ValueError("Encountered an NA value with skipna=False")
             else:
                 return min_value[1]
 
@@ -7425,8 +7476,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     )
                 else:
                     footer = (
-                        "\nName: {name}, dtype: {dtype}"
-                        "\nShowing only the first {length}".format(
+                        "\nName: {name}, dtype: {dtype}\nShowing only the first {length}".format(
                             length=length, name=self.name, dtype=pprint_thing(dtype_name)
                         )
                     )
@@ -7462,13 +7512,11 @@ def unpack_scalar(sdf: SparkDataFrame) -> Any:
 
 
 @overload
-def first_series(df: DataFrame) -> Series:
-    ...
+def first_series(df: DataFrame) -> Series: ...
 
 
 @overload
-def first_series(df: pd.DataFrame) -> pd.Series:
-    ...
+def first_series(df: pd.DataFrame) -> pd.Series: ...
 
 
 def first_series(df: Union[DataFrame, pd.DataFrame]) -> Union[Series, pd.Series]:
@@ -7497,7 +7545,7 @@ def _test() -> None:
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.series tests").getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.series,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

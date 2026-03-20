@@ -203,19 +203,19 @@ def write_read_func_and_partitions(
             columns = [column.to_pylist() for column in batch.columns]
             partition_bytes = converter(columns[0][0])  # type: ignore[misc]
 
-        assert (
-            partition_bytes is not None
-        ), "The input iterator for Python data source read function is empty."
+        assert partition_bytes is not None, (
+            "The input iterator for Python data source read function is empty."
+        )
 
         # Deserialize the partition value.
         partition = pickleSer.loads(partition_bytes)
 
-        assert partition is None or isinstance(partition, InputPartition), (
+        assert isinstance(partition, InputPartition), (
             "Expected the partition value to be of type 'InputPartition', "
             f"but found '{type(partition).__name__}'."
         )
 
-        output_iter = reader.read(partition)  # type: ignore[arg-type]
+        output_iter = reader.read(partition)
 
         # Validate the output iterator.
         if not isinstance(output_iter, Iterator):
@@ -242,27 +242,29 @@ def write_read_func_and_partitions(
         # The partitioning of python batch source read is determined before query execution.
         try:
             partitions = reader.partitions()  # type: ignore[call-arg]
-            if not isinstance(partitions, list):
-                raise PySparkRuntimeError(
-                    errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                    messageParameters={
-                        "expected": "'partitions' to return a list",
-                        "actual": f"'{type(partitions).__name__}'",
-                    },
-                )
-            if not all(isinstance(p, InputPartition) for p in partitions):
-                partition_types = ", ".join([f"'{type(p).__name__}'" for p in partitions])
-                raise PySparkRuntimeError(
-                    errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                    messageParameters={
-                        "expected": "elements in 'partitions' to be of type 'InputPartition'",
-                        "actual": partition_types,
-                    },
-                )
-            if len(partitions) == 0:
-                partitions = [None]  # type: ignore[list-item]
         except NotImplementedError:
-            partitions = [None]  # type: ignore[list-item]
+            # Backward compatibility for data sources that raise NotImplementedError for partitions
+            # Our old base class did this so an old client may still be using it.
+            partitions = [InputPartition(None)]
+        if not isinstance(partitions, list):
+            raise PySparkRuntimeError(
+                errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                messageParameters={
+                    "expected": "'partitions' to return a list",
+                    "actual": f"'{type(partitions).__name__}'",
+                },
+            )
+        if not all(isinstance(p, InputPartition) for p in partitions):
+            partition_types = ", ".join([f"'{type(p).__name__}'" for p in partitions])
+            raise PySparkRuntimeError(
+                errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                messageParameters={
+                    "expected": "elements in 'partitions' to be of type 'InputPartition'",
+                    "actual": partition_types,
+                },
+            )
+        if len(partitions) == 0:
+            partitions = [InputPartition(None)]
 
         # Return the serialized partition values.
         write_int(len(partitions), outfile)
@@ -336,8 +338,7 @@ def _main(infile: IO, outfile: IO) -> None:
     # Receive the configuration values.
     max_arrow_batch_size = read_int(infile)
     assert max_arrow_batch_size > 0, (
-        "The maximum arrow batch size should be greater than 0, but got "
-        f"'{max_arrow_batch_size}'"
+        f"The maximum arrow batch size should be greater than 0, but got '{max_arrow_batch_size}'"
     )
     enable_pushdown = read_bool(infile)
 

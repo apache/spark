@@ -45,7 +45,6 @@ from pyspark.testing.connectutils import (
 )
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
-
 if should_test_connect:
     from pyspark.sql.connect.proto import ExecutePlanResponse, Expression as ProtoExpression
     from pyspark.sql.connect.column import Column

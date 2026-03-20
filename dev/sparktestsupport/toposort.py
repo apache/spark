@@ -34,7 +34,6 @@
 
 from functools import reduce as _reduce
 
-
 __all__ = ["toposort", "toposort_flatten"]
 
 

@@ -342,8 +342,9 @@ class ApplyInPandasTestsMixin:
 
     def check_apply_in_pandas_returning_incompatible_type(self):
         for safely in [True, False]:
-            with self.subTest(convertToArrowArraySafely=safely), self.sql_conf(
-                {"spark.sql.execution.pandas.convertToArrowArraySafely": safely}
+            with (
+                self.subTest(convertToArrowArraySafely=safely),
+                self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": safely}),
             ):
                 # sometimes we see ValueErrors
                 with self.subTest(convert="string to double"):
@@ -1008,7 +1009,7 @@ class ApplyInPandasTestsMixin:
                 [
                     Row(
                         level="WARNING",
-                        msg=f"pandas grouped map: {dict(id=lst, value=[v*10 for v in lst])}",
+                        msg=f"pandas grouped map: {dict(id=lst, value=[v * 10 for v in lst])}",
                         context={"func_name": func_with_logging.__name__},
                         logger="test_pandas_grouped_map",
                     )

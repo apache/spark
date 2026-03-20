@@ -64,7 +64,7 @@ def checked_versions(spark_version, hadoop_version, hive_version):
         spark_version = "spark-%s" % spark_version
     if not spark_version.startswith("spark-"):
         raise RuntimeError(
-            "Spark version should start with 'spark-' prefix; however, " "got %s" % spark_version
+            "Spark version should start with 'spark-' prefix; however, got %s" % spark_version
         )
 
     if hadoop_version == "without":

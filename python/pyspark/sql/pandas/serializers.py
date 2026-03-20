@@ -222,7 +222,7 @@ class ArrowStreamSerializer(Serializer):
         write_int(SpecialLengths.START_ARROW_STREAM, stream)
         yield from itertools.chain([first], batch_iterator)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "ArrowStreamSerializer(write_start_stream=%s, num_dfs=%d)" % (
             self._write_start_stream,
             self._num_dfs,
@@ -279,9 +279,11 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
             # For each column: flatten struct columns at table_arg_offsets into RecordBatch,
             # keep other columns as Array
             yield [
-                ArrowBatchTransformer.flatten_struct(batch, column_index=i)
-                if i in self.table_arg_offsets
-                else batch.column(i)
+                (
+                    ArrowBatchTransformer.flatten_struct(batch, column_index=i)
+                    if i in self.table_arg_offsets
+                    else batch.column(i)
+                )
                 for i in range(batch.num_columns)
             ]
 
@@ -294,9 +296,9 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
 
         def apply_type_coercion():
             for batch, arrow_return_type in iterator:
-                assert isinstance(
-                    arrow_return_type, pa.StructType
-                ), f"Expected pa.StructType, got {type(arrow_return_type)}"
+                assert isinstance(arrow_return_type, pa.StructType), (
+                    f"Expected pa.StructType, got {type(arrow_return_type)}"
+                )
 
                 # Handle empty struct case specially
                 if batch.num_columns == 0:
@@ -322,14 +324,12 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                                     safecheck=True,
                                 )
                             )
-                        except (pa.ArrowInvalid, pa.ArrowTypeError):
-                            raise PySparkRuntimeError(
-                                errorClass="RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF",
-                                messageParameters={
-                                    "expected": str(field.type),
-                                    "actual": str(batch.column(i).type),
-                                },
-                            )
+                        except (pa.ArrowInvalid, pa.ArrowTypeError) as e:
+                            raise PySparkTypeError(
+                                f"Result type of column '{field.name}' does not "
+                                f"match the expected type. Expected: {field.type}, "
+                                f"got: {batch.column(i).type}."
+                            ) from e
                     coerced_batch = pa.RecordBatch.from_arrays(
                         coerced_arrays, names=expected_field_names
                     )
@@ -1651,9 +1651,11 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                         yield (
                             batch_key,
                             pd.DataFrame(rows) if len(rows) > 0 else EMPTY_DATAFRAME.copy(),
-                            pd.DataFrame(init_state_rows)
-                            if len(init_state_rows) > 0
-                            else EMPTY_DATAFRAME.copy(),
+                            (
+                                pd.DataFrame(init_state_rows)
+                                if len(init_state_rows) > 0
+                                else EMPTY_DATAFRAME.copy()
+                            ),
                         )
                         rows = []
                         init_state_rows = []
@@ -1661,9 +1663,11 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                     yield (
                         batch_key,
                         pd.DataFrame(rows) if len(rows) > 0 else EMPTY_DATAFRAME.copy(),
-                        pd.DataFrame(init_state_rows)
-                        if len(init_state_rows) > 0
-                        else EMPTY_DATAFRAME.copy(),
+                        (
+                            pd.DataFrame(init_state_rows)
+                            if len(init_state_rows) > 0
+                            else EMPTY_DATAFRAME.copy()
+                        ),
                     )
 
         _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)

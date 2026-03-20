@@ -28,7 +28,7 @@ from decimal import Decimal
 from typing import Callable, Iterable, List, Union, Iterator, Tuple
 
 from pyspark.errors import AnalysisException, PythonException
-from pyspark.profiler import has_memory_profiler
+from pyspark.memory_profiler_ext import has_memory_profiler
 from pyspark.sql.datasource import (
     CaseInsensitiveDict,
     DataSource,
@@ -72,8 +72,7 @@ class BasePythonDataSourceTestsMixin:
     spark: SparkSession
 
     def test_basic_data_source_class(self):
-        class MyDataSource(DataSource):
-            ...
+        class MyDataSource(DataSource): ...
 
         options = dict(a=1, b=2)
         ds = MyDataSource(options=options)
@@ -89,7 +88,7 @@ class BasePythonDataSourceTestsMixin:
     def test_basic_data_source_reader_class(self):
         class MyDataSourceReader(DataSourceReader):
             def read(self, partition):
-                yield None,
+                yield (None,)
 
         reader = MyDataSourceReader()
         self.assertEqual(list(reader.read(None)), [(None,)])
@@ -162,7 +161,7 @@ class BasePythonDataSourceTestsMixin:
                 if partition_func is not None:
                     return partition_func()
                 else:
-                    raise NotImplementedError
+                    return [InputPartition(None)]
 
             def read(self, partition):
                 return read_func(self.schema, partition)
@@ -835,8 +834,9 @@ class BasePythonDataSourceTestsMixin:
             (True, "Segmentation fault"),
             (False, "Consider setting .* for the better Python traceback."),
         ]:
-            with self.subTest(enabled=enabled), self.sql_conf(
-                {"spark.sql.execution.pyspark.udf.faulthandler.enabled": enabled}
+            with (
+                self.subTest(enabled=enabled),
+                self.sql_conf({"spark.sql.execution.pyspark.udf.faulthandler.enabled": enabled}),
             ):
                 with self.subTest(worker="pyspark.sql.worker.create_data_source"):
 
@@ -895,7 +895,7 @@ class BasePythonDataSourceTestsMixin:
                     class TestReader2(DataSourceReader):
                         def read(self, partition):
                             ctypes.string_at(0)
-                            yield "x",
+                            yield ("x",)
 
                     self.spark.dataSource.register(TestDataSource)
 
@@ -1040,7 +1040,7 @@ class BasePythonDataSourceTestsMixin:
                             {"class_name": "TestJsonReader", "func_name": "partitions"},
                         ),
                         (
-                            "TestJsonReader.read: None",
+                            "TestJsonReader.read: InputPartition(value=None)",
                             {"class_name": "TestJsonReader", "func_name": "read"},
                         ),
                     ]
@@ -1151,7 +1151,7 @@ class BasePythonDataSourceTestsMixin:
                             {"class_name": "TestJsonReader", "func_name": "partitions"},
                         ),
                         (
-                            "TestJsonReader.read: None",
+                            "TestJsonReader.read: InputPartition(value=None)",
                             {"class_name": "TestJsonReader", "func_name": "read"},
                         ),
                     ]
@@ -1356,8 +1356,7 @@ class BasePythonDataSourceTestsMixin:
             self.assertEqual(stdout, "")
 
 
-class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):
-    ...
+class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase): ...
 
 
 class PythonDataSourceTestsWithSimpleWorker(PythonDataSourceTests):

@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, InternalRow, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, Star, TableAlreadyExistsException, UnresolvedRegex}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamedRelation, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, Star, TableAlreadyExistsException, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SortOrder, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
@@ -3514,14 +3514,38 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "change" -> change.toString, "tableName" -> toSQLId(sanitizedTableName)))
   }
 
-  def unsupportedTableChangesInAutoSchemaEvolutionError(
-      changes: Array[TableChange], tableName: Seq[String]): Throwable = {
-    val sanitizedTableName = tableName.map(_.replaceAll("\"", ""))
-    val changesDesc = changes.map(_.toString).mkString("; ")
+  def unsupportedAutoSchemaEvolutionChangesError(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      remainingChanges: Seq[TableChange]): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_TABLE_CHANGES_IN_AUTO_SCHEMA_EVOLUTION",
+      errorClass = "UNSUPPORTED_AUTO_SCHEMA_EVOLUTION_CHANGES.PARTIAL_EVOLUTION",
       messageParameters = Map(
-        "changes" -> changesDesc, "tableName" -> toSQLId(sanitizedTableName)))
+        "tableName" -> toSQLId(ident.toQualifiedNameParts(catalog)),
+        "changes" -> remainingChanges.mkString("; ")))
+  }
+
+  def unsupportedAutoSchemaEvolutionError(table: LogicalPlan): Throwable = {
+    val name = table match {
+      case r: NamedRelation => toSQLId(r.name)
+      case _ => table.nodeName
+    }
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_AUTO_SCHEMA_EVOLUTION_CHANGES.TABLE_NOT_SUPPORTED",
+      messageParameters = Map("tableName" -> name))
+  }
+
+  def failedAutoSchemaEvolutionError(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      cause: Throwable): Throwable = {
+    val detail = Option(cause.getMessage).getOrElse("Unknown error")
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_AUTO_SCHEMA_EVOLUTION_CHANGES.FAILED_EVOLUTION",
+      messageParameters = Map(
+        "tableName" -> toSQLId(ident.toQualifiedNameParts(catalog)),
+        "detail" -> detail),
+      cause = Some(cause))
   }
 
   def pathOptionNotSetCorrectlyWhenReadingError(): Throwable = {
@@ -3727,6 +3751,54 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
       messageParameters = Map("relationId" -> relationId))
+  }
+
+  def cdcUnsupportedOnRelationError(relationId: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.CHANGE_DATA_CAPTURE_ON_RELATION",
+      messageParameters = Map("relationId" -> relationId))
+  }
+
+  def cdcNotSupportedError(catalogName: String): AnalysisException = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.CHANGE_DATA_CAPTURE",
+      messageParameters = Map("catalogName" -> catalogName))
+  }
+
+  def invalidCdcOptionConflictingRangeTypes(): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_CDC_OPTION.CONFLICTING_RANGE_TYPES",
+      messageParameters = Map.empty[String, String])
+  }
+
+  def invalidCdcOptionInvalidDeduplicationMode(mode: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_CDC_OPTION.INVALID_DEDUPLICATION_MODE",
+      messageParameters = Map("mode" -> mode))
+  }
+
+  def invalidCdcOptionMissingStartingVersion(): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_CDC_OPTION.MISSING_STARTING_VERSION",
+      messageParameters = Map.empty[String, String])
+  }
+
+  def invalidCdcOptionMissingStartingTimestamp(): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_CDC_OPTION.MISSING_STARTING_TIMESTAMP",
+      messageParameters = Map.empty[String, String])
+  }
+
+  def invalidCdcOptionInvalidTimestamp(timestamp: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_CDC_OPTION.INVALID_TIMESTAMP",
+      messageParameters = Map("timestamp" -> timestamp))
+  }
+
+  def invalidCdcOptionInvalidTimestampExpr(): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_CDC_OPTION.INVALID_TIMESTAMP_EXPR",
+      messageParameters = Map.empty[String, String])
   }
 
   def writeDistributionAndOrderingNotSupportedInContinuousExecution(): Throwable = {
@@ -4386,6 +4458,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         cause = Some(fixedPointException)
       ),
       plan = singlePassResult
+    )
+  }
+
+  def singlePassFailedFixedPointSucceeded(
+      fixedPointResult: LogicalPlan,
+      singlePassException: Throwable): Throwable = {
+    new ExtendedAnalysisException(
+      new AnalysisException(
+        errorClass = "HYBRID_ANALYZER_EXCEPTION.SINGLE_PASS_FAILED_FIXED_POINT_SUCCEEDED",
+        messageParameters = Map("fixedPointOutput" -> fixedPointResult.toString),
+        cause = Some(singlePassException)
+      ),
+      plan = fixedPointResult
     )
   }
 

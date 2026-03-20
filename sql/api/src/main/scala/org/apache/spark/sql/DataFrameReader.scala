@@ -498,6 +498,25 @@ abstract class DataFrameReader {
   def table(tableName: String): DataFrame
 
   /**
+   * Returns the row-level changes (Change Data Capture) from the specified table as a
+   * `DataFrame`. Currently this API is only supported for Data Source V2 tables whose catalog
+   * implements `TableCatalog.loadChangelog()`.
+   *
+   * Use `.option()` to specify the version/timestamp range and processing options:
+   * {{{
+   *   spark.read
+   *     .option("startingVersion", "10")
+   *     .option("endingVersion", "20")
+   *     .changes("my_table")
+   * }}}
+   *
+   * @param tableName
+   *   a qualified or unqualified name that designates a table.
+   * @since 4.2.0
+   */
+  def changes(tableName: String): DataFrame
+
+  /**
    * Loads text files and returns a `DataFrame` whose schema starts with a string column named
    * "value", and followed by partitioned columns if there are any. See the documentation on the
    * other overloaded `text()` method for more details.

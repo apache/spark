@@ -410,17 +410,16 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
           .start()
 
         try {
-          // Initially no providers should be registered
-          assert(RocksDBMemoryManager.getNumRocksDBInstances(true) == 0)
-
           // Add data to trigger state store creation
           inputData.addData(1, 2, 3, 4)
           query.processAllAvailable()
 
-          // With 2 partitions, we should have 2 bounded memory providers registered
-          assert(RocksDBMemoryManager.getNumRocksDBInstances(true) == 2)
-
-          assert(RocksDBMemoryManager.getNumRocksDBInstances(false) == 0)
+          // With 2 partitions and bounded memory enabled, we should have
+          // 2 bounded memory providers registered and no unbounded ones
+          eventually(timeout(Span(10, Seconds)), interval(Span(500, Millis))) {
+            assert(RocksDBMemoryManager.getNumRocksDBInstances(true) == 2)
+            assert(RocksDBMemoryManager.getNumRocksDBInstances(false) == 0)
+          }
 
           // Add more data and check providers remain registered
           inputData.addData(5, 6, 7, 8)

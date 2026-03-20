@@ -18,6 +18,7 @@
 """
 MLflow-related functions to load models and apply them to pandas-on-Spark dataframes.
 """
+
 from typing import List, Union
 from typing import Any
 
@@ -216,7 +217,7 @@ def _test() -> None:
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.mlflow tests").getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.mlflow,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

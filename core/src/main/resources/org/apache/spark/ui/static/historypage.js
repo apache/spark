@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, Mustache, jQuery, uiRoot */
+/* global $, jQuery, uiRoot */
 
 import {formatDuration, formatTimeMillis, stringAbbreviate} from "./utils.js";
 
@@ -109,9 +109,11 @@ jQuery.extend( jQuery.fn.dataTableExt.ofnSearch, {
   }
 });
 
-$(document).ajaxStop($.unblockUI);
-$(document).ajaxStart(function(){
-  $.blockUI({ message: '<h3>Loading history summary...</h3>'});
+$(document).ajaxStop(function () {
+  $("#loading-overlay").addClass("d-none");
+});
+$(document).ajaxStart(function () {
+  $("#loading-overlay").removeClass("d-none");
 });
 
 $(document).ready(function() {
@@ -173,17 +175,10 @@ $(document).ready(function() {
       $.fn.dataTable.defaults.paging = false;
     }
 
-    var data = {
-      "uiroot": uiRoot,
-      "applications": array,
-      "hasMultipleAttempts": hasMultipleAttempts,
-      "showCompletedColumns": !requestedIncomplete,
-    };
-
     $.get(uiRoot + "/static/historypage-template.html", function(template) {
       var sibling = historySummary.prev();
       historySummary.detach();
-      var apps = $(Mustache.render($(template).filter("#history-summary-template").html(),data));
+      var apps = $($(template).filter("#history-summary-template").html());
       var attemptIdColumnName = 'attemptId';
       var startedColumnName = 'started';
       var completedColumnName = 'completed';

@@ -1,0 +1,2 @@
+SubqueryAlias primary.tempdb.myTable
++- RelationV2[id#0L, _change_type#0, _commit_version#0L, _commit_timestamp#0] primary.tempdb.myTable

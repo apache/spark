@@ -45,9 +45,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       // We resolve only UnresolvedIdentifiers, and pass on the other nodes
       val resolved = identifiers.map {
         case UnresolvedIdentifier(nameParts, _) =>
-          // From scripts we can only create local variables, which must be unqualified,
-          // and must not be DECLARE OR REPLACE.
-          if (withinSqlScript) {
+          if (withinLocalVariableScope) {
             if (c.replace) {
               throw new AnalysisException(
                 "INVALID_VARIABLE_DECLARATION.REPLACE_LOCAL_VARIABLE",
@@ -61,7 +59,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
                 Map("varName" -> toSQLId(nameParts)))
             }
 
-            SqlScriptingContextManager.get().map(_.getVariableManager)
+            SqlScriptingContextManager.get().flatMap(_.getVariableManager)
               .getOrElse(throw SparkException.internalError(
                 "Scripting local variable manager should be present in SQL script."))
               .qualify(nameParts.last)
@@ -77,7 +75,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       c.copy(names = resolved)
 
     case d @ DropVariable(UnresolvedIdentifier(nameParts, _), _) =>
-      if (withinSqlScript) {
+      if (withinLocalVariableScope) {
         throw new AnalysisException(
           "UNSUPPORTED_FEATURE.SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE", Map.empty)
       }
@@ -170,12 +168,11 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       nameParts: Seq[String],
       origin: Origin): ResolvedIdentifier = CurrentOrigin.withOrigin(origin) {
     if (nameParts.length == 1) {
-      val funcName = FunctionIdentifier(nameParts.head)
       val sessionCatalog = catalogManager.v1SessionCatalog
-      if (sessionCatalog.isBuiltinFunction(funcName)) {
+      if (sessionCatalog.isBuiltinFunction(nameParts.head)) {
         val ident = Identifier.of(Array(CatalogManager.BUILTIN_NAMESPACE), nameParts.head)
         ResolvedIdentifier(FakeSystemCatalog, ident)
-      } else if (sessionCatalog.isTemporaryFunction(funcName)) {
+      } else if (sessionCatalog.isTemporaryFunction(FunctionIdentifier(nameParts.head))) {
         val ident = Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), nameParts.head)
         ResolvedIdentifier(FakeSystemCatalog, ident)
       } else {
@@ -203,8 +200,14 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     }
   }
 
-  private def withinSqlScript: Boolean =
-    SqlScriptingContextManager.get().map(_.getVariableManager).isDefined
+  /**
+   * Whether we are within a local variable scope. This is true when we are directly inside a
+   * SQL script and local variable rules apply (unqualified DECLARE only, no OR REPLACE, no DROP).
+   * EXECUTE IMMEDIATE inside a script is not within a local variable scope, since it works
+   * with session variables as if it were outside the script.
+   */
+  private def withinLocalVariableScope: Boolean =
+    SqlScriptingContextManager.get().flatMap(_.getVariableManager).isDefined
 
   private def assertValidSessionVariableNameParts(
       nameParts: Seq[String],

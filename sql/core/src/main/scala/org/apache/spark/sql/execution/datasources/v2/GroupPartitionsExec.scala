@@ -25,7 +25,7 @@ import org.apache.spark.rdd.{CoalescedRDD, PartitionCoalescer, PartitionGroup, R
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, Partitioning}
-import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
+import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.types.DataType
@@ -45,16 +45,16 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  * @param expectedPartitionKeys Optional sequence of expected partition key values and their
  *                              split counts
  * @param reducers Optional reducers to apply to partition keys for grouping compatibility
- * @param applyPartialClustering Whether to apply partial clustering for skewed data
- * @param replicatePartitions Whether to replicate partitions across multiple keys
+ * @param distributePartitions When true, splits for a key are distributed across the expected
+ *                             partitions (padding with empty partitions). When false, all splits
+ *                             are replicated to every expected partition for that key.
  */
 case class GroupPartitionsExec(
     child: SparkPlan,
     @transient joinKeyPositions: Option[Seq[Int]] = None,
     @transient expectedPartitionKeys: Option[Seq[(InternalRowComparableWrapper, Int)]] = None,
     @transient reducers: Option[Seq[Option[Reducer[_, _]]]] = None,
-    @transient applyPartialClustering: Boolean = false,
-    @transient replicatePartitions: Boolean = false
+    @transient distributePartitions: Boolean = false
   ) extends UnaryExecNode {
 
   override def outputPartitioning: Partitioning = {
@@ -91,7 +91,7 @@ case class GroupPartitionsExec(
     val alignedPartitions = expectedPartitionKeys.get.flatMap { case (key, numSplits) =>
       if (numSplits > 1) isGrouped = false
       val splits = keyMap.getOrElse(key, Seq.empty)
-      if (applyPartialClustering && !replicatePartitions) {
+      if (distributePartitions) {
         // Distribute splits across expected partitions, padding with empty sequences
         val paddedSplits = splits.map(Seq(_)).padTo(numSplits, Seq.empty)
         paddedSplits.map((key, _))
@@ -190,6 +190,26 @@ case class GroupPartitionsExec(
     } else {
       super.outputOrdering
     }
+  }
+
+  override def simpleString(maxFields: Int): String = {
+    s"$nodeName${planSummaryParts(maxFields).map(" " + _).mkString("")}"
+  }
+
+  override protected def stringArgs: Iterator[Any] = planSummaryParts(Int.MaxValue)
+
+  private def planSummaryParts(joinKeyMaxFields: Int): Iterator[String] = {
+    val joinKeyStr = joinKeyPositions.map { p =>
+      s"JoinKeyPositions: ${truncatedString(p, "[", ",", "]", joinKeyMaxFields)}"
+    }.iterator
+    val expectedStr = expectedPartitionKeys.map(ks => s"ExpectedPartitionKeys: ${ks.size}")
+    val reducersStr = reducers.map { seq =>
+      val names = seq.map(_.map(_.toString()).getOrElse("identity"))
+      s"Reducers: ${truncatedString(names, "[", ", ", "]", joinKeyMaxFields)}"
+    }
+    val distributeStr = Iterator(s"DistributePartitions: $distributePartitions")
+    joinKeyStr ++ expectedStr ++ reducersStr ++ distributeStr
+
   }
 }
 
