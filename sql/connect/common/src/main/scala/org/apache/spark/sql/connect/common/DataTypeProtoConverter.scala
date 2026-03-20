@@ -177,228 +177,228 @@ object DataTypeProtoConverter {
   }
 
   private def toConnectProtoTypeInternal(t: DataType, bytesToBinary: Boolean): proto.DataType =
-    ProtoTypeOps(t).map(_.toConnectProtoType)
+    ProtoTypeOps(t)
+      .map(_.toConnectProtoType)
       .getOrElse(toConnectProtoTypeDefault(t, bytesToBinary))
 
-  private def toConnectProtoTypeDefault(
-      t: DataType, bytesToBinary: Boolean): proto.DataType = t match {
-    case NullType => ProtoDataTypes.NullType
+  private def toConnectProtoTypeDefault(t: DataType, bytesToBinary: Boolean): proto.DataType =
+    t match {
+      case NullType => ProtoDataTypes.NullType
 
-    case BooleanType => ProtoDataTypes.BooleanType
+      case BooleanType => ProtoDataTypes.BooleanType
 
-    case BinaryType => ProtoDataTypes.BinaryType
+      case BinaryType => ProtoDataTypes.BinaryType
 
-    case ByteType => ProtoDataTypes.ByteType
+      case ByteType => ProtoDataTypes.ByteType
 
-    case ShortType => ProtoDataTypes.ShortType
+      case ShortType => ProtoDataTypes.ShortType
 
-    case IntegerType => ProtoDataTypes.IntegerType
+      case IntegerType => ProtoDataTypes.IntegerType
 
-    case LongType => ProtoDataTypes.LongType
+      case LongType => ProtoDataTypes.LongType
 
-    case FloatType => ProtoDataTypes.FloatType
+      case FloatType => ProtoDataTypes.FloatType
 
-    case DoubleType => ProtoDataTypes.DoubleType
+      case DoubleType => ProtoDataTypes.DoubleType
 
-    case DecimalType.Fixed(precision, scale) =>
-      proto.DataType
-        .newBuilder()
-        .setDecimal(
-          proto.DataType.Decimal.newBuilder().setPrecision(precision).setScale(scale).build())
-        .build()
-
-    case c: CharType =>
-      proto.DataType
-        .newBuilder()
-        .setChar(proto.DataType.Char.newBuilder().setLength(c.length).build())
-        .build()
-
-    case v: VarcharType =>
-      proto.DataType
-        .newBuilder()
-        .setVarChar(proto.DataType.VarChar.newBuilder().setLength(v.length).build())
-        .build()
-
-    // StringType must be matched after CharType and VarcharType
-    case s: StringType =>
-      val stringBuilder = proto.DataType.String.newBuilder()
-      // Send collation only for explicit collations (including explicit UTF8_BINARY).
-      // Default STRING (case object) has no explicit collation and should omit it.
-      if (!s.eq(StringType)) {
-        stringBuilder.setCollation(
-          CollationFactory.fetchCollation(s.collationId).collationName)
-      }
-      proto.DataType
-        .newBuilder()
-        .setString(stringBuilder.build())
-        .build()
-
-    case DateType => ProtoDataTypes.DateType
-
-    case TimestampType => ProtoDataTypes.TimestampType
-
-    case TimestampNTZType => ProtoDataTypes.TimestampNTZType
-
-    case TimeType(precision) =>
-      proto.DataType
-        .newBuilder()
-        .setTime(proto.DataType.Time.newBuilder().setPrecision(precision).build())
-        .build()
-
-    case CalendarIntervalType => ProtoDataTypes.CalendarIntervalType
-
-    case YearMonthIntervalType(startField, endField) =>
-      proto.DataType
-        .newBuilder()
-        .setYearMonthInterval(
-          proto.DataType.YearMonthInterval
-            .newBuilder()
-            .setStartField(startField)
-            .setEndField(endField)
-            .build())
-        .build()
-
-    case DayTimeIntervalType(startField, endField) =>
-      proto.DataType
-        .newBuilder()
-        .setDayTimeInterval(
-          proto.DataType.DayTimeInterval
-            .newBuilder()
-            .setStartField(startField)
-            .setEndField(endField)
-            .build())
-        .build()
-
-    case ArrayType(elementType: DataType, containsNull: Boolean) =>
-      if (elementType == ByteType && bytesToBinary) {
+      case DecimalType.Fixed(precision, scale) =>
         proto.DataType
           .newBuilder()
-          .setBinary(proto.DataType.Binary.newBuilder().build())
+          .setDecimal(
+            proto.DataType.Decimal.newBuilder().setPrecision(precision).setScale(scale).build())
           .build()
-      } else {
+
+      case c: CharType =>
         proto.DataType
           .newBuilder()
-          .setArray(
-            proto.DataType.Array
+          .setChar(proto.DataType.Char.newBuilder().setLength(c.length).build())
+          .build()
+
+      case v: VarcharType =>
+        proto.DataType
+          .newBuilder()
+          .setVarChar(proto.DataType.VarChar.newBuilder().setLength(v.length).build())
+          .build()
+
+      // StringType must be matched after CharType and VarcharType
+      case s: StringType =>
+        val stringBuilder = proto.DataType.String.newBuilder()
+        // Send collation only for explicit collations (including explicit UTF8_BINARY).
+        // Default STRING (case object) has no explicit collation and should omit it.
+        if (!s.eq(StringType)) {
+          stringBuilder.setCollation(CollationFactory.fetchCollation(s.collationId).collationName)
+        }
+        proto.DataType
+          .newBuilder()
+          .setString(stringBuilder.build())
+          .build()
+
+      case DateType => ProtoDataTypes.DateType
+
+      case TimestampType => ProtoDataTypes.TimestampType
+
+      case TimestampNTZType => ProtoDataTypes.TimestampNTZType
+
+      case TimeType(precision) =>
+        proto.DataType
+          .newBuilder()
+          .setTime(proto.DataType.Time.newBuilder().setPrecision(precision).build())
+          .build()
+
+      case CalendarIntervalType => ProtoDataTypes.CalendarIntervalType
+
+      case YearMonthIntervalType(startField, endField) =>
+        proto.DataType
+          .newBuilder()
+          .setYearMonthInterval(
+            proto.DataType.YearMonthInterval
               .newBuilder()
-              .setElementType(toConnectProtoTypeInternal(elementType, bytesToBinary))
-              .setContainsNull(containsNull)
+              .setStartField(startField)
+              .setEndField(endField)
               .build())
           .build()
-      }
 
-    case StructType(fields: Array[StructField]) =>
-      val protoFields = fields.toImmutableArraySeq.map {
-        case StructField(
-              name: String,
-              dataType: DataType,
-              nullable: Boolean,
-              metadata: Metadata) =>
-          if (metadata.equals(Metadata.empty)) {
-            proto.DataType.StructField
+      case DayTimeIntervalType(startField, endField) =>
+        proto.DataType
+          .newBuilder()
+          .setDayTimeInterval(
+            proto.DataType.DayTimeInterval
               .newBuilder()
-              .setName(name)
-              .setDataType(toConnectProtoTypeInternal(dataType, bytesToBinary))
-              .setNullable(nullable)
-              .build()
-          } else {
-            proto.DataType.StructField
-              .newBuilder()
-              .setName(name)
-              .setDataType(toConnectProtoTypeInternal(dataType, bytesToBinary))
-              .setNullable(nullable)
-              .setMetadata(metadata.json)
-              .build()
-          }
-      }
-      proto.DataType
-        .newBuilder()
-        .setStruct(
-          proto.DataType.Struct
-            .newBuilder()
-            .addAllFields(protoFields.asJava)
-            .build())
-        .build()
+              .setStartField(startField)
+              .setEndField(endField)
+              .build())
+          .build()
 
-    case MapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean) =>
-      proto.DataType
-        .newBuilder()
-        .setMap(
-          proto.DataType.Map
-            .newBuilder()
-            .setKeyType(toConnectProtoTypeInternal(keyType, bytesToBinary))
-            .setValueType(toConnectProtoTypeInternal(valueType, bytesToBinary))
-            .setValueContainsNull(valueContainsNull)
-            .build())
-        .build()
-
-    case g: GeographyType =>
-      proto.DataType
-        .newBuilder()
-        .setGeography(
-          proto.DataType.Geography
-            .newBuilder()
-            .setSrid(g.srid)
-            .build())
-        .build()
-
-    case g: GeometryType =>
-      proto.DataType
-        .newBuilder()
-        .setGeometry(
-          proto.DataType.Geometry
-            .newBuilder()
-            .setSrid(g.srid)
-            .build())
-        .build()
-
-    case VariantType => ProtoDataTypes.VariantType
-
-    case pyudt: PythonUserDefinedType =>
-      // Python UDT
-      proto.DataType
-        .newBuilder()
-        .setUdt(
-          proto.DataType.UDT
-            .newBuilder()
-            .setType("udt")
-            .setPythonClass(pyudt.pyUDT)
-            .setSqlType(toConnectProtoTypeInternal(pyudt.sqlType, bytesToBinary))
-            .setSerializedPythonClass(pyudt.serializedPyClass)
-            .build())
-        .build()
-
-    case udt: UserDefinedType[_] =>
-      // Scala/Java UDT
-      udt.getClass.getName match {
-        // To avoid making connect-common depend on ml,
-        // we use class name to identify VectorUDT and MatrixUDT.
-        case "org.apache.spark.ml.linalg.VectorUDT" =>
-          ProtoDataTypes.VectorUDT
-
-        case "org.apache.spark.ml.linalg.MatrixUDT" =>
-          ProtoDataTypes.MatrixUDT
-
-        case className =>
-          val builder = proto.DataType.UDT.newBuilder()
-          builder
-            .setType("udt")
-            .setJvmClass(className)
-            .setSqlType(toConnectProtoTypeInternal(udt.sqlType, bytesToBinary))
-
-          if (udt.pyUDT != null) {
-            builder.setPythonClass(udt.pyUDT)
-          }
-
+      case ArrayType(elementType: DataType, containsNull: Boolean) =>
+        if (elementType == ByteType && bytesToBinary) {
           proto.DataType
             .newBuilder()
-            .setUdt(builder.build())
+            .setBinary(proto.DataType.Binary.newBuilder().build())
             .build()
-      }
+        } else {
+          proto.DataType
+            .newBuilder()
+            .setArray(
+              proto.DataType.Array
+                .newBuilder()
+                .setElementType(toConnectProtoTypeInternal(elementType, bytesToBinary))
+                .setContainsNull(containsNull)
+                .build())
+            .build()
+        }
 
-    case _ =>
-      throw InvalidPlanInput(
-        "CONNECT_INVALID_PLAN.DATA_TYPE_UNSUPPORTED_CATALYST_TO_PROTO",
-        Map("typeName" -> t.typeName))
-  }
+      case StructType(fields: Array[StructField]) =>
+        val protoFields = fields.toImmutableArraySeq.map {
+          case StructField(
+                name: String,
+                dataType: DataType,
+                nullable: Boolean,
+                metadata: Metadata) =>
+            if (metadata.equals(Metadata.empty)) {
+              proto.DataType.StructField
+                .newBuilder()
+                .setName(name)
+                .setDataType(toConnectProtoTypeInternal(dataType, bytesToBinary))
+                .setNullable(nullable)
+                .build()
+            } else {
+              proto.DataType.StructField
+                .newBuilder()
+                .setName(name)
+                .setDataType(toConnectProtoTypeInternal(dataType, bytesToBinary))
+                .setNullable(nullable)
+                .setMetadata(metadata.json)
+                .build()
+            }
+        }
+        proto.DataType
+          .newBuilder()
+          .setStruct(
+            proto.DataType.Struct
+              .newBuilder()
+              .addAllFields(protoFields.asJava)
+              .build())
+          .build()
+
+      case MapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean) =>
+        proto.DataType
+          .newBuilder()
+          .setMap(
+            proto.DataType.Map
+              .newBuilder()
+              .setKeyType(toConnectProtoTypeInternal(keyType, bytesToBinary))
+              .setValueType(toConnectProtoTypeInternal(valueType, bytesToBinary))
+              .setValueContainsNull(valueContainsNull)
+              .build())
+          .build()
+
+      case g: GeographyType =>
+        proto.DataType
+          .newBuilder()
+          .setGeography(
+            proto.DataType.Geography
+              .newBuilder()
+              .setSrid(g.srid)
+              .build())
+          .build()
+
+      case g: GeometryType =>
+        proto.DataType
+          .newBuilder()
+          .setGeometry(
+            proto.DataType.Geometry
+              .newBuilder()
+              .setSrid(g.srid)
+              .build())
+          .build()
+
+      case VariantType => ProtoDataTypes.VariantType
+
+      case pyudt: PythonUserDefinedType =>
+        // Python UDT
+        proto.DataType
+          .newBuilder()
+          .setUdt(
+            proto.DataType.UDT
+              .newBuilder()
+              .setType("udt")
+              .setPythonClass(pyudt.pyUDT)
+              .setSqlType(toConnectProtoTypeInternal(pyudt.sqlType, bytesToBinary))
+              .setSerializedPythonClass(pyudt.serializedPyClass)
+              .build())
+          .build()
+
+      case udt: UserDefinedType[_] =>
+        // Scala/Java UDT
+        udt.getClass.getName match {
+          // To avoid making connect-common depend on ml,
+          // we use class name to identify VectorUDT and MatrixUDT.
+          case "org.apache.spark.ml.linalg.VectorUDT" =>
+            ProtoDataTypes.VectorUDT
+
+          case "org.apache.spark.ml.linalg.MatrixUDT" =>
+            ProtoDataTypes.MatrixUDT
+
+          case className =>
+            val builder = proto.DataType.UDT.newBuilder()
+            builder
+              .setType("udt")
+              .setJvmClass(className)
+              .setSqlType(toConnectProtoTypeInternal(udt.sqlType, bytesToBinary))
+
+            if (udt.pyUDT != null) {
+              builder.setPythonClass(udt.pyUDT)
+            }
+
+            proto.DataType
+              .newBuilder()
+              .setUdt(builder.build())
+              .build()
+        }
+
+      case _ =>
+        throw InvalidPlanInput(
+          "CONNECT_INVALID_PLAN.DATA_TYPE_UNSUPPORTED_CATALYST_TO_PROTO",
+          Map("typeName" -> t.typeName))
+    }
 }

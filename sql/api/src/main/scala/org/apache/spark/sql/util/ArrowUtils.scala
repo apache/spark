@@ -40,11 +40,14 @@ private[sql] object ArrowUtils {
 
   /** Maps data type from Spark to Arrow. NOTE: timeZoneId required for TimestampTypes */
   def toArrowType(dt: DataType, timeZoneId: String, largeVarTypes: Boolean = false): ArrowType =
-    ClientTypeOps(dt).map(_.toArrowType(timeZoneId))
+    ClientTypeOps(dt)
+      .map(_.toArrowType(timeZoneId))
       .getOrElse(toArrowTypeDefault(dt, timeZoneId, largeVarTypes))
 
   private def toArrowTypeDefault(
-      dt: DataType, timeZoneId: String, largeVarTypes: Boolean): ArrowType = dt match {
+      dt: DataType,
+      timeZoneId: String,
+      largeVarTypes: Boolean): ArrowType = dt match {
     case BooleanType => ArrowType.Bool.INSTANCE
     case ByteType => new ArrowType.Int(8, true)
     case ShortType => new ArrowType.Int(8 * 2, true)

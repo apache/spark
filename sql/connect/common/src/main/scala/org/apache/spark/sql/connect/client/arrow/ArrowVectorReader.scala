@@ -69,6 +69,14 @@ object ArrowVectorReader {
   def apply(
       targetDataType: DataType,
       vector: FieldVector,
+      timeZoneId: String): ArrowVectorReader =
+    ConnectArrowTypeOps(targetDataType)
+      .map(_.createArrowVectorReader(vector).asInstanceOf[ArrowVectorReader])
+      .getOrElse(applyDefault(targetDataType, vector, timeZoneId))
+
+  private def applyDefault(
+      targetDataType: DataType,
+      vector: FieldVector,
       timeZoneId: String): ArrowVectorReader = {
     val vectorDataType = ArrowUtils.fromArrowType(vector.getField.getType)
     if (!UpCastRule.canUpCast(vectorDataType, targetDataType)) {
@@ -93,10 +101,6 @@ object ArrowVectorReader {
       case v: DateDayVector => new DateDayVectorReader(v, timeZoneId)
       case v: TimeStampMicroTZVector => new TimeStampMicroTZVectorReader(v)
       case v: TimeStampMicroVector => new TimeStampMicroVectorReader(v, timeZoneId)
-      case v if ConnectArrowTypeOps(targetDataType).isDefined =>
-        ConnectArrowTypeOps(targetDataType).get
-          .createArrowVectorReader(v)
-          .asInstanceOf[ArrowVectorReader]
       case v: TimeNanoVector => new TimeVectorReader(v)
       case _: NullVector => NullVectorReader
       case _ => throw new RuntimeException("Unsupported Vector Type: " + vector.getClass)
