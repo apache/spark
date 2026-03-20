@@ -2,7 +2,7 @@
 
 ## Before Making Changes
 
-Before the first edit in a session, ensure a clean working environment:
+Before the first edit in a session, ensure a clean working environment. DO NOT skip these checks:
 
 1. Run `git remote -v` to identify the personal fork and upstream (`apache/spark`). If unclear, ask the user to configure their remotes following the standard convention (`origin` for the fork, `upstream` for `apache/spark`).
 2. If the latest commit on `<upstream>/master` is more than a day old (check with `git log -1 --format="%ci" <upstream>/master`), run `git fetch <upstream> master`.
@@ -11,7 +11,7 @@ Before the first edit in a session, ensure a clean working environment:
 
 ## Development Notes
 
-SQL golden file tests are managed by `SQLQueryTestSuite` and its variants. Read the class documentation before running or updating these tests.
+SQL golden file tests are managed by `SQLQueryTestSuite` and its variants. Read the class documentation before running or updating these tests. DO NOT edit the generated golden files (`.sql.out`) directly. Always regenerate them when needed, and carefully review the diff to make sure it's expected.
 
 Spark Connect protocol is defined in proto files under `sql/connect/common/src/main/protobuf/`. Read the README there before modifying proto definitions.
 
@@ -70,6 +70,6 @@ Run a single test case:
 
 PR title requires a JIRA ticket ID (e.g., `[SPARK-xxxx][SQL] Title`). Ask the user to create a new ticket or provide an existing one if not given. Follow the template in `.github/PULL_REQUEST_TEMPLATE` for the PR description.
 
-Contributors push their feature branch to their personal fork and open PRs against `master` on the upstream Apache Spark repo.
+DO NOT push to the upstream repo. Always push to the personal fork. Open PRs against `master` on the upstream repo.
 
 Always get user approval before external operations such as pushing commits, creating PRs, or posting comments. Use `gh pr create` to open PRs. If `gh` is not installed, generate the GitHub PR URL for the user and recommend installing the GitHub CLI.
