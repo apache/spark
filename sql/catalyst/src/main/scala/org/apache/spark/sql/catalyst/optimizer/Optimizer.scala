@@ -234,8 +234,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // this batch.
     Batch("Early Filter and Projection Push-Down", Once, earlyScanPushDownRules: _*),
     Batch("Update CTE Relation Stats", Once, UpdateCTERelationStats),
-    // This batch pushes Join through Union when the right side is broadcastable.
-    // It must run after "Early Filter and Projection Push-Down" because it relies on
+    // Must run after "Early Filter and Projection Push-Down" because it relies on
     // accurate stats (e.g., DSv2 relations only report stats after V2ScanRelationPushDown).
     Batch("Push Down Join Through Union", Once,
       PushDownJoinThroughUnion),
