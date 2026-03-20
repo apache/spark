@@ -320,6 +320,70 @@ class FrameReindexingMixin:
             lambda: psdf.drop(labels="A", axis=0, columns="X"),
         )
 
+    def test_drop_with_errors(self):
+        pdf = pd.DataFrame({"x": [1, 2], "y": [3, 4], "z": [5, 6]}, index=np.random.rand(2))
+        psdf = ps.from_pandas(pdf)
+
+        # errors='ignore' with all-missing columns
+        self.assert_eq(
+            psdf.drop(columns=["a", "b"], errors="ignore"),
+            pdf.drop(columns=["a", "b"], errors="ignore"),
+        )
+
+        # errors='ignore' with some existing, some missing columns
+        self.assert_eq(
+            psdf.drop(columns=["x", "a"], errors="ignore"),
+            pdf.drop(columns=["x", "a"], errors="ignore"),
+        )
+
+        # errors='ignore' via labels + axis=1
+        self.assert_eq(
+            psdf.drop(["x", "a"], axis=1, errors="ignore"),
+            pdf.drop(["x", "a"], axis=1, errors="ignore"),
+        )
+
+        # errors='raise' (explicit) should still raise for missing columns
+        self.assertRaises(KeyError, lambda: psdf.drop(columns=["a", "b"], errors="raise"))
+
+        # errors='raise' with partial match (some exist, some don't)
+        self.assertRaises(KeyError, lambda: psdf.drop(columns=["x", "a"], errors="raise"))
+
+        # errors='raise' is the default
+        self.assertRaises(KeyError, lambda: psdf.drop(columns=["x", "a"]))
+
+        # errors='ignore' for row drops
+        pdf2 = pd.DataFrame({"X": [1, 2, 3], "Y": [4, 5, 6]}, index=["A", "B", "C"])
+        psdf2 = ps.from_pandas(pdf2)
+        self.assert_eq(
+            psdf2.drop(index=["A", "Z"], errors="ignore"),
+            pdf2.drop(index=["A", "Z"], errors="ignore"),
+        )
+
+        # errors='ignore' for combined row and column drops
+        self.assert_eq(
+            psdf2.drop(index=["A"], columns=["X", "W"], errors="ignore"),
+            pdf2.drop(index=["A"], columns=["X", "W"], errors="ignore"),
+        )
+
+        # MultiIndex columns with errors='ignore'
+        columns = pd.MultiIndex.from_tuples([(1, "x"), (1, "y"), (2, "z")])
+        pdf.columns = columns
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            psdf.drop(columns=3, errors="ignore"),
+            pdf.drop(columns=3, errors="ignore"),
+        )
+        self.assert_eq(
+            psdf.drop(columns=(1, "z"), errors="ignore"),
+            pdf.drop(columns=(1, "z"), errors="ignore"),
+        )
+
+        # Invalid errors value
+        self.assertRaises(
+            ValueError,
+            lambda: psdf.drop(columns=[1], errors="invalid"),
+        )
+
     def test_droplevel(self):
         pdf = (
             pd.DataFrame([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])

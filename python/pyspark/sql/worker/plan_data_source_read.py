@@ -203,9 +203,9 @@ def write_read_func_and_partitions(
             columns = [column.to_pylist() for column in batch.columns]
             partition_bytes = converter(columns[0][0])  # type: ignore[misc]
 
-        assert (
-            partition_bytes is not None
-        ), "The input iterator for Python data source read function is empty."
+        assert partition_bytes is not None, (
+            "The input iterator for Python data source read function is empty."
+        )
 
         # Deserialize the partition value.
         partition = pickleSer.loads(partition_bytes)
@@ -240,7 +240,12 @@ def write_read_func_and_partitions(
 
     if not is_streaming:
         # The partitioning of python batch source read is determined before query execution.
-        partitions = reader.partitions()  # type: ignore[call-arg]
+        try:
+            partitions = reader.partitions()  # type: ignore[call-arg]
+        except NotImplementedError:
+            # Backward compatibility for data sources that raise NotImplementedError for partitions
+            # Our old base class did this so an old client may still be using it.
+            partitions = [InputPartition(None)]
         if not isinstance(partitions, list):
             raise PySparkRuntimeError(
                 errorClass="DATA_SOURCE_TYPE_MISMATCH",
@@ -333,8 +338,7 @@ def _main(infile: IO, outfile: IO) -> None:
     # Receive the configuration values.
     max_arrow_batch_size = read_int(infile)
     assert max_arrow_batch_size > 0, (
-        "The maximum arrow batch size should be greater than 0, but got "
-        f"'{max_arrow_batch_size}'"
+        f"The maximum arrow batch size should be greater than 0, but got '{max_arrow_batch_size}'"
     )
     enable_pushdown = read_bool(infile)
 

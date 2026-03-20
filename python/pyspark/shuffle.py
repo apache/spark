@@ -61,7 +61,7 @@ except ImportError:
                     return int(line.split()[1]) >> 10
 
         else:
-            warnings.warn("Please install psutil to have better " "support with spilling")
+            warnings.warn("Please install psutil to have better support with spilling")
             if platform.system() == "Darwin":
                 import resource
 

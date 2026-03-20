@@ -550,7 +550,8 @@ class Index(IndexOpsMixin):
             "It should only be used if the resulting NumPy ndarray is expected to be small."
         )
         result = np.asarray(
-            self._to_internal_pandas()._values, dtype=dtype  # type: ignore[attr-defined, arg-type]
+            self._to_internal_pandas()._values,  # type: ignore[attr-defined]
+            dtype=dtype,  # type: ignore[arg-type]
         )
         if copy:
             result = result.copy()
@@ -929,9 +930,7 @@ class Index(IndexOpsMixin):
             else:
 
                 def struct_to_array(scol: Column) -> Column:
-                    field_names = result._internal.spark_type_for(
-                        scol
-                    ).fieldNames()  # type: ignore[attr-defined]
+                    field_names = result._internal.spark_type_for(scol).fieldNames()  # type: ignore[attr-defined]
                     return F.array([scol[field] for field in field_names])
 
                 return result.spark.transform(struct_to_array)
@@ -1262,7 +1261,7 @@ class Index(IndexOpsMixin):
                     " %d is not a valid level number" % (level,)
                 )
             elif level > 0:
-                raise IndexError("Too many levels:" " Index has only 1 level, not %d" % (level + 1))
+                raise IndexError("Too many levels: Index has only 1 level, not %d" % (level + 1))
         elif level != self.name:
             raise KeyError(
                 "Requested level ({}) does not match index name ({})".format(level, self.name)
