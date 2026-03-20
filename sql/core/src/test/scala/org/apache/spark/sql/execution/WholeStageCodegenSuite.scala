@@ -947,58 +947,41 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
   }
 
   test("SPARK-56032: subexpression elimination in FilterExec codegen") {
-    def testFilterCSE(cseEnabled: Boolean): (Seq[Row], String) = {
-      withSQLConf(
-        SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> cseEnabled.toString,
-        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
-        SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
-        val df = spark.range(10).selectExpr("id", "id as a", "id as b")
-        val filtered = df.where("(a + b) > 3 AND (a + b) < 17 AND (a + b) != 10")
-        val plan = filtered.queryExecution.executedPlan
-        assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
-          "Filter should be in whole-stage codegen")
-        (filtered.collect().toSeq, codegenString(plan))
+    val schema = StructType(Seq(
+      StructField("a", IntegerType, nullable = true),
+      StructField("b", IntegerType, nullable = true)))
+    val data = spark.sparkContext.parallelize(Seq(
+      Row(1, 5), Row(null, 3), Row(4, null), Row(5, 6), Row(7, 8), Row(2, 3)))
+
+    Seq("1", Int.MaxValue.toString).foreach { splitThreshold =>
+      def testFilterCSE(cseEnabled: Boolean): (Seq[Row], String) = {
+        withSQLConf(
+          SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> cseEnabled.toString,
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> splitThreshold) {
+          val df = spark.createDataFrame(data, schema)
+          val filtered = df.where("a IS NOT NULL AND (a + b) > 3 AND (a + b) < 15")
+          val plan = filtered.queryExecution.executedPlan
+          assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+            "Filter should be in whole-stage codegen")
+          (filtered.collect().toSeq, codegenString(plan))
+        }
       }
-    }
 
-    val (cseResult, cseCode) = testFilterCSE(cseEnabled = true)
-    val (noCseResult, noCseCode) = testFilterCSE(cseEnabled = false)
+      val (cseResult, cseCode) = testFilterCSE(cseEnabled = true)
+      val (noCseResult, noCseCode) = testFilterCSE(cseEnabled = false)
 
-    val expected = (2L to 8L).filter(_ * 2 != 10).map(i => Row(i, i, i))
-    assert(cseResult === expected)
-    assert(noCseResult === expected)
+      val expected = Seq(Row(1, 5), Row(5, 6), Row(2, 3))
+      assert(cseResult === expected)
+      assert(noCseResult === expected)
 
-    val addExactPattern = "addExact".r
-    val cseAddCount = addExactPattern.findAllIn(cseCode).length
-    val noCseAddCount = addExactPattern.findAllIn(noCseCode).length
-    assert(cseAddCount < noCseAddCount,
-      s"CSE should reduce repeated evaluation: addExact appears $cseAddCount times with CSE " +
-        s"vs $noCseAddCount times without")
-  }
-
-  test("SPARK-56032: FilterExec CSE with notNullPreds sharing input variables") {
-    withSQLConf(
-      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
-      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-      val schema = StructType(Seq(
-        StructField("a", IntegerType, nullable = true),
-        StructField("b", IntegerType, nullable = true)))
-      val data = spark.sparkContext.parallelize(Seq(
-        Row(1, 5), Row(null, 3), Row(4, null), Row(5, 6), Row(7, 8), Row(2, 3)))
-      val df = spark.createDataFrame(data, schema)
-
-      val result = df.where("a IS NOT NULL AND (a + b) > 3 AND (a + b) < 15")
-
-      val plan = result.queryExecution.executedPlan
-      assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
-        "Filter should be in whole-stage codegen")
-
-      val codeGenStr = codegenString(plan)
-      assert(codeGenStr.nonEmpty, "Should generate valid code")
-
-      checkAnswer(result, Seq(Row(1, 5), Row(5, 6), Row(2, 3)))
+      val addExactPattern = "addExact".r
+      val cseAddCount = addExactPattern.findAllIn(cseCode).length
+      val noCseAddCount = addExactPattern.findAllIn(noCseCode).length
+      assert(cseAddCount < noCseAddCount,
+        s"CSE should reduce repeated evaluation (splitThreshold=$splitThreshold): " +
+          s"addExact appears $cseAddCount times with CSE vs $noCseAddCount times without")
     }
   }
 }
