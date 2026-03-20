@@ -116,7 +116,7 @@ private[spark] object History {
   val SNAPSHOT_ENABLED = ConfigBuilder("spark.history.snapshot.enabled")
     .doc("Whether Spark should write a protobuf history snapshot for completed applications " +
       "and allow the History Server to load that snapshot instead of replaying the event log.")
-    .version("4.1.0")
+    .version("4.2.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
     .createWithDefault(false)
@@ -124,7 +124,7 @@ private[spark] object History {
   val SNAPSHOT_PATH = ConfigBuilder("spark.history.snapshot.path")
     .doc("Shared filesystem or object store path where Spark writes protobuf history snapshots " +
       "for completed applications and the History Server reads them from.")
-    .version("4.1.0")
+    .version("4.2.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .stringConf
     .createOptional
