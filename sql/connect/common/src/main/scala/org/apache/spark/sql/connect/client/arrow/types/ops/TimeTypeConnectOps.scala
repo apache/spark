@@ -85,14 +85,13 @@ private[connect] class TimeTypeConnectOps(val t: TimeType)
     SparkDateTimeUtils.nanosToLocalTime(v.getTime.getNano)
   }
 
-  override def buildProtoDataType(
-      literal: proto.Expression.Literal,
-      builder: proto.DataType.Builder): Unit = {
+  override def getProtoDataTypeFromLiteral(
+      literal: proto.Expression.Literal): proto.DataType = {
     val timeBuilder = proto.DataType.Time.newBuilder()
     if (literal.getTime.hasPrecision) {
       timeBuilder.setPrecision(literal.getTime.getPrecision)
     }
-    builder.setTime(timeBuilder.build())
+    proto.DataType.newBuilder().setTime(timeBuilder.build()).build()
   }
 
   // ==================== ConnectArrowTypeOps ====================

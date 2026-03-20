@@ -47,34 +47,35 @@ private[sql] object ArrowUtils {
   private def toArrowTypeDefault(
       dt: DataType,
       timeZoneId: String,
-      largeVarTypes: Boolean): ArrowType = dt match {
-    case BooleanType => ArrowType.Bool.INSTANCE
-    case ByteType => new ArrowType.Int(8, true)
-    case ShortType => new ArrowType.Int(8 * 2, true)
-    case IntegerType => new ArrowType.Int(8 * 4, true)
-    case LongType => new ArrowType.Int(8 * 8, true)
-    case FloatType => new ArrowType.FloatingPoint(FloatingPointPrecision.SINGLE)
-    case DoubleType => new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE)
-    case _: StringType if !largeVarTypes => ArrowType.Utf8.INSTANCE
-    case BinaryType if !largeVarTypes => ArrowType.Binary.INSTANCE
-    case _: StringType if largeVarTypes => ArrowType.LargeUtf8.INSTANCE
-    case BinaryType if largeVarTypes => ArrowType.LargeBinary.INSTANCE
-    case DecimalType.Fixed(precision, scale) =>
-      new ArrowType.Decimal(precision, scale, 8 * 16)
-    case DateType => new ArrowType.Date(DateUnit.DAY)
-    case TimestampType if timeZoneId == null =>
-      throw SparkException.internalError("Missing timezoneId where it is mandatory.")
-    case TimestampType => new ArrowType.Timestamp(TimeUnit.MICROSECOND, timeZoneId)
-    case TimestampNTZType =>
-      new ArrowType.Timestamp(TimeUnit.MICROSECOND, null)
-    case _: TimeType => new ArrowType.Time(TimeUnit.NANOSECOND, 8 * 8)
-    case NullType => ArrowType.Null.INSTANCE
-    case _: YearMonthIntervalType => new ArrowType.Interval(IntervalUnit.YEAR_MONTH)
-    case _: DayTimeIntervalType => new ArrowType.Duration(TimeUnit.MICROSECOND)
-    case CalendarIntervalType => new ArrowType.Interval(IntervalUnit.MONTH_DAY_NANO)
-    case _ =>
-      throw ExecutionErrors.unsupportedDataTypeError(dt)
-  }
+      largeVarTypes: Boolean): ArrowType =
+    dt match {
+      case BooleanType => ArrowType.Bool.INSTANCE
+      case ByteType => new ArrowType.Int(8, true)
+      case ShortType => new ArrowType.Int(8 * 2, true)
+      case IntegerType => new ArrowType.Int(8 * 4, true)
+      case LongType => new ArrowType.Int(8 * 8, true)
+      case FloatType => new ArrowType.FloatingPoint(FloatingPointPrecision.SINGLE)
+      case DoubleType => new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE)
+      case _: StringType if !largeVarTypes => ArrowType.Utf8.INSTANCE
+      case BinaryType if !largeVarTypes => ArrowType.Binary.INSTANCE
+      case _: StringType if largeVarTypes => ArrowType.LargeUtf8.INSTANCE
+      case BinaryType if largeVarTypes => ArrowType.LargeBinary.INSTANCE
+      case DecimalType.Fixed(precision, scale) =>
+        new ArrowType.Decimal(precision, scale, 8 * 16)
+      case DateType => new ArrowType.Date(DateUnit.DAY)
+      case TimestampType if timeZoneId == null =>
+        throw SparkException.internalError("Missing timezoneId where it is mandatory.")
+      case TimestampType => new ArrowType.Timestamp(TimeUnit.MICROSECOND, timeZoneId)
+      case TimestampNTZType =>
+        new ArrowType.Timestamp(TimeUnit.MICROSECOND, null)
+      case _: TimeType => new ArrowType.Time(TimeUnit.NANOSECOND, 8 * 8)
+      case NullType => ArrowType.Null.INSTANCE
+      case _: YearMonthIntervalType => new ArrowType.Interval(IntervalUnit.YEAR_MONTH)
+      case _: DayTimeIntervalType => new ArrowType.Duration(TimeUnit.MICROSECOND)
+      case CalendarIntervalType => new ArrowType.Interval(IntervalUnit.MONTH_DAY_NANO)
+      case _ =>
+        throw ExecutionErrors.unsupportedDataTypeError(dt)
+    }
 
   def fromArrowType(dt: ArrowType): DataType =
     ClientTypeOps.fromArrowType(dt).getOrElse(fromArrowTypeDefault(dt))

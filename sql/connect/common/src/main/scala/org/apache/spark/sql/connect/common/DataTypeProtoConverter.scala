@@ -33,69 +33,70 @@ object DataTypeProtoConverter {
   def toCatalystType(t: proto.DataType): DataType =
     ProtoTypeOps.toCatalystType(t).getOrElse(toCatalystTypeDefault(t))
 
-  private def toCatalystTypeDefault(t: proto.DataType): DataType = t.getKindCase match {
-    case proto.DataType.KindCase.NULL => NullType
+  private def toCatalystTypeDefault(t: proto.DataType): DataType =
+    t.getKindCase match {
+      case proto.DataType.KindCase.NULL => NullType
 
-    case proto.DataType.KindCase.BINARY => BinaryType
+      case proto.DataType.KindCase.BINARY => BinaryType
 
-    case proto.DataType.KindCase.BOOLEAN => BooleanType
+      case proto.DataType.KindCase.BOOLEAN => BooleanType
 
-    case proto.DataType.KindCase.BYTE => ByteType
-    case proto.DataType.KindCase.SHORT => ShortType
-    case proto.DataType.KindCase.INTEGER => IntegerType
-    case proto.DataType.KindCase.LONG => LongType
+      case proto.DataType.KindCase.BYTE => ByteType
+      case proto.DataType.KindCase.SHORT => ShortType
+      case proto.DataType.KindCase.INTEGER => IntegerType
+      case proto.DataType.KindCase.LONG => LongType
 
-    case proto.DataType.KindCase.FLOAT => FloatType
-    case proto.DataType.KindCase.DOUBLE => DoubleType
-    case proto.DataType.KindCase.DECIMAL => toCatalystDecimalType(t.getDecimal)
+      case proto.DataType.KindCase.FLOAT => FloatType
+      case proto.DataType.KindCase.DOUBLE => DoubleType
+      case proto.DataType.KindCase.DECIMAL => toCatalystDecimalType(t.getDecimal)
 
-    case proto.DataType.KindCase.STRING => toCatalystStringType(t.getString)
-    case proto.DataType.KindCase.CHAR => CharType(t.getChar.getLength)
-    case proto.DataType.KindCase.VAR_CHAR => VarcharType(t.getVarChar.getLength)
+      case proto.DataType.KindCase.STRING => toCatalystStringType(t.getString)
+      case proto.DataType.KindCase.CHAR => CharType(t.getChar.getLength)
+      case proto.DataType.KindCase.VAR_CHAR => VarcharType(t.getVarChar.getLength)
 
-    case proto.DataType.KindCase.DATE => DateType
-    case proto.DataType.KindCase.TIMESTAMP => TimestampType
-    case proto.DataType.KindCase.TIMESTAMP_NTZ => TimestampNTZType
-    case proto.DataType.KindCase.TIME =>
-      if (t.getTime.hasPrecision) {
-        TimeType(t.getTime.getPrecision)
-      } else {
-        TimeType()
-      }
+      case proto.DataType.KindCase.DATE => DateType
+      case proto.DataType.KindCase.TIMESTAMP => TimestampType
+      case proto.DataType.KindCase.TIMESTAMP_NTZ => TimestampNTZType
+      case proto.DataType.KindCase.TIME =>
+        if (t.getTime.hasPrecision) {
+          TimeType(t.getTime.getPrecision)
+        } else {
+          TimeType()
+        }
 
-    case proto.DataType.KindCase.CALENDAR_INTERVAL => CalendarIntervalType
-    case proto.DataType.KindCase.YEAR_MONTH_INTERVAL =>
-      toCatalystYearMonthIntervalType(t.getYearMonthInterval)
-    case proto.DataType.KindCase.DAY_TIME_INTERVAL =>
-      toCatalystDayTimeIntervalType(t.getDayTimeInterval)
+      case proto.DataType.KindCase.CALENDAR_INTERVAL => CalendarIntervalType
+      case proto.DataType.KindCase.YEAR_MONTH_INTERVAL =>
+        toCatalystYearMonthIntervalType(t.getYearMonthInterval)
+      case proto.DataType.KindCase.DAY_TIME_INTERVAL =>
+        toCatalystDayTimeIntervalType(t.getDayTimeInterval)
 
-    case proto.DataType.KindCase.ARRAY => toCatalystArrayType(t.getArray)
-    case proto.DataType.KindCase.STRUCT => toCatalystStructType(t.getStruct)
-    case proto.DataType.KindCase.MAP => toCatalystMapType(t.getMap)
-    case proto.DataType.KindCase.VARIANT => VariantType
+      case proto.DataType.KindCase.ARRAY => toCatalystArrayType(t.getArray)
+      case proto.DataType.KindCase.STRUCT => toCatalystStructType(t.getStruct)
+      case proto.DataType.KindCase.MAP => toCatalystMapType(t.getMap)
+      case proto.DataType.KindCase.VARIANT => VariantType
 
-    case proto.DataType.KindCase.GEOMETRY =>
-      val srid = t.getGeometry.getSrid
-      if (srid == GeometryType.MIXED_SRID) {
-        GeometryType("ANY")
-      } else {
-        GeometryType(srid)
-      }
-    case proto.DataType.KindCase.GEOGRAPHY =>
-      val srid = t.getGeography.getSrid
-      if (srid == GeographyType.MIXED_SRID) {
-        GeographyType("ANY")
-      } else {
-        GeographyType(srid)
-      }
+      case proto.DataType.KindCase.GEOMETRY =>
+        val srid = t.getGeometry.getSrid
+        if (srid == GeometryType.MIXED_SRID) {
+          GeometryType("ANY")
+        } else {
+          GeometryType(srid)
+        }
+      case proto.DataType.KindCase.GEOGRAPHY =>
+        val srid = t.getGeography.getSrid
+        if (srid == GeographyType.MIXED_SRID) {
+          GeographyType("ANY")
+        } else {
+          GeographyType(srid)
+        }
 
-    case proto.DataType.KindCase.UDT => toCatalystUDT(t.getUdt)
+      case proto.DataType.KindCase.UDT => toCatalystUDT(t.getUdt)
 
-    case _ =>
-      throw InvalidPlanInput(
-        "CONNECT_INVALID_PLAN.DATA_TYPE_UNSUPPORTED_PROTO_TO_CATALYST",
-        Map("kindCase" -> t.getKindCase.toString))
-  }
+      case _ =>
+        throw InvalidPlanInput(
+          "CONNECT_INVALID_PLAN.DATA_TYPE_UNSUPPORTED_PROTO_TO_CATALYST",
+          Map("kindCase" -> t.getKindCase.toString))
+    }
 
   private def toCatalystDecimalType(t: proto.DataType.Decimal): DecimalType = {
     (t.hasPrecision, t.hasScale) match {

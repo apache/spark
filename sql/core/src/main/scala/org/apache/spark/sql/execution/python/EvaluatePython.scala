@@ -170,8 +170,8 @@ object EvaluatePython {
       case c: Int => c
     }
 
-    case TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
-      (obj: Any) => nullSafeConvert(obj) {
+    case TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType => (obj: Any) =>
+      nullSafeConvert(obj) {
         case c: Long => c
         // Py4J serializes values between MIN_INT and MAX_INT as Ints, not Longs
         case c: Int => c.toLong
@@ -236,8 +236,7 @@ object EvaluatePython {
     case VariantType => (obj: Any) => nullSafeConvert(obj) {
       case s: java.util.HashMap[_, _] =>
         new VariantVal(
-          s.get("value").asInstanceOf[Array[Byte]],
-          s.get("metadata").asInstanceOf[Array[Byte]]
+          s.get("value").asInstanceOf[Array[Byte]], s.get("metadata").asInstanceOf[Array[Byte]]
         )
     }
 
