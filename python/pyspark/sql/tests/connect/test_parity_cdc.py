@@ -17,7 +17,6 @@
 
 import unittest
 
-from pyspark import SparkConf
 from pyspark.sql import SparkSession as PySparkSession
 from pyspark.sql.tests.test_cdc import CDCTestsMixin, _find_catalyst_test_jar
 from pyspark.testing.connectutils import should_test_connect, ReusedConnectTestCase
@@ -41,6 +40,10 @@ class CDCParityTests(CDCTestsMixin, ReusedConnectTestCase):
         )
         return conf
 
+    # JVM access is needed only for test setup (creating the InMemoryChangelogCatalog
+    # table and inserting change rows). The actual changes() API calls in the test
+    # methods go through Spark Connect. We access the underlying classic PySparkSession
+    # that the Connect server runs on.
     def _jvm(self):
         return PySparkSession._instantiatedSession._jvm
 
