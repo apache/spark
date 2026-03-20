@@ -66,7 +66,29 @@ object LiteralValueProtoConverter {
   private def toLiteralProtoBuilderDefault(
       literal: Any,
       builder: proto.Expression.Literal.Builder,
-      options: ToLiteralProtoOptions): proto.Expression.Literal.Builder =
+      options: ToLiteralProtoOptions): proto.Expression.Literal.Builder = {
+    def decimalBuilder(precision: Int, scale: Int, value: String) = {
+      builder.getDecimalBuilder.setPrecision(precision).setScale(scale).setValue(value)
+    }
+
+    def calendarIntervalBuilder(months: Int, days: Int, microseconds: Long) = {
+      builder.getCalendarIntervalBuilder
+        .setMonths(months)
+        .setDays(days)
+        .setMicroseconds(microseconds)
+    }
+
+    def arrayBuilder(array: Array[_]) = {
+      val ab = builder.getArrayBuilder
+      array.foreach { x =>
+        ab.addElements(toLiteralProtoBuilderInternal(x, options).build())
+      }
+      if (options.useDeprecatedDataTypeFields) {
+        ab.setElementType(toConnectProtoType(toDataType(array.getClass.getComponentType)))
+      }
+      ab
+    }
+
     literal match {
       case v: Boolean => builder.setBoolean(v)
       case v: Byte => builder.setByte(v)
@@ -76,17 +98,9 @@ object LiteralValueProtoConverter {
       case v: Float => builder.setFloat(v)
       case v: Double => builder.setDouble(v)
       case v: BigDecimal =>
-        builder.setDecimal(
-          builder.getDecimalBuilder
-            .setPrecision(v.precision)
-            .setScale(v.scale)
-            .setValue(v.toString))
+        builder.setDecimal(decimalBuilder(v.precision, v.scale, v.toString))
       case v: JBigDecimal =>
-        builder.setDecimal(
-          builder.getDecimalBuilder
-            .setPrecision(v.precision)
-            .setScale(v.scale)
-            .setValue(v.toString))
+        builder.setDecimal(decimalBuilder(v.precision, v.scale, v.toString))
       case v: String => builder.setString(v)
       case v: Char => builder.setString(v.toString)
       case v: Array[Char] => builder.setString(String.valueOf(v))
@@ -96,11 +110,7 @@ object LiteralValueProtoConverter {
         toLiteralProtoBuilderInternal(v.unsafeArray, options)
       case v: LocalDate => builder.setDate(v.toEpochDay.toInt)
       case v: Decimal =>
-        builder.setDecimal(
-          builder.getDecimalBuilder
-            .setPrecision(Math.max(v.precision, v.scale))
-            .setScale(v.scale)
-            .setValue(v.toString))
+        builder.setDecimal(decimalBuilder(Math.max(v.precision, v.scale), v.scale, v.toString))
       case v: Instant => builder.setTimestamp(SparkDateTimeUtils.instantToMicros(v))
       case v: Timestamp => builder.setTimestamp(SparkDateTimeUtils.fromJavaTimestamp(v))
       case v: LocalDateTime =>
@@ -113,24 +123,13 @@ object LiteralValueProtoConverter {
           builder.getTimeBuilder
             .setNano(SparkDateTimeUtils.localTimeToNanos(v))
             .setPrecision(TimeType.DEFAULT_PRECISION))
-      case v: Array[_] =>
-        val ab = builder.getArrayBuilder
-        v.foreach { x =>
-          ab.addElements(toLiteralProtoBuilderInternal(x, options).build())
-        }
-        if (options.useDeprecatedDataTypeFields) {
-          ab.setElementType(toConnectProtoType(toDataType(v.getClass.getComponentType)))
-        }
-        builder.setArray(ab)
+      case v: Array[_] => builder.setArray(arrayBuilder(v))
       case v: CalendarInterval =>
-        builder.setCalendarInterval(
-          builder.getCalendarIntervalBuilder
-            .setMonths(v.months)
-            .setDays(v.days)
-            .setMicroseconds(v.microseconds))
+        builder.setCalendarInterval(calendarIntervalBuilder(v.months, v.days, v.microseconds))
       case null => builder.setNull(ProtoDataTypes.NullType)
       case _ => throw new UnsupportedOperationException(s"literal $literal not supported (yet).")
     }
+  }
 
   private def toLiteralProtoBuilderInternal(
       literal: Any,
