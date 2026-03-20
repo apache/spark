@@ -108,7 +108,7 @@ object DaysFunction extends DaysFunctionBase {
 object DaysFunctionWithIncompatibleResultTypeReducer extends DaysFunctionBase {
   override def reducer(otherFunc: ReducibleFunction[_, _]): Reducer[Int, Int] = {
     if (otherFunc == YearsFunction) {
-      DaysToYearsReducerWithIncompableResultType()
+      DaysToYearsReducerWithIncompatibleResultType()
     } else {
       null
     }
@@ -129,7 +129,7 @@ case class DaysToYearsReducer() extends DaysToYearsReducerBase {
   override def resultType(): DataType = IntegerType
 }
 
-case class DaysToYearsReducerWithIncompableResultType() extends DaysToYearsReducerBase {
+case class DaysToYearsReducerWithIncompatibleResultType() extends DaysToYearsReducerBase {
   override def resultType(): DataType = DateType
 }
 
