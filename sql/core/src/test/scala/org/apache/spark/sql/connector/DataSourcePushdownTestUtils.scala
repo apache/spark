@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.expressions.aggregate.GeneralAggregateFunc
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, ExtractV2Scan, V1ScanWrapper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
@@ -88,7 +88,7 @@ trait DataSourcePushdownTestUtils extends ExplainSuiteHelper {
 
   protected def checkAggregatePushed(df: DataFrame, funcName: String): Unit = {
     df.queryExecution.optimizedPlan.collect {
-      case DataSourceV2ScanRelation(_, scan, _, _, _) =>
+      case ExtractV2Scan(scan) =>
         assert(scan.isInstanceOf[V1ScanWrapper])
         val wrapper = scan.asInstanceOf[V1ScanWrapper]
         assert(wrapper.pushedDownOperators.aggregation.isDefined)

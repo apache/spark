@@ -203,6 +203,32 @@ case class DataSourceV2ScanRelation(
 }
 
 /**
+ * An extractor that returns the [[Scan]] from a [[DataSourceV2ScanRelation]].
+ *
+ * This is useful when a pattern match site only needs the scan and should not be
+ * coupled to the full constructor signature of [[DataSourceV2ScanRelation]].
+ */
+object ExtractV2Scan {
+  def unapply(scanRelation: DataSourceV2ScanRelation): Option[Scan] =
+    Some(scanRelation.scan)
+}
+
+/**
+ * An extractor that returns a 3-tuple of ([[DataSourceV2Relation]], [[Scan]],
+ * output attributes) from a [[DataSourceV2ScanRelation]].
+ *
+ * This is useful when a pattern match site needs the relation, scan, and output
+ * but should not be coupled to the full constructor signature of
+ * [[DataSourceV2ScanRelation]] (e.g., optional fields like keyGroupedPartitioning
+ * and ordering).
+ */
+object ExtractV2ScanRelation {
+  def unapply(scanRelation: DataSourceV2ScanRelation)
+      : Option[(DataSourceV2Relation, Scan, Seq[AttributeReference])] =
+    Some((scanRelation.relation, scanRelation.scan, scanRelation.output))
+}
+
+/**
  * A specialization of [[DataSourceV2RelationBase]] that supports streaming scan.
  * It will be transformed to [[StreamingDataSourceV2ScanRelation]] during the planning phase of
  * [[MicrobatchExecution]].
