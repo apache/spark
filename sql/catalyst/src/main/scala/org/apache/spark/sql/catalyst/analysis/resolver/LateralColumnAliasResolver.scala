@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   Expression,
   ExprId,
-  ExprUtils,
   NamedExpression,
   ScalarSubquery,
   WindowExpression,
@@ -71,9 +70,7 @@ class LateralColumnAliasResolver(expressionResolver: ExpressionResolver, operato
       case _ @Project(projectList: Seq[_], aggregate: Aggregate) =>
         operatorResolutionContextStack.current.baseOperator = Some(aggregate)
 
-        // TODO: This validation function does a post-traversal. This is discouraged in single-pass
-        //       Analyzer.
-        ExprUtils.assertValidAggregation(aggregate)
+        AggregationValidator(aggregate)
 
         val remappedAliases = new HashMap[ExprId, Alias](projectList.size)
         projectList.foreach {
