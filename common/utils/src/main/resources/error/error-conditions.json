@@ -4372,6 +4372,14 @@
           "IN predicate requires at least one value. Empty IN clauses like 'IN ()' are not allowed. Consider using 'WHERE FALSE' if you need an always-false condition, or provide at least one value in the IN list."
         ]
       },
+      "MISSING_COLUMN_BEFORE_IN" : {
+        "message" : [
+          "Column name is missing before IN clause.", 
+          "Expected syntax: <column> IN (value1, value2, ...)", 
+          "Found: IN (values)",
+          "For example: SELECT * FROM t WHERE id IN (1, 2)"
+        ]
+      },
       "EMPTY_PARTITION_VALUE" : {
         "message" : [
           "Partition key <partKey> must set value."

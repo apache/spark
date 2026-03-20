@@ -302,6 +302,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       case u: UnresolvedRelation =>
         u.tableNotFound(u.multipartIdentifier)
 
+      // Rare: identifier "in" as column + IN (list) when "in" is a valid unquoted identifier.
+      case f @ Filter(In(UnresolvedAttribute(Seq(name)), _), _) if name.equalsIgnoreCase("in") =>
+        throw QueryCompilationErrors.missingColumnBeforeInError(f.condition.origin)
+
       case u: UnresolvedFunctionName =>
         val catalogPath = currentCatalog.name +: catalogManager.currentNamespace
         val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)

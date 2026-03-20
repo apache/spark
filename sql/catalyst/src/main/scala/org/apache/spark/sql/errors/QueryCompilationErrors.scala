@@ -453,6 +453,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = commonParam ++ proposalParam)
   }
 
+  def missingColumnBeforeInError(origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_SQL_SYNTAX.MISSING_COLUMN_BEFORE_IN",
+      messageParameters = Map.empty,
+      origin = origin
+    )
+  }
+
   def unresolvedFieldError(
       fieldName: String,
       columnPath: Seq[String],
