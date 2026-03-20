@@ -3197,8 +3197,8 @@ private[spark] object Utils
 
   /**
    * Retrieves the value of a HotSpot VM option via the HotSpotDiagnosticMXBean.
-   * Returns [[Some]] with the option value string on success, or [[None]] if the option cannot
-   * be read (e.g. on non-HotSpot JVMs or when the option does not exist).
+   * Returns Some with the option value string on success, or None if the option
+   * cannot be read (e.g. on non-HotSpot JVMs or when the option does not exist).
    */
   def getVMOptionValue(option: String): Option[String] = Try {
     val clazz = Utils.classForName("com.sun.management.HotSpotDiagnosticMXBean")
