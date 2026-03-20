@@ -961,7 +961,8 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
           SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> splitThreshold) {
           val df = spark.createDataFrame(data, schema)
-          val filtered = df.where("a IS NOT NULL AND (a + b) > 3 AND (a + b) < 15")
+          val filtered = df.where(
+            "a IS NOT NULL AND (a + b) > 3 AND (a + b) < 15 AND (a + b) != 10")
           val plan = filtered.queryExecution.executedPlan
           assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
             "Filter should be in whole-stage codegen")
