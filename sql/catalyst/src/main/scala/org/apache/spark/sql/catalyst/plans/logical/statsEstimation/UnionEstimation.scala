@@ -72,9 +72,9 @@ object UnionEstimation {
     // For each child, look up the ColumnStat for each of its output attributes.
     // After transposing, maybeColStats(i) holds the ColumnStat (if available) contributed
     // by the i-th child for the current output column.
-    union.children.map(c => c.output.map(c.stats.attributeStats.get))
-      .transpose.zip(union.output).flatMap {
-        case (maybeColStats, outputAttr) =>
+    union.output.zip(union.children.map(c => c.output.map(c.stats.attributeStats.get)).transpose)
+      .flatMap {
+        case (outputAttr, maybeColStats) =>
           val maybeMinMax: Option[(Any, Any)] = if (isTypeSupported(outputAttr.dataType)) {
             val statComparator = createStatComparator(outputAttr.dataType)
             val initial = maybeColStats.head
