@@ -97,14 +97,16 @@ object UnionEstimation {
           val maybeDistinctCount = maybeColStats.foldLeft(Option(BigInt(0))) {
             case (Some(currentMax), Some(s)) => s.distinctCount.map(currentMax.max)
             case _ => None
-          }.map(max => outputRows.fold(max)(max.min))
+          }
+          // Cap distinctCount by outputRows if available
+          val cappedDistinctCount = maybeDistinctCount.map(max => outputRows.fold(max)(max.min))
 
-          if (maybeMinMax.isDefined || maybeNullCount.isDefined || maybeDistinctCount.isDefined) {
+          if (maybeMinMax.isDefined || maybeNullCount.isDefined || cappedDistinctCount.isDefined) {
             Some(outputAttr -> ColumnStat(
               min = maybeMinMax.map(_._1),
               max = maybeMinMax.map(_._2),
               nullCount = maybeNullCount,
-              distinctCount = maybeDistinctCount
+              distinctCount = cappedDistinctCount
             ))
           } else None
       }
