@@ -242,6 +242,7 @@ object LiteralValueProtoConverter {
             .setPrecision(timeType.precision))
       case _ => toLiteralProtoBuilderInternal(literal, options)
     }
+
   }
 
   /**
