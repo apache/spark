@@ -59,7 +59,7 @@ object ArrowWriter {
   }
 
   private[sql] def createFieldWriterDefault(
-      dt: DataType, vector: ValueVector): ArrowFieldWriter =
+      dt: DataType, vector: ValueVector): ArrowFieldWriter = {
     (dt, vector) match {
       case (BooleanType, vector: BitVector) => new BooleanWriter(vector)
       case (ByteType, vector: TinyIntVector) => new ByteWriter(vector)
@@ -92,8 +92,7 @@ object ArrowWriter {
         }
         new StructWriter(vector, children.toArray)
       case (NullType, vector: NullVector) => new NullWriter(vector)
-      case (_: YearMonthIntervalType, vector: IntervalYearVector) =>
-        new IntervalYearWriter(vector)
+      case (_: YearMonthIntervalType, vector: IntervalYearVector) => new IntervalYearWriter(vector)
       case (_: DayTimeIntervalType, vector: DurationVector) => new DurationWriter(vector)
       case (CalendarIntervalType, vector: IntervalMonthDayNanoVector) =>
         new IntervalMonthDayNanoWriter(vector)
@@ -115,6 +114,7 @@ object ArrowWriter {
       case (dt, _) =>
         throw ExecutionErrors.unsupportedDataTypeError(dt)
     }
+  }
 }
 
 class ArrowWriter(val root: VectorSchemaRoot, fields: Array[ArrowFieldWriter]) {
