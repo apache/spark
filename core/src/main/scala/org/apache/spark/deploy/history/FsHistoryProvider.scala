@@ -1506,10 +1506,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         return createDiskStoreFromSnapshot(dm, appId, attempt, metadata, snapshot)
       } catch {
         case e: InvalidHistorySnapshotException =>
-          logInfo(s"Failed to import invalid snapshot for $appId/${attempt.info.attemptId}.", e)
+          logInfo(s"Failed to import invalid snapshot for appId: $appId.", e)
           HistorySnapshotStore.invalidateSnapshot(conf, appId, snapshot)
         case e: Exception =>
-          logInfo(s"Failed to import snapshot for $appId/${attempt.info.attemptId}.", e)
+          logInfo(s"Failed to import snapshot for appId: $appId.", e)
       }
     }
 
