@@ -74,6 +74,6 @@ PR title requires a JIRA ticket ID (e.g., `[SPARK-xxxx][SQL] Title`). Ask the us
 
 DO NOT push to the upstream repo. Always push to the personal fork. Open PRs against `master` on the upstream repo.
 
-DO NOT force push unless the user explicitly asks. Avoid `--amend` on commits that have been pushed. If the remote branch has new commits, fetch and rebase before pushing.
+DO NOT force push or use `--amend` on pushed commits unless the user explicitly asks. If the remote branch has new commits, fetch and rebase before pushing.
 
 Always get user approval before external operations such as pushing commits, creating PRs, or posting comments. Use `gh pr create` to open PRs. If `gh` is not installed, generate the GitHub PR URL for the user and recommend installing the GitHub CLI.
