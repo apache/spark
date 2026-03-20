@@ -78,7 +78,7 @@ trait SparkConnectServerTest extends SharedSparkSession with ArrowAllocatorLeakC
     // super.afterAll()) calls executor.stop() which awaits task-thread termination, so TCLs
     // on any still-running tasks fire before super.afterAll() returns.  ArrowAllocatorLeakCheck
     // (mixed in to the right of SharedSparkSession) therefore runs its assertion after all
-    // task memory has been released — no manual pre-stop wait is needed or correct.
+    // task memory has been released; no manual pre-stop wait is needed or correct.
     spark.sparkContext.cancelAllJobs()
     allocator.close()
     super.afterAll()
