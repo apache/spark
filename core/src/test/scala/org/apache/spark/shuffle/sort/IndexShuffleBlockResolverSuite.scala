@@ -273,8 +273,6 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite {
     val checksumFile = resolver.getChecksumFile(0, 0, conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
     assert(checksumFile.exists())
     val checksumFileName = checksumFile.toString
-    val checksumAlgo = checksumFileName.substring(checksumFileName.lastIndexOf(".") + 1)
-    assert(checksumAlgo === conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
     val checksumsFromFile = resolver.getChecksums(checksumFile, 10)
     assert(checksumsInMemory === checksumsFromFile)
   }

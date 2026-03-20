@@ -29,7 +29,7 @@ import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_DRIVER_REUSE_PVC
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.{SHUFFLE_CHECKSUM_ALGORITHM, SHUFFLE_CHECKSUM_ENABLED}
-import org.apache.spark.shuffle.ShuffleChecksumUtils.{compareChecksums, getChecksumFileName}
+import org.apache.spark.shuffle.ShuffleChecksumUtils.compareChecksums
 import org.apache.spark.shuffle.api.{ShuffleExecutorComponents, ShuffleMapOutputWriter, SingleSpillShuffleMapOutputWriter}
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents
 import org.apache.spark.storage.{BlockId, BlockManager, ShuffleDataBlockId, StorageLevel, UnrecognizedBlockId}
@@ -127,7 +127,7 @@ object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
         if (id.isShuffle) {
           // For index files, skipVerification is true and checksumFile and indexFile are ignored.
           val skipVerification = checksumDisabled || f.getName.endsWith(".index")
-          val checksumFile = checksumFileMap.getOrElse(getChecksumFileName(id, algorithm), null)
+          val checksumFile = checksumFileMap.getOrElse(id.name, null)
           val indexFile = indexFileMap.getOrElse(f.getName, null)
           if (skipVerification || verifyChecksum(algorithm, id, checksumFile, indexFile, f)) {
             val decryptedSize = f.length()
