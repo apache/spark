@@ -200,11 +200,11 @@ case class GroupPartitionsExec(
 
   private def planSummaryParts(joinKeyMaxFields: Int): Iterator[String] = {
     val joinKeyStr = joinKeyPositions.map { p =>
-      s"JoinKeyPositions: ${truncatedString(p, "[", ",", "]", joinKeyMaxFields)}"
+      s"JoinKeyPositions: ${truncatedString(p, "[", ", ", "]", joinKeyMaxFields)}"
     }.iterator
     val expectedStr = expectedPartitionKeys.map(ks => s"ExpectedPartitionKeys: ${ks.size}")
     val reducersStr = reducers.map { seq =>
-      val names = seq.map(_.map(_.toString()).getOrElse("identity"))
+      val names = seq.map(_.map(_.displayName()).getOrElse("identity"))
       s"Reducers: ${truncatedString(names, "[", ", ", "]", joinKeyMaxFields)}"
     }
     val distributeStr = Iterator(s"DistributePartitions: $distributePartitions")
