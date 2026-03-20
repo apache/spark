@@ -50,14 +50,14 @@ PySpark tests require building Spark with Hive support first:
 
     build/sbt -Phive package
 
-Activate the virtual environment specified by the user, or default to `~/.virtualenvs/pyspark`:
+Activate the virtual environment specified by the user, or default to `.venv`:
 
     source <venv>/bin/activate
 
 If the default venv does not exist, create it:
 
-    python3 -m venv ~/.virtualenvs/pyspark
-    source ~/.virtualenvs/pyspark/bin/activate
+    python3 -m venv .venv
+    source .venv/bin/activate
     pip install -r dev/requirements.txt
 
 Run a single test suite:
