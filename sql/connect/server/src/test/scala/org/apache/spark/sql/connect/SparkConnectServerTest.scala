@@ -68,19 +68,18 @@ trait SparkConnectServerTest extends SharedSparkSession with ArrowAllocatorLeakC
 
   override def afterAll(): Unit = {
     SparkConnectService.stop()
-    // Cancel any lingering Spark jobs and wait for Arrow allocator memory to be released
-    // before SparkContext.stop() (in super.afterAll()) and ArrowAllocatorLeakCheck run.
-    // executionManager.shutdown() does not close execute holders, so execute threads may
-    // still have running Spark jobs when stop() returns. By afterAll() time, tasks from
-    // all prior tests have had time to complete; only the last test's tasks may be
-    // running, and they complete within seconds of cancellation.
+    // Cancel any lingering Spark jobs before SparkContext.stop() (called by super.afterAll()).
+    // executionManager.shutdown() does not close execute holders, so execute threads may still
+    // have running Spark jobs when stop() returns. By afterAll() time, tasks from all prior
+    // tests have had time to complete; only the last test's tasks may be running, and they
+    // complete within seconds of cancellation.
+    //
+    // We do NOT wait for Arrow memory to reach 0 here: SparkContext.stop() (inside
+    // super.afterAll()) calls executor.stop() which awaits task-thread termination, so TCLs
+    // on any still-running tasks fire before super.afterAll() returns.  ArrowAllocatorLeakCheck
+    // (mixed in to the right of SharedSparkSession) therefore runs its assertion after all
+    // task memory has been released — no manual pre-stop wait is needed or correct.
     spark.sparkContext.cancelAllJobs()
-    eventuallyWithTimeout {
-      assert(
-        ArrowUtils.rootAllocator.getAllocatedMemory == 0,
-        s"Arrow rootAllocator memory not released: " +
-          s"${ArrowUtils.rootAllocator.getAllocatedMemory} bytes still allocated")
-    }
     allocator.close()
     super.afterAll()
   }
