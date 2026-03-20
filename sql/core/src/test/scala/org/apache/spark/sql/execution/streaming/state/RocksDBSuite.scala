@@ -2695,32 +2695,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
-  test("RocksDBFileManager: zip checksum verified on successful load") {
-    withTempDir { dir =>
-      val dfsRootDir = dir.getAbsolutePath
-      val fileMapping = new RocksDBFileMapping
-      val fileManager = new RocksDBFileManager(
-        dfsRootDir, Utils.createTempDir(), hadoopConf,
-        fileChecksumEnabled = true,
-        fileChecksumThreadPoolSize = Some(2))
-      val cpFiles = Seq(
-        "sst-file1.sst" -> 10,
-        "sst-file2.sst" -> 20,
-        "other-file1" -> 100)
-
-      saveCheckpointFiles(fileManager, cpFiles, version = 1, numKeys = 5, fileMapping)
-
-      // Verify the checksum sidecar file was created alongside the zip
-      assert(new File(dfsRootDir, "1.zip.crc").exists())
-
-      // Load should succeed - checksum is verified transparently on ZipInputStream.close()
-      val verificationDir = Utils.createTempDir().getAbsolutePath
-      loadAndVerifyCheckpointFiles(
-        fileManager, verificationDir, version = 1, cpFiles, 5, fileMapping)
-    }
-  }
-
-  test("RocksDBFileManager: loading zip without checksum file succeeds when checksum enabled") {
+  testWithStateStoreCheckpointIds(
+    "RocksDBFileManager: loading zip without checksum file succeeds when checksum enabled") { _ =>
     withTempDir { dir =>
       val dfsRootDir = dir.getAbsolutePath
       val cpFiles = Seq("sst-file1.sst" -> 10, "other-file1" -> 100)
@@ -2745,7 +2721,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
-  test("RocksDBFileManager: corrupted zip checksum fails on load") {
+  testWithStateStoreCheckpointIds("RocksDBFileManager: corrupted zip checksum fails on load") {
+    enableStateStoreCheckpointIds =>
     withTempDir { dir =>
       val dfsRootDir = dir.getAbsolutePath
       val fileMapping = new RocksDBFileMapping
@@ -2754,28 +2731,45 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         fileChecksumEnabled = true,
         fileChecksumThreadPoolSize = Some(2))
       val cpFiles = Seq("sst-file1.sst" -> 10, "other-file1" -> 100)
+      val checkpointUniqueId =
+        if (enableStateStoreCheckpointIds) Some(java.util.UUID.randomUUID.toString) else None
 
-      saveCheckpointFiles(fileManager, cpFiles, version = 1, numKeys = 3, fileMapping)
+      saveCheckpointFiles(fileManager, cpFiles, version = 1, numKeys = 3, fileMapping,
+        checkpointUniqueId = checkpointUniqueId)
 
       // Overwrite the checksum sidecar with a wrong value/size to simulate corruption
       val wrongChecksumJson =
         """{"algorithm":"CRC32C","value":0,"mainFileSize":0,""" +
         """"timestampMs":0,"creator":{"executorId":"","taskInfo":""}}"""
-      Files.writeString(new File(dfsRootDir, "1.zip.crc").toPath, wrongChecksumJson)
+      val crcFileName = checkpointUniqueId.map(id => s"1_$id.zip.crc").getOrElse("1.zip.crc")
+      Files.writeString(new File(dfsRootDir, crcFileName).toPath, wrongChecksumJson)
 
-      val ex = intercept[SparkException] {
-        fileManager.loadCheckpointFromDfs(1, Utils.createTempDir(), new RocksDBFileMapping())
+      if (enableStateStoreCheckpointIds) {
+        // Checkpoint v2: each zip has a unique suffix (the checkpointUniqueId), so a checksum
+        // file always corresponds to exactly one zip write and corruption is reliably detected.
+        val zipName = s"1_${checkpointUniqueId.get}\\.zip"
+        val ex = intercept[SparkException] {
+          fileManager.loadCheckpointFromDfs(
+            1, Utils.createTempDir(), new RocksDBFileMapping(), checkpointUniqueId)
+        }
+        checkError(
+          exception = ex,
+          condition = "CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED",
+          parameters = Map(
+            "fileName" -> s"$dfsRootDir/$zipName",
+            "expectedSize" -> "0",
+            "expectedChecksum" -> "0",
+            "computedSize" -> "^\\d+$",
+            "computedChecksum" -> "^-?\\d+$"),
+          matchPVals = true)
+      } else {
+        // Checkpoint v1: the zip filename is fixed (e.g. "1.zip"), so a later overwrite with
+        // checksums disabled would reuse the same name and leave a stale checksum file behind.
+        // Checksum verification is skipped to avoid spurious mismatches in this case.
+        loadAndVerifyCheckpointFiles(
+          fileManager, Utils.createTempDir().getAbsolutePath,
+          version = 1, cpFiles, 3, new RocksDBFileMapping())
       }
-      checkError(
-        exception = ex,
-        condition = "CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED",
-        parameters = Map(
-          "fileName" -> s"$dfsRootDir/1\\.zip",
-          "expectedSize" -> "0",
-          "expectedChecksum" -> "0",
-          "computedSize" -> "^\\d+$",
-          "computedChecksum" -> "^-?\\d+$"),
-        matchPVals = true)
     }
   }
 

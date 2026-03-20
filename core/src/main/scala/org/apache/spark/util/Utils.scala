@@ -3101,8 +3101,7 @@ private[spark] object Utils
   /**
    * Decompress a zip input stream into a local dir. File names are read from the zip entries.
    * Note, we skip addressing the directory here. Also, we rely on the caller side to address
-   * any exceptions. The caller is responsible for opening the stream with whatever abstraction
-   * is appropriate (e.g. a CheckpointFileManager to enable checksum verification on close).
+   * any exceptions.
    */
   def unzipFilesFromInputStream(inputStream: InputStream, localDir: File): Seq[File] = {
     val files = new ArrayBuffer[File]()
