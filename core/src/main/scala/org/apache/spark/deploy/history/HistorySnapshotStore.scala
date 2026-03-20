@@ -240,7 +240,7 @@ private[spark] object HistorySnapshotStore extends Logging {
       manifestPath: Path): Unit = {
     val fs = manifestPath.getFileSystem(SparkHadoopUtil.get.newConfiguration(conf))
     Utils.tryLogNonFatalError {
-      deleteSnapshot(fs, manifestPath)
+      deleteSnapshotArtifacts(fs, manifestPath)
       logInfo(
         s"Deleted invalid history snapshot $manifestPath for appId: $appId.")
     }
@@ -381,15 +381,16 @@ private[spark] object HistorySnapshotStore extends Logging {
         }
       }
       val manifests = Option(fs.listStatus(rootPath)).getOrElse(Array.empty).map(_.getPath).toSeq
-      staleManifestsForCleanup(manifests, keepManifestPath).foreach(deleteSnapshot(fs, _))
+      staleManifestsForCleanup(manifests, keepManifestPath)
+        .foreach(deleteSnapshotArtifacts(fs, _))
     } catch {
       case NonFatal(e) =>
         logWarning(s"Failed to clean up stale history snapshots under $rootPath.", e)
     }
   }
 
-  /** Deletes a manifest and its associated snapshot data, tolerating partial corruption. */
-  private def deleteSnapshot(fs: FileSystem, manifestPath: Path): Unit = {
+  /** Deletes a manifest and its associated snapshot artifacts, tolerating partial corruption. */
+  private def deleteSnapshotArtifacts(fs: FileSystem, manifestPath: Path): Unit = {
     val manifest = try {
       Some(loadManifest(fs, manifestPath))
     } catch {
