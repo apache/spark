@@ -132,6 +132,18 @@
     ],
     "sqlState" : "22003"
   },
+  "ARROW_SCHEMA_FIELD_COUNT_MISMATCH" : {
+    "message" : [
+      "Arrow schema mismatch: encoder has <encoderFieldCount> fields but Arrow data only has <arrowColumnCount> columns."
+    ],
+    "sqlState" : "42000"
+  },
+  "ARROW_SCHEMA_FIELD_NAME_MISMATCH" : {
+    "message" : [
+      "Arrow schema mismatch: encoder field '<encoderFieldName>' does not match Arrow column '<arrowColumnName>' at the same position."
+    ],
+    "sqlState" : "42000"
+  },
   "ARROW_TYPE_MISMATCH" : {
     "message" : [
       "Invalid schema from <operation>: expected <outputTypes>, got <actualDataTypes>."
@@ -172,18 +184,6 @@
       }
     },
     "sqlState" : "42604"
-  },
-  "ARROW_SCHEMA_FIELD_COUNT_MISMATCH" : {
-    "message" : [
-      "Arrow schema mismatch: encoder has <encoderFieldCount> fields but Arrow data only has <arrowColumnCount> columns."
-    ],
-    "sqlState" : "42000"
-  },
-  "ARROW_SCHEMA_FIELD_NAME_MISMATCH" : {
-    "message" : [
-      "Arrow schema mismatch: encoder field '<encoderFieldName>' does not match Arrow column '<arrowColumnName>' at the same position."
-    ],
-    "sqlState" : "42000"
   },
   "ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION" : {
     "message" : [

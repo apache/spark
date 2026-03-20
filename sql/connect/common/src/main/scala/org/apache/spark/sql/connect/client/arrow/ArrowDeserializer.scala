@@ -343,9 +343,8 @@ object ArrowDeserializers {
           if (!field.name.equalsIgnoreCase(vector.getName)) {
             throw new SparkRuntimeException(
               errorClass = "ARROW_SCHEMA_FIELD_NAME_MISMATCH",
-              messageParameters = Map(
-                "encoderFieldName" -> field.name,
-                "arrowColumnName" -> vector.getName))
+              messageParameters =
+                Map("encoderFieldName" -> field.name, "arrowColumnName" -> vector.getName))
           }
           deserializerFor(field.enc, vector, timeZoneId)
         }

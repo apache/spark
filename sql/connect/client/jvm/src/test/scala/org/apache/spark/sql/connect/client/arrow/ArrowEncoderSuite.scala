@@ -900,6 +900,7 @@ class ArrowEncoderSuite extends ConnectFunSuite {
         allocator,
         timeZoneId = "UTC")
       assert(!result.hasNext)
+      arrowBatches.close()
       result.close()
     }
   }
