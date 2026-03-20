@@ -829,6 +829,13 @@ class DataFrame(Frame, Generic[T]):
                 internal = InternalFrame(
                     spark_frame=sdf,
                     index_spark_columns=[scol_for(sdf, SPARK_DEFAULT_INDEX_NAME)],
+                    index_fields=(
+                        None
+                        if LooseVersion(pd.__version__) < "3.0.0"
+                        # Explicitly specify the dtype as "object" to avoid converting to `nan`
+                        # due to pandas 3's default string type (`str`) behavior.
+                        else [InternalField(np.dtype("object"))]
+                    ),
                     column_labels=new_column_labels,
                     column_label_names=self._internal.column_label_names,
                 )
@@ -4994,7 +5001,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     spark_frame=sdf,
                     index_spark_columns=[scol_for(sdf, SPARK_DEFAULT_INDEX_NAME)],
                     index_names=[None],
-                    index_fields=[None],
+                    index_fields=(
+                        [None]
+                        if LooseVersion(pd.__version__) < "3.0.0"
+                        # Explicitly specify the dtype as "object" to avoid converting to `nan`
+                        # due to pandas 3's default string type (`str`) behavior.
+                        else [InternalField(np.dtype("object"))]
+                    ),
                     data_spark_columns=[
                         scol_for(sdf, col) for col in self._internal.data_spark_column_names
                     ],
