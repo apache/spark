@@ -51,8 +51,8 @@ trait ProtoTypeOps extends Serializable {
   /** Returns a converter from proto literal to Scala value. */
   def getScalaConverter: proto.Expression.Literal => Any
 
-  /** Builds a proto DataType from a proto literal (for type inference). */
-  def buildProtoDataType(literal: proto.Expression.Literal, builder: proto.DataType.Builder): Unit
+  /** Returns a proto DataType inferred from a proto literal (for type inference). */
+  def getProtoDataTypeFromLiteral(literal: proto.Expression.Literal): proto.DataType
 }
 
 /**
@@ -109,17 +109,16 @@ object ProtoTypeOps {
   }
 
   /**
-   * Reverse lookup: builds a proto DataType from a proto literal's type case.
+   * Reverse lookup: returns the proto DataType inferred from a proto literal's type case, if the
+   * literal type belongs to a framework-managed type.
    */
-  def buildProtoDataTypeForLiteral(
-      literal: proto.Expression.Literal,
-      builder: proto.DataType.Builder): Boolean = {
-    if (!SqlApiConf.get.typesFrameworkEnabled) return false
+  def getProtoDataTypeFromLiteral(
+      literal: proto.Expression.Literal): Option[proto.DataType] = {
+    if (!SqlApiConf.get.typesFrameworkEnabled) return None
     literal.getLiteralTypeCase match {
       case proto.Expression.Literal.LiteralTypeCase.TIME =>
-        new TimeTypeConnectOps(TimeType()).buildProtoDataType(literal, builder)
-        true
-      case _ => false
+        Some(new TimeTypeConnectOps(TimeType()).getProtoDataTypeFromLiteral(literal))
+      case _ => None
     }
   }
 }
