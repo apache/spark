@@ -838,8 +838,6 @@ class RocksDB(
     assert(snapshotVersionStateStoreCkptId.isDefined == endVersionStateStoreCkptId.isDefined)
     assert(snapshotVersion >= 0 && endVersion >= snapshotVersion)
     recordedMetrics = None
-    // version 0 is the empty initial state; loadCheckpointFromDfs skips DFS for it
-    loadedFromDfs = endVersion > 0
     loadMetrics.clear()
 
     logInfo(
@@ -851,6 +849,9 @@ class RocksDB(
         endVersion,
         snapshotVersionStateStoreCkptId,
         endVersionStateStoreCkptId)
+
+      // version 0 is the empty initial state; loadCheckpointFromDfs skips DFS for it
+      loadedFromDfs = endVersion > 0
 
       logInfo(
         log"Loaded snapshot at version ${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and apply " +
