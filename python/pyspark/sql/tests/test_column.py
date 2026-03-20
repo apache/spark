@@ -502,6 +502,69 @@ class ColumnTestsMixin:
         self.assertEqual(result[1][0], 40)
         self.assertEqual(result[2][0], 60)
 
+    def test_transform_sql_lambda_arithmetic(self):
+        """Test transform() with SQL lambda expression for arithmetic."""
+        df = self.spark.createDataFrame([(1,), (2,), (3,)], ["value"])
+        result = df.select(df.value.transform("x -> x * 2").alias("result")).collect()
+        self.assertEqual(result[0][0], 2)
+        self.assertEqual(result[1][0], 4)
+        self.assertEqual(result[2][0], 6)
+
+    def test_transform_sql_lambda_function_call(self):
+        """Test transform() with SQL lambda using function calls."""
+        df = self.spark.createDataFrame([("hello",), ("world",)], ["text"])
+        result = df.select(df.text.transform("x -> upper(x)").alias("result")).collect()
+        self.assertEqual(result[0][0], "HELLO")
+        self.assertEqual(result[1][0], "WORLD")
+
+    def test_transform_sql_lambda_conditional(self):
+        """Test transform() with SQL lambda using CASE WHEN."""
+        df = self.spark.createDataFrame([(-1,), (0,), (1,)], ["value"])
+        result = df.select(
+            df.value.transform("x -> CASE WHEN x > 0 THEN x ELSE 0 END").alias("result")
+        ).collect()
+        self.assertEqual(result[0][0], 0)
+        self.assertEqual(result[1][0], 0)
+        self.assertEqual(result[2][0], 1)
+
+    def test_transform_sql_lambda_with_nulls(self):
+        """Test transform() with SQL lambda handles nulls."""
+        df = self.spark.createDataFrame([(1,), (None,), (3,)], ["value"])
+        result = df.select(df.value.transform("x -> x * 2").alias("result")).collect()
+        self.assertEqual(result[0][0], 2)
+        self.assertIsNone(result[1][0])
+        self.assertEqual(result[2][0], 6)
+
+    def test_transform_sql_lambda_chaining(self):
+        """Test chaining SQL lambda transform calls."""
+        df = self.spark.createDataFrame([(5,)], ["value"])
+        result = df.select(
+            df.value.transform("x -> x * 2").transform("y -> y + 1").alias("result")
+        ).collect()
+        self.assertEqual(result[0][0], 11)
+
+    def test_transform_sql_lambda_mixed_chaining(self):
+        """Test chaining SQL lambda with Python callable."""
+        df = self.spark.createDataFrame([(5,)], ["value"])
+        result = df.select(
+            df.value.transform("x -> x * 2").transform(lambda c: c + 1).alias("result")
+        ).collect()
+        self.assertEqual(result[0][0], 11)
+
+    def test_transform_sql_lambda_invalid_no_arrow(self):
+        """Test transform() raises error for string without ->."""
+        df = self.spark.createDataFrame([(1,)], ["value"])
+        with self.assertRaises(PySparkValueError) as ctx:
+            df.select(df.value.transform("x * 2")).collect()
+        self.assertIn("INVALID_LAMBDA_EXPRESSION", ctx.exception.getErrorClass())
+
+    def test_transform_sql_lambda_invalid_param(self):
+        """Test transform() raises error for invalid parameter name."""
+        df = self.spark.createDataFrame([(1,)], ["value"])
+        with self.assertRaises(PySparkValueError) as ctx:
+            df.select(df.value.transform("123 -> x * 2")).collect()
+        self.assertIn("INVALID_LAMBDA_EXPRESSION", ctx.exception.getErrorClass())
+
 
 class ColumnTests(ColumnTestsMixin, ReusedSQLTestCase):
     pass

@@ -610,7 +610,28 @@ class Column(ParentColumn):
         jc = self._jc.over(window._jspec)
         return Column(jc)
 
-    def transform(self, f: Callable[[ParentColumn], ParentColumn]) -> ParentColumn:
+    def transform(self, f: Union[Callable[[ParentColumn], ParentColumn], str]) -> ParentColumn:
+        if isinstance(f, str):
+            from py4j.java_gateway import JVMView
+
+            arrow_idx = f.find("->")
+            if arrow_idx == -1:
+                raise PySparkValueError(
+                    errorClass="INVALID_LAMBDA_EXPRESSION",
+                    messageParameters={"expression": f},
+                )
+
+            param = f[:arrow_idx].strip()
+            if not param.isidentifier():
+                raise PySparkValueError(
+                    errorClass="INVALID_LAMBDA_EXPRESSION",
+                    messageParameters={"expression": f},
+                )
+
+            sc = get_active_spark_context()
+            jvm = cast(JVMView, sc._jvm)
+            jresult = jvm.PythonSQLUtils.applyLambda(self._jc, f)
+            return Column(jresult)
         return f(self)
 
     def outer(self) -> ParentColumn:

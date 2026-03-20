@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.classic.ExpressionUtils
 import org.apache.spark.sql.classic.ExpressionUtils.expression
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
@@ -179,6 +180,25 @@ private[sql] object PythonSQLUtils extends Logging {
   def lambdaFunction(function: Column, variables: Column*): Column = {
     val arguments = variables.map(_.node.asInstanceOf[internal.UnresolvedNamedLambdaVariable])
     Column(internal.LambdaFunction(function.node, arguments))
+  }
+
+  def applyLambda(col: Column, lambdaExpr: String): Column = {
+    val parsed = CatalystSqlParser.parseExpression(lambdaExpr)
+    parsed match {
+      case LambdaFunction(function, arguments, _) if arguments.size == 1 =>
+        val colExpr = expression(col)
+        val param = arguments.head.asInstanceOf[UnresolvedNamedLambdaVariable]
+        val replaced = function.transform {
+          case v: UnresolvedNamedLambdaVariable if v.nameParts == param.nameParts => colExpr
+        }
+        ExpressionUtils.column(replaced)
+      case _: LambdaFunction =>
+        throw new IllegalArgumentException(
+          s"Expected a single-parameter lambda expression, but got: $lambdaExpr")
+      case _ =>
+        throw new IllegalArgumentException(
+          s"Expected a lambda expression (param -> expr), but got: $lambdaExpr")
+    }
   }
 
   def namedArgumentExpression(name: String, e: Column): Column =
