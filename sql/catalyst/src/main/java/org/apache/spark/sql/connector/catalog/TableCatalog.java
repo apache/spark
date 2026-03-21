@@ -307,9 +307,8 @@ public interface TableCatalog extends CatalogPlugin {
    * constraints ({@link Table#constraints()}), and format-specific properties
    * ({@link Table#properties()}).
    * <p>
-   * There is no default implementation. Connectors that support {@code CREATE TABLE ... LIKE ...}
-   * must override this method. Connectors that do not override it will throw
-   * {@link UnsupportedOperationException} when the command is issued against their catalog.
+   * The default implementation throws {@link UnsupportedOperationException}. Connectors that
+   * support {@code CREATE TABLE ... LIKE ...} must override this method.
    *
    * @param ident a table identifier for the new table
    * @param tableInfo user-specified overrides only: TBLPROPERTIES, LOCATION, resolved provider,
