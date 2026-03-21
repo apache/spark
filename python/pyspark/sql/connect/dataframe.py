@@ -152,13 +152,12 @@ class DataFrame(ParentDataFrame):
     def _metadata_plan(self) -> "proto.Plan":
         # Connect DataFrames are immutable on the client so metadata requests can safely
         # reuse the unresolved proto plan. Keeping metadata on one path also leaves a single
-        # insertion point for future session-scoped metadata caching
+        # insertion point for future session-scoped metadata caching.
         try:
-            session = self._session.client
+            return self._plan.to_proto(self._session.client)
         except (AttributeError, LookupError):
-            # Plan only tests use a lightweight mock session without a .client property
-            session = self._session
-        return self._plan.to_proto(session)
+            # Plan-only tests use a lightweight mock session without a .client property.
+            return self._plan.to_proto(cast(Any, self._session))
 
     def _resolve_schema(self) -> StructType:
         return self._session.client.schema(self._metadata_plan)
