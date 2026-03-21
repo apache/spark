@@ -988,7 +988,7 @@ object StateStoreProvider extends Logging {
   private[state] def coordinatorRef: Option[StateStoreCoordinatorRef] = synchronized {
     val env = SparkEnv.get
     if (env != null) {
-      val isDriver = env.executorId == SparkContext.DRIVER_IDENTIFIER
+      val isDriver = SparkContext.isDriver(env.executorId)
       // If running locally, then the coordinator reference in stateStoreCoordinatorRef may have
       // become inactive as SparkContext + SparkEnv may have been restarted. Hence, when running in
       // driver, always recreate the reference.
@@ -1765,8 +1765,7 @@ object StateStore extends Logging {
   private def coordinatorRef: Option[StateStoreCoordinatorRef] = loadedProviders.synchronized {
     val env = SparkEnv.get
     if (env != null) {
-      val isDriver =
-        env.executorId == SparkContext.DRIVER_IDENTIFIER
+      val isDriver = SparkContext.isDriver(env.executorId)
       // If running locally, then the coordinator reference in _coordRef may be have become inactive
       // as SparkContext + SparkEnv may have been restarted. Hence, when running in driver,
       // always recreate the reference.
