@@ -263,7 +263,11 @@ class UnivocityParser(
           timeFormatter.parse(datum)
         } catch {
           case NonFatal(e) =>
-            TimeUtils.stringToTime(UTF8String.fromString(datum)).getOrElse(throw e)
+            if (options.timeFormatInRead.isEmpty) {
+              TimeUtils.stringToTime(UTF8String.fromString(datum)).getOrElse(throw e)
+            } else {
+              throw e
+            }
         }
       }
 
