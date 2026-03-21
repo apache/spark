@@ -531,7 +531,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       events.foreach { event =>
         event match {
           case metricsUpdate: SparkListenerExecutorMetricsUpdate
-            if metricsUpdate.execId != SparkContext.DRIVER_IDENTIFIER =>
+            if !SparkContext.isDriver(metricsUpdate.execId) =>
           case stageCompleted: SparkListenerStageCompleted =>
             val execIds = Set[String]()
             (1 to 3).foreach { _ =>
@@ -631,7 +631,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       case (expected: SparkListenerExecutorMetricsUpdate,
           actual: SparkListenerExecutorMetricsUpdate) =>
         assert(expected.execId == actual.execId)
-        assert(expected.execId == SparkContext.DRIVER_IDENTIFIER)
+        assert(SparkContext.isDriver(expected.execId))
       case (expected: SparkListenerEvent, actual: SparkListenerEvent) =>
         assert(expected === actual)
     }
