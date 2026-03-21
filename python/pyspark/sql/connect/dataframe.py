@@ -92,6 +92,8 @@ from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignor
 from pyspark.sql.table_arg import TableArg
 
 if TYPE_CHECKING:
+    import pyspark.sql.connect.proto as proto
+
     from pyspark.sql.connect._typing import (
         ColumnOrName,
         ColumnOrNameOrOrdinal,
@@ -147,10 +149,10 @@ class DataFrame(ParentDataFrame):
         self._execution_info: Optional["ExecutionInfo"] = None
 
     @functools.cached_property
-    def _metadata_plan(self):
+    def _metadata_plan(self) -> "proto.Plan":
         # Connect DataFrames are immutable on the client so metadata requests can safely
         # reuse the unresolved proto plan. Keeping metadata on one path also leaves a single
-        # insertion point for future session mscoped metadata caching
+        # insertion point for future session-scoped metadata caching
         try:
             session = self._session.client
         except (AttributeError, LookupError):
