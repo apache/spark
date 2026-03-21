@@ -1,24 +1,16 @@
 # Apache Spark
 
-## Before Making Changes
+## Pre-flight Checks
 
-Before the first edit in a session, ensure a clean working environment. DO NOT skip these checks:
+Before the first code read, edit, or test in a session, ensure a clean working environment. DO NOT skip these checks:
 
 1. Run `git remote -v` to identify the personal fork and upstream (`apache/spark`). If unclear, ask the user to configure their remotes following the standard convention (`origin` for the fork, `upstream` for `apache/spark`).
 2. If the latest commit on `<upstream>/master` is more than a day old (check with `git log -1 --format="%ci" <upstream>/master`), run `git fetch <upstream> master`.
 3. If there are uncommitted changes (check with `git status`), ask the user to stash or commit them before proceeding.
-
-Then, depending on the task:
-
-If working on an existing PR:
-- 4a. Find the local branch for the PR by matching branch name and shared commits (one can fast-forward to the other). If not found, ask the user whether to fetch the PR to a new local branch or identify the correct local branch.
-- 4b. Switch to that branch.
-
-If starting new work:
-- 4a. If the current branch has commits not in upstream `master` (check with `git log <upstream>/master..HEAD`), ask the user to pick one:
-   - Create a new git worktree from `<upstream>/master` (recommended) and work from there.
-   - Create and switch to a new branch from `<upstream>/master`.
-- 4b. Otherwise, proceed on the current branch.
+4. Switch to the appropriate branch:
+   - **Existing PR**: find the local branch by matching branch name and shared commits (one can fast-forward to the other). If the branch is checked out in another worktree, work from that worktree. If not found, ask the user whether to fetch the PR to a new local branch or identify the correct local branch.
+   - **New work**: if the current branch has commits not in upstream `master` (check with `git log <upstream>/master..HEAD`), ask the user to choose: create a new git worktree from `<upstream>/master` (recommended), or create and switch to a new branch from `<upstream>/master`.
+   - **Otherwise**: use `<upstream>/master`.
 
 ## Development Notes
 
