@@ -111,11 +111,13 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       val (keySchema, valueSchema) = sourceOptions.joinSide match {
         case JoinSideValues.left =>
           StreamStreamJoinStateHelper.readKeyValueSchema(session, stateCheckpointLocation.toString,
-            sourceOptions.operatorId, LeftSide, oldSchemaFilePaths)
+            sourceOptions.operatorId, LeftSide, oldSchemaFilePaths,
+            joinStateFormatVersion = stateStoreReaderInfo.joinStateFormatVersion)
 
         case JoinSideValues.right =>
           StreamStreamJoinStateHelper.readKeyValueSchema(session, stateCheckpointLocation.toString,
-            sourceOptions.operatorId, RightSide, oldSchemaFilePaths)
+            sourceOptions.operatorId, RightSide, oldSchemaFilePaths,
+            joinStateFormatVersion = stateStoreReaderInfo.joinStateFormatVersion)
 
         case JoinSideValues.none =>
           // we should have the schema for the state store if joinSide is none

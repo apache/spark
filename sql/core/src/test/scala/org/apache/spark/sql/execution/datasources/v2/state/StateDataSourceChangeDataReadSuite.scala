@@ -48,6 +48,46 @@ class RocksDBWithChangelogCheckpointStateDataSourceChangeDataReaderSuite extends
     spark.conf.set("spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled",
       "true")
   }
+
+  test("read stream-stream join v4 state change feed") {
+    withSQLConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "4") {
+      withTempDir { tempDir =>
+        runStreamStreamJoinQuery(tempDir.getAbsolutePath)
+
+        val keyWithTsToValuesDf = spark.read.format("statestore")
+          .option(StateSourceOptions.STORE_NAME, "left-keyWithTsToValues")
+          .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
+          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+          .option(StateSourceOptions.CHANGE_END_BATCH_ID, 1)
+          .load(tempDir.getAbsolutePath)
+        assert(keyWithTsToValuesDf.count() > 0)
+
+        val tsWithKeyDf = spark.read.format("statestore")
+          .option(StateSourceOptions.STORE_NAME, "left-tsWithKey")
+          .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
+          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+          .option(StateSourceOptions.CHANGE_END_BATCH_ID, 1)
+          .load(tempDir.getAbsolutePath)
+        assert(tsWithKeyDf.count() > 0)
+
+        val rightKeyWithTsToValuesDf = spark.read.format("statestore")
+          .option(StateSourceOptions.STORE_NAME, "right-keyWithTsToValues")
+          .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
+          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+          .option(StateSourceOptions.CHANGE_END_BATCH_ID, 1)
+          .load(tempDir.getAbsolutePath)
+        assert(rightKeyWithTsToValuesDf.count() > 0)
+
+        val rightTsWithKeyDf = spark.read.format("statestore")
+          .option(StateSourceOptions.STORE_NAME, "right-tsWithKey")
+          .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
+          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+          .option(StateSourceOptions.CHANGE_END_BATCH_ID, 1)
+          .load(tempDir.getAbsolutePath)
+        assert(rightTsWithKeyDf.count() > 0)
+      }
+    }
+  }
 }
 
 class RocksDBWithCheckpointV2StateDataSourceChangeDataReaderSuite extends

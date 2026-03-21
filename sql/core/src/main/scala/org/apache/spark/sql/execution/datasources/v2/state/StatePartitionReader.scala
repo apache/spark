@@ -44,6 +44,18 @@ case class AllColumnFamiliesReaderInfo(
     operatorName: String,
     stateFormatVersion: Option[Int] = None)
 
+private[state] object StatePartitionReaderUtils {
+  val v4JoinCFNames: Set[String] =
+    SymmetricHashJoinStateManager.allStateStoreNamesV4(LeftSide, RightSide).toSet
+
+  def isMultiValuedCF(
+      colFamilyName: String,
+      stateVariableInfoOpt: Option[TransformWithStateVariableInfo]): Boolean = {
+    SchemaUtil.checkVariableType(stateVariableInfoOpt, StateVariableType.ListState) ||
+      v4JoinCFNames.contains(colFamilyName)
+  }
+}
+
 /**
  * An implementation of [[PartitionReaderFactory]] for State data source. This is used to support
  * general read from a state store instance, rather than specific to the operator.
@@ -139,10 +151,6 @@ abstract class StatePartitionReaderBase(
     getStoreUniqueId(partition.sourceOptions.endOperatorStateUniqueIds)
   }
 
-  protected val isJoinV4MultiValuedCF: Boolean = joinColFamilyOpt.exists { cfName =>
-    SymmetricHashJoinStateManager.allStateStoreNamesV4(LeftSide, RightSide).contains(cfName)
-  }
-
   protected lazy val provider: StateStoreProvider = {
     val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
       partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
@@ -150,8 +158,8 @@ abstract class StatePartitionReaderBase(
 
     val useColFamilies = stateVariableInfoOpt.isDefined || joinColFamilyOpt.isDefined
 
-    val useMultipleValuesPerKey = SchemaUtil.checkVariableType(stateVariableInfoOpt,
-      StateVariableType.ListState) || isJoinV4MultiValuedCF
+    val useMultipleValuesPerKey = StatePartitionReaderUtils.isMultiValuedCF(
+      joinColFamilyOpt.getOrElse(""), stateVariableInfoOpt)
 
     val provider = StateStoreProvider.createAndInit(
       stateStoreProviderId, keySchema, valueSchema, keyStateEncoderSpec,
@@ -254,7 +262,7 @@ class StatePartitionReader(
       val stateVarType = stateVariableInfo.stateVariableType
       SchemaUtil.processStateEntries(stateVarType, colFamilyName, store,
         keySchema, partition.partition, partition.sourceOptions)
-    } else if (isJoinV4MultiValuedCF) {
+    } else if (joinColFamilyOpt.exists(StatePartitionReaderUtils.v4JoinCFNames.contains)) {
       store
         .iteratorWithMultiValues(colFamilyName)
         .map { pair =>
@@ -338,17 +346,10 @@ class StatePartitionAllColumnFamiliesReader(
       }.toMap
   }
 
-  private def isListType(colFamilyName: String): Boolean = {
-    SchemaUtil.checkVariableType(
-      stateVariableInfos.find(info => info.stateName == colFamilyName),
-      StateVariableType.ListState)
-  }
-
-  private val v4JoinCFNames: Set[String] =
-    SymmetricHashJoinStateManager.allStateStoreNamesV4(LeftSide, RightSide).toSet
-
   private def isMultiValuedCF(colFamilyName: String): Boolean = {
-    isListType(colFamilyName) || v4JoinCFNames.contains(colFamilyName)
+    StatePartitionReaderUtils.isMultiValuedCF(
+      colFamilyName,
+      stateVariableInfos.find(info => info.stateName == colFamilyName))
   }
 
   override protected lazy val provider: StateStoreProvider = {

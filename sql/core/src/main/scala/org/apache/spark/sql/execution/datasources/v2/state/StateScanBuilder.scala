@@ -138,7 +138,8 @@ class StateScan(
         hadoopConfBroadcast.value.value)
       val stateSchema = StreamStreamJoinStateHelper.readSchema(session,
         sourceOptions.stateCheckpointLocation.toString, sourceOptions.operatorId, LeftSide,
-        oldSchemaFilePaths, excludeAuxColumns = false)
+        oldSchemaFilePaths, excludeAuxColumns = false,
+        joinStateFormatVersion = joinStateFormatVersion)
       new StreamStreamJoinStatePartitionReaderFactory(stateStoreConf,
         hadoopConfBroadcast.value, userFacingSchema, stateSchema, joinStateFormatVersion)
 
@@ -148,7 +149,8 @@ class StateScan(
         hadoopConfBroadcast.value.value)
       val stateSchema = StreamStreamJoinStateHelper.readSchema(session,
         sourceOptions.stateCheckpointLocation.toString, sourceOptions.operatorId, RightSide,
-        oldSchemaFilePaths, excludeAuxColumns = false)
+        oldSchemaFilePaths, excludeAuxColumns = false,
+        joinStateFormatVersion = joinStateFormatVersion)
       new StreamStreamJoinStatePartitionReaderFactory(stateStoreConf,
         hadoopConfBroadcast.value, userFacingSchema, stateSchema, joinStateFormatVersion)
 
