@@ -6,11 +6,11 @@ Before the first code read, edit, or test in a session, ensure a clean working e
 
 1. Run `git remote -v` to identify the personal fork and upstream (`apache/spark`). If unclear, ask the user to configure their remotes following the standard convention (`origin` for the fork, `upstream` for `apache/spark`).
 2. If the latest commit on `<upstream>/master` is more than a day old (check with `git log -1 --format="%ci" <upstream>/master`), run `git fetch <upstream> master`.
-3. If there are uncommitted changes (check with `git status`), ask the user to stash or commit them before proceeding.
+3. If there are uncommitted changes (check with `git status`), ask the user to stash them before proceeding.
 4. Switch to the appropriate branch:
    - **Existing PR**: find the local branch by matching branch name and shared commits (one can fast-forward to the other). If the branch is checked out in another worktree, work from that worktree. If not found, ask the user whether to fetch the PR to a new local branch or identify the correct local branch.
-   - **New work**: if the current branch has commits not in upstream `master` (check with `git log <upstream>/master..HEAD`), ask the user to choose: create a new git worktree from `<upstream>/master` (recommended), or create and switch to a new branch from `<upstream>/master`.
-   - **Otherwise**: use `<upstream>/master`.
+   - **New edits**: ask the user to choose: create a new git worktree from `<upstream>/master` and work from there (recommended), or create and switch to a new branch from `<upstream>/master`.
+   - **Reading code or running tests**: use `<upstream>/master`.
 
 ## Development Notes
 
