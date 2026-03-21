@@ -270,7 +270,8 @@ To use it, create a wrapper script called ``uv_run``:
 and make it executable with ``chmod +x uv_run``.
 
 You may pass ``--python <version>`` to select a specific Python interpreter
-(see `using different Python versions <https://docs.astral.sh/uv/guides/scripts/#using-different-python-versions>`_):
+(see `using different Python versions <https://docs.astral.sh/uv/guides/scripts/#using-different-python-versions>`_).
+Refer to the :ref:`Installation </getting_started/install.rst>` page for supported Python versions.
 
 Set ``PYSPARK_PYTHON`` to the wrapper script:
 
