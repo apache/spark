@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, InMemoryCatalog}
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType}
+import org.apache.spark.sql.types.{CharType, IntegerType, LongType, StringType, VarcharType}
 
 class CreateTableLikeSuite extends DatasourceV2SQLBase {
 
@@ -217,6 +217,21 @@ class CreateTableLikeSuite extends DatasourceV2SQLBase {
   // -------------------------------------------------------------------------
   // Column type fidelity
   // -------------------------------------------------------------------------
+
+  test("CHAR and VARCHAR types are preserved from v1 source to v2 target") {
+    // InMemoryTableCatalog.createTableLike applies CharVarcharUtils.getRawSchema when
+    // the source is a V1Table, preserving CHAR/VARCHAR types as declared.
+    // This illustrates the pattern connectors should follow to preserve declared types.
+    withTable("src", "testcat.dst") {
+      sql("CREATE TABLE src (id bigint, name CHAR(10), tag VARCHAR(20)) USING parquet")
+      sql("CREATE TABLE testcat.dst LIKE src")
+
+      val dst = testCatalog.loadTable(Identifier.of(Array(), "dst"))
+      val schema = CatalogV2Util.v2ColumnsToStructType(dst.columns())
+      assert(schema("name").dataType === CharType(10))
+      assert(schema("tag").dataType === VarcharType(20))
+    }
+  }
 
   test("multiple column types are preserved") {
     withTable("src", "testcat.dst") {

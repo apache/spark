@@ -26,6 +26,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NonEmptyNamespaceException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
@@ -242,11 +243,17 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
       ident: Identifier,
       tableInfo: TableInfo,
       sourceTable: Table): Table = {
-    // Format-specific behavior: read schema and partitioning from sourceTable, merge source
-    // properties with user overrides (user overrides win), and copy source constraints.
-    // This demonstrates how a connector accesses all source metadata from sourceTable.
+    // Read schema from source. For V1Table sources, apply CharVarcharUtils to preserve
+    // CHAR/VARCHAR types as declared rather than collapsed to StringType.
+    val columns = sourceTable match {
+      case v1: V1Table =>
+        CatalogV2Util.structTypeToV2Columns(CharVarcharUtils.getRawSchema(v1.catalogTable.schema))
+      case _ =>
+        sourceTable.columns()
+    }
+    // Merge source properties with user overrides (user overrides win), copy constraints.
     val mergedProps = (sourceTable.properties().asScala ++ tableInfo.properties().asScala).asJava
-    createTable(ident, sourceTable.columns(), sourceTable.partitioning(), mergedProps,
+    createTable(ident, columns, sourceTable.partitioning(), mergedProps,
       Distributions.unspecified(), Array.empty, None, None, sourceTable.constraints())
   }
 

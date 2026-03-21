@@ -1141,7 +1141,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Create a [[CreateTableLikeCommand]] command.
+   * Create a [[CreateTableLike]] logical plan.
    *
    * For example:
    * {{{
