@@ -399,8 +399,7 @@ class DataFrameReader(OptionUtils):
     @overload
     def jdbc(
         self, url: str, table: str, *, properties: Optional[Dict[str, str]] = None
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def jdbc(
@@ -413,8 +412,7 @@ class DataFrameReader(OptionUtils):
         numPartitions: int,
         *,
         properties: Optional[Dict[str, str]] = None,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def jdbc(
@@ -424,8 +422,7 @@ class DataFrameReader(OptionUtils):
         *,
         predicates: List[str],
         properties: Optional[Dict[str, str]] = None,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     def jdbc(
         self,
@@ -446,9 +443,9 @@ class DataFrameReader(OptionUtils):
         if column is not None:
             assert lowerBound is not None, "lowerBound can not be None when ``column`` is specified"
             assert upperBound is not None, "upperBound can not be None when ``column`` is specified"
-            assert (
-                numPartitions is not None
-            ), "numPartitions can not be None when ``column`` is specified"
+            assert numPartitions is not None, (
+                "numPartitions can not be None when ``column`` is specified"
+            )
             self.options(
                 partitionColumn=column,
                 lowerBound=lowerBound,
@@ -526,12 +523,10 @@ class DataFrameWriter(OptionUtils):
     options.__doc__ = PySparkDataFrameWriter.options.__doc__
 
     @overload
-    def partitionBy(self, *cols: str) -> "DataFrameWriter":
-        ...
+    def partitionBy(self, *cols: str) -> "DataFrameWriter": ...
 
     @overload
-    def partitionBy(self, *cols: List[str]) -> "DataFrameWriter":
-        ...
+    def partitionBy(self, *cols: List[str]) -> "DataFrameWriter": ...
 
     def partitionBy(self, *cols: Union[str, List[str]]) -> "DataFrameWriter":
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
@@ -543,12 +538,10 @@ class DataFrameWriter(OptionUtils):
     partitionBy.__doc__ = PySparkDataFrameWriter.partitionBy.__doc__
 
     @overload
-    def bucketBy(self, numBuckets: int, col: str, *cols: str) -> "DataFrameWriter":
-        ...
+    def bucketBy(self, numBuckets: int, col: str, *cols: str) -> "DataFrameWriter": ...
 
     @overload
-    def bucketBy(self, numBuckets: int, col: TupleOrListOfString) -> "DataFrameWriter":
-        ...
+    def bucketBy(self, numBuckets: int, col: TupleOrListOfString) -> "DataFrameWriter": ...
 
     def bucketBy(
         self, numBuckets: int, col: Union[str, TupleOrListOfString], *cols: Optional[str]
@@ -597,12 +590,10 @@ class DataFrameWriter(OptionUtils):
     bucketBy.__doc__ = PySparkDataFrameWriter.bucketBy.__doc__
 
     @overload
-    def sortBy(self, col: str, *cols: str) -> "DataFrameWriter":
-        ...
+    def sortBy(self, col: str, *cols: str) -> "DataFrameWriter": ...
 
     @overload
-    def sortBy(self, col: TupleOrListOfString) -> "DataFrameWriter":
-        ...
+    def sortBy(self, col: TupleOrListOfString) -> "DataFrameWriter": ...
 
     def sortBy(
         self, col: Union[str, TupleOrListOfString], *cols: Optional[str]
@@ -642,12 +633,10 @@ class DataFrameWriter(OptionUtils):
     sortBy.__doc__ = PySparkDataFrameWriter.sortBy.__doc__
 
     @overload
-    def clusterBy(self, *cols: str) -> "DataFrameWriter":
-        ...
+    def clusterBy(self, *cols: str) -> "DataFrameWriter": ...
 
     @overload
-    def clusterBy(self, *cols: List[str]) -> "DataFrameWriter":
-        ...
+    def clusterBy(self, *cols: List[str]) -> "DataFrameWriter": ...
 
     def clusterBy(self, *cols: Union[str, List[str]]) -> "DataFrameWriter":
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
@@ -993,7 +982,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.connect.readwriter,
         globs=globs,
         optionflags=doctest.ELLIPSIS

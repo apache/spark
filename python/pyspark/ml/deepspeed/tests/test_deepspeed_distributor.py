@@ -192,14 +192,12 @@ def _create_pytorch_training_test_file():
     # Note: when Deepspeed CPU support becomes better,
     # switch in more realistic training files using Deepspeed
     # optimizations + constructs
-    str_to_write = textwrap.dedent(
-        """ 
+    str_to_write = textwrap.dedent(""" 
             import sys
             def pythagorean_thm(x : int, y: int): # type: ignore 
                 import deepspeed # type: ignore
                 return (x*x + y*y)**0.5 # type: ignore
-            print(pythagorean_thm(int(sys.argv[1]), int(sys.argv[2])))"""
-    )
+            print(pythagorean_thm(int(sys.argv[1]), int(sys.argv[2])))""")
     cp_path = "/tmp/test_deepspeed_training_file.py"
     with open(cp_path, "w") as f:
         f.write(str_to_write)
@@ -218,7 +216,7 @@ def _create_pytorch_training_test_file():
 class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()  # noqa
+        cls.gpu_discovery_script_file_name, cls.mnist_dir_path = set_up_test_dirs()  # noqa
         # "loadDefaults" is set to False because if not, the SparkConf will
         # use contain configurations from the LocalEndToEnd test,
         # which causes the test to break.

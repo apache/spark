@@ -35,7 +35,7 @@ sealed trait OrdinalReplacementExpressions
 case class OrdinalReplacementGroupingExpressions(
     expressions: IndexedSeq[NamedExpression],
     hasStar: Boolean,
-    expressionIndexesWithAggregateFunctions: HashSet[Int])
+    expressionIndicesWithAggregateFunctions: HashSet[Int])
     extends OrdinalReplacementExpressions
 
 /**

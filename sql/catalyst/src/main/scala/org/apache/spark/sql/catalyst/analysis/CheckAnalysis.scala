@@ -495,6 +495,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           case RelationTimeTravel(u: UnresolvedRelation, _, _) =>
             u.tableNotFound(u.multipartIdentifier)
 
+          case RelationChanges(u: UnresolvedRelation, _) =>
+            u.tableNotFound(u.multipartIdentifier)
+
           case etw: EventTimeWatermark =>
             etw.eventTime.dataType match {
               case s: StructType

@@ -30,8 +30,8 @@ import org.apache.spark.sql.catalyst.expressions.NamedExpression
  *      [[AggregateExpression]]s in their subtrees.
  *  - hasAttributeOutsideOfAggregateExpressions: True if `expressions` list contains any attributes
  *      that are not under an [[AggregateExpression]].
- *  - hasStar: True if there is a star (`*`) in aggregate expressions list
- *  - expressionIndexesWithAggregateFunctions: Indices of expressions in aggregate expressions list
+ *  - hasStar: True if there is a star (`*`) in aggregate expressions list.
+ *  - expressionIndicesWithAggregateFunctions: Indices of expressions in aggregate expressions list
  *      that have aggregate functions in their subtrees.
  *  - hasLateralColumnAlias: True if there is a lateral column reference in the aggregate
  *      expressions list.
@@ -41,6 +41,6 @@ case class ResolvedAggregateExpressions(
     resolvedExpressionsWithoutAggregates: Seq[NamedExpression],
     hasAttributeOutsideOfAggregateExpressions: Boolean,
     hasStar: Boolean,
-    expressionIndexesWithAggregateFunctions: HashSet[Int],
+    expressionIndicesWithAggregateFunctions: HashSet[Int],
     hasLateralColumnAlias: Boolean
 )

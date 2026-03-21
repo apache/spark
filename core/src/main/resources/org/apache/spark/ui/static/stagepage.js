@@ -42,14 +42,14 @@ function setTaskThreadDumpEnabled(enabled){
 
 $(document).ajaxStop(function () {
   if (shouldBlockUI) {
-    $.unblockUI();
+    $("#loading-overlay").addClass("d-none");
     shouldBlockUI = false;
   }
 });
 
 $(document).ajaxStart(function () {
   if (shouldBlockUI) {
-    $.blockUI({message: '<h3>Loading Stage Page...</h3>'});
+    $("#loading-overlay").removeClass("d-none");
   }
 });
 

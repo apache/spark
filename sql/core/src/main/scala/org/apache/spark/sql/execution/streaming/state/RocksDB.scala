@@ -40,6 +40,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.{LogEntry, Logging, LogKeys}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.streaming.checkpointing.ChecksumCheckpointFileManager
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{NextIterator, Utils}
 
@@ -152,11 +153,19 @@ class RocksDB(
 
   private val workingDir = createTempDir("workingDir")
 
-  // We need 2 threads per fm caller to avoid blocking
-  // (one for main file and another for checksum file).
-  // Since this fm is used by both query task and maintenance thread,
-  // then we need 2 * 2 = 4 threads.
-  protected val fileChecksumThreadPoolSize: Option[Int] = Some(4)
+  // To avoid blocking, we need 2 threads per fm caller (one for main file, one for checksum file).
+  // Since this fm is used by both query task and maintenance thread, the recommended default is
+  // 2 * 2 = 4 threads. A value of 0 disables the thread pool (sequential execution).
+  protected val fileChecksumThreadPoolSize: Option[Int] = {
+    val size = conf.fileChecksumThreadPoolSize
+    if (size < ChecksumCheckpointFileManager.DEFAULT_THREAD_POOL_SIZE) {
+      logWarning(s"fileChecksumThreadPoolSize for the state store file checksum thread pool " +
+        s"is set to $size, which is below the recommended default of " +
+        s"${ChecksumCheckpointFileManager.DEFAULT_THREAD_POOL_SIZE}. " +
+        "This may have performance impact.")
+    }
+    Some(size)
+  }
 
   protected def createFileManager(
       dfsRootDir: String,
@@ -243,6 +252,9 @@ class RocksDB(
 
   // Was snapshot auto repair performed when loading the current version
   @volatile private var performedSnapshotAutoRepair = false
+
+  // Was state loaded from DFS during the current load operation
+  @volatile private var loadedFromDfs = false
 
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
 
@@ -517,7 +529,8 @@ class RocksDB(
 
         val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion,
           workingDir, rocksDBFileMapping, latestSnapshotUniqueId)
-
+        // version 0 is the empty initial state; loadCheckpointFromDfs skips DFS for it
+        loadedFromDfs = version > 0
         loadedVersion = latestSnapshotVersion
 
         // reset the last snapshot version to the latest available snapshot version
@@ -622,6 +635,8 @@ class RocksDB(
         } else {
           // load the latest snapshot
           loadSnapshotWithoutCheckpointId(version)
+          // version 0 is the empty initial state; loadCheckpointFromDfs skips DFS for it
+          loadedFromDfs = version > 0
 
           if (loadedVersion != version) {
             val versionsAndUniqueIds: Array[(Long, Option[String])] =
@@ -782,6 +797,7 @@ class RocksDB(
     assert(version >= 0)
     recordedMetrics = None
     performedSnapshotAutoRepair = false
+    loadedFromDfs = false
     // Reset the load metrics before loading
     loadMetrics.clear()
 
@@ -842,6 +858,9 @@ class RocksDB(
         endVersion,
         snapshotVersionStateStoreCkptId,
         endVersionStateStoreCkptId)
+
+      // version 0 is the empty initial state; loadCheckpointFromDfs skips DFS for it
+      loadedFromDfs = endVersion > 0
 
       logInfo(
         log"Loaded snapshot at version ${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and apply " +
@@ -1589,18 +1608,28 @@ class RocksDB(
       prefix: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): NextIterator[ByteArrayPair] = {
     updateMemoryUsageIfNeeded()
-    val iter = db.newIterator()
     val updatedPrefix = if (useColumnFamilies) {
       encodeStateRowWithPrefix(prefix, cfName)
     } else {
       prefix
     }
 
+    val upperBoundSlice = RocksDB.prefixUpperBound(updatedPrefix).map(new Slice(_))
+    val prefixScanReadOptions = new ReadOptions()
+    upperBoundSlice.foreach(prefixScanReadOptions.setIterateUpperBound)
+
+    val iter = db.newIterator(prefixScanReadOptions)
     iter.seek(updatedPrefix)
+
+    def closeResources(): Unit = {
+      iter.close()
+      prefixScanReadOptions.close()
+      upperBoundSlice.foreach(_.close())
+    }
 
     // Attempt to close this iterator if there is a task failure, or a task interruption.
     Option(TaskContext.get()).foreach { tc =>
-      tc.addTaskCompletionListener[Unit] { _ => iter.close() }
+      tc.addTaskCompletionListener[Unit] { _ => closeResources() }
     }
 
     new NextIterator[ByteArrayPair] {
@@ -1624,12 +1653,12 @@ class RocksDB(
           byteArrayPair
         } else {
           finished = true
-          iter.close()
+          closeResources()
           null
         }
       }
 
-      override protected def close(): Unit = { iter.close() }
+      override protected def close(): Unit = closeResources()
     }
   }
 
@@ -2034,7 +2063,8 @@ class RocksDB(
       lastUploadedSnapshotVersion = lastUploadedSnapshotVersion.get(),
       zipFileBytesUncompressed = fileManagerMetrics.zipFileBytesUncompressed,
       nativeOpsMetrics = nativeOpsMetrics,
-      numSnapshotsAutoRepaired = if (performedSnapshotAutoRepair) 1 else 0)
+      numSnapshotsAutoRepaired = if (performedSnapshotAutoRepair) 1 else 0,
+      loadedFromDfs = if (this.loadedFromDfs) 1 else 0)
   }
 
   /**
@@ -2225,6 +2255,27 @@ class RocksDB(
 }
 
 object RocksDB extends Logging {
+
+  /**
+   * Computes the exclusive upper bound for a prefix byte array by incrementing the prefix.
+   * For example, [0x01, 0x02, 0x03] -> Some([0x01, 0x02, 0x04]).
+   * Returns None if the prefix is all 0xFF bytes (no finite upper bound exists).
+   */
+  def prefixUpperBound(prefix: Array[Byte]): Option[Array[Byte]] = {
+    if (prefix.isEmpty) return None
+
+    var i = prefix.length - 1
+    while (i >= 0) {
+      val incremented = (prefix(i) & 0xFF) + 1
+      if (incremented <= 0xFF) {
+        val upperBound = java.util.Arrays.copyOf(prefix, i + 1)
+        upperBound(i) = incremented.toByte
+        return Some(upperBound)
+      }
+      i -= 1
+    }
+    None
+  }
 
   val mainMemorySources: Seq[String] = Seq(
     "rocksdb.estimate-table-readers-mem",
@@ -2489,6 +2540,7 @@ case class RocksDBConf(
     reportSnapshotUploadLag: Boolean,
     maxVersionsToDeletePerMaintenance: Int,
     fileChecksumEnabled: Boolean,
+    fileChecksumThreadPoolSize: Int,
     rowChecksumEnabled: Boolean,
     rowChecksumReadVerificationRatio: Long,
     mergeOperatorVersion: Int,
@@ -2711,6 +2763,7 @@ object RocksDBConf {
       storeConf.reportSnapshotUploadLag,
       storeConf.maxVersionsToDeletePerMaintenance,
       storeConf.checkpointFileChecksumEnabled,
+      storeConf.fileChecksumThreadPoolSize,
       storeConf.rowChecksumEnabled,
       storeConf.rowChecksumReadVerificationRatio,
       getPositiveIntConf(MERGE_OPERATOR_VERSION_CONF),
@@ -2737,7 +2790,8 @@ case class RocksDBMetrics(
     zipFileBytesUncompressed: Option[Long],
     nativeOpsMetrics: Map[String, Long],
     lastUploadedSnapshotVersion: Long,
-    numSnapshotsAutoRepaired: Long) {
+    numSnapshotsAutoRepaired: Long,
+    loadedFromDfs: Long) {
   def json: String = Serialization.write(this)(RocksDBMetrics.format)
 }
 

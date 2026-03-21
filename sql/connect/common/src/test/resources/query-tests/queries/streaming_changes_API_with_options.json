@@ -1,0 +1,13 @@
+{
+  "common": {
+    "planId": "0"
+  },
+  "relationChanges": {
+    "unparsedIdentifier": "tempdb.myStreamingTable",
+    "options": {
+      "startingVersion": "1",
+      "deduplicationMode": "dropCarryovers"
+    },
+    "isStreaming": true
+  }
+}

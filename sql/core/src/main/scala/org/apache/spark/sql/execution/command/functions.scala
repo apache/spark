@@ -158,9 +158,8 @@ case class DropFunctionCommand(
 
       // Check if temp function exists first - if it does, allow dropping it even if a builtin
       // with the same name exists (shadowing case)
-      val unqualifiedIdent = FunctionIdentifier(funcName)
-      if (!catalog.isTemporaryFunction(unqualifiedIdent) &&
-          catalog.isBuiltinFunction(unqualifiedIdent)) {
+      if (!catalog.isTemporaryFunction(FunctionIdentifier(funcName)) &&
+          catalog.isBuiltinFunction(funcName)) {
         throw QueryCompilationErrors.cannotDropBuiltinFuncError(funcName)
       }
       catalog.dropTempFunction(funcName, ifExists)
@@ -197,9 +196,10 @@ case class ShowFunctionsCommand(
       sparkSession.sessionState.catalog
         .listFunctions(db, pattern.getOrElse("*"))
         .collect {
-          case (f, "USER") if showUserFunctions => f.unquotedString
-          case (f, "SYSTEM") if showSystemFunctions => f.unquotedString
+          case (f, "USER") if showUserFunctions => f.displayNameForShowFunctions
+          case (f, "SYSTEM") if showSystemFunctions => f.displayNameForShowFunctions
         }
+        .distinct
     // Hard code "<>", "!=", "between", "case", and "||"
     // for now as there is no corresponding functions.
     // "<>", "!=", "between", "case", and "||" is SystemFunctions,

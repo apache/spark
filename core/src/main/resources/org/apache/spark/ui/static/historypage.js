@@ -109,9 +109,11 @@ jQuery.extend( jQuery.fn.dataTableExt.ofnSearch, {
   }
 });
 
-$(document).ajaxStop($.unblockUI);
-$(document).ajaxStart(function(){
-  $.blockUI({ message: '<h3>Loading history summary...</h3>'});
+$(document).ajaxStop(function () {
+  $("#loading-overlay").addClass("d-none");
+});
+$(document).ajaxStart(function () {
+  $("#loading-overlay").removeClass("d-none");
 });
 
 $(document).ready(function() {

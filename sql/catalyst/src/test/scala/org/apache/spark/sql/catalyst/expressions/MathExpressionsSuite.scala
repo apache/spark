@@ -280,7 +280,9 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("acosh") {
-    testUnary(Acosh, (x: Double) => StrictMath.log(x + math.sqrt(x * x - 1.0)))
+    def f: (Double) => Double = (x: Double) => StrictMath.log(x + math.sqrt(x * x - 1.0))
+    testUnary(Acosh, f, (10 to 20).map(_ * 0.1))
+    testUnary(Acosh, f, (-20 to 9).map(_ * 0.1), expectNaN = true)
     checkConsistencyBetweenInterpretedAndCodegen(Cosh, DoubleType)
 
     val nullLit = Literal.create(null, NullType)
@@ -1010,4 +1012,17 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         s"Expression $expr should be context independent foldable")
     }
   }
+
+  test("SPARK-55557: hyperbolic functions should not overflow with large inputs") {
+    checkEvaluation(Asinh(Double.MaxValue), 710.4758600739439)
+    checkEvaluation(Asinh(Math.sqrt(Double.MaxValue)), 355.58450362725193)
+    checkEvaluation(Acosh(Double.MaxValue), 710.4758600739439)
+    checkEvaluation(Acosh(Math.sqrt(Double.MaxValue)), 355.58450362725193)
+    checkEvaluation(Asinh(Double.MinValue), -710.4758600739439)
+    checkEvaluation(Asinh(-Math.sqrt(Double.MaxValue)), -355.58450362725193)
+    checkNaN(Acosh(Double.MinValue))
+    checkNaN(Acosh(-Math.sqrt(Double.MaxValue) + 1))
+    checkNaN(Acosh(-Math.sqrt(Double.MaxValue) + 2))
+  }
+
 }
