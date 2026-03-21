@@ -45,7 +45,10 @@ import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.connector.catalog.CatalogManager.{
+  SESSION_CATALOG_NAME,
+  SYSTEM_CATALOG_NAME
+}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{AtomicType, TimestampNTZType, TimestampType}
 import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
@@ -139,6 +142,40 @@ object SQLConf {
       sqlConf.setConfString(k, v)
     }
   }
+
+  /**
+   * Second segment of the virtual path entry `system.current_schema` in `spark.sql.session.path`.
+   * CURRENT_SCHEMA and CURRENT_DATABASE in SET PATH both normalize to this sentinel (SQL aliases).
+   * It is stored literally and expanded to the session catalog + namespace when building routine
+   * resolution candidates and CURRENT_PATH().
+   */
+  private[sql] val SESSION_PATH_VIRTUAL_CURRENT_SCHEMA: String = "current_schema"
+
+  /** True if this path entry is the virtual current-schema slot (`system.current_schema`). */
+  private[sql] def isVirtualCurrentSchemaPathEntry(entry: Seq[String]): Boolean =
+    entry.length == 2 &&
+      entry.head.equalsIgnoreCase(SYSTEM_CATALOG_NAME) &&
+      entry(1).equalsIgnoreCase(SESSION_PATH_VIRTUAL_CURRENT_SCHEMA)
+
+  /** Materialize virtual current-schema entry for duplicate checks at SET PATH time. */
+  private[sql] def concreteSessionPathEntry(
+      entry: Seq[String],
+      currentCatalog: String,
+      currentNamespace: Seq[String]): Seq[String] = {
+    if (isVirtualCurrentSchemaPathEntry(entry)) {
+      if (currentNamespace.isEmpty) Seq(currentCatalog)
+      else currentCatalog +: currentNamespace
+    } else {
+      entry
+    }
+  }
+
+  /** Expand markers in stored session path using the current catalog and namespace. */
+  private[sql] def expandSessionPathMarkers(
+      entries: Seq[Seq[String]],
+      currentCatalog: String,
+      currentNamespace: Seq[String]): Seq[Seq[String]] =
+    entries.map(concreteSessionPathEntry(_, currentCatalog, currentNamespace))
 
   /**
    * Default config. Only used when there is no active SparkSession for the thread.
@@ -8301,7 +8338,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def currentPathString(currentCatalog: String, currentNamespace: Seq[String]): String = {
     val defaultEntry =
       if (currentNamespace.isEmpty) Seq(currentCatalog) else currentCatalog +: currentNamespace
-    val pathEntries = effectivePathEntries.getOrElse(Seq(defaultEntry))
+    val raw = effectivePathEntries.getOrElse(Seq(defaultEntry))
+    val pathEntries =
+      SQLConf.expandSessionPathMarkers(raw, currentCatalog, currentNamespace)
     val fullPath = resolutionSearchPath(pathEntries)
     SQLConf.formatSessionPath(fullPath)
   }

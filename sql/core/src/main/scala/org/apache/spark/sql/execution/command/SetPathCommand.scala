@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.util.Locale
+
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -32,7 +34,10 @@ object PathElement {
   case object DefaultPath extends PathElement
   case object SystemPath extends PathElement
   case object PathRef extends PathElement
-  /** Current database/schema (same in Spark); expands to current catalog + current namespace. */
+  /**
+   * Current database/schema (SQL aliases in Spark). Both normalize to stored `system.current_schema`
+   * and expand when building resolution candidates (so later USE SCHEMA is reflected).
+   */
   case object CurrentDatabase extends PathElement
   case object CurrentSchema extends PathElement
   /** Schema name parts (1 = unqualified namespace, 2+ = catalog.namespace...). Qualified at run. */
@@ -60,12 +65,14 @@ case class SetPathCommand(elements: Seq[PathElement]) extends LeafRunnableComman
     val expanded = expandPathElements(elements, conf, currentCatalog, currentNamespace)
     val seen = new scala.collection.mutable.HashSet[(String, String)]
     val deduped = expanded.flatMap { entry =>
-      val key = (entry.head.toLowerCase(java.util.Locale.ROOT),
-        entry.lift(1).getOrElse("").toLowerCase(java.util.Locale.ROOT))
+      val concrete =
+        SQLConf.concreteSessionPathEntry(entry, currentCatalog, currentNamespace)
+      val key = (concrete.head.toLowerCase(Locale.ROOT),
+        concrete.lift(1).getOrElse("").toLowerCase(Locale.ROOT))
       if (seen.contains(key)) {
         throw new AnalysisException(
           errorClass = "DUPLICATE_PATH_ENTRY",
-          messageParameters = Map("pathEntry" -> entry.mkString(".")))
+          messageParameters = Map("pathEntry" -> concrete.mkString(".")))
       }
       seen.add(key)
       Some(entry)
@@ -95,8 +102,7 @@ case class SetPathCommand(elements: Seq[PathElement]) extends LeafRunnableComman
       case PathElement.SystemPath =>
         Seq(Seq(systemCatalog, builtin), Seq(systemCatalog, session))
       case PathElement.CurrentDatabase | PathElement.CurrentSchema =>
-        if (currentNamespace.isEmpty) Seq(Seq(currentCatalog))
-        else Seq(currentCatalog +: currentNamespace)
+        Seq(Seq(systemCatalog, SQLConf.SESSION_PATH_VIRTUAL_CURRENT_SCHEMA))
       case PathElement.PathRef =>
         conf.sessionPath match {
           case Some(s) => SQLConf.parseSessionPath(s)

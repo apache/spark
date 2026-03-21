@@ -309,8 +309,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
       case u: UnresolvedFunctionName =>
         val catalogPath = currentCatalog.name +: catalogManager.currentNamespace
-        val pathEntries = confForRoutineResolution.effectivePathEntries
+        val raw = confForRoutineResolution.effectivePathEntries
           .getOrElse(Seq(catalogPath.toSeq))
+        val pathEntries = org.apache.spark.sql.internal.SQLConf.expandSessionPathMarkers(
+          raw,
+          currentCatalog.name,
+          catalogManager.currentNamespace.toSeq)
         val searchPath = confForRoutineResolution.resolutionSearchPath(pathEntries)
           .map(_.quoted)
         throw QueryCompilationErrors.unresolvedRoutineError(

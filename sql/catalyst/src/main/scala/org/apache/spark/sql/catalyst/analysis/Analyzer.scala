@@ -2075,8 +2075,12 @@ class Analyzer(
                 case FunctionType.NotFound =>
                   val catalogPath =
                     catalogManager.currentCatalog.name +: catalogManager.currentNamespace
-                  val pathEntries = resolutionConf.effectivePathEntries
+                  val raw = resolutionConf.effectivePathEntries
                     .getOrElse(Seq(catalogPath.toSeq))
+                  val pathEntries = org.apache.spark.sql.internal.SQLConf.expandSessionPathMarkers(
+                    raw,
+                    catalogManager.currentCatalog.name,
+                    catalogManager.currentNamespace.toSeq)
                   val searchPath = resolutionConf.resolutionSearchPath(pathEntries)
                     .map(_.quoted)
                   throw QueryCompilationErrors.unresolvedRoutineError(

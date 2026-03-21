@@ -92,9 +92,17 @@ class FunctionResolution(
    *
    * All other multi-part names are returned as-is for downstream resolution.
    */
+  private def resolvedPathEntries: Seq[Seq[String]] = {
+    val raw = conf.effectivePathEntries.getOrElse(Seq(currentCatalogPath))
+    org.apache.spark.sql.internal.SQLConf.expandSessionPathMarkers(
+      raw,
+      catalogManager.currentCatalog.name,
+      catalogManager.currentNamespace.toSeq)
+  }
+
   private def resolutionCandidates(nameParts: Seq[String]): Seq[Seq[String]] = {
     if (nameParts.size == 1) {
-      val pathEntries = conf.effectivePathEntries.getOrElse(Seq(currentCatalogPath))
+      val pathEntries = resolvedPathEntries
       val searchPath = conf.resolutionSearchPath(pathEntries)
       searchPath.map(_ ++ nameParts)
     } else if (nameParts.size == 2 &&
@@ -175,7 +183,7 @@ class FunctionResolution(
           case None =>
         }
       }
-      val pathEntries = conf.effectivePathEntries.getOrElse(Seq(currentCatalogPath))
+      val pathEntries = resolvedPathEntries
       val searchPath = conf.resolutionSearchPath(pathEntries)
       throw QueryCompilationErrors.unresolvedRoutineError(
         unresolvedFunc.nameParts, searchPath.map(toSQLId), unresolvedFunc.origin)
