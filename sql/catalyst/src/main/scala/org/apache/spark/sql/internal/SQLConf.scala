@@ -2914,7 +2914,7 @@ object SQLConf {
       )
       .version("4.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val STATEFUL_SHUFFLE_PARTITIONS_INTERNAL =
     buildConf("spark.sql.streaming.internal.stateStore.partitions")
@@ -3813,6 +3813,19 @@ object SQLConf {
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
+
+  val STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE =
+    buildConf("spark.sql.streaming.stateStore.fileChecksumThreadPoolSize")
+      .internal()
+      .doc("Number of threads used to read/write files and their corresponding checksum files " +
+        "concurrently. Set to 0 to disable the thread pool and run operations sequentially on " +
+        "the calling thread. WARNING: Reducing below the default value of 4 may have " +
+        "performance impact.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .intConf
+      .checkValue(x => x >= 0, "Must be a non-negative integer (0 to disable thread pool)")
+      .createWithDefault(4)
 
   val PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION =
     buildConf("spark.sql.statistics.parallelFileListingInStatsComputation.enabled")
@@ -7101,8 +7114,6 @@ object SQLConf {
       DeprecatedConfig(OPTIMIZER_METADATA_ONLY.key, "3.0",
         "Avoid to depend on this optimization to prevent a potential correctness issue. " +
           "If you must use, use 'SparkSessionExtensions' instead to inject it as a custom rule."),
-      DeprecatedConfig(CONVERT_CTAS.key, "3.1",
-        s"Set '${LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key}' to false instead."),
       DeprecatedConfig("spark.sql.sources.schemaStringLengthThreshold", "3.2",
         s"Use '${HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD.key}' instead."),
       DeprecatedConfig(LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED.key, "3.2",
@@ -7334,6 +7345,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def checkpointFileChecksumSkipCreationIfFileMissingChecksum: Boolean =
     getConf(STREAMING_CHECKPOINT_FILE_CHECKSUM_SKIP_CREATION_IF_FILE_MISSING_CHECKSUM)
+
+  def stateStoreFileChecksumThreadPoolSize: Int =
+    getConf(STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE)
 
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
 

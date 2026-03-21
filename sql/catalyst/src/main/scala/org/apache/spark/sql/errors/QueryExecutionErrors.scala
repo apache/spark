@@ -47,6 +47,7 @@ import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
 import org.apache.spark.sql.catalyst.util.{sideBySide, CharsetProvider, DateTimeUtils, FailFastMode, IntervalUtils, MapData}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
@@ -3126,6 +3127,30 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "NULL_DATA_SOURCE_OPTION",
       messageParameters = Map("option" -> option)
     )
+  }
+
+  def storagePartitionJoinIncompatibleReducedTypesError(
+      leftReducers: Option[Seq[Option[Reducer[_, _]]]],
+      leftReducedDataTypes: Seq[DataType],
+      rightReducers: Option[Seq[Option[Reducer[_, _]]]],
+      rightReducedDataTypes: Seq[DataType]): Throwable = {
+    def reducersNames(reducers: Option[Seq[Option[Reducer[_, _]]]]) = {
+      reducers.toSeq.flatMap(_.map(_.map(_.displayName()).getOrElse("identity")))
+        .mkString("[", ", ", "]")
+    }
+
+    def dataTypeNames(dataTypes: Seq[DataType]) = {
+      dataTypes.map(toSQLType).mkString("[", ", ", "]")
+    }
+
+    new SparkException(
+      errorClass = "STORAGE_PARTITION_JOIN_INCOMPATIBLE_REDUCED_TYPES",
+      messageParameters = Map(
+        "leftReducers" -> reducersNames(leftReducers),
+        "leftReducedDataTypes" -> dataTypeNames(leftReducedDataTypes),
+        "rightReducers" -> reducersNames(rightReducers),
+        "rightReducedDataTypes" -> dataTypeNames(rightReducedDataTypes)),
+      cause = null)
   }
 
   def notAbsolutePathError(path: Path): SparkException = {

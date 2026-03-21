@@ -25,7 +25,7 @@ import org.apache.spark.rdd.{CoalescedRDD, PartitionCoalescer, PartitionGroup, R
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, Partitioning}
-import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
+import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.types.DataType
@@ -141,7 +141,7 @@ case class GroupPartitionsExec(
       )(keyedPartitioning.projectKeys)
 
     // Reduce keys if reducers are specified
-    val reducedKeys = reducers.fold(projectedKeys)(
+    val (reducedDataTypes, reducedKeys) = reducers.fold((projectedDataTypes, projectedKeys))(
       KeyedPartitioning.reduceKeys(projectedKeys, projectedDataTypes, _))
 
     val keyToPartitionIndices = reducedKeys.zipWithIndex.groupMap(_._1)(_._2)
@@ -149,7 +149,7 @@ case class GroupPartitionsExec(
     if (expectedPartitionKeys.isDefined) {
       alignToExpectedKeys(keyToPartitionIndices)
     } else {
-      (groupAndSortByKeys(keyToPartitionIndices, projectedDataTypes), true)
+      (groupAndSortByKeys(keyToPartitionIndices, reducedDataTypes), true)
     }
   }
 
@@ -193,13 +193,23 @@ case class GroupPartitionsExec(
   }
 
   override def simpleString(maxFields: Int): String = {
-    val joinKeyPositionsString =
-      joinKeyPositions.map(p => s" JoinKeyPositions: ${p.mkString("[", ",", "]")}").getOrElse("")
-    val expectedPartitionKeysString =
-      expectedPartitionKeys.map(ks => s" ExpectedPartitionKeys: ${ks.size}").getOrElse("")
-    val reducersString = reducers.map(r => s" Reducers: ${r.count(_.isDefined)}").getOrElse("")
-    s"$nodeName$joinKeyPositionsString$expectedPartitionKeysString$reducersString " +
-      s"DistributePartitions: $distributePartitions"
+    s"$nodeName${planSummaryParts(maxFields).map(" " + _).mkString("")}"
+  }
+
+  override protected def stringArgs: Iterator[Any] = planSummaryParts(Int.MaxValue)
+
+  private def planSummaryParts(joinKeyMaxFields: Int): Iterator[String] = {
+    val joinKeyStr = joinKeyPositions.map { p =>
+      s"JoinKeyPositions: ${truncatedString(p, "[", ", ", "]", joinKeyMaxFields)}"
+    }.iterator
+    val expectedStr = expectedPartitionKeys.map(ks => s"ExpectedPartitionKeys: ${ks.size}")
+    val reducersStr = reducers.map { seq =>
+      val names = seq.map(_.map(_.displayName()).getOrElse("identity"))
+      s"Reducers: ${truncatedString(names, "[", ", ", "]", joinKeyMaxFields)}"
+    }
+    val distributeStr = Iterator(s"DistributePartitions: $distributePartitions")
+    joinKeyStr ++ expectedStr ++ reducersStr ++ distributeStr
+
   }
 }
 

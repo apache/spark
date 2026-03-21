@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 import java.sql.Timestamp
 import java.util.Collections
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, TransformExpression}
@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.distributions.Distributions
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.Expressions._
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{ExtendedMode, FormattedMode, RDDScanExec, SimpleMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
@@ -75,6 +75,20 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       Column.create("dept_id", IntegerType),
       Column.create("data", StringType))
 
+  def withFunction[T](fn: UnboundFunction)(f: => T): T = {
+    val id = Identifier.of(Array.empty, fn.name())
+    val oldFn = Option.when(catalog.listFunctions(Array.empty).contains(id)) {
+      val fn = catalog.loadFunction(id)
+      catalog.dropFunction(id)
+      fn
+    }
+    catalog.createFunction(id, fn)
+    try f finally {
+      catalog.dropFunction(id)
+      oldFn.foreach(catalog.createFunction(id, _))
+    }
+  }
+
   test("clustered distribution: output partitioning should be KeyedPartitioning") {
     val partitions: Array[Transform] = Array(Expressions.years("ts"))
 
@@ -88,7 +102,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     var df = sql(s"SELECT count(*) FROM testcat.ns.$table GROUP BY ts")
     val catalystDistribution = physical.ClusteredDistribution(
       Seq(TransformExpression(YearsFunction, Seq(attr("ts")))))
-    val partitionKeys = Seq(50L, 51L, 52L).map(v => InternalRow.fromSeq(Seq(v)))
+    val partitionKeys = Seq(50, 51, 52).map(v => InternalRow.fromSeq(Seq(v)))
 
     checkQueryPlan(df, catalystDistribution,
       physical.KeyedPartitioning(catalystDistribution.clustering, partitionKeys))
@@ -1209,6 +1223,145 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
           val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
           assert(groupPartitions.forall(_.outputPartitioning.numPartitions === 3))
         }
+      }
+    }
+  }
+
+  test("SPARK-55848: dropDuplicates after SPJ with partial clustering") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    // Two rows for id=1 so partial clustering may split them across tasks
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        "(1, 'aa', 41.0, cast('2020-01-15' as timestamp)), " +
+        "(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        "(1, 50.0, cast('2020-01-02' as timestamp)), " +
+        "(2, 11.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> true.toString) {
+      // dropDuplicates on the join key after a partially-clustered SPJ must still
+      // produce the correct number of distinct ids.  Before the fix, the
+      // partially-clustered partitioning was incorrectly treated as satisfying
+      // ClusteredDistribution, so EnsureRequirements did not insert an Exchange
+      // before the dedup, leading to duplicate rows.
+      val df = sql(
+        s"""
+           |${selectWithMergeJoinHint("i", "p")} DISTINCT i.id
+           |FROM testcat.ns.$items i
+           |JOIN testcat.ns.$purchases p ON i.id = p.item_id
+           |""".stripMargin)
+      checkAnswer(df, Seq(Row(1), Row(2), Row(3)))
+
+      // One GroupPartitionsExec per join child to align the partially-clustered
+      // partitions, and one above the join to group for the aggregate.
+      val joinGP = collectGroupPartitions(df.queryExecution.executedPlan)
+      assert(joinGP.size === 2,
+        "expected 2 GroupPartitionsExec under the join")
+      val allGP = collectAllGroupPartitions(df.queryExecution.executedPlan)
+      assert(allGP.size === 3,
+        "expected 3 GroupPartitionsExec total (2 under join + 1 above for aggregate)")
+    }
+  }
+
+  test("SPARK-55848: Window dedup after SPJ with partial clustering") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        "(1, 'aa', 41.0, cast('2020-01-15' as timestamp)), " +
+        "(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        "(1, 50.0, cast('2020-01-02' as timestamp)), " +
+        "(2, 11.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> true.toString) {
+      // Use ROW_NUMBER() OVER to dedup joined rows per id after a partially-clustered
+      // SPJ.  The WINDOW operator requires ClusteredDistribution on i.id; with partial
+      // clustering the plan must insert the right exchange/group so that the window
+      // produces exactly one row per id.
+      val df = sql(
+        s"""
+           |SELECT id, price FROM (
+           |  ${selectWithMergeJoinHint("i", "p")} i.id, i.price,
+           |    ROW_NUMBER() OVER (PARTITION BY i.id ORDER BY i.price DESC) AS rn
+           |  FROM testcat.ns.$items i
+           |  JOIN testcat.ns.$purchases p ON i.id = p.item_id
+           |) t WHERE rn = 1
+           |""".stripMargin)
+      checkAnswer(df, Seq(Row(1, 41.0f), Row(2, 10.0f), Row(3, 15.5f)))
+
+      // One GroupPartitionsExec per join child to align the partially-clustered
+      // partitions, and one above the join to group for the window.
+      val joinGP = collectGroupPartitions(df.queryExecution.executedPlan)
+      assert(joinGP.size === 2,
+        "expected 2 GroupPartitionsExec under the join")
+      val allGP = collectAllGroupPartitions(df.queryExecution.executedPlan)
+      assert(allGP.size === 3,
+        "expected 3 GroupPartitionsExec total (2 under join + 1 above for window)")
+    }
+  }
+
+  test("SPARK-55848: checkpointed partially-clustered join with dedup") {
+    withTempDir { dir =>
+      spark.sparkContext.setCheckpointDir(dir.getPath)
+      val items_partitions = Array(identity("id"))
+      createTable(items, itemsColumns, items_partitions)
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+          "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+          "(1, 'aa', 41.0, cast('2020-01-15' as timestamp)), " +
+          "(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+          "(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+      val purchases_partitions = Array(identity("item_id"))
+      createTable(purchases, purchasesColumns, purchases_partitions)
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+          "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+          "(1, 50.0, cast('2020-01-02' as timestamp)), " +
+          "(2, 11.0, cast('2020-01-01' as timestamp)), " +
+          "(3, 19.5, cast('2020-02-01' as timestamp))")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> true.toString) {
+        // Checkpoint the JOIN result (not the scan) so the checkpoint node carries the
+        // partially-clustered KeyGroupedPartitioning. The dedup on top must still insert
+        // the required grouping operator because partially-clustered partitioning does not
+        // satisfy ClusteredDistribution.
+        val joinedDf = sql(
+          s"""${selectWithMergeJoinHint("i", "p")} i.id, i.name, i.price
+             |FROM testcat.ns.$items i
+             |JOIN testcat.ns.$purchases p ON i.id = p.item_id""".stripMargin)
+        val checkpointedDf = joinedDf.checkpoint()
+        val df = checkpointedDf.select("id").distinct()
+        checkAnswer(df, Seq(Row(1), Row(2), Row(3)))
+
+        val checkpointScans = collect(df.queryExecution.executedPlan) {
+          case r: RDDScanExec => r
+        }
+        assert(checkpointScans.exists(_.outputPartitioning match {
+          case kp: physical.KeyedPartitioning => !kp.isGrouped
+          case _ => false
+        }), "checkpoint (RDDScanExec) should have ungrouped KeyedPartitioning")
+
+        val allGroupPartitions = collectAllGroupPartitions(df.queryExecution.executedPlan)
+        assert(allGroupPartitions.size === 1,
+          "expected 1 GroupPartitionsExec above the checkpointed join for dedup")
       }
     }
   }
@@ -3217,29 +3370,112 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     }
   }
 
-  test("SPARK-55992: GroupPartitions textual representatin in plans") {
+  test("SPARK-55992: GroupPartitions string in simple and extended explain") {
     val items_partitions = Array(bucket(4, "id"), years("arrive_time"))
     createTable(items, itemsColumns, items_partitions)
-
     sql(s"INSERT INTO testcat.ns.$items VALUES (1, 'aa', 10.0, cast('2021-01-01' as timestamp))")
-
     val purchases_partitions = Array(bucket(6, "item_id"), years("time"))
     createTable(purchases, purchasesColumns, purchases_partitions)
-
     sql(s"INSERT INTO testcat.ns.$purchases VALUES (2, 10.0, cast('2021-01-01' as timestamp))")
-
     withSQLConf(
       SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
       SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
       SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
       val df = sql(
         s"""
-           |SELECT *
+           |${selectWithMergeJoinHint("i", "p")}
+           |*
            |FROM testcat.ns.$items i
            |JOIN testcat.ns.$purchases p ON p.item_id = i.id
            |""".stripMargin)
-      checkKeywordsExistsInExplain(df, keywords = "GroupPartitions JoinKeyPositions: [0] " +
-        "ExpectedPartitionKeys: 2 Reducers: 1 DistributePartitions: false")
+      val simpleAndExtendedKeyword =
+        "GroupPartitions JoinKeyPositions: [0] ExpectedPartitionKeys: 2 " +
+        "Reducers: [BucketReducer(2)] DistributePartitions: false"
+      val formattedKeyword =
+        "Arguments: JoinKeyPositions: [0], ExpectedPartitionKeys: 2, " +
+        "Reducers: [BucketReducer(2)], DistributePartitions: false"
+      checkKeywordsExistsInExplain(df, SimpleMode, simpleAndExtendedKeyword)
+      checkKeywordsExistsInExplain(df, ExtendedMode, simpleAndExtendedKeyword)
+      checkKeywordsExistsInExplain(df, FormattedMode, formattedKeyword)
+    }
+  }
+
+  test("SPARK-56046: Reducers with same result types") {
+    val items_partitions = Array(days("arrive_time"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      s"(0, 'aa', 39.0, cast('2020-01-01' as timestamp)), " +
+      s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 'bb', 41.0, cast('2021-01-03' as timestamp)), " +
+      s"(3, 'bb', 42.0, cast('2021-01-04' as timestamp))")
+
+    val purchases_partitions = Array(years("time"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      s"(5, 44.0, cast('2020-01-15' as timestamp)), " +
+      s"(7, 46.5, cast('2021-02-08' as timestamp))")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        Seq(
+          s"testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.time = i.arrive_time",
+          s"testcat.ns.$purchases p JOIN testcat.ns.$items i ON i.arrive_time = p.time"
+        ).foreach { joinString =>
+          val df = sql(
+            s"""
+               |${selectWithMergeJoinHint("i", "p")} id, item_id
+               |FROM $joinString
+               |ORDER BY id, item_id
+               |""".stripMargin)
+
+          val shuffles = collectShuffles(df.queryExecution.executedPlan)
+          assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+          val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+          assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 2))
+
+          checkAnswer(df, Seq(Row(0, 1), Row(1, 1)))
+        }
+      }
+  }
+
+  test("SPARK-56046: Reducers with different result types") {
+    withFunction(UnboundDaysFunctionWithIncompatibleResultTypeReducer) {
+      val items_partitions = Array(days("arrive_time"))
+      createTable(items, itemsColumns, items_partitions)
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(0, 'aa', 39.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'bb', 41.0, cast('2021-01-03' as timestamp)), " +
+        s"(3, 'bb', 42.0, cast('2021-01-04' as timestamp))")
+
+      val purchases_partitions = Array(years("time"))
+      createTable(purchases, purchasesColumns, purchases_partitions)
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(5, 44.0, cast('2020-01-15' as timestamp)), " +
+        s"(7, 46.5, cast('2021-02-08' as timestamp))")
+
+      withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        Seq(
+          s"testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.time = i.arrive_time",
+          s"testcat.ns.$purchases p JOIN testcat.ns.$items i ON i.arrive_time = p.time"
+        ).foreach { joinString =>
+          val e = intercept[SparkException] {
+            sql(
+              s"""
+                 |${selectWithMergeJoinHint("i", "p")} id, item_id
+                 |FROM $joinString
+                 |ORDER BY id, item_id
+                 |""".stripMargin).collect()
+          }
+          assert(e.getMessage.contains(
+            "Storage-partition join partition transforms produced incompatible reduced types"))
+        }
+      }
     }
   }
 }

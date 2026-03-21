@@ -170,7 +170,8 @@ def as_spark_type(
         return types.ArrayType(types.StringType())
     elif hasattr(tpe, "__origin__") and issubclass(tpe.__origin__, list):
         element_type = as_spark_type(
-            tpe.__args__[0], raise_error=raise_error  # type: ignore[union-attr]
+            tpe.__args__[0],  # type: ignore[union-attr]
+            raise_error=raise_error,
         )
         if element_type is None:
             return None

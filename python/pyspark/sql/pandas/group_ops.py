@@ -948,9 +948,7 @@ class PandasGroupedOpsMixin:
             eval_type = PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
 
         # The usage of the pandas_udf is internal so type checking is disabled.
-        udf = pandas_udf(
-            func, returnType=schema, functionType=eval_type
-        )  # type: ignore[call-overload]
+        udf = pandas_udf(func, returnType=schema, functionType=eval_type)  # type: ignore[call-overload]
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
         jdf = self._jgd.flatMapGroupsInArrow(udf_column._jc)
