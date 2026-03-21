@@ -21,7 +21,10 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal, UnspecifiedFrame}
+import org.apache.spark.sql.catalyst.expressions.{
+  Alias, AttributeReference, EqualTo, GroupingID,
+  Literal, UnspecifiedFrame, VirtualColumn
+}
 import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Filter, LocalRelation, LogicalPlan, Project}
@@ -419,5 +422,22 @@ class PropagateEmptyRelationSuite extends PlanTest {
     val p5 = emptyRelation.sortBy("$a".asc).repartition().limit(1).repartition(1).analyze
     val expected5 = emptyRelation.repartition(1).analyze
     comparePlans(Optimize.execute(p5), expected5)
+  }
+
+  test("SPARK-53565: Expand is always propagated to empty after optimizer split") {
+    // SplitEmptyGroupingSet removes the empty grouping set before
+    // this rule runs, so Expand can always be eliminated.
+    val emptyChild = LocalRelation($"a".int, $"b".int)
+    val childOutput = emptyChild.output
+    val groupByAliases = Seq(Alias(childOutput.head, "a")())
+    val groupByAttrs = groupByAliases.map(_.toAttribute)
+    val gidAttr = AttributeReference(
+      VirtualColumn.groupingIdName, GroupingID.dataType, nullable = false)()
+    val groupingSetsAttrs = Seq(Seq(groupByAttrs.head))
+
+    val expand = Expand(groupingSetsAttrs, groupByAliases, groupByAttrs, gidAttr, emptyChild)
+    val optimized = Optimize.execute(expand.analyze)
+    assert(optimized.isInstanceOf[LocalRelation],
+      "Expand on empty child should be eliminated to empty")
   }
 }
