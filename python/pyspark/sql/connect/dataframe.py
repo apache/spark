@@ -1857,9 +1857,7 @@ class DataFrame(ParentDataFrame):
 
     @functools.cache
     def isLocal(self) -> bool:
-        result = self._session.client._analyze(
-            method="is_local", plan=self._metadata_plan
-        ).is_local
+        result = self._session.client._analyze(method="is_local", plan=self._metadata_plan).is_local
         assert result is not None
         return result
 
