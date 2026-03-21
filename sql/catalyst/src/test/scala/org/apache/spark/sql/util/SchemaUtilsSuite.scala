@@ -21,10 +21,12 @@ import java.util.Locale
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, LongType, MapType, StringType, StructType}
 
-class SchemaUtilsSuite extends SparkFunSuite {
+class SchemaUtilsSuite extends SparkFunSuite with SQLConfHelper {
 
   private def resolver(caseSensitiveAnalysis: Boolean): Resolver = {
     if (caseSensitiveAnalysis) {
@@ -119,14 +121,18 @@ class SchemaUtilsSuite extends SparkFunSuite {
       .add("arr", ArrayType(LongType))
       .add("m", MapType(StringType, LongType))
 
-    assert(!SchemaUtils.fieldExistsAtPath(root, Seq.empty, resolver(true)))
-    assert(SchemaUtils.fieldExistsAtPath(root, Seq("a"), resolver(true)))
-    assert(!SchemaUtils.fieldExistsAtPath(root, Seq("A"), resolver(true)))
-    assert(SchemaUtils.fieldExistsAtPath(root, Seq("A"), resolver(false)))
-    assert(SchemaUtils.fieldExistsAtPath(root, Seq("S", "y"), resolver(true)))
-    assert(SchemaUtils.fieldExistsAtPath(root, Seq("arr", "element"), resolver(true)))
-    assert(SchemaUtils.fieldExistsAtPath(root, Seq("m", "key"), resolver(true)))
-    assert(SchemaUtils.fieldExistsAtPath(root, Seq("m", "value"), resolver(true)))
-    assert(!SchemaUtils.fieldExistsAtPath(root, Seq("missing"), resolver(true)))
+    assert(!SchemaUtils.fieldExistsAtPath(root, Seq.empty))
+    assert(SchemaUtils.fieldExistsAtPath(root, Seq("a")))
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      assert(!SchemaUtils.fieldExistsAtPath(root, Seq("A")))
+    }
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      assert(SchemaUtils.fieldExistsAtPath(root, Seq("A")))
+    }
+    assert(SchemaUtils.fieldExistsAtPath(root, Seq("S", "y")))
+    assert(SchemaUtils.fieldExistsAtPath(root, Seq("arr", "element")))
+    assert(SchemaUtils.fieldExistsAtPath(root, Seq("m", "key")))
+    assert(SchemaUtils.fieldExistsAtPath(root, Seq("m", "value")))
+    assert(!SchemaUtils.fieldExistsAtPath(root, Seq("missing")))
   }
 }

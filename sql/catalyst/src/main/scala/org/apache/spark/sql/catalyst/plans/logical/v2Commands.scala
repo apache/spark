@@ -42,7 +42,6 @@ import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, M
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, AtomicType, BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
@@ -1079,14 +1078,14 @@ object MergeIntoTable {
    * analysis steps before this logic applies.
    *
    * Only assignments that copy from a source column (or nested field) into the same path on the
-   * target are considered—including new target columns that do not exist on the table yet but name
+   * target are considered, including new target columns that do not exist on the table yet but name
    * the same path as that source field.
    *
    * From those assignments we may produce:
    *  - `addColumn` when the assignment targets a new column and the table does not already have it
    *    at that name/path.
    *  - `updateColumnType` when an existing target column and the matching source column disagree on
-   *    a simple (non-struct) type—for example widening `INT` to `BIGINT`.
+   *    a simple (non-struct) type (for example widening `INT` to `BIGINT`).
    *  - Extra nested `addColumn` steps when the source side has struct fields (including inside
    *    arrays or maps) that the target table row does not yet store at the same path.
    *  - Nothing extra when the types already line up for that assignment.
@@ -1117,7 +1116,7 @@ object MergeIntoTable {
       case a if !a.key.resolved =>
         val fieldPath = extractFieldPath(a.key, allowUnresolved = true)
         if (fieldPath.nonEmpty &&
-            !SchemaUtils.fieldExistsAtPath(originalTarget, fieldPath, SQLConf.get.resolver)) {
+            !SchemaUtils.fieldExistsAtPath(originalTarget, fieldPath)) {
           changes += TableChange.addColumn(fieldPath.toArray, a.value.dataType.asNullable)
         }
       case a if a.key.dataType != a.value.dataType =>
@@ -1139,20 +1138,16 @@ object MergeIntoTable {
    * `addColumn` / `updateColumnType` entries to `changes`.
    *
    * `keyType` and `valueType` come from the assignment expression types (MERGE target side vs
-   * source side). `targetTypeAtPath` is the type of the same path in `merge.targetTable.schema`
-   * (catalog-backed). Those can differ after `alterTable` + reload: the table may already include
-   * a new field while the key expression still carries an older [[DataType]], so nested
-   * `addColumn` is skipped when the table struct already contains the field name.
+   * source side). `targetTypeAtPath` is the type of the same path in the current
+   * MERGE target table.
    *
    * @param keyType type of the assignment key at this path (MERGE target column expression)
    * @param valueType type of the assignment value at this path (typically source column)
    * @param changes accumulator for [[TableChange]] instances
    * @param fieldPath qualified path segments for nested columns (`element` / `key` / `value`
-   *                  under arrays and maps, per DSv2 [[TableChange]] conventions)
-   * @param targetTypeAtPath type of the loaded target table at `fieldPath` (not necessarily
-   *                         equal to `keyType` when catalog and analyzer are out of sync)
-   * @param failIncompatible called when assignment types cannot be reconciled; throws with MERGE
-   *                         target and source schemas for the error message
+   *                  under arrays and mapss)
+   * @param targetTypeAtPath type of the loaded MERGE target table at `fieldPath`
+   * @param failIncompatible error handling when assignment types cannot be reconciled
    */
   private def computeTypeSchemaChanges(
       keyType: DataType,
@@ -1163,10 +1158,10 @@ object MergeIntoTable {
       failIncompatible: () => Nothing): Unit = {
     (keyType, valueType) match {
       case (StructType(keyFields), StructType(valueFields)) =>
-        val keyFieldMap = toFieldMap(keyFields)
-        val valueFieldMap = toFieldMap(valueFields)
+        val keyFieldMap = SchemaUtils.toFieldMap(keyFields)
+        val valueFieldMap = SchemaUtils.toFieldMap(valueFields)
         val targetFieldMap = targetTypeAtPath match {
-          case st: StructType => toFieldMap(st.fields)
+          case st: StructType => SchemaUtils.toFieldMap(st.fields)
           case _ => Map.empty[String, StructField]
         }
 
@@ -1235,15 +1230,6 @@ object MergeIntoTable {
 
       case _ =>
         failIncompatible()
-    }
-  }
-
-  private def toFieldMap(fields: Array[StructField]): Map[String, StructField] = {
-    val fieldMap = fields.map(f => f.name -> f).toMap
-    if (SQLConf.get.caseSensitiveAnalysis) {
-      fieldMap
-    } else {
-      CaseInsensitiveMap(fieldMap)
     }
   }
 
