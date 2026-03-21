@@ -141,7 +141,7 @@ case class GroupPartitionsExec(
       )(keyedPartitioning.projectKeys)
 
     // Reduce keys if reducers are specified
-    val reducedKeys = reducers.fold(projectedKeys)(
+    val (reducedDataTypes, reducedKeys) = reducers.fold((projectedDataTypes, projectedKeys))(
       KeyedPartitioning.reduceKeys(projectedKeys, projectedDataTypes, _))
 
     val keyToPartitionIndices = reducedKeys.zipWithIndex.groupMap(_._1)(_._2)
@@ -149,7 +149,7 @@ case class GroupPartitionsExec(
     if (expectedPartitionKeys.isDefined) {
       alignToExpectedKeys(keyToPartitionIndices)
     } else {
-      (groupAndSortByKeys(keyToPartitionIndices, projectedDataTypes), true)
+      (groupAndSortByKeys(keyToPartitionIndices, reducedDataTypes), true)
     }
   }
 

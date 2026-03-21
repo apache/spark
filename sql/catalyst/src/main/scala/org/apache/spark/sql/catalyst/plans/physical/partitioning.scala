@@ -465,10 +465,11 @@ case class KeyedPartitioning(
 
   /**
    * Reduces this partitioning's partition keys by applying the given reducers.
-   * Returns the distinct reduced keys.
+   * Returns the reduced keys and their data types.
    */
-  def reduceKeys(reducers: Seq[Option[Reducer[_, _]]]): Seq[InternalRowComparableWrapper] =
-    KeyedPartitioning.reduceKeys(partitionKeys, expressionDataTypes, reducers).distinct
+  def reduceKeys(
+      reducers: Seq[Option[Reducer[_, _]]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) =
+    KeyedPartitioning.reduceKeys(partitionKeys, expressionDataTypes, reducers)
 
   override def satisfies0(required: Distribution): Boolean = {
     nonGroupedSatisfies(required) || groupedSatisfies(required)
@@ -586,10 +587,14 @@ object KeyedPartitioning {
   def reduceKeys(
       keys: Seq[InternalRowComparableWrapper],
       dataTypes: Seq[DataType],
-      reducers: Seq[Option[Reducer[_, _]]]): Seq[InternalRowComparableWrapper] = {
+      reducers: Seq[Option[Reducer[_, _]]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) = {
+    val reducedDataTypes = dataTypes.zip(reducers).map {
+      case (_, Some(reducer: Reducer[Any, Any])) => reducer.resultType()
+      case (t, _) => t
+    }
     val comparableKeyWrapperFactory =
-      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes)
-    keys.map { key =>
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(reducedDataTypes)
+    val reducedKeys = keys.map { key =>
       val keyValues = key.row.toSeq(dataTypes)
       val reducedKey = keyValues.zip(reducers).map {
         case (v, Some(reducer: Reducer[Any, Any])) => reducer.reduce(v)
@@ -597,6 +602,8 @@ object KeyedPartitioning {
       }.toArray
       comparableKeyWrapperFactory(new GenericInternalRow(reducedKey))
     }
+
+    (reducedDataTypes, reducedKeys)
   }
 }
 
