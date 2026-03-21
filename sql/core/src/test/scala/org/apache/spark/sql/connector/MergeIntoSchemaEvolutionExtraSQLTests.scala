@@ -142,7 +142,7 @@ trait MergeIntoSchemaEvolutionExtraSQLTests extends RowLevelOperationSuiteBase {
           s"Error message should mention table name: ${ex.getMessage}")
 
         val msg = ex.getMessage
-        val expectedChanges = "ALTER COLUMN pk TYPE BIGINT; ADD COLUMN active BOOLEAN"
+        val expectedChanges = "ADD COLUMN active BOOLEAN; ALTER COLUMN pk TYPE BIGINT"
         assert(msg.contains(expectedChanges),
           s"Error message should contain exact changes '$expectedChanges': $msg")
       }

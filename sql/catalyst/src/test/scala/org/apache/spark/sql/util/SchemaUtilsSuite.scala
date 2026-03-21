@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.types.{ArrayType, LongType, MapType, StructType}
+import org.apache.spark.sql.types.{ArrayType, LongType, MapType, StringType, StructType}
 
 class SchemaUtilsSuite extends SparkFunSuite {
 
@@ -109,5 +109,24 @@ class SchemaUtilsSuite extends SparkFunSuite {
         condition = "COLUMN_ALREADY_EXISTS",
         parameters = Map("columnName" -> "`camelcase`"))
     }
+  }
+
+  test("fieldExistsAtPath: structs, arrays, maps, and name case rules") {
+    val nested = new StructType().add("y", LongType)
+    val root = new StructType()
+      .add("a", LongType)
+      .add("S", nested)
+      .add("arr", ArrayType(LongType))
+      .add("m", MapType(StringType, LongType))
+
+    assert(!SchemaUtils.fieldExistsAtPath(root, Seq.empty, resolver(true)))
+    assert(SchemaUtils.fieldExistsAtPath(root, Seq("a"), resolver(true)))
+    assert(!SchemaUtils.fieldExistsAtPath(root, Seq("A"), resolver(true)))
+    assert(SchemaUtils.fieldExistsAtPath(root, Seq("A"), resolver(false)))
+    assert(SchemaUtils.fieldExistsAtPath(root, Seq("S", "y"), resolver(true)))
+    assert(SchemaUtils.fieldExistsAtPath(root, Seq("arr", "element"), resolver(true)))
+    assert(SchemaUtils.fieldExistsAtPath(root, Seq("m", "key"), resolver(true)))
+    assert(SchemaUtils.fieldExistsAtPath(root, Seq("m", "value"), resolver(true)))
+    assert(!SchemaUtils.fieldExistsAtPath(root, Seq("missing"), resolver(true)))
   }
 }

@@ -25,6 +25,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, NamedTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -122,6 +123,83 @@ private[spark] object SchemaUtils {
       throw QueryExecutionErrors.unreachableError(
         ": A resolver to check if two identifiers are equal must be " +
         "`caseSensitiveResolution` or `caseInsensitiveResolution` in o.a.s.sql.catalyst.")
+    }
+  }
+
+  /**
+   * Returns whether a column path exists in the schema's nested structure.
+   *
+   * Walks [[StructType]] fields and DSv2 nested path segments (`element`, `key`, `value`)
+   * through [[ArrayType]] / [[MapType]], consistent with
+   * [[org.apache.spark.sql.connector.catalog.TableChange]] path conventions.
+   * Struct field name matching uses the same case rules as
+   * [[checkSchemaColumnNameDuplication]].
+   *
+   * @param root top-level row schema (e.g. a table schema)
+   * @param path name segments (e.g. from an unresolved attribute or path extractor)
+   * @param resolver resolver used to compare struct field names
+   */
+  def fieldExistsAtPath(root: StructType, path: Seq[String], resolver: Resolver): Boolean = {
+    fieldExistsAtPath(root, path, isCaseSensitiveAnalysis(resolver))
+  }
+
+  /**
+   * Returns whether a column path exists in the schema's nested structure.
+   *
+   * @param root top-level row schema (e.g. a table schema)
+   * @param path name segments (e.g. from an unresolved attribute or path extractor)
+   * @param caseSensitiveAnalysis whether struct field name matching is case sensitive
+   */
+  def fieldExistsAtPath(
+      root: StructType,
+      path: Seq[String],
+      caseSensitiveAnalysis: Boolean): Boolean = {
+    fieldExistsAtPathInternal(root, path, caseSensitiveAnalysis)
+  }
+
+  private def fieldExistsAtPathInternal(
+      dt: DataType,
+      parts: Seq[String],
+      caseSensitiveAnalysis: Boolean): Boolean = {
+    def checkAndRecurse(
+        nextType: DataType,
+        remaining: Seq[String],
+        caseSensitiveAnalysis: Boolean): Boolean = {
+      if (remaining.isEmpty) {
+        true
+      } else {
+        fieldExistsAtPathInternal(nextType, remaining, caseSensitiveAnalysis)
+      }
+    }
+
+    if (parts.isEmpty) {
+      true
+    } else {
+      dt match {
+        case st: StructType =>
+          toFieldMap(st.fields, caseSensitiveAnalysis).get(parts.head) match {
+            case Some(f) => checkAndRecurse(f.dataType, parts.tail, caseSensitiveAnalysis)
+            case None => false
+          }
+        case ArrayType(elementType, _) if parts.head == "element" =>
+          checkAndRecurse(elementType, parts.tail, caseSensitiveAnalysis)
+        case MapType(keyType, _, _) if parts.head == "key" =>
+          checkAndRecurse(keyType, parts.tail, caseSensitiveAnalysis)
+        case MapType(_, valueType, _) if parts.head == "value" =>
+          checkAndRecurse(valueType, parts.tail, caseSensitiveAnalysis)
+        case _ => false
+      }
+    }
+  }
+
+  private def toFieldMap(
+      fields: Array[StructField],
+      caseSensitiveAnalysis: Boolean): Map[String, StructField] = {
+    val fieldMap = fields.map(f => f.name -> f).toMap
+    if (caseSensitiveAnalysis) {
+      fieldMap
+    } else {
+      CaseInsensitiveMap(fieldMap)
     }
   }
 
