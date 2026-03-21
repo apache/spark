@@ -18,6 +18,7 @@
 import numpy as np
 import pandas as pd
 
+from pyspark.loose_version import LooseVersion
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -41,46 +42,73 @@ class GroupbyStatAdvMixin(GroupbyStatTestingFuncMixin):
         return ps.from_pandas(self.pdf)
 
     def test_quantile(self):
-        dfs = [
-            pd.DataFrame(
-                [["a", 1], ["a", 2], ["a", 3], ["b", 1], ["b", 3], ["b", 5]], columns=["key", "val"]
-            ),
-            pd.DataFrame(
-                [["a", True], ["a", True], ["a", False], ["b", True], ["b", True], ["b", False]],
-                columns=["key", "val"],
-            ),
-        ]
-        for df in dfs:
-            psdf = ps.from_pandas(df)
-            # q accept float and int between 0 and 1
-            for i in [0, 0.1, 0.5, 1]:
-                self.assert_eq(
-                    df.groupby("key").quantile(q=i, interpolation="lower"),
-                    psdf.groupby("key").quantile(q=i),
-                    almost=True,
-                )
-                self.assert_eq(
-                    df.groupby("key")["val"].quantile(q=i, interpolation="lower"),
-                    psdf.groupby("key")["val"].quantile(q=i),
-                    almost=True,
-                )
-            # raise ValueError when q not in [0, 1]
-            with self.assertRaises(ValueError):
-                psdf.groupby("key").quantile(q=1.1)
-            with self.assertRaises(ValueError):
-                psdf.groupby("key").quantile(q=-0.1)
-            with self.assertRaises(ValueError):
-                psdf.groupby("key").quantile(q=2)
-            with self.assertRaises(ValueError):
-                psdf.groupby("key").quantile(q=np.nan)
-            # raise TypeError when q type mismatch
-            with self.assertRaises(TypeError):
-                psdf.groupby("key").quantile(q="0.1")
-            # raise NotImplementedError when q is list like type
-            with self.assertRaises(NotImplementedError):
-                psdf.groupby("key").quantile(q=(0.1, 0.5))
-            with self.assertRaises(NotImplementedError):
-                psdf.groupby("key").quantile(q=[0.1, 0.5])
+        df = pd.DataFrame(
+            [["a", 1], ["a", 2], ["a", 3], ["b", 1], ["b", 3], ["b", 5]], columns=["key", "val"]
+        )
+        boolean_df = pd.DataFrame(
+            [["a", True], ["a", True], ["a", False], ["b", True], ["b", True], ["b", False]],
+            columns=["key", "val"],
+        )
+
+        if LooseVersion(pd.__version__) < "3.0.0":
+            dfs = [df, boolean_df]
+            error_dfs = []
+        else:
+            dfs = [df]
+            error_dfs = [boolean_df]
+
+        for i, pdf in enumerate(dfs):
+            with self.subTest(i=i):
+                psdf = ps.from_pandas(pdf)
+                # q accept float and int between 0 and 1
+                for q in [0, 0.1, 0.5, 1]:
+                    with self.subTest(q=q):
+                        self.assert_eq(
+                            pdf.groupby("key").quantile(q=q, interpolation="lower"),
+                            psdf.groupby("key").quantile(q=q),
+                            almost=True,
+                        )
+                        self.assert_eq(
+                            pdf.groupby("key")["val"].quantile(q=q, interpolation="lower"),
+                            psdf.groupby("key")["val"].quantile(q=q),
+                            almost=True,
+                        )
+
+        # raise TypeError when bool dtype with pandas 3
+        for i, pdf in enumerate(error_dfs):
+            with self.subTest(i=i):
+                psdf = ps.from_pandas(pdf)
+                for q in [0, 0.1, 0.5, 1]:
+                    with self.subTest(q=q):
+                        with self.assertRaisesRegex(
+                            TypeError, "Cannot use quantile with bool dtype"
+                        ):
+                            psdf.groupby("key").quantile(q=q)
+                        with self.assertRaisesRegex(
+                            TypeError, "Cannot use quantile with bool dtype"
+                        ):
+                            psdf.groupby("key")["val"].quantile(q=q)
+
+        for i, pdf in enumerate([df, boolean_df]):
+            with self.subTest(i=i):
+                psdf = ps.from_pandas(pdf)
+                # raise ValueError when q not in [0, 1]
+                with self.assertRaises(ValueError):
+                    psdf.groupby("key").quantile(q=1.1)
+                with self.assertRaises(ValueError):
+                    psdf.groupby("key").quantile(q=-0.1)
+                with self.assertRaises(ValueError):
+                    psdf.groupby("key").quantile(q=2)
+                with self.assertRaises(ValueError):
+                    psdf.groupby("key").quantile(q=np.nan)
+                # raise TypeError when q type mismatch
+                with self.assertRaises(TypeError):
+                    psdf.groupby("key").quantile(q="0.1")
+                # raise NotImplementedError when q is list like type
+                with self.assertRaises(NotImplementedError):
+                    psdf.groupby("key").quantile(q=(0.1, 0.5))
+                with self.assertRaises(NotImplementedError):
+                    psdf.groupby("key").quantile(q=[0.1, 0.5])
 
     def test_first(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.first())
