@@ -3422,11 +3422,11 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
         Seq(
           s"testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.time = i.arrive_time",
           s"testcat.ns.$purchases p JOIN testcat.ns.$items i ON i.arrive_time = p.time"
-        ).foreach { joinSting =>
+        ).foreach { joinString =>
           val df = sql(
             s"""
                |${selectWithMergeJoinHint("i", "p")} id, item_id
-               |FROM $joinSting
+               |FROM $joinString
                |ORDER BY id, item_id
                |""".stripMargin)
 
@@ -3463,12 +3463,12 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
         Seq(
           s"testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.time = i.arrive_time",
           s"testcat.ns.$purchases p JOIN testcat.ns.$items i ON i.arrive_time = p.time"
-        ).foreach { joinSting =>
+        ).foreach { joinString =>
           val e = intercept[SparkException] {
             sql(
               s"""
                  |${selectWithMergeJoinHint("i", "p")} id, item_id
-                 |FROM $joinSting
+                 |FROM $joinString
                  |ORDER BY id, item_id
                  |""".stripMargin).collect()
           }

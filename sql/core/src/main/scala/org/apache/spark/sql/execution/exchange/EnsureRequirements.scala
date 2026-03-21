@@ -766,7 +766,7 @@ case class EnsureRequirements(
    * @param leftPartitionKeys left side partition keys
    * @param rightPartitionKeys right side partition keys
    * @param joinType join type for optional partition filtering
-   * @keyOrdering ordering to sort partition keys
+   * @param keyOrdering ordering to sort partition keys
    * @return merged and sorted partition values
    */
   def mergeAndDedupPartitions(

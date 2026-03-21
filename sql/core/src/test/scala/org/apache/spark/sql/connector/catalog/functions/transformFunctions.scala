@@ -91,7 +91,7 @@ abstract class DaysFunctionBase extends ScalarFunction[Int] with ReducibleFuncti
   override def canonicalName(): String = name()
 }
 
-// This `days` function reduces `DateType` partitions keys to `IntegerType` partitions keys when
+// This `days` function reduces `DateType` partition keys to `IntegerType` partition keys when
 // partitions are reduced to partitions of a `years` function, which produces `IntegerType` keys.
 object DaysFunction extends DaysFunctionBase {
   override def reducer(otherFunc: ReducibleFunction[_, _]): Reducer[Int, Int] = {
