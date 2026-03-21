@@ -19,8 +19,53 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.SortOrder
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EMPTY_RELATION, TreePattern}
 
 case class EmptyRelation(logical: LogicalPlan) extends LeafNode {
+  override val nodePatterns: Seq[TreePattern] = Seq(EMPTY_RELATION)
+
+  override protected def stringArgs: Iterator[Any] = Iterator.empty
+
+  override def generateTreeString(
+      depth: Int,
+      lastChildren: java.util.ArrayList[Boolean],
+      append: String => Unit,
+      verbose: Boolean,
+      prefix: String = "",
+      addSuffix: Boolean = false,
+      maxFields: Int,
+      printNodeId: Boolean,
+      printOutputColumns: Boolean,
+      indent: Int = 0): Unit = {
+    super.generateTreeString(
+      depth,
+      lastChildren,
+      append,
+      verbose,
+      prefix,
+      addSuffix,
+      maxFields,
+      printNodeId,
+      printOutputColumns,
+      indent)
+    // Nested logical operators are not registered in QueryPlan.localIdMap with physical ids.
+    Option(logical).foreach { _ =>
+      lastChildren.add(true)
+      logical.generateTreeString(
+        depth + 1,
+        lastChildren,
+        append,
+        verbose,
+        prefix = "",
+        addSuffix = false,
+        maxFields,
+        printNodeId = false,
+        printOutputColumns,
+        indent)
+      lastChildren.remove(lastChildren.size() - 1)
+    }
+  }
+
   override val isStreaming: Boolean = logical.isStreaming
 
   override val outputOrdering: Seq[SortOrder] = logical.outputOrdering

@@ -73,11 +73,21 @@ case class EmptyRelationExec(@transient logical: LogicalPlan) extends LeafExecNo
       printNodeId,
       printOutputColumns,
       indent)
+    // Preserved logical subtree is not in QueryPlan.localIdMap; avoid simpleStringWithNodeId which
+    // would print "(unknown)" for every nested logical operator in formatted explain / SQL UI.
     Option(logical).foreach { _ =>
       lastChildren.add(true)
       logical.generateTreeString(
-        depth + 1, lastChildren, append, verbose, "", false, maxFields, printNodeId,
-        printOutputColumns, indent)
+        depth + 1,
+        lastChildren,
+        append,
+        verbose,
+        prefix = "",
+        addSuffix = false,
+        maxFields,
+        printNodeId = false,
+        printOutputColumns,
+        indent)
       lastChildren.remove(lastChildren.size() - 1)
     }
   }
