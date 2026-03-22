@@ -35,8 +35,8 @@ object PathElement {
   case object SystemPath extends PathElement
   case object PathRef extends PathElement
   /**
-   * Current database/schema (SQL aliases in Spark). Both normalize to stored `system.current_schema`
-   * and expand when building resolution candidates (so later USE SCHEMA is reflected).
+   * Current database/schema (SQL aliases). Stored as system.current_schema; expands when
+   * building resolution candidates so later USE SCHEMA is reflected.
    */
   case object CurrentDatabase extends PathElement
   case object CurrentSchema extends PathElement

@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
@@ -355,6 +357,25 @@ class FunctionResolution(
     }
 
     // Check external catalog for persistent functions
+    if (nameParts.length == 1) {
+      // Must match [[resolutionCandidates]] / [[resolveFunction]]: single-part names use PATH +
+      // session order, not only the current namespace (LookupCatalog single-part rule).
+      for (candidate <- resolutionCandidates(nameParts)) {
+        try {
+          candidate match {
+            case CatalogAndIdentifier(catalog, ident) =>
+              if (catalog.asFunctionCatalog.functionExists(ident)) {
+                return FunctionType.Persistent
+              }
+            case _ =>
+          }
+        } catch {
+          case NonFatal(_) =>
+        }
+      }
+      return FunctionType.NotFound
+    }
+
     val CatalogAndIdentifier(catalog, ident) = relationResolution.expandIdentifier(nameParts)
     if (catalog.asFunctionCatalog.functionExists(ident)) {
       return FunctionType.Persistent
