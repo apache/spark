@@ -113,7 +113,8 @@ object DataTypeTestUtils {
     DateType,
     StringType,
     TimestampType,
-    TimestampNTZType) ++ dayTimeIntervalTypes ++ yearMonthIntervalTypes
+    TimestampNTZType,
+    TimeType) ++ dayTimeIntervalTypes ++ yearMonthIntervalTypes
 
   /**
    * Instances of [[ArrayType]] for all [[AtomicType]]s. Arrays of these types may contain null.

@@ -901,4 +901,14 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
           castOverflowErrMsg(toType))
     }
   }
+
+  test("cast from time to boolean") {
+    checkEvaluation(cast(Literal(0L, TimeType), BooleanType, UTC_OPT), false)
+    checkEvaluation(cast(Literal(1L, TimeType), BooleanType, UTC_OPT), true)
+  }
+
+  test("cast from boolean to time") {
+    checkEvaluation(cast(true, TimeType, UTC_OPT), 1L)
+    checkEvaluation(cast(false, TimeType, UTC_OPT), 0L)
+  }
 }

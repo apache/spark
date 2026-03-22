@@ -19,7 +19,9 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.time.ZoneId
 
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimeUtils}
+import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -93,6 +95,20 @@ object TimeCast {
   }
 
   /**
+   * Cast from String to TimeType in ANSI mode.
+   * Throws an exception if the string is not a valid time.
+   */
+  def castStringToTimeAnsi(from: UTF8String, errorContext: SQLQueryContext): Long = {
+    if (from == null) throw new NullPointerException("from is null")
+    TimeUtils.stringToTime(from) match {
+      case Some(micros) => micros
+      case None =>
+        throw new IllegalArgumentException(
+          s"Cannot cast '$from' to TIME. $errorContext")
+    }
+  }
+
+  /**
    * Cast from TimeType to String.
    * Formats time as HH:mm:ss or HH:mm:ss.SSSSSS (omits microseconds if zero)
    */
@@ -102,9 +118,10 @@ object TimeCast {
 
   /**
    * Cast from Long to TimeType.
-   * Interprets the long value as microseconds since midnight.
+   * Interprets the long value as seconds since midnight.
    */
-  def castLongToTime(micros: Long): Any = {
+  def castLongToTime(seconds: Long): Any = {
+    val micros = seconds * TimeUtils.MICROS_PER_SECOND
     if (TimeUtils.isValidTime(micros)) micros else null
   }
 
@@ -112,13 +129,70 @@ object TimeCast {
    * Cast from Long to TimeType in ANSI mode.
    * Throws an exception if the value is out of range.
    */
-  def castLongToTimeAnsi(micros: Long, errorContext: String): Long = {
+  def castLongToTimeAnsi(seconds: Long, errorContext: SQLQueryContext): Long = {
+    val micros = seconds * TimeUtils.MICROS_PER_SECOND
     if (TimeUtils.isValidTime(micros)) {
       micros
     } else {
-      val maxValue = TimeUtils.MICROS_PER_DAY - 1
+      val maxSeconds = 86400L - 1
       throw new IllegalArgumentException(
-        s"Cannot cast $micros to TIME. Valid range is 0 to $maxValue. $errorContext")
+        s"Cannot cast $seconds to TIME. Valid range is 0 to $maxSeconds. $errorContext")
+    }
+  }
+
+  /**
+   * Cast from Double to TimeType.
+   * Interprets the double value as seconds since midnight.
+   */
+  def castDoubleToTime(seconds: Double): Any = {
+    if (seconds.isNaN || seconds.isInfinite) return null
+    val micros = (seconds * TimeUtils.MICROS_PER_SECOND).toLong
+    if (TimeUtils.isValidTime(micros)) micros else null
+  }
+
+  /**
+   * Cast from Double to TimeType in ANSI mode.
+   */
+  def castDoubleToTimeAnsi(seconds: Double, errorContext: SQLQueryContext): Long = {
+    if (seconds.isNaN || seconds.isInfinite) {
+      throw new IllegalArgumentException(s"Cannot cast $seconds to TIME. $errorContext")
+    }
+    val micros = (seconds * TimeUtils.MICROS_PER_SECOND).toLong
+    if (TimeUtils.isValidTime(micros)) {
+      micros
+    } else {
+      val maxSeconds = 86400.0 - 0.000001
+      throw new IllegalArgumentException(
+        s"Cannot cast $seconds to TIME. Valid range is 0 to $maxSeconds. $errorContext")
+    }
+  }
+
+  /**
+   * Cast from Decimal to TimeType.
+   */
+  def castDecimalToTime(d: Decimal, precision: Int, scale: Int): Any = {
+    if (d == null) return null
+    val seconds = d.toBigDecimal
+    val micros = (seconds * TimeUtils.MICROS_PER_SECOND).toLong
+    if (TimeUtils.isValidTime(micros)) micros else null
+  }
+
+  /**
+   * Cast from Decimal to TimeType in ANSI mode.
+   */
+  def castDecimalToTimeAnsi(
+      d: Decimal,
+      precision: Int,
+      scale: Int,
+      errorContext: SQLQueryContext): Long = {
+    if (d == null) throw new NullPointerException("decimal is null")
+    val seconds = d.toBigDecimal
+    val micros = (seconds * TimeUtils.MICROS_PER_SECOND).toLong
+    if (TimeUtils.isValidTime(micros)) {
+      micros
+    } else {
+      throw new IllegalArgumentException(
+        s"Cannot cast $d to TIME. Valid range is 0 to 86399.999999. $errorContext")
     }
   }
 
@@ -129,6 +203,21 @@ object TimeCast {
   def castIntToTime(seconds: Int): Any = {
     val micros = seconds.toLong * TimeUtils.MICROS_PER_SECOND
     if (TimeUtils.isValidTime(micros)) micros else null
+  }
+
+  /**
+   * Cast from Int to TimeType in ANSI mode.
+   * Throws an exception if the value is out of range.
+   */
+  def castIntToTimeAnsi(seconds: Int, errorContext: SQLQueryContext): Long = {
+    val micros = seconds.toLong * TimeUtils.MICROS_PER_SECOND
+    if (TimeUtils.isValidTime(micros)) {
+      micros
+    } else {
+      val maxSeconds = 86400 - 1
+      throw new IllegalArgumentException(
+        s"Cannot cast $seconds to TIME. Valid range is 0 to $maxSeconds. $errorContext")
+    }
   }
 
   /**
@@ -173,9 +262,11 @@ object TimeCast {
 
   /**
    * Cast from TimeType to Long.
-   * Returns the internal representation (microseconds since midnight).
+   * Returns seconds since midnight (truncates microseconds).
    */
-  def castTimeToLong(timeMicros: Long): Long = timeMicros
+  def castTimeToLong(timeMicros: Long): Long = {
+    timeMicros / TimeUtils.MICROS_PER_SECOND
+  }
 
   /**
    * Cast from TimeType to Int.
@@ -184,6 +275,16 @@ object TimeCast {
   def castTimeToInt(timeMicros: Long): Int = {
     (timeMicros / TimeUtils.MICROS_PER_SECOND).toInt
   }
+
+  /**
+   * Cast from TimeType to Short.
+   */
+  def castTimeToShort(timeMicros: Long): Short = castTimeToInt(timeMicros).toShort
+
+  /**
+   * Cast from TimeType to Byte.
+   */
+  def castTimeToByte(timeMicros: Long): Byte = castTimeToInt(timeMicros).toByte
 
   /**
    * Cast from DateType to TimeType.

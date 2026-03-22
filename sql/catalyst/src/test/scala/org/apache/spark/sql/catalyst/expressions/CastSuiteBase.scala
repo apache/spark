@@ -93,6 +93,17 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkNullCast(StringType, DateType)
     checkNullCast(TimestampType, DateType)
 
+    checkNullCast(StringType, TimeType)
+    checkNullCast(TimestampType, TimeType)
+    checkNullCast(TimestampNTZType, TimeType)
+    checkNullCast(DateType, TimeType)
+    numericTypes.foreach(dt => checkNullCast(dt, TimeType))
+
+    checkNullCast(TimeType, StringType)
+    checkNullCast(TimeType, TimestampType)
+    checkNullCast(TimeType, DateType)
+    numericTypes.foreach(dt => checkNullCast(TimeType, dt))
+
     checkNullCast(StringType, CalendarIntervalType)
     numericTypes.foreach(dt => checkNullCast(StringType, dt))
     numericTypes.foreach(dt => checkNullCast(BooleanType, dt))
@@ -324,6 +335,50 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(cast(0.000001, TimestampType), DoubleType), 0.000001)
   }
 
+  test("cast from string to time") {
+    checkEvaluation(cast("00:00:00", TimeType, UTC_OPT), 0L)
+    checkEvaluation(cast("10:30:45.123456", TimeType, UTC_OPT), 37845123456L)
+    checkEvaluation(cast("23:59:59.999999", TimeType, UTC_OPT), 86399999999L)
+  }
+
+  test("cast from timestamp to time") {
+    val ldt1 = LocalDateTime.of(2024, 1, 15, 10, 30, 45, 123456000)
+    val ts1 = instantToMicros(ldt1.toInstant(java.time.ZoneOffset.UTC))
+    checkEvaluation(cast(Literal(ts1, TimestampType), TimeType, UTC_OPT), 37845123456L)
+  }
+
+  test("cast from date to time") {
+    val date1 = localDateToDays(java.time.LocalDate.of(2024, 1, 15))
+    checkEvaluation(cast(Literal(date1, DateType), TimeType, UTC_OPT), 0L)
+  }
+
+  test("cast from integral to time") {
+    checkEvaluation(cast(0, TimeType, UTC_OPT), 0L)
+    checkEvaluation(cast(36000, TimeType, UTC_OPT), 36000000000L)
+    checkEvaluation(cast(86399L, TimeType, UTC_OPT), 86399000000L)
+  }
+
+  test("cast from time to string") {
+    checkEvaluation(cast(Literal(0L, TimeType), StringType, UTC_OPT), "00:00:00")
+    checkEvaluation(cast(Literal(37845123456L, TimeType), StringType, UTC_OPT), "10:30:45.123456")
+  }
+
+  test("cast from time to timestamp") {
+    val ldt2 = LocalDateTime.of(1970, 1, 1, 10, 30, 45, 123456000)
+    val ts2 = instantToMicros(ldt2.toInstant(java.time.ZoneOffset.UTC))
+    checkEvaluation(cast(Literal(37845123456L, TimeType), TimestampType, UTC_OPT), ts2)
+  }
+
+  test("cast from time to date") {
+    val epochDate = localDateToDays(java.time.LocalDate.ofEpochDay(0))
+    checkEvaluation(cast(Literal(37845123456L, TimeType), DateType, UTC_OPT), epochDate)
+  }
+
+  test("cast from time to integral") {
+    checkEvaluation(cast(Literal(37845123456L, TimeType), IntegerType, UTC_OPT), 37845)
+    checkEvaluation(cast(Literal(37845123456L, TimeType), LongType, UTC_OPT), 37845123456L)
+  }
+
   test("data type casting") {
     val sd = "1970-01-01"
     val d = Date.valueOf(sd)
@@ -351,8 +406,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast("abdef", StringType), "abdef")
     checkEvaluation(cast("12.65", DecimalType.SYSTEM_DEFAULT), Decimal(12.65))
 
-    checkEvaluation(cast(cast(sd, DateType), StringType), sd)
-    checkEvaluation(cast(cast(d, StringType), DateType), 0)
+    checkEvaluation(cast(cast(sd, DateType, UTC_OPT), StringType, UTC_OPT), sd)
+    checkEvaluation(cast(cast(d, StringType, UTC_OPT), DateType, UTC_OPT), 0)
     checkEvaluation(cast(cast(nts, TimestampType, UTC_OPT), StringType, UTC_OPT), nts)
     checkEvaluation(
       cast(cast(ts, StringType, UTC_OPT), TimestampType, UTC_OPT),
@@ -360,7 +415,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     // all convert to string type to check
     checkEvaluation(
-      cast(cast(cast(nts, TimestampType, UTC_OPT), DateType, UTC_OPT), StringType),
+      cast(cast(cast(nts, TimestampType, UTC_OPT), DateType, UTC_OPT), StringType, UTC_OPT),
       sd)
     checkEvaluation(
       cast(cast(cast(ts, DateType, UTC_OPT), TimestampType, UTC_OPT), StringType, UTC_OPT),
@@ -731,6 +786,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       assert(Cast.canUpCast(TimestampNTZType, TimestampType))
       assert(!Cast.canUpCast(TimestampType, DateType))
       assert(!Cast.canUpCast(TimestampNTZType, DateType))
+
+      assert(Cast.canUpCast(TimeType, StringType))
+      assert(Cast.canUpCast(TimeType, TimestampType))
+      assert(Cast.canUpCast(TimeType, TimestampNTZType))
+      assert(Cast.canUpCast(TimeType, DateType))
+      assert(Cast.canUpCast(TimeType, LongType))
     }
   }
 
