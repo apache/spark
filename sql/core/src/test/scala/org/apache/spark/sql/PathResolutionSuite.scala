@@ -176,7 +176,9 @@ class PathResolutionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("PATH enabled: duplicate after expanding virtual CURRENT_SCHEMA (explicit + current_schema)") {
+  test(
+    "PATH enabled: duplicate after expanding virtual CURRENT_SCHEMA " +
+      "(explicit + current_schema)") {
     withPathEnabled {
       sql("USE spark_catalog.default")
       checkError(
