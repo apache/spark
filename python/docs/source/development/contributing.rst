@@ -145,7 +145,7 @@ Now, you can start developing and `running the tests <testing.rst>`_.
 venv
 ~~~~
 
-If you prefer a lightweight setup without Conda, you can use Python's built-in ``venv`` module:
+You can use Python's built-in ``venv`` module to create an isolated environment:
 
 .. code-block:: bash
 

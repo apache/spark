@@ -160,8 +160,7 @@ For a short summary about useful conda commands, see their
 Using venv
 ----------
 
-If you prefer a lightweight setup without Conda, you can use Python's built-in ``venv`` module
-to create an isolated environment:
+You can use Python's built-in ``venv`` module to create an isolated environment:
 
 .. code-block:: bash
 
