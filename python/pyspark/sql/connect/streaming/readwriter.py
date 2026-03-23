@@ -21,7 +21,13 @@ import pickle
 from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
 
 from pyspark.serializers import CloudPickleSerializer
-from pyspark.sql.connect.plan import DataSource, LogicalPlan, Read, RelationChanges, WriteStreamOperation
+from pyspark.sql.connect.plan import (
+    DataSource,
+    LogicalPlan,
+    Read,
+    RelationChanges,
+    WriteStreamOperation,
+)
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql.connect.readwriter import OptionUtils, to_str
 from pyspark.sql.connect.streaming.query import StreamingQuery

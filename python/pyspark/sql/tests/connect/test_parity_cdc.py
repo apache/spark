@@ -29,7 +29,6 @@ _catalyst_test_jar = _find_catalyst_test_jar()
     "Spark Connect test or catalyst test JAR not available",
 )
 class CDCParityTests(CDCTestsMixin, ReusedConnectTestCase):
-
     @classmethod
     def conf(cls):
         conf = super().conf()

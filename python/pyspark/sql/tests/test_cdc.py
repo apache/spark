@@ -32,9 +32,7 @@ SPARK_HOME = _find_spark_home()
 
 def _find_catalyst_test_jar():
     """Find the catalyst test JAR needed for InMemoryChangelogCatalog."""
-    pattern = os.path.join(
-        SPARK_HOME, "sql/catalyst/target/scala-*/spark-catalyst_*-tests.jar"
-    )
+    pattern = os.path.join(SPARK_HOME, "sql/catalyst/target/scala-*/spark-catalyst_*-tests.jar")
     jars = glob.glob(pattern)
     return jars[0] if jars else None
 
@@ -61,20 +59,13 @@ class CDCTestsMixin:
         return self.spark.sparkContext._gateway
 
     def _catalog(self):
-        return (
-            self._j_spark_session()
-            .sessionState()
-            .catalogManager()
-            .catalog(self.catalog_name)
-        )
+        return self._j_spark_session().sessionState().catalogManager().catalog(self.catalog_name)
 
     def _ident(self):
         jvm = self._jvm()
         gw = self._gateway()
         empty_ns = gw.new_array(jvm.java.lang.String, 0)
-        return jvm.org.apache.spark.sql.connector.catalog.Identifier.of(
-            empty_ns, self.test_table
-        )
+        return jvm.org.apache.spark.sql.connector.catalog.Identifier.of(empty_ns, self.test_table)
 
     def _make_change_row(self, id, data, change_type, commit_version, commit_timestamp):
         jvm = self._jvm()
@@ -94,9 +85,7 @@ class CDCTestsMixin:
         java_list = jvm.java.util.ArrayList()
         for row in rows:
             java_list.add(row)
-        scala_seq = (
-            jvm.scala.jdk.CollectionConverters.ListHasAsScala(java_list).asScala().toSeq()
-        )
+        scala_seq = jvm.scala.jdk.CollectionConverters.ListHasAsScala(java_list).asScala().toSeq()
         catalog.addChangeRows(ident, scala_seq)
 
     def setUp(self):
@@ -115,9 +104,7 @@ class CDCTestsMixin:
         columns[0] = Column.create("id", DataTypes.LongType)
         columns[1] = Column.create("data", DataTypes.StringType)
 
-        transforms = gw.new_array(
-            jvm.org.apache.spark.sql.connector.expressions.Transform, 0
-        )
+        transforms = gw.new_array(jvm.org.apache.spark.sql.connector.expressions.Transform, 0)
         props = jvm.java.util.HashMap()
         catalog.createTable(ident, columns, transforms, props)
         catalog.clearChangeRows(ident)
@@ -138,10 +125,20 @@ class CDCTestsMixin:
         )
 
         expected = [
-            Row(id=1, data="a", _change_type="insert", _commit_version=1,
-                _commit_timestamp=self._ts(1000000)),
-            Row(id=2, data="b", _change_type="delete", _commit_version=2,
-                _commit_timestamp=self._ts(2000000)),
+            Row(
+                id=1,
+                data="a",
+                _change_type="insert",
+                _commit_version=1,
+                _commit_timestamp=self._ts(1000000),
+            ),
+            Row(
+                id=2,
+                data="b",
+                _change_type="delete",
+                _commit_version=2,
+                _commit_timestamp=self._ts(2000000),
+            ),
         ]
 
         # DataFrame API
@@ -168,10 +165,20 @@ class CDCTestsMixin:
         )
 
         expected = [
-            Row(id=2, data="b", _change_type="insert", _commit_version=2,
-                _commit_timestamp=self._ts(2000000)),
-            Row(id=3, data="c", _change_type="insert", _commit_version=3,
-                _commit_timestamp=self._ts(3000000)),
+            Row(
+                id=2,
+                data="b",
+                _change_type="insert",
+                _commit_version=2,
+                _commit_timestamp=self._ts(2000000),
+            ),
+            Row(
+                id=3,
+                data="c",
+                _change_type="insert",
+                _commit_version=3,
+                _commit_timestamp=self._ts(3000000),
+            ),
         ]
 
         # DataFrame API
@@ -179,9 +186,7 @@ class CDCTestsMixin:
         self.assertEqual(sorted(df.collect()), sorted(expected))
 
         # SQL
-        df_sql = self.spark.sql(
-            f"SELECT * FROM {self.full_table_name} CHANGES FROM VERSION 2"
-        )
+        df_sql = self.spark.sql(f"SELECT * FROM {self.full_table_name} CHANGES FROM VERSION 2")
         self.assertEqual(sorted(df_sql.collect()), sorted(expected))
 
     def test_changes_empty_result(self):
@@ -303,10 +308,20 @@ class CDCTestsMixin:
         )
 
         expected = [
-            Row(id=2, data="b", _change_type="insert", _commit_version=2,
-                _commit_timestamp=self._ts(2000000)),
-            Row(id=3, data="c", _change_type="insert", _commit_version=3,
-                _commit_timestamp=self._ts(3000000)),
+            Row(
+                id=2,
+                data="b",
+                _change_type="insert",
+                _commit_version=2,
+                _commit_timestamp=self._ts(2000000),
+            ),
+            Row(
+                id=3,
+                data="c",
+                _change_type="insert",
+                _commit_version=3,
+                _commit_timestamp=self._ts(3000000),
+            ),
         ]
 
         # DataFrame API
@@ -371,8 +386,7 @@ class CDCTestsMixin:
 
         # SQL
         df_sql = self.spark.sql(
-            f"SELECT * FROM {self.full_table_name} "
-            "CHANGES FROM VERSION 1 EXCLUSIVE TO VERSION 3"
+            f"SELECT * FROM {self.full_table_name} CHANGES FROM VERSION 1 EXCLUSIVE TO VERSION 3"
         )
         self.assertEqual(len(df_sql.collect()), 2)
 
@@ -399,8 +413,7 @@ class CDCTestsMixin:
 
         # SQL
         df_sql = self.spark.sql(
-            f"SELECT * FROM {self.full_table_name} "
-            "CHANGES FROM VERSION 1 TO VERSION 3 EXCLUSIVE"
+            f"SELECT * FROM {self.full_table_name} CHANGES FROM VERSION 1 TO VERSION 3 EXCLUSIVE"
         )
         self.assertEqual(len(df_sql.collect()), 2)
 
@@ -436,9 +449,9 @@ class CDCTestsMixin:
 
     def test_changes_rejects_user_schema(self):
         with self.assertRaises(AnalysisException) as ctx:
-            self.spark.read.schema("id LONG, data STRING").option(
-                "startingVersion", "1"
-            ).changes(self.full_table_name)
+            self.spark.read.schema("id LONG, data STRING").option("startingVersion", "1").changes(
+                self.full_table_name
+            )
         self.assertIn("changes", str(ctx.exception))
 
     # ---------- Streaming ----------
@@ -453,18 +466,32 @@ class CDCTestsMixin:
         )
 
         expected = [
-            Row(id=1, data="a", _change_type="insert", _commit_version=1,
-                _commit_timestamp=self._ts(1000000)),
-            Row(id=2, data="b", _change_type="insert", _commit_version=1,
-                _commit_timestamp=self._ts(1000000)),
-            Row(id=1, data="a", _change_type="delete", _commit_version=2,
-                _commit_timestamp=self._ts(2000000)),
+            Row(
+                id=1,
+                data="a",
+                _change_type="insert",
+                _commit_version=1,
+                _commit_timestamp=self._ts(1000000),
+            ),
+            Row(
+                id=2,
+                data="b",
+                _change_type="insert",
+                _commit_version=1,
+                _commit_timestamp=self._ts(1000000),
+            ),
+            Row(
+                id=1,
+                data="a",
+                _change_type="delete",
+                _commit_version=2,
+                _commit_timestamp=self._ts(2000000),
+            ),
         ]
 
         # DataFrame API
-        stream_df = (
-            self.spark.readStream.option("startingVersion", "1")
-            .changes(self.full_table_name)
+        stream_df = self.spark.readStream.option("startingVersion", "1").changes(
+            self.full_table_name
         )
         q = stream_df.writeStream.format("memory").queryName("cdc_py_stream_df").start()
         try:
@@ -496,14 +523,18 @@ class CDCTestsMixin:
         )
 
         expected = [
-            Row(id=1, data="a", _change_type="delete", _commit_version=2,
-                _commit_timestamp=self._ts(2000000)),
+            Row(
+                id=1,
+                data="a",
+                _change_type="delete",
+                _commit_version=2,
+                _commit_timestamp=self._ts(2000000),
+            ),
         ]
 
         # DataFrame API
-        stream_df = (
-            self.spark.readStream.option("startingVersion", "2")
-            .changes(self.full_table_name)
+        stream_df = self.spark.readStream.option("startingVersion", "2").changes(
+            self.full_table_name
         )
         q = stream_df.writeStream.format("memory").queryName("cdc_py_stream_v2_df").start()
         try:
@@ -556,11 +587,7 @@ class CDCTestsMixin:
             f"SELECT id, data FROM STREAM {self.full_table_name} "
             "CHANGES FROM VERSION 1 WHERE _commit_version = 1"
         )
-        q2 = (
-            sql_stream.writeStream.format("memory")
-            .queryName("cdc_py_stream_proj_sql")
-            .start()
-        )
+        q2 = sql_stream.writeStream.format("memory").queryName("cdc_py_stream_proj_sql").start()
         try:
             q2.processAllAvailable()
             result = self.spark.sql("SELECT * FROM cdc_py_stream_proj_sql")

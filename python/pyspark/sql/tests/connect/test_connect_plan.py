@@ -623,12 +623,8 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         )
         plan = df._plan.to_proto(self.connect)
         relation_changes = plan.root.relation_changes
-        self.assertEqual(
-            relation_changes.options.get("startingTimestamp"), "2024-01-01T00:00:00Z"
-        )
-        self.assertEqual(
-            relation_changes.options.get("endingTimestamp"), "2024-06-01T00:00:00Z"
-        )
+        self.assertEqual(relation_changes.options.get("startingTimestamp"), "2024-01-01T00:00:00Z")
+        self.assertEqual(relation_changes.options.get("endingTimestamp"), "2024-06-01T00:00:00Z")
 
     def test_relation_changes_oneof_is_relation_changes(self):
         reader = DataFrameReader(self.connect)
@@ -639,9 +635,9 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
     def test_relation_changes_streaming(self):
         from pyspark.sql.connect.plan import RelationChanges
 
-        plan = RelationChanges(
-            "myTable", {"startingVersion": "10"}, is_streaming=True
-        ).plan(self.connect)
+        plan = RelationChanges("myTable", {"startingVersion": "10"}, is_streaming=True).plan(
+            self.connect
+        )
         relation_changes = plan.relation_changes
         self.assertEqual(relation_changes.unparsed_identifier, "myTable")
         self.assertEqual(relation_changes.options.get("startingVersion"), "10")
