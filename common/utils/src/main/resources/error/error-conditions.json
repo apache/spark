@@ -4372,12 +4372,6 @@
           "IN predicate requires at least one value. Empty IN clauses like 'IN ()' are not allowed. Consider using 'WHERE FALSE' if you need an always-false condition, or provide at least one value in the IN list."
         ]
       },
-      "MISSING_COLUMN_BEFORE_IN" : {
-        "message" : [
-          "Invalid IN predicate: a column or expression must appear before IN and its parenthesized value list.",
-          "For example, use `WHERE id IN (1, 2)` instead of `WHERE IN (1, 2)` or `WHERE in (1)` with no expression before `in`."
-        ]
-      },
       "EMPTY_PARTITION_VALUE" : {
         "message" : [
           "Partition key <partKey> must set value."
@@ -4411,6 +4405,12 @@
       "LATERAL_WITHOUT_SUBQUERY_OR_TABLE_VALUED_FUNC" : {
         "message" : [
           "LATERAL can only be used with subquery and table-valued functions."
+        ]
+      },
+      "MISSING_COLUMN_BEFORE_IN" : {
+        "message" : [
+          "Invalid IN predicate: a column or expression must appear before IN and its parenthesized value list.",
+          "For example, use `WHERE id IN (1, 2)` instead of `WHERE IN (1, 2)` or `WHERE in (1)` with no expression before `in`."
         ]
       },
       "MULTI_PART_NAME" : {
