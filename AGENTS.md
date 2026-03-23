@@ -8,7 +8,7 @@ Before the first code read, edit, or test in a session, ensure a clean working e
 2. If the latest commit on `<upstream>/master` is more than a day old (check with `git log -1 --format="%ci" <upstream>/master`), run `git fetch <upstream> master`.
 3. If there are uncommitted changes (check with `git status`), ask the user to stash them before proceeding.
 4. Switch to the appropriate branch:
-   - **Existing PR**: look for a local branch matching the PR branch name and confirm with the user. If found, switch to it (if it is checked out in another worktree, work from that worktree). If not found, ask the user whether to fetch the PR to a new local branch or whether there is a local branch under a different name.
+   - **Existing PR**: look for a local branch matching the PR branch name. If found, switch to it and inform the user. If not found, ask whether to fetch it or if there is a local branch under a different name.
    - **New edits**: ask the user to choose: create a new git worktree from `<upstream>/master` and work from there (recommended), or create and switch to a new branch from `<upstream>/master`.
    - **Reading code or running tests**: use `<upstream>/master`.
 
