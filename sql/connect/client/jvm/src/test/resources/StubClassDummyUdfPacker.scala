@@ -16,16 +16,26 @@
  */
 package org.apache.spark.sql.connect.client
 
-/**
- * Dummy UDF class used for testing dynamic class loading and stub class behavior.
- *
- * At test time, this file is compiled by UDFClassLoadingE2ESuite via
- * createJarWithScalaSources() to generate a JAR and a serialized UdfPacket binary.
- * StubClassDummyUdfPacker (in a separate file) handles the serialization.
- */
-class StubClassDummyUdf {
-  val udf: Int => Int = (x: Int) => x + 1
-  val dummy = (x: Int) => A(x)
-}
+import java.io.{ByteArrayOutputStream, File, FileOutputStream, ObjectOutputStream}
 
-case class A(x: Int) { def get: Int = x + 5 }
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveIntEncoder
+import org.apache.spark.sql.connect.common.UdfPacket
+
+/**
+ * Generates the serialized UdfPacket binary used by UDFClassLoadingE2ESuite.
+ * Run at build time via TestJarTask.buildJarAndRun.
+ */
+object StubClassDummyUdfPacker {
+  def main(args: Array[String]): Unit = {
+    val packet = new UdfPacket(
+      new StubClassDummyUdf().udf,
+      Seq(PrimitiveIntEncoder),
+      PrimitiveIntEncoder)
+    val bos = new ByteArrayOutputStream()
+    val oos = new ObjectOutputStream(bos)
+    oos.writeObject(packet)
+    oos.flush()
+    val fos = new FileOutputStream(new File(args(0)))
+    try { fos.write(bos.toByteArray) } finally { fos.close() }
+  }
+}

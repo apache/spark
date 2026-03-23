@@ -19,18 +19,29 @@ package org.apache.spark.sql.artifact
 import java.io.File
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.util.{ChildFirstURLClassLoader, StubClassLoader}
+import org.apache.spark.util.{ChildFirstURLClassLoader, SparkTestUtils, StubClassLoader, Utils}
 
 class StubClassLoaderSuite extends SparkFunSuite {
 
-  // TODO: Modify JAR to remove references to connect.
-  // See connector/client/jvm/src/test/resources/StubClassDummyUdf for how the UDFs and jars are
-  // created.
-  private var udfNoJarFile = new File(
-    "src/test/resources/artifact-tests/udf_noA.jar")
-  private lazy val udfNoAJar = udfNoJarFile.toURI.toURL
-  private val classDummyUdf = "org.apache.spark.sql.connect.client.StubClassDummyUdf"
-  private val classA = "org.apache.spark.sql.connect.client.A"
+  // Dynamically compiled with Helper class excluded from the JAR.
+  private lazy val dummyNoHelperJar = {
+    val source =
+      """package org.apache.spark.sql.artifact.test
+        |class Dummy { val dummy = (x: Int) => Helper(x) }
+        |case class Helper(x: Int) { def get: Int = x + 5 }
+        |""".stripMargin
+    val srcFile = File.createTempFile("StubClassDummy", ".scala", Utils.createTempDir())
+    val pw = new java.io.PrintWriter(srcFile)
+    try { pw.write(source) } finally { pw.close() }
+    val jarFile = new File(Utils.createTempDir(), "dummy_noHelper.jar")
+    val cp = System.getProperty("java.class.path")
+      .split(File.pathSeparator).map(p => new File(p).toURI.toURL).toSeq
+    SparkTestUtils.createJarWithScalaSources(
+      Seq(srcFile), jarFile, cp,
+      excludeClassPrefixes = Seq("Helper"))
+  }
+  private val classDummy = "org.apache.spark.sql.artifact.test.Dummy"
+  private val classHelper = "org.apache.spark.sql.artifact.test.Helper"
 
   test("find class with stub class") {
     val cl = new RecordedStubClassLoader(getClass().getClassLoader(), _ => true)
@@ -75,40 +86,38 @@ class StubClassLoaderSuite extends SparkFunSuite {
   }
 
   test("stub missing class") {
-    assume(udfNoJarFile.exists)
     val sysClassLoader = getClass.getClassLoader()
     val stubClassLoader = new RecordedStubClassLoader(null, _ => true)
 
-    // Install artifact without class A.
+    // Install artifact without Helper class.
     val sessionClassLoader =
-      new ChildFirstURLClassLoader(Array(udfNoAJar), stubClassLoader, sysClassLoader)
-    // Load udf with A used in the same class.
-    loadDummyUdf(sessionClassLoader)
-    // Class A should be stubbed.
-    assert(stubClassLoader.lastStubbed === classA)
+      new ChildFirstURLClassLoader(Array(dummyNoHelperJar), stubClassLoader, sysClassLoader)
+    // Load Dummy which references Helper.
+    loadDummy(sessionClassLoader)
+    // Helper should be stubbed.
+    assert(stubClassLoader.lastStubbed === classHelper)
   }
 
   test("unload stub class") {
-    assume(udfNoJarFile.exists)
     val sysClassLoader = getClass.getClassLoader()
     val stubClassLoader = new RecordedStubClassLoader(null, _ => true)
 
     val cl1 = new ChildFirstURLClassLoader(Array.empty, stubClassLoader, sysClassLoader)
 
-    // Failed to load DummyUdf
+    // Failed to load Dummy
     intercept[Exception] {
-      loadDummyUdf(cl1)
+      loadDummy(cl1)
     }
     // Successfully stubbed the missing class.
-    assert(stubClassLoader.lastStubbed === classDummyUdf)
+    assert(stubClassLoader.lastStubbed === classDummy)
 
-    // Creating a new class loader will unpack the udf correctly.
+    // Creating a new class loader will load the class correctly.
     val cl2 = new ChildFirstURLClassLoader(
-      Array(udfNoAJar),
+      Array(dummyNoHelperJar),
       stubClassLoader, // even with the same stub class loader.
       sysClassLoader)
     // Should be able to load after the artifact is added
-    loadDummyUdf(cl2)
+    loadDummy(cl2)
   }
 
   test("throw no such method if trying to access methods on stub class") {
@@ -118,24 +127,24 @@ class StubClassLoaderSuite extends SparkFunSuite {
     val sessionClassLoader =
       new ChildFirstURLClassLoader(Array.empty, stubClassLoader, sysClassLoader)
 
-    // Failed to load DummyUdf because of missing methods
+    // Failed to load Dummy because of missing methods
     assert(intercept[NoSuchMethodException] {
-      loadDummyUdf(sessionClassLoader)
-    }.getMessage.contains(classDummyUdf))
+      loadDummy(sessionClassLoader)
+    }.getMessage.contains(classDummy))
     // Successfully stubbed the missing class.
-    assert(stubClassLoader.lastStubbed === classDummyUdf)
+    assert(stubClassLoader.lastStubbed === classDummy)
   }
 
-  private def loadDummyUdf(sessionClassLoader: ClassLoader): Unit = {
-    // Load DummyUdf and call a method on it.
+  private def loadDummy(sessionClassLoader: ClassLoader): Unit = {
+    // Load Dummy and call a method on it.
     // scalastyle:off classforname
-    val cls = Class.forName(classDummyUdf, false, sessionClassLoader)
+    val cls = Class.forName(classDummy, false, sessionClassLoader)
     // scalastyle:on classforname
     cls.getDeclaredMethod("dummy")
 
-    // Load class A used inside DummyUdf
+    // Load Helper class used inside Dummy
     // scalastyle:off classforname
-    Class.forName(classA, false, sessionClassLoader)
+    Class.forName(classHelper, false, sessionClassLoader)
     // scalastyle:on classforname
   }
 }

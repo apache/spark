@@ -151,6 +151,56 @@ private[spark] trait SparkTestUtils {
     jarFile.toURI.toURL
   }
 
+  /**
+   * Compile Scala source files and package the resulting class files
+   * into a JAR.
+   *
+   * @param sourceFiles Scala source files to compile
+   * @param jarFile the JAR file to create
+   * @param classpathUrls additional classpath URLs needed for compilation
+   * @param excludeClassPrefixes class name prefixes to exclude from the
+   *   JAR (e.g., Seq("A") excludes A.class, A$.class)
+   */
+  def createJarWithScalaSources(
+      sourceFiles: Seq[File],
+      jarFile: File,
+      classpathUrls: Seq[URL] = Seq.empty,
+      excludeClassPrefixes: Seq[String] = Seq.empty): URL = {
+    val classDir = Files.createTempDirectory("spark-test-scala-classes").toFile
+    val compilerClass = SparkClassUtils.classForName[AnyRef]("scala.tools.nsc.Main")
+    val processMethod = compilerClass.getMethod("process", classOf[Array[String]])
+
+    val cpStr = classpathUrls.map(_.getFile).mkString(File.pathSeparator)
+    val args = Array("-classpath", cpStr, "-d", classDir.getAbsolutePath) ++
+      sourceFiles.map(_.getAbsolutePath)
+
+    val success = processMethod.invoke(null, args).asInstanceOf[Boolean]
+    assert(success, s"Scala compilation failed for: ${sourceFiles.map(_.getName).mkString(", ")}")
+
+    try {
+      val classFiles = listFilesRecursively(classDir).filter { f =>
+        f.getName.endsWith(".class") && !excludeClassPrefixes.exists(p =>
+          f.getName == s"$p.class" || f.getName.startsWith(s"$p$$"))
+      }
+
+      jarFile.getParentFile.mkdirs()
+      val jarStream = new JarOutputStream(new FileOutputStream(jarFile))
+      try {
+        for (classFile <- classFiles) {
+          val entryName = classDir.toPath.relativize(classFile.toPath).toString.replace('\\', '/')
+          jarStream.putNextEntry(new JarEntry(entryName))
+          val in = new FileInputStream(classFile)
+          try { in.transferTo(jarStream) } finally { in.close() }
+        }
+      } finally {
+        jarStream.close()
+      }
+    } finally {
+      SparkFileUtils.deleteRecursively(classDir)
+    }
+
+    jarFile.toURI.toURL
+  }
 
   private def listFilesRecursively(dir: File): Seq[File] = {
     val children = dir.listFiles()
