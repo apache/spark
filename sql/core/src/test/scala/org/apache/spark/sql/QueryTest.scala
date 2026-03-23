@@ -251,6 +251,10 @@ trait QueryTestBase extends PlanTestBase with SparkSessionProvider { self: Suite
       s"The physical plan has missing inputs:\n${qe.executedPlan}")
   }
 
+}
+
+abstract class QueryTest extends SparkFunSuite with QueryTestBase {
+
   protected def getCurrentClassCallSitePattern: String = {
     val cs = Thread.currentThread().getStackTrace()(2)
     s"${cs.getClassName}\\..*\\(${cs.getFileName}:\\d+\\)"
@@ -262,8 +266,6 @@ trait QueryTestBase extends PlanTestBase with SparkSessionProvider { self: Suite
       s"${cs.getClassName}.${cs.getMethodName}(${cs.getFileName}:${cs.getLineNumber + lines})")
   }
 }
-
-abstract class QueryTest extends SparkFunSuite with QueryTestBase
 
 object QueryTest extends Assertions {
   /**
