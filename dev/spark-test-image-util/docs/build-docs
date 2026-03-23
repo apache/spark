@@ -31,7 +31,7 @@ IMG_TAG=$(date +%s)
 IMG_NAME="${REPOSITORY}:${IMG_TAG}"
 IMG_URL="$REPO_OWNER/$IMG_NAME"
 DOCKER_MOUNT_SPARK_HOME="/__w/spark/spark"
-BUILD_DOCS_SCRIPT_PATH="${DOCKER_MOUNT_SPARK_HOME}/dev/spark-test-image-util/docs/run-in-container"
+BUILD_DOCS_SCRIPT_PATH="${DOCKER_MOUNT_SPARK_HOME}/dev/spark-test-image-util/docs/run-in-container.sh"
 
 FWDIR="$(cd "`dirname "${BASH_SOURCE[0]}"`"; pwd)"
 SPARK_HOME="$(cd "`dirname "${BASH_SOURCE[0]}"`"/../../..; pwd)"
