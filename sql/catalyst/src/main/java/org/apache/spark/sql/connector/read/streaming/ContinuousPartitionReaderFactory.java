@@ -38,6 +38,6 @@ public interface ContinuousPartitionReaderFactory extends PartitionReaderFactory
 
   @Override
   default ContinuousPartitionReader<ColumnarBatch> createColumnarReader(InputPartition partition) {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3150");
+    throw new SparkUnsupportedOperationException("DATASOURCE_COLUMNAR_READER_NOT_SUPPORTED");
   }
 }
