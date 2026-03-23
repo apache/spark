@@ -241,8 +241,8 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
 
   override def createTableLike(
       ident: Identifier,
-      tableInfo: TableInfo,
-      sourceTable: Table): Table = {
+      sourceTable: Table,
+      userSpecifiedOverrides: TableInfo): Table = {
     // Read schema from source. For V1Table sources, apply CharVarcharUtils to preserve
     // CHAR/VARCHAR types as declared rather than collapsed to StringType.
     val columns = sourceTable match {
@@ -252,7 +252,8 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
         sourceTable.columns()
     }
     // Merge source properties with user overrides (user overrides win), copy constraints.
-    val mergedProps = (sourceTable.properties().asScala ++ tableInfo.properties().asScala).asJava
+    val mergedProps =
+      (sourceTable.properties().asScala ++ userSpecifiedOverrides.properties().asScala).asJava
     createTable(ident, columns, sourceTable.partitioning(), mergedProps,
       Distributions.unspecified(), Array.empty, None, None, sourceTable.constraints())
   }

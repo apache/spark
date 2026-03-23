@@ -1394,7 +1394,7 @@ class CatalogSuite extends SparkFunSuite {
     val tableInfo = new TableInfo.Builder()
       .withProperties(overrides)
       .build()
-    catalog.createTableLike(dstIdent, tableInfo, sourceTable)
+    catalog.createTableLike(dstIdent, sourceTable, tableInfo)
 
     val dst = catalog.loadTable(dstIdent)
     assert(dst.properties.asScala("user.key") == "user.value",
@@ -1414,7 +1414,7 @@ class CatalogSuite extends SparkFunSuite {
     val tableInfo = new TableInfo.Builder()
       .withProperties(emptyProps)
       .build()
-    catalog.createTableLike(dstIdent, tableInfo, sourceTable)
+    catalog.createTableLike(dstIdent, sourceTable, tableInfo)
 
     val dst = catalog.loadTable(dstIdent)
     assert(dst.properties.asScala("format.version") == "2",
@@ -1437,7 +1437,7 @@ class CatalogSuite extends SparkFunSuite {
     val tableInfo = new TableInfo.Builder()
       .withProperties(overrides)
       .build()
-    catalog.createTableLike(dstIdent, tableInfo, sourceTable)
+    catalog.createTableLike(dstIdent, sourceTable, tableInfo)
 
     val dst = catalog.loadTable(dstIdent)
     assert(dst.properties.asScala("format.version") == "2",
@@ -1463,7 +1463,7 @@ class CatalogSuite extends SparkFunSuite {
     val tableInfo = new TableInfo.Builder()
       .withProperties(emptyProps)
       .build()
-    catalog.createTableLike(dstIdent, tableInfo, sourceTable)
+    catalog.createTableLike(dstIdent, sourceTable, tableInfo)
 
     val dst = catalog.loadTable(dstIdent)
     assert(dst.constraints().toSet == constraints.toSet,
@@ -1488,7 +1488,7 @@ class CatalogSuite extends SparkFunSuite {
       .withProperties(Map.empty[String, String].asJava)
       .build()
     val ex = intercept[UnsupportedOperationException] {
-      catalog.createTableLike(dstIdent, tableInfo, sourceTable)
+      catalog.createTableLike(dstIdent, sourceTable, tableInfo)
     }
     assert(ex.getMessage.contains("basic"),
       "Exception should mention the catalog name")

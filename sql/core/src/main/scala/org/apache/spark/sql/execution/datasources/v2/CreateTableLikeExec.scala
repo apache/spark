@@ -85,10 +85,10 @@ case class CreateTableLikeExec(
           locationProp)
 
       try {
-        val tableInfo = new TableInfo.Builder()
+        val userSpecifiedOverrides = new TableInfo.Builder()
           .withProperties(finalProps.asJava)
           .build()
-        targetCatalog.createTableLike(targetIdent, tableInfo, sourceTable)
+        targetCatalog.createTableLike(targetIdent, sourceTable, userSpecifiedOverrides)
       } catch {
         case _: TableAlreadyExistsException if ifNotExists =>
           logWarning(

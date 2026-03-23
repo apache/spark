@@ -145,7 +145,7 @@ class CreateTableLikeSuite extends DatasourceV2SQLBase {
   test("source TBLPROPERTIES are copied to target when connector implements createTableLike") {
     // InMemoryTableCatalog overrides createTableLike to merge source properties into the target,
     // demonstrating connector-specific copy semantics. Connectors that do not override
-    // createTableLike fall back to createTable and do not copy source properties.
+    // createTableLike will throw UnsupportedOperationException.
     withTable("src", "testcat.dst") {
       sql("CREATE TABLE src (id bigint) USING parquet TBLPROPERTIES ('source_key' = 'source')")
       sql("CREATE TABLE testcat.dst LIKE src")

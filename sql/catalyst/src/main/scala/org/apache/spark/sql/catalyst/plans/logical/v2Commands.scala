@@ -624,6 +624,10 @@ case class CreateTable(
  * @param source      Source table or view. Starts as UnresolvedTableOrView, resolved to
  *                    ResolvedTable / ResolvedPersistentView / ResolvedTempView by ResolveRelations.
  * @param fileFormat  User-specified STORED AS / ROW FORMAT (Hive-style). Empty if not specified.
+ *                    [[CatalogStorageFormat]] is carried here because ResolveSessionCatalog
+ *                    passes the full format (including serde info) to [[CreateTableLikeCommand]]
+ *                    for the V1 fallback path. The V2 execution path (DataSourceV2Strategy)
+ *                    extracts only [[CatalogStorageFormat#locationUri]] from this field.
  * @param provider    User-specified USING provider. None if not specified.
  * @param properties  User-specified TBLPROPERTIES.
  * @param ifNotExists IF NOT EXISTS flag.

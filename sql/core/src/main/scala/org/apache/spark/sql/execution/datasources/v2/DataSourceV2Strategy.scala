@@ -251,8 +251,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case ResolvedPersistentView(_, _, meta) => V1Table(meta)
         case ResolvedTempView(_, meta) => V1Table(meta)
       }
+      val location = fileFormat.locationUri.map { uri =>
+        if (uri.isAbsolute) uri
+        else if (new Path(uri).isAbsolute) CatalogUtils.makeQualifiedPath(uri, hadoopConf)
+        else uri
+      }
       CreateTableLikeExec(catalog.asTableCatalog, ident, table,
-        fileFormat.locationUri, provider, properties, ifNotExists) :: Nil
+        location, provider, properties, ifNotExists) :: Nil
 
     case RefreshTable(r: ResolvedTable) =>
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r, includeTimeTravel = true)) :: Nil
