@@ -56,7 +56,7 @@ public interface Write {
    */
   default BatchWrite toBatch() {
     throw new SparkUnsupportedOperationException(
-      "_LEGACY_ERROR_TEMP_3137", Map.of("description", description()));
+      "DATASOURCE_BATCH_WRITE_NOT_SUPPORTED", Map.of("description", description()));
   }
 
   /**
@@ -67,7 +67,7 @@ public interface Write {
    */
   default StreamingWrite toStreaming() {
     throw new SparkUnsupportedOperationException(
-      "_LEGACY_ERROR_TEMP_3138", Map.of("description", description()));
+      "DATASOURCE_STREAMING_WRITE_NOT_SUPPORTED", Map.of("description", description()));
   }
 
   /**

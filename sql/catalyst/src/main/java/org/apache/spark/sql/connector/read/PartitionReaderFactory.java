@@ -51,7 +51,7 @@ public interface PartitionReaderFactory extends Serializable {
    * {@link InputPartition} class defined for the data source.
    */
   default PartitionReader<ColumnarBatch> createColumnarReader(InputPartition partition) {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3150");
+    throw new SparkUnsupportedOperationException("DATASOURCE_COLUMNAR_READER_NOT_SUPPORTED");
   }
 
   /**
