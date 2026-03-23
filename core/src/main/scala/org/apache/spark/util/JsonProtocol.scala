@@ -22,7 +22,7 @@ import java.util.{Properties, UUID}
 import scala.collection.Map
 import scala.jdk.CollectionConverters._
 
-import com.fasterxml.jackson.core.{JsonGenerator, StreamReadConstraints}
+import com.fasterxml.jackson.core.{JsonGenerator, StreamReadConstraints, StreamWriteConstraints}
 import com.fasterxml.jackson.databind.JsonNode
 import org.json4s.jackson.JsonMethods.compact
 
@@ -67,8 +67,17 @@ private[spark] object JsonProtocol extends JsonUtils {
   // TODO: Remove this file and put JSON serialization into each individual class.
 
   // SPARK-49872: Remove jackson JSON string length limitation.
+  // Remove jackson JSON nesting depth limitation.
   mapper.getFactory.setStreamReadConstraints(
-    StreamReadConstraints.builder().maxStringLength(Int.MaxValue).build()
+    StreamReadConstraints.builder()
+      .maxStringLength(Int.MaxValue)
+      .maxNestingDepth(Int.MaxValue)
+      .build()
+  )
+  mapper.getFactory.setStreamWriteConstraints(
+    StreamWriteConstraints.builder()
+      .maxNestingDepth(Int.MaxValue)
+      .build()
   )
 
   private[util]
@@ -965,7 +974,7 @@ private[spark] object JsonProtocol extends JsonUtils {
       case other =>
         val otherClass = Utils.classForName(other)
         if (classOf[SparkListenerEvent].isAssignableFrom(otherClass)) {
-          mapper.readValue(json.toString, otherClass)
+          mapper.readValue(mapper.writeValueAsString(json), otherClass)
             .asInstanceOf[SparkListenerEvent]
         } else {
           throw new SparkException(s"Unknown event type: $other")
@@ -1610,7 +1619,7 @@ private[spark] object JsonProtocol extends JsonUtils {
   def resourcesMapFromJson(json: JsonNode): Map[String, ResourceInformation] = {
     assert(json.isObject, s"expected object, got ${json.getNodeType}")
     json.properties.asScala.map { field =>
-      val resourceInfo = ResourceInformation.parseJson(field.getValue.toString)
+      val resourceInfo = ResourceInformation.parseJson(mapper.writeValueAsString(field.getValue))
       (field.getKey, resourceInfo)
     }.toMap
   }
