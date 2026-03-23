@@ -50,7 +50,9 @@ class RocksDBWithChangelogCheckpointStateDataSourceChangeDataReaderSuite extends
   }
 
   test("read stream-stream join v4 state change feed") {
-    withSQLConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "4") {
+    withSQLConf(
+      SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "4",
+      SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "true") {
       withTempDir { tempDir =>
         runStreamStreamJoinQuery(tempDir.getAbsolutePath)
 
