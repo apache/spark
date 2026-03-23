@@ -114,7 +114,7 @@ object HiveResult extends SQLConfHelper {
       binaryFormatter: BinaryFormatter): String = a match {
     case (null, _) => if (nested) "null" else "NULL"
     case (value, dt) =>
-      ClientTypeOps(dt).map(_.formatExternal(value)).getOrElse {
+      ClientTypeOps(dt).map(_.formatExternal(value, nested)).getOrElse {
         toHiveStringDefault(a, nested, formatters, binaryFormatter)
       }
   }

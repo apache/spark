@@ -146,6 +146,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * @param dt The datatype (e.g. [[org.apache.spark.sql.types.StringType]])
    * @return The default JdbcType for this DataType
    */
+  // Uses .orElse (not .getOrElse) because this method returns Option[JdbcType].
   def getCommonJDBCType(dt: DataType): Option[JdbcType] =
     ClientTypeOps(dt).map(ops => JdbcType(ops.jdbcTypeName, ops.getJdbcType))
       .orElse(getCommonJDBCTypeDefault(dt))
