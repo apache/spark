@@ -31,6 +31,7 @@ import org.apache.spark.internal.config.History.HybridStoreDiskBackend.ROCKSDB
 import org.apache.spark.status.KVUtils
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.util.{Clock, Utils}
+import org.apache.spark.util.ShutdownHookManager
 import org.apache.spark.util.kvstore.KVStore
 
 /**
@@ -321,6 +322,7 @@ private class HistoryServerDiskManager(
       val newSize = sizeOf(tmpPath)
       makeRoom(newSize)
       tmpPath.renameTo(dst)
+      ShutdownHookManager.removeShutdownDeleteDir(tmpPath)
 
       updateUsage(newSize, committed = true)
       if (committedUsage.get() > maxUsage) {
@@ -343,6 +345,7 @@ private class HistoryServerDiskManager(
     def rollback(): Unit = {
       updateUsage(-leased)
       Utils.deleteRecursively(tmpPath)
+      ShutdownHookManager.removeShutdownDeleteDir(tmpPath)
     }
 
   }
