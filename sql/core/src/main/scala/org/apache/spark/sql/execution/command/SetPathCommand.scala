@@ -71,7 +71,7 @@ case class SetPathCommand(elements: Seq[PathElement]) extends LeafRunnableComman
         concrete.lift(1).getOrElse("").toLowerCase(Locale.ROOT))
       if (seen.contains(key)) {
         throw new AnalysisException(
-          errorClass = "DUPLICATE_PATH_ENTRY",
+          errorClass = "DUPLICATE_SQL_PATH_ENTRY",
           messageParameters = Map("pathEntry" -> concrete.mkString(".")))
       }
       seen.add(key)

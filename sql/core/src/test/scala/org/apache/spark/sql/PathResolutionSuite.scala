@@ -92,7 +92,8 @@ class PathResolutionSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("SET PATH = spark_catalog.default, spark_catalog.default")
         },
-        condition = "DUPLICATE_PATH_ENTRY",
+        condition = "DUPLICATE_SQL_PATH_ENTRY",
+        sqlState = Some("42732"),
         parameters = Map("pathEntry" -> "spark_catalog.default"))
     }
   }
@@ -185,7 +186,8 @@ class PathResolutionSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("SET PATH = spark_catalog.default, current_schema")
         },
-        condition = "DUPLICATE_PATH_ENTRY",
+        condition = "DUPLICATE_SQL_PATH_ENTRY",
+        sqlState = Some("42732"),
         parameters = Map("pathEntry" -> "spark_catalog.default"))
     }
   }
@@ -197,7 +199,8 @@ class PathResolutionSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("SET PATH = current_schema, current_schema")
         },
-        condition = "DUPLICATE_PATH_ENTRY",
+        condition = "DUPLICATE_SQL_PATH_ENTRY",
+        sqlState = Some("42732"),
         parameters = Map("pathEntry" -> "spark_catalog.default"))
     }
   }
@@ -208,7 +211,8 @@ class PathResolutionSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("SET PATH = SYSTEM_PATH, SYSTEM_PATH")
         },
-        condition = "DUPLICATE_PATH_ENTRY",
+        condition = "DUPLICATE_SQL_PATH_ENTRY",
+        sqlState = Some("42732"),
         parameters = Map("pathEntry" -> "system.builtin"))
     }
   }
