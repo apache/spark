@@ -1887,6 +1887,23 @@ private[spark] object Utils
   }
 
   /**
+   * Upload a file to a Hadoop-compatible filesystem.
+   */
+  def uploadFileToHadoopCompatibleFS(
+      src: Path,
+      dest: Path,
+      fs: FileSystem,
+      delSrc: Boolean = false,
+      overwrite: Boolean = true): Unit = {
+    try {
+      fs.copyFromLocalFile(delSrc, overwrite, src, dest)
+    } catch {
+      case e: IOException =>
+        throw new SparkException(s"Error uploading file ${src.getName}", e)
+    }
+  }
+
+  /**
    * Whether the underlying JVM prefer IPv6 addresses.
    */
   val preferIPv6 = "true".equals(System.getProperty("java.net.preferIPv6Addresses"))
