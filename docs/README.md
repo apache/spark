@@ -136,6 +136,6 @@ Note: Before running it, you need to have `docker` installed.
 $ dev/spark-test-image-util/docs/build-docs
 ```
 
-It will generate all documents on the `container` and `host`.
+It will generate all documents on the `container` except for R and `host` (R).
 Especially when there are conflicts between the libraries required by Python development environment
 and the libraries required by generating Python docs environment, this is a good choice.
