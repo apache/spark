@@ -919,10 +919,9 @@ class BasePythonDataSourceTestsMixin:
 
                     self.spark.dataSource.register(TestDataSource)
 
-                    with self.assertRaisesRegex(Exception, expected):
-                        self.spark.range(10).write.format("test").mode("append").saveAsTable(
-                            "test_table"
-                        )
+                    with tempfile.TemporaryDirectory(prefix="test_segfault_") as d:
+                        with self.assertRaisesRegex(Exception, expected):
+                            self.spark.range(10).write.format("test").mode("append").save(d)
 
                 with self.subTest(worker="pyspark.sql.worker.commit_data_source_write"):
 
@@ -943,10 +942,9 @@ class BasePythonDataSourceTestsMixin:
 
                     self.spark.dataSource.register(TestDataSource)
 
-                    with self.assertRaisesRegex(Exception, expected):
-                        self.spark.range(10).write.format("test").mode("append").saveAsTable(
-                            "test_table"
-                        )
+                    with tempfile.TemporaryDirectory(prefix="test_segfault_") as d:
+                        with self.assertRaisesRegex(Exception, expected):
+                            self.spark.range(10).write.format("test").mode("append").save(d)
 
     @unittest.skipIf(is_remote_only(), "Requires JVM access")
     def test_data_source_reader_with_logging(self):
