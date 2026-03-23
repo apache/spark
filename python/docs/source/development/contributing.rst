@@ -151,7 +151,7 @@ You can use Python's built-in ``venv`` module to create an isolated environment:
 
     # Python 3.10+ is required
     python3 -m venv .venv
-    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+    source .venv/bin/activate
     pip install --upgrade -r dev/requirements.txt
 
 pip

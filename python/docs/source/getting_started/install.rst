@@ -165,7 +165,7 @@ You can use Python's built-in ``venv`` module to create an isolated environment:
 .. code-block:: bash
 
     python3 -m venv .venv
-    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+    source .venv/bin/activate
     pip install pyspark
 
 
