@@ -571,7 +571,7 @@ DropFunctionCommand myDoubleAvg, false, true
 -- !query
 DECLARE var = 'sometable'
 -- !query analysis
-CreateVariable defaultvalueexpression(sometable, 'sometable'), false
+CreateVariable default(sometable, sql=''sometable''), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var
 
 
@@ -1115,21 +1115,21 @@ DropTable false, false
 -- !query
 DECLARE agg = 'max'
 -- !query analysis
-CreateVariable defaultvalueexpression(max, 'max'), false
+CreateVariable default(max, sql=''max''), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.agg
 
 
 -- !query
 DECLARE col = 'c1'
 -- !query analysis
-CreateVariable defaultvalueexpression(c1, 'c1'), false
+CreateVariable default(c1, sql=''c1''), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.col
 
 
 -- !query
 DECLARE tab = 'T'
 -- !query analysis
-CreateVariable defaultvalueexpression(T, 'T'), false
+CreateVariable default(T, sql=''T''), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.tab
 
 
@@ -1805,7 +1805,7 @@ DropTable false, false
 -- !query
 DECLARE IDENTIFIER('my_var') = 'value'
 -- !query analysis
-CreateVariable defaultvalueexpression(value, 'value'), false
+CreateVariable default(value, sql=''value''), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.my_var
 
 
