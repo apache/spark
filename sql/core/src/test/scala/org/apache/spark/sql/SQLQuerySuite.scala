@@ -3865,19 +3865,27 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-33084: Add jar support Ivy URI in SQL -- jar contains udf class") {
-    val jarPath = Thread.currentThread().getContextClassLoader
-      .getResource("SPARK-33084.jar")
-    assume(jarPath != null)
     val sumFuncClass = "org.apache.spark.examples.sql.Spark33084"
+    val resourceName = "SPARK-33084/Spark33084.java"
+    val sourceUrl = Thread.currentThread().getContextClassLoader
+      .getResource(resourceName)
+    assert(sourceUrl != null, s"Resource not found: $resourceName")
+    val source = Map(sumFuncClass ->
+      new String(java.nio.file.Files.readAllBytes(
+        java.nio.file.Paths.get(sourceUrl.toURI)),
+        java.nio.charset.StandardCharsets.UTF_8))
+    val classpath = java.lang.management.ManagementFactory.getRuntimeMXBean.getClassPath
+      .split(java.io.File.pathSeparator).map(p => new java.io.File(p).toURI.toURL).toSeq
+    val jarFile = new java.io.File(Utils.createTempDir(), "SPARK-33084.jar")
+    org.apache.spark.util.SparkTestUtils.createJarWithJavaSources(source, jarFile, classpath)
     val functionName = "test_udf"
     withTempDir { dir =>
       System.setProperty("ivy.home", dir.getAbsolutePath)
-      val sourceJar = new File(jarPath.getFile)
       val targetCacheJarDir = new File(dir.getAbsolutePath +
         "/local/org.apache.spark/SPARK-33084/1.0/jars/")
       targetCacheJarDir.mkdir()
       // copy jar to local cache
-      Utils.copyFileToDirectory(sourceJar, targetCacheJarDir)
+      Utils.copyFileToDirectory(jarFile, targetCacheJarDir)
       withTempView("v1") {
         withUserDefinedFunction(
           s"default.$functionName" -> false,
