@@ -60,6 +60,16 @@ public class DataTypes {
   public static final DataType TimestampNTZType = TimestampNTZType$.MODULE$;
 
   /**
+   * Gets the TimestampNanosType object.
+   */
+  public static final DataType TimestampNanosType = TimestampNanosType$.MODULE$;
+
+  /**
+   * Gets the TimestampNTZNanosType object.
+   */
+  public static final DataType TimestampNTZNanosType = TimestampNTZNanosType$.MODULE$;
+
+  /**
    * Gets the CalendarIntervalType object.
    */
   public static final DataType CalendarIntervalType = CalendarIntervalType$.MODULE$;
