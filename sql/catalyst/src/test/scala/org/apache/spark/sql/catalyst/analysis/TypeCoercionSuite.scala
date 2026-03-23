@@ -217,7 +217,7 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
     shouldNotCast(checkedType, IntegralType)
   }
 
-  test("implicit type cast - TimeType") {
+  test("SPARK-56152: implicit type cast - TimeType") {
     val checkedType = TimeType()
     checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType) ++ datetimeTypes)
     shouldCast(checkedType, AnyTimeType, AnyTimeType.defaultConcreteType)
