@@ -1,3 +1,4 @@
+#!/bin/bash
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -17,9 +18,14 @@
 
 # 1.Set env variable.
 set -ex
-(ls /usr/lib/jvm/java-17-openjdk-arm64 && JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64) || (ls /usr/lib/jvm/java-17-openjdk-amd64 && JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64)
-export JAVA_HOME
-export PATH=~/.bin:$JAVA_HOME/bin:$PATH
+_arch="$(uname -m)"
+case "$_arch" in
+  "aarch64") export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64 ;;
+  "x86_64") export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 ;;
+  *) echo "Unexpected arch $_arch picking first java-17-openjdk in /usr/lib/jvm";
+     export JAVA_HOME=$(ls /usr/lib/jvm/java-17-openjdk-* | head -n 1);;
+esac
+export PATH="$HOME/.bin:$JAVA_HOME/bin:$PATH"
 export SPARK_DOCS_IS_BUILT_ON_HOST=1
 # We expect to compile the R document on the host.
 export SKIP_RDOC=1
@@ -33,7 +39,7 @@ bundle install
 
 # 3.Build docs, includes: `error docs`, `scala doc`, `python doc`, `sql doc`, excludes: `r doc`.
 # We need this link to make sure `python3` points to `python3.12` which contains the prerequisite packages.
-ln -s "$(which python3.12)" "~/.bin/python3"
+ln -s "$(which python3.12)" ~/.bin/python3
 
 # Build docs first with SKIP_API to ensure they are buildable without requiring any
 # language docs to be built beforehand.
