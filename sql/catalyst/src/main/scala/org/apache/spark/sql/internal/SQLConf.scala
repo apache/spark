@@ -1233,7 +1233,7 @@ object SQLConf {
     buildConf("spark.sql.adaptive.broadcastJoin.fallbackToShuffle.enabled")
       .doc("When true, adaptive execution retries with broadcast joins disabled if a broadcast " +
         "query stage fails because it exceeds broadcast table row or size limits.")
-      .version("3.5.0")
+      .version("4.2.0")
       .booleanConf
       .createWithDefault(false)
 
