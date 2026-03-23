@@ -24,7 +24,7 @@ import scala.util.{Failure, Success, Try}
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.sql.{AnalysisException, Row}
@@ -159,6 +159,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
 
     val converter: Iterator[InternalRow] => Iterator[Batch] = rows => {
       val batches = mkBatches(rows)
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => batches.close()))
       batches.map(b => b -> batches.rowCountInLastBatch)
     }
 
