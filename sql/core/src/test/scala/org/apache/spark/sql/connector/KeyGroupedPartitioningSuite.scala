@@ -75,17 +75,23 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       Column.create("dept_id", IntegerType),
       Column.create("data", StringType))
 
-  def withFunction[T](fn: UnboundFunction)(f: => T): T = {
-    val id = Identifier.of(Array.empty, fn.name())
-    val oldFn = Option.when(catalog.listFunctions(Array.empty).contains(id)) {
-      val fn = catalog.loadFunction(id)
-      catalog.dropFunction(id)
-      fn
+  def withFunctions[T](fns: UnboundFunction*)(f: => T): T = {
+    val fnIds = catalog.listFunctions(Array.empty)
+    val oldFns = fns.map { fn =>
+      val id = Identifier.of(Array.empty, fn.name())
+      val oldFn = Option.when(fnIds.contains(id)) {
+        val fn = catalog.loadFunction(id)
+        catalog.dropFunction(id)
+        fn
+      }
+      catalog.createFunction(id, fn)
+      (id, oldFn)
     }
-    catalog.createFunction(id, fn)
     try f finally {
-      catalog.dropFunction(id)
-      oldFn.foreach(catalog.createFunction(id, _))
+      oldFns.foreach { case (id, oldFn ) =>
+        catalog.dropFunction(id)
+        oldFn.foreach(catalog.createFunction(id, _))
+      }
     }
   }
 
@@ -3441,7 +3447,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
   }
 
   test("SPARK-56046: Reducers with different result types") {
-    withFunction(UnboundDaysFunctionWithIncompatibleResultTypeReducer) {
+    withFunctions(UnboundDaysFunctionWithToYearsReducerWithDateResult) {
       val items_partitions = Array(days("arrive_time"))
       createTable(items, itemsColumns, items_partitions)
       sql(s"INSERT INTO testcat.ns.$items VALUES " +
@@ -3474,6 +3480,50 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
           }
           assert(e.getMessage.contains(
             "Storage-partition join partition transforms produced incompatible reduced types"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-56164: Reducers with different result types to original keys") {
+    withFunctions(
+      UnboundDaysFunctionWithToYearsReducerWithLongResult,
+      UnboundYearsFunctionWithToYearsReducerWithLongResult) {
+      val items_partitions = Array(days("arrive_time"))
+      createTable(items, itemsColumns, items_partitions)
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(0, 'aa', 39.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'bb', 41.0, cast('2021-01-03' as timestamp)), " +
+        s"(3, 'bb', 42.0, cast('2021-01-04' as timestamp))")
+
+      val purchases_partitions = Array(years("time"))
+      createTable(purchases, purchasesColumns, purchases_partitions)
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(5, 44.0, cast('2020-01-15' as timestamp)), " +
+        s"(7, 46.5, cast('2021-02-08' as timestamp))")
+
+      withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        Seq(
+          s"testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.time = i.arrive_time",
+          s"testcat.ns.$purchases p JOIN testcat.ns.$items i ON i.arrive_time = p.time"
+        ).foreach { joinString =>
+          val df = sql(
+            s"""
+               |${selectWithMergeJoinHint("i", "p")} id, item_id
+               |FROM $joinString
+               |ORDER BY id, item_id
+               |""".stripMargin)
+
+          val shuffles = collectShuffles(df.queryExecution.executedPlan)
+          assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+          val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+          assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 2))
+
+          checkAnswer(df, Seq(Row(0, 1), Row(1, 1)))
         }
       }
     }
