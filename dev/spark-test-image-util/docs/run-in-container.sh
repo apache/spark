@@ -23,6 +23,8 @@ export PATH=~/.bin:$JAVA_HOME/bin:$PATH
 export SPARK_DOCS_IS_BUILT_ON_HOST=1
 # We expect to compile the R document on the host.
 export SKIP_RDOC=1
+mkdir -p ~/.bin
+mkdir -p ~/.gem
 
 # 2.Install bundler.
 gem install bundler -v 2.4.22
@@ -31,7 +33,6 @@ bundle install
 
 # 3.Build docs, includes: `error docs`, `scala doc`, `python doc`, `sql doc`, excludes: `r doc`.
 # We need this link to make sure `python3` points to `python3.12` which contains the prerequisite packages.
-mkdir -p ~/.bin
 ln -s "$(which python3.12)" "~/.bin/python3"
 
 # Build docs first with SKIP_API to ensure they are buildable without requiring any
