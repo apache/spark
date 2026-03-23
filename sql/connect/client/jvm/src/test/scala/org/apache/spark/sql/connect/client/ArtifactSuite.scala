@@ -16,12 +16,12 @@
  */
 package org.apache.spark.sql.connect.client
 
-import java.io.InputStream
+import java.io.{FileOutputStream, InputStream}
 import java.net.URI
 import java.nio.file.{Files, Path, Paths}
 import java.util.concurrent.TimeUnit
-
-import scala.jdk.CollectionConverters._
+import java.util.jar.{JarEntry, JarOutputStream}
+import java.util.zip.CRC32
 
 import com.google.protobuf.ByteString
 import io.grpc.{ManagedChannel, Server}
@@ -86,16 +86,54 @@ class ArtifactSuite extends ConnectFunSuite {
   }
 
   private val CHUNK_SIZE: Int = 32 * 1024
-  protected def artifactFilePath: Path = commonResourcePath.resolve("artifact-tests")
-  protected def artifactCrcPath: Path = artifactFilePath.resolve("crc")
+
+  protected lazy val artifactFilePath: Path = {
+    val dir = Files.createTempDirectory("artifact-tests")
+    dir.toFile.deleteOnExit()
+    // Generate test artifacts. The .class files and JAR entries are not valid Java
+    // class files -- they contain arbitrary bytes. The tests only verify byte-level
+    // transfer protocol (chunking, CRC), so valid class content is not required.
+    val small = "public class smallClassFile {}".getBytes
+    Files.write(dir.resolve("smallClassFile.class"), small)
+    Files.write(dir.resolve("smallClassFileDup.class"), small)
+    Files.write(dir.resolve("Hello.class"), "Hello".getBytes)
+    // small JAR
+    val smallJar = dir.resolve("smallJar.jar")
+    val jos = new JarOutputStream(new FileOutputStream(smallJar.toFile))
+    try {
+      jos.putNextEntry(new JarEntry("Dummy.class"))
+      jos.write(small)
+    } finally { jos.close() }
+    // large JAR (>32KB) - use STORED to avoid compression
+    val largeJar = dir.resolve("largeJar.jar")
+    val jos2 = new JarOutputStream(new FileOutputStream(largeJar.toFile))
+    try {
+      for (i <- 0 until 100) {
+        val data = new Array[Byte](4096)
+        java.util.Arrays.fill(data, i.toByte)
+        val entry = new JarEntry(s"pkg/Class$i.class")
+        entry.setMethod(java.util.zip.ZipEntry.STORED)
+        entry.setSize(data.length)
+        entry.setCompressedSize(data.length)
+        val crc = new CRC32()
+        crc.update(data)
+        entry.setCrc(crc.getValue)
+        jos2.putNextEntry(entry)
+        jos2.write(data)
+      }
+    } finally { jos2.close() }
+    dir
+  }
 
   private def getCrcValues(filePath: Path): Seq[Long] = {
-    val fileName = filePath.getFileName.toString
-    val crcFileName = fileName.split('.').head + ".txt"
-    Files
-      .readAllLines(artifactCrcPath.resolve(crcFileName))
-      .asScala
-      .map(_.toLong)
+    val data = Files.readAllBytes(filePath)
+    data
+      .grouped(CHUNK_SIZE)
+      .map { chunk =>
+        val c = new CRC32()
+        c.update(chunk)
+        c.getValue
+      }
       .toSeq
   }
 
@@ -117,7 +155,6 @@ class ArtifactSuite extends ConnectFunSuite {
   private def singleChunkArtifactTest(path: String): Unit = {
     test(s"Single Chunk Artifact - $path") {
       val artifactPath = artifactFilePath.resolve(path)
-      assume(artifactPath.toFile.exists)
       artifactManager.addArtifact(artifactPath.toString)
 
       val receivedRequests = service.getAndClearLatestAddArtifactRequests()
@@ -177,20 +214,17 @@ class ArtifactSuite extends ConnectFunSuite {
     }
   }
 
-  test("Chunked Artifact - junitLargeJar.jar") {
-    val artifactPath = artifactFilePath.resolve("junitLargeJar.jar")
-    assume(artifactPath.toFile.exists)
+  test("Chunked Artifact - largeJar.jar") {
+    val artifactPath = artifactFilePath.resolve("largeJar.jar")
     artifactManager.addArtifact(artifactPath.toString)
-    // Expected chunks = roundUp( file_size / chunk_size) = 12
-    // File size of `junitLargeJar.jar` is 384581 bytes.
-    val expectedChunks = (384581 + (CHUNK_SIZE - 1)) / CHUNK_SIZE
+    val largeJarSize = Files.size(artifactPath)
+    val expectedChunks = ((largeJarSize + CHUNK_SIZE - 1) / CHUNK_SIZE).toInt
     val receivedRequests = service.getAndClearLatestAddArtifactRequests()
-    assert(384581 == Files.size(artifactPath))
     assert(receivedRequests.size == expectedChunks)
     assert(receivedRequests.head.hasBeginChunk)
     val beginChunkRequest = receivedRequests.head.getBeginChunk
-    assert(beginChunkRequest.getName == "jars/junitLargeJar.jar")
-    assert(beginChunkRequest.getTotalBytes == 384581)
+    assert(beginChunkRequest.getName == "jars/largeJar.jar")
+    assert(beginChunkRequest.getTotalBytes == largeJarSize)
     assert(beginChunkRequest.getNumChunks == expectedChunks)
     val dataChunks = Seq(beginChunkRequest.getInitialChunk) ++
       receivedRequests.drop(1).map(_.getChunk)
@@ -199,10 +233,8 @@ class ArtifactSuite extends ConnectFunSuite {
 
   test("Batched SingleChunkArtifacts") {
     val path1 = artifactFilePath.resolve("smallClassFile.class")
-    assume(path1.toFile.exists)
     val file1 = path1.toUri
     val path2 = artifactFilePath.resolve("smallJar.jar")
-    assume(path2.toFile.exists)
     val file2 = path2.toUri
     artifactManager.addArtifacts(Seq(file1, file2))
     val receivedRequests = service.getAndClearLatestAddArtifactRequests()
@@ -225,27 +257,22 @@ class ArtifactSuite extends ConnectFunSuite {
 
   test("Mix of SingleChunkArtifact and chunked artifact") {
     val path1 = artifactFilePath.resolve("smallClassFile.class")
-    assume(path1.toFile.exists)
     val file1 = path1.toUri
-    val path2 = artifactFilePath.resolve("junitLargeJar.jar")
-    assume(path2.toFile.exists)
+    val path2 = artifactFilePath.resolve("largeJar.jar")
     val file2 = path2.toUri
     val path3 = artifactFilePath.resolve("smallClassFileDup.class")
-    assume(path3.toFile.exists)
     val file3 = path3.toUri
     val path4 = artifactFilePath.resolve("smallJar.jar")
-    assume(path4.toFile.exists)
     val file4 = path4.toUri
     artifactManager.addArtifacts(Seq(file1, file2, file3, file4))
+    val largeJarSize = Files.size(path2)
+    val largeJarChunks = ((largeJarSize + CHUNK_SIZE - 1) / CHUNK_SIZE).toInt
     val receivedRequests = service.getAndClearLatestAddArtifactRequests()
-    // There are a total of 14 requests.
     // The 1st request contains a single artifact - smallClassFile.class (There are no
     // other artifacts batched with it since the next one is large multi-chunk artifact)
-    // Requests 2-13 (1-indexed) belong to the transfer of junitLargeJar.jar. This includes
-    // the first "beginning chunk" and the subsequent data chunks.
-    // The last request (14) contains both smallClassFileDup.class and smallJar.jar batched
-    // together.
-    assert(receivedRequests.size == 1 + 12 + 1)
+    // Next `largeJarChunks` requests belong to the transfer of largeJar.jar.
+    // The last request contains both smallClassFileDup.class and smallJar.jar batched together.
+    assert(receivedRequests.size == 1 + largeJarChunks + 1)
 
     val firstReqBatch = receivedRequests.head.getBatch.getArtifactsList
     assert(firstReqBatch.size() == 1)
@@ -255,10 +282,10 @@ class ArtifactSuite extends ConnectFunSuite {
     val secondReq = receivedRequests(1)
     assert(secondReq.hasBeginChunk)
     val beginChunkRequest = secondReq.getBeginChunk
-    assert(beginChunkRequest.getName == "jars/junitLargeJar.jar")
-    assert(beginChunkRequest.getTotalBytes == 384581)
-    assert(beginChunkRequest.getNumChunks == 12)
-    // Large artifact data chunks are requests number 3 to 13.
+    assert(beginChunkRequest.getName == "jars/largeJar.jar")
+    assert(beginChunkRequest.getTotalBytes == largeJarSize)
+    assert(beginChunkRequest.getNumChunks == largeJarChunks)
+    // Large artifact data chunks follow the begin chunk request.
     val dataChunks = Seq(beginChunkRequest.getInitialChunk) ++
       receivedRequests.drop(2).dropRight(1).map(_.getChunk)
     checkChunksDataAndCrc(Paths.get(file2), dataChunks)
@@ -303,7 +330,6 @@ class ArtifactSuite extends ConnectFunSuite {
 
   test("artifact with custom target") {
     val artifactPath = artifactFilePath.resolve("smallClassFile.class")
-    assume(artifactPath.toFile.exists)
     val target = "sub/package/smallClassFile.class"
     artifactManager.addArtifact(artifactPath.toString, target)
     val receivedRequests = service.getAndClearLatestAddArtifactRequests()
@@ -324,7 +350,6 @@ class ArtifactSuite extends ConnectFunSuite {
 
   test("in-memory artifact with custom target") {
     val artifactPath = artifactFilePath.resolve("smallClassFile.class")
-    assume(artifactPath.toFile.exists)
     val artifactBytes = Files.readAllBytes(artifactPath)
     val target = "sub/package/smallClassFile.class"
     artifactManager.addArtifact(artifactBytes, target)
@@ -348,7 +373,6 @@ class ArtifactSuite extends ConnectFunSuite {
     "When both source and target paths are given, extension conditions are checked " +
       "on target path") {
     val artifactPath = artifactFilePath.resolve("smallClassFile.class")
-    assume(artifactPath.toFile.exists)
     assertThrows[UnsupportedOperationException] {
       artifactManager.addArtifact(artifactPath.toString, "dummy.extension")
     }

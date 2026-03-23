@@ -16,21 +16,20 @@
  */
 package org.apache.spark.sql.connect.client
 
-import java.nio.file.Paths
+import java.nio.file.{Files, Paths}
 
 import org.apache.spark.sql.connect.test.ConnectFunSuite
-import org.apache.spark.util.SparkFileUtils
 
 class ClassFinderSuite extends ConnectFunSuite {
 
-  private val classResourcePath = commonResourcePath.resolve("artifact-tests")
+  private val dummyContent = Array[Byte](0xca.toByte, 0xfe.toByte, 0xba.toByte, 0xbe.toByte)
 
   test("REPLClassDirMonitor functionality test") {
     val requiredClasses = Seq("Hello.class", "smallClassFile.class", "smallClassFileDup.class")
-    requiredClasses.foreach(className =>
-      assume(classResourcePath.resolve(className).toFile.exists))
-    val copyDir = SparkFileUtils.createTempDir().toPath
-    SparkFileUtils.copyDirectory(classResourcePath.toFile, copyDir.toFile)
+    val copyDir = Files.createTempDirectory("classFinderTest")
+    copyDir.toFile.deleteOnExit()
+    requiredClasses.foreach(name => Files.write(copyDir.resolve(name), dummyContent))
+
     val monitor = new REPLClassDirMonitor(copyDir.toAbsolutePath.toString)
 
     def checkClasses(monitor: REPLClassDirMonitor, additionalClasses: Seq[String] = Nil): Unit = {
@@ -44,12 +43,11 @@ class ClassFinderSuite extends ConnectFunSuite {
 
     checkClasses(monitor)
 
-    // Add new class file into directory
-    val subDir = SparkFileUtils.createTempDir(copyDir.toAbsolutePath.toString)
-    val classToCopy = copyDir.resolve("Hello.class")
-    val copyLocation = subDir.toPath.resolve("HelloDup.class")
-    SparkFileUtils.copyFile(classToCopy.toFile, copyLocation.toFile)
+    // Add new class file into a subdirectory
+    val subDir = Files.createTempDirectory(copyDir, "sub")
+    subDir.toFile.deleteOnExit()
+    Files.write(subDir.resolve("HelloDup.class"), dummyContent)
 
-    checkClasses(monitor, Seq(s"${subDir.getName}/HelloDup.class"))
+    checkClasses(monitor, Seq(s"${subDir.getFileName}/HelloDup.class"))
   }
 }
