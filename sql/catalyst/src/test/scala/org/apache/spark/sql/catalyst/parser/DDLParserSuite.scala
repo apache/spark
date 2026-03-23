@@ -1923,7 +1923,7 @@ class DDLParserSuite extends AnalysisTest {
 
     test(s"INSERT WITH SCHEMA EVOLUTION INTO REPLACE USING - $testMsg") {
       val table = "testcat.ns1.ns2.tbl"
-      val insertSQLStmt = s"INSERT WITH SCHEMA EVOLUTION INTO $table AS t " +
+      val insertSQLStmt = s"INSERT WITH SCHEMA EVOLUTION INTO $table " +
         s"${byNameClause}REPLACE USING (col1) ${sourceQuery}"
 
       parseCompare(
@@ -1940,6 +1940,47 @@ class DDLParserSuite extends AnalysisTest {
           replaceCriteriaOpt = Some(InsertReplaceUsing(Seq("col1"))))
       )
     }
+
+    test(s"INSERT WITH SCHEMA EVOLUTION INTO REPLACE ON - $testMsg") {
+      val table = "testcat.ns1.ns2.tbl"
+      val insertSQLStmt = s"INSERT WITH SCHEMA EVOLUTION INTO $table AS t " +
+        s"${byNameClause}REPLACE ON t.col1 = col2 ${sourceQuery}"
+
+      parseCompare(
+        sql = insertSQLStmt,
+        expected = InsertIntoStatement(
+          table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+          partitionSpec = Map.empty,
+          userSpecifiedCols = Seq.empty,
+          query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+          overwrite = true,
+          ifPartitionNotExists = false,
+          byName = isByName,
+          withSchemaEvolution = true,
+          replaceCriteriaOpt = Some(InsertReplaceOn(
+            EqualTo(UnresolvedAttribute(Seq("t", "col1")), UnresolvedAttribute("col2")),
+            Some("t"))))
+      )
+    }
+  }
+
+  test("INSERT INTO REPLACE ON") {
+    val table = "testcat.ns1.ns2.tbl"
+    parseCompare(
+      sql = s"INSERT INTO $table REPLACE ON col1 = col2 SELECT * FROM source",
+      expected = InsertIntoStatement(
+        table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        partitionSpec = Map.empty,
+        userSpecifiedCols = Seq.empty,
+        query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        overwrite = true,
+        ifPartitionNotExists = false,
+        byName = false,
+        withSchemaEvolution = false,
+        replaceCriteriaOpt = Some(InsertReplaceOn(
+          EqualTo(UnresolvedAttribute("col1"), UnresolvedAttribute("col2")),
+          None)))
+    )
   }
 
   test("delete from table: delete all") {
