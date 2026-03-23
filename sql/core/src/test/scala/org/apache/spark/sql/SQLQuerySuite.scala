@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.{CommandResultExec, OneRowRelationExec, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -119,9 +120,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-14415: All functions should have own descriptions") {
+    val excludedBuiltins = Seq("cube", "grouping", "grouping_id", "rollup").map { name =>
+      s"${CatalogManager.SYSTEM_CATALOG_NAME}.${CatalogManager.BUILTIN_NAMESPACE}.$name"
+    }
     for (f <- spark.sessionState.functionRegistry.listFunction()) {
-      if (!Seq("cube", "grouping", "grouping_id", "rollup").contains(f.unquotedString)) {
-        checkKeywordsNotExist(sql(s"describe function $f"), "N/A.")
+      if (!excludedBuiltins.contains(f.unquotedString)) {
+        // Use quotedString so special characters (e.g. ^) in function names are valid in SQL.
+        checkKeywordsNotExist(sql(s"describe function ${f.quotedString}"), "N/A.")
       }
     }
   }
@@ -5086,6 +5091,22 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
     withSQLConf(SQLConf.PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX.key -> "false") {
       checkAnswer(sql(query), Row(1, 2))
+    }
+  }
+
+  gridTest("SPARK-55811: Catch NonFatal instead of UnresolvedException when calling " +
+    "nodeWithOutputColumnsString")(Seq("TRACE", "DEBUG", "INFO", "WARN", "ERROR")) { level =>
+    withSQLConf(SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> level) {
+      checkAnswer(sql("SELECT 1L UNION SELECT 1"), Row(1L))
+    }
+  }
+
+  test("SPARK-56035: Introduce `AggregationValidator` for single-pass `Aggregate` validation") {
+    withSQLConf(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "true") {
+      sql("SELECT col1 + rand() FROM VALUES(1) GROUP BY ALL")
+      sql("SELECT col1 + rand() FROM VALUES(1) GROUP BY 1")
+      sql("SELECT rand() FROM VALUES(1) GROUP BY ALL")
+      sql("SELECT col1 - rand() FROM VALUES(1) GROUP BY ALL")
     }
   }
 }

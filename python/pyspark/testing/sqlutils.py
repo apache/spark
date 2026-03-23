@@ -30,7 +30,6 @@ from pyspark.testing.utils import (
 )
 from pyspark.find_spark_home import _find_spark_home
 
-
 SPARK_HOME = _find_spark_home()
 
 

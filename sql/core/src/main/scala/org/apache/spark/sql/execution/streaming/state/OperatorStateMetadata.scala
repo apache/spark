@@ -183,13 +183,15 @@ object OperatorStateMetadataUtils extends Logging {
   }
 
   def getLastOffsetBatch(session: SparkSession, checkpointLocation: String): Long = {
-    val offsetLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).offsetLog
+    val offsetLog = new StreamingQueryCheckpointMetadata(
+      session, checkpointLocation, readOnly = true).offsetLog
     offsetLog.getLatest().map(_._1).getOrElse(throw
       StateDataSourceErrors.offsetLogUnavailable(0, checkpointLocation))
   }
 
   def getLastCommittedBatch(session: SparkSession, checkpointLocation: String): Option[Long] = {
-    val commitLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).commitLog
+    val commitLog = new StreamingQueryCheckpointMetadata(
+      session, checkpointLocation, readOnly = true).commitLog
     commitLog.getLatest().map(_._1)
   }
 }

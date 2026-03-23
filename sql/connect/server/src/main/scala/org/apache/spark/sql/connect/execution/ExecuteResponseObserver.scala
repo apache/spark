@@ -28,6 +28,7 @@ import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
+import org.apache.spark.sql.connect.IllegalStateErrors
 import org.apache.spark.sql.connect.config.Connect.CONNECT_EXECUTE_REATTACHABLE_OBSERVER_RETRY_BUFFER_SIZE
 import org.apache.spark.sql.connect.service.ExecuteHolder
 
@@ -133,7 +134,7 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
 
   def onNext(r: T): Unit = {
     if (!tryOnNext(r)) {
-      throw new IllegalStateException("Stream onNext can't be called after stream completed")
+      throw IllegalStateErrors.streamLifecycleAlreadyCompleted("onNext")
     }
   }
 
@@ -142,14 +143,14 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
    */
   def onNextComplete(r: T): Unit = responseLock.synchronized {
     if (!tryOnNext(r)) {
-      throw new IllegalStateException("Stream onNext can't be called after stream completed")
+      throw IllegalStateErrors.streamLifecycleAlreadyCompleted("onNext")
     }
     onCompleted()
   }
 
   def onError(t: Throwable): Unit = responseLock.synchronized {
     if (finalProducedIndex.nonEmpty) {
-      throw new IllegalStateException("Stream onError can't be called after stream completed")
+      throw IllegalStateErrors.streamLifecycleAlreadyCompleted("onError")
     }
     error = Some(t)
     finalProducedIndex = Some(lastProducedIndex) // no responses to be send after error.
@@ -161,7 +162,7 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
 
   def onCompleted(): Unit = responseLock.synchronized {
     if (finalProducedIndex.nonEmpty) {
-      throw new IllegalStateException("Stream onCompleted can't be called after stream completed")
+      throw IllegalStateErrors.streamLifecycleAlreadyCompleted("onCompleted")
     }
     finalProducedIndex = Some(lastProducedIndex)
     logDebug(
@@ -203,8 +204,7 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
         messageParameters = Map("index" -> index.toString, "responseId" -> responseId))
     } else if (getLastResponseIndex().exists(index > _)) {
       // If index > lastIndex, it's out of bounds. This is an internal error.
-      throw new IllegalStateException(
-        s"Cursor position $index is beyond last index ${getLastResponseIndex()}.")
+      throw IllegalStateErrors.cursorOutOfBounds(index, getLastResponseIndex().get)
     }
     ret
   }

@@ -121,6 +121,43 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
     }
   }
 
+  test("ParameterHandler - named parameter with emoji in SQL") {
+    val emoji = new String(Character.toChars(0x1F4AA)) // supplementary char (2 UTF-16 code units)
+    val context = NamedParameterContext(Map("team" -> Literal("abc")))
+    val sql = s"SELECT '${emoji}' AS a FROM T WHERE :team IS NULL"
+    val (result, _) = ParameterHandler.substituteParameters(sql, context)
+    assert(result === s"SELECT '${emoji}' AS a FROM T WHERE 'abc' IS NULL")
+  }
+
+  test("ParameterHandler - positional parameter with emoji in SQL") {
+    val emoji = new String(Character.toChars(0x1F4AA))
+    val context = PositionalParameterContext(Seq(Literal("abc")))
+    val sql = s"SELECT '${emoji}' AS a FROM T WHERE ? IS NULL"
+    val (result, _) = ParameterHandler.substituteParameters(sql, context)
+    assert(result === s"SELECT '${emoji}' AS a FROM T WHERE 'abc' IS NULL")
+  }
+
+  test("ParameterHandler - multiple params with emoji in SQL and replacement values") {
+    val flexed = new String(Character.toChars(0x1F4AA))
+    val tada = new String(Character.toChars(0x1F389))
+    val context = NamedParameterContext(Map(
+      "p1" -> Literal(tada),
+      "p2" -> Literal(42)
+    ))
+    val sql = s"SELECT '${flexed}', :p1, '${flexed}', :p2"
+    val (result, _) = ParameterHandler.substituteParameters(sql, context)
+    assert(result === s"SELECT '${flexed}', '${tada}', '${flexed}', 42")
+  }
+
+  test("ParameterHandler - positional params with multiple emojis") {
+    val flexed = new String(Character.toChars(0x1F4AA))
+    val tada = new String(Character.toChars(0x1F389))
+    val context = PositionalParameterContext(Seq(Literal(tada), Literal(99)))
+    val sql = s"SELECT '${flexed}', ?, '${flexed}${flexed}', ?"
+    val (result, _) = ParameterHandler.substituteParameters(sql, context)
+    assert(result === s"SELECT '${flexed}', '${tada}', '${flexed}${flexed}', 99")
+  }
+
   test("Large parameter set") {
 
     val largeParamMap = (1 to 100).map(i => s"param$i" -> Literal(i)).toMap

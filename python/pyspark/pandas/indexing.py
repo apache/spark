@@ -18,6 +18,7 @@
 """
 A loc indexer for pandas-on-Spark DataFrame/Series.
 """
+
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable
 from functools import reduce
@@ -64,9 +65,9 @@ class IndexerLike:
         from pyspark.pandas.frame import DataFrame
         from pyspark.pandas.series import Series
 
-        assert isinstance(
-            psdf_or_psser, (DataFrame, Series)
-        ), "unexpected argument type: {}".format(type(psdf_or_psser))
+        assert isinstance(psdf_or_psser, (DataFrame, Series)), (
+            "unexpected argument type: {}".format(type(psdf_or_psser))
+        )
         self._psdf_or_psser = psdf_or_psser
 
     @property
@@ -672,7 +673,8 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             )
 
             internal = self._internal.with_new_spark_column(
-                self._psdf_or_psser._column_label, scol  # TODO: dtype?
+                self._psdf_or_psser._column_label,
+                scol,  # TODO: dtype?
             )
             self._psdf_or_psser._update_internal_frame(internal, check_same_anchor=False)
         else:
@@ -776,7 +778,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                         if label in selected_column_labels_set
                     ]
                     if selected_column_labels != selected_labels_in_internal_order:
-                        # If requested columns are in different order than the DataFrame’s internal order,
+                        # If requested columns are in different order than the DataFrame's internal order,
                         # it returns early (no-op), matching pandas 3 behavior for that edge case.
                         return
                 value = F.lit(value)
@@ -1901,7 +1903,7 @@ def _test() -> None:
         .appName("pyspark.pandas.indexing tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.indexing,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

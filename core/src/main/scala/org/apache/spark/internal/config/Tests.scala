@@ -21,6 +21,8 @@ private[spark] object Tests {
 
   val TEST_USE_COMPRESSED_OOPS_KEY = "spark.test.useCompressedOops"
 
+  val TEST_USE_COMPACT_OBJECT_HEADERS_KEY = "spark.test.useCompactObjectHeaders"
+
   val TEST_MEMORY = ConfigBuilder("spark.testing.memory")
     .version("1.6.0")
     .longConf

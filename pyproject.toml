@@ -35,10 +35,16 @@ exclude = [
     "*python/pyspark/sql/streaming/proto/*",
     "*venv*/*",
 ]
+line-length = 100
 
 [tool.ruff.lint]
 extend-select = [
     "G010",  # logging-warn
+    # ambiguous unicode character
+    "RUF001",  # string
+    "RUF002",  # docstring
+    "RUF003",  # comment
+    # ambiguous unicode character end
     "RUF100",  # unused-noqa
 ]
 ignore = [
@@ -59,7 +65,7 @@ ignore = [
 [tool.black]
 # When changing the version, we have to update
 # GitHub workflow version and dev/reformat-python
-required-version = "23.12.1"
+required-version = "26.3.1"
 line-length = 100
 target-version = ['py39']
 include = '\.pyi?$'

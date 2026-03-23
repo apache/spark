@@ -309,4 +309,37 @@ class LikeSimplificationSuite extends PlanTest {
 
     comparePlans(Optimize.execute(originalQuery), originalQuery)
   }
+
+  // scalastyle:off nonascii
+  test("LikeSimplification with emojis") {
+    val originalQuery =
+      testRelation
+        .where($"a" like "😀%🥑")
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = testRelation
+      .where(Length($"a") >= 2 && (StartsWith($"a", "😀") && EndsWith($"a", "🥑")))
+      .analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("LikeSimplification StartsWith/EndsWith/Contains with emojis") {
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "😀%").analyze),
+      testRelation.where(StartsWith($"a", "😀")).analyze)
+
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "%🥑").analyze),
+      testRelation.where(EndsWith($"a", "🥑")).analyze)
+
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "%😇%").analyze),
+      testRelation.where(Contains($"a", "😇")).analyze)
+
+    comparePlans(
+      Optimize.execute(testRelation.where($"a" like "😀😇🥑").analyze),
+      testRelation.where($"a" === "😀😇🥑").analyze)
+  }
+  // scalastyle:on nonascii
 }

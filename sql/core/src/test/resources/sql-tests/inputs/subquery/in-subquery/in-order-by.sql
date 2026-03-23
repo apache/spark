@@ -1,5 +1,6 @@
 -- A test suite for ORDER BY in parent side, subquery, and both predicate subquery
 -- It includes correlated cases.
+--SET spark.sql.autoBroadcastJoinThreshold=-1
 
 -- Test sort operator with codegen on and off.
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=true

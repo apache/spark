@@ -450,6 +450,144 @@ class SparkConnectClientTestCase(unittest.TestCase):
         for resp in client._stub.ExecutePlan(req, metadata=None):
             assert resp.operation_id == "10a4c38e-7e87-40ee-9d6f-60ff0751e63b"
 
+    def test_on_exit_calls_release_and_close_when_enabled(self):
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+        client._release_session_on_exit = True
+        client._closed = False
+
+        call_tracker = {"release_session": 0, "close": 0}
+
+        def mock_release_session():
+            call_tracker["release_session"] += 1
+
+        def mock_close():
+            call_tracker["close"] += 1
+
+        client.release_session = mock_release_session
+        client.close = mock_close
+
+        client._on_exit()
+
+        self.assertEqual(call_tracker["release_session"], 1)
+        self.assertEqual(call_tracker["close"], 1)
+
+    def test_on_exit_does_not_call_when_release_disabled(self):
+        """Test _on_exit does nothing when _release_session_on_exit is False."""
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+        client._release_session_on_exit = False
+        client._closed = False
+
+        call_tracker = {"release_session": 0, "close": 0}
+
+        def mock_release_session():
+            call_tracker["release_session"] += 1
+
+        def mock_close():
+            call_tracker["close"] += 1
+
+        client.release_session = mock_release_session
+        client.close = mock_close
+
+        client._on_exit()
+
+        self.assertEqual(call_tracker["release_session"], 0)
+        self.assertEqual(call_tracker["close"], 0)
+
+    def test_on_exit_does_not_call_when_already_closed(self):
+        """Test _on_exit does nothing when client is already closed."""
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+        client._release_session_on_exit = True
+        client._closed = True
+
+        call_tracker = {"release_session": 0, "close": 0}
+
+        def mock_release_session():
+            call_tracker["release_session"] += 1
+
+        def mock_close():
+            call_tracker["close"] += 1
+
+        client.release_session = mock_release_session
+        client.close = mock_close
+
+        client._on_exit()
+
+        self.assertEqual(call_tracker["release_session"], 0)
+        self.assertEqual(call_tracker["close"], 0)
+
+    def test_on_exit_catches_release_session_exception(self):
+        """Test _on_exit continues to call close even if release_session raises."""
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+        client._release_session_on_exit = True
+        client._closed = False
+
+        call_tracker = {"release_session": 0, "close": 0}
+
+        def mock_release_session():
+            call_tracker["release_session"] += 1
+            raise Exception("release error")
+
+        def mock_close():
+            call_tracker["close"] += 1
+
+        client.release_session = mock_release_session
+        client.close = mock_close
+
+        # Should not raise
+        client._on_exit()
+
+        self.assertEqual(call_tracker["release_session"], 1)
+        self.assertEqual(call_tracker["close"], 1)
+
+    def test_on_exit_catches_close_exception(self):
+        """Test _on_exit silently catches exception from close."""
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+        client._release_session_on_exit = True
+        client._closed = False
+
+        call_tracker = {"release_session": 0, "close": 0}
+
+        def mock_release_session():
+            call_tracker["release_session"] += 1
+
+        def mock_close():
+            call_tracker["close"] += 1
+            raise Exception("close error")
+
+        client.release_session = mock_release_session
+        client.close = mock_close
+
+        # Should not raise
+        client._on_exit()
+
+        self.assertEqual(call_tracker["release_session"], 1)
+        self.assertEqual(call_tracker["close"], 1)
+
+    def test_on_exit_catches_both_exceptions(self):
+        """Test _on_exit handles both release_session and close raising exceptions."""
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+        client._release_session_on_exit = True
+        client._closed = False
+
+        call_tracker = {"release_session": 0, "close": 0}
+
+        def mock_release_session():
+            call_tracker["release_session"] += 1
+            raise Exception("release error")
+
+        def mock_close():
+            call_tracker["close"] += 1
+            raise Exception("close error")
+
+        client.release_session = mock_release_session
+        client.close = mock_close
+
+        # Should not raise
+        client._on_exit()
+
+        self.assertEqual(call_tracker["release_session"], 1)
+        self.assertEqual(call_tracker["close"], 1)
+
     def test_get_operations_statuses_all(self):
         """Test get_operations_statuses returns all operation statuses when no IDs specified."""
         OperationStatus = proto.GetStatusResponse.OperationStatus

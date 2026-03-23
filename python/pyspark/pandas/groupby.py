@@ -18,6 +18,7 @@
 """
 A wrapper for GroupedData to behave like pandas GroupBy.
 """
+
 from abc import ABCMeta, abstractmethod
 import inspect
 from collections import defaultdict, namedtuple
@@ -753,12 +754,15 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         if not 0 <= q <= 1:
             raise ValueError("'q' must be between 0 and 1. Got '%s' instead" % q)
         if any(isinstance(_agg_col.spark.data_type, BooleanType) for _agg_col in self._agg_columns):
-            warnings.warn(
-                f"Allowing bool dtype in {self.__class__.__name__}.quantile is deprecated "
-                "and will raise in a future version, matching the Series/DataFrame behavior. "
-                "Cast to uint8 dtype before calling quantile instead.",
-                FutureWarning,
-            )
+            if LooseVersion(pd.__version__) < "3.0.0":
+                warnings.warn(
+                    f"Allowing bool dtype in {self.__class__.__name__}.quantile is deprecated "
+                    "and will raise in a future version, matching the Series/DataFrame behavior. "
+                    "Cast to uint8 dtype before calling quantile instead.",
+                    FutureWarning,
+                )
+            else:
+                raise TypeError("Cannot use quantile with bool dtype")
 
         return self._reduce_for_stat_function(
             lambda col: F.percentile_approx(col.cast(DoubleType()), q, accuracy),
@@ -1988,8 +1992,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             if include_groups:
                 raise ValueError("include_groups=True is no longer allowed.")
 
-        spec = inspect.getfullargspec(func)
-        return_sig = spec.annotations.get("return", None)
+        try:
+            spec = inspect.getfullargspec(func)
+            return_sig = spec.annotations.get("return", None)
+        except TypeError:
+            return_sig = None
         should_infer_schema = return_sig is None
         should_retain_index = should_infer_schema
 
@@ -3264,7 +3271,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Parameters
         ----------
         dropna : boolean, default True
-            Don’t include NaN in the counts.
+            Don't include NaN in the counts.
 
         Returns
         -------
@@ -4245,7 +4252,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
                 F.col(f"{auxiliary_col_name}.{CORRELATION_CORR_OUTPUT_COLUMN}"),
             )
 
-        sdf = sdf.orderBy(groupkey_names + [index_1_col_name])  # type: ignore[arg-type]
+        sdf = sdf.orderBy(groupkey_names + [index_1_col_name])
 
         sdf = sdf.select(
             *[F.col(col) for col in groupkey_names + numeric_col_names],
@@ -4728,7 +4735,7 @@ def _test() -> None:
         .appName("pyspark.pandas.groupby tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.groupby,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

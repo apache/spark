@@ -196,7 +196,14 @@ private[spark] class BlockManager(
   // We initialize the ShuffleManager later in SparkContext and Executor, to allow
   // user jars to define custom ShuffleManagers, as such `_shuffleManager` will be null here
   // (except for tests) and we ask for the instance from the SparkEnv.
-  private lazy val shuffleManager = Option(_shuffleManager).getOrElse(SparkEnv.get.shuffleManager)
+  private lazy val shuffleManager = {
+    Option(_shuffleManager).getOrElse {
+      // Wait for ShuffleManager to be initialized before handling shuffle operations.
+      // Exception will be thrown if it is not initialized within the configured timeout.
+      waitForShuffleManagerInit()
+      SparkEnv.get.shuffleManager
+    }
+  }
 
   // Similarly, we also initialize MemoryManager later after DriverPlugin is loaded, to
   // allow the plugin to overwrite certain memory configurations. The `_memoryManager` will be
@@ -206,7 +213,7 @@ private[spark] class BlockManager(
 
   // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)`
   private[spark] val externalShuffleServiceEnabled: Boolean = externalBlockStoreClient.isDefined
-  private val isDriver = executorId == SparkContext.DRIVER_IDENTIFIER
+  private val isDriver = SparkContext.isDriver(executorId)
 
   private val remoteReadNioBufferConversion =
     conf.get(Network.NETWORK_REMOTE_READ_NIO_BUFFER_CONVERSION)
@@ -312,6 +319,32 @@ private[spark] class BlockManager(
   // for shuffles. Used in BlockManagerDecommissioner & block puts.
   lazy val migratableResolver: MigratableResolver = {
     shuffleManager.shuffleBlockResolver.asInstanceOf[MigratableResolver]
+  }
+
+  // Timeout waiting for ShuffleManager initialization when receiving shuffle migration requests
+  private val shuffleManagerInitWaitingTimeoutMs =
+    conf.get(config.STORAGE_SHUFFLE_MANAGER_INIT_WAITING_TIMEOUT)
+
+  /**
+   * Wait for the ShuffleManager to be initialized before handling shuffle migration requests.
+   * This is necessary because BlockManager is registered with the driver before ShuffleManager
+   * is initialized in Executor, which could cause NPE if shuffle migration requests are received
+   * before ShuffleManager is ready.
+   *
+   * @throws ShuffleManagerNotInitializedException if ShuffleManager is not initialized within
+   *         the configured timeout
+   */
+  private def waitForShuffleManagerInit(): Unit = {
+    if (!SparkEnv.get.isShuffleManagerInitialized) {
+      logInfo(log"Waiting for ShuffleManager initialization before handling shuffle operations")
+
+      if (!SparkEnv.get.waitForShuffleManagerInit(shuffleManagerInitWaitingTimeoutMs)) {
+        logWarning(log"ShuffleManager not initialized within " +
+          log"${MDC(TIMEOUT, shuffleManagerInitWaitingTimeoutMs)}ms " +
+          log"while handling shuffle operations")
+        throw new ShuffleManagerNotInitializedException(shuffleManagerInitWaitingTimeoutMs)
+      }
+    }
   }
 
   override def getLocalDiskDirs: Array[String] = diskBlockManager.localDirsString

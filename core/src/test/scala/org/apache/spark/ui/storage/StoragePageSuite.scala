@@ -89,7 +89,7 @@ class StoragePageSuite extends SparkFunSuite {
         }
       }
     }
-    assert((xmlNodes \\ "th").map(_.text) === headerRow.map(_.text))
+    assert((xmlNodes \\ "th").map(_.text.trim) === headerRow.map(_.text.trim))
 
     assert((xmlNodes \\ "tr").size === 3)
     assert(((xmlNodes \\ "tr")(0) \\ "td").map(_.text.trim) ===

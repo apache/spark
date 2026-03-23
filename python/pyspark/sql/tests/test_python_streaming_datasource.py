@@ -82,8 +82,7 @@ def wait_for_condition(query, condition_fn, timeout_sec=30):
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class BasePythonStreamingDataSourceTestsMixin:
     def test_basic_streaming_data_source_class(self):
-        class MyDataSource(DataSource):
-            ...
+        class MyDataSource(DataSource): ...
 
         options = dict(a=1, b=2)
         ds = MyDataSource(options=options)
@@ -228,9 +227,9 @@ class BasePythonStreamingDataSourceTestsMixin:
                 if isinstance(limit, ReadAllAvailable):
                     end_offset = start_idx + 10
                 else:
-                    assert isinstance(
-                        limit, ReadMaxRows
-                    ), "Expected ReadMaxRows read limit but got " + str(type(limit))
+                    assert isinstance(limit, ReadMaxRows), (
+                        "Expected ReadMaxRows read limit but got " + str(type(limit))
+                    )
                     end_offset = start_idx + limit.max_rows
                 return {"partition-1": end_offset}
 
@@ -267,9 +266,9 @@ class BasePythonStreamingDataSourceTestsMixin:
                 if isinstance(limit, ReadAllAvailable):
                     end_offset = start_idx + 10
                 else:
-                    assert isinstance(
-                        limit, ReadMaxRows
-                    ), "Expected ReadMaxRows read limit but got " + str(type(limit))
+                    assert isinstance(limit, ReadMaxRows), (
+                        "Expected ReadMaxRows read limit but got " + str(type(limit))
+                    )
                     end_offset = min(
                         start_idx + limit.max_rows, self.desired_end_offset["partition-1"]
                     )

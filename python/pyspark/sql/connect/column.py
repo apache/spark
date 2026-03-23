@@ -14,10 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
-
 import datetime
 import decimal
 import warnings
@@ -55,7 +51,6 @@ from pyspark.sql.connect.expressions import (
     DropField,
 )
 from pyspark.errors.utils import with_origin_to_class
-
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -616,7 +611,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.column,
         globs=globs,
         optionflags=doctest.ELLIPSIS

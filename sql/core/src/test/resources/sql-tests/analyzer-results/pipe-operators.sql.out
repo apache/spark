@@ -1534,7 +1534,8 @@ table t
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "errorClass" : "WINDOW_FUNCTION_NOT_ALLOWED_IN_CLAUSE",
+  "sqlState" : "42601",
   "messageParameters" : {
     "clauseName" : "WHERE"
   }
@@ -1565,7 +1566,8 @@ select * from t where sum(x) over (partition by y) = 1
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "errorClass" : "WINDOW_FUNCTION_NOT_ALLOWED_IN_CLAUSE",
+  "sqlState" : "42601",
   "messageParameters" : {
     "clauseName" : "WHERE"
   }

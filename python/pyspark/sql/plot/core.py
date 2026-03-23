@@ -458,7 +458,7 @@ class PySparkPlotAccessor:
         self, column: Optional[Union[str, List[str]]] = None, bins: int = 10, **kwargs: Any
     ) -> "Figure":
         """
-        Draw one histogram of the DataFrame’s columns.
+        Draw one histogram of the DataFrame's columns.
 
         A `histogram`_ is a representation of the distribution of data.
 
@@ -530,9 +530,9 @@ class PySparkKdePlotBase:
         ind: Sequence[float],
     ) -> Column:
         # refers to org.apache.spark.mllib.stat.KernelDensity
-        assert bw_method is not None and isinstance(
-            bw_method, (int, float)
-        ), "'bw_method' must be set as a scalar number."
+        assert bw_method is not None and isinstance(bw_method, (int, float)), (
+            "'bw_method' must be set as a scalar number."
+        )
 
         assert ind is not None, "'ind' must be a scalar array."
 

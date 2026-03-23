@@ -20,6 +20,7 @@ from typing import Any, Union, cast
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import functions as F
 from pyspark.sql.types import IntegralType, StringType
 from pyspark.sql.utils import pyspark_column_op
@@ -139,6 +140,13 @@ class StringOps(DataTypeOps):
             return _as_string_type(index_ops, dtype, null_str=null_str)
         else:
             return _as_other_type(index_ops, dtype, spark_type)
+
+    def restore(self, col: pd.Series) -> pd.Series:
+        """Restore column when to_pandas."""
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return super().restore(col)
+        else:
+            return col.astype(self.dtype)
 
 
 class StringExtensionOps(StringOps):
