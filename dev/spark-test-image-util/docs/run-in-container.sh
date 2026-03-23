@@ -27,7 +27,7 @@ mkdir -p ~/.bin
 mkdir -p ~/.gem
 
 # 2.Install bundler.
-gem install bundler -v 2.4.22
+gem install bundler -v 2.4.22 --install-dir ~/.gem --bindir ~/.bin
 cd /__w/spark/spark/docs
 bundle install
 
