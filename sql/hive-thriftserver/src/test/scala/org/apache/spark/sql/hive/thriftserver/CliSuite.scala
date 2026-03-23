@@ -25,7 +25,6 @@ import java.util.concurrent.CountDownLatch
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Promise
 import scala.concurrent.duration._
-import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.hive.cli.CliSessionState
 import org.apache.hadoop.hive.ql.session.SessionState
@@ -680,10 +679,271 @@ class CliSuite extends SparkFunSuite {
       "-- comment \nSELECT 1" -> Seq("-- comment \nSELECT 1"),
       "/*  comment */  " -> Seq()
     ).foreach { case (query, ret) =>
-      assert(cli.splitSemiColon(query).asScala === ret)
+      assert(cli.splitSemiColon(query) === ret)
     }
     sessionState.close()
     SparkSQLEnv.stop()
+  }
+
+  test("SQL Scripting: splitSemiColon should not split inside compound blocks") {
+    val sparkConf = new SparkConf(loadDefaults = true)
+      .setMaster("local-cluster[1,1,1024]")
+      .setAppName("sql-scripting-split")
+    val sparkContext = new SparkContext(sparkConf)
+    SparkSQLEnv.sparkContext = sparkContext
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    val cliConf = HiveClientImpl.newHiveConf(sparkConf, hadoopConf)
+    val sessionState = new CliSessionState(cliConf)
+    SessionState.setCurrentSessionState(sessionState)
+    val cli = new SparkSQLCLIDriver
+
+    // Simple BEGIN...END
+    assert(cli.splitSemiColon(
+      """BEGIN
+        |  SELECT 1;
+        |END""".stripMargin) ===
+      Seq(
+        """BEGIN
+          |  SELECT 1;
+          |END""".stripMargin))
+
+    // BEGIN...END with trailing semicolon
+    assert(cli.splitSemiColon(
+      """BEGIN
+        |  SELECT 1;
+        |END;""".stripMargin) ===
+      Seq(
+        """BEGIN
+          |  SELECT 1;
+          |END""".stripMargin))
+
+    // Multiple statements inside the block
+    assert(cli.splitSemiColon(
+      """BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |END;""".stripMargin) ===
+      Seq(
+        """BEGIN
+          |  SELECT 1;
+          |  SELECT 2;
+          |END""".stripMargin))
+
+    // Regular statements before and after a scripting block should still be split
+    assert(cli.splitSemiColon(
+      """SELECT 0;
+        |BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |END;
+        |SELECT 3;""".stripMargin) ===
+      Seq(
+        "SELECT 0",
+        """
+          |BEGIN
+          |  SELECT 1;
+          |  SELECT 2;
+          |END""".stripMargin,
+        """
+          |SELECT 3""".stripMargin))
+
+    // IF...END IF inside a block
+    assert(cli.splitSemiColon(
+      """BEGIN
+        |  IF x = 1 THEN
+        |    SELECT 1;
+        |  END IF;
+        |END;""".stripMargin) ===
+      Seq(
+        """BEGIN
+          |  IF x = 1 THEN
+          |    SELECT 1;
+          |  END IF;
+          |END""".stripMargin))
+
+    // WHILE...DO...END WHILE inside a block
+    assert(cli.splitSemiColon(
+      """BEGIN
+        |  WHILE x > 0 DO
+        |    SET x = x - 1;
+        |  END WHILE;
+        |END;""".stripMargin) ===
+      Seq(
+        """BEGIN
+          |  WHILE x > 0 DO
+          |    SET x = x - 1;
+          |  END WHILE;
+          |END""".stripMargin))
+
+    // FOR...DO...END FOR inside a block
+    assert(cli.splitSemiColon(
+      """BEGIN
+        |  FOR r AS SELECT * FROM t DO
+        |    SELECT r.id;
+        |  END FOR;
+        |END;""".stripMargin) ===
+      Seq(
+        """BEGIN
+          |  FOR r AS SELECT * FROM t DO
+          |    SELECT r.id;
+          |  END FOR;
+          |END""".stripMargin))
+
+    // LOOP...END LOOP inside a block
+    assert(cli.splitSemiColon(
+      """BEGIN
+        |  LOOP
+        |    SELECT 1;
+        |  END LOOP;
+        |END;""".stripMargin) ===
+      Seq(
+        """BEGIN
+          |  LOOP
+          |    SELECT 1;
+          |  END LOOP;
+          |END""".stripMargin))
+
+    // REPEAT...END REPEAT inside a block
+    assert(cli.splitSemiColon(
+      """BEGIN
+        |  REPEAT
+        |    SELECT 1;
+        |  UNTIL x > 0 END REPEAT;
+        |END;""".stripMargin) ===
+      Seq(
+        """BEGIN
+          |  REPEAT
+          |    SELECT 1;
+          |  UNTIL x > 0 END REPEAT;
+          |END""".stripMargin))
+
+    // CASE statement inside a block
+    assert(cli.splitSemiColon(
+      """BEGIN
+        |  CASE x
+        |    WHEN 1 THEN SELECT 'one';
+        |  END CASE;
+        |END;""".stripMargin) ===
+      Seq(
+        """BEGIN
+          |  CASE x
+          |    WHEN 1 THEN SELECT 'one';
+          |  END CASE;
+          |END""".stripMargin))
+
+    // CASE expression (not a scripting block) inside a scripting block
+    assert(cli.splitSemiColon(
+      """BEGIN
+        |  SELECT CASE WHEN x=1 THEN 'a' ELSE 'b' END;
+        |END;""".stripMargin) ===
+      Seq(
+        """BEGIN
+          |  SELECT CASE WHEN x=1 THEN 'a' ELSE 'b' END;
+          |END""".stripMargin))
+
+    // Nested BEGIN...END
+    assert(cli.splitSemiColon(
+      """BEGIN
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  SELECT 2;
+        |END;""".stripMargin) ===
+      Seq(
+        """BEGIN
+          |  BEGIN
+          |    SELECT 1;
+          |  END;
+          |  SELECT 2;
+          |END""".stripMargin))
+
+    // `IF(` is the Spark SQL built-in function, not a scripting IF -- the block must
+    // not be kept unsplit merely because IF appears inside it.
+    assert(cli.splitSemiColon(
+      """BEGIN
+        |  SELECT IF(x > 0, 'pos', 'non-pos');
+        |END;""".stripMargin) ===
+      Seq(
+        """BEGIN
+          |  SELECT IF(x > 0, 'pos', 'non-pos');
+          |END""".stripMargin))
+
+    // Labeled block: label: BEGIN ... END label
+    assert(cli.splitSemiColon(
+      """outer: BEGIN
+        |  SELECT 1;
+        |END outer;""".stripMargin) ===
+      Seq(
+        """outer: BEGIN
+          |  SELECT 1;
+          |END outer""".stripMargin))
+
+    sessionState.close()
+    SparkSQLEnv.stop()
+  }
+
+  test("SQL Scripting: sqlScriptingBlockDepth correctly tracks nesting") {
+    import SparkSQLCLIDriver.sqlScriptingBlockDepth
+
+    // Not a script
+    assert(sqlScriptingBlockDepth("SELECT 1") === 0)
+    // Simple open block
+    assert(sqlScriptingBlockDepth(
+      """BEGIN
+        |  SELECT 1;""".stripMargin) === 1)
+    // Closed block
+    assert(sqlScriptingBlockDepth(
+      """BEGIN
+        |  SELECT 1;
+        |END""".stripMargin) === 0)
+    // Trailing semicolon after END still closes
+    assert(sqlScriptingBlockDepth("BEGIN SELECT 1; END;") === 0)
+    // Nested block open
+    assert(sqlScriptingBlockDepth(
+      """BEGIN
+        |  BEGIN
+        |    SELECT 1;""".stripMargin) === 2)
+    // IF still open
+    assert(sqlScriptingBlockDepth(
+      """BEGIN
+        |  IF x=1 THEN
+        |    SELECT 1;""".stripMargin) === 2)
+    // IF closed
+    assert(sqlScriptingBlockDepth(
+      """BEGIN
+        |  IF x=1 THEN
+        |    SELECT 1;
+        |  END IF;""".stripMargin) === 1)
+    // WHILE/DO still open
+    assert(sqlScriptingBlockDepth(
+      """BEGIN
+        |  WHILE x>0 DO
+        |    SET x=x-1;""".stripMargin) === 2)
+    // WHILE closed
+    assert(sqlScriptingBlockDepth(
+      """BEGIN
+        |  WHILE x>0 DO
+        |    SET x=x-1;
+        |  END WHILE;""".stripMargin) === 1)
+    // CASE expression: CASE increments, END decrements -- net zero inside the block
+    assert(sqlScriptingBlockDepth(
+      """BEGIN
+        |  SELECT CASE WHEN 1=1 THEN 'a' END;""".stripMargin) === 1)
+    // IF( is a Spark SQL function call, not a scripting IF -- must not increment
+    assert(sqlScriptingBlockDepth(
+      """BEGIN
+        |  SELECT IF(1=1, 'a', 'b');""".stripMargin) === 1)
+    // Keywords inside string literals must be ignored
+    assert(sqlScriptingBlockDepth(
+      """BEGIN
+        |  SELECT 'END';""".stripMargin) === 1)
+    // Keywords inside line comments must be ignored
+    assert(sqlScriptingBlockDepth(
+      """BEGIN
+        |  -- END
+        |  SELECT 1;""".stripMargin) === 1)
+    // Keywords inside bracketed comments must be ignored
+    assert(sqlScriptingBlockDepth("BEGIN /* END */ SELECT 1;") === 1)
   }
 
   testRetry("SPARK-39068: support in-memory catalog and running concurrently") {
