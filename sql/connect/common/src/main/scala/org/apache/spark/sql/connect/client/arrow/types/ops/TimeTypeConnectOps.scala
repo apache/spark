@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect.client.arrow
+package org.apache.spark.sql.connect.client.arrow.types.ops
 
 import java.time.LocalTime
 
@@ -25,6 +25,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.LocalTimeEncoder
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils
+import org.apache.spark.sql.connect.client.arrow.{ArrowDeserializers, ArrowSerializer, TimeVectorReader}
 import org.apache.spark.sql.connect.common.types.ops.{ConnectArrowTypeOps, ProtoTypeOps}
 import org.apache.spark.sql.types.{DataType, TimeType}
 
@@ -34,9 +35,9 @@ import org.apache.spark.sql.types.{DataType, TimeType}
  * Implements both ProtoTypeOps (proto DataType/Literal conversions) and ConnectArrowTypeOps
  * (Arrow serialization/deserialization) in a single class.
  *
- * Lives in the arrow package to access arrow-private types (ArrowVectorReader, TimeVectorReader,
- * ArrowSerializer.Serializer, ArrowDeserializers.LeafFieldDeserializer). Placed under types/ops
- * subdirectory to separate ops implementations from core arrow infrastructure.
+ * Lives under the arrow.types.ops sub-package to access arrow-private types
+ * (TimeVectorReader, ArrowSerializer.Serializer, ArrowDeserializers.LeafFieldDeserializer)
+ * while keeping ops implementations separate from core arrow infrastructure.
  *
  * @param t
  *   The TimeType with precision information

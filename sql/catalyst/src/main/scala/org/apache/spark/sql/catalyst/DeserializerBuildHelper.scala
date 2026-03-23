@@ -294,7 +294,7 @@ object DeserializerBuildHelper {
       path: Expression,
       walkedTypePath: WalkedTypePath,
       isTopLevel: Boolean = false): Expression =
-    CatalystTypeOps(enc.dataType).map(_.createDeserializer(path))
+    CatalystTypeOps(enc.dataType).map(_.createDeserializer(path, walkedTypePath, isTopLevel))
       .getOrElse(createDeserializerDefault(enc, path, walkedTypePath, isTopLevel))
 
   private def createDeserializerDefault(

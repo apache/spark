@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.common.types.ops
 
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.LocalTimeEncoder
-import org.apache.spark.sql.connect.client.arrow.TimeTypeConnectOps
+import org.apache.spark.sql.connect.client.arrow.types.ops.TimeTypeConnectOps
 import org.apache.spark.sql.types.{DataType, TimeType}
 
 /**
@@ -40,6 +40,11 @@ import org.apache.spark.sql.types.{DataType, TimeType}
 trait ConnectArrowTypeOps extends Serializable {
 
   def encoder: AgnosticEncoder[_]
+
+  // Note: Methods use Any parameter/return types because the concrete Arrow types
+  // (ArrowSerializer.Serializer, ArrowDeserializers.Deserializer, ArrowVectorReader) are
+  // private[arrow] and cannot be referenced from the types.ops package. Call sites in
+  // the arrow package cast to the expected types.
 
   /** Creates an Arrow serializer for writing values to a vector. Returns a Serializer. */
   def createArrowSerializer(vector: Any): Any
@@ -62,6 +67,7 @@ object ConnectArrowTypeOps {
   def apply(enc: AgnosticEncoder[_]): Option[ConnectArrowTypeOps] =
     enc match {
       case LocalTimeEncoder => Some(new TimeTypeConnectOps(TimeType()))
+      // Add new framework encoders here
       case _ => None
     }
 
@@ -69,6 +75,7 @@ object ConnectArrowTypeOps {
   def apply(dt: DataType): Option[ConnectArrowTypeOps] =
     dt match {
       case tt: TimeType => Some(new TimeTypeConnectOps(tt))
+      // Add new framework types here
       case _ => None
     }
 }

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.types.ops
 
 import org.apache.arrow.vector.ValueVector
 
+import org.apache.spark.sql.catalyst.WalkedTypePath
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.arrow.ArrowFieldWriter
 import org.apache.spark.sql.types.DataType
@@ -63,13 +64,20 @@ trait CatalystTypeOps { self: TypeOps =>
    * to its external representation.
    *
    * Used by DeserializerBuildHelper for Dataset[T] deserialization.
-   *
-   * @param path
-   *   the expression representing the internal value
-   * @return
-   *   an Expression that performs the conversion
+   * Most types override this simple version. Types that need the walked type path
+   * (for error messages) or isTopLevel (for null handling) should override the
+   * 3-param overload instead.
    */
   def createDeserializer(path: Expression): Expression
+
+  /**
+   * Creates a deserializer with full context. Default delegates to the simple version.
+   * Override if walkedTypePath or isTopLevel affects deserialization behavior.
+   */
+  def createDeserializer(
+      path: Expression,
+      walkedTypePath: WalkedTypePath,
+      isTopLevel: Boolean): Expression = createDeserializer(path)
 
   /**
    * Creates an ArrowFieldWriter for writing values of this type to an Arrow vector.

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connect.common.types.ops
 
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.connect.client.arrow.TimeTypeConnectOps
+import org.apache.spark.sql.connect.client.arrow.types.ops.TimeTypeConnectOps
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{DataType, TimeType}
 
@@ -64,6 +64,7 @@ object ProtoTypeOps {
     if (!SqlApiConf.get.typesFrameworkEnabled) return None
     dt match {
       case tt: TimeType => Some(new TimeTypeConnectOps(tt))
+      // Add new framework types here
       case _ => None
     }
   }
@@ -76,6 +77,7 @@ object ProtoTypeOps {
     value match {
       case v: java.time.LocalTime =>
         Some(new TimeTypeConnectOps(TimeType()).toLiteralProto(v, builder))
+      // Add new framework value types here
       case _ => None
     }
   }
@@ -91,6 +93,7 @@ object ProtoTypeOps {
         val time = t.getTime
         if (time.hasPrecision) Some(TimeType(time.getPrecision))
         else Some(TimeType())
+      // Add new framework proto kinds here
       case _ => None
     }
   }
@@ -104,6 +107,7 @@ object ProtoTypeOps {
     kindCase match {
       case proto.DataType.KindCase.TIME =>
         Some(new TimeTypeConnectOps(TimeType()).getScalaConverter)
+      // Add new framework proto kinds here
       case _ => None
     }
   }
@@ -117,6 +121,7 @@ object ProtoTypeOps {
     literal.getLiteralTypeCase match {
       case proto.Expression.Literal.LiteralTypeCase.TIME =>
         Some(new TimeTypeConnectOps(TimeType()).getProtoDataTypeFromLiteral(literal))
+      // Add new framework literal types here
       case _ => None
     }
   }
