@@ -40,7 +40,7 @@ The key advantage of SDP is its declarative approach - you define what tables sh
 A quick way to install SDP is with pip:
 
 ```
-pip install pyspark[pipelines]
+pip install "pyspark[pipelines]"
 ```
 
 See the [downloads page](//spark.apache.org/downloads.html) for more installation options.
