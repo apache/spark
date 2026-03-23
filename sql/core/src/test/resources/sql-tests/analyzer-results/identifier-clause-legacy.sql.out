@@ -540,13 +540,13 @@ DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 -- !query
 REFRESH FUNCTION IDENTIFIER('ident.' || 'myDoubleAvg')
 -- !query analysis
-RefreshFunctionCommand ident, mydoubleavg
+RefreshFunctionCommand spark_catalog.ident.myDoubleAvg
 
 
 -- !query
 DROP FUNCTION IDENTIFIER('ident.' || 'myDoubleAvg')
 -- !query analysis
-DropFunctionCommand spark_catalog.ident.mydoubleavg, false, false
+DropFunctionCommand spark_catalog.ident.myDoubleAvg, false, false
 
 
 -- !query
@@ -883,7 +883,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
-    "namespace" : "`a`.`b`",
+    "identifier" : "`a`.`b`.`c`",
     "sessionCatalog" : "spark_catalog"
   }
 }
@@ -897,7 +897,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
-    "namespace" : "`a`.`b`",
+    "identifier" : "`a`.`b`.`c`",
     "sessionCatalog" : "spark_catalog"
   }
 }
@@ -911,7 +911,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
-    "namespace" : "`a`.`b`",
+    "identifier" : "`a`.`b`.`c`",
     "sessionCatalog" : "spark_catalog"
   }
 }
@@ -925,7 +925,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
-    "namespace" : "`a`.`b`",
+    "identifier" : "`a`.`b`.`c`",
     "sessionCatalog" : "spark_catalog"
   }
 }
@@ -939,7 +939,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
-    "namespace" : "`a`.`b`.`c`",
+    "identifier" : "`a`.`b`.`c`.`d`",
     "sessionCatalog" : "spark_catalog"
   }
 }
@@ -972,11 +972,11 @@ VALUES(IDENTIFIER('a.b.c.d')())
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
-  "sqlState" : "42601",
+  "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
+  "sqlState" : "42K05",
   "messageParameters" : {
     "identifier" : "`a`.`b`.`c`.`d`",
-    "limit" : "2"
+    "sessionCatalog" : "spark_catalog"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -993,10 +993,12 @@ CREATE TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg') AS 'test.org.a
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_DATABASE",
-  "sqlState" : "42000",
+  "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
+  "sqlState" : "42602",
   "messageParameters" : {
-    "database" : "`default`"
+    "objectName" : "`myDoubleAvg`",
+    "objectType" : "FUNCTION",
+    "qualifier" : "`default`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1013,11 +1015,12 @@ DROP TEMPORARY FUNCTION IDENTIFIER('default.my' || 'DoubleAvg')
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-  "sqlState" : "42000",
+  "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
+  "sqlState" : "42602",
   "messageParameters" : {
-    "name" : "`default`.`myDoubleAvg`",
-    "statement" : "DROP TEMPORARY FUNCTION"
+    "objectName" : "`myDoubleAvg`",
+    "objectType" : "FUNCTION",
+    "qualifier" : "`default`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2434,6 +2437,47 @@ DROP TABLE unpivot_test
 -- !query analysis
 DropTable false, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clause_test_schema.unpivot_test
+
+
+-- !query
+CREATE TABLE describe_col_test(c1 INT, c2 STRING, c3 DOUBLE) USING CSV
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`identifier_clause_test_schema`.`describe_col_test`, false
+
+
+-- !query
+DESCRIBE describe_col_test IDENTIFIER('c1')
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+DESCRIBE describe_col_test IDENTIFIER('c2')
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+DROP TABLE describe_col_test
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clause_test_schema.describe_col_test
 
 
 -- !query

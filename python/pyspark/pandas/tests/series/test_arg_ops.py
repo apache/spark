@@ -14,11 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
 import numpy as np
 import pandas as pd
 
+from pyspark.loose_version import LooseVersion
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -153,15 +153,36 @@ class SeriesArgOpsMixin:
         psser2 = ps.from_pandas(pser2)
         self.assert_eq(pser2.argmin(), psser2.argmin())
         self.assert_eq(pser2.argmax(), psser2.argmax())
-        self.assert_eq(pser2.argmin(skipna=False), psser2.argmin(skipna=False))
-        self.assert_eq(pser2.argmax(skipna=False), psser2.argmax(skipna=False))
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(pser2.argmin(skipna=False), psser2.argmin(skipna=False))
+            self.assert_eq(pser2.argmax(skipna=False), psser2.argmax(skipna=False))
 
-        # Null Series
-        self.assert_eq(pd.Series([np.nan]).argmin(), ps.Series([np.nan]).argmin())
-        self.assert_eq(pd.Series([np.nan]).argmax(), ps.Series([np.nan]).argmax())
-        self.assert_eq(
-            pd.Series([np.nan]).argmax(skipna=False), ps.Series([np.nan]).argmax(skipna=False)
-        )
+            # Null Series
+            self.assert_eq(pd.Series([np.nan]).argmin(), ps.Series([np.nan]).argmin())
+            self.assert_eq(pd.Series([np.nan]).argmax(), ps.Series([np.nan]).argmax())
+            self.assert_eq(
+                pd.Series([np.nan]).argmin(skipna=False), ps.Series([np.nan]).argmin(skipna=False)
+            )
+            self.assert_eq(
+                pd.Series([np.nan]).argmax(skipna=False), ps.Series([np.nan]).argmax(skipna=False)
+            )
+        else:
+            with self.assertRaisesRegex(ValueError, "Encountered an NA value with skipna=False"):
+                psser2.argmin(skipna=False)
+            with self.assertRaisesRegex(ValueError, "Encountered an NA value with skipna=False"):
+                psser2.argmax(skipna=False)
+
+            # Null Series
+            with self.assertRaisesRegex(ValueError, "Encountered all NA values$"):
+                ps.Series([np.nan]).argmin()
+            with self.assertRaisesRegex(ValueError, "Encountered all NA values$"):
+                ps.Series([np.nan]).argmax()
+            with self.assertRaisesRegex(ValueError, "Encountered an NA value with skipna=False"):
+                ps.Series([np.nan]).argmin(skipna=False)
+                with self.assertRaisesRegex(
+                    ValueError, "Encountered an NA value with skipna=False"
+                ):
+                    ps.Series([np.nan]).argmax(skipna=False)
 
         with self.assertRaisesRegex(ValueError, "attempt to get argmin of an empty sequence"):
             ps.Series([]).argmin()
@@ -182,12 +203,6 @@ class SeriesArgOpsTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.series.test_arg_ops import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

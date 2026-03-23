@@ -25,8 +25,6 @@ import java.util.Locale
 
 import scala.util.control.NonFatal
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -47,7 +45,7 @@ import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
  * See the documentation of public vals in this class for information on how test execution can be
  * configured using system properties.
  */
-abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
+abstract class HiveComparisonTest extends SparkFunSuite {
 
   override protected val enableAutoThreadAudit = false
 

@@ -418,10 +418,39 @@ case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH"
   since = "3.0.0",
   group = "math_funcs")
 case class Acosh(child: Expression)
-  extends UnaryMathExpression((x: Double) => StrictMath.log(x + math.sqrt(x * x - 1.0)), "ACOSH") {
+  extends UnaryMathExpression((x: Double) => {
+    // fdlibm e_acosh.c algorithm
+    if (x < 1.0) {
+      Double.NaN
+    } else if (x >= (1 << 28)) {
+      StrictMath.log(x) + StrictMath.log(2.0)
+    } else if (x == 1.0) {
+      0.0
+    } else if (x > 2.0) {
+      StrictMath.log(2.0 * x - 1.0 / (x + math.sqrt(x * x - 1.0)))
+    } else {
+      val t = x - 1.0
+      StrictMath.log1p(t + math.sqrt(2.0 * t + t * t))
+    }
+  }, "ACOSH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev,
-      c => s"java.lang.StrictMath.log($c + java.lang.Math.sqrt($c * $c - 1.0))")
+    nullSafeCodeGen(ctx, ev, c => {
+      val sm = "java.lang.StrictMath"
+      s"""
+         |if ($c < 1.0) {
+         |  ${ev.value} = java.lang.Double.NaN;
+         |} else if ($c >= ${1 << 28}.0) {
+         |  ${ev.value} = $sm.log($c) + $sm.log(2.0);
+         |} else if ($c == 1.0) {
+         |  ${ev.value} = 0.0;
+         |} else if ($c > 2.0) {
+         |  ${ev.value} = $sm.log(2.0 * $c - 1.0 / ($c + java.lang.Math.sqrt($c * $c - 1.0)));
+         |} else {
+         |  double t = $c - 1.0;
+         |  ${ev.value} = $sm.log1p(t + java.lang.Math.sqrt(2.0 * t + t * t));
+         |}
+         |""".stripMargin
+    })
   }
   override protected def withNewChildInternal(newChild: Expression): Acosh = copy(child = newChild)
 }
@@ -847,13 +876,44 @@ case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH"
   since = "3.0.0",
   group = "math_funcs")
 case class Asinh(child: Expression)
-  extends UnaryMathExpression((x: Double) => x match {
-    case Double.NegativeInfinity => Double.NegativeInfinity
-    case _ => StrictMath.log(x + math.sqrt(x * x + 1.0)) }, "ASINH") {
+  extends UnaryMathExpression((x: Double) => {
+    // fdlibm s_asinh.c algorithm
+    val ax = Math.abs(x)
+    val w = if (ax.isInfinite || ax.isNaN) {
+      ax
+    } else if (ax < 1.0 / (1 << 28)) {
+      ax
+    } else if (ax > (1 << 28)) {
+      StrictMath.log(ax) + StrictMath.log(2.0)
+    } else if (ax > 2.0) {
+      StrictMath.log(2.0 * ax + 1.0 / (math.sqrt(x * x + 1.0) + ax))
+    } else {
+      val t = x * x
+      StrictMath.log1p(ax + t / (1.0 + math.sqrt(1.0 + t)))
+    }
+    Math.copySign(w, x)
+  }, "ASINH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c =>
-      s"$c == Double.NEGATIVE_INFINITY ? Double.NEGATIVE_INFINITY : " +
-      s"java.lang.StrictMath.log($c + java.lang.Math.sqrt($c * $c + 1.0))")
+    nullSafeCodeGen(ctx, ev, c => {
+      val sm = "java.lang.StrictMath"
+      s"""
+         |double ax = java.lang.Math.abs($c);
+         |double w;
+         |if (java.lang.Double.isInfinite(ax) || java.lang.Double.isNaN(ax)) {
+         |  w = ax;
+         |} else if (ax < ${1.0 / (1 << 28)}) {
+         |  w = ax;
+         |} else if (ax > ${1 << 28}.0) {
+         |  w = $sm.log(ax) + $sm.log(2.0);
+         |} else if (ax > 2.0) {
+         |  w = $sm.log(2.0 * ax + 1.0 / (java.lang.Math.sqrt($c * $c + 1.0) + ax));
+         |} else {
+         |  double t = $c * $c;
+         |  w = $sm.log1p(ax + t / (1.0 + java.lang.Math.sqrt(1.0 + t)));
+         |}
+         |${ev.value} = java.lang.Math.copySign(w, $c);
+         |""".stripMargin
+    })
   }
   override protected def withNewChildInternal(newChild: Expression): Asinh = copy(child = newChild)
 }
@@ -1572,7 +1632,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
         val decimal = input1.asInstanceOf[Decimal]
         if (_scale >= 0) {
           // Overflow cannot happen, so no need to control nullOnOverflow
-          decimal.toPrecision(decimal.precision, s, mode)
+          decimal.toPrecision(p, s, mode)
         } else {
           Decimal(decimal.toBigDecimal.setScale(_scale, mode), p, s)
         }
@@ -1644,10 +1704,9 @@ abstract class RoundBase(child: Expression, scale: Expression,
       case DecimalType.Fixed(p, s) =>
         if (_scale >= 0) {
           s"""
-            ${ev.value} = ${ce.value}.toPrecision(${ce.value}.precision(), $s,
-            Decimal.$modeStr(), true, null);
+            ${ev.value} = ${ce.value}.toPrecision($p, $s, Decimal.$modeStr(), true, null);
             ${ev.isNull} = ${ev.value} == null;"""
-       } else {
+        } else {
           s"""
             ${ev.value} = new Decimal().set(${ce.value}.toBigDecimal()
             .setScale(${_scale}, Decimal.$modeStr()), $p, $s);

@@ -340,3 +340,11 @@ one	1	one	5	one	4	one	9
 one	1	one	5	one	6	one	7
 one	1	one	5	one	6	one	9
 two	2	two	22	two	5	two	8
+
+
+-- !query
+SELECT * FROM (SELECT 1 AS ID) t1 NATURAL JOIN (SELECT 1 AS id) t2
+-- !query schema
+struct<ID:int>
+-- !query output
+1

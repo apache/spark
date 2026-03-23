@@ -302,38 +302,39 @@ SELECT '12:30:41.123' - TIME'10:00:01';
 SELECT '23:59:59.999999' :: TIME(6) - '00:00' :: TIME(0);
 SELECT '00:00:00.1234' :: TIME(4) - TIME'23:59:59';
 
--- Numeric constructor functions for TIME type
--- time_from_seconds
+-- Numeric constructor and extractor functions for TIME type
+
+
+-- time_from_seconds (valid: 0 to 86399.999999)
 SELECT time_from_seconds(0);
 SELECT time_from_seconds(43200);
 SELECT time_from_seconds(52200.5);
 SELECT time_from_seconds(86399.999999);
-SELECT time_from_seconds(-1);
-SELECT time_from_seconds(86400);
-SELECT time_from_seconds(90000);
+SELECT time_from_seconds(-1);           -- invalid: negative -> exception
+SELECT time_from_seconds(86400);        -- invalid: >= 86400 -> exception
+SELECT time_from_seconds(90000);        -- invalid: >= 86400 -> exception
 SELECT time_from_seconds(NULL);
 
--- time_from_millis
+-- time_from_millis (valid: 0 to 86399999)
 SELECT time_from_millis(0);
 SELECT time_from_millis(43200);
 SELECT time_from_millis(52200000);
 SELECT time_from_millis(52200500);
 SELECT time_from_millis(86399999);
-SELECT time_from_millis(-1);
-SELECT time_from_millis(86400000);
+SELECT time_from_millis(-1);            -- invalid: negative -> exception
+SELECT time_from_millis(86400000);      -- invalid: >= 86400000 -> exception
 SELECT time_from_millis(NULL);
 
--- time_from_micros
+-- time_from_micros (valid: 0 to 86399999999)
 SELECT time_from_micros(0);
 SELECT time_from_micros(43200);
 SELECT time_from_micros(52200000000);
 SELECT time_from_micros(52200500000);
 SELECT time_from_micros(86399999999);
-SELECT time_from_micros(-1);
-SELECT time_from_micros(86400000000);
+SELECT time_from_micros(-1);            -- invalid: negative -> exception
+SELECT time_from_micros(86400000000);   -- invalid: >= 86400000000 -> exception
 SELECT time_from_micros(NULL);
 
--- Numeric extractor functions for TIME type
 -- time_to_seconds
 SELECT time_to_seconds(TIME'00:00:00');
 SELECT time_to_seconds(TIME'12:00:00');
@@ -358,7 +359,7 @@ SELECT time_to_micros(TIME'23:59:59.999');
 SELECT time_to_micros(TIME'23:59:59.999999');
 SELECT time_to_micros(NULL);
 
--- Round trip tests for numeric functions
+-- Round trip tests
 SELECT time_to_seconds(time_from_seconds(52200.5));
 SELECT time_from_seconds(time_to_seconds(TIME'14:30:00.5'));
 SELECT time_to_millis(time_from_millis(52200500));

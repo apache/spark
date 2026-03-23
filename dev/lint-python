@@ -20,7 +20,7 @@ FLAKE8_BUILD="flake8"
 MINIMUM_FLAKE8="3.9.0"
 RUFF_BUILD="ruff"
 MINIMUM_RUFF="0.14.0"
-MINIMUM_MYPY="1.8.0"
+MINIMUM_MYPY="1.19.1"
 MYPY_BUILD="mypy"
 PYTEST_BUILD="pytest"
 
@@ -33,7 +33,7 @@ function exit_with_usage {
   echo "lint-python - linter for Python"
   echo ""
   echo "usage:"
-  cl_options="[--compile] [--black] [--custom-pyspark-error] [--flake8] [--mypy] [--mypy-examples] [--mypy-data]"
+  cl_options="[--compile] [--custom-pyspark-error] [--ruff] [--mypy] [--mypy-examples] [--mypy-data]"
   echo "lint-python $cl_options"
   echo ""
   exit 1
@@ -76,9 +76,8 @@ done
 
 if [[ -z "$COMPILE_TEST$BLACK_TEST$PYSPARK_CUSTOM_ERRORS_CHECK_TEST$FLAKE8_TEST$RUFF_TEST$MYPY_TEST$MYPY_EXAMPLES_TEST$MYPY_DATA_TEST" ]]; then
   COMPILE_TEST=true
-  BLACK_TEST=true
   PYSPARK_CUSTOM_ERRORS_CHECK_TEST=true
-  FLAKE8_TEST=true
+  RUFF_TEST=true
   MYPY_TEST=true
   MYPY_EXAMPLES_TEST=true
   MYPY_DATA_TEST=true
@@ -164,11 +163,14 @@ function mypy_data_test {
     fi
 
     PYTEST_REPORT=$( (MYPYPATH=python $PYTEST_BUILD \
-      -c dev/pyproject.toml \
+      -o "python_files=test_*.yml" \
       --rootdir python \
       --mypy-only-local-stub \
       --mypy-ini-file python/mypy.ini \
-      python/pyspark ) 2>&1)
+      python/pyspark/tests/typing \
+      python/pyspark/sql/tests/typing \
+      python/pyspark/ml/tests/typing \
+      ) 2>&1)
 
     PYTEST_STATUS=$?
 
@@ -299,7 +301,7 @@ ruff checks failed."
     fi
 
     echo "starting $RUFF_BUILD test..."
-    RUFF_REPORT=$( ($RUFF_BUILD check --config dev/pyproject.toml) 2>&1)
+    RUFF_REPORT=$( ($RUFF_BUILD check) 2>&1)
     RUFF_STATUS=$?
 
     if [ "$RUFF_STATUS" -ne 0 ]; then
@@ -309,6 +311,19 @@ ruff checks failed."
         exit "$RUFF_STATUS"
     else
         echo "ruff checks passed."
+        echo
+    fi
+
+    RUFF_REPORT=$( ($RUFF_BUILD format --diff python/pyspark dev python/packaging python/benchmarks) 2>&1)
+    RUFF_STATUS=$?
+
+    if [ "$RUFF_STATUS" -ne 0 ]; then
+        echo "ruff format checks failed:"
+        echo "$RUFF_REPORT"
+        echo "$RUFF_STATUS"
+        exit "$RUFF_STATUS"
+    else
+        echo "ruff format checks passed."
         echo
     fi
 
@@ -327,7 +342,7 @@ function black_test {
     fi
 
     echo "starting black test..."
-    BLACK_REPORT=$( ($BLACK_BUILD  --config dev/pyproject.toml --check python/pyspark dev python/packaging) 2>&1)
+    BLACK_REPORT=$( ($BLACK_BUILD --check python/pyspark dev python/packaging python/benchmarks) 2>&1)
     BLACK_STATUS=$?
 
     if [ "$BLACK_STATUS" -ne 0 ]; then

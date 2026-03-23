@@ -51,8 +51,11 @@ import org.apache.spark.sql.execution.streaming.runtime.SerializedOffset
  *   1:{3}     // sourceId:offset
  *   ...
  */
-class OffsetSeqLog(sparkSession: SparkSession, path: String)
-  extends HDFSMetadataLog[OffsetSeqBase](sparkSession, path) {
+class OffsetSeqLog(
+    sparkSession: SparkSession,
+    path: String,
+    readOnly: Boolean = false)
+  extends HDFSMetadataLog[OffsetSeqBase](sparkSession, path, readOnly) {
 
   override protected def deserialize(in: InputStream): OffsetSeqBase = {
     // called inside a try-finally where the underlying stream is closed in the caller
@@ -88,7 +91,10 @@ class OffsetSeqLog(sparkSession: SparkSession, path: String)
         }
         sourceId -> offset
       }.toMap
-      OffsetMap(offsetsMap, metadata.map(OffsetSeqMetadata.apply))
+      // V2 requires metadata
+      val metadataV2 = metadata.map(OffsetSeqMetadataV2.apply).getOrElse(
+        throw new IllegalStateException("VERSION_2 offset log requires metadata"))
+      OffsetMap(offsetsMap, metadataV2)
     } else {
       OffsetSeq.fill(metadata,
         lines.map(OffsetSeqLog.parseOffset).toArray.toImmutableArraySeq: _*)
@@ -128,7 +134,7 @@ class OffsetSeqLog(sparkSession: SparkSession, path: String)
     }
   }
 
-  def offsetSeqMetadataForBatchId(batchId: Long): Option[OffsetSeqMetadata] = {
+  def offsetSeqMetadataForBatchId(batchId: Long): Option[OffsetSeqMetadataBase] = {
     if (batchId < 0) {
       None
     } else {
@@ -142,7 +148,7 @@ object OffsetSeqLog {
   private[streaming] val VERSION_2 = 2
   private[streaming] val VERSION = VERSION_1  // Default version for backward compatibility
   private[streaming] val MAX_VERSION = VERSION_2
-  private[streaming] val SERIALIZED_VOID_OFFSET = "-"
+  private[spark] val SERIALIZED_VOID_OFFSET = "-"
 
   private[checkpointing] def parseOffset(value: String): OffsetV2 = value match {
     case SERIALIZED_VOID_OFFSET => null

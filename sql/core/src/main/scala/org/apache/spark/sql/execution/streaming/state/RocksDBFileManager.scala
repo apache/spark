@@ -201,6 +201,14 @@ class RocksDBFileManager(
     }
   }
 
+  private def createDfsRootDirIfNotExist(): Unit = {
+    if (!rootDirChecked) {
+      val rootDir = new Path(dfsRootDir)
+      if (!fm.exists(rootDir)) fm.mkdirs(rootDir)
+      rootDirChecked = true
+    }
+  }
+
   def getChangeLogWriter(
       version: Long,
       useColumnFamilies: Boolean = false,
@@ -209,11 +217,7 @@ class RocksDBFileManager(
     ): StateStoreChangelogWriter = {
     try {
       val changelogFile = dfsChangelogFile(version, checkpointUniqueId)
-      if (!rootDirChecked) {
-        val rootDir = new Path(dfsRootDir)
-        if (!fm.exists(rootDir)) fm.mkdirs(rootDir)
-        rootDirChecked = true
-      }
+      createDfsRootDirIfNotExist()
 
       val enableStateStoreCheckpointIds = checkpointUniqueId.isDefined
       val changelogVersion = getChangelogWriterVersion(
@@ -332,11 +336,7 @@ class RocksDBFileManager(
         // CheckpointFileManager.createAtomic API which doesn't auto-initialize parent directories.
         // Moreover, once we disable to track the number of keys, in which the numKeys is -1, we
         // still need to create the initial dfs root directory anyway.
-        if (!rootDirChecked) {
-          val path = new Path(dfsRootDir)
-          if (!fm.exists(path)) fm.mkdirs(path)
-          rootDirChecked = true
-        }
+        createDfsRootDirIfNotExist()
       }
       zipToDfsFile(localOtherFiles :+ metadataFile,
         dfsBatchZipFile(version, checkpointUniqueId), verifyNonEmptyFilesInZip)
@@ -372,8 +372,11 @@ class RocksDBFileManager(
     val metadata = if (version == 0) {
       if (localDir.exists) Utils.deleteRecursively(localDir)
       Utils.createDirectory(localDir)
+      createDfsRootDirIfNotExist()
       // Since we cleared the local dir, we should also clear the local file mapping
       rocksDBFileMapping.clear()
+      // Set empty metrics since we're not loading any files from DFS
+      loadCheckpointMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
       RocksDBCheckpointMetadata(Seq.empty, 0)
     } else {
       // Delete all non-immutable files in local dir, and unzip new ones from DFS commit file
@@ -404,11 +407,7 @@ class RocksDBFileManager(
   // Return if there is a snapshot file at the corresponding version
   // and optionally with checkpointunique id, e.g. version.zip or version_uniqueId.zip
   def existsSnapshotFile(version: Long, checkpointUniqueId: Option[String] = None): Boolean = {
-    if (!rootDirChecked) {
-      val path = new Path(dfsRootDir)
-      if (!fm.exists(path)) fm.mkdirs(path)
-      rootDirChecked = true
-    }
+    createDfsRootDirIfNotExist()
     fm.exists(dfsBatchZipFile(version, checkpointUniqueId))
   }
 
@@ -425,6 +424,23 @@ class RocksDBFileManager(
         .map(_.toLong)
         .filter(_ <= version)
         .foldLeft(0L)(math.max)
+    } else {
+      0
+    }
+  }
+
+  /** Get the latest snapshot version available in DFS. If none present, it returns 0. */
+  def getLatestSnapshotVersion(): Long = {
+    val path = new Path(dfsRootDir)
+    if (fm.exists(path)) {
+      val files = fm.list(path).map(_.getPath)
+      files.filter(onlyZipFiles.accept)
+        .map { fileName =>
+          fileName.getName.stripSuffix(".zip").split("_") match {
+            case Array(version, _) => version.toLong
+            case Array(version) => version.toLong
+          }
+        }.foldLeft(0L)(math.max)
     } else {
       0
     }
@@ -681,13 +697,28 @@ class RocksDBFileManager(
     // Resolve RocksDB files for all the versions and find the max version each file is used
     val fileToMaxUsedVersion = new mutable.HashMap[String, Long]
     sortedSnapshotVersionsAndUniqueIds.foreach { case (version, uniqueId) =>
-      val files = Option(versionToRocksDBFiles.get((version, uniqueId))).getOrElse {
+      var readFromCache = true
+      val cachedFiles = Option(versionToRocksDBFiles.get((version, uniqueId))).getOrElse {
+        readFromCache = false
         val newResolvedFiles = getImmutableFilesFromVersionZip(version, uniqueId)
         versionToRocksDBFiles.put((version, uniqueId), newResolvedFiles)
         newResolvedFiles
       }
-      files.foreach(f => fileToMaxUsedVersion(f.dfsFileName) =
+      cachedFiles.foreach(f => fileToMaxUsedVersion(f.dfsFileName) =
         math.max(version, fileToMaxUsedVersion.getOrElse(f.dfsFileName, version)))
+
+      // For ckpt v1, for the min retained version, fetch metadata from cloud zip
+      // to protect files that may differ from the in-memory cache. This handles the case
+      // where a no-overwrite FS prevented a snapshot zip from being overwritten: the
+      // in-memory cache may reference a newer set of SST files (from a retry), while the
+      // cloud zip still references the original SST files.
+      // We do this for the min retained version, to make sure the files from the original
+      // upload for this version are not seen as orphan files.
+      if (uniqueId.isEmpty && version == minVersionToRetain && readFromCache) {
+        val cloudFiles = getImmutableFilesFromVersionZip(version, uniqueId)
+        cloudFiles.foreach(f => fileToMaxUsedVersion(f.dfsFileName) =
+          math.max(version, fileToMaxUsedVersion.getOrElse(f.dfsFileName, version)))
+      }
     }
 
     // Best effort attempt to delete SST files that were last used in to-be-deleted versions

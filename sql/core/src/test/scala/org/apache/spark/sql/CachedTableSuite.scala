@@ -53,7 +53,7 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.storage.StorageLevel.{MEMORY_AND_DISK_2, MEMORY_ONLY}
@@ -64,7 +64,7 @@ import org.apache.spark.util.{AccumulatorContext, Utils}
 private case class BigData(s: String)
 
 @SlowSQLTest
-class CachedTableSuite extends QueryTest with SQLTestUtils
+class CachedTableSuite extends QueryTest
   with SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
@@ -2595,6 +2595,89 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       // table should be re-cached correctly
       assertCached(spark.table(t))
       checkAnswer(spark.table(t), Seq(Row(10, 100, "x")))
+    }
+  }
+
+  test("SPARK-46741: Cache Table with CTE should work") {
+    withTempView("t1", "t2") {
+      sql(
+        """
+          |CREATE TEMPORARY VIEW t1
+          |AS
+          |SELECT * FROM VALUES (0, 0), (1, 1), (2, 2) AS t(c1, c2)
+          |""".stripMargin)
+      sql(
+        """
+          |CREATE TEMPORARY VIEW t2 AS
+          |WITH v as (
+          |  SELECT c1 + c1 c3 FROM t1
+          |)
+          |SELECT SUM(c3) s FROM v
+          |""".stripMargin)
+      sql(
+        """
+          |CACHE TABLE cache_nested_cte_table
+          |WITH
+          |v AS (
+          |  SELECT c1 * c2 c3 from t1
+          |)
+          |SELECT SUM(c3) FROM v
+          |EXCEPT
+          |SELECT s FROM t2
+          |""".stripMargin)
+
+      val df = sql("SELECT * FROM cache_nested_cte_table")
+
+      val inMemoryTableScan = collect(df.queryExecution.executedPlan) {
+        case i: InMemoryTableScanExec => i
+      }
+      assert(inMemoryTableScan.size == 1)
+      checkAnswer(df, Row(5) :: Nil)
+
+      sql(
+        """
+          |CACHE TABLE cache_subquery_cte_table
+          |WITH v AS (
+          |  SELECT c1 * c2 c3 from t1
+          |)
+          |SELECT *
+          |FROM v
+          |WHERE EXISTS (
+          |  WITH cte AS (SELECT 1 AS id)
+          |  SELECT 1
+          |  FROM cte
+          |  WHERE cte.id = v.c3
+          |)
+          |""".stripMargin)
+
+      val cteInSubquery = sql(
+        """
+          |SELECT * FROM cache_subquery_cte_table
+          |""".stripMargin)
+
+      val subqueryInMemoryTableScan = collect(cteInSubquery.queryExecution.executedPlan) {
+        case i: InMemoryTableScanExec => i
+      }
+      assert(subqueryInMemoryTableScan.size == 1)
+      checkAnswer(cteInSubquery, Row(1) :: Nil)
+    }
+  }
+
+  test("ALTER TABLE invalidates cached table") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, "a"), Row(2, "b")))
+
+      sql(s"ALTER TABLE $t ADD COLUMN new_col int")
+
+      val result = sql(s"SELECT * FROM $t ORDER BY id")
+      assertCached(result)
+      checkAnswer(result, Seq(Row(1, "a", null), Row(2, "b", null)))
     }
   }
 

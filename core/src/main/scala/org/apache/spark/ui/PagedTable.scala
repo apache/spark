@@ -134,7 +134,7 @@ private[spark] trait PagedTable[T] {
         val PageData(totalPages, _) = _dataSource.pageData(1)
         <div>
           {pageNavigation(1, _dataSource.pageSize, totalPages)}
-          <div class="alert alert-error">
+          <div class="alert alert-danger">
             <p>Error while rendering table:</p>
             <pre>
               {Utils.exceptionString(e)}
@@ -218,35 +218,10 @@ private[spark] trait PagedTable[T] {
       }
     }
 
-    <div>
-      <div>
-        <form id={s"form-$navigationId-page"}
-              method="get"
-              action={Unparsed(goButtonFormPath)}
-              class="form-inline float-right justify-content-end"
-              style="margin-bottom: 0px;">
-          {hiddenFormFields}
-          <label>{totalPages} Pages. Jump to</label>
-          <input type="text"
-                 name={pageNumberFormField}
-                 id={s"form-$navigationId-page-no"}
-                 value={page.toString}
-                 class="col-1 form-control" />
-
-          <label>. Show </label>
-          <input type="text"
-                 id={s"form-$navigationId-page-size"}
-                 name={pageSizeFormField}
-                 value={pageSize.toString}
-                 class="col-1 form-control" />
-          <label>items in a page.</label>
-
-          <button type="submit" class="btn btn-spark">Go</button>
-        </form>
-      </div>
-      <div>
-        <span style="float: left; padding-top: 4px; padding-right: 4px;">Page: </span>
-        <ul class="pagination">
+    <div class="d-flex justify-content-between align-items-center">
+      <div class="d-flex align-items-center">
+        <span class="pe-1">Page: </span>
+        <ul class="pagination mb-0">
           {if (currentGroup > firstGroup) {
           <li class="page-item">
             <a href={Unparsed(pageLink(startPage - groupSize))} class="page-link"
@@ -285,6 +260,32 @@ private[spark] trait PagedTable[T] {
           </li>
         }}
         </ul>
+      </div>
+      <div>
+        <form id={s"form-$navigationId-page"}
+              method="get"
+              action={Unparsed(goButtonFormPath)}
+              class="d-flex align-items-center gap-1 mb-0">
+          {hiddenFormFields}
+          <label class="text-nowrap">{totalPages} Pages. Jump to</label>
+          <input type="text"
+                 name={pageNumberFormField}
+                 id={s"form-$navigationId-page-no"}
+                 value={page.toString}
+                 class="form-control form-control-sm"
+                 style="width: 60px;" />
+
+          <label class="text-nowrap">. Show </label>
+          <input type="text"
+                 id={s"form-$navigationId-page-size"}
+                 name={pageSizeFormField}
+                 value={pageSize.toString}
+                 class="form-control form-control-sm"
+                 style="width: 60px;" />
+          <label class="text-nowrap">items in a page.</label>
+
+          <button type="submit" class="btn btn-outline-secondary btn-sm">Go</button>
+        </form>
       </div>
     </div>
   }
@@ -362,9 +363,9 @@ private[spark] trait PagedTable[T] {
 
           <th>
             <a href={headerLink}>
-              <span data-toggle="tooltip" data-placement="top" title={tooltip.getOrElse("")}>
-                {header}&nbsp;{Unparsed(arrow)}
-              </span>
+              {UIUtils.tooltipSpan(
+                <xml:group>{header}&nbsp;{Unparsed(arrow)}</xml:group>,
+                tooltip.getOrElse(""))}
             </a>
           </th>
         } else {
@@ -377,16 +378,14 @@ private[spark] trait PagedTable[T] {
 
             <th>
               <a href={headerLink}>
-                <span data-toggle="tooltip" data-placement="top" title={tooltip.getOrElse("")}>
-                  {header}
-                </span>
+                {UIUtils.tooltipSpan(<xml:group>{header}</xml:group>,
+                  tooltip.getOrElse(""))}
               </a>
             </th>
           } else {
             <th>
-              <span data-toggle="tooltip" data-placement="top" title={tooltip.getOrElse("")}>
-                {header}
-              </span>
+              {UIUtils.tooltipSpan(<xml:group>{header}</xml:group>,
+                tooltip.getOrElse(""))}
             </th>
           }
         }

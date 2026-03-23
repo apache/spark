@@ -22,22 +22,29 @@ import java.util.{ArrayList, HashMap}
 import org.apache.spark.sql.catalyst.expressions.Expression
 
 /**
- * [[SemanticComparator]] is a tool to compare expressions semantically to a predefined sequence
- * of `targetExpressions`. Semantic comparison is based on [[QueryPlan.canonicalized]] - for
- * example, `col1 + 1 + col2` is semantically equal to `1 + col2 + col1`. To speed up slow tree
- * traversals and expression node field comparisons, we cache the semantic hashes (which is
- * simply a hash of a canonicalized subtree) and use them for O(1) indexing. If the hashes don't
- * match, we perform an early return. Otherwise, we invoke the heavy [[Expression.semanticEquals]]
- * method to make sure that expression trees are indeed identical.
+ * [[SemanticComparator]] is a tool to compare expressions semantically to a sequence of target
+ * expressions. Semantic comparison is based on [[QueryPlan.canonicalized]] - for example,
+ * `col1 + 1 + col2` is semantically equal to `1 + col2 + col1`. To speed up slow tree traversals
+ * and expression node field comparisons, we cache the semantic hashes (which is simply a hash of a
+ * canonicalized subtree) and use them for O(1) indexing. If the hashes don't match, we perform an
+ * early return. Otherwise, we invoke the heavy [[Expression.semanticEquals]] method to make sure
+ * that expression trees are indeed identical.
  */
-class SemanticComparator(targetExpressions: Seq[Expression]) {
+class SemanticComparator(targetExpressions: Seq[Expression] = Seq.empty) {
   private val targetExpressionsBySemanticHash =
     new HashMap[Int, ArrayList[Expression]](targetExpressions.size)
 
   for (targetExpression <- targetExpressions) {
+    add(targetExpression)
+  }
+
+  /**
+   * Inserts expression into the appropriate bucket based on its semantic hash.
+   */
+  def add(expression: Expression): Unit = {
     targetExpressionsBySemanticHash
-      .computeIfAbsent(targetExpression.semanticHash(), _ => new ArrayList[Expression])
-      .add(targetExpression)
+      .computeIfAbsent(expression.semanticHash(), _ => new ArrayList[Expression])
+      .add(expression)
   }
 
   /**

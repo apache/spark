@@ -63,6 +63,11 @@ object TransformWithStateVariableUtils {
   def isRowCounterCFName(colFamilyName: String): Boolean = {
     colFamilyName.startsWith(ROW_COUNTER_CF_PREFIX)
   }
+
+  def getStateNameFromRowCounterCFName(colFamilyName: String): String = {
+    require(isRowCounterCFName(colFamilyName))
+    colFamilyName.substring(ROW_COUNTER_CF_PREFIX.length)
+  }
 }
 
 // Enum of possible State Variable types

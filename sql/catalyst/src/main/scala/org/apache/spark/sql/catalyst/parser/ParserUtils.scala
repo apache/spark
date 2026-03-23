@@ -24,7 +24,7 @@ import scala.util.matching.Regex
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
-import org.antlr.v4.runtime.tree.{ParseTree, TerminalNodeImpl}
+import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode, TerminalNodeImpl}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
@@ -88,6 +88,18 @@ object ParserUtils extends SparkParserUtils {
     node.getText.slice(1, node.getText.length - 1)
   }
 
+  /**
+   * Obtain the string literal provided as a dollar quoted string.
+   * A dollar quoted string is defined as {{{$[tag]$<string literal>$[tag]$}}},
+   * where the string literal is parsed as a list of body sections.
+   * This helper method concatenates all body sections and restores the string literal back.
+   */
+  def dollarQuotedString(sections: util.List[TerminalNode]): String = {
+    val sb = new StringBuilder()
+    sections forEach (body => sb.append(body.getText))
+    sb.toString()
+  }
+
   /** Collect the entries if any. */
   def entry(key: String, value: Token): Seq[(String, String)] = {
     Option(value).toSeq.map(x => key -> string(x))
@@ -142,7 +154,7 @@ class CompoundBodyParsingContext {
 
   object State extends Enumeration {
     type State = Value
-    val INIT, VARIABLE, CONDITION, HANDLER, STATEMENT = Value
+    val INIT, VARIABLE, CONDITION, CURSOR, HANDLER, STATEMENT = Value
   }
 
   private var currentState: State.State = State.INIT
@@ -167,6 +179,11 @@ class CompoundBodyParsingContext {
     transitionTo(State.CONDITION, None, errorCondition = Some(errorCondition))
   }
 
+  /** Transition to CURSOR state. */
+  def cursor(): Unit = {
+    transitionTo(State.CURSOR)
+  }
+
   /** Transition to HANDLER state. */
   def handler(): Unit = {
     transitionTo(State.HANDLER)
@@ -182,8 +199,9 @@ class CompoundBodyParsingContext {
    * Possible states are:
    * 1a. VARIABLE (1)
    * 1b. CONDITION (1)
-   * 2. HANDLERS (2)
-   * 3. STATEMENTS (3)
+   * 2. CURSOR (2)
+   * 3. HANDLERS (3)
+   * 4. STATEMENTS (4)
    * Transition is allowed from state with number n to state with number m,
    * where m >= n.
    *
@@ -203,6 +221,8 @@ class CompoundBodyParsingContext {
 
       case (State.VARIABLE, State.CONDITION) => currentState = State.CONDITION
 
+      case (State.VARIABLE, State.CURSOR) => currentState = State.CURSOR
+
       case (State.VARIABLE, State.HANDLER) => currentState = State.HANDLER
 
       case (State.VARIABLE, State.STATEMENT) => currentState = State.STATEMENT
@@ -212,9 +232,18 @@ class CompoundBodyParsingContext {
 
       case (State.CONDITION, State.VARIABLE) => currentState = State.VARIABLE
 
+      case (State.CONDITION, State.CURSOR) => currentState = State.CURSOR
+
       case (State.CONDITION, State.HANDLER) => currentState = State.HANDLER
 
       case (State.CONDITION, State.STATEMENT) => currentState = State.STATEMENT
+
+      // Transition from CURSOR to other states.
+      case (State.CURSOR, State.CURSOR) => // do nothing
+
+      case (State.CURSOR, State.HANDLER) => currentState = State.HANDLER
+
+      case (State.CURSOR, State.STATEMENT) => currentState = State.STATEMENT
 
       // Transition from HANDLER to other states.
       case (State.HANDLER, State.HANDLER) => // do nothing
@@ -227,6 +256,11 @@ class CompoundBodyParsingContext {
       // INVALID TRANSITIONS
 
       // Invalid transitions to VARIABLE state.
+      case (State.CURSOR, State.VARIABLE) =>
+        throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
+          createVariable.get.origin,
+          createVariable.get.names(0).asInstanceOf[UnresolvedIdentifier].nameParts)
+
       case (State.STATEMENT, State.VARIABLE) =>
         throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
           createVariable.get.origin,
@@ -238,6 +272,11 @@ class CompoundBodyParsingContext {
           createVariable.get.names(0).asInstanceOf[UnresolvedIdentifier].nameParts)
 
       // Invalid transitions to CONDITION state.
+      case (State.CURSOR, State.CONDITION) =>
+        throw SqlScriptingErrors.conditionDeclarationNotAtStartOfCompound(
+          CurrentOrigin.get,
+          errorCondition.get.conditionName)
+
       case (State.STATEMENT, State.CONDITION) =>
         throw SqlScriptingErrors.conditionDeclarationNotAtStartOfCompound(
           CurrentOrigin.get,
@@ -247,6 +286,13 @@ class CompoundBodyParsingContext {
         throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
           createVariable.get.origin,
           createVariable.get.names(0).asInstanceOf[UnresolvedIdentifier].nameParts)
+
+      // Invalid transitions to CURSOR state.
+      case (State.STATEMENT, State.CURSOR) =>
+        throw SqlScriptingErrors.cursorDeclarationNotAtStartOfCompound(CurrentOrigin.get)
+
+      case (State.HANDLER, State.CURSOR) =>
+        throw SqlScriptingErrors.cursorDeclarationNotAtStartOfCompound(CurrentOrigin.get)
 
       // Invalid transitions to HANDLER state.
       case (State.STATEMENT, State.HANDLER) =>

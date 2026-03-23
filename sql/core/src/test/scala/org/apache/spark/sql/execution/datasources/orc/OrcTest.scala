@@ -22,8 +22,6 @@ import java.io.File
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.sql.{Column, DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Predicate}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -49,7 +47,7 @@ import org.apache.spark.util.Utils
  *       -> HiveOrcPartitionDiscoverySuite
  *   -> OrcFilterSuite
  */
-trait OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfterAll {
+trait OrcTest extends QueryTest with FileBasedDataSourceTest {
 
   val orcImp: String = "native"
 

@@ -157,6 +157,18 @@ For a short summary about useful conda commands, see their
 `cheat sheet <https://docs.conda.io/projects/conda/en/latest/user-guide/cheatsheet.html>`_.
 
 
+Using venv
+----------
+
+You can use Python's built-in ``venv`` module to create an isolated environment:
+
+.. code-block:: bash
+
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install pyspark
+
+
 Manually Downloading
 --------------------
 
@@ -226,7 +238,7 @@ Installable with ``pip install "pyspark[connect]"``.
 Package                    Supported version Note
 ========================== ================= ==========================
 `pandas`                   >=2.2.0           Required for Spark Connect
-`pyarrow`                  >=15.0.0          Required for Spark Connect
+`pyarrow`                  >=18.0.0          Required for Spark Connect
 `grpcio`                   >=1.76.0          Required for Spark Connect
 `grpcio-status`            >=1.76.0          Required for Spark Connect
 `googleapis-common-protos` >=1.71.0          Required for Spark Connect
@@ -243,7 +255,7 @@ Installable with ``pip install "pyspark[sql]"``.
 Package   Supported version Note
 ========= ================= ======================
 `pandas`  >=2.2.0           Required for Spark SQL
-`pyarrow` >=15.0.0          Required for Spark SQL
+`pyarrow` >=18.0.0          Required for Spark SQL
 ========= ================= ======================
 
 Additional libraries that enhance functionality but are not included in the installation packages:
@@ -260,7 +272,7 @@ Installable with ``pip install "pyspark[pandas_on_spark]"``.
 Package   Supported version Note
 ========= ================= ================================
 `pandas`  >=2.2.0           Required for Pandas API on Spark
-`pyarrow` >=15.0.0          Required for Pandas API on Spark
+`pyarrow` >=18.0.0          Required for Pandas API on Spark
 ========= ================= ================================
 
 Additional libraries that enhance functionality but are not included in the installation packages:
@@ -310,7 +322,7 @@ Installable with ``pip install "pyspark[pipelines]"``. Includes all dependencies
 Package                    Supported version Note
 ========================== ================= ===================================================
 `pandas`                   >=2.2.0           Required for Spark Connect and Spark SQL
-`pyarrow`                  >=15.0.0          Required for Spark Connect and Spark SQL
+`pyarrow`                  >=18.0.0          Required for Spark Connect and Spark SQL
 `grpcio`                   >=1.76.0          Required for Spark Connect
 `grpcio-status`            >=1.76.0          Required for Spark Connect
 `googleapis-common-protos` >=1.71.0          Required for Spark Connect

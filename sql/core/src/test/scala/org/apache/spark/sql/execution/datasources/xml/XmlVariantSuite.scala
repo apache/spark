@@ -34,7 +34,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
   protected val legacyParserEnabled: Boolean = false
 
   override protected def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.xml.legacyXMLParser.enabled", legacyParserEnabled.toString)
+    .set(SQLConf.LEGACY_XML_PARSER_ENABLED, legacyParserEnabled)
 
   private val baseOptions = Map("rowTag" -> "ROW", "valueTag" -> "_VALUE", "attributePrefix" -> "_")
 
@@ -79,6 +79,13 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     testParser(
       xml = "<ROW><amount>1e40</amount></ROW>",
       expectedJsonStr = """{"amount":"1e40"}"""
+    )
+    // Extreme negative scale: parsed as String to avoid hanging on setScale(0).
+    // "1e-99999" parses to a BigDecimal with scale=99999, which is fine (positive scale).
+    // "1e99999" parses to a BigDecimal with scale=-99999, triggering the guard.
+    testParser(
+      xml = "<ROW><amount>1e99999</amount></ROW>",
+      expectedJsonStr = """{"amount":"1e99999"}"""
     )
 
     // Date -> String

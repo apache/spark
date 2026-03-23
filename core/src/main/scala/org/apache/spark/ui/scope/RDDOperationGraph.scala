@@ -269,7 +269,7 @@ private[spark] object RDDOperationGraph extends Logging {
     val label = StringEscapeUtils.escapeJava(
       s"${node.name} [${node.id}]$isCached$isBarrier$outputDeterministicLevel" +
         s"<br>$escapedCallsite")
-    s"""${node.id} [id="node_${node.id}" labelType="html" label="$label}"]"""
+    s"""${node.id} [id="node_${node.id}" labelType="html" label="$label"]"""
   }
 
   /** Update the dot representation of the RDDOperationGraph in cluster to subgraph.

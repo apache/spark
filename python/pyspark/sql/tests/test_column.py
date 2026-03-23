@@ -25,7 +25,8 @@ from pyspark.sql import Column, Row
 from pyspark.sql import functions as sf
 from pyspark.sql.types import StructType, StructField, IntegerType, LongType
 from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
-from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, pandas_requirement_message
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import have_pandas, pandas_requirement_message
 
 
 class ColumnTestsMixin:
@@ -507,13 +508,6 @@ class ColumnTests(ColumnTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.test_column import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

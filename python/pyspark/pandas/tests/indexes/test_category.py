@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import unittest
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
@@ -31,7 +30,7 @@ class CategoricalIndexTestsMixin:
 
         self.assert_eq(psidx, pidx)
         self.assert_eq(psidx.categories, pidx.categories)
-        self.assert_eq(psidx.codes, pd.Index(pidx.codes))
+        self.assert_eq(psidx.codes.to_numpy(), pidx.codes)
         self.assert_eq(psidx.ordered, pidx.ordered)
 
         pidx = pd.Index([1, 2, 3], dtype="category")
@@ -39,7 +38,7 @@ class CategoricalIndexTestsMixin:
 
         self.assert_eq(psidx, pidx)
         self.assert_eq(psidx.categories, pidx.categories)
-        self.assert_eq(psidx.codes, pd.Index(pidx.codes))
+        self.assert_eq(psidx.codes.to_numpy(), pidx.codes)
         self.assert_eq(psidx.ordered, pidx.ordered)
 
         pdf = pd.DataFrame(
@@ -56,7 +55,7 @@ class CategoricalIndexTestsMixin:
 
         self.assert_eq(psidx, pidx)
         self.assert_eq(psidx.categories, pidx.categories)
-        self.assert_eq(psidx.codes, pd.Index(pidx.codes))
+        self.assert_eq(psidx.codes.to_numpy(), pidx.codes)
         self.assert_eq(psidx.ordered, pidx.ordered)
 
         pidx = pdf.set_index(["a", "b"]).index.get_level_values(0)
@@ -64,7 +63,7 @@ class CategoricalIndexTestsMixin:
 
         self.assert_eq(psidx, pidx)
         self.assert_eq(psidx.categories, pidx.categories)
-        self.assert_eq(psidx.codes, pd.Index(pidx.codes))
+        self.assert_eq(psidx.codes.to_numpy(), pidx.codes)
         self.assert_eq(psidx.ordered, pidx.ordered)
 
         with self.assertRaisesRegex(TypeError, "Index.name must be a hashable type"):
@@ -402,12 +401,6 @@ class CategoricalIndexTests(CategoricalIndexTestsMixin, PandasOnSparkTestCase, T
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.indexes.test_category import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

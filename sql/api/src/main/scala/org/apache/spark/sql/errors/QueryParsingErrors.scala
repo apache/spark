@@ -55,8 +55,15 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0004", ctx.source)
   }
 
-  def insertedValueNumberNotMatchFieldNumberError(ctx: NotMatchedClauseContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0006", ctx.notMatchedAction())
+  def insertedValueNumberNotMatchColumnNumberError(
+      expectedCount: Int,
+      actualCount: Int,
+      ctx: NotMatchedClauseContext): Throwable = {
+    new ParseException(
+      errorClass = "MERGE_INSERT_VALUE_COUNT_MISMATCH",
+      messageParameters =
+        Map("expectedCount" -> expectedCount.toString, "actualCount" -> actualCount.toString),
+      ctx.notMatchedAction())
   }
 
   def mergeStatementWithoutWhenClauseError(ctx: MergeIntoTableContext): Throwable = {
@@ -461,7 +468,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def computeStatisticsNotExpectedError(ctx: IdentifierContext): Throwable = {
+  def computeStatisticsNotExpectedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.ANALYZE_TABLE_UNEXPECTED_NOSCAN",
       messageParameters = Map("ctx" -> toSQLStmt(ctx.getText)),
@@ -618,8 +625,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def createViewWithBothIfNotExistsAndReplaceError(ctx: CreateViewContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0052", ctx)
+  def createViewWithBothIfNotExistsAndReplaceError(
+      viewName: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "CREATE_VIEW_WITH_IF_NOT_EXISTS_AND_REPLACE",
+      messageParameters = Map("viewName" -> viewName),
+      ctx)
   }
 
   def temporaryViewWithSchemaBindingMode(ctx: StatementContext): Throwable = {
@@ -674,6 +686,20 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_IF_NOT_EXISTS", ctx)
   }
 
+  def invalidTempObjQualifierError(
+      objectType: String,
+      objectName: String,
+      qualifier: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      "INVALID_TEMP_OBJ_QUALIFIER",
+      Map(
+        "objectType" -> objectType,
+        "objectName" -> toSQLId(objectName),
+        "qualifier" -> toSQLId(qualifier)),
+      ctx)
+  }
+
   def unsupportedFunctionNameError(funcName: Seq[String], ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
@@ -723,13 +749,6 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def invalidNameForSetCatalog(name: Seq[String], ctx: ParserRuleContext): Throwable = {
-    new ParseException(
-      errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      messageParameters = Map("statement" -> toSQLStmt("SET CATALOG"), "name" -> toSQLId(name)),
-      ctx)
-  }
-
   def defaultColumnNotImplementedYetError(ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "UNSUPPORTED_DEFAULT_VALUE.WITHOUT_SUGGESTION", ctx)
   }
@@ -773,6 +792,15 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
         alterTypeMap ++ Map("columnName" -> columnName, "optionName" -> optionName),
       ctx)
   }
+
+  def missingClausesForOperation(
+      ctx: ParserRuleContext,
+      clauses: String,
+      operation: String): Throwable =
+    new ParseException(
+      errorClass = "MISSING_CLAUSES_FOR_OPERATION",
+      messageParameters = Map("clauses" -> clauses, "operation" -> operation),
+      ctx)
 
   def invalidDatetimeUnitError(
       ctx: ParserRuleContext,
@@ -821,6 +849,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def emptyInPredicateError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
   /**
    * Throws an internal error for unexpected parameter markers found during AST building. This
    * should be unreachable in normal operation due to grammar-level blocking.
@@ -835,5 +870,21 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       errorClass = "UNEXPECTED_USE_OF_PARAMETER_MARKER",
       messageParameters = Map("parameterMarker" -> ctx.getText),
       ctx = ctx)
+  }
+
+  /**
+   * Throws an exception when a cursor reference has more than one qualifier. Valid: cursor or
+   * label.cursor Invalid: a.b.cursor
+   *
+   * @param cursorName
+   *   The fully qualified cursor name with multiple qualifiers
+   * @throws ParseException
+   *   Always throws this exception
+   */
+  def cursorInvalidQualifierError(cursorName: String): Throwable = {
+    new ParseException(
+      errorClass = "CURSOR_REFERENCE_INVALID_QUALIFIER",
+      messageParameters = Map("cursorName" -> toSQLId(cursorName)),
+      ctx = null)
   }
 }

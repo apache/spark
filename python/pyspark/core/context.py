@@ -95,7 +95,6 @@ U = TypeVar("U")
 
 
 class SparkContext:
-
     """
     Main entry point for Spark functionality. A SparkContext represents the
     connection to a Spark cluster, and can be used to create :class:`RDD` and
@@ -162,9 +161,9 @@ class SparkContext:
     _next_accum_id = 0
     _active_spark_context: ClassVar[Optional["SparkContext"]] = None
     _lock = RLock()
-    _python_includes: Optional[
-        List[str]
-    ] = None  # zip and egg files that need to be added to PYTHONPATH
+    _python_includes: Optional[List[str]] = (
+        None  # zip and egg files that need to be added to PYTHONPATH
+    )
     serializer: Serializer
     profiler_collector: ProfilerCollector
 
@@ -327,7 +326,7 @@ class SparkContext:
                 self._accumulatorServer.server_address
             )
         else:
-            (host, port) = self._accumulatorServer.server_address  # type: ignore[misc]
+            host, port = self._accumulatorServer.server_address  # type: ignore[misc]
             self._javaAccumulator = self._jvm.PythonAccumulatorV2(host, port, auth_token)
         self._jsc.sc().register(self._javaAccumulator)
 
@@ -362,7 +361,7 @@ class SparkContext:
         # with SparkContext.addFile, so we just need to add them to the PYTHONPATH
         for path in self._conf.get("spark.submit.pyFiles", "").split(","):
             if path != "":
-                (dirname, filename) = os.path.split(path)
+                dirname, filename = os.path.split(path)
                 try:
                     filepath = os.path.join(SparkFiles.getRootDirectory(), filename)
                     if not os.path.exists(filepath):
@@ -405,12 +404,15 @@ class SparkContext:
 
         # create a signal handler which would be invoked on receiving SIGINT
         def signal_handler(signal: Any, frame: Any) -> NoReturn:
-            self.cancelAllJobs()
-            raise KeyboardInterrupt()
+            try:
+                self.cancelAllJobs()
+            finally:
+                raise KeyboardInterrupt()
 
         # see http://stackoverflow.com/questions/23206787/
         if isinstance(
-            threading.current_thread(), threading._MainThread  # type: ignore[attr-defined]
+            threading.current_thread(),
+            threading._MainThread,  # type: ignore[attr-defined]
         ):
             signal.signal(signal.SIGINT, signal_handler)
 
@@ -436,9 +438,7 @@ class SparkContext:
                 <dd><code>{sc.appName}</code></dd>
             </dl>
         </div>
-        """.format(
-            sc=self
-        )
+        """.format(sc=self)
 
     def _initialize_context(self, jconf: JavaObject) -> JavaObject:
         """
@@ -834,8 +834,8 @@ class SparkContext:
             size = len(c)
             if size == 0:
                 return self.parallelize([], numSlices)
-            step = c[1] - c[0] if size > 1 else 1  # type: ignore[index]
-            start0 = c[0]  # type: ignore[index]
+            step = c[1] - c[0] if size > 1 else 1
+            start0 = c[0]
 
             def getStart(split: int) -> int:
                 assert numSlices is not None
@@ -858,7 +858,8 @@ class SparkContext:
         if "__len__" not in dir(c):
             c = list(c)  # Make it a list so we can compute its length
         batchSize = max(
-            1, min(len(c) // numSlices, self._batchSize or 1024)  # type: ignore[arg-type]
+            1,
+            min(len(c) // numSlices, self._batchSize or 1024),  # type: ignore[arg-type]
         )
         serializer = BatchedSerializer(self._unbatched_serializer, batchSize)
 
@@ -899,7 +900,7 @@ class SparkContext:
         if self._encryption_enabled:
             # with encryption, we open a server in java and send the data directly
             server = server_func()
-            (sock_file, _) = local_connect_and_auth(server.connInfo(), server.secret())
+            sock_file, _ = local_connect_and_auth(server.connInfo(), server.secret())
             chunked_out = ChunkedStream(sock_file, 8192)
             serializer.dump_stream(data, chunked_out)
             chunked_out.close()
@@ -1985,7 +1986,7 @@ class SparkContext:
         A path can be added only once. Subsequent additions of the same path are ignored.
         """
         self.addFile(path)
-        (dirname, filename) = os.path.split(path)  # dirname may be directory or HDFS/S3 prefix
+        dirname, filename = os.path.split(path)  # dirname may be directory or HDFS/S3 prefix
         if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
             assert self._python_includes is not None
             self._python_includes.append(filename)
@@ -2661,7 +2662,7 @@ def _test() -> None:
     globs = globals().copy()
     conf = SparkConf().set("spark.ui.enabled", "True")
     globs["sc"] = SparkContext("local[4]", "context tests", conf=conf)
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs["sc"].stop()
     if failure_count:
         sys.exit(-1)

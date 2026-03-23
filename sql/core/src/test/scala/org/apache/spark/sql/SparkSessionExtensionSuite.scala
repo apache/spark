@@ -26,18 +26,20 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, Max, Partial}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.{PlanTest, SQLHelper}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AggregateHint, ColumnStat, Limit, LocalRelation, LogicalPlan, Sort, SortHint, Statistics, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AggregateHint, ColumnStat, Limit, LocalRelation, LogicalPlan, Project, Range, Sort, SortHint, Statistics, UnresolvedHint}
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.classic.Dataset
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, AQEShuffleReadExec, QueryStageExec, ShuffleQueryStageExec}
@@ -88,6 +90,22 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   test("inject analyzer rule") {
     withSession(Seq(_.injectResolutionRule(MyRule))) { session =>
       assert(session.sessionState.analyzer.extendedResolutionRules.contains(MyRule(session)))
+    }
+  }
+
+  test("inject analyzer rule - hidden column") {
+    withSession(Seq(_.injectResolutionRule(MyHiddenColumn))) { session: SparkSession =>
+      val rel = LocalRelation(
+        AttributeReference("a", IntegerType)(),
+        AttributeReference("b", IntegerType)())
+      rel.setTagValue[Long](LogicalPlan.PLAN_ID_TAG, 0L)
+
+      val u = UnresolvedAttribute("x")
+      u.setTagValue[Long](LogicalPlan.PLAN_ID_TAG, 0L)
+      val proj = Project(Seq(u), rel)
+
+      val df = Dataset.ofRows(session, proj)
+      assert(df.schema.fieldNames === Array("x"))
     }
   }
 
@@ -155,8 +173,29 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       extensions.injectFunction(MyExtensions.myFunction)
     }
     withSession(extensions) { session =>
-      assert(session.sessionState.functionRegistry
-        .lookupFunction(MyExtensions.myFunction._1).isDefined)
+      // Extension functions are treated as built-ins (unqualified, 3-part key)
+      val builtinIdent = FunctionIdentifier(
+        MyExtensions.myFunction._1.funcName.toLowerCase(Locale.ROOT),
+        Some(CatalogManager.BUILTIN_NAMESPACE),
+        Some(CatalogManager.SYSTEM_CATALOG_NAME))
+      assert(session.sessionState.functionRegistry.lookupFunction(builtinIdent).isDefined)
+    }
+  }
+
+  test("inject table function") {
+    val extensions = create { extensions =>
+      extensions.injectTableFunction(MyExtensions.myTableFunction)
+    }
+    withSession(extensions) { session =>
+      // Extension table functions are in the builtin namespace (3-part key)
+      val builtinIdent = FunctionIdentifier(
+        MyExtensions.myTableFunction._1.funcName.toLowerCase(Locale.ROOT),
+        Some(CatalogManager.BUILTIN_NAMESPACE),
+        Some(CatalogManager.SYSTEM_CATALOG_NAME))
+      assert(session.sessionState.tableFunctionRegistry.lookupFunction(builtinIdent).isDefined)
+      val rows = session.sql("SELECT * FROM myTableFunc()").collect()
+      assert(rows.length === 2, s"expected 2 rows, got ${rows.length}")
+      assert(rows(0).getLong(0) === 0L && rows(1).getLong(0) === 1L)
     }
   }
 
@@ -363,8 +402,12 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       assert(session.sessionState.analyzer.extendedCheckRules.contains(MyCheckRule(session)))
       assert(session.sessionState.optimizer.batches.flatMap(_.rules).contains(MyRule(session)))
       assert(session.sessionState.sqlParser.isInstanceOf[MyParser])
-      assert(session.sessionState.functionRegistry
-        .lookupFunction(MyExtensions.myFunction._1).isDefined)
+      // Extension functions are in the builtin namespace (3-part key)
+      val builtinIdent = FunctionIdentifier(
+        MyExtensions.myFunction._1.funcName.toLowerCase(Locale.ROOT),
+        Some(CatalogManager.BUILTIN_NAMESPACE),
+        Some(CatalogManager.SYSTEM_CATALOG_NAME))
+      assert(session.sessionState.functionRegistry.lookupFunction(builtinIdent).isDefined)
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
     } finally {
@@ -391,10 +434,17 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       assert(session.sessionState.optimizer.batches.flatMap(_.rules).filter(orderedRules.contains)
         .containsSlice(orderedRules ++ orderedRules)) // The optimizer rules are duplicated
       assert(session.sessionState.sqlParser === parser)
-      assert(session.sessionState.functionRegistry
-        .lookupFunction(MyExtensions.myFunction._1).isDefined)
-      assert(session.sessionState.functionRegistry
-        .lookupFunction(MyExtensions2.myFunction._1).isDefined)
+      // Extension functions are in the builtin namespace (3-part key)
+      val builtinIdent1 = FunctionIdentifier(
+        MyExtensions.myFunction._1.funcName.toLowerCase(Locale.ROOT),
+        Some(CatalogManager.BUILTIN_NAMESPACE),
+        Some(CatalogManager.SYSTEM_CATALOG_NAME))
+      val builtinIdent2 = FunctionIdentifier(
+        MyExtensions2.myFunction._1.funcName.toLowerCase(Locale.ROOT),
+        Some(CatalogManager.BUILTIN_NAMESPACE),
+        Some(CatalogManager.SYSTEM_CATALOG_NAME))
+      assert(session.sessionState.functionRegistry.lookupFunction(builtinIdent1).isDefined)
+      assert(session.sessionState.functionRegistry.lookupFunction(builtinIdent2).isDefined)
     } finally {
       stop(session)
     }
@@ -420,8 +470,12 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       val outerParser = session.sessionState.sqlParser
       assert(outerParser.isInstanceOf[MyParser])
       assert(outerParser.asInstanceOf[MyParser].delegate.isInstanceOf[MyParser])
-      assert(session.sessionState.functionRegistry
-        .lookupFunction(MyExtensions.myFunction._1).isDefined)
+      // Extension functions are in the builtin namespace (3-part key)
+      val builtinIdent = FunctionIdentifier(
+        MyExtensions.myFunction._1.funcName.toLowerCase(Locale.ROOT),
+        Some(CatalogManager.BUILTIN_NAMESPACE),
+        Some(CatalogManager.SYSTEM_CATALOG_NAME))
+      assert(session.sessionState.functionRegistry.lookupFunction(builtinIdent).isDefined)
     } finally {
       stop(session)
     }
@@ -435,11 +489,15 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
         classOf[MyExtensions2Duplicate].getCanonicalName).mkString(","))
       .getOrCreate()
     try {
-      val lastRegistered = session.sessionState.functionRegistry
-        .lookupFunction(FunctionIdentifier("myFunction2"))
+      // Extension functions are in the builtin namespace (3-part key); last registered wins
+      val builtinIdent = FunctionIdentifier(
+        "myfunction2",
+        Some(CatalogManager.BUILTIN_NAMESPACE),
+        Some(CatalogManager.SYSTEM_CATALOG_NAME))
+      val lastRegistered = session.sessionState.functionRegistry.lookupFunctionBuilder(builtinIdent)
       assert(lastRegistered.isDefined)
-      assert(lastRegistered.get !== MyExtensions2.myFunction._2)
-      assert(lastRegistered.get === MyExtensions2Duplicate.myFunction._2)
+      assert(lastRegistered.get !== MyExtensions2.myFunction._3)
+      assert(lastRegistered.get === MyExtensions2Duplicate.myFunction._3)
     } finally {
       stop(session)
     }
@@ -608,6 +666,19 @@ case class MyRule(spark: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan
 }
 
+case class MyHiddenColumn(spark: SparkSession) extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case rel: LocalRelation if rel.output.size == 2 =>
+      // rel.output.size == 2 for idempotence
+      val newRel = rel.copy(
+        output = rel.output :+ AttributeReference("x", IntegerType)()
+      )
+      assert(rel.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(0L))
+      newRel.setTagValue(LogicalPlan.PLAN_ID_TAG, 0L)
+      newRel
+  }
+}
+
 case class MyCheckRule(spark: SparkSession) extends (LogicalPlan => Unit) {
   override def apply(plan: LogicalPlan): Unit = { }
 }
@@ -666,6 +737,21 @@ object MyExtensions {
       """,
       ""),
     (_: Seq[Expression]) => Literal(5, IntegerType))
+
+  val myTableFunction = (FunctionIdentifier("myTableFunc"),
+    new ExpressionInfo(
+      "noClass",
+      "",
+      "myTableFunc",
+      "usage",
+      "",
+      "",
+      "",
+      "",
+      "3.0.0",
+      "",
+      ""),
+    (_: Seq[Expression]) => Range(0, 2, 1, None, Range.getOutputAttrs, isStreaming = false))
 }
 
 case class CloseableColumnBatchIterator(itr: Iterator[ColumnarBatch],

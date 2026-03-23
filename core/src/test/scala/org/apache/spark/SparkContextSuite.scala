@@ -849,7 +849,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     val listener = new SparkListener {
       override def onExecutorMetricsUpdate(
           executorMetricsUpdate: SparkListenerExecutorMetricsUpdate): Unit = {
-        if (executorMetricsUpdate.execId != SparkContext.DRIVER_IDENTIFIER) {
+        if (!SparkContext.isDriver(executorMetricsUpdate.execId)) {
           runningTaskIds = executorMetricsUpdate.accumUpdates.map(_._1)
         }
       }
@@ -1474,6 +1474,14 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(!sc.conf.get(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS).contains("-Dfoo=bar"))
     assert(!sc.conf.get(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS).contains("-Dfoo=bar"))
     sc.stop()
+  }
+
+  test("SPARK-55757: Improve `spark.task.cpus` validation") {
+    val conf = new SparkConf().setAppName("test").setMaster("local").set(CPUS_PER_TASK, 0)
+    val m = intercept[SparkIllegalArgumentException] {
+      sc = new SparkContext(conf)
+    }.getMessage
+    assert(m.contains("Number of cores to allocate for each task should be positive."))
   }
 }
 

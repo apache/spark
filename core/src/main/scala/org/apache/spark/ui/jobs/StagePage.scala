@@ -240,7 +240,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           <script type="module" src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script>
           <script type="module"
                   src={UIUtils.prependBaseUri(request, "/static/stagepage.js")}></script>
-          <script type="module">{Unparsed(js)}</script>
+          <script type="module" nonce={CspNonce.get}>{Unparsed(js)}</script>
         </div>
         UIUtils.headerSparkPage(request, stageHeader, content, parent, showVisualization = true,
           useDataTables = true)
@@ -361,9 +361,9 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
                |'className': 'task task-assignment-timeline-object',
                |'group': '$executorId',
                |'content': '<div class="task-assignment-timeline-content"
-                 |data-toggle="tooltip" data-placement="top"
-                 |data-html="true" data-container="body"
-                 |data-title="${"Task " + index + " (attempt " + attempt + ")"}<br>
+                 |data-bs-toggle="tooltip"
+                 |data-bs-html="true" data-bs-container="body"
+                 |data-bs-title="${"Task " + index + " (attempt " + attempt + ")"}<br>
                  |Status: ${taskInfo.status}<br>
                  |Launch Time: ${UIUtils.formatDate(new Date(launchTime))}
                  |${
@@ -422,8 +422,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           <form id={"form-event-timeline-page"}
                 method="get"
                 action=""
-                class="form-inline float-right justify-content-end"
-                style="margin-bottom: 0px;">
+                class="d-flex float-end justify-content-end align-items-center gap-1 mb-0">
             <label>Tasks: {totalTasks}. {totalPages} Pages. Jump to</label>
             <input type="hidden" name="id" value={stageId.toString} />
             <input type="hidden" name="attempt" value={stageAttemptId.toString} />
@@ -431,23 +430,23 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
                    name="task.eventTimelinePageNumber"
                    id={"form-event-timeline-page-no"}
                    value={page.toString}
-                   class="col-1 form-control" />
+                   class="form-control form-control-sm" style="width: 60px;" />
 
             <label>. Show </label>
             <input type="text"
                    id={"form-event-timeline-page-size"}
                    name="task.eventTimelinePageSize"
                    value={pageSize.toString}
-                   class="col-1 form-control" />
+                   class="form-control form-control-sm" style="width: 60px;" />
             <label>items in a page.</label>
 
-            <button type="submit" class="btn btn-spark">Go</button>
+            <button type="submit" class="btn btn-outline-secondary">Go</button>
           </form>
         </div>
       </div>
       {TIMELINE_LEGEND}
     </div> ++
-    <script type="text/javascript">
+    <script type="text/javascript" nonce={CspNonce.get}>
       {Unparsed("drawTaskAssignmentTimeline(" +
       s"$groupArrayStr, $executorsArrayStr, $minLaunchTime, $maxFinishTime, " +
         s"${UIUtils.getTimeZoneOffset()})")}

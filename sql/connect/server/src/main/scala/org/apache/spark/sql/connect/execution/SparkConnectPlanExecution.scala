@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.execution
 
 import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
@@ -29,15 +29,15 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.st.STExpressionUtils
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_ARROW_MAX_BATCH_SIZE, CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE}
 import org.apache.spark.sql.connect.planner.{InvalidInputErrors, SparkConnectPlanner}
 import org.apache.spark.sql.connect.service.ExecuteHolder
-import org.apache.spark.sql.connect.utils.{MetricGenerator, PipelineAnalysisContextUtils}
-import org.apache.spark.sql.execution.{DoNotCleanup, LocalTableScanExec, QueryExecution, RemoveShuffleFiles, SkipMigration, SQLExecution}
+import org.apache.spark.sql.connect.utils.{ErrorUtils, MetricGenerator, PipelineAnalysisContextUtils}
+import org.apache.spark.sql.execution.{CollectLimitExec, CollectTailExec, DoNotCleanup, LocalTableScanExec, QueryExecution, RemoveShuffleFiles, SkipMigration, SQLExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -87,10 +87,6 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
         responseObserver.onNext(createSchemaResponse(request.getSessionId, dataframe.schema))
         processAsArrowBatches(dataframe, responseObserver, executeHolder)
         responseObserver.onNext(MetricGenerator.createMetricsResponse(sessionHolder, dataframe))
-        createObservedMetricsResponse(
-          request.getSessionId,
-          executeHolder.allObservationAndPlanIds,
-          dataframe).foreach(responseObserver.onNext)
       case proto.Plan.OpTypeCase.COMMAND =>
         val command = request.getPlan.getCommand
         planner.transformCommand(command) match {
@@ -99,7 +95,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
               session,
               transformer(tracker),
               tracker,
-              shuffleCleanupMode = shuffleCleanupMode)
+              shuffleCleanupModeOpt = Some(shuffleCleanupMode))
             qe.assertCommandExecuted()
             executeHolder.eventsManager.postFinished()
           case None =>
@@ -137,12 +133,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     val sessionId = executePlan.sessionHolder.sessionId
     val spark = dataframe.sparkSession
     val schema = dataframe.schema
-    val geospatialEnabled = spark.sessionState.conf.geospatialEnabled
-    if (!geospatialEnabled && schema.existsRecursively(STExpressionUtils.isGeoSpatialType)) {
-      throw new org.apache.spark.sql.AnalysisException(
-        errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
-        messageParameters = scala.collection.immutable.Map.empty)
-    }
+    TypeUtils.failUnsupportedDataType(schema, spark.sessionState.conf)
     val maxRecordsPerBatch = spark.sessionState.conf.arrowMaxRecordsPerBatch
     val timeZoneId = spark.sessionState.conf.sessionLocalTimeZone
     val largeVarTypes = spark.sessionState.conf.arrowUseLargeVarTypes
@@ -213,7 +204,14 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       }
       numSent += 1
     }
-
+    def sendCollectedRows(rows: Array[InternalRow]): Unit = {
+      executePlan.eventsManager.postFinished(Some(rows.length))
+      var offset = 0L
+      converter(rows.iterator).foreach { case (bytes, count) =>
+        sendBatch(bytes, count, offset)
+        offset += count
+      }
+    }
     dataframe.queryExecution.executedPlan match {
       case LocalTableScanExec(_, rows, _) =>
         executePlan.eventsManager.postFinished(Some(rows.length))
@@ -221,6 +219,14 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
         converter(rows.iterator).foreach { case (bytes, count) =>
           sendBatch(bytes, count, offset)
           offset += count
+        }
+      case collectLimit: CollectLimitExec =>
+        SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectLimitArrow")) {
+          sendCollectedRows(collectLimit.executeCollect())
+        }
+      case collectTail: CollectTailExec =>
+        SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectTailArrow")) {
+          sendCollectedRows(collectTail.executeCollect())
         }
       case _ =>
         SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectArrow")) {
@@ -331,26 +337,6 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       .setSchema(DataTypeProtoConverter.toConnectProtoType(schema))
       .build()
   }
-
-  private def createObservedMetricsResponse(
-      sessionId: String,
-      observationAndPlanIds: Map[String, Long],
-      dataframe: DataFrame): Option[ExecutePlanResponse] = {
-    val observedMetrics = dataframe.queryExecution.observedMetrics.collect {
-      case (name, row) if !executeHolder.observations.contains(name) =>
-        val values = SparkConnectPlanExecution.toObservedMetricsValues(row)
-        name -> values
-    }
-    if (observedMetrics.nonEmpty) {
-      Some(
-        SparkConnectPlanExecution
-          .createObservedMetricsResponse(
-            sessionId,
-            sessionHolder.serverSessionId,
-            observationAndPlanIds,
-            observedMetrics))
-    } else None
-  }
 }
 
 object SparkConnectPlanExecution {
@@ -369,22 +355,30 @@ object SparkConnectPlanExecution {
       sessionId: String,
       serverSessionId: String,
       observationAndPlanIds: Map[String, Long],
-      metrics: Map[String, Seq[(Option[String], Any, Option[DataType])]]): ExecutePlanResponse = {
-    val observedMetrics = metrics.map { case (name, values) =>
-      val metrics = ExecutePlanResponse.ObservedMetrics
+      metrics: Map[String, Try[Seq[(Option[String], Any, Option[DataType])]]])
+      : ExecutePlanResponse = {
+    val observedMetrics = metrics.map { case (name, result) =>
+      val metricsBuilder = ExecutePlanResponse.ObservedMetrics
         .newBuilder()
         .setName(name)
-      values.foreach { case (keyOpt, value, dataTypeOpt) =>
-        dataTypeOpt match {
-          case Some(dataType) =>
-            metrics.addValues(toLiteralProto(value, dataType))
-          case None =>
-            metrics.addValues(toLiteralProto(value))
-        }
-        keyOpt.foreach(metrics.addKeys)
+      result match {
+        case Success(values) =>
+          values.foreach { case (keyOpt, value, dataTypeOpt) =>
+            dataTypeOpt match {
+              case Some(dataType) =>
+                metricsBuilder.addValues(toLiteralProto(value, dataType))
+              case None =>
+                metricsBuilder.addValues(toLiteralProto(value))
+            }
+            keyOpt.foreach(metricsBuilder.addKeys)
+          }
+        case Failure(throwable) =>
+          val (rootErrorIdx, errors) = ErrorUtils.throwableToProtoErrors(throwable)
+          metricsBuilder.setRootErrorIdx(rootErrorIdx)
+          metricsBuilder.addAllErrors(errors.asJava)
       }
-      observationAndPlanIds.get(name).foreach(metrics.setPlanId)
-      metrics.build()
+      observationAndPlanIds.get(name).foreach(metricsBuilder.setPlanId)
+      metricsBuilder.build()
     }
     // Prepare a response with the observed metrics.
     ExecutePlanResponse

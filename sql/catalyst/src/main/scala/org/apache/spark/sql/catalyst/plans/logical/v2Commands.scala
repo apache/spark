@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, ResolveSchemaEvolution, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.catalog.{FunctionResource, RoutineLanguage}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -38,10 +38,9 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, AtomicType, BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -56,13 +55,50 @@ trait KeepAnalyzedQuery extends Command {
 }
 
 /**
+ * Trait that gathers schema evolution logic shared by V2 write commands and MERGE INTO.
+ */
+trait SupportsSchemaEvolution extends LogicalPlan {
+  /** The target of the write operation. */
+  def table: LogicalPlan
+
+  def withNewTable(newTable: NamedRelation): SupportsSchemaEvolution
+
+  /** Whether schema evolution is enabled for the write operation. */
+  def withSchemaEvolution: Boolean
+
+  /**
+   * Whether the plan satisfies requirements to be able to identify schema changes, in particular
+   * the table and source are resolved.
+   */
+  def schemaEvolutionReady: Boolean
+
+  /**
+   * The set of table changes needed to evolve the target table schema to accommodate the source
+   * query schema. Returns an empty array if no changes are needed or if schema evolution is
+   * disabled.
+   */
+  def pendingSchemaChanges: Seq[TableChange]
+
+  /** The write privileges required by this command. */
+  def writePrivileges: Set[TableWritePrivilege]
+
+  /** Whether schema evolution is enabled for this command and supported by the table. */
+  lazy val schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
+    table match {
+      case r: DataSourceV2Relation if r.autoSchemaEvolution => true
+      case _ => false
+    }
+  }
+}
+
+/**
  * Base trait for DataSourceV2 write commands
  */
 trait V2WriteCommand
     extends UnaryCommand
     with KeepAnalyzedQuery
     with CTEInChildren
-    with IgnoreCachedData {
+    with SupportsSchemaEvolution {
   def table: NamedRelation
   def query: LogicalPlan
   def isByName: Boolean
@@ -90,6 +126,16 @@ trait V2WriteCommand
     }
   }
 
+  override lazy val schemaEvolutionReady: Boolean = table.resolved && query.resolved
+
+  override lazy val pendingSchemaChanges: Seq[TableChange] = {
+    if (schemaEvolutionEnabled && schemaEvolutionReady) {
+      ResolveSchemaEvolution.computeSchemaChanges(table.schema, query.schema, isByName).toSeq
+    } else {
+      Seq.empty
+    }
+  }
+
   def withNewQuery(newQuery: LogicalPlan): V2WriteCommand
   def withNewTable(newTable: NamedRelation): V2WriteCommand
 }
@@ -108,8 +154,10 @@ case class AppendData(
     query: LogicalPlan,
     writeOptions: Map[String, String],
     isByName: Boolean,
+    withSchemaEvolution: Boolean,
     write: Option[Write] = None,
     analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand {
+  override val writePrivileges: Set[TableWritePrivilege] = Set(TableWritePrivilege.INSERT)
   override def withNewQuery(newQuery: LogicalPlan): AppendData = copy(query = newQuery)
   override def withNewTable(newTable: NamedRelation): AppendData = copy(table = newTable)
   override def storeAnalyzedQuery(): Command = copy(analyzedQuery = Some(query))
@@ -121,15 +169,27 @@ object AppendData {
   def byName(
       table: NamedRelation,
       df: LogicalPlan,
-      writeOptions: Map[String, String] = Map.empty): AppendData = {
-    new AppendData(table, df, writeOptions, isByName = true)
+      writeOptions: Map[String, String] = Map.empty,
+      withSchemaEvolution: Boolean = false): AppendData = {
+    new AppendData(
+      table,
+      df,
+      writeOptions,
+      isByName = true,
+      withSchemaEvolution)
   }
 
   def byPosition(
       table: NamedRelation,
       query: LogicalPlan,
-      writeOptions: Map[String, String] = Map.empty): AppendData = {
-    new AppendData(table, query, writeOptions, isByName = false)
+      writeOptions: Map[String, String] = Map.empty,
+      withSchemaEvolution: Boolean = false): AppendData = {
+    new AppendData(
+      table,
+      query,
+      writeOptions,
+      isByName = false,
+      withSchemaEvolution)
   }
 }
 
@@ -142,8 +202,11 @@ case class OverwriteByExpression(
     query: LogicalPlan,
     writeOptions: Map[String, String],
     isByName: Boolean,
+    withSchemaEvolution: Boolean,
     write: Option[Write] = None,
     analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand {
+  override val writePrivileges: Set[TableWritePrivilege] =
+    Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
   override lazy val resolved: Boolean = {
     table.resolved && query.resolved && outputResolved && deleteExpr.resolved
   }
@@ -165,16 +228,30 @@ object OverwriteByExpression {
       table: NamedRelation,
       df: LogicalPlan,
       deleteExpr: Expression,
-      writeOptions: Map[String, String] = Map.empty): OverwriteByExpression = {
-    OverwriteByExpression(table, deleteExpr, df, writeOptions, isByName = true)
+      writeOptions: Map[String, String] = Map.empty,
+      withSchemaEvolution: Boolean = false): OverwriteByExpression = {
+    OverwriteByExpression(
+      table,
+      deleteExpr,
+      df,
+      writeOptions,
+      isByName = true,
+      withSchemaEvolution)
   }
 
   def byPosition(
       table: NamedRelation,
       query: LogicalPlan,
       deleteExpr: Expression,
-      writeOptions: Map[String, String] = Map.empty): OverwriteByExpression = {
-    OverwriteByExpression(table, deleteExpr, query, writeOptions, isByName = false)
+      writeOptions: Map[String, String] = Map.empty,
+      withSchemaEvolution: Boolean = false): OverwriteByExpression = {
+    OverwriteByExpression(
+      table,
+      deleteExpr,
+      query,
+      writeOptions,
+      isByName = false,
+      withSchemaEvolution)
   }
 }
 
@@ -186,7 +263,10 @@ case class OverwritePartitionsDynamic(
     query: LogicalPlan,
     writeOptions: Map[String, String],
     isByName: Boolean,
+    withSchemaEvolution: Boolean,
     write: Option[Write] = None) extends V2WriteCommand {
+  override val writePrivileges: Set[TableWritePrivilege] =
+    Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
   override def withNewQuery(newQuery: LogicalPlan): OverwritePartitionsDynamic = {
     copy(query = newQuery)
   }
@@ -205,15 +285,27 @@ object OverwritePartitionsDynamic {
   def byName(
       table: NamedRelation,
       df: LogicalPlan,
-      writeOptions: Map[String, String] = Map.empty): OverwritePartitionsDynamic = {
-    OverwritePartitionsDynamic(table, df, writeOptions, isByName = true)
+      writeOptions: Map[String, String] = Map.empty,
+      withSchemaEvolution: Boolean = false): OverwritePartitionsDynamic = {
+    OverwritePartitionsDynamic(
+      table,
+      df,
+      writeOptions,
+      isByName = true,
+      withSchemaEvolution)
   }
 
   def byPosition(
       table: NamedRelation,
       query: LogicalPlan,
-      writeOptions: Map[String, String] = Map.empty): OverwritePartitionsDynamic = {
-    OverwritePartitionsDynamic(table, query, writeOptions, isByName = false)
+      writeOptions: Map[String, String] = Map.empty,
+      withSchemaEvolution: Boolean = false): OverwritePartitionsDynamic = {
+    OverwritePartitionsDynamic(
+      table,
+      query,
+      writeOptions,
+      isByName = false,
+      withSchemaEvolution)
   }
 }
 
@@ -257,7 +349,11 @@ case class ReplaceData(
     write: Option[Write] = None) extends RowLevelWrite {
 
   override val isByName: Boolean = false
-  override val stringArgs: Iterator[Any] = Iterator(table, query, write)
+  override val withSchemaEvolution: Boolean = false
+  override def writePrivileges: Set[TableWritePrivilege] =
+    throw SparkException.internalError("ReplaceData.writePrivileges should not be called.")
+
+  override def stringArgs: Iterator[Any] = Iterator(table, query, write)
 
   override lazy val references: AttributeSet = query.outputSet
 
@@ -339,7 +435,11 @@ case class WriteDelta(
     write: Option[DeltaWrite] = None) extends RowLevelWrite {
 
   override val isByName: Boolean = false
-  override val stringArgs: Iterator[Any] = Iterator(table, query, write)
+  override val withSchemaEvolution: Boolean = false
+  override def writePrivileges: Set[TableWritePrivilege] =
+    throw SparkException.internalError("WriteDelta.writePrivileges should not be called.")
+
+  override def stringArgs: Iterator[Any] = Iterator(table, query, write)
 
   override lazy val references: AttributeSet = query.outputSet
 
@@ -845,11 +945,11 @@ case class UpdateTable(
   override protected def withNewChildInternal(newChild: LogicalPlan): UpdateTable =
     copy(table = newChild)
 
-  def skipSchemaResolution: Boolean = table match {
-    case r: NamedRelation => r.skipSchemaResolution
-    case SubqueryAlias(_, r: NamedRelation) => r.skipSchemaResolution
-    case _ => false
-  }
+  def skipSchemaResolution: Boolean =
+    EliminateSubqueryAliases(table) match {
+      case r: NamedRelation => r.skipSchemaResolution
+      case _ => false
+    }
 }
 
 /**
@@ -862,7 +962,17 @@ case class MergeIntoTable(
     matchedActions: Seq[MergeAction],
     notMatchedActions: Seq[MergeAction],
     notMatchedBySourceActions: Seq[MergeAction],
-    withSchemaEvolution: Boolean) extends BinaryCommand with SupportsSubquery {
+    withSchemaEvolution: Boolean)
+    extends BinaryCommand with SupportsSchemaEvolution with SupportsSubquery {
+
+  override val table: LogicalPlan = EliminateSubqueryAliases(targetTable)
+
+  override def withNewTable(newTable: NamedRelation): MergeIntoTable = {
+    copy(targetTable = targetTable.transform { case _: NamedRelation => newTable })
+  }
+
+  override val writePrivileges: Set[TableWritePrivilege] =
+    MergeIntoTable.getWritePrivileges(this)
 
   lazy val aligned: Boolean = {
     val actions = matchedActions ++ notMatchedActions ++ notMatchedBySourceActions
@@ -894,71 +1004,55 @@ case class MergeIntoTable(
     case _ => false
   }
 
-  lazy val needSchemaEvolution: Boolean =
-    evaluateSchemaEvolution && changesForSchemaEvolution.nonEmpty
-
-  lazy val evaluateSchemaEvolution: Boolean =
-    schemaEvolutionEnabled &&
-      canEvaluateSchemaEvolution
-
-  lazy val schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
-    EliminateSubqueryAliases(targetTable) match {
-      case r: DataSourceV2Relation if r.autoSchemaEvolution() => true
-      case _ => false
+  override lazy val pendingSchemaChanges: Seq[TableChange] = {
+    if (schemaEvolutionEnabled && schemaEvolutionReady) {
+      val referencedSourceSchema = MergeIntoTable.sourceSchemaForSchemaEvolution(this)
+      ResolveSchemaEvolution.computeSchemaChanges(
+        targetTable.schema, referencedSourceSchema, isByName = true).toSeq
+    } else {
+      Seq.empty
     }
   }
 
   // Guard that assignments are either resolved or candidates for evolution before
   // evaluating schema evolution. We need to use resolved assignment values to check
-  // candidates, see MergeIntoTable.sourceSchemaForSchemaEvolution for details.
-  lazy val canEvaluateSchemaEvolution: Boolean = {
-    if ((!targetTable.resolved) || (!sourceTable.resolved)) {
-      false
-    } else {
-      val actions = matchedActions ++ notMatchedActions
-      val hasStarActions = actions.exists {
-        case _: UpdateStarAction => true
-        case _: InsertStarAction => true
-        case _ => false
-      }
-      if (hasStarActions) {
-        // need to resolve star actions first
-        false
-      } else {
-        val assignments = actions.collect {
-          case a: UpdateAction => a.assignments
-          case a: InsertAction => a.assignments
-        }.flatten
-        val sourcePaths = DataTypeUtils.extractAllFieldPaths(sourceTable.schema)
-        assignments.forall { assignment =>
-          assignment.resolved ||
-            (assignment.value.resolved && sourcePaths.exists {
-              path => MergeIntoTable.isEqual(assignment, path)
-            })
-        }
-      }
+  // candidates, see MergeIntoTable.isSchemaEvolutionCandidate for details.
+  override lazy val schemaEvolutionReady: Boolean = {
+    targetTable.resolved && sourceTable.resolved && actionsSchemaEvolutionReady
+  }
+
+  private def actionsSchemaEvolutionReady: Boolean = {
+    val actions = matchedActions ++ notMatchedActions
+    actions.forall {
+      case a: UpdateAction => MergeIntoTable.areSchemaEvolutionReady(a.assignments, sourceTable)
+      case a: InsertAction => MergeIntoTable.areSchemaEvolutionReady(a.assignments, sourceTable)
+      case _ => false
     }
   }
 
-  private lazy val sourceSchemaForEvolution: StructType =
-    MergeIntoTable.sourceSchemaForSchemaEvolution(this)
-
-  lazy val changesForSchemaEvolution: Array[TableChange] =
-    MergeIntoTable.schemaChanges(targetTable.schema, sourceSchemaForEvolution)
-
   override def left: LogicalPlan = targetTable
   override def right: LogicalPlan = sourceTable
+
   override protected def withNewChildrenInternal(
-      newLeft: LogicalPlan, newRight: LogicalPlan): MergeIntoTable =
+      newLeft: LogicalPlan,
+      newRight: LogicalPlan): MergeIntoTable = {
     copy(targetTable = newLeft, sourceTable = newRight)
+  }
 }
 
 object MergeIntoTable {
 
+  def getWritePrivileges(merge: MergeIntoTable): Set[TableWritePrivilege] = {
+    getWritePrivileges(
+      merge.matchedActions,
+      merge.notMatchedActions,
+      merge.notMatchedBySourceActions)
+  }
+
   def getWritePrivileges(
       matchedActions: Iterable[MergeAction],
       notMatchedActions: Iterable[MergeAction],
-      notMatchedBySourceActions: Iterable[MergeAction]): Seq[TableWritePrivilege] = {
+      notMatchedBySourceActions: Iterable[MergeAction]): Set[TableWritePrivilege] = {
     (matchedActions ++ notMatchedActions ++ notMatchedBySourceActions)
       .collect {
         case _: DeleteAction => TableWritePrivilege.DELETE
@@ -966,74 +1060,6 @@ object MergeIntoTable {
         case _: InsertAction | _: InsertStarAction => TableWritePrivilege.INSERT
       }
       .toSet
-      .toSeq
-  }
-
-  def schemaChanges(
-      originalTarget: StructType,
-      originalSource: StructType,
-      fieldPath: Array[String] = Array()): Array[TableChange] = {
-    schemaChanges(originalTarget, originalSource, originalTarget, originalSource, fieldPath)
-  }
-
-  private def schemaChanges(
-      current: DataType,
-      newType: DataType,
-      originalTarget: StructType,
-      originalSource: StructType,
-      fieldPath: Array[String]): Array[TableChange] = {
-    (current, newType) match {
-      case (StructType(currentFields), StructType(newFields)) =>
-        val newFieldMap = toFieldMap(newFields)
-
-        // Update existing field types
-        val updates = {
-          currentFields collect {
-            case currentField: StructField if newFieldMap.contains(currentField.name) =>
-              schemaChanges(currentField.dataType, newFieldMap(currentField.name).dataType,
-                originalTarget, originalSource, fieldPath ++ Seq(currentField.name))
-          }
-        }.flatten
-
-        // Identify the newly added fields and append to the end
-        val currentFieldMap = toFieldMap(currentFields)
-        val adds = newFields.filterNot(f => currentFieldMap.contains(f.name))
-          .map(f => TableChange.addColumn(fieldPath ++ Set(f.name), f.dataType))
-
-        updates ++ adds
-
-      case (ArrayType(currentElementType, _), ArrayType(newElementType, _)) =>
-        schemaChanges(currentElementType, newElementType,
-          originalTarget, originalSource, fieldPath ++ Seq("element"))
-
-      case (MapType(currentKeyType, currentElementType, _),
-      MapType(updateKeyType, updateElementType, _)) =>
-        schemaChanges(currentKeyType, updateKeyType, originalTarget, originalSource,
-          fieldPath ++ Seq("key")) ++
-          schemaChanges(currentElementType, updateElementType,
-            originalTarget, originalSource, fieldPath ++ Seq("value"))
-
-      case (currentType: AtomicType, newType: AtomicType) if currentType != newType =>
-        Array(TableChange.updateColumnType(fieldPath, newType))
-
-      case (currentType, newType) if currentType == newType =>
-        // No change needed
-        Array.empty[TableChange]
-
-      case _ =>
-        // Do not support change between atomic and complex types for now
-        throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
-          originalTarget, originalSource, null)
-    }
-  }
-
-  def toFieldMap(fields: Array[StructField]): Map[String, StructField] = {
-    val fieldMap = fields.map(field => field.name -> field).toMap
-    if (SQLConf.get.caseSensitiveAnalysis) {
-      fieldMap
-    } else {
-      CaseInsensitiveMap(fieldMap)
-    }
   }
 
   // A pruned version of source schema that only contains columns/nested fields
@@ -1107,11 +1133,40 @@ object MergeIntoTable {
   // Example: UPDATE SET target.a = source.a
   private def isEqual(assignment: Assignment, sourceFieldPath: Seq[String]): Boolean = {
     // key must be a non-qualified field path that may be added to target schema via evolution
-    val assignmenKeyExpr = extractFieldPath(assignment.key, allowUnresolved = true)
+    val assignmentKeyExpr = extractFieldPath(assignment.key, allowUnresolved = true)
     // value should always be resolved (from source)
     val assignmentValueExpr = extractFieldPath(assignment.value, allowUnresolved = false)
-    assignmenKeyExpr == assignmentValueExpr &&
-      assignmenKeyExpr == sourceFieldPath
+    assignmentKeyExpr == assignmentValueExpr && assignmentKeyExpr == sourceFieldPath
+  }
+
+  private def areSchemaEvolutionReady(
+      assignments: Seq[Assignment],
+      source: LogicalPlan): Boolean = {
+    assignments.forall(assign => assign.resolved || isSchemaEvolutionCandidate(assign, source))
+  }
+
+  private def isSchemaEvolutionCandidate(assignment: Assignment, source: LogicalPlan): Boolean = {
+    assignment.value.resolved && isSameColumnAssignment(assignment, source)
+  }
+
+  // Helper method to check if an assignment key is equal to a source column
+  // and if the assignment value is that same source column.
+  //
+  // Top-level example: UPDATE SET target.a = source.a
+  //   key:   AttributeReference("a", ...) -> path Seq("a")
+  //   value: AttributeReference("a", ...) from source
+  //
+  // Nested example: UPDATE SET addr.city = source.addr.city
+  //   key:   GetStructField(GetStructField(AttributeReference("addr", ...), 0), 1)
+  //   value: GetStructField(GetStructField(AttributeReference("addr", ...), 0), 1) from source
+  //
+  // references contains only root attributes, so subsetOf(source.outputSet) works for both.
+  private def isSameColumnAssignment(assignment: Assignment, source: LogicalPlan): Boolean = {
+    // key must be a non-qualified field path that may be added to target schema via evolution
+    val keyPath = extractFieldPath(assignment.key, allowUnresolved = true)
+    // value should always be resolved (from source)
+    val valuePath = extractFieldPath(assignment.value, allowUnresolved = false)
+    keyPath == valuePath && assignment.value.references.subsetOf(source.outputSet)
   }
 }
 
@@ -1378,6 +1433,7 @@ case class CreateUserDefinedFunction(
     exprText: Option[String],
     queryText: Option[String],
     comment: Option[String],
+    collation: Option[String],
     isDeterministic: Option[Boolean],
     containsSQL: Option[Boolean],
     language: RoutineLanguage,
@@ -1673,7 +1729,7 @@ case class CreateView(
 }
 
 /**
- * Used to apply ApplyDefaultCollationToStringType to CreateViewCommand
+ * Used to apply ApplyDefaultCollation to CreateViewCommand
  */
 trait CreateTempView {
   val collation: Option[String]
@@ -1742,7 +1798,8 @@ case class CacheTableAsSelect(
     isLazy: Boolean,
     options: Map[String, String],
     isAnalyzed: Boolean = false,
-    referredTempFunctions: Seq[String] = Seq.empty) extends AnalysisOnlyCommand {
+    referredTempFunctions: Seq[String] = Seq.empty)
+  extends AnalysisOnlyCommand with CTEInChildren {
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): CacheTableAsSelect = {
     assert(!isAnalyzed)
@@ -1756,6 +1813,10 @@ case class CacheTableAsSelect(
       isAnalyzed = true,
       // Collect the referred temporary functions from AnalysisContext
       referredTempFunctions = ac.referredTempFunctionNames.toSeq)
+  }
+
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    copy(plan = WithCTE(plan, cteDefs))
   }
 }
 
@@ -1921,6 +1982,53 @@ case class SetVariable(
   override protected def withNewChildInternal(newChild: LogicalPlan): SetVariable =
     copy(sourceQuery = newChild)
 }
+
+/**
+ * The logical plan of the DECLARE CURSOR statement.
+ *
+ * The queryText is stored to support both parameterized and non-parameterized cursors.
+ * The query is parsed and analyzed when the cursor is declared at execution time.
+ *
+ * @param cursorName Name of the cursor
+ * @param queryText The original SQL text of the query (preserves parameter markers)
+ * @param asensitive Whether the cursor is ASENSITIVE or INSENSITIVE
+ */
+case class DeclareCursor(
+    cursorName: String,
+    queryText: String,
+    asensitive: Boolean = true) extends LeafCommand
+
+/**
+ * The logical plan of the OPEN cursor command.
+ *
+ * @param cursor Cursor reference (UnresolvedCursor during parsing,
+ *               CursorReference after analysis)
+ * @param args Parameter expressions from USING clause
+ * @param paramNames Parameter names extracted from Alias at parse time
+ *                   (empty string for positional parameters)
+ */
+case class OpenCursor(
+    cursor: Expression,
+    args: Seq[Expression] = Seq.empty,
+    paramNames: Seq[String] = Seq.empty) extends LeafCommand
+
+/**
+ * The logical plan of the FETCH cursor command.
+ *
+ * @param cursor Cursor reference (UnresolvedCursor during parsing, CursorReference after analysis)
+ * @param targetVariables Target variables to fetch into
+ */
+case class FetchCursor(
+    cursor: Expression,
+    targetVariables: Seq[Expression]) extends LeafCommand
+
+/**
+ * The logical plan of the CLOSE cursor command.
+ *
+ * @param cursor Cursor reference (UnresolvedCursor during parsing, CursorReference after analysis)
+ */
+case class CloseCursor(cursor: Expression) extends LeafCommand
+
 
 /**
  * The logical plan of the CALL statement.

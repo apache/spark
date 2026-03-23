@@ -406,7 +406,7 @@ class WindowArrowUDFTestsMixin:
                         windowed.collect(), df.withColumn("wm", sf.mean(df.v).over(w)).collect()
                     )
 
-        with self.tempView("v"), self.temp_func("weighted_mean"):
+        with self.temp_view("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -437,7 +437,7 @@ class WindowArrowUDFTestsMixin:
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
 
-        with self.tempView("v"), self.temp_func("weighted_mean"):
+        with self.temp_view("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -507,7 +507,7 @@ class WindowArrowUDFTestsMixin:
                         windowed.collect(), df.withColumn("wm", sf.mean(df.v).over(w)).collect()
                     )
 
-        with self.tempView("v"), self.temp_func("weighted_mean"):
+        with self.temp_view("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -661,8 +661,7 @@ class WindowArrowUDFTestsMixin:
     def test_time_min(self):
         import pyarrow as pa
 
-        df = self.spark.sql(
-            """
+        df = self.spark.sql("""
             SELECT * FROM VALUES
             (1, TIME '12:34:56'),
             (1, TIME '1:2:3'),
@@ -670,8 +669,7 @@ class WindowArrowUDFTestsMixin:
             (2, TIME '10:58:59'),
             (2, TIME '10:00:03')
             AS tab(i, t)
-            """
-        )
+            """)
         w1 = Window.partitionBy("i").orderBy("t")
         w2 = Window.orderBy("t")
 
@@ -855,12 +853,6 @@ class WindowArrowUDFTests(WindowArrowUDFTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.arrow.test_arrow_udf_window import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

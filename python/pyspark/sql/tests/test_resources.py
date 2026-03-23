@@ -19,13 +19,13 @@ import unittest
 from pyspark import TaskContext
 from pyspark.resource import TaskResourceRequests, ResourceProfileBuilder
 from pyspark.sql import SparkSession
-from pyspark.testing.sqlutils import (
+from pyspark.testing.utils import (
+    ReusedPySparkTestCase,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import ReusedPySparkTestCase
 
 
 @unittest.skipIf(
@@ -95,12 +95,6 @@ class ResourceProfileTests(ResourceProfileTestsMixin, ReusedPySparkTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_resources import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

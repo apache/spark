@@ -110,13 +110,15 @@ class DiffFramesDotSeriesMixin:
         with self.assertRaisesRegex(ValueError, "matrices are not aligned"):
             psser.dot(psser_other)
 
-        with ps.option_context("compute.eager_check", False), self.assertRaisesRegex(
-            ValueError, "matrices are not aligned"
+        with (
+            ps.option_context("compute.eager_check", False),
+            self.assertRaisesRegex(ValueError, "matrices are not aligned"),
         ):
             psser.dot(psser_other2)
 
-        with ps.option_context("compute.eager_check", True), self.assertRaisesRegex(
-            ValueError, "matrices are not aligned"
+        with (
+            ps.option_context("compute.eager_check", True),
+            self.assertRaisesRegex(ValueError, "matrices are not aligned"),
         ):
             psser.dot(psser_other)
 
@@ -129,13 +131,6 @@ class DiffFramesDotSeriesTests(DiffFramesDotSeriesMixin, PandasOnSparkTestCase, 
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.diff_frames_ops.test_dot_series import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

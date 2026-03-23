@@ -122,7 +122,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   private def setLogicalLink(logicalPlan: LogicalPlan, inherited: Boolean = false): Unit = {
     // Stop at a descendant which is the root of a sub-tree transformed from another logical node.
-    if (inherited && getTagValue(SparkPlan.LOGICAL_PLAN_TAG).isDefined) {
+    if (inherited && containsTag(SparkPlan.LOGICAL_PLAN_TAG)) {
       return
     }
 

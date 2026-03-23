@@ -77,13 +77,13 @@ __all__ = [
 
 
 def _parallelFitTasks(
-    est: Estimator,
+    est: Estimator[Transformer],
     train: DataFrame,
     eva: Evaluator,
     validation: DataFrame,
     epm: Sequence["ParamMap"],
     collectSubModel: bool,
-) -> List[Callable[[], Tuple[int, float, Transformer]]]:
+) -> List[Callable[[], Tuple[int, float, Union[Transformer, None]]]]:
     """
     Creates a list of callables which can be called from different threads to fit and evaluate
     an estimator in parallel. Each callable returns an `(index, metric)` pair.
@@ -110,7 +110,7 @@ def _parallelFitTasks(
     """
     modelIter = est.fitMultiple(train, epm)
 
-    def singleTask() -> Tuple[int, float, Transformer]:
+    def singleTask() -> Tuple[int, float, Union[Transformer, None]]:
         index, model = next(modelIter)
         # TODO: duplicate evaluator to take extra params from input
         #  Note: Supporting tuning params in evaluator need update method
@@ -169,12 +169,10 @@ class ParamGridBuilder:
         return self
 
     @overload
-    def baseOn(self, __args: "ParamMap") -> "ParamGridBuilder":
-        ...
+    def baseOn(self, __args: "ParamMap") -> "ParamGridBuilder": ...
 
     @overload
-    def baseOn(self, *args: Tuple[Param, Any]) -> "ParamGridBuilder":
-        ...
+    def baseOn(self, *args: Tuple[Param, Any]) -> "ParamGridBuilder": ...
 
     @since("1.4.0")
     def baseOn(self, *args: Union["ParamMap", Tuple[Param, Any]]) -> "ParamGridBuilder":
@@ -853,9 +851,10 @@ class CrossValidator(
             validation = datasets[i][1]
             train = datasets[i][0]
 
-            with _cache_spark_dataset(train) as train, _cache_spark_dataset(
-                validation
-            ) as validation:
+            with (
+                _cache_spark_dataset(train) as train,
+                _cache_spark_dataset(validation) as validation,
+            ):
                 tasks = map(
                     inheritable_thread_target(dataset.sparkSession),
                     _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam),
@@ -1758,7 +1757,7 @@ if __name__ == "__main__":
     sc = spark.sparkContext
     globs["sc"] = sc
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
         sys.exit(-1)

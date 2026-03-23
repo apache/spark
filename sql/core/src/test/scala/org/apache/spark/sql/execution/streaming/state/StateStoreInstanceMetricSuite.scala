@@ -75,6 +75,7 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
           SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
           SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
           SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
+          SQLConf.STATE_STORE_MAINTENANCE_FORCE_SHUTDOWN_TIMEOUT.key -> "5",
           SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
           SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "3"
         ) {
@@ -139,6 +140,7 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
           SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
           SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
           SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
+          SQLConf.STATE_STORE_MAINTENANCE_FORCE_SHUTDOWN_TIMEOUT.key -> "5",
           SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
           SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "3"
         ) {
@@ -214,6 +216,7 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
           SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
           SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
           SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
+          SQLConf.STATE_STORE_MAINTENANCE_FORCE_SHUTDOWN_TIMEOUT.key -> "5",
           SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
           SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "10",
           SQLConf.SHUFFLE_PARTITIONS.key -> "3"
@@ -291,6 +294,7 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
           SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
           SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
           SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
+          SQLConf.STATE_STORE_MAINTENANCE_FORCE_SHUTDOWN_TIMEOUT.key -> "5",
           SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
           SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "10"
         ) {
@@ -365,6 +369,7 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
       SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
       SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
       SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
+      SQLConf.STATE_STORE_MAINTENANCE_FORCE_SHUTDOWN_TIMEOUT.key -> "5",
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
       SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "4",
       SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3"

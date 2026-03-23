@@ -101,8 +101,7 @@ case class ArrowEvalPythonExec(
       ArrowPythonRunner.getPythonRunnerConfMap(conf),
       pythonMetrics,
       jobArtifactUUID,
-      sessionUUID,
-      conf.pythonUDFProfiler)
+      sessionUUID)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
@@ -128,8 +127,7 @@ class ArrowEvalPythonEvaluatorFactory(
     pythonRunnerConf: Map[String, String],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
-    sessionUUID: Option[String],
-    profiler: Option[String])
+    sessionUUID: Option[String])
   extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
 
   override def evaluate(
@@ -155,8 +153,7 @@ class ArrowEvalPythonEvaluatorFactory(
       pythonRunnerConf,
       pythonMetrics,
       jobArtifactUUID,
-      sessionUUID,
-      profiler) with BatchedPythonArrowInput
+      sessionUUID) with BatchedPythonArrowInput
     val columnarBatchIter = pyRunner.compute(batchIter, context.partitionId(), context)
 
     columnarBatchIter.flatMap { batch =>

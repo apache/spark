@@ -56,17 +56,17 @@ private[ui] class DriverLogPage(
       </span>
 
     val moreButton =
-      <button type="button" onclick={"loadMore()"} class="log-more-btn btn btn-secondary">
+      <button type="button" class="log-more-btn btn btn-secondary">
         Load More
       </button>
 
     val newButton =
-      <button type="button" onclick={"loadNew()"} class="log-new-btn btn btn-secondary">
+      <button type="button" class="log-new-btn btn btn-secondary">
         Load New
       </button>
 
     val alert =
-      <div class="no-new-alert alert alert-info" style="display: none;">
+      <div class="no-new-alert alert alert-info d-none">
         End of Log
       </div>
 
@@ -79,13 +79,13 @@ private[ui] class DriverLogPage(
       <div>
         Logs at {logDir}
         {range}
-        <div class="log-content" style="height:80vh; overflow:auto; padding:5px;">
+        <div class="log-content overflow-auto p-1" style="height:80vh;">
           <div>{moreButton}</div>
           <pre>{logText}</pre>
           {alert}
           <div>{newButton}</div>
         </div>
-        <script>{Unparsed(jsOnload)}</script>
+        <script nonce={CspNonce.get}>{Unparsed(jsOnload)}</script>
       </div>
 
     UIUtils.headerSparkPage(request, "Logs", content, parent)

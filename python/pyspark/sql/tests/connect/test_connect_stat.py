@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import unittest
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.testing.connectutils import should_test_connect
@@ -214,7 +213,7 @@ class SparkConnectStatTests(SparkConnectSQLTestCase):
             },
         )
         with self.assertRaises(ValueError) as context:
-            self.connect.read.table(self.tbl_name2).stat.corr("col1", "col3", "spearman"),
+            (self.connect.read.table(self.tbl_name2).stat.corr("col1", "col3", "spearman"),)
             self.assertTrue(
                 "Currently only the calculation of the Pearson Correlation "
                 + "coefficient is supported."
@@ -801,13 +800,6 @@ class SparkConnectStatTests(SparkConnectSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.test_connect_stat import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

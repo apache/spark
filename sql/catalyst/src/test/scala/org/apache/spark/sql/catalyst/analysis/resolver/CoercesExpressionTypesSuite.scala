@@ -77,7 +77,11 @@ class CoercesExpressionTypesSuite extends SparkFunSuite with SQLConfHelper {
       )
       .asInstanceOf[Add]
     assert(resolvedExpression.left == doubleChild)
-    // Cast that isn't a product of type coercion resolution won't be re-instantiated with timezone
-    assert(resolvedExpression.right == castIntegerChild)
+    // TimezoneAwareExpressionResolver applies timezone recursively up until the first
+    // TimeZoneAwareExpression that already has timezone, so all Cast children get timezone set.
+    val newRightChild = resolvedExpression.right.asInstanceOf[Cast]
+    assert(newRightChild.child == integerChild)
+    assert(newRightChild.dataType == DoubleType)
+    assert(newRightChild.timeZoneId.nonEmpty)
   }
 }

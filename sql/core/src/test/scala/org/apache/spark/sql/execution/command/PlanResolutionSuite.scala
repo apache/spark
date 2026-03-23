@@ -1249,7 +1249,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       case InsertIntoStatement(
         _, _, _,
         UnresolvedInlineTable(_, Seq(Seq(UnresolvedAttribute(Seq("DEFAULT"))))),
-        _, _, _) =>
+        _, _, _, _) =>
 
       case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
     }
@@ -1257,7 +1257,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       case InsertIntoStatement(
         _, _, _,
         Project(Seq(UnresolvedAttribute(Seq("DEFAULT"))), _),
-        _, _, _) =>
+        _, _, _, _) =>
 
       case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
     }
@@ -1267,7 +1267,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     val sql1 = "INSERT INTO testcat.defaultvalues VALUES (DEFAULT, DEFAULT)"
     parseAndResolve(sql1) match {
       // The top-most Project just adds aliases.
-      case AppendData(_: DataSourceV2Relation, Project(_, l: LocalRelation), _, _, _, _) =>
+      case AppendData(_: DataSourceV2Relation, Project(_, l: LocalRelation), _, _, _, _, _) =>
         assert(l.data.length == 1)
         val row = l.data.head
         assert(row.numFields == 2)
@@ -1305,19 +1305,19 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     val overwriteSql = s"INSERT OVERWRITE $tblName(i, s) VALUES (3, 'a')"
     val overwriteParsed = parseAndResolve(overwriteSql)
     insertParsed match {
-      case AppendData(_: DataSourceV2Relation, _, _, isByName, _, _) =>
+      case AppendData(_: DataSourceV2Relation, _, _, isByName, _, _, _) =>
         assert(isByName)
       case _ => fail("Expected AppendData, but got:\n" + insertParsed.treeString)
     }
     overwriteParsed match {
-      case OverwriteByExpression(_: DataSourceV2Relation, _, _, _, isByName, _, _) =>
+      case OverwriteByExpression(_: DataSourceV2Relation, _, _, _, isByName, _, _, _) =>
         assert(isByName)
       case _ => fail("Expected OverwriteByExpression, but got:\n" + overwriteParsed.treeString)
     }
     withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
       val dynamicOverwriteParsed = parseAndResolve(overwriteSql)
       dynamicOverwriteParsed match {
-        case OverwritePartitionsDynamic(_: DataSourceV2Relation, _, _, isByName, _) =>
+        case OverwritePartitionsDynamic(_: DataSourceV2Relation, _, _, isByName, _, _) =>
           assert(isByName)
         case _ =>
           fail("Expected OverwriteByExpression, but got:\n" + dynamicOverwriteParsed.treeString)
@@ -1585,7 +1585,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         case Project(_, AsDataSourceV2Relation(r)) =>
           assert(r.catalog.contains(catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
-        case AppendData(r: DataSourceV2Relation, _, _, _, _, _) =>
+        case AppendData(r: DataSourceV2Relation, _, _, _, _, _, _) =>
           assert(r.catalog.contains(catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
         case DescribeRelation(r: ResolvedTable, _, _, _) =>
@@ -2966,6 +2966,36 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       sql2,
       Map("message" -> "Schema may not be specified in a Create Table As Select (CTAS) statement"),
       ExpectedContext(fragment = sql2, start = 0, stop = 61))
+  }
+
+  test("CTAS statement with constraints") {
+    Seq(
+      "CONSTRAINT pk PRIMARY KEY (id)",
+      "CONSTRAINT uk UNIQUE (id)",
+      "CONSTRAINT ck CHECK (id > 0)"
+    ).foreach { constraintDef =>
+      val sql = s"CREATE TABLE ctas1 ($constraintDef) AS SELECT 1 AS id"
+      assertUnsupported(
+        sql,
+        Map("message" ->
+          "Constraints may not be specified in a Create Table As Select (CTAS) statement"),
+        ExpectedContext(fragment = sql, start = 0, stop = sql.length - 1))
+    }
+  }
+
+  test("RTAS statement with constraints") {
+    Seq(
+      "CONSTRAINT pk PRIMARY KEY (id)",
+      "CONSTRAINT uk UNIQUE (id)",
+      "CONSTRAINT ck CHECK (id > 0)"
+    ).foreach { constraintDef =>
+      val sql = s"REPLACE TABLE rtas1 ($constraintDef) AS SELECT 1 AS id"
+      assertUnsupported(
+        sql,
+        Map("message" ->
+          "Constraints may not be specified in a Replace Table As Select (RTAS) statement"),
+        ExpectedContext(fragment = sql, start = 0, stop = sql.length - 1))
+    }
   }
 
   test("create table - basic") {

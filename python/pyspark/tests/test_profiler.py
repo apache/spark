@@ -22,7 +22,7 @@ import unittest
 from io import StringIO
 
 from pyspark import SparkConf, SparkContext, BasicProfiler
-from pyspark.profiler import has_memory_profiler
+from pyspark.memory_profiler_ext import has_memory_profiler
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import udf
 from pyspark.errors import PythonException, PySparkRuntimeError
@@ -153,8 +153,7 @@ class ProfilerTests2(unittest.TestCase, PySparkErrorTestUtils):
         try:
             self.assertRaisesRegex(
                 PythonException,
-                "Install the 'memory_profiler' library in the cluster to enable memory "
-                "profiling",
+                "Install the 'memory_profiler' library in the cluster to enable memory profiling",
                 lambda: spark.range(10).select(plus_one("id")).collect(),
             )
         finally:
@@ -162,12 +161,6 @@ class ProfilerTests2(unittest.TestCase, PySparkErrorTestUtils):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_profiler import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

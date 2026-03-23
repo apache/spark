@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.{CatalogManager, FunctionCatalog, Identifier}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class LookupFunctionsSuite extends PlanTest {
@@ -152,7 +151,7 @@ class CustomV2SessionCatalog(v1Catalog: SessionCatalog) extends FunctionCatalog 
   }
 
   override def loadFunction(ident: Identifier): UnboundFunction = {
-    V1Function(v1Catalog.lookupPersistentFunction(ident.asFunctionIdentifier))
+    v1Catalog.loadPersistentScalarFunction(ident.asFunctionIdentifier)
   }
   override def functionExists(ident: Identifier): Boolean = {
     v1Catalog.isPersistentFunction(ident.asFunctionIdentifier)

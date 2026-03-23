@@ -67,7 +67,7 @@ org.apache.spark.SparkArithmeticException
   "messageParameters" : {
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
     "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "integer overflow"
+    "message" : "overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -91,7 +91,7 @@ org.apache.spark.SparkArithmeticException
   "messageParameters" : {
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
     "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "long overflow"
+    "message" : "overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -307,7 +307,7 @@ org.apache.spark.SparkArithmeticException
   "messageParameters" : {
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
     "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "integer overflow"
+    "message" : "overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -331,7 +331,7 @@ org.apache.spark.SparkArithmeticException
   "messageParameters" : {
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
     "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "long overflow"
+    "message" : "overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -505,7 +505,7 @@ org.apache.spark.SparkArithmeticException
   "messageParameters" : {
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
     "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "integer overflow"
+    "message" : "overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -529,7 +529,7 @@ org.apache.spark.SparkArithmeticException
   "messageParameters" : {
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
     "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "long overflow"
+    "message" : "overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -671,7 +671,7 @@ org.apache.spark.SparkArithmeticException
   "messageParameters" : {
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
     "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "integer overflow"
+    "message" : "overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -695,7 +695,7 @@ org.apache.spark.SparkArithmeticException
   "messageParameters" : {
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
     "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "long overflow"
+    "message" : "overflow"
   },
   "queryContext" : [ {
     "objectType" : "",

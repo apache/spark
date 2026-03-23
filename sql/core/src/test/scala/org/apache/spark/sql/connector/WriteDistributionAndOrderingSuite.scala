@@ -1174,7 +1174,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         Invoke(
           Literal.create(YearsFunction, ObjectType(YearsFunction.getClass)),
           "invoke",
-          LongType,
+          IntegerType,
           Seq(Cast(attr("day"), TimestampType, Some("America/Los_Angeles"))),
           Seq(TimestampType),
           propagateNull = false),

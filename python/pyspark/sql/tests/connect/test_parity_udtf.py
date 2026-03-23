@@ -58,7 +58,7 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
         @udtf(returnType="int")
         class TestUDTF:
             def eval(self, a: int):
-                yield a + 1,
+                yield (a + 1,)
 
         with self.assertRaisesRegex(InvalidPlanInput, "Invalid.*type"):
             TestUDTF(lit(1)).collect()
@@ -115,7 +115,7 @@ class LegacyArrowUDTFParityTests(LegacyUDTFArrowTestsMixin, UDTFParityTests):
         class TestUDTF:
             def eval(self):
                 df.collect()
-                yield 1,
+                yield (1,)
 
         with self.assertRaisesRegex(PythonException, "NO_ACTIVE_SESSION"):
             TestUDTF().collect()
@@ -149,20 +149,13 @@ class ArrowUDTFParityTests(UDTFArrowTestsMixin, UDTFParityTests):
         class TestUDTF:
             def eval(self):
                 df.collect()
-                yield 1,
+                yield (1,)
 
         with self.assertRaisesRegex(PythonException, "NO_ACTIVE_SESSION"):
             TestUDTF().collect()
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.connect.test_parity_udtf import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

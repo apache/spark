@@ -185,13 +185,12 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
 
   test("drop table when database/table does not exist") {
     val catalog = newBasicCatalog()
-    // Should always throw exception when the database does not exist
+    // Should throw exception when the database does not exist and ignoreIfNotExists is false
     intercept[AnalysisException] {
       catalog.dropTable("unknown_db", "unknown_table", ignoreIfNotExists = false, purge = false)
     }
-    intercept[AnalysisException] {
-      catalog.dropTable("unknown_db", "unknown_table", ignoreIfNotExists = true, purge = false)
-    }
+    // Should succeed (no-op) when the database does not exist and ignoreIfNotExists is true
+    catalog.dropTable("unknown_db", "unknown_table", ignoreIfNotExists = true, purge = false)
     // Should throw exception when the table does not exist, if ignoreIfNotExists is false
     intercept[AnalysisException] {
       catalog.dropTable("db2", "unknown_table", ignoreIfNotExists = false, purge = false)

@@ -25,6 +25,7 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.{classTag, ClassTag}
 
 import com.fasterxml.jackson.annotation.JsonInclude
+import com.fasterxml.jackson.core.StreamReadConstraints
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.fusesource.leveldbjni.internal.NativeDB
 import org.rocksdb.RocksDBException
@@ -76,6 +77,10 @@ private[spark] object KVUtils extends Logging {
     mapper.registerModule(DefaultScalaModule)
     mapper.setDefaultPropertyInclusion(JsonInclude.Include.NON_ABSENT)
 
+    // SPARK-49872: Remove jackson JSON string length limitation.
+    mapper.getFactory.setStreamReadConstraints(
+      StreamReadConstraints.builder().maxStringLength(Int.MaxValue).build()
+    )
   }
 
   /**

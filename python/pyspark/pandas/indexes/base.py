@@ -32,7 +32,7 @@ import warnings
 
 import pandas as pd
 import numpy as np
-from pandas.api.types import (  # type: ignore[attr-defined]
+from pandas.api.types import (
     is_list_like,
     is_bool_dtype,
     is_integer_dtype,
@@ -40,11 +40,12 @@ from pandas.api.types import (  # type: ignore[attr-defined]
     is_numeric_dtype,
     is_object_dtype,
 )
-from pandas.core.accessor import CachedAccessor
-from pandas.io.formats.printing import pprint_thing
-from pandas.api.types import CategoricalDtype, is_hashable  # type: ignore[attr-defined]
+from pandas.core.accessor import CachedAccessor  # type: ignore[attr-defined]
+from pandas.io.formats.printing import pprint_thing  # type: ignore[import-not-found]
+from pandas.api.types import CategoricalDtype, is_hashable
 from pandas._libs import lib
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql.column import Column
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
@@ -245,9 +246,11 @@ class Index(IndexOpsMixin):
         internal = self._internal.copy(
             index_spark_columns=[scol.alias(SPARK_DEFAULT_INDEX_NAME)],
             index_fields=[
-                field
-                if field is None or field.struct_field is None
-                else field.copy(name=SPARK_DEFAULT_INDEX_NAME)
+                (
+                    field
+                    if field is None or field.struct_field is None
+                    else field.copy(name=SPARK_DEFAULT_INDEX_NAME)
+                )
             ],
             column_labels=[],
             data_spark_columns=[],
@@ -255,9 +258,7 @@ class Index(IndexOpsMixin):
         )
         return DataFrame(internal).index
 
-    spark: "SparkIndexOpsMethods" = CachedAccessor(  # type: ignore[assignment]
-        "spark", SparkIndexMethods
-    )
+    spark: "SparkIndexOpsMethods" = CachedAccessor("spark", SparkIndexMethods)
 
     # This method is used via `DataFrame.info` API internally.
     def _summary(self, name: Optional[str] = None) -> str:
@@ -549,7 +550,8 @@ class Index(IndexOpsMixin):
             "It should only be used if the resulting NumPy ndarray is expected to be small."
         )
         result = np.asarray(
-            self._to_internal_pandas()._values, dtype=dtype  # type: ignore[arg-type,attr-defined]
+            self._to_internal_pandas()._values,  # type: ignore[attr-defined]
+            dtype=dtype,  # type: ignore[arg-type]
         )
         if copy:
             result = result.copy()
@@ -566,7 +568,7 @@ class Index(IndexOpsMixin):
         mapper : function, dict, or pd.Series
             Mapping correspondence.
         na_action : {None, 'ignore'}
-            If ‘ignore’, propagate NA values, without passing them to the mapping correspondence.
+            If 'ignore', propagate NA values, without passing them to the mapping correspondence.
 
         Returns
         -------
@@ -928,9 +930,7 @@ class Index(IndexOpsMixin):
             else:
 
                 def struct_to_array(scol: Column) -> Column:
-                    field_names = result._internal.spark_type_for(
-                        scol
-                    ).fieldNames()  # type: ignore[attr-defined]
+                    field_names = result._internal.spark_type_for(scol).fieldNames()  # type: ignore[attr-defined]
                     return F.array([scol[field] for field in field_names])
 
                 return result.spark.transform(struct_to_array)
@@ -1261,7 +1261,7 @@ class Index(IndexOpsMixin):
                     " %d is not a valid level number" % (level,)
                 )
             elif level > 0:
-                raise IndexError("Too many levels:" " Index has only 1 level, not %d" % (level + 1))
+                raise IndexError("Too many levels: Index has only 1 level, not %d" % (level + 1))
         elif level != self.name:
             raise KeyError(
                 "Requested level ({}) does not match index name ({})".format(level, self.name)
@@ -2241,7 +2241,7 @@ class Index(IndexOpsMixin):
             raise ValueError("index must be monotonic increasing or decreasing")
 
         result = sdf.toPandas().iloc[0, 0]
-        return result if result is not None else np.nan
+        return result if result is not None else np.nan  # type: ignore[return-value]
 
     def _index_fields_for_union_like(
         self: "Index", other: "Index", func_name: str
@@ -2254,9 +2254,11 @@ class Index(IndexOpsMixin):
             for left, right in zip(self._internal.index_fields, other._internal.index_fields)
         ):
             return [
-                left.copy(nullable=left.nullable or right.nullable)
-                if left.spark_type == right.spark_type
-                else InternalField(dtype=left.dtype)
+                (
+                    left.copy(nullable=left.nullable or right.nullable)
+                    if left.spark_type == right.spark_type
+                    else InternalField(dtype=left.dtype)
+                )
                 for left, right in zip(self._internal.index_fields, other._internal.index_fields)
             ]
         elif any(
@@ -2372,16 +2374,21 @@ class Index(IndexOpsMixin):
         Returns False for string type.
 
         >>> psidx = ps.Index(["A", "B", "C", "D"])
-        >>> psidx.holds_integer()
+        >>> psidx.holds_integer()  # doctest: +SKIP
         False
 
         Returns False for float type.
 
         >>> psidx = ps.Index([1.1, 2.2, 3.3, 4.4])
-        >>> psidx.holds_integer()
+        >>> psidx.holds_integer()  # doctest: +SKIP
         False
         """
-        return isinstance(self.spark.data_type, IntegralType)
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return isinstance(self.spark.data_type, IntegralType)
+        else:
+            raise AttributeError(
+                "The `holds_integer` method is not supported in pandas 3.0.0 and later. "
+            )
 
     def intersection(self, other: Union[DataFrame, Series, "Index", List]) -> "Index":
         """
@@ -2658,7 +2665,7 @@ def _test() -> None:
         # Numpy 2.0+ changed its string format,
         # adding type information to numeric scalars.
         # `legacy="1.25"` only available in `nump>=2`
-        np.set_printoptions(legacy="1.25")  # type: ignore[arg-type]
+        np.set_printoptions(legacy="1.25")  # type: ignore[arg-type, unused-ignore]
 
     globs = pyspark.pandas.indexes.base.__dict__.copy()
     globs["ps"] = pyspark.pandas
@@ -2667,7 +2674,7 @@ def _test() -> None:
         .appName("pyspark.pandas.indexes.base tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.indexes.base,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

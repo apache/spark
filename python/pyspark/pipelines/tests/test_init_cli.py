@@ -25,7 +25,6 @@ from pyspark.testing.connectutils import (
 )
 from pyspark.testing.utils import have_yaml, yaml_requirement_message
 
-
 if should_test_connect and have_yaml:
     from pyspark.pipelines.cli import (
         change_dir,
@@ -89,10 +88,6 @@ class InitCLITests(ReusedConnectTestCase):
 
 
 if __name__ == "__main__":
-    try:
-        import xmlrunner  # type: ignore
+    from pyspark.testing import main
 
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

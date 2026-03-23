@@ -125,7 +125,7 @@ case class UnresolvedRelation(
 
   override def name: String = tableName
 
-  def requireWritePrivileges(privileges: Seq[TableWritePrivilege]): UnresolvedRelation = {
+  def requireWritePrivileges(privileges: Set[TableWritePrivilege]): UnresolvedRelation = {
     if (privileges.nonEmpty) {
       val newOptions = new java.util.HashMap[String, String]
       newOptions.putAll(options)
@@ -177,6 +177,8 @@ case class UnresolvedInlineTable(
     names: Seq[String],
     rows: Seq[Seq[Expression]])
   extends UnresolvedLeafNode {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(INLINE_TABLE_EVAL)
 
   lazy val expressionsResolved: Boolean = rows.forall(_.forall(_.resolved))
 }
@@ -369,7 +371,7 @@ case class UnresolvedFunction(
     arguments: Seq[Expression],
     isDistinct: Boolean,
     filter: Option[Expression] = None,
-    ignoreNulls: Boolean = false,
+    ignoreNulls: Option[Boolean] = None,
     orderingWithinGroup: Seq[SortOrder] = Seq.empty,
     isInternal: Boolean = false)
   extends Expression with Unevaluable {

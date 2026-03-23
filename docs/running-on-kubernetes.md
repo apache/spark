@@ -44,7 +44,7 @@ Cluster administrators should use the [Pod Security Admission Controller](https:
 
 # Prerequisites
 
-* A running Kubernetes cluster at version >= 1.32 with access configured to it using
+* A running Kubernetes cluster at version >= 1.33 with access configured to it using
 [kubectl](https://kubernetes.io/docs/reference/kubectl/).  If you do not already have a working Kubernetes cluster,
 you may set up a test cluster on your local machine using
 [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
@@ -1611,7 +1611,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>(none)</td>
   <td>
     Class names of an extra driver pod feature step implementing
-    `KubernetesFeatureConfigStep`. This is a developer API. Comma separated.
+    `KubernetesFeatureConfigStep`. This is a stable developer API. Comma separated.
     Runs after all of Spark internal feature steps. Since 3.3.0, your driver feature step
     can implement `KubernetesDriverCustomFeatureConfigStep` where the driver config
     is also available.
@@ -1632,7 +1632,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>(none)</td>
   <td>
     Class names of an extra executor pod feature step implementing
-    `KubernetesFeatureConfigStep`. This is a developer API. Comma separated.
+    `KubernetesFeatureConfigStep`. This is a stable developer API. Comma separated.
     Runs after all of Spark internal feature steps. Since 3.3.0, your executor feature step
     can implement `KubernetesExecutorCustomFeatureConfigStep` where the executor config
     is also available.
@@ -1953,10 +1953,10 @@ Spark allows users to specify a custom Kubernetes schedulers.
 #### Using Volcano as Customized Scheduler for Spark on Kubernetes
 
 ##### Prerequisites
-* Spark on Kubernetes with [Volcano](https://volcano.sh/en) as a custom scheduler is supported since Spark v3.3.0 and Volcano v1.7.0. Below is an example to install Volcano 1.7.0:
+* Spark on Kubernetes with [Volcano](https://volcano.sh/en) as a custom scheduler is supported since Spark v3.3.0 and Volcano v1.7.0. Below is an example to install Volcano 1.14.1:
 
   ```bash
-  kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.7.0/installer/volcano-development.yaml
+  kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.1/installer/volcano-development.yaml
   ```
 
 ##### Build
@@ -1990,7 +1990,6 @@ Note that currently only driver/job level PodGroup is supported in Volcano Featu
 Volcano defines PodGroup spec using [CRD yaml](https://volcano.sh/en/docs/podgroup/#example).
 
 Similar to [Pod template](#pod-template), Spark users can use Volcano PodGroup Template to define the PodGroup spec configurations.
-To do so, specify the Spark property `spark.kubernetes.scheduler.volcano.podGroupTemplateFile` to point to files accessible to the `spark-submit` process.
 Below is an example of PodGroup template:
 
 ```yaml
@@ -2011,6 +2010,17 @@ spec:
   queue: default
 ```
 
+You have two options to provide the PodGroup template in spark. If both are provided, the `podGroupTemplateFile` will takes precedence.
+1. Use `spark.kubernetes.scheduler.volcano.podGroupTemplateFile` to point to files accessible to the `spark-submit` process
+```bash
+--conf spark.kubernetes.scheduler.volcano.podGroupTemplateFile=/path/to/podgroup
+```
+
+2. Use `spark.kubernetes.scheduler.volcano.podGroupTemplateJson` to pass the template directly in JSON format:.
+```bash
+--conf spark.kubernetes.scheduler.volcano.podGroupTemplateJson={"spec": {"minMember": 1,"minResources": {"cpu": "2","memory": "3Gi"},"priorityClassName": "system-node-critical","queue": "default"}}
+```
+
 #### Using Apache YuniKorn as Customized Scheduler for Spark on Kubernetes
 
 [Apache YuniKorn](https://yunikorn.apache.org/) is a resource scheduler for Kubernetes that provides advanced batch scheduling
@@ -2024,10 +2034,10 @@ Install Apache YuniKorn:
 ```bash
 helm repo add yunikorn https://apache.github.io/yunikorn-release
 helm repo update
-helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.7.0 --create-namespace --set embedAdmissionController=false
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.8.0 --create-namespace --set embedAdmissionController=false
 ```
 
-The above steps will install YuniKorn v1.7.0 on an existing Kubernetes cluster.
+The above steps will install YuniKorn v1.8.0 on an existing Kubernetes cluster.
 
 ##### Get started
 

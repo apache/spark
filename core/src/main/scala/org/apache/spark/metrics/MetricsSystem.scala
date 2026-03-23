@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable
 
 import com.codahale.metrics.{Metric, MetricRegistry}
-import org.eclipse.jetty.servlet.ServletContextHandler
+import org.eclipse.jetty.ee10.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging

@@ -142,6 +142,18 @@ Once it is set up, make sure you switch to `pyspark-dev-env` before starting the
 
 Now, you can start developing and `running the tests <testing.rst>`_.
 
+venv
+~~~~
+
+You can use Python's built-in ``venv`` module to create an isolated environment:
+
+.. code-block:: bash
+
+    # Python 3.10+ is required
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install --upgrade -r dev/requirements.txt
+
 pip
 ~~~
 
@@ -215,7 +227,7 @@ Note that:
 
 * In addition, pandas-on-Spark (``pyspark.pandas``) also uses `snake_case` because this package is free from API consistency with other languages.
 
-PySpark leverages linters such as `pycodestyle <https://pycodestyle.pycqa.org/en/latest/>`_ and `flake8 <https://flake8.pycqa.org/en/latest/>`_, which ``dev/lint-python`` runs. Therefore, make sure to run that script to double check.
+PySpark leverages linters such as `pycodestyle <https://pycodestyle.pycqa.org/en/latest/>`_ and `ruff <https://docs.astral.sh/ruff/>`_, which ``dev/lint-python`` runs. Therefore, make sure to run that script to double check.
 
 
 Docstring Conventions
@@ -230,7 +242,7 @@ Doctest Conventions
 In general, doctests should be grouped logically by separating a newline.
 
 For instance, the first block is for the statements for preparation, the second block is for using the function with a specific argument,
-and third block is for another argument. As a example, please refer `DataFrame.rsub <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.rsub.html#pandas.DataFrame.rsub>`_ in pandas.
+and third block is for another argument. As an example, please refer `DataFrame.rsub <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.rsub.html#pandas.DataFrame.rsub>`_ in pandas.
 
 These blocks should be consistently separated in PySpark doctests, and more doctests should be added if the coverage of the doctests or the number of examples to show is not enough.
 

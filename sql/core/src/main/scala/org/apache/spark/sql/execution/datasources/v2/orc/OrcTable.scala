@@ -51,6 +51,8 @@ case class OrcTable(
   }
 
   override def supportsDataType(dataType: DataType): Boolean = dataType match {
+    case _: GeometryType | _: GeographyType => false
+
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportsDataType(f.dataType) }

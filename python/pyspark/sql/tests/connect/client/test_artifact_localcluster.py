@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 import os
 
 from pyspark.sql.tests.connect.client.test_artifact import ArtifactTestsMixin
@@ -39,12 +38,6 @@ class LocalClusterArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.client.test_artifact_localcluster import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

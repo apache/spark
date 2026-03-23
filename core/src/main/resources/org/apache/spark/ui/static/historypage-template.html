@@ -16,60 +16,69 @@
 -->
 
 <script id="history-summary-template" type="text/html">
-<table id="history-summary-table" class="table table-striped compact">
+<div class="row mb-2">
+  <div class="col-md-12">
+    <label for="log-path-filter" class="me-2">Filter by Log Source:</label>
+    <select id="log-path-filter" class="form-control d-inline-block w-auto">
+      <option value="">All Sources</option>
+    </select>
+  </div>
+</div>
+<table id="history-summary-table" class="table table-striped table-hover compact">
   <thead>
     <tr>
       <th>
-        <span data-toggle="tooltip" data-placement="top" title="Spark version of this application.">
+        <span data-bs-toggle="tooltip" title="Spark version of this application.">
           Version
         </span>
       </th>
       <th>
-        <span data-toggle="tooltip" data-placement="top" title="ID of this application.">
+        <span data-bs-toggle="tooltip" title="ID of this application.">
           App ID
         </span>
       </th>
       <th>
-        <span data-toggle="tooltip" data-placement="top" title="Name of this application.">
+        <span data-bs-toggle="tooltip" title="Name of this application.">
           App Name
         </span>
       </th>
-      {{#hasMultipleAttempts}}
       <th>
-        <span data-toggle="tooltip" data-placement="top" title="The attempt ID of this application since one application might be launched several times">
+        <span data-bs-toggle="tooltip" title="Log directory where this application's event log is stored.">
+          Log Source
+        </span>
+      </th>
+      <th>
+        <span data-bs-toggle="tooltip" title="The attempt ID of this application since one application might be launched several times">
           Attempt ID
         </span>
       </th>
-      {{/hasMultipleAttempts}}
       <th>
-        <span data-toggle="tooltip" data-placement="top" title="Started time of this application.">
+        <span data-bs-toggle="tooltip" title="Started time of this application.">
           Started
         </span>
       </th>
-      {{#showCompletedColumns}}
       <th>
-        <span data-toggle="tooltip" data-placement="top" title="The completed time of this application.">
+        <span data-bs-toggle="tooltip" title="The completed time of this application.">
           Completed
         </span>
       </th>
       <th>
-        <span data-toggle="tooltip" data-placement="top" title="The duration time of this application.">
+        <span data-bs-toggle="tooltip" title="The duration time of this application.">
           Duration
         </span>
       </th>
-      {{/showCompletedColumns}}
       <th>
-        <span data-toggle="tooltip" data-placement="top" title="The Spark user of this application">
+        <span data-bs-toggle="tooltip" title="The Spark user of this application">
           Spark User
         </span>
       </th>
       <th>
-        <span data-toggle="tooltip" data-placement="top" title="The timestamp of the last updating on this application">
+        <span data-bs-toggle="tooltip" title="The timestamp of the last updating on this application">
           Last Updated
         </span>
       </th>
       <th>
-        <span data-toggle="tooltip" data-placement="top" title="Download the event log for this application">
+        <span data-bs-toggle="tooltip" title="Download the event log for this application">
           Event Log
         </span>
       </th>

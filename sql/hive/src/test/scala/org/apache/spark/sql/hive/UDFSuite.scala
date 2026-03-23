@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -36,8 +34,7 @@ case class FunctionResult(f1: String, f2: String)
 class UDFSuite
   extends QueryTest
   with SQLTestUtils
-  with TestHiveSingleton
-  with BeforeAndAfterEach {
+  with TestHiveSingleton {
 
   import spark.implicits._
 

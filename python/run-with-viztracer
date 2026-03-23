@@ -37,6 +37,17 @@ Environment:
 
 Requirements:
   - viztracer must be installed (pip install viztracer)
+
+Check the following documentation for more information on using viztracer:
+
+  https://viztracer.readthedocs.io/en/latest/
+
+Examples:
+  - Start pyspark shell
+    $0 bin/pyspark --conf spark.driver.memory=16g
+
+  - Start pyspark shell in Connect mode
+    $0 bin/pyspark --remote local
 EOF
   exit 0
 }

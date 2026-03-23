@@ -57,7 +57,7 @@ private[spark] trait SecretsTestsSuite { k8sSuite: KubernetesSuite =>
       .delete()
   }
 
-  test("Run SparkPi with env and mount secrets.", k8sTestTag) {
+  test("Run SparkPi with env and mount secrets.", k8sTestTag, commandTestTag) {
     createTestSecret()
     sparkAppConf
       .set(s"spark.kubernetes.driver.secrets.$ENV_SECRET_NAME", SECRET_MOUNT_PATH)

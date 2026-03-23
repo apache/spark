@@ -30,6 +30,7 @@ import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.classic
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
 import org.apache.spark.sql.types._
@@ -162,6 +163,133 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
         executor2.shutdown()
         session.stop()
       }
+    }
+  }
+
+  test("Concurrent query execution queryId persists in thread local") {
+    SparkSession.getActiveSession.foreach(_.stop())
+    val spark = SparkSession.builder().master("local[*]").appName("ignore").getOrCreate()
+
+    try {
+      val originalQueryId = spark.sparkContext.getLocalProperty(SQLExecution.QUERY_ID_KEY)
+      val parentQE = new QueryExecution(spark.asInstanceOf[classic.SparkSession], OneRowRelation())
+      val parentQueryId = parentQE.queryId.toString
+
+      var childQueryId: String = null
+      var throwable: Option[Throwable] = None
+
+      val child = new Thread {
+        override def run(): Unit = {
+          try {
+            val childQE =
+              new QueryExecution(spark.asInstanceOf[classic.SparkSession], OneRowRelation())
+            SQLExecution.withNewExecutionId(childQE) {
+              childQueryId = spark.sparkContext.getLocalProperty(SQLExecution.QUERY_ID_KEY)
+            }
+          } catch {
+            case t: Throwable =>
+              throwable = Some(t)
+          }
+        }
+      }
+
+      SQLExecution.withNewExecutionId(parentQE) {
+        child.start()
+        child.join()
+      }
+
+      assert(childQueryId != null)
+      assert(originalQueryId != childQueryId && parentQueryId != childQueryId)
+      // SparkContext originalQueryId should be maintained after child thread
+      assert(spark.sparkContext.getLocalProperty(SQLExecution.QUERY_ID_KEY) == originalQueryId)
+
+      throwable.foreach { t =>
+        t.setStackTrace(t.getStackTrace ++ Thread.currentThread.getStackTrace)
+        throw t
+      }
+    } finally {
+      spark.stop()
+    }
+  }
+
+  test("QueryId restored for single thread multiple QueryExecutions") {
+    // This test simulates a DBSQL query where a single thread creates multiple QueryExecutions
+    // queryId should be restored on the thread after all executions complete.
+    val spark = SparkSession.builder().master("local[*]").appName("ignore").getOrCreate()
+
+    try {
+      val sc = spark.sparkContext
+      val originalQueryId = spark.sparkContext.getLocalProperty(SQLExecution.QUERY_ID_KEY)
+
+      def getQueryExecution: QueryExecution =
+        new QueryExecution(spark.asInstanceOf[classic.SparkSession], OneRowRelation())
+
+      // analyzeQuery creates df
+      val dummyQueryExecution1 = getQueryExecution
+      val queryId1 = dummyQueryExecution1.queryId.toString
+
+      Thread.sleep(1) // ensure a time difference in queryId
+
+      // Delta metadata scan triggered in analysis
+      val dummyQueryExecution2 = getQueryExecution
+      val queryId2 = dummyQueryExecution2.queryId.toString
+
+      // Delta runs collect() on above QE2, triggering SQLExecution.withNewExec
+      SQLExecution.withNewExecutionId(dummyQueryExecution2) {
+        // Different QueryExecution objects have different queryIds
+        assert(dummyQueryExecution2.queryId.toString != queryId1)
+        // Same thread, so local queryId should be set to the new id
+        assert(sc.getLocalProperty(SQLExecution.QUERY_ID_KEY) == queryId2)
+      }
+
+      // After Delta materialize API, should restore to originalQueryId
+      assert(sc.getLocalProperty(SQLExecution.QUERY_ID_KEY) == originalQueryId)
+
+      // After analysis, DBSQL executes above analyzed df QE1
+      SQLExecution.withNewExecutionId(dummyQueryExecution1) {
+        // First execution uses the original queryId
+        assert(sc.getLocalProperty(SQLExecution.QUERY_ID_KEY) == queryId1)
+      }
+
+      // Restore original null queryId once entire DBSQL query finished
+      assert(sc.getLocalProperty(SQLExecution.QUERY_ID_KEY) == null)
+
+    } finally {
+      spark.stop()
+    }
+  }
+
+  test("Multiple execution of same QueryExecution should have unique queryId") {
+    val spark = SparkSession.builder().master("local[*]").appName("ignore").getOrCreate()
+
+    try {
+      val sc = spark.sparkContext
+
+      def getQueryExecution: QueryExecution =
+        new QueryExecution(spark.asInstanceOf[classic.SparkSession], OneRowRelation())
+
+      val dummyQueryExecution = getQueryExecution
+
+      Thread.sleep(1) // ensure a time difference in queryId
+
+      // First execution uses the original queryId from QueryExecution
+      val originalQueryId: String = dummyQueryExecution.queryId.toString
+      var queryId1: String = null
+      SQLExecution.withNewExecutionId(dummyQueryExecution) {
+        queryId1 = sc.getLocalProperty(SQLExecution.QUERY_ID_KEY)
+        assert(queryId1 == originalQueryId)
+      }
+
+      // Second execution generates a new queryId (not stored in QueryExecution)
+      var queryId2: String = null
+      SQLExecution.withNewExecutionId(dummyQueryExecution) {
+        queryId2 = sc.getLocalProperty(SQLExecution.QUERY_ID_KEY)
+        assert(queryId2 != originalQueryId)
+      }
+
+      assert(queryId1 != queryId2)
+    } finally {
+      spark.stop()
     }
   }
 

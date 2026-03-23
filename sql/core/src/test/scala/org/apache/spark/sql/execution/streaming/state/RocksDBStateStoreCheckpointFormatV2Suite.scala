@@ -122,6 +122,8 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
     )
   }
 
+  override def allColumnFamilyNames: Set[String] = innerStore.allColumnFamilyNames
+
   override def put(
       key: UnsafeRow,
       value: UnsafeRow,
@@ -164,6 +166,16 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
     ret
   }
   override def hasCommitted: Boolean = innerStore.hasCommitted
+
+  override def prefixScanWithMultiValues(
+      prefixKey: UnsafeRow, colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+    innerStore.prefixScanWithMultiValues(prefixKey, colFamilyName)
+  }
+
+  override def iteratorWithMultiValues(
+      colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+    innerStore.iteratorWithMultiValues(colFamilyName)
+  }
 }
 
 class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
@@ -200,8 +212,10 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
   override def getStore(
       version: Long,
       stateStoreCkptId: Option[String] = None,
-      forceSnapshotOnCommit: Boolean = false): StateStore = {
-    val innerStateStore = innerProvider.getStore(version, stateStoreCkptId, forceSnapshotOnCommit)
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore = {
+    val innerStateStore = innerProvider.getStore(version, stateStoreCkptId,
+      forceSnapshotOnCommit, loadEmpty)
     CkptIdCollectingStateStoreWrapper(innerStateStore)
   }
 

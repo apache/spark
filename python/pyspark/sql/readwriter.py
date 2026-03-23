@@ -468,7 +468,7 @@ class DataFrameReader(OptionUtils):
             return self._df(self._jreader.json(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
         if not is_remote_only():
-            from pyspark.core.rdd import RDD  # noqa: F401
+            from pyspark.core.rdd import RDD
 
         if not is_remote_only() and isinstance(path, RDD):
 
@@ -838,7 +838,7 @@ class DataFrameReader(OptionUtils):
             return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
         if not is_remote_only():
-            from pyspark.core.rdd import RDD  # noqa: F401
+            from pyspark.core.rdd import RDD
 
         if not is_remote_only() and isinstance(path, RDD):
 
@@ -965,7 +965,7 @@ class DataFrameReader(OptionUtils):
             return self._df(self._jreader.xml(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
         if not is_remote_only():
-            from pyspark.core.rdd import RDD  # noqa: F401
+            from pyspark.core.rdd import RDD
 
         if not is_remote_only() and isinstance(path, RDD):
 
@@ -1061,8 +1061,7 @@ class DataFrameReader(OptionUtils):
     @overload
     def jdbc(
         self, url: str, table: str, *, properties: Optional[Dict[str, str]] = None
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def jdbc(
@@ -1075,8 +1074,7 @@ class DataFrameReader(OptionUtils):
         numPartitions: int,
         *,
         properties: Optional[Dict[str, str]] = None,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def jdbc(
@@ -1086,8 +1084,7 @@ class DataFrameReader(OptionUtils):
         *,
         predicates: List[str],
         properties: Optional[Dict[str, str]] = None,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     def jdbc(
         self,
@@ -1163,9 +1160,9 @@ class DataFrameReader(OptionUtils):
         if column is not None:
             assert lowerBound is not None, "lowerBound can not be None when ``column`` is specified"
             assert upperBound is not None, "upperBound can not be None when ``column`` is specified"
-            assert (
-                numPartitions is not None
-            ), "numPartitions can not be None when ``column`` is specified"
+            assert numPartitions is not None, (
+                "numPartitions can not be None when ``column`` is specified"
+            )
             return self._df(
                 self._jreader.jdbc(
                     url, table, column, int(lowerBound), int(upperBound), int(numPartitions), jprop
@@ -1395,12 +1392,10 @@ class DataFrameWriter(OptionUtils):
         return self
 
     @overload
-    def partitionBy(self, *cols: str) -> "DataFrameWriter":
-        ...
+    def partitionBy(self, *cols: str) -> "DataFrameWriter": ...
 
     @overload
-    def partitionBy(self, *cols: List[str]) -> "DataFrameWriter":
-        ...
+    def partitionBy(self, *cols: List[str]) -> "DataFrameWriter": ...
 
     def partitionBy(self, *cols: Union[str, List[str]]) -> "DataFrameWriter":
         """Partitions the output by the given columns on the file system.
@@ -1457,12 +1452,10 @@ class DataFrameWriter(OptionUtils):
         return self
 
     @overload
-    def bucketBy(self, numBuckets: int, col: str, *cols: str) -> "DataFrameWriter":
-        ...
+    def bucketBy(self, numBuckets: int, col: str, *cols: str) -> "DataFrameWriter": ...
 
     @overload
-    def bucketBy(self, numBuckets: int, col: TupleOrListOfString) -> "DataFrameWriter":
-        ...
+    def bucketBy(self, numBuckets: int, col: TupleOrListOfString) -> "DataFrameWriter": ...
 
     def bucketBy(
         self, numBuckets: int, col: Union[str, TupleOrListOfString], *cols: Optional[str]
@@ -1558,12 +1551,10 @@ class DataFrameWriter(OptionUtils):
         return self
 
     @overload
-    def sortBy(self, col: str, *cols: str) -> "DataFrameWriter":
-        ...
+    def sortBy(self, col: str, *cols: str) -> "DataFrameWriter": ...
 
     @overload
-    def sortBy(self, col: TupleOrListOfString) -> "DataFrameWriter":
-        ...
+    def sortBy(self, col: TupleOrListOfString) -> "DataFrameWriter": ...
 
     def sortBy(
         self, col: Union[str, TupleOrListOfString], *cols: Optional[str]
@@ -1642,12 +1633,10 @@ class DataFrameWriter(OptionUtils):
         return self
 
     @overload
-    def clusterBy(self, *cols: str) -> "DataFrameWriter":
-        ...
+    def clusterBy(self, *cols: str) -> "DataFrameWriter": ...
 
     @overload
-    def clusterBy(self, *cols: List[str]) -> "DataFrameWriter":
-        ...
+    def clusterBy(self, *cols: List[str]) -> "DataFrameWriter": ...
 
     def clusterBy(self, *cols: Union[str, List[str]]) -> "DataFrameWriter":
         """Clusters the data by the given columns to optimize query performance.
@@ -2531,7 +2520,7 @@ def _test() -> None:
         spark = SparkSession(sc)
 
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.readwriter,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,

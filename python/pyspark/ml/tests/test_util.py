@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import unittest
 
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import LogisticRegression, OneVsRest
@@ -74,12 +73,6 @@ class MetaAlgorithmReadWriteTests(SparkSessionTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_util import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

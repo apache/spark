@@ -160,6 +160,14 @@ class StringOpsTestsMixin:
         self.assert_eq(pser, psser._to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
+    def test_from_to_pandas_with_missing_values(self):
+        pser = pd.Series(["x", None, "z"])
+        psser = ps.from_pandas(pser)
+
+        self.assert_eq(psser.to_pandas(), pser)
+        self.assertEqual(psser.dtype, pser.dtype)
+        self.assertEqual(psser.to_pandas().dtype, pser.dtype)
+
     def test_isnull(self):
         self.assert_eq(self.pdf["string"].isnull(), self.psdf["string"].isnull())
 
@@ -241,7 +249,7 @@ class StringOpsTests(
 @unittest.skipIf(
     not extension_object_dtypes_available, "pandas extension object dtypes are not available"
 )
-class StringExtensionOpsTest(StringOpsTests):
+class StringExtensionOpsTestsMixin:
     @property
     def pser(self):
         return pd.Series(["x", "y", "z", None], dtype="string")
@@ -342,13 +350,15 @@ class StringExtensionOpsTest(StringOpsTests):
             self.check_extension(self.pser >= self.pser, (self.psser >= self.psser).sort_index())
 
 
+class StringExtensionOpsTests(
+    StringExtensionOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
+    pass
+
+
 if __name__ == "__main__":
-    from pyspark.pandas.tests.data_type_ops.test_string_ops import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

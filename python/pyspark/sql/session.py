@@ -24,13 +24,16 @@ from threading import RLock
 from types import TracebackType
 from typing import (
     Any,
+    Callable,
     ClassVar,
     Dict,
     Iterable,
+    Generic,
     List,
     Optional,
     Tuple,
     Type,
+    TypeVar,
     Union,
     Set,
     cast,
@@ -77,6 +80,7 @@ if TYPE_CHECKING:
     from pyspark.sql.catalog import Catalog
     from pyspark.sql.pandas._typing import ArrayLike, DataFrameLike as PandasDataFrameLike
     from pyspark.sql.streaming import StreamingQueryManager
+    from pyspark.sql.streaming.query import StreamingCheckpointManager
     from pyspark.sql.tvf import TableValuedFunction
     from pyspark.sql.udf import UDFRegistration
     from pyspark.sql.udtf import UDTFRegistration
@@ -136,7 +140,10 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
         RDD.toDF = toDF  # type: ignore[method-assign]
 
 
-class classproperty(property):
+T = TypeVar("T")
+
+
+class classproperty(Generic[T]):
     """Same as Python's @property decorator, but for class attributes.
 
     Examples
@@ -161,12 +168,13 @@ class classproperty(property):
     True
     """
 
-    def __get__(self, instance: Any, owner: Any = None) -> "SparkSession.Builder":
-        # The "type: ignore" below silences the following error from mypy:
-        # error: Argument 1 to "classmethod" has incompatible
-        # type "Optional[Callable[[Any], Any]]";
-        # expected "Callable[..., Any]"  [arg-type]
-        return classmethod(self.fget).__get__(None, owner)()  # type: ignore
+    def __init__(self, fget: Callable[[type], T]) -> None:
+        self.fget = fget
+
+    def __get__(self, instance: Any, owner: Optional[type]) -> T:
+        if owner is None:
+            owner = type(instance)
+        return self.fget(owner)
 
 
 class SparkSession(SparkConversionMixin):
@@ -214,16 +222,13 @@ class SparkSession(SparkConversionMixin):
             self._options: Dict[str, Any] = {}
 
         @overload
-        def config(self, *, conf: SparkConf) -> "SparkSession.Builder":
-            ...
+        def config(self, *, conf: SparkConf) -> "SparkSession.Builder": ...
 
         @overload
-        def config(self, key: str, value: Any) -> "SparkSession.Builder":
-            ...
+        def config(self, key: str, value: Any) -> "SparkSession.Builder": ...
 
         @overload
-        def config(self, *, map: Dict[str, "OptionalPrimitiveType"]) -> "SparkSession.Builder":
-            ...
+        def config(self, *, map: Dict[str, "OptionalPrimitiveType"]) -> "SparkSession.Builder": ...
 
         def config(
             self,
@@ -317,8 +322,8 @@ class SparkSession(SparkConversionMixin):
                 raise PySparkRuntimeError(
                     errorClass="CANNOT_CONFIGURE_SPARK_CONNECT_MASTER",
                     messageParameters={
-                        "master_url": self._options.get("spark.master", os.environ.get("MASTER")),
-                        "connect_url": self._options.get(
+                        "master_url": self._options.get("spark.master", os.environ.get("MASTER")),  # type: ignore[dict-item]
+                        "connect_url": self._options.get(  # type: ignore[dict-item]
                             "spark.remote", os.environ.get("SPARK_REMOTE")
                         ),
                     },
@@ -560,13 +565,13 @@ class SparkSession(SparkConversionMixin):
                     module.applyModifiableSettings(session._jsparkSession, self._options)
                 return session
 
-        # Spark Connect-specific API
-        @remote_only
         def create(self) -> "SparkSession":
-            """Creates a new SparkSession. Can only be used in the context of Spark Connect
-            and will throw an exception otherwise.
+            """Creates a new SparkSession.
 
             .. versionadded:: 3.5.0
+
+            .. versionchanged:: 4.2.0
+                Supports creating a SparkSession in Classic mode.
 
             Returns
             -------
@@ -577,6 +582,7 @@ class SparkSession(SparkConversionMixin):
             This method will update the default and/or active session if they are not set.
             """
             opts = dict(self._options)
+            # Connect mode
             if "SPARK_REMOTE" in os.environ or "spark.remote" in opts:
                 from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
@@ -584,6 +590,7 @@ class SparkSession(SparkConversionMixin):
                 self._validate_startup_urls()
 
                 url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+                assert url is not None
                 if url.startswith("local"):
                     raise PySparkRuntimeError(
                         errorClass="UNSUPPORTED_LOCAL_CONNECTION_STRING",
@@ -595,20 +602,33 @@ class SparkSession(SparkConversionMixin):
                 os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
                 opts["spark.remote"] = url
                 return cast(SparkSession, RemoteSparkSession.builder.config(map=opts).create())
+            # Classic mode
             else:
-                raise PySparkRuntimeError(
-                    errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-                    messageParameters={"feature": "SparkSession.builder.create"},
-                )
+                from pyspark.core.context import SparkContext
+
+                with self._lock:
+                    # Build SparkConf from options
+                    sparkConf = SparkConf()
+                    for key, value in self._options.items():
+                        sparkConf.set(key, str(value))
+
+                    sc = SparkContext.getOrCreate(sparkConf)
+                    jSparkSessionClass = SparkSession._get_j_spark_session_class(sc._jvm)
+                    # Create a new SparkSession in the JVM
+                    jSparkSession = jSparkSessionClass.builder().config(self._options).create()
+                    # Wrap the JVM SparkSession in a Python SparkSession
+                    return SparkSession(sc, jsparkSession=jSparkSession, options=self._options)
 
     # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
     # If changing, make sure this bug is not reintroduced.
-    builder: Builder = classproperty(lambda cls: cls.Builder())  # type: ignore
-    """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
+    @classproperty
+    def builder(cls: Type["SparkSession"]) -> "Builder":
+        """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
 
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-    """
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+        """
+        return cls.Builder()
 
     _instantiatedSession: ClassVar[Optional["SparkSession"]] = None
     _activeSession: ClassVar[Optional["SparkSession"]] = None
@@ -1303,8 +1323,7 @@ class SparkSession(SparkConversionMixin):
         data: Iterable["RowLike"],
         schema: Union[List[str], Tuple[str, ...]] = ...,
         samplingRatio: Optional[float] = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
@@ -1312,8 +1331,7 @@ class SparkSession(SparkConversionMixin):
         data: "RDD[RowLike]",
         schema: Union[List[str], Tuple[str, ...]] = ...,
         samplingRatio: Optional[float] = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
@@ -1322,8 +1340,7 @@ class SparkSession(SparkConversionMixin):
         schema: Union[StructType, str],
         *,
         verifySchema: bool = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
@@ -1332,8 +1349,7 @@ class SparkSession(SparkConversionMixin):
         schema: Union[StructType, str],
         *,
         verifySchema: bool = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
@@ -1341,8 +1357,7 @@ class SparkSession(SparkConversionMixin):
         data: "RDD[AtomicValue]",
         schema: Union[AtomicType, str],
         verifySchema: bool = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
@@ -1350,18 +1365,17 @@ class SparkSession(SparkConversionMixin):
         data: Iterable["AtomicValue"],
         schema: Union[AtomicType, str],
         verifySchema: bool = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
         self, data: "PandasDataFrameLike", samplingRatio: Optional[float] = ...
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
-    def createDataFrame(self, data: "pa.Table", samplingRatio: Optional[float] = ...) -> DataFrame:
-        ...
+    def createDataFrame(
+        self, data: "pa.Table", samplingRatio: Optional[float] = ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
@@ -1369,8 +1383,7 @@ class SparkSession(SparkConversionMixin):
         data: "PandasDataFrameLike",
         schema: Union[StructType, str],
         verifySchema: bool = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
@@ -1378,8 +1391,7 @@ class SparkSession(SparkConversionMixin):
         data: "pa.Table",
         schema: Union[StructType, str],
         verifySchema: bool = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     def createDataFrame(  # type: ignore[misc]
         self,
@@ -1633,7 +1645,10 @@ class SparkSession(SparkConversionMixin):
                 data, schema, samplingRatio, verifySchema
             )
         return self._create_dataframe(
-            data, schema, samplingRatio, verifySchema  # type: ignore[arg-type]
+            data,
+            schema,  # type: ignore[arg-type]
+            samplingRatio,
+            verifySchema,
         )
 
     def _create_dataframe(
@@ -1677,7 +1692,8 @@ class SparkSession(SparkConversionMixin):
             rdd, struct = self._createFromRDD(data.map(prepare), schema, samplingRatio)
         else:
             rdd, struct = self._createFromLocal(
-                map(prepare, data), schema  # type: ignore[arg-type]
+                map(prepare, data),  # type: ignore[arg-type]
+                schema,
             )
         assert self._jvm is not None
         jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())
@@ -2005,6 +2021,24 @@ class SparkSession(SparkConversionMixin):
         from pyspark.sql.streaming import StreamingQueryManager
 
         return StreamingQueryManager(self._jsparkSession.streams())
+
+    @cached_property
+    def _streamingCheckpointManager(self) -> "StreamingCheckpointManager":
+        """Returns a :class:`StreamingCheckpointManager` to manage streaming checkpoints.
+
+        .. versionadded:: 4.2.0
+
+        Notes
+        -----
+        This API is evolving.
+
+        Returns
+        -------
+        :class:`StreamingCheckpointManager`
+        """
+        from pyspark.sql.streaming.query import StreamingCheckpointManager
+
+        return StreamingCheckpointManager(self._jsparkSession.streamingCheckpointManager())
 
     @property
     def tvf(self) -> "TableValuedFunction":
@@ -2476,7 +2510,7 @@ def _test() -> None:
     globs["spark"] = (
         SparkSession.builder.master("local[4]").appName("sql.session tests").getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.session,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

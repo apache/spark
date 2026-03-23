@@ -47,6 +47,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LITERAL, NULL_LITERAL, TRUE_OR_FALSE_LITERAL}
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localTimeToNanos}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
@@ -169,7 +170,7 @@ object Literal {
       case _: DayTimeIntervalType if v.isInstanceOf[Duration] =>
         Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
       case _: ObjectType => Literal(v, dataType)
-      case CharType(_) | VarcharType(_) if SQLConf.get.preserveCharVarcharTypeInfo =>
+      case _: CharType | _: VarcharType if SQLConf.get.preserveCharVarcharTypeInfo =>
         Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
       case _ => Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
     }
@@ -186,7 +187,10 @@ object Literal {
   /**
    * Create a literal with default value for given DataType
    */
-  def default(dataType: DataType): Literal = dataType match {
+  def default(dataType: DataType): Literal =
+    TypeOps(dataType).map(_.getDefaultLiteral).getOrElse(defaultDefault(dataType))
+
+  private def defaultDefault(dataType: DataType): Literal = dataType match {
     case NullType => create(null, NullType)
     case BooleanType => Literal(false)
     case ByteType => Literal(0.toByte)
@@ -202,11 +206,11 @@ object Literal {
     case t: TimeType => create(0L, t)
     case it: DayTimeIntervalType => create(0L, it)
     case it: YearMonthIntervalType => create(0, it)
-    case CharType(length) =>
-      create(CharVarcharCodegenUtils.charTypeWriteSideCheck(UTF8String.fromString(""), length),
+    case c: CharType =>
+      create(CharVarcharCodegenUtils.charTypeWriteSideCheck(UTF8String.fromString(""), c.length),
         dataType)
-    case VarcharType(length) =>
-      create(CharVarcharCodegenUtils.varcharTypeWriteSideCheck(UTF8String.fromString(""), length),
+    case v: VarcharType =>
+      create(CharVarcharCodegenUtils.varcharTypeWriteSideCheck(UTF8String.fromString(""), v.length),
         dataType)
     case st: StringType => Literal(UTF8String.fromString(""), st)
     case BinaryType => Literal("".getBytes(StandardCharsets.UTF_8))
@@ -281,10 +285,11 @@ object Literal {
         assert(u.nameParts.length == 1)
         assert(!u.isDistinct)
         assert(u.filter.isEmpty)
-        assert(!u.ignoreNulls)
+        assert(u.ignoreNulls.isEmpty)
         assert(u.orderingWithinGroup.isEmpty)
         assert(!u.isInternal)
-        FunctionRegistry.builtin.lookupFunction(FunctionIdentifier(u.nameParts.head), u.arguments)
+        FunctionRegistry.builtin.lookupFunction(
+          FunctionIdentifier(u.nameParts.head), u.arguments)
     }
   }
 }

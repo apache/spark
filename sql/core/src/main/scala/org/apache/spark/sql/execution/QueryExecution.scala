@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.io.{BufferedWriter, OutputStreamWriter}
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.util.control.NonFatal
@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.execution.SQLExecution.EXECUTION_ROOT_ID_KEY
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.datasources.v2.V2TableRefreshUtil
@@ -51,7 +52,7 @@ import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, W
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.scripting.SqlScriptingExecution
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.util.{LazyTry, Utils}
+import org.apache.spark.util.{LazyTry, Utils, UUIDv7Generator}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -66,10 +67,14 @@ class QueryExecution(
     val logical: LogicalPlan,
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
     val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
-    val shuffleCleanupMode: ShuffleCleanupMode = DoNotCleanup,
-    val refreshPhaseEnabled: Boolean = true) extends Logging {
+    val shuffleCleanupModeOpt: Option[ShuffleCleanupMode] = None,
+    val refreshPhaseEnabled: Boolean = true,
+    val queryId: UUID = UUIDv7Generator.generate()) extends Logging {
 
   val id: Long = QueryExecution.nextExecutionId
+
+  // Used by SQLExecution to determine whether to use the existing queryId or generate a new one.
+  private[sql] val firstExecution = new AtomicBoolean(true)
 
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
@@ -178,13 +183,8 @@ class QueryExecution(
       // with the rest of processing of the root plan being just outputting command results,
       // for eagerly executed commands we mark this place as beginning of execution.
       tracker.setReadyForExecution()
-      val qe = new QueryExecution(sparkSession, p, mode = mode,
-        shuffleCleanupMode = shuffleCleanupMode, refreshPhaseEnabled = refreshPhaseEnabled)
-      val result = QueryExecution.withInternalError(s"Eagerly executed $name failed.") {
-        SQLExecution.withNewExecutionId(qe, Some(name)) {
-          qe.executedPlan.executeCollect()
-        }
-      }
+      val (qe, result) = QueryExecution.runCommand(
+        sparkSession, p, name, refreshPhaseEnabled, mode, Some(shuffleCleanupMode))
       CommandResult(
         qe.analyzed.output,
         qe.commandExecuted,
@@ -468,6 +468,32 @@ class QueryExecution(
     Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, message)
   }
 
+  /**
+   * Determine the shuffle cleanup mode, based on the following order:
+   * 1. input arg when constructing this QueryExecution
+   * 2. the cleanup mode of the root execution
+   * 3. SQLConf from SparkSession
+   */
+  lazy val shuffleCleanupMode: ShuffleCleanupMode =
+    shuffleCleanupModeOpt.getOrElse(
+      getShuffleCleanupModeFromRootExecution.getOrElse(
+        QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf)))
+
+  private def getShuffleCleanupModeFromRootExecution: Option[ShuffleCleanupMode] = {
+    val rootExecutionIdStr = sparkSession.sparkContext.getLocalProperty(EXECUTION_ROOT_ID_KEY)
+    if (rootExecutionIdStr != null) {
+      val rootExecutionId = rootExecutionIdStr.toLong
+      val rootExecution = SQLExecution.getQueryExecution(rootExecutionId)
+      if (rootExecution != null) {
+        rootExecution.shuffleCleanupModeOpt
+      } else {
+        None
+      }
+    } else {
+      None
+    }
+  }
+
   def extendedExplainInfo(append: String => Unit, plan: SparkPlan): Unit = {
     val generators = sparkSession.sessionState.conf.getConf(SQLConf.EXTENDED_EXPLAIN_PROVIDERS)
       .getOrElse(Seq.empty)
@@ -582,7 +608,7 @@ object QueryExecution {
       sparkSession,
       logical,
       mode = CommandExecutionMode.ALL,
-      shuffleCleanupMode = determineShuffleCleanupMode(sparkSession.sessionState.conf),
+      shuffleCleanupModeOpt = Some(determineShuffleCleanupMode(sparkSession.sessionState.conf)),
       refreshPhaseEnabled = refreshPhaseEnabled)
   }
 
@@ -762,5 +788,27 @@ object QueryExecution {
       case NameParameterizedQuery(_: CompoundBody, _, _) => true
       case _ => false
     }
+  }
+
+  def runCommand(
+      sparkSession: SparkSession,
+      command: LogicalPlan,
+      name: String,
+      refreshPhaseEnabled: Boolean = true,
+      mode: CommandExecutionMode.Value = CommandExecutionMode.SKIP,
+      shuffleCleanupModeOpt: Option[ShuffleCleanupMode] = None)
+    : (QueryExecution, Array[InternalRow]) = {
+    val qe = new QueryExecution(
+      sparkSession,
+      command,
+      mode = mode,
+      shuffleCleanupModeOpt = shuffleCleanupModeOpt,
+      refreshPhaseEnabled = refreshPhaseEnabled)
+    val result = QueryExecution.withInternalError(s"Executed $name failed.") {
+      SQLExecution.withNewExecutionId(qe, Some(name)) {
+        qe.executedPlan.executeCollect()
+      }
+    }
+    (qe, result)
   }
 }

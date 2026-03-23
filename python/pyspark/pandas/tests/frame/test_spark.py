@@ -16,7 +16,6 @@
 #
 import inspect
 import sys
-import unittest
 from io import StringIO
 
 import numpy as np
@@ -88,6 +87,19 @@ class FrameSparkMixin:
         with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
             psdf = ps.from_pandas(pdf)
             self.assert_eq(psdf, pdf)
+
+    def test_to_pandas_with_nullable_string_column(self):
+        pdf = pd.DataFrame({"a": ["x", None, "z"]})
+
+        psdf = ps.from_pandas(pdf)
+        actual = psdf.to_pandas()
+        self.assert_eq(actual, pdf)
+        self.assertEqual(actual["a"].dtype, pdf["a"].dtype)
+
+        with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
+            actual = ps.from_pandas(pdf).to_pandas()
+            self.assert_eq(actual, pdf)
+            self.assertEqual(actual["a"].dtype, pdf["a"].dtype)
 
     def test_nullable_object(self):
         pdf = pd.DataFrame(
@@ -300,12 +312,6 @@ class FrameSparkTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.frame.test_spark import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

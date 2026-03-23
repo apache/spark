@@ -16,36 +16,18 @@
 #
 from importlib import import_module
 from pkgutil import iter_modules
-import os
-import sys
 from typing import IO
 
-from pyspark.accumulators import _accumulatorRegistry
 from pyspark.serializers import (
-    read_int,
     write_int,
     write_with_length,
-    SpecialLengths,
 )
 from pyspark.sql.datasource import DataSource
-from pyspark.util import (
-    handle_worker_exception,
-    local_connect_and_auth,
-    with_faulthandler,
-    start_faulthandler_periodic_traceback,
-)
-from pyspark.worker_util import (
-    check_python_version,
-    pickleSer,
-    send_accumulator_updates,
-    setup_broadcasts,
-    setup_memory_limits,
-    setup_spark_files,
-)
+from pyspark.sql.worker.utils import worker_run
+from pyspark.worker_util import get_sock_file_to_executor, pickleSer
 
 
-@with_faulthandler
-def main(infile: IO, outfile: IO) -> None:
+def _main(infile: IO, outfile: IO) -> None:
     """
     Main method for looking up the available Python Data Sources in Python path.
 
@@ -56,55 +38,25 @@ def main(infile: IO, outfile: IO) -> None:
     This is responsible for searching the available Python Data Sources so they can be
     statically registered automatically.
     """
-    try:
-        check_python_version(infile)
+    infos = {}
+    for info in iter_modules():
+        if info.name.startswith("pyspark_"):
+            mod = import_module(info.name)
+            if hasattr(mod, "DefaultSource") and issubclass(mod.DefaultSource, DataSource):
+                infos[mod.DefaultSource.name()] = mod.DefaultSource
 
-        start_faulthandler_periodic_traceback()
+    # Writes name -> pickled data source to JVM side to be registered
+    # as a Data Source.
+    write_int(len(infos), outfile)
+    for name, dataSource in infos.items():
+        write_with_length(name.encode("utf-8"), outfile)
+        pickleSer._write_with_length(dataSource, outfile)
 
-        memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
-        setup_memory_limits(memory_limit_mb)
 
-        setup_spark_files(infile)
-        setup_broadcasts(infile)
-
-        _accumulatorRegistry.clear()
-
-        infos = {}
-        for info in iter_modules():
-            if info.name.startswith("pyspark_"):
-                mod = import_module(info.name)
-                if hasattr(mod, "DefaultSource") and issubclass(mod.DefaultSource, DataSource):
-                    infos[mod.DefaultSource.name()] = mod.DefaultSource
-
-        # Writes name -> pickled data source to JVM side to be registered
-        # as a Data Source.
-        write_int(len(infos), outfile)
-        for name, dataSource in infos.items():
-            write_with_length(name.encode("utf-8"), outfile)
-            pickleSer._write_with_length(dataSource, outfile)
-
-    except BaseException as e:
-        handle_worker_exception(e, outfile)
-        sys.exit(-1)
-
-    send_accumulator_updates(outfile)
-
-    # check end of stream
-    if read_int(infile) == SpecialLengths.END_OF_STREAM:
-        write_int(SpecialLengths.END_OF_STREAM, outfile)
-    else:
-        # write a different value to tell JVM to not reuse this worker
-        write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
-        sys.exit(-1)
+def main(infile: IO, outfile: IO) -> None:
+    worker_run(_main, infile, outfile)
 
 
 if __name__ == "__main__":
-    # Read information about how to connect back to the JVM from the environment.
-    conn_info = os.environ.get(
-        "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
-    )
-    auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
-    (sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
-    write_int(os.getpid(), sock_file)
-    sock_file.flush()
-    main(sock_file, sock_file)
+    with get_sock_file_to_executor() as sock_file:
+        main(sock_file, sock_file)

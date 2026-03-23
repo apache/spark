@@ -17,6 +17,7 @@
 """
 User-defined function related classes and functions
 """
+
 import functools
 import inspect
 import sys
@@ -201,7 +202,7 @@ class UserDefinedFunction:
     def _check_return_type(returnType: DataType, evalType: int) -> None:
         if evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF:
             try:
-                to_arrow_type(returnType)
+                to_arrow_type(returnType, timezone="UTC")
             except TypeError:
                 raise PySparkNotImplementedError(
                     errorClass="NOT_IMPLEMENTED",
@@ -215,12 +216,12 @@ class UserDefinedFunction:
             or evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
         ):
             try:
-                to_arrow_type(returnType)
+                to_arrow_type(returnType, timezone="UTC")
             except TypeError:
                 raise PySparkNotImplementedError(
                     errorClass="NOT_IMPLEMENTED",
                     messageParameters={
-                        "feature": f"Invalid return type with scalar Pandas UDFs: " f"{returnType}"
+                        "feature": f"Invalid return type with scalar Pandas UDFs: {returnType}"
                     },
                 )
         elif (
@@ -228,12 +229,12 @@ class UserDefinedFunction:
             or evalType == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
         ):
             try:
-                to_arrow_type(returnType)
+                to_arrow_type(returnType, timezone="UTC")
             except TypeError:
                 raise PySparkNotImplementedError(
                     errorClass="NOT_IMPLEMENTED",
                     messageParameters={
-                        "feature": f"Invalid return type with scalar Arrow UDFs: " f"{returnType}"
+                        "feature": f"Invalid return type with scalar Arrow UDFs: {returnType}"
                     },
                 )
         elif (
@@ -243,7 +244,7 @@ class UserDefinedFunction:
         ):
             if isinstance(returnType, StructType):
                 try:
-                    to_arrow_type(returnType)
+                    to_arrow_type(returnType, timezone="UTC")
                 except TypeError:
                     raise PySparkNotImplementedError(
                         errorClass="NOT_IMPLEMENTED",
@@ -268,12 +269,12 @@ class UserDefinedFunction:
         ):
             if isinstance(returnType, StructType):
                 try:
-                    to_arrow_type(returnType)
+                    to_arrow_type(returnType, timezone="UTC")
                 except TypeError:
                     raise PySparkNotImplementedError(
                         errorClass="NOT_IMPLEMENTED",
                         messageParameters={
-                            "feature": f"Invalid return type in mapInPandas: " f"{returnType}"
+                            "feature": f"Invalid return type in mapInPandas: {returnType}"
                         },
                     )
             else:
@@ -290,7 +291,7 @@ class UserDefinedFunction:
         ):
             if isinstance(returnType, StructType):
                 try:
-                    to_arrow_type(returnType)
+                    to_arrow_type(returnType, timezone="UTC")
                 except TypeError:
                     raise PySparkNotImplementedError(
                         errorClass="NOT_IMPLEMENTED",
@@ -310,13 +311,12 @@ class UserDefinedFunction:
         elif evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
             if isinstance(returnType, StructType):
                 try:
-                    to_arrow_type(returnType)
+                    to_arrow_type(returnType, timezone="UTC")
                 except TypeError:
                     raise PySparkNotImplementedError(
                         errorClass="NOT_IMPLEMENTED",
                         messageParameters={
-                            "feature": f"Invalid return type in cogroup.applyInPandas: "
-                            f"{returnType}"
+                            "feature": f"Invalid return type in cogroup.applyInPandas: {returnType}"
                         },
                     )
             else:
@@ -330,13 +330,12 @@ class UserDefinedFunction:
         elif evalType == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
             if isinstance(returnType, StructType):
                 try:
-                    to_arrow_type(returnType)
+                    to_arrow_type(returnType, timezone="UTC")
                 except TypeError:
                     raise PySparkNotImplementedError(
                         errorClass="NOT_IMPLEMENTED",
                         messageParameters={
-                            "feature": "Invalid return type in cogroup.applyInArrow: "
-                            f"{returnType}"
+                            "feature": f"Invalid return type in cogroup.applyInArrow: {returnType}"
                         },
                     )
             else:
@@ -358,7 +357,7 @@ class UserDefinedFunction:
                             f"{returnType}"
                         },
                     )
-                to_arrow_type(returnType)
+                to_arrow_type(returnType, timezone="UTC")
             except TypeError:
                 raise PySparkNotImplementedError(
                     errorClass="NOT_IMPLEMENTED",
@@ -370,7 +369,7 @@ class UserDefinedFunction:
         elif evalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF:
             try:
                 # Different from SQL_GROUPED_AGG_PANDAS_UDF, StructType is allowed here
-                to_arrow_type(returnType)
+                to_arrow_type(returnType, timezone="UTC")
             except TypeError:
                 raise PySparkNotImplementedError(
                     errorClass="NOT_IMPLEMENTED",
@@ -439,6 +438,7 @@ class UserDefinedFunction:
                 PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
                 PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
                 PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
+                PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
             ]:
                 warnings.warn(
                     "Profiling UDFs with iterators input/output is not supported.",
@@ -476,13 +476,17 @@ class UserDefinedFunction:
             else:  # memory_profiler_enabled
                 f = self.func
                 memory_profiler = sc.profiler_collector.new_memory_profiler(sc)
-                (sub_lines, start_line) = inspect.getsourcelines(f.__code__)
+                sub_lines, start_line = inspect.getsourcelines(f.__code__)
 
                 @functools.wraps(f)
                 def func(*args: Any, **kwargs: Any) -> Any:
                     assert memory_profiler is not None
                     return memory_profiler.profile(
-                        sub_lines, start_line, f, *args, **kwargs  # type: ignore[arg-type]
+                        sub_lines,  # type: ignore[arg-type]
+                        start_line,
+                        f,
+                        *args,
+                        **kwargs,
                     )
 
                 func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
@@ -681,6 +685,7 @@ class UDFRegistration:
                 PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
                 PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
                 PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+                PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
                 PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
             ]:
                 raise PySparkTypeError(
@@ -689,8 +694,8 @@ class UDFRegistration:
                         "eval_type": "SQL_BATCHED_UDF, SQL_ARROW_BATCHED_UDF, "
                         "SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_ARROW_UDF, "
                         "SQL_SCALAR_PANDAS_ITER_UDF, SQL_SCALAR_ARROW_ITER_UDF, "
-                        "SQL_GROUPED_AGG_PANDAS_UDF, SQL_GROUPED_AGG_ARROW_UDF or "
-                        "SQL_GROUPED_AGG_ARROW_ITER_UDF"
+                        "SQL_GROUPED_AGG_PANDAS_UDF, SQL_GROUPED_AGG_ARROW_UDF, "
+                        "SQL_GROUPED_AGG_PANDAS_ITER_UDF or SQL_GROUPED_AGG_ARROW_ITER_UDF"
                     },
                 )
             source_udf = _create_udf(
@@ -708,7 +713,7 @@ class UDFRegistration:
             return_udf = _create_udf(
                 f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF, name=name
             )
-            register_udf = return_udf._unwrapped
+            register_udf = return_udf._unwrapped  # type: ignore[attr-defined]
         self.sparkSession._jsparkSession.udf().registerPython(name, register_udf._judf)
         return return_udf
 
@@ -807,7 +812,7 @@ def _test() -> None:
 
     spark = SparkSession.builder.master("local[4]").appName("sql.udf tests").getOrCreate()
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.udf, globs=globs, optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
     )
     spark.stop()

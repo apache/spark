@@ -39,7 +39,7 @@ import org.apache.spark.sql.execution.{QueryExecution, StreamSourceAwareSparkPla
 import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress}
 import org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec
 import org.apache.spark.sql.execution.streaming.StreamingQueryPlanTraverseHelper
-import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
+import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadataBase
 import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeWatermarkExec, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.streaming._
@@ -154,7 +154,7 @@ abstract class ProgressContext(
   import ProgressContext._
 
   // offset metadata for this batch
-  protected def offsetSeqMetadata: OffsetSeqMetadata
+  protected def offsetSeqMetadata: OffsetSeqMetadataBase
 
   // the most recent input data for each source.
   protected def newData: Map[SparkDataStream, LogicalPlan]

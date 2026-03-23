@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.streaming.util
 
-import org.apache.spark.SparkContext.DRIVER_IDENTIFIER
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.util.RpcUtils
@@ -73,8 +72,7 @@ class GlobalManualClock(endpointName: String)
 
   private def isDriver: Boolean = {
     val executorId = SparkEnv.get.executorId
-    // Check for null to match the behavior of executorId == DRIVER_IDENTIFIER
-    executorId != null && executorId.startsWith(DRIVER_IDENTIFIER)
+    SparkContext.isDriver(executorId)
   }
 
   override def getTimeMillis(): Long = {
@@ -115,7 +113,7 @@ class GlobalSyncClockClient(driverEndpointName: String)
     SparkEnv.get.rpcEnv)
 
   override def getTimeMillis(): Long = {
-    val result = endpoint.askSync[Long]()
+    val result = endpoint.askSync[Long](())
     result
   }
 

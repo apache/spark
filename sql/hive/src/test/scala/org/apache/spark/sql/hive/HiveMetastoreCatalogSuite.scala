@@ -498,4 +498,31 @@ class DataSourceWithHiveMetastoreCatalogSuite
       assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(schema))
     }
   }
+
+  test("SPARK-55645: Read/write Serde Name to/from an external table") {
+    withTable("t") {
+      sql("CREATE TABLE t (d1 DECIMAL(10,3), d2 STRING) STORED AS TEXTFILE")
+
+      val hiveTable =
+        sessionState.catalog.getTableMetadata(TableIdentifier("t", Some("default")))
+      val updated =
+        hiveTable.copy(storage = hiveTable.storage.copy(serdeName = Some("testSerdeName")))
+      sessionState.catalog.alterTable(updated)
+      val tableWithSerdeName =
+        sessionState.catalog.getTableMetadata(TableIdentifier("t", Some("default")))
+      assert(tableWithSerdeName.storage.serdeName === Some("testSerdeName"))
+    }
+  }
+
+  test("SPARK-55645: serdeName should be None for tables without an explicit serde name") {
+    withTable("t") {
+      sql("CREATE TABLE t (d1 DECIMAL(10,3), d2 STRING) STORED AS TEXTFILE")
+
+      val hiveTable =
+        sessionState.catalog.getTableMetadata(TableIdentifier("t", Some("default")))
+      // Hive Metastore returns "" for tables without an explicit serde name.
+      // This should be mapped to None, not Some("").
+      assert(hiveTable.storage.serdeName === None)
+    }
+  }
 }

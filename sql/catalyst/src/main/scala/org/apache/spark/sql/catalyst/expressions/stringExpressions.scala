@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.lang.{StringBuilder => JStringBuilder}
 import java.nio.{ByteBuffer, CharBuffer}
 import java.nio.charset.CharacterCodingException
 import java.text.{DecimalFormat, DecimalFormatSymbols}
@@ -3390,7 +3391,7 @@ case class FormatNumber(x: Expression, d: Expression)
   // A cached DecimalFormat, for performance concern, we will change it
   // only if the d value changed.
   @transient
-  private lazy val pattern: StringBuffer = new StringBuffer()
+  private lazy val pattern: JStringBuilder = new JStringBuilder()
 
   // SPARK-13515: US Locale configures the DecimalFormat object to use a dot ('.')
   // as a decimal separator.
@@ -3465,7 +3466,7 @@ case class FormatNumber(x: Expression, d: Expression)
         }
       }
 
-      val sb = classOf[StringBuffer].getName
+      val sb = classOf[JStringBuilder].getName
       val df = classOf[DecimalFormat].getName
       val dfs = classOf[DecimalFormatSymbols].getName
       val l = classOf[Locale].getName
