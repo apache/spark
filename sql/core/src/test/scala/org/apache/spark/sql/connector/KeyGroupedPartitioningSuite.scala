@@ -75,7 +75,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       Column.create("dept_id", IntegerType),
       Column.create("data", StringType))
 
-  def withFunctions[T](fns: UnboundFunction*)(f: => T): T = {
+  def withFunction[T](fns: UnboundFunction*)(f: => T): T = {
     val fnIds = catalog.listFunctions(Array.empty)
     val oldFns = fns.map { fn =>
       val id = Identifier.of(Array.empty, fn.name())
@@ -3447,7 +3447,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
   }
 
   test("SPARK-56046: Reducers with different result types") {
-    withFunctions(UnboundDaysFunctionWithToYearsReducerWithDateResult) {
+    withFunction(UnboundDaysFunctionWithToYearsReducerWithDateResult) {
       val items_partitions = Array(days("arrive_time"))
       createTable(items, itemsColumns, items_partitions)
       sql(s"INSERT INTO testcat.ns.$items VALUES " +
@@ -3486,7 +3486,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
   }
 
   test("SPARK-56164: Reducers with different result types to original keys") {
-    withFunctions(
+    withFunction(
       UnboundDaysFunctionWithToYearsReducerWithLongResult,
       UnboundYearsFunctionWithToYearsReducerWithLongResult) {
       val items_partitions = Array(days("arrive_time"))
