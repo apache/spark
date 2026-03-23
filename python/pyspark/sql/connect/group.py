@@ -15,10 +15,6 @@
 # limitations under the License.
 #
 
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
-
 import warnings
 from typing import (
     Dict,
@@ -121,12 +117,10 @@ class GroupedData:
         return f"GroupedData[{grouping_str}, value: [{value_str}], type: {type_str}]"
 
     @overload
-    def agg(self, *exprs: Column) -> "DataFrame":
-        ...
+    def agg(self, *exprs: Column) -> "DataFrame": ...
 
     @overload
-    def agg(self, __exprs: Dict[str, str]) -> "DataFrame":
-        ...
+    def agg(self, __exprs: Dict[str, str]) -> "DataFrame": ...
 
     def agg(self, *exprs: Union[Column, Dict[str, str]]) -> "DataFrame":
         from pyspark.sql.connect.dataframe import DataFrame
@@ -615,7 +609,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.connect.group,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,

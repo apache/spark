@@ -18,8 +18,8 @@
 import os
 import unittest
 from pyspark.sql import SparkSession
-from pyspark.testing.sqlutils import (
-    SQLTestUtils,
+from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.testing.utils import (
     have_pyarrow,
     have_pandas,
     pandas_requirement_message,

@@ -27,18 +27,18 @@ from typing import Iterator
 from unittest import mock
 
 from pyspark import SparkConf
-from pyspark.profiler import has_memory_profiler
+from pyspark.memory_profiler_ext import has_memory_profiler
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, pandas_udf, udf
 from pyspark.sql.window import Window
-from pyspark.testing.sqlutils import (
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
+    PySparkTestCase,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
-    ReusedSQLTestCase,
 )
-from pyspark.testing.utils import PySparkTestCase
 
 
 def _do_computation(spark, *, action=lambda df: df.collect(), use_arrow=False):
@@ -70,7 +70,7 @@ class MemoryProfilerTests(PySparkTestCase):
         self.spark = SparkSession(sparkContext=self.sc)
 
     def test_code_map(self):
-        from pyspark.profiler import CodeMapForUDF
+        from pyspark.memory_profiler_ext import CodeMapForUDF
 
         code_map = CodeMapForUDF(include_children=False, backend="psutil")
 
@@ -85,7 +85,7 @@ class MemoryProfilerTests(PySparkTestCase):
         self.assertEqual(len(code_map._toplevel), 1)
 
     def test_udf_line_profiler(self):
-        from pyspark.profiler import UDFLineProfiler
+        from pyspark.memory_profiler_ext import UDFLineProfiler
 
         profiler = UDFLineProfiler()
 

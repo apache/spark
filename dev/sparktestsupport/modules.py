@@ -239,6 +239,9 @@ api = Module(
     source_file_regexes=[
         "sql/api/",
     ],
+    sbt_test_goals=[
+        "sql-api/test",
+    ],
 )
 
 catalyst = Module(
@@ -250,9 +253,9 @@ catalyst = Module(
     sbt_test_goals=[
         "catalyst/test",
     ],
-    environ=None
-    if "GITHUB_ACTIONS" not in os.environ
-    else {"ENABLE_DOCKER_INTEGRATION_TESTS": "1"},
+    environ=(
+        None if "GITHUB_ACTIONS" not in os.environ else {"ENABLE_DOCKER_INTEGRATION_TESTS": "1"}
+    ),
 )
 
 sql = Module(
@@ -265,9 +268,9 @@ sql = Module(
     sbt_test_goals=[
         "sql/test",
     ],
-    environ=None
-    if "GITHUB_ACTIONS" not in os.environ
-    else {"ENABLE_DOCKER_INTEGRATION_TESTS": "1"},
+    environ=(
+        None if "GITHUB_ACTIONS" not in os.environ else {"ENABLE_DOCKER_INTEGRATION_TESTS": "1"}
+    ),
 )
 
 hive = Module(
@@ -491,6 +494,7 @@ pyspark_core = Module(
         "pyspark.tests.test_daemon",
         "pyspark.tests.test_join",
         "pyspark.tests.test_memory_profiler",
+        "pyspark.tests.test_pin_thread",
         "pyspark.tests.test_profiler",
         "pyspark.tests.test_rdd",
         "pyspark.tests.test_rddbarrier",
@@ -557,6 +561,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_collection",
         "pyspark.sql.tests.test_creation",
         "pyspark.sql.tests.test_conversion",
+        "pyspark.sql.tests.test_dataframe_query_context",
         "pyspark.sql.tests.test_listener",
         "pyspark.sql.tests.test_observation",
         "pyspark.sql.tests.test_repartition",
@@ -777,6 +782,7 @@ pyspark_ml = Module(
         "pyspark.ml.tests.tuning.test_tvs_io_basic",
         "pyspark.ml.tests.tuning.test_tvs_io_nested",
         "pyspark.ml.tests.tuning.test_tvs_io_pipeline",
+        "pyspark.ml.tests.test_dl_util",
         "pyspark.ml.tests.test_util",
         "pyspark.ml.tests.test_wrapper",
         "pyspark.ml.torch.tests.test_distributor",
@@ -871,6 +877,7 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.computation.test_cumulative",
         "pyspark.pandas.tests.computation.test_describe",
         "pyspark.pandas.tests.computation.test_eval",
+        "pyspark.pandas.tests.computation.test_idxmax_idxmin",
         "pyspark.pandas.tests.computation.test_melt",
         "pyspark.pandas.tests.computation.test_missing_data",
         "pyspark.pandas.tests.computation.test_pivot",
@@ -1163,6 +1170,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_sql",
         "pyspark.sql.tests.connect.test_parity_job_cancellation",
         "pyspark.sql.tests.connect.test_parity_dataframe",
+        "pyspark.sql.tests.connect.test_parity_dataframe_query_context",
         "pyspark.sql.tests.connect.test_parity_collection",
         "pyspark.sql.tests.connect.test_parity_creation",
         "pyspark.sql.tests.connect.test_parity_observation",
@@ -1182,11 +1190,13 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_python_datasource",
         "pyspark.sql.tests.connect.test_parity_frame_plot",
         "pyspark.sql.tests.connect.test_parity_frame_plot_plotly",
+        "pyspark.sql.tests.connect.test_session",
         "pyspark.sql.tests.connect.test_utils",
         "pyspark.sql.tests.connect.client.test_artifact",
         "pyspark.sql.tests.connect.client.test_artifact_localcluster",
         "pyspark.sql.tests.connect.client.test_client",
         "pyspark.sql.tests.connect.client.test_client_call_stack_trace",
+        "pyspark.sql.tests.connect.client.test_client_retries",
         "pyspark.sql.tests.connect.client.test_reattach",
         "pyspark.sql.tests.connect.test_resources",
         "pyspark.sql.tests.connect.shell.test_progress",
@@ -1316,6 +1326,7 @@ pyspark_pandas_connect = Module(
         "pyspark.pandas.tests.connect.computation.test_parity_cumulative",
         "pyspark.pandas.tests.connect.computation.test_parity_describe",
         "pyspark.pandas.tests.connect.computation.test_parity_eval",
+        "pyspark.pandas.tests.connect.computation.test_parity_idxmax_idxmin",
         "pyspark.pandas.tests.connect.computation.test_parity_melt",
         "pyspark.pandas.tests.connect.computation.test_parity_missing_data",
         "pyspark.pandas.tests.connect.computation.test_parity_pivot",
@@ -1677,9 +1688,9 @@ docker_integration_tests = Module(
     build_profile_flags=["-Pdocker-integration-tests"],
     source_file_regexes=["connector/docker-integration-tests"],
     sbt_test_goals=["docker-integration-tests/test"],
-    environ=None
-    if "GITHUB_ACTIONS" not in os.environ
-    else {"ENABLE_DOCKER_INTEGRATION_TESTS": "1"},
+    environ=(
+        None if "GITHUB_ACTIONS" not in os.environ else {"ENABLE_DOCKER_INTEGRATION_TESTS": "1"}
+    ),
     test_tags=["org.apache.spark.tags.DockerTest"],
 )
 

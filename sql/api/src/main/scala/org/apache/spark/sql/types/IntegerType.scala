@@ -34,6 +34,10 @@ class IntegerType private () extends IntegralType {
 
   override def simpleString: String = "int"
 
+  override def equals(obj: Any): Boolean = obj.isInstanceOf[IntegerType]
+
+  override def hashCode(): Int = classOf[IntegerType].getSimpleName.hashCode
+
   private[spark] override def asNullable: IntegerType = this
 }
 

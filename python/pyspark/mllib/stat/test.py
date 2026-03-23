@@ -19,7 +19,6 @@ from typing import Generic, Tuple, TypeVar
 
 from pyspark.mllib.common import inherit_doc, JavaModelWrapper
 
-
 __all__ = ["ChiSqTestResult", "KolmogorovSmirnovTestResult"]
 
 DF = TypeVar("DF", int, float, Tuple[int, ...], Tuple[float, ...])

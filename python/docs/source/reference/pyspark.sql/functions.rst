@@ -641,6 +641,27 @@ Misc Functions
     current_database
     current_schema
     current_user
+    input_file_block_length
+    input_file_block_start
+    input_file_name
+    java_method
+    monotonically_increasing_id
+    raise_error
+    reflect
+    session_user
+    spark_partition_id
+    try_aes_decrypt
+    try_reflect
+    typeof
+    user
+    uuid
+    version
+
+Datasketch Functions
+--------------------
+.. autosummary::
+    :toctree: api/
+
     hll_sketch_estimate
     hll_union
     kll_sketch_get_n_bigint
@@ -658,23 +679,18 @@ Misc Functions
     kll_sketch_to_string_bigint
     kll_sketch_to_string_double
     kll_sketch_to_string_float
-    input_file_block_length
-    input_file_block_start
-    input_file_name
-    java_method
-    monotonically_increasing_id
-    raise_error
-    reflect
-    session_user
-    spark_partition_id
     theta_difference
     theta_intersection
     theta_sketch_estimate
     theta_union
     tuple_difference_double
     tuple_difference_integer
+    tuple_difference_theta_double
+    tuple_difference_theta_integer
     tuple_intersection_double
     tuple_intersection_integer
+    tuple_intersection_theta_double
+    tuple_intersection_theta_integer
     tuple_sketch_estimate_double
     tuple_sketch_estimate_integer
     tuple_sketch_summary_double
@@ -683,12 +699,8 @@ Misc Functions
     tuple_sketch_theta_integer
     tuple_union_double
     tuple_union_integer
-    try_aes_decrypt
-    try_reflect
-    typeof
-    user
-    uuid
-    version
+    tuple_union_theta_double
+    tuple_union_theta_integer
 
 
 Geospatial ST Functions

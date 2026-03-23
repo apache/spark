@@ -25,12 +25,8 @@ from pyspark.errors import PythonException
 from pyspark.sql import Row, functions as sf
 from pyspark.sql.functions import array, col, explode, lit, mean, stddev
 from pyspark.sql.window import Window
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
-    have_pyarrow,
-    pyarrow_requirement_message,
-)
-from pyspark.testing.utils import assertDataFrameEqual
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import assertDataFrameEqual, have_pyarrow, pyarrow_requirement_message
 from pyspark.util import is_remote_only
 
 if have_pyarrow:
@@ -423,7 +419,7 @@ class ApplyInArrowTestsMixin:
                 [
                     Row(
                         level="WARNING",
-                        msg=f"arrow grouped map: {dict(id=lst, value=[v*10 for v in lst])}",
+                        msg=f"arrow grouped map: {dict(id=lst, value=[v * 10 for v in lst])}",
                         context={"func_name": func_with_logging.__name__},
                         logger="test_arrow_grouped_map",
                     )
@@ -463,7 +459,7 @@ class ApplyInArrowTestsMixin:
                 [
                     Row(
                         level="WARNING",
-                        msg=f"arrow grouped map: {dict(id=lst, value=[v*10 for v in lst])}",
+                        msg=f"arrow grouped map: {dict(id=lst, value=[v * 10 for v in lst])}",
                         context={"func_name": func_with_logging.__name__},
                         logger="test_arrow_grouped_map",
                     )

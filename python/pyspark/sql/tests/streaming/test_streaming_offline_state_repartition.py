@@ -28,8 +28,8 @@ from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
     StatefulProcessorCompositeTypeFactory,
 )
 from pyspark.sql.types import LongType, StringType, StructType, StructField
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
@@ -84,7 +84,10 @@ class OfflineStateRepartitionTestUtils:
         verify_initial, verify_after_increase, verify_after_decrease : callable
             Functions(collected_results) to verify results at each stage.
         """
-        with tempfile.TemporaryDirectory() as input_dir, tempfile.TemporaryDirectory() as checkpoint_dir:
+        with (
+            tempfile.TemporaryDirectory() as input_dir,
+            tempfile.TemporaryDirectory() as checkpoint_dir,
+        ):
             collected_results = []
 
             def collect_batch(batch_df, batch_id):

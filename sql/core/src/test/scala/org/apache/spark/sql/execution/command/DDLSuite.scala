@@ -1121,27 +1121,35 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   test("drop built-in function") {
     Seq("true", "false").foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
-        // partition to add already exists
         checkError(
           exception = intercept[AnalysisException] {
             sql("DROP TEMPORARY FUNCTION year")
           },
-          condition = "_LEGACY_ERROR_TEMP_1255",
-          parameters = Map("functionName" -> "year")
+          condition = "FORBIDDEN_OPERATION",
+          parameters = Map(
+            "statement" -> "DROP",
+            "objectType" -> "FUNCTION",
+            "objectName" -> "`year`")
         )
         checkError(
           exception = intercept[AnalysisException] {
             sql("DROP TEMPORARY FUNCTION YeAr")
           },
-          condition = "_LEGACY_ERROR_TEMP_1255",
-          parameters = Map("functionName" -> "YeAr")
+          condition = "FORBIDDEN_OPERATION",
+          parameters = Map(
+            "statement" -> "DROP",
+            "objectType" -> "FUNCTION",
+            "objectName" -> "`YeAr`")
         )
         checkError(
           exception = intercept[AnalysisException] {
             sql("DROP TEMPORARY FUNCTION `YeAr`")
           },
-          condition = "_LEGACY_ERROR_TEMP_1255",
-          parameters = Map("functionName" -> "YeAr")
+          condition = "FORBIDDEN_OPERATION",
+          parameters = Map(
+            "statement" -> "DROP",
+            "objectType" -> "FUNCTION",
+            "objectName" -> "`YeAr`")
         )
       }
     }

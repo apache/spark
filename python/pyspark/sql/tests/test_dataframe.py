@@ -56,6 +56,8 @@ from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     SPARK_HOME,
+)
+from pyspark.testing.utils import (
     have_pyarrow,
     have_pandas,
     pandas_requirement_message,
@@ -883,9 +885,7 @@ class DataFrameTestsMixin:
                         [(1, "Alice"), (2, "Bob")], ["id", "name"]
                     ).write.mode("overwrite").saveAsTable("testcat.ns1.target")
 
-                source = self.spark.createDataFrame(
-                    [(1, "Charlie"), (3, "David")], ["id", "name"]
-                )  # type: DataFrame
+                source = self.spark.createDataFrame([(1, "Charlie"), (3, "David")], ["id", "name"])  # type: DataFrame
 
                 from pyspark.sql.functions import col
 
@@ -1149,12 +1149,10 @@ class DataFrameTestsMixin:
         ):
             tbl = "testcat.t"
             with self.table(tbl):
-                self.spark.sql(
-                    f"""
+                self.spark.sql(f"""
                     CREATE TABLE {tbl} (index bigint, data string)
                     PARTITIONED BY (bucket(4, index), index)
-                    """
-                )
+                    """)
                 self.spark.sql(f"""INSERT INTO {tbl} VALUES (1, 'a'), (2, 'b'), (3, 'c')""")
 
                 df = self.spark.sql(f"""SELECT * FROM {tbl}""")

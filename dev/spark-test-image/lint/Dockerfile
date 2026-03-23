@@ -24,7 +24,7 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image for Linter"
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20260210
+ENV FULL_REFRESH_DATE=20260316
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -63,10 +63,10 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown', 'rmarkdown', 'testthat'), repos='https://cloud.r-project.org/')" \
+RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown', 'rmarkdown', 'testthat', 'remotes'), repos='https://cloud.r-project.org/')" \
     && Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')" \
     && Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')" \
-    && Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')" \
+    && Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
 
 # See more in SPARK-39735
 ENV R_LIBS_SITE="/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
@@ -77,7 +77,6 @@ RUN python3.12 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 RUN python3.12 -m pip install \
-    'black==23.12.1' \
     'flake8==3.9.0' \
     'ruff==0.14.8' \
     'googleapis-common-protos-stubs==2.2.0' \
@@ -95,7 +94,7 @@ RUN python3.12 -m pip install \
     'pandas' \
     'pandas-stubs' \
     'plotly>=4.8' \
-    'pyarrow>=22.0.0' \
+    'pyarrow>=23.0.0' \
     'pytest-mypy-plugins==1.9.3' \
     'pytest==7.1.3' \
     'scipy>=1.8.0' \

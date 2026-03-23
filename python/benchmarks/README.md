@@ -15,13 +15,21 @@ The default configuration uses `virtualenv`, but ASV also supports `conda`, `mam
 
 ## Running Benchmarks
 
+All commands below can be run from the Spark root directory using `./python/asv`,
+which is a wrapper that forwards arguments to `asv` in the benchmarks directory.
+
 ### Quick run (current environment)
 
 Run benchmarks using your current Python environment (fastest for development):
 
 ```bash
-cd python/benchmarks
-asv run --python=same --quick
+./python/asv run --python=same --quick
+```
+
+You can also specify the test class to run:
+
+```bash
+./python/asv run --python=same --quick -b 'bench_arrow.LongArrowToPandasBenchmark'
 ```
 
 ### Full run against a commit
@@ -29,24 +37,23 @@ asv run --python=same --quick
 Run benchmarks in an isolated virtualenv (builds pyspark from source):
 
 ```bash
-cd python/benchmarks
-asv run master^!          # Run on latest master commit
-asv run v3.5.0^!          # Run on a specific tag
-asv run abc123^!          # Run on a specific commit
+./python/asv run master^!          # Run on latest master commit
+./python/asv run v3.5.0^!          # Run on a specific tag
+./python/asv run abc123^!          # Run on a specific commit
 ```
 
 ### Compare two commits
 
-Compare current branch against upstream/main with 10% threshold:
+Compare current branch against upstream/master with 10% threshold:
 
 ```bash
-asv continuous -f 1.1 upstream/main HEAD
+./python/asv continuous -f 1.1 upstream/master HEAD
 ```
 
 ### Other useful commands
 
 ```bash
-asv check          # Validate benchmark syntax
+./python/asv check          # Validate benchmark syntax
 ```
 
 ## Writing Benchmarks

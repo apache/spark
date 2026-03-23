@@ -14,10 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
-
 import decimal
 import inspect
 import warnings
@@ -74,7 +70,6 @@ from pyspark.sql.utils import enum_to_value as _enum_to_value
 # The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
 # for code reuse.
 from pyspark.sql.functions import arrow_udf, pandas_udf  # noqa: F401
-
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -1236,7 +1231,9 @@ def max(col: "ColumnOrName") -> Column:
 max.__doc__ = pysparkfuncs.max.__doc__
 
 
-def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
+def max_by(col: "ColumnOrName", ord: "ColumnOrName", k: Optional[int] = None) -> Column:
+    if k is not None:
+        return _invoke_function_over_columns("max_by", col, ord, lit(k))
     return _invoke_function_over_columns("max_by", col, ord)
 
 
@@ -1264,7 +1261,9 @@ def min(col: "ColumnOrName") -> Column:
 min.__doc__ = pysparkfuncs.min.__doc__
 
 
-def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
+def min_by(col: "ColumnOrName", ord: "ColumnOrName", k: Optional[int] = None) -> Column:
+    if k is not None:
+        return _invoke_function_over_columns("min_by", col, ord, lit(k))
     return _invoke_function_over_columns("min_by", col, ord)
 
 
@@ -1682,7 +1681,7 @@ reduce.__doc__ = pysparkfuncs.reduce.__doc__
 
 
 def array(
-    *cols: Union["ColumnOrName", Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]
+    *cols: Union["ColumnOrName", Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]],
 ) -> Column:
     if len(cols) == 1 and isinstance(cols[0], (list, set, tuple)):
         cols = cols[0]  # type: ignore[assignment]
@@ -1854,7 +1853,7 @@ concat.__doc__ = pysparkfuncs.concat.__doc__
 
 
 def create_map(
-    *cols: Union["ColumnOrName", Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]
+    *cols: Union["ColumnOrName", Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]],
 ) -> Column:
     if len(cols) == 1 and isinstance(cols[0], (list, set, tuple)):
         cols = cols[0]  # type: ignore[assignment]
@@ -2053,7 +2052,7 @@ json_tuple.__doc__ = pysparkfuncs.json_tuple.__doc__
 
 
 def map_concat(
-    *cols: Union["ColumnOrName", Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]
+    *cols: Union["ColumnOrName", Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]],
 ) -> Column:
     if len(cols) == 1 and isinstance(cols[0], (list, set, tuple)):
         cols = cols[0]  # type: ignore[assignment]
@@ -2339,7 +2338,7 @@ sort_array.__doc__ = pysparkfuncs.sort_array.__doc__
 
 
 def struct(
-    *cols: Union["ColumnOrName", Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]
+    *cols: Union["ColumnOrName", Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]],
 ) -> Column:
     if len(cols) == 1 and isinstance(cols[0], (list, set, tuple)):
         cols = cols[0]  # type: ignore[assignment]
@@ -3142,13 +3141,11 @@ current_date.__doc__ = pysparkfuncs.current_date.__doc__
 
 
 @overload
-def current_time() -> Column:
-    ...
+def current_time() -> Column: ...
 
 
 @overload
-def current_time(precision: int) -> Column:
-    ...
+def current_time(precision: int) -> Column: ...
 
 
 def current_time(precision: Optional[int] = None) -> Column:
@@ -3435,13 +3432,11 @@ unix_seconds.__doc__ = pysparkfuncs.unix_seconds.__doc__
 
 
 @overload
-def to_time(str: "ColumnOrName") -> Column:
-    ...
+def to_time(str: "ColumnOrName") -> Column: ...
 
 
 @overload
-def to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column:
-    ...
+def to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column: ...
 
 
 def to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
@@ -3455,13 +3450,11 @@ to_time.__doc__ = pysparkfuncs.to_time.__doc__
 
 
 @overload
-def to_timestamp(col: "ColumnOrName") -> Column:
-    ...
+def to_timestamp(col: "ColumnOrName") -> Column: ...
 
 
 @overload
-def to_timestamp(col: "ColumnOrName", format: str) -> Column:
-    ...
+def to_timestamp(col: "ColumnOrName", format: str) -> Column: ...
 
 
 def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
@@ -3475,13 +3468,11 @@ to_timestamp.__doc__ = pysparkfuncs.to_timestamp.__doc__
 
 
 @overload
-def try_to_time(str: "ColumnOrName") -> Column:
-    ...
+def try_to_time(str: "ColumnOrName") -> Column: ...
 
 
 @overload
-def try_to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column:
-    ...
+def try_to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column: ...
 
 
 def try_to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
@@ -3603,13 +3594,11 @@ from_unixtime.__doc__ = pysparkfuncs.from_unixtime.__doc__
 
 
 @overload
-def unix_timestamp(timestamp: "ColumnOrName", format: str = ...) -> Column:
-    ...
+def unix_timestamp(timestamp: "ColumnOrName", format: str = ...) -> Column: ...
 
 
 @overload
-def unix_timestamp() -> Column:
-    ...
+def unix_timestamp() -> Column: ...
 
 
 def unix_timestamp(
@@ -3998,8 +3987,7 @@ def make_timestamp(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
@@ -4011,20 +3999,17 @@ def make_timestamp(
     mins: "ColumnOrName",
     secs: "ColumnOrName",
     timezone: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
-def make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
-    ...
+def make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column: ...
 
 
 @overload
 def make_timestamp(
     *, date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
-) -> Column:
-    ...
+) -> Column: ...
 
 
 def make_timestamp(
@@ -4095,8 +4080,7 @@ def try_make_timestamp(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
@@ -4108,20 +4092,17 @@ def try_make_timestamp(
     mins: "ColumnOrName",
     secs: "ColumnOrName",
     timezone: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
-def try_make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
-    ...
+def try_make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column: ...
 
 
 @overload
 def try_make_timestamp(
     *, date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
-) -> Column:
-    ...
+) -> Column: ...
 
 
 def try_make_timestamp(
@@ -4237,8 +4218,7 @@ def make_timestamp_ntz(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
@@ -4246,8 +4226,7 @@ def make_timestamp_ntz(
     *,
     date: "ColumnOrName",
     time: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 def make_timestamp_ntz(
@@ -4297,8 +4276,7 @@ def try_make_timestamp_ntz(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
@@ -4306,8 +4284,7 @@ def try_make_timestamp_ntz(
     *,
     date: "ColumnOrName",
     time: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 def try_make_timestamp_ntz(
@@ -4488,6 +4465,8 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
 
 
 sha2.__doc__ = pysparkfuncs.sha2.__doc__
+
+# Datasketch Functions
 
 
 def hll_sketch_agg(
@@ -5040,6 +5019,82 @@ def tuple_difference_integer(col1: "ColumnOrName", col2: "ColumnOrName") -> Colu
 tuple_difference_integer.__doc__ = pysparkfuncs.tuple_difference_integer.__doc__
 
 
+def tuple_difference_theta_double(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("tuple_difference_theta_double", col1, col2)
+
+
+tuple_difference_theta_double.__doc__ = pysparkfuncs.tuple_difference_theta_double.__doc__
+
+
+def tuple_difference_theta_integer(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("tuple_difference_theta_integer", col1, col2)
+
+
+tuple_difference_theta_integer.__doc__ = pysparkfuncs.tuple_difference_theta_integer.__doc__
+
+
+def tuple_intersection_theta_double(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    fn = "tuple_intersection_theta_double"
+    if mode is None:
+        return _invoke_function_over_columns(fn, col1, col2)
+    else:
+        return _invoke_function_over_columns(fn, col1, col2, lit(mode))
+
+
+tuple_intersection_theta_double.__doc__ = pysparkfuncs.tuple_intersection_theta_double.__doc__
+
+
+def tuple_intersection_theta_integer(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    fn = "tuple_intersection_theta_integer"
+    if mode is None:
+        return _invoke_function_over_columns(fn, col1, col2)
+    else:
+        return _invoke_function_over_columns(fn, col1, col2, lit(mode))
+
+
+tuple_intersection_theta_integer.__doc__ = pysparkfuncs.tuple_intersection_theta_integer.__doc__
+
+
+def tuple_union_theta_double(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    fn = "tuple_union_theta_double"
+    _lgNomEntries = lit(12) if lgNomEntries is None else lit(lgNomEntries)
+    _mode = lit("sum") if mode is None else lit(mode)
+
+    return _invoke_function_over_columns(fn, col1, col2, _lgNomEntries, _mode)
+
+
+tuple_union_theta_double.__doc__ = pysparkfuncs.tuple_union_theta_double.__doc__
+
+
+def tuple_union_theta_integer(
+    col1: "ColumnOrName",
+    col2: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+    mode: Optional[Union[str, Column]] = None,
+) -> Column:
+    fn = "tuple_union_theta_integer"
+    _lgNomEntries = lit(12) if lgNomEntries is None else lit(lgNomEntries)
+    _mode = lit("sum") if mode is None else lit(mode)
+
+    return _invoke_function_over_columns(fn, col1, col2, _lgNomEntries, _mode)
+
+
+tuple_union_theta_integer.__doc__ = pysparkfuncs.tuple_union_theta_integer.__doc__
+
+
 # Predicates Function
 
 
@@ -5402,7 +5457,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.connect.functions.builtin,
         globs=globs,
         optionflags=doctest.ELLIPSIS

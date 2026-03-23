@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.DataSourceOptions
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.streaming.StreamingSourceIdentifyingName
+import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned, UserProvided}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, TypeUtils}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.classic.Dataset
@@ -103,12 +103,15 @@ case class DataSource(
     bucketSpec: Option[BucketSpec] = None,
     options: Map[String, String] = Map.empty,
     catalogTable: Option[CatalogTable] = None,
-    userSpecifiedStreamingSourceName: Option[StreamingSourceIdentifyingName] = None)
+    userSpecifiedStreamingSourceName: Option[UserProvided] = None)
   extends SessionStateHelper with Logging {
 
   case class SourceInfo(name: String, schema: StructType, partitionColumns: Seq[String])
 
   private val conf: SQLConf = getSqlConf(sparkSession)
+
+  lazy val streamingSourceIdentifyingName: StreamingSourceIdentifyingName =
+    userSpecifiedStreamingSourceName.getOrElse(Unassigned)
 
   lazy val providingClass: Class[_] = {
     val cls = DataSource.lookupDataSource(className, conf)
@@ -359,7 +362,10 @@ case class DataSource(
    *                        is considered as a non-streaming file based data source. Since we know
    *                        that files already exist, we don't need to check them again.
    */
-  def resolveRelation(checkFilesExist: Boolean = true, readOnly: Boolean = false): BaseRelation = {
+  def resolveRelation(
+      checkFilesExist: Boolean = true,
+      readOnly: Boolean = false,
+      forceNullable: Boolean = true): BaseRelation = {
     val relation = (providingInstance(), userSpecifiedSchema) match {
       // TODO: Throw when too much is given.
       case (dataSource: SchemaRelationProvider, Some(schema)) =>
@@ -397,8 +403,7 @@ case class DataSource(
             caseInsensitiveOptions - "path",
             fileCatalog.allFiles())
         }.getOrElse {
-          throw QueryCompilationErrors.dataSchemaNotSpecifiedError(
-            format.toString, fileCatalog.allFiles().mkString(","))
+          throw QueryCompilationErrors.dataSchemaNotSpecifiedError(format.toString)
         }
 
         HadoopFsRelation(
@@ -433,7 +438,7 @@ case class DataSource(
         HadoopFsRelation(
           fileCatalog,
           partitionSchema = partitionSchema,
-          dataSchema = dataSchema.asNullable,
+          dataSchema = if (forceNullable) dataSchema.asNullable else dataSchema,
           bucketSpec = bucketSpec,
           format,
           caseInsensitiveOptions)(sparkSession)
@@ -729,6 +734,14 @@ object DataSource extends Logging {
       case e: ServiceConfigurationError if e.getCause.isInstanceOf[NoClassDefFoundError] =>
         // NoClassDefFoundError's class name uses "/" rather than "." for packages
         val className = e.getCause.getMessage.replaceAll("/", ".")
+        if (spark2RemovedClasses.contains(className)) {
+          throw QueryExecutionErrors.incompatibleDataSourceRegisterError(e)
+        } else {
+          throw e
+        }
+      case e: NoClassDefFoundError =>
+        // NoClassDefFoundError's class name uses "/" rather than "." for packages
+        val className = e.getMessage.replaceAll("/", ".")
         if (spark2RemovedClasses.contains(className)) {
           throw QueryExecutionErrors.incompatibleDataSourceRegisterError(e)
         } else {

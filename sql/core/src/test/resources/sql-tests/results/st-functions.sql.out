@@ -26,6 +26,182 @@ struct<>
 
 
 -- !query
+SELECT ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040')
+-- !query schema
+struct<st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0):geometry(0)>
+-- !query output
+POINT(1 2)
+
+
+-- !query
+SELECT ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040', 4326)
+-- !query schema
+struct<st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 4326):geometry(4326)>
+-- !query output
+SRID=4326;POINT(1 2)
+
+
+-- !query
+SELECT ST_SetSrid(ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040'), 3857)
+-- !query schema
+struct<st_setsrid(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0), 3857):geometry(3857)>
+-- !query output
+SRID=3857;POINT(1 2)
+
+
+-- !query
+SELECT ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040')
+-- !query schema
+struct<st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'):geography(4326)>
+-- !query output
+SRID=4326;POINT(1 2)
+
+
+-- !query
+SELECT CAST(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040') AS GEOMETRY(4326))
+-- !query schema
+struct<CAST(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040') AS GEOMETRY(4326)):geometry(4326)>
+-- !query output
+SRID=4326;POINT(1 2)
+
+
+-- !query
+SELECT ST_GeomFromWKB(NULL)
+-- !query schema
+struct<st_geomfromwkb(NULL, 0):geometry(0)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT ST_GeomFromWKB(NULL, 4326)
+-- !query schema
+struct<st_geomfromwkb(NULL, 4326):geometry(4326)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT ST_SetSrid(ST_GeomFromWKB(NULL), 3857)
+-- !query schema
+struct<st_setsrid(st_geomfromwkb(NULL, 0), 3857):geometry(3857)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT ST_GeogFromWKB(NULL)
+-- !query schema
+struct<st_geogfromwkb(NULL):geography(4326)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT CAST(ST_GeogFromWKB(NULL) AS GEOMETRY(4326))
+-- !query schema
+struct<CAST(st_geogfromwkb(NULL) AS GEOMETRY(4326)):geometry(4326)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT array(ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040'))
+-- !query schema
+struct<array(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0)):array<geometry(0)>>
+-- !query output
+["POINT(1 2)"]
+
+
+-- !query
+SELECT array(ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040', 4326))
+-- !query schema
+struct<array(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 4326)):array<geometry(4326)>>
+-- !query output
+["SRID=4326;POINT(1 2)"]
+
+
+-- !query
+SELECT array(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040'))
+-- !query schema
+struct<array(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040')):array<geography(4326)>>
+-- !query output
+["SRID=4326;POINT(1 2)"]
+
+
+-- !query
+SELECT ST_GeomFromWKB(wkb) FROM geodata
+-- !query schema
+struct<st_geomfromwkb(wkb, 0):geometry(0)>
+-- !query output
+NULL
+POINT(1 2)
+
+
+-- !query
+SELECT ST_GeomFromWKB(wkb, 4326) FROM geodata
+-- !query schema
+struct<st_geomfromwkb(wkb, 4326):geometry(4326)>
+-- !query output
+NULL
+SRID=4326;POINT(1 2)
+
+
+-- !query
+SELECT ST_SetSrid(ST_GeomFromWKB(wkb), 3857) FROM geodata
+-- !query schema
+struct<st_setsrid(st_geomfromwkb(wkb, 0), 3857):geometry(3857)>
+-- !query output
+NULL
+SRID=3857;POINT(1 2)
+
+
+-- !query
+SELECT ST_GeogFromWKB(wkb) FROM geodata
+-- !query schema
+struct<st_geogfromwkb(wkb):geography(4326)>
+-- !query output
+NULL
+SRID=4326;POINT(1 2)
+
+
+-- !query
+SELECT CAST(ST_GeogFromWKB(wkb) AS GEOMETRY(4326)) FROM geodata
+-- !query schema
+struct<CAST(st_geogfromwkb(wkb) AS GEOMETRY(4326)):geometry(4326)>
+-- !query output
+NULL
+SRID=4326;POINT(1 2)
+
+
+-- !query
+SELECT array(ST_GeomFromWKB(wkb)) FROM geodata
+-- !query schema
+struct<array(st_geomfromwkb(wkb, 0)):array<geometry(0)>>
+-- !query output
+["POINT(1 2)"]
+[null]
+
+
+-- !query
+SELECT array(ST_GeomFromWKB(wkb, 4326)) FROM geodata
+-- !query schema
+struct<array(st_geomfromwkb(wkb, 4326)):array<geometry(4326)>>
+-- !query output
+["SRID=4326;POINT(1 2)"]
+[null]
+
+
+-- !query
+SELECT array(ST_GeogFromWKB(wkb)) FROM geodata
+-- !query schema
+struct<array(st_geogfromwkb(wkb)):array<geography(4326)>>
+-- !query output
+["SRID=4326;POINT(1 2)"]
+[null]
+
+
+-- !query
 SELECT CAST(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040') AS STRING) AS result
 -- !query schema
 struct<>
@@ -166,6 +342,54 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "stopIndex" : 107,
     "fragment" : "CAST(ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040')::GEOMETRY(ANY) AS GEOMETRY(4326))"
   } ]
+}
+
+
+-- !query
+SELECT hex(ST_AsBinary(CAST(ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040', 4326) AS GEOGRAPHY(4326)))) AS result
+-- !query schema
+struct<result:string>
+-- !query output
+0101000000000000000000F03F0000000000000040
+
+
+-- !query
+SELECT CAST(ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040') AS GEOGRAPHY(4326)) AS result
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"CAST(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0) AS GEOGRAPHY(4326))\"",
+    "srcType" : "\"GEOMETRY(0)\"",
+    "targetType" : "\"GEOGRAPHY(4326)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 93,
+    "fragment" : "CAST(ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040') AS GEOGRAPHY(4326))"
+  } ]
+}
+
+
+-- !query
+SELECT CAST(ST_GeomFromWKB(X'010100000000000000000069400000000000005940', 4326) AS GEOGRAPHY(4326)) AS result
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "WKB_PARSE_ERROR",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "parseError" : "Invalid coordinate value found",
+    "pos" : "5"
+  }
 }
 
 
@@ -348,6 +572,54 @@ struct<result:string>
 
 
 -- !query
+SELECT ST_AsBinary(ST_GeogFromWKB(NULL))
+-- !query schema
+struct<st_asbinary(st_geogfromwkb(NULL)):binary>
+-- !query output
+NULL
+
+
+-- !query
+SELECT hex(ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040')))
+-- !query schema
+struct<hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'))):string>
+-- !query output
+0101000000000000000000F03F0000000000000040
+
+
+-- !query
+SELECT ST_GeogFromWKB(X'6F')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "WKB_PARSE_ERROR",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "parseError" : "Unexpected end of WKB buffer",
+    "pos" : "0"
+  }
+}
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_GeogFromWKB(wkb) IS NULL AND wkb IS NOT NULL
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+0
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeogFromWKB(wkb)) <> wkb
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+0
+
+
+-- !query
 SELECT ST_AsBinary(ST_GeomFromWKB(NULL))
 -- !query schema
 struct<st_asbinary(st_geomfromwkb(NULL, 0)):binary>
@@ -413,6 +685,38 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "srid" : "9999"
+  }
+}
+
+
+-- !query
+SELECT ST_GeomFromWKB(X'6F')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "WKB_PARSE_ERROR",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "parseError" : "Unexpected end of WKB buffer",
+    "pos" : "0"
+  }
+}
+
+
+-- !query
+SELECT ST_GeomFromWKB(X'6F', 4326)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "WKB_PARSE_ERROR",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "parseError" : "Unexpected end of WKB buffer",
+    "pos" : "0"
   }
 }
 

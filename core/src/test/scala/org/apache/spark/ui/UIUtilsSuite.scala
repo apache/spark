@@ -126,10 +126,17 @@ class UIUtilsSuite extends SparkFunSuite {
 
   test("SPARK-11906: Progress bar should not overflow because of speculative tasks") {
     val generated = makeProgressBar(2, 3, 0, 0, Map.empty, 4).head.child.filter(_.label == "div")
+    // BS5 progress-stacked: each segment is a .progress wrapper with a .progress-bar
+    // scalastyle:off line.size.limit
     val expected = Seq(
-      <div class="progress-bar progress-completed" style="width: 75.0%"></div>,
-      <div class="progress-bar progress-started" style="width: 25.0%"></div>
+      <div class="progress" role="progressbar" aria-label="Completed" aria-valuenow="75" aria-valuemin="0" aria-valuemax="100" style="width: 75.0%">
+        <div class="progress-bar progress-completed"></div>
+      </div>,
+      <div class="progress" role="progressbar" aria-label="Running" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100" style="width: 25.0%">
+        <div class="progress-bar progress-started"></div>
+      </div>
     )
+    // scalastyle:on line.size.limit
     assert(generated.sameElements(expected),
       s"\nRunning progress bar should round down\n\nExpected:\n$expected\nGenerated:\n$generated")
   }
@@ -154,11 +161,12 @@ class UIUtilsSuite extends SparkFunSuite {
     val generated = listingTable(header, generateDataRowValue, data, tooltipHeaders = tooltip)
 
     val expected: Node =
-      <table class="table table-bordered table-sm table-striped sortable">
+      <div class="table-responsive">
+      <table class="table table-bordered table-hover table-sm table-striped sortable">
         <thead>
           <th width="" class="">{header(0)}</th>
           <th width="" class="">
-              <span data-toggle="tooltip" title="tooltip">
+              <span data-bs-toggle="tooltip" title="tooltip">
                 {header(1)}
               </span>
           </th>
@@ -167,6 +175,7 @@ class UIUtilsSuite extends SparkFunSuite {
         {data.map(generateDataRowValue)}
       </tbody>
     </table>
+      </div>
 
     assert(trim(generated(0)) == trim(expected))
   }
@@ -180,7 +189,8 @@ class UIUtilsSuite extends SparkFunSuite {
     val generated = listingTable(header, generateDataRowValue, data)
 
     val expected =
-      <table class="table table-bordered table-sm table-striped sortable">
+      <div class="table-responsive">
+      <table class="table table-bordered table-hover table-sm table-striped sortable">
         <thead>
           <th width="" class="">{header(0)}</th>
           <th width="" class="">{header(1)}</th>
@@ -189,6 +199,7 @@ class UIUtilsSuite extends SparkFunSuite {
           {data.map(generateDataRowValue)}
         </tbody>
       </table>
+      </div>
 
     assert(trim(generated(0)) == trim(expected))
   }

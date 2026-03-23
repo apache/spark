@@ -33,20 +33,33 @@ trait ResolverMetricTracker {
   protected def recordTopLevelMetrics[R](tracker: QueryPlanningTracker)(body: => R): R =
     QueryPlanningTracker.withTracker(tracker) {
       val startTime = System.nanoTime()
-
       val result = body
+      val totalTimeNs = System.nanoTime() - startTime
 
-      val runTime = System.nanoTime() - startTime
-
-      collectQueryExecutionMetrics(runTime)
+      collectQueryExecutionMetrics(totalTimeNs)
       tracker.recordRuleInvocation(
         rule = ResolverMetricTracker.SINGLE_PASS_RESOLVER_METRIC_LOGGING_ALIAS,
-        timeNs = runTime,
+        timeNs = totalTimeNs,
         effective = true
       )
 
       result
     }
+
+  /**
+   * Executes the body. Can be overridden to record profiling and latency metrics.
+   */
+  protected def recordProfileAndLatency[R](methodName: String, metricKey: Any)(
+      body: => R): R = {
+    body
+  }
+
+  /**
+   * Executes the body. Can be overridden to record frame profiling.
+   */
+  protected def recordProfile[R](methodName: String)(body: => R): R = {
+    body
+  }
 
   private def collectQueryExecutionMetrics(runTime: Long) = {
     val queryExecutionMetrics = QueryExecutionMetering.INSTANCE

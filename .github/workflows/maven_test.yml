@@ -130,7 +130,7 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     steps:
       - name: Checkout Spark repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         # In order to fetch changed files
         with:
           fetch-depth: 0
@@ -147,7 +147,7 @@ jobs:
       - name: Cache SBT and Maven
         # TODO(SPARK-54466): https://github.com/actions/runner-images/issues/13341
         if: ${{ runner.os != 'macOS' }}
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             build/apache-maven-*
@@ -159,19 +159,19 @@ jobs:
       - name: Cache Maven local repository
         # TODO(SPARK-54466): https://github.com/actions/runner-images/issues/13341
         if: ${{ runner.os != 'macOS' }}
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.m2/repository
           key: java${{ matrix.java }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             java${{ matrix.java }}-maven-
       - name: Install Java ${{ matrix.java }}
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: zulu
           java-version: ${{ matrix.java }}
       - name: Install Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         # We should install one Python that is higher than 3+ for SQL and Yarn because:
         # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
         # - Yarn has a Python specific test too, for example, YarnClusterSuite.
@@ -238,7 +238,7 @@ jobs:
           rm -rf ~/.m2/repository/org/apache/spark
       - name: Upload test results to report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: test-results-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
           path: |
@@ -246,7 +246,7 @@ jobs:
             **/target/surefire-reports/*.xml
       - name: Upload unit tests log files
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
           path: "**/target/unit-tests.log"

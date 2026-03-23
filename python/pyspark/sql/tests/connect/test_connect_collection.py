@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.connectutils import should_test_connect, ReusedMixedTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
@@ -62,13 +63,11 @@ class SparkConnectCollectionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
         cdf = self.connect.sql(query)
         sdf = self.spark.sql(query)
 
-        self.assertEqual(cdf.schema, sdf.schema)
+        assertDataFrameEqual(cdf, sdf)
 
-        self.assertEqual(cdf.collect(), sdf.collect())
-
-        self.assertEqual(
-            cdf.select(CF.date_trunc("year", cdf.date).alias("year")).collect(),
-            sdf.select(SF.date_trunc("year", sdf.date).alias("year")).collect(),
+        assertDataFrameEqual(
+            cdf.select(CF.date_trunc("year", cdf.date).alias("year")),
+            sdf.select(SF.date_trunc("year", sdf.date).alias("year")),
         )
 
     def test_head(self):
@@ -359,9 +358,9 @@ class SparkConnectCollectionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
                     count = 0
                     for row in iterator:
                         # This will raise an exception if the type is not as expected
-                        assert isinstance(
-                            row.b, expected_type
-                        ), f"Expected {expected_type_name}, got {type(row.b).__name__}"
+                        assert isinstance(row.b, expected_type), (
+                            f"Expected {expected_type_name}, got {type(row.b).__name__}"
+                        )
                         count += 1
                     # Ensure we actually processed rows
                     assert count > 0, "No rows were processed"

@@ -18,7 +18,10 @@ package org.apache.spark.sql.catalyst.types
 
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, Literal}
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
+import org.apache.spark.sql.connector.catalog.CatalogV2Util
+import org.apache.spark.sql.connector.catalog.Column
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
@@ -237,6 +240,10 @@ object DataTypeUtils {
     schema.map(toAttribute)
   }
 
+  def toAttributes(columns: Array[Column]): Seq[AttributeReference] = {
+    toAttributes(CatalogV2Util.v2ColumnsToStructType(columns))
+  }
+
   def fromAttributes(attributes: Seq[Attribute]): StructType =
     StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
 
@@ -325,6 +332,24 @@ object DataTypeUtils {
       case varcharType: VarcharType => varcharType.collation.isEmpty
       case st: StringType => st.eq(StringType)
       case _ => false
+    }
+  }
+
+  /**
+   * Recursively replaces all STRING, CHAR and VARCHAR types that do not have an explicit collation
+   * with the same type but with explicit `UTF8_BINARY` collation.
+   *
+   * Used for cases like `SHOW CREATE TABLE`, where we want to show the exact collation of the
+   * columns, because the default collation of the table may change the type of the column.
+   */
+  def replaceNonCollatedTypesWithExplicitUTF8Binary(dataType: DataType): DataType = {
+    dataType.transformRecursively {
+      case charType: CharType if isDefaultStringCharOrVarcharType(charType) =>
+        CharType(charType.length, CollationFactory.UTF8_BINARY_COLLATION_ID)
+      case varcharType: VarcharType if isDefaultStringCharOrVarcharType(varcharType) =>
+        VarcharType(varcharType.length, CollationFactory.UTF8_BINARY_COLLATION_ID)
+      case stringType: StringType if isDefaultStringCharOrVarcharType(stringType) =>
+        StringType(CollationFactory.UTF8_BINARY_COLLATION_ID)
     }
   }
 }

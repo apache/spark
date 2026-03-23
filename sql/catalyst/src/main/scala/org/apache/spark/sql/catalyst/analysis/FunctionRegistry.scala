@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.variant._
 import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, Generate, LogicalPlan, OneRowRelation, PythonWorkerLogs, Range}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -78,10 +79,13 @@ trait FunctionRegistryBase[T] {
   /* Create or replace a temporary function. */
   final def createOrReplaceTempFunction(
       name: String, builder: FunctionBuilder, source: String): Unit = {
-    registerFunction(
-      FunctionIdentifier(name),
-      builder,
-      source)
+    // Regular temporary functions are qualified with CatalogManager.SESSION_NAMESPACE
+    // to enable coexistence with builtin functions of the same name
+    val identifier = FunctionIdentifier(
+      name,
+      Some(CatalogManager.SESSION_NAMESPACE),
+      Some(CatalogManager.SYSTEM_CATALOG_NAME))
+    registerFunction(identifier, builder, source)
   }
 
   @throws[AnalysisException]("If function does not exist")
@@ -103,6 +107,14 @@ trait FunctionRegistryBase[T] {
 
   /** Drop a function and return whether the function existed. */
   def dropFunction(name: FunctionIdentifier): Boolean
+
+  /**
+   * Remove all cached function entries matching the given namespace.
+   * The namespace is a FunctionIdentifier with empty funcName used as a filter:
+   * matches on database (case-insensitive) and catalog. The catalog must be specified
+   * (e.g. when dropping a database, the database belongs to a catalog).
+   */
+  def dropFunctionsInDatabase(namespace: FunctionIdentifier): Unit
 
   /** Checks if a function with a given name exists. */
   def functionExists(name: FunctionIdentifier): Boolean = lookupFunction(name).isDefined
@@ -206,10 +218,15 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
   protected val functionBuilders =
     new mutable.HashMap[FunctionIdentifier, (ExpressionInfo, FunctionBuilder)]
 
-  // Resolution of the function name is always case insensitive, but the database name
-  // depends on the caller
-  private def normalizeFuncName(name: FunctionIdentifier): FunctionIdentifier = {
-    FunctionIdentifier(name.funcName.toLowerCase(Locale.ROOT), name.database)
+  // All function identifiers must be fully qualified (3-part: catalog.database.funcName).
+  // Normalization lowercases all parts for case-insensitive lookup.
+  protected def normalizeFuncName(name: FunctionIdentifier): FunctionIdentifier = {
+    assert(name.database.isDefined && name.catalog.isDefined,
+      s"Function identifier must be fully qualified (3-part): $name")
+    new FunctionIdentifier(
+      name.funcName.toLowerCase(Locale.ROOT),
+      name.database.map(_.toLowerCase(Locale.ROOT)),
+      name.catalog.map(_.toLowerCase(Locale.ROOT)))
   }
 
   override def registerFunction(
@@ -259,6 +276,13 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
     functionBuilders.remove(normalizeFuncName(name)).isDefined
   }
 
+  override def dropFunctionsInDatabase(namespace: FunctionIdentifier): Unit = synchronized {
+    val toRemove = listFunction().filter { f =>
+      f.copy(funcName = "") == namespace
+    }
+    toRemove.foreach(n => functionBuilders.remove(n))
+  }
+
   override def clear(): Unit = synchronized {
     functionBuilders.clear()
   }
@@ -291,6 +315,8 @@ trait EmptyFunctionRegistryBase[T] extends FunctionRegistryBase[T] {
     throw SparkUnsupportedOperationException()
   }
 
+  override def dropFunctionsInDatabase(namespace: FunctionIdentifier): Unit = {}
+
   override def clear(): Unit = {
     throw SparkUnsupportedOperationException()
   }
@@ -315,6 +341,16 @@ class SimpleFunctionRegistry
   }
 }
 
+/**
+ * A mixin for builtin-only registries that accepts any identifier and normalizes
+ * it to the builtin 3-part key (system.builtin.funcName). This allows callers to
+ * look up builtins by simple name without constructing a fully qualified identifier.
+ */
+trait BuiltinRegistryMixin[T] extends SimpleFunctionRegistryBase[T] {
+  override protected def normalizeFuncName(name: FunctionIdentifier): FunctionIdentifier =
+    super.normalizeFuncName(FunctionRegistry.builtinFunctionIdentifier(name.funcName))
+}
+
 object EmptyFunctionRegistry
     extends EmptyFunctionRegistryBase[Expression]
     with FunctionRegistry {
@@ -325,6 +361,13 @@ object EmptyFunctionRegistry
 object FunctionRegistry {
 
   type FunctionBuilder = Seq[Expression] => Expression
+
+  /** Returns the 3-part identifier for a builtin function: system.builtin.funcName. */
+  private[sql] def builtinFunctionIdentifier(name: String): FunctionIdentifier =
+    new FunctionIdentifier(
+      name.toLowerCase(Locale.ROOT),
+      Some(CatalogManager.BUILTIN_NAMESPACE),
+      Some(CatalogManager.SYSTEM_CATALOG_NAME))
 
   val FUNC_ALIAS = TreeNodeTag[String]("functionAliasName")
 
@@ -485,10 +528,10 @@ object FunctionRegistry {
     expression[Last]("last"),
     expression[Last]("last_value", true),
     expression[Max]("max"),
-    expression[MaxBy]("max_by"),
+    expressionBuilder("max_by", MaxByBuilder),
     expression[Average]("mean", true),
     expression[Min]("min"),
-    expression[MinBy]("min_by"),
+    expressionBuilder("min_by", MinByBuilder),
     expression[Percentile]("percentile"),
     expressionBuilder("percentile_cont", PercentileContBuilder),
     expressionBuilder("percentile_disc", PercentileDiscBuilder),
@@ -819,6 +862,9 @@ object FunctionRegistry {
     expression[SparkVersion]("version"),
     expression[TypeOf]("typeof"),
     expression[EqualNull]("equal_null"),
+    expression[Measure]("measure"),
+
+    // datasketch functions
     expression[HllSketchEstimate]("hll_sketch_estimate"),
     expression[HllUnion]("hll_union"),
     expression[ThetaSketchEstimate]("theta_sketch_estimate"),
@@ -828,8 +874,12 @@ object FunctionRegistry {
     expression[ApproxTopKEstimate]("approx_top_k_estimate"),
     expression[TupleDifferenceDouble]("tuple_difference_double"),
     expression[TupleDifferenceInteger]("tuple_difference_integer"),
+    expression[TupleDifferenceThetaDouble]("tuple_difference_theta_double"),
+    expression[TupleDifferenceThetaInteger]("tuple_difference_theta_integer"),
     expression[TupleIntersectionDouble]("tuple_intersection_double"),
     expression[TupleIntersectionInteger]("tuple_intersection_integer"),
+    expression[TupleIntersectionThetaDouble]("tuple_intersection_theta_double"),
+    expression[TupleIntersectionThetaInteger]("tuple_intersection_theta_integer"),
     expression[TupleSketchEstimateDouble]("tuple_sketch_estimate_double"),
     expression[TupleSketchEstimateInteger]("tuple_sketch_estimate_integer"),
     expression[TupleSketchSummaryDouble]("tuple_sketch_summary_double"),
@@ -838,7 +888,8 @@ object FunctionRegistry {
     expression[TupleSketchThetaInteger]("tuple_sketch_theta_integer"),
     expressionBuilder("tuple_union_double", TupleUnionDoubleExpressionBuilder),
     expressionBuilder("tuple_union_integer", TupleUnionIntegerExpressionBuilder),
-    expression[Measure]("measure"),
+    expressionBuilder("tuple_union_theta_double", TupleUnionThetaDoubleExpressionBuilder),
+    expressionBuilder("tuple_union_theta_integer", TupleUnionThetaIntegerExpressionBuilder),
     expression[KllSketchToStringBigint]("kll_sketch_to_string_bigint"),
     expression[KllSketchToStringFloat]("kll_sketch_to_string_float"),
     expression[KllSketchToStringDouble]("kll_sketch_to_string_double"),
@@ -974,11 +1025,12 @@ object FunctionRegistry {
     expression[ToProtobuf]("to_protobuf")
   )
 
+  // BuiltinRegistryMixin normalizes any name to the builtin 3-part key (system.builtin.name).
   val builtin: SimpleFunctionRegistry = {
-    val fr = new SimpleFunctionRegistry
+    val fr = new SimpleFunctionRegistry with BuiltinRegistryMixin[Expression]
     expressions.foreach {
       case (name, (info, builder)) =>
-        fr.internalRegisterFunction(FunctionIdentifier(name), info, builder)
+        fr.registerFunction(FunctionIdentifier(name), info, builder)
     }
     fr
   }
@@ -986,7 +1038,8 @@ object FunctionRegistry {
   val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
 
   /** Registry for internal functions used by Connect and the Column API. */
-  private[sql] val internal: SimpleFunctionRegistry = new SimpleFunctionRegistry
+  private[sql] val internal: SimpleFunctionRegistry =
+    new SimpleFunctionRegistry with BuiltinRegistryMixin[Expression]
 
   private[spark] def registerInternalExpression[T <: Expression : ClassTag](
       name: String,
@@ -1001,7 +1054,8 @@ object FunctionRegistry {
     } else {
       builder
     }
-    internal.internalRegisterFunction(FunctionIdentifier(name), info, newBuilder)
+    // BuiltinRegistryMixin normalizes to the builtin 3-part key (system.builtin.name).
+    internal.registerFunction(FunctionIdentifier(name), info, newBuilder)
   }
 
   registerInternalExpression[Product]("product")
@@ -1272,11 +1326,12 @@ object TableFunctionRegistry {
     PythonWorkerLogs.functionBuilder
   )
 
+  // BuiltinRegistryMixin normalizes any name to the builtin 3-part key (system.builtin.name).
   val builtin: SimpleTableFunctionRegistry = {
-    val fr = new SimpleTableFunctionRegistry
+    val fr = new SimpleTableFunctionRegistry with BuiltinRegistryMixin[LogicalPlan]
     logicalPlans.foreach {
       case (name, (info, builder)) =>
-        fr.internalRegisterFunction(FunctionIdentifier(name), info, builder)
+        fr.registerFunction(FunctionIdentifier(name), info, builder)
     }
     fr
   }

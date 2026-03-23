@@ -743,4 +743,37 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
       from_avro($"avro", avroStructSchema).as("schedule"))
     checkAnswer(readBack, df)
   }
+
+  test("SPARK-56043: from_avro with invalid schema should not throw NPE") {
+    // An Avro schema that references an undefined type should produce MALFORMED_AVRO_MESSAGE
+    // rather than a raw NullPointerException from the Avro library's ParseContext.resolve().
+    val invalidSchema =
+      """
+        |{
+        |  "type": "record",
+        |  "name": "TestRecord",
+        |  "fields": [
+        |    {"name": "value", "type": "UndefinedType"}
+        |  ]
+        |}
+      """.stripMargin
+
+    val df = spark.range(1).select(lit(Array[Byte](1, 2, 3)).as("data"))
+    val ex = intercept[Exception] {
+      df.select(from_avro($"data", invalidSchema)).collect()
+    }
+    assert(!ex.isInstanceOf[NullPointerException],
+      s"Should not throw NPE, but got: ${ex.getClass.getName}: ${ex.getMessage}")
+  }
+
+  test("SPARK-56043: from_avro with completely unparseable schema should not throw NPE") {
+    val garbageSchema = "this is not valid JSON at all"
+
+    val df = spark.range(1).select(lit(Array[Byte](1, 2, 3)).as("data"))
+    val ex = intercept[Exception] {
+      df.select(from_avro($"data", garbageSchema)).collect()
+    }
+    assert(!ex.isInstanceOf[NullPointerException],
+      s"Should not throw NPE, but got: ${ex.getClass.getName}: ${ex.getMessage}")
+  }
 }

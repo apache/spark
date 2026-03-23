@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.execution
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.jdk.CollectionConverters._
+import scala.util.{Success, Try}
 import scala.util.control.NonFatal
 
 import com.google.protobuf.Message
@@ -192,6 +193,11 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       return
     }
 
+    // SPARK-53339: Post the Started event here, right after the CAS succeeds, to ensure that
+    // postStarted() is never called when interrupt() has already transitioned the state to
+    // interrupted. This eliminates the race between postStarted() and interrupt().
+    executeHolder.eventsManager.postStarted()
+
     // `withSession` ensures that session-specific artifacts (such as JARs and class files) are
     // available during processing.
     executeHolder.sessionHolder.withSession { session =>
@@ -229,22 +235,20 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
             executeHolder.request.getPlan.getDescriptorForType)
       }
 
-      val observedMetrics: Map[String, Seq[(Option[String], Any, Option[DataType])]] = {
+      val observedMetrics: Map[String, Try[Seq[(Option[String], Any, Option[DataType])]]] = {
         executeHolder.observations.map { case (name, observation) =>
-          val values =
-            observation.getRowOrEmpty
-              .map(SparkConnectPlanExecution.toObservedMetricsValues(_))
-              .getOrElse(Seq.empty)
-          name -> values
+          name -> observation.future.value
+            .map(_.map(SparkConnectPlanExecution.toObservedMetricsValues))
+            .getOrElse(Success(Seq.empty))
         }.toMap
       }
-      val accumulatedInPython: Map[String, Seq[(Option[String], Any, Option[DataType])]] = {
+      val accumulatedInPython: Map[String, Try[Seq[(Option[String], Any, Option[DataType])]]] = {
         executeHolder.sessionHolder.pythonAccumulator.flatMap { accumulator =>
           accumulator.synchronized {
             val value = accumulator.value.asScala.toSeq
             if (value.nonEmpty) {
               accumulator.reset()
-              Some("__python_accumulator__" -> value.map(value => (None, value, None)))
+              Some("__python_accumulator__" -> Success(value.map(value => (None, value, None))))
             } else {
               None
             }

@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.io.File
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.collection.concurrent
 import scala.collection.mutable
@@ -75,7 +76,30 @@ class SparkEnv (
   // user jars to define custom ShuffleManagers.
   @volatile private var _shuffleManager: ShuffleManager = _
 
+  // Latch to signal when the ShuffleManager has been initialized.
+  // Used to allow callers to wait for initialization.
+  private val shuffleManagerInitLatch = new CountDownLatch(1)
+
   def shuffleManager: ShuffleManager = _shuffleManager
+
+  /**
+   * Wait for the ShuffleManager to be initialized within the specified timeout.
+   *
+   * @param timeoutMs Maximum time to wait in milliseconds
+   * @return true if the ShuffleManager was initialized within the timeout, false otherwise
+   */
+  private[spark] def waitForShuffleManagerInit(timeoutMs: Long): Boolean = {
+    shuffleManagerInitLatch.await(timeoutMs, TimeUnit.MILLISECONDS)
+  }
+
+  /**
+   * Check if the ShuffleManager has been initialized.
+   *
+   * @return true if the ShuffleManager is initialized, false otherwise
+   */
+  private[spark] def isShuffleManagerInitialized: Boolean = {
+    _shuffleManager != null
+  }
 
   // We initialize the MemoryManager later in SparkContext after DriverPlugin is loaded
   // to allow the plugin to overwrite executor memory configurations
@@ -223,7 +247,12 @@ class SparkEnv (
   private[spark] def initializeShuffleManager(): Unit = {
     Preconditions.checkState(null == _shuffleManager,
       "Shuffle manager already initialized to %s", _shuffleManager)
-    _shuffleManager = ShuffleManager.create(conf, executorId == SparkContext.DRIVER_IDENTIFIER)
+    try {
+      _shuffleManager = ShuffleManager.create(conf, SparkContext.isDriver(executorId))
+    } finally {
+      // Signal that the ShuffleManager has been initialized
+      shuffleManagerInitLatch.countDown()
+    }
   }
 
   private[spark] def initializeMemoryManager(numUsableCores: Int): Unit = {
@@ -327,7 +356,7 @@ object SparkEnv extends Logging {
       listenerBus: LiveListenerBus = null,
       mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
 
-    val isDriver = executorId == SparkContext.DRIVER_IDENTIFIER
+    val isDriver = SparkContext.isDriver(executorId)
 
     // Listener bus is only used on the driver
     if (isDriver) {

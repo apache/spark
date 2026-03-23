@@ -909,8 +909,10 @@ class SparkSession private(
       override protected def conf: SQLConf = sessionState.conf
     }
 
+  // Avoid using lazy val here because it locks the SparkSession instance
+  // when initializing observationManager and may cause deadlocks.
   @transient
-  private[sql] lazy val observationManager = new ObservationManager(this)
+  private[sql] val observationManager = new ObservationManager(this)
 
   override private[sql] def isUsable: Boolean = !sparkContext.isStopped
 
@@ -1281,12 +1283,18 @@ object SparkSession extends SparkSessionCompanion with Logging {
       Utils.getContextOrSparkClassLoader)
     val loadedExts = loader.iterator()
 
-    while (loadedExts.hasNext) {
+    var keepLoading = true
+    while (keepLoading) {
       try {
-        val ext = loadedExts.next()
-        ext(extensions)
+        if (loadedExts.hasNext) {
+          val ext = loadedExts.next()
+          ext(extensions)
+        } else {
+          keepLoading = false
+        }
       } catch {
-        case e: Throwable => logWarning("Failed to load session extension", e)
+        case e: Throwable =>
+          logWarning("Failed to load session extension", e)
       }
     }
   }

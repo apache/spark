@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC
 import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeStats, StateStoreSaveExec}
 import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
-import org.apache.spark.sql.functions.{count, expr, timestamp_seconds, window}
+import org.apache.spark.sql.functions.{count, expr, struct, timestamp_seconds, to_timestamp, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
 import org.apache.spark.tags.SlowSQLTest
@@ -129,6 +129,50 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     }
     assert(e.getMessage contains "value")
     assert(e.getMessage contains "int")
+  }
+
+  test("error on nested column") {
+    // Cannot past nested column as `eventTime` to `withWatermark`.
+    val e = intercept[AnalysisException] {
+      Seq((1, ("2024-01-01 10:00:00", "val1")))
+        .toDF("id", "data")
+        .select(
+          $"id",
+          struct(
+            to_timestamp($"data._1").as("timestamp"),
+            $"data._2".as("value")
+          ).as("nested_struct")
+        )
+        .withWatermark("nested_struct.timestamp", "0 seconds")
+        .schema
+    }
+    checkError(
+      e,
+      condition = "EVENT_TIME_MUST_BE_TOP_LEVEL_COLUMN",
+      parameters = Map("eventExpr" -> ".*nested_struct.*timestamp.*"),
+      matchPVals = true)
+  }
+
+  test("withWatermark should work with alias-qualified column name") {
+    // When a DataFrame has an alias, referencing the event time column via
+    // "alias.columnName" should be allowed because it still refers to a top-level column.
+    val inputData = MemoryStream[Int]
+    val df = inputData.toDF()
+      .withColumn("eventTime", timestamp_seconds($"value"))
+      .alias("a")
+      .withWatermark("a.eventTime", "10 seconds")
+      .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+      .agg(count("*") as Symbol("count"))
+      .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+
+    testStream(df)(
+      AddData(inputData, 15),
+      CheckAnswer(),
+      AddData(inputData, 10, 12, 14),
+      CheckAnswer(),
+      AddData(inputData, 25),
+      CheckAnswer((10, 3))
+    )
   }
 
   test("event time and watermark metrics") {

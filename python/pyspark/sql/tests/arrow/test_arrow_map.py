@@ -20,15 +20,15 @@ import unittest
 import logging
 
 from pyspark.sql.utils import PythonException
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.sql import Row
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.sql import Row
-from pyspark.testing.utils import assertDataFrameEqual
 from pyspark.util import is_remote_only
 
 if have_pyarrow:

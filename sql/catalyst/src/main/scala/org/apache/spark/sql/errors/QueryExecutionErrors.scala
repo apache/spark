@@ -47,6 +47,7 @@ import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
 import org.apache.spark.sql.catalyst.util.{sideBySide, CharsetProvider, DateTimeUtils, FailFastMode, IntervalUtils, MapData}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
@@ -674,6 +675,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def stInvalidSridValueError(srid: Int): SparkIllegalArgumentException = {
     stInvalidSridValueError(srid.toString)
+  }
+
+  def wkbParseError(msg: String, pos: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(errorClass = "WKB_PARSE_ERROR",
+      messageParameters = Map("parseError" -> msg, "pos" -> pos))
+  }
+
+  def wkbParseError(msg: String, pos: Long): SparkIllegalArgumentException = {
+    wkbParseError(msg, pos.toString)
   }
 
   def withSuggestionIntervalArithmeticOverflowError(
@@ -3119,6 +3129,30 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
+  def storagePartitionJoinIncompatibleReducedTypesError(
+      leftReducers: Option[Seq[Option[Reducer[_, _]]]],
+      leftReducedDataTypes: Seq[DataType],
+      rightReducers: Option[Seq[Option[Reducer[_, _]]]],
+      rightReducedDataTypes: Seq[DataType]): Throwable = {
+    def reducersNames(reducers: Option[Seq[Option[Reducer[_, _]]]]) = {
+      reducers.toSeq.flatMap(_.map(_.map(_.displayName()).getOrElse("identity")))
+        .mkString("[", ", ", "]")
+    }
+
+    def dataTypeNames(dataTypes: Seq[DataType]) = {
+      dataTypes.map(toSQLType).mkString("[", ", ", "]")
+    }
+
+    new SparkException(
+      errorClass = "STORAGE_PARTITION_JOIN_INCOMPATIBLE_REDUCED_TYPES",
+      messageParameters = Map(
+        "leftReducers" -> reducersNames(leftReducers),
+        "leftReducedDataTypes" -> dataTypeNames(leftReducedDataTypes),
+        "rightReducers" -> reducersNames(rightReducers),
+        "rightReducedDataTypes" -> dataTypeNames(rightReducedDataTypes)),
+      cause = null)
+  }
+
   def notAbsolutePathError(path: Path): SparkException = {
     SparkException.internalError(s"$path is not absolute path.")
   }
@@ -3257,5 +3291,29 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "function" -> toSQLId(function),
         "mode" -> mode,
         "validModes" -> validModes.mkString(", ")))
+  }
+
+  def tupleInvalidInputSketchBufferFamily(
+      function: String,
+      expectedFamily: String,
+      actualFamily: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "TUPLE_INVALID_INPUT_SKETCH_BUFFER_FAMILY",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "expectedFamily" -> expectedFamily,
+        "actualFamily" -> actualFamily))
+  }
+
+  def thetaInvalidInputSketchBufferFamily(
+      function: String,
+      expectedFamily: String,
+      actualFamily: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "THETA_INVALID_INPUT_SKETCH_BUFFER_FAMILY",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "expectedFamily" -> expectedFamily,
+        "actualFamily" -> actualFamily))
   }
 }

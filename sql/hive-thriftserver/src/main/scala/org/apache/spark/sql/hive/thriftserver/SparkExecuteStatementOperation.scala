@@ -335,6 +335,8 @@ object SparkExecuteStatementOperation {
     case LongType => TTypeId.BIGINT_TYPE
     case FloatType => TTypeId.FLOAT_TYPE
     case DoubleType => TTypeId.DOUBLE_TYPE
+    case _: GeometryType => TTypeId.STRING_TYPE
+    case _: GeographyType => TTypeId.STRING_TYPE
     case _: CharType => TTypeId.CHAR_TYPE
     case _: VarcharType => TTypeId.VARCHAR_TYPE
     case _: StringType => TTypeId.STRING_TYPE

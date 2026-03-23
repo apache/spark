@@ -39,7 +39,7 @@ from pyspark.sql.types import (
     ArrayType,
     MapType,
 )
-from pyspark.testing.sqlutils import have_pandas
+from pyspark.testing.utils import have_pandas
 
 if have_pandas:
     import pandas as pd
@@ -47,12 +47,10 @@ if have_pandas:
 
 class StatefulProcessorFactory:
     @abstractmethod
-    def pandas(self):
-        ...
+    def pandas(self): ...
 
     @abstractmethod
-    def row(self):
-        ...
+    def row(self): ...
 
     def get(self, use_pandas: bool = False):
         return self.pandas() if use_pandas else self.row()
@@ -1052,14 +1050,14 @@ class PandasListStateLargeListProcessor(StatefulProcessor):
             list_size = self.list_size_state.get()
             assert list_size is not None
             list_size = list_size[0]
-            assert list_size == len(
-                elements
-            ), f"list_size ({list_size}) != len(elements) ({len(elements)})"
+            assert list_size == len(elements), (
+                f"list_size ({list_size}) != len(elements) ({len(elements)})"
+            )
 
             expected_elements_in_state = [(i, None) for i in range(list_size)]
-            assert (
-                elements == expected_elements_in_state
-            ), f"expected {expected_elements_in_state} but got {elements}"
+            assert elements == expected_elements_in_state, (
+                f"expected {expected_elements_in_state} but got {elements}"
+            )
 
             if key == ("0",):
                 # Use the operation `put`
@@ -1119,14 +1117,14 @@ class RowListStateLargeListProcessor(StatefulProcessor):
             list_size = self.list_size_state.get()
             assert list_size is not None
             list_size = list_size[0]
-            assert list_size == len(
-                elements
-            ), f"list_size ({list_size}) != len(elements) ({len(elements)})"
+            assert list_size == len(elements), (
+                f"list_size ({list_size}) != len(elements) ({len(elements)})"
+            )
 
             expected_elements_in_state = [(i, None) for i in range(list_size)]
-            assert (
-                elements == expected_elements_in_state
-            ), f"expected {expected_elements_in_state} but got {elements}"
+            assert elements == expected_elements_in_state, (
+                f"expected {expected_elements_in_state} but got {elements}"
+            )
 
             if key == ("0",):
                 # Use the operation `put`
@@ -1769,9 +1767,9 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
             ids, tags, metadata, address = self.obj_state.get()
             assert tags == self.TAGS, f"Tag mismatch: {tags}"
             assert metadata == [Row(**m) for m in self.METADATA], f"Metadata mismatch: {metadata}"
-            assert address == [
-                Row(**e._asdict()) for e in self.ADDRESS
-            ], f"Address mismatch: {address}"
+            assert address == [Row(**e._asdict()) for e in self.ADDRESS], (
+                f"Address mismatch: {address}"
+            )
             ids = [int(x + total_temperature) for x in ids]
         else:
             ids = [0]
@@ -1892,9 +1890,9 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
             ids, tags, metadata, address = self.obj_state.get()
             assert tags == self.TAGS, f"Tag mismatch: {tags}"
             assert metadata == [Row(**m) for m in self.METADATA], f"Metadata mismatch: {metadata}"
-            assert address == [
-                Row(**e._asdict()) for e in self.ADDRESS
-            ], f"Address mismatch: {address}"
+            assert address == [Row(**e._asdict()) for e in self.ADDRESS], (
+                f"Address mismatch: {address}"
+            )
             ids = [int(x + total_temperature) for x in ids]
         else:
             ids = [0]

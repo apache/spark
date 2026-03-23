@@ -133,3 +133,85 @@ SELECT explode(array(array(0), array(1), array(2))) as arr, explode(arr) as col;
 
 -- generator LCA right-to-left should work
 SELECT explode(arr) as col, explode(array(array(0), array(1), array(2))) as arr;
+
+-- generator output LCA right-to-left should fail (reference before definition)
+SELECT col + 1 as col2, explode(array(1, 2, 3)) as col;
+
+-- multi-alias on non-generator expression should fail
+SELECT 1 AS (pos, val);
+
+-- generator in ORDER BY should fail
+SELECT * FROM VALUES (1) ORDER BY explode(array(1, 2, 3));
+
+-- generator in WHERE should fail
+SELECT * FROM VALUES (array(1, 2, 3)) t(arr) WHERE explode(arr) == 2;
+
+-- generator with GROUP BY ALL and HAVING should work
+SELECT explode(packages) AS package
+FROM (VALUES(array('a', 'b'))) AS t(packages)
+GROUP BY ALL
+HAVING package IN ('a');
+
+-- generator with aggregate function and GROUP BY ALL and HAVING should work
+SELECT explode(collect_list(a)) AS package
+FROM (VALUES ('a'), ('b')) AS t(a)
+GROUP BY ALL
+HAVING package IN ('a');
+
+-- stack with mixed aggregate and non-aggregate children should fail without GROUP BY
+SELECT stack(2, id * 10L, count(val))
+FROM (VALUES (1,'a'), (1,'b'), (2, 'c')) AS t(id, val);
+
+-- three generators with full outer join, one with constant array
+SELECT
+  explode(array(1)) AS x1,
+  explode(array(t1.c1, t2.c1)) AS x2,
+  explode(array(t2.c1)) AS x3
+FROM (VALUES (1), (2)) AS t1(c1)
+FULL OUTER JOIN (VALUES (2), (3)) AS t2(c1)
+USING (c1);
+
+-- three generators with full outer join, all using hidden attributes
+SELECT
+  explode(array(t1.c1)) AS x1,
+  explode(array(t1.c1, t2.c1)) AS x2,
+  explode(array(t2.c1)) AS x3
+FROM (VALUES (1), (2)) AS t1(c1)
+FULL OUTER JOIN (VALUES (2), (3)) AS t2(c1)
+USING (c1);
+
+-- explode with LCA reference to another generator alias
+SELECT explode(array(t1.c1, t2.c1)) AS x1, explode(array(x1, t1.c1)) AS x2
+FROM (VALUES (1), (2), (3)) AS t1(c1)
+FULL OUTER JOIN (VALUES (2), (3), (4)) AS t2(c1)
+USING (c1);
+
+-- LCA and generator output share the same alias name: LCA defined first
+SELECT 1 as a, explode(array(1, 2, 3)) as a, a * 10;
+
+-- LCA and generator output share the same alias name: LCA defined first with aggregate
+SELECT 1 as a, explode(array(1, 2, 3)) as a, a * 10, count(*);
+
+-- LCA and generator output share the same alias name: generator defined first
+SELECT explode(array(1, 2, 3)) as a, 1 as a, a * 10;
+
+-- LCA and generator output share the same alias name: generator defined first with aggregate
+SELECT explode(array(1, 2, 3)) as a, 1 as a, a * 10, count(*);
+
+-- LCA and generator output share the same alias name with multi-alias
+SELECT 1 as pos, posexplode(array('x', 'y')) as (pos, val), pos * 10;
+
+-- LCA and generator output share the same alias name with multi-alias and aggregate
+SELECT 1 as pos, posexplode(array('x', 'y')) as (pos, val), pos * 10, count(*);
+
+-- generator's output alias does not shadow table column
+SELECT explode(array(10, 20)) as col, col FROM (VALUES (42)) AS t(col);
+
+-- generator's output alias does not shadow table column with aggregate
+SELECT explode(array(10, 20)) as col, col, count(*) FROM (VALUES (42)) AS t(col) GROUP BY col;
+
+-- generator's multi-alias does not shadow table column
+SELECT posexplode(array('x', 'y')) as (pos, val), pos, val FROM (VALUES (42)) AS t(pos);
+
+-- generator's multi-alias does not shadow table column with aggregate
+SELECT posexplode(array('x', 'y')) as (pos, val), pos, val, count(*) FROM (VALUES (42)) AS t(pos) GROUP BY pos;

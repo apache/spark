@@ -22,12 +22,8 @@ import logging
 from pyspark.errors import PythonException
 from pyspark.sql import Row
 from pyspark.sql import functions as sf
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
-    have_pyarrow,
-    pyarrow_requirement_message,
-)
-from pyspark.testing.utils import assertDataFrameEqual
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import assertDataFrameEqual, have_pyarrow, pyarrow_requirement_message
 from pyspark.util import is_remote_only
 
 if have_pyarrow:

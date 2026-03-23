@@ -35,6 +35,7 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.connect.IllegalStateErrors
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.ml.MLCache
@@ -96,16 +97,15 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // Set of active operation IDs for this session.
   private val activeOperationIds: mutable.Set[String] = mutable.Set.empty
 
-  // Cache of inactive operation IDs for this session, either completed, interrupted or abandoned.
-  // The Boolean is just a placeholder since Guava needs a <K, V> pair.
-  private lazy val inactiveOperationIds: Cache[String, Boolean] =
+  // Cache of inactive operations for this session, either completed, interrupted or abandoned.
+  private lazy val inactiveOperations: Cache[String, TerminationInfo] =
     CacheBuilder
       .newBuilder()
       .ticker(Ticker.systemTicker())
       .expireAfterAccess(
         SparkEnv.get.conf.get(Connect.CONNECT_INACTIVE_OPERATIONS_CACHE_EXPIRATION_MINS),
         TimeUnit.MINUTES)
-      .build[String, Boolean]()
+      .build[String, TerminationInfo]()
 
   // The cache that maps an error id to a throwable. The throwable in cache is independent to
   // each other.
@@ -176,7 +176,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
     activeOperationIds.synchronized {
       if (activeOperationIds.contains(operationId)) {
-        throw new IllegalStateException(s"ExecuteHolder with opId=${operationId} already exists!")
+        throw IllegalStateErrors.executeHolderAlreadyExists(operationId)
       }
       activeOperationIds.add(operationId)
     }
@@ -197,7 +197,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     if (activeOperationIds.contains(operationId)) {
       return Some(true)
     }
-    Option(inactiveOperationIds.getIfPresent(operationId)) match {
+    Option(inactiveOperations.getIfPresent(operationId)) match {
       case Some(_) =>
         return Some(false)
       case None =>
@@ -206,13 +206,50 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   /**
-   * Close an operation in this session by removing its operation ID.
+   * Returns the TerminationInfo for an inactive operation if it exists in the cache. Cache
+   * expiration is configured with CONNECT_INACTIVE_OPERATIONS_CACHE_EXPIRATION_MINS.
    *
-   * Called only by SparkConnectExecutionManager when an execution is ended.
+   * @param operationId
+   * @return
+   *   Some(TerminationInfo) if the operation was closed recently, None if no inactive operation
+   *   with this id is found.
    */
-  private[service] def closeOperation(operationId: String): Unit = {
-    inactiveOperationIds.put(operationId, true)
-    activeOperationIds.remove(operationId)
+  private[service] def getInactiveOperationInfo(operationId: String): Option[TerminationInfo] = {
+    Option(inactiveOperations.getIfPresent(operationId))
+  }
+
+  /**
+   * Returns all inactive operations for this session. These are operations that were closed and
+   * are still in the cache. Cache expiration is configured with
+   * CONNECT_INACTIVE_OPERATIONS_CACHE_EXPIRATION_MINS.
+   *
+   * @return
+   *   Sequence of TerminationInfo for inactive operations.
+   */
+  private[service] def listInactiveOperations(): Seq[TerminationInfo] = {
+    inactiveOperations.asMap().values().asScala.toSeq
+  }
+
+  /**
+   * Returns all active operation IDs for this session.
+   *
+   * @return
+   *   Sequence of operation IDs that are currently active.
+   */
+  private[service] def listActiveOperationIds(): Seq[String] = {
+    activeOperationIds.synchronized {
+      activeOperationIds.toSeq
+    }
+  }
+
+  /**
+   * Close an operation in this session by storing its TerminationInfo and removing from active
+   * set.
+   */
+  private[service] def closeOperation(executeHolder: ExecuteHolder): Unit = {
+    val terminationInfo = executeHolder.getTerminationInfo
+    inactiveOperations.put(terminationInfo.operationId, terminationInfo)
+    activeOperationIds.remove(terminationInfo.operationId)
   }
 
   /**
@@ -249,7 +286,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
       SparkConnectService.executionManager.getExecuteHolder(executeKey).foreach { executeHolder =>
         if (executeHolder.sparkSessionTags.contains(tag)) {
           if (executeHolder.interrupt()) {
-            closeOperation(operationId)
+            closeOperation(executeHolder)
             interruptedIds += operationId
           }
         }
@@ -268,7 +305,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     val executeKey = ExecuteKey(userId, sessionId, operationId)
     SparkConnectService.executionManager.getExecuteHolder(executeKey).foreach { executeHolder =>
       if (executeHolder.interrupt()) {
-        closeOperation(operationId)
+        closeOperation(executeHolder)
         interruptedIds += operationId
       }
     }
@@ -332,7 +369,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     // called only once, since removing the session from SparkConnectSessionManager.sessionStore is
     // synchronized and guaranteed to happen only once.
     if (closedTimeMs.isDefined) {
-      throw new IllegalStateException(s"Session $key is already closed.")
+      throw IllegalStateErrors.sessionAlreadyClosed(key.toString)
     }
     logInfo(
       log"Closing session with userId: ${MDC(LogKeys.USER_ID, userId)} and " +
@@ -428,7 +465,9 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[connect] def getDataFrameOrThrow(dfId: String): DataFrame = {
     Option(dataFrameCache.get(dfId))
       .getOrElse {
-        throw InvalidPlanInput(s"No DataFrame with id $dfId is found in the session $sessionId")
+        throw InvalidPlanInput(
+          "CONNECT_INVALID_PLAN.DATAFRAME_NOT_FOUND",
+          Map("dfId" -> dfId, "sessionId" -> sessionId))
       }
   }
 
@@ -496,9 +535,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
       graphId,
       (_, existing) => {
         if (Option(existing).isDefined) {
-          throw new IllegalStateException(
-            s"Pipeline execution for graph ID $graphId already exists. " +
-              s"Stop the existing execution before starting a new one.")
+          throw IllegalStateErrors.executeHolderAlreadyExistsGraphId(graphId)
         }
 
         pipelineUpdateContext

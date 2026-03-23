@@ -382,9 +382,13 @@ class SeriesStatMixin:
         ):
             ps.Series([24.0, 21.0, 25.0, 33.0, 26.0]).quantile(q=1.1)
 
-        with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
+        with self.assertRaisesRegex(
+            TypeError, r"Could not convert (object|str) \(string\) to numeric"
+        ):
             ps.Series(["a", "b", "c"]).quantile()
-        with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
+        with self.assertRaisesRegex(
+            TypeError, r"Could not convert (object|str) \(string\) to numeric"
+        ):
             ps.Series(["a", "b", "c"]).quantile([0.25, 0.5, 0.75])
 
     def test_pct_change(self):
@@ -544,10 +548,12 @@ class SeriesStatMixin:
             ps.Series([]).prod(numeric_only=True)
         with self.assertRaisesRegex(TypeError, "Could not convert object \\(void\\) to numeric"):
             ps.Series([]).prod(min_count=1)
-        with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
+        with self.assertRaisesRegex(
+            TypeError, r"Could not convert (object|str) \(string\) to numeric"
+        ):
             ps.Series(["a", "b", "c"]).prod()
         with self.assertRaisesRegex(
-            TypeError, "Could not convert datetime64\\[ns\\] \\(timestamp.*\\) to numeric"
+            TypeError, r"Could not convert datetime64\[[nu]s\] \(timestamp.*\) to numeric"
         ):
             ps.Series([pd.Timestamp("2016-01-01") for _ in range(3)]).prod()
         with self.assertRaisesRegex(NotImplementedError, "Series does not support columns axis."):
@@ -624,9 +630,9 @@ class SeriesStatMixin:
             index=[0, 1, 2],
         )
         psdf = ps.from_pandas(pdf)
-        with self.assertRaisesRegex(TypeError, "unsupported dtype: object"):
+        with self.assertRaisesRegex(TypeError, "unsupported dtype: (object|str)"):
             psdf["s1"].cov(psdf["s2"])
-        with self.assertRaisesRegex(TypeError, "unsupported dtype: object"):
+        with self.assertRaisesRegex(TypeError, "unsupported dtype: (object|str)"):
             psdf["s2"].cov(psdf["s1"])
         with self.assertRaisesRegex(TypeError, "ddof must be integer"):
             psdf["s2"].cov(psdf["s2"], ddof="ddof")
@@ -648,6 +654,29 @@ class SeriesStatMixin:
             index=[0, 1, 2, 3],
         )
         self._test_cov(pdf)
+
+        # Extension Dtypes
+        pdf = pd.DataFrame(
+            {
+                "s1": pd.Series([0.90010907, None, 0.13484424, 0.62036035], dtype="Float64"),
+                "s2": pd.Series([0.12528585, 0.81131178, 0.26962463, 0.51111198], dtype="Float64"),
+            },
+            index=[0, 1, 2, 3],
+        )
+        self._test_cov(pdf)
+
+        pdf = pd.DataFrame(
+            {
+                "s1": pd.Series(["a", "b", "c"], dtype="string"),
+                "s2": pd.Series([0.12528585, 0.26962463, 0.51111198], dtype="Float64"),
+            },
+            index=[0, 1, 2],
+        )
+        psdf = ps.from_pandas(pdf)
+        with self.assertRaisesRegex(TypeError, "unsupported dtype: (object|str)"):
+            psdf["s1"].cov(psdf["s2"])
+        with self.assertRaisesRegex(TypeError, "unsupported dtype: (object|str)"):
+            psdf["s2"].cov(psdf["s1"])
 
     def _test_cov(self, pdf):
         psdf = ps.from_pandas(pdf)
@@ -680,19 +709,19 @@ class SeriesStatMixin:
         )
 
     def test_series_stat_fail(self):
-        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+        with self.assertRaisesRegex(TypeError, "Could not convert (object|str)"):
             ps.Series(["a", "b", "c"]).mean()
-        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+        with self.assertRaisesRegex(TypeError, "Could not convert (object|str)"):
             ps.Series(["a", "b", "c"]).skew()
-        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+        with self.assertRaisesRegex(TypeError, "Could not convert (object|str)"):
             ps.Series(["a", "b", "c"]).kurtosis()
-        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+        with self.assertRaisesRegex(TypeError, "Could not convert (object|str)"):
             ps.Series(["a", "b", "c"]).std()
-        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+        with self.assertRaisesRegex(TypeError, "Could not convert (object|str)"):
             ps.Series(["a", "b", "c"]).var()
-        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+        with self.assertRaisesRegex(TypeError, "Could not convert (object|str)"):
             ps.Series(["a", "b", "c"]).median()
-        with self.assertRaisesRegex(TypeError, "Could not convert object"):
+        with self.assertRaisesRegex(TypeError, "Could not convert (object|str)"):
             ps.Series(["a", "b", "c"]).sem()
 
 

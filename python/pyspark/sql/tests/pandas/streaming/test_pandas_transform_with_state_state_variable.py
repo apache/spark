@@ -36,8 +36,8 @@ from pyspark.sql.types import (
     IntegerType,
 )
 from pyspark.testing import assertDataFrameEqual
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
@@ -63,8 +63,7 @@ from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
 class TransformWithStateStateVariableTestsMixin:
     @classmethod
     @abstractmethod
-    def use_pandas(cls) -> bool:
-        ...
+    def use_pandas(cls) -> bool: ...
 
     @classmethod
     def get_processor(cls, stateful_processor_factory) -> StatefulProcessor:
@@ -707,9 +706,7 @@ class TransformWithStateStateVariableTestsMixin:
                     "id AS groupingKey",
                     "map_key.name AS mapKey",
                     "map_value.value.count AS mapValue",
-                ).sort(
-                    "groupingKey"
-                ).collect() == [
+                ).sort("groupingKey").collect() == [
                     Row(groupingKey="0", mapKey="key2", mapValue=2),
                     Row(groupingKey="1", mapKey="key2", mapValue=2),
                 ]
@@ -802,9 +799,7 @@ class TransformWithStateStateVariableTestsMixin:
                     "key.id AS groupingKey", "list_value.temperature AS valueList"
                 ).sort("groupingKey").withColumn(
                     "valueSortedList", array_sort(col("valueList"))
-                ).select(
-                    "groupingKey", "valueSortedList"
-                ).collect() == [
+                ).select("groupingKey", "valueSortedList").collect() == [
                     Row(groupingKey="0", valueSortedList=[20, 20, 120, 120, 222]),
                     Row(groupingKey="1", valueSortedList=[20, 20, 120, 120, 222]),
                 ]
@@ -1010,7 +1005,7 @@ class TransformWithStateInPandasStateVariableTests(
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state import *
+    from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state import *  # noqa: F403
 
     from pyspark.testing import main
 

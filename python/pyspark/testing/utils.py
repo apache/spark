@@ -43,7 +43,6 @@ from pyspark.sql import Row
 from pyspark.sql.types import StructType, StructField, VariantVal
 from pyspark.sql.functions import col, when
 
-
 __all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
 
 
@@ -101,11 +100,14 @@ grpc_requirement_message = "" if have_grpc else "No module named 'grpc'"
 have_grpc_status = have_package("grpc_status")
 grpc_status_requirement_message = "" if have_grpc_status else "No module named 'grpc_status'"
 
+have_zstandard = have_package("zstandard")
+zstandard_requirement_message = "" if have_zstandard else "No module named 'zstandard'"
+
 
 googleapis_common_protos_requirement_message = ""
 
 try:
-    from google.rpc import error_details_pb2
+    from google.rpc import error_details_pb2  # noqa: F401
 except ImportError as e:
     googleapis_common_protos_requirement_message = str(e)
 have_googleapis_common_protos = not googleapis_common_protos_requirement_message
@@ -140,6 +142,7 @@ connect_requirement_message = (
     or grpc_requirement_message
     or googleapis_common_protos_requirement_message
     or grpc_status_requirement_message
+    or zstandard_requirement_message
 )
 
 should_test_connect = not connect_requirement_message
@@ -448,12 +451,14 @@ class PySparkErrorTestUtils:
                     f"Expected message parameter key '{key}' was not found "
                     "in actual message parameters.",
                 )
-                self.assertRegex(
-                    actual[key],
-                    value,
-                    f"Expected message parameter value '{value}' does not match actual message "
-                    f"parameter value '{actual[key]}'.",
-                ),
+                (
+                    self.assertRegex(
+                        actual[key],
+                        value,
+                        f"Expected message parameter value '{value}' does not match actual message "
+                        f"parameter value '{actual[key]}'.",
+                    ),
+                )
         else:
             self.assertEqual(
                 expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
@@ -469,9 +474,9 @@ class PySparkErrorTestUtils:
                     expected, actual, f"Expected QueryContext was '{expected}', got '{actual}'"
                 )
                 if actual == QueryContextType.DataFrame:
-                    assert (
-                        fragment is not None
-                    ), "`fragment` is required when QueryContextType is DataFrame."
+                    assert fragment is not None, (
+                        "`fragment` is required when QueryContextType is DataFrame."
+                    )
                     expected = fragment
                     actual = actual_context.fragment()
                     self.assertEqual(
@@ -501,7 +506,7 @@ def assertSchemaEqual(
     expected : StructType
         The expected schema, for comparison with the actual schema.
     ignoreNullable : bool, default True
-        Specifies whether a column’s nullable property is included when checking for
+        Specifies whether a column's nullable property is included when checking for
         schema equality.
         When set to `True` (default), the nullable property of the columns being compared
         is not taken into account and the columns will be considered equal even if they have
@@ -711,7 +716,7 @@ def assertDataFrameEqual(
         The absolute tolerance, used in asserting approximate equality for float values in actual
         and expected. Set to 1e-8 by default. (See Notes)
     ignoreNullable : bool, default True
-        Specifies whether a column’s nullable property is included when checking for
+        Specifies whether a column's nullable property is included when checking for
         schema equality.
         When set to `True` (default), the nullable property of the columns being compared
         is not taken into account and the columns will be considered equal even if they have
@@ -960,7 +965,7 @@ def assertDataFrameEqual(
 
     has_arrow = False
     try:
-        import pyarrow
+        import pyarrow  # noqa: F401
 
         has_arrow = True
     except ImportError:
@@ -1158,7 +1163,7 @@ def _test() -> None:
     globs = pyspark.testing.utils.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("testing.utils tests").getOrCreate()
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.testing.utils,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

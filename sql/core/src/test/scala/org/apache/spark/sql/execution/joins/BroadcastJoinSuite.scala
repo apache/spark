@@ -592,11 +592,10 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
         HashPartitioning(Seq(l3), 1)))),
       right = DummySparkPlan())
     expected = PartitioningCollection(Seq(
-      PartitioningCollection(Seq(
-        HashPartitioning(Seq(l1), 1),
-        HashPartitioning(Seq(r1), 1),
-        HashPartitioning(Seq(l2), 1),
-        HashPartitioning(Seq(r2), 1))),
+      HashPartitioning(Seq(l1), 1),
+      HashPartitioning(Seq(r1), 1),
+      HashPartitioning(Seq(l2), 1),
+      HashPartitioning(Seq(r2), 1),
       HashPartitioning(Seq(l3), 1),
       HashPartitioning(Seq(r3), 1)))
     assert(bhj.outputPartitioning === expected)

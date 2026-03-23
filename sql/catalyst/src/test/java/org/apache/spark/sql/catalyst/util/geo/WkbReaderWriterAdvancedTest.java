@@ -59,8 +59,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     if (expectedValidateError) {
       WkbParseException ex = Assertions.assertThrows(
         WkbParseException.class, () -> validateReader.read(wkbLittle, geomSrid));
-      Assertions.assertTrue(ex.getMessage().toUpperCase().contains(wkbHexLittle.toUpperCase()),
-        "Exception message should contain the WKB hex: " + wkbHexLittle);
+      Assertions.assertSame(wkbLittle, ex.getWkb());
       geomLittle = noValidateReader.read(wkbLittle, geomSrid);
     } else {
       geomLittle = validateReader.read(wkbLittle, geomSrid);
@@ -77,8 +76,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
     if (expectedValidateError) {
       WkbParseException ex = Assertions.assertThrows(
         WkbParseException.class, () -> validateReader.read(wkbBig, geomSrid));
-      Assertions.assertTrue(ex.getMessage().toUpperCase().contains(wkbHexBig.toUpperCase()),
-        "Exception message should contain the WKB hex: " + wkbHexBig);
+      Assertions.assertSame(wkbBig, ex.getWkb());
       geomBig = noValidateReader.read(wkbBig, geomSrid);
     } else {
       geomBig = validateReader.read(wkbBig, geomSrid);
@@ -1202,7 +1200,7 @@ public class WkbReaderWriterAdvancedTest extends WkbTestBase {
       WkbReader geographyReader = new WkbReader(true);
       WkbParseException ex = Assertions.assertThrows(
           WkbParseException.class, () -> geographyReader.read(wkb, 0));
-      Assertions.assertTrue(ex.getMessage().contains("Invalid coordinate value"));
+      Assertions.assertTrue(ex.getParseError().contains("Invalid coordinate value"));
       // Geography mode without validation should accept non-geographic coordinate values.
       WkbReader noValidateGeographyReader = new WkbReader(0, true);
       Assertions.assertDoesNotThrow(() -> noValidateGeographyReader.read(wkb, 0));

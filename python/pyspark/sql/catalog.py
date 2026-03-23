@@ -1265,7 +1265,7 @@ def _test() -> None:
     globs["spark"] = (
         SparkSession.builder.master("local[4]").appName("sql.catalog tests").getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.catalog,
         globs=globs,
         optionflags=doctest.ELLIPSIS

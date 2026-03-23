@@ -38,10 +38,10 @@ case class VarcharType private[sql] (length: Int, collation: Option[Int])
 
   override def defaultSize: Int = length
   override def typeName: String =
-    if (isUTF8BinaryCollation) s"varchar($length)"
+    if (collation.isEmpty) s"varchar($length)"
     else s"varchar($length) collate $collationName"
   override def toString: String =
-    if (isUTF8BinaryCollation) s"VarcharType($length)"
+    if (collation.isEmpty) s"VarcharType($length)"
     else s"VarcharType($length, $collationName)"
   private[spark] override def asNullable: VarcharType = this
 

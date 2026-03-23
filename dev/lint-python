@@ -33,7 +33,7 @@ function exit_with_usage {
   echo "lint-python - linter for Python"
   echo ""
   echo "usage:"
-  cl_options="[--compile] [--black] [--custom-pyspark-error] [--ruff] [--mypy] [--mypy-examples] [--mypy-data]"
+  cl_options="[--compile] [--custom-pyspark-error] [--ruff] [--mypy] [--mypy-examples] [--mypy-data]"
   echo "lint-python $cl_options"
   echo ""
   exit 1
@@ -76,7 +76,6 @@ done
 
 if [[ -z "$COMPILE_TEST$BLACK_TEST$PYSPARK_CUSTOM_ERRORS_CHECK_TEST$FLAKE8_TEST$RUFF_TEST$MYPY_TEST$MYPY_EXAMPLES_TEST$MYPY_DATA_TEST" ]]; then
   COMPILE_TEST=true
-  BLACK_TEST=true
   PYSPARK_CUSTOM_ERRORS_CHECK_TEST=true
   RUFF_TEST=true
   MYPY_TEST=true
@@ -315,6 +314,19 @@ ruff checks failed."
         echo
     fi
 
+    RUFF_REPORT=$( ($RUFF_BUILD format --diff python/pyspark dev python/packaging python/benchmarks) 2>&1)
+    RUFF_STATUS=$?
+
+    if [ "$RUFF_STATUS" -ne 0 ]; then
+        echo "ruff format checks failed:"
+        echo "$RUFF_REPORT"
+        echo "$RUFF_STATUS"
+        exit "$RUFF_STATUS"
+    else
+        echo "ruff format checks passed."
+        echo
+    fi
+
 }
 
 function black_test {
@@ -330,7 +342,7 @@ function black_test {
     fi
 
     echo "starting black test..."
-    BLACK_REPORT=$( ($BLACK_BUILD --check python/pyspark dev python/packaging) 2>&1)
+    BLACK_REPORT=$( ($BLACK_BUILD --check python/pyspark dev python/packaging python/benchmarks) 2>&1)
     BLACK_STATUS=$?
 
     if [ "$BLACK_STATUS" -ne 0 ]; then

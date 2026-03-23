@@ -19,6 +19,7 @@ from pyspark.sql import Row, Observation, functions as F
 from pyspark.sql.types import StructType, LongType
 from pyspark.errors import (
     PySparkAssertionError,
+    PySparkException,
     PySparkTypeError,
     PySparkValueError,
 )
@@ -181,8 +182,9 @@ class DataFrameObservationTestsMixin:
 
         # DataFrameWriter
         for cache_enabled in [False, True]:
-            with self.subTest(cache_enabled=cache_enabled), self.sql_conf(
-                {"spark.connect.session.planCache.enabled": cache_enabled}
+            with (
+                self.subTest(cache_enabled=cache_enabled),
+                self.sql_conf({"spark.connect.session.planCache.enabled": cache_enabled}),
             ):
                 for command, action in [
                     ("collect", lambda df: df.collect()),
@@ -191,8 +193,9 @@ class DataFrameObservationTestsMixin:
                     ("create", lambda df: df.writeTo(test_table).using("parquet").create()),
                 ]:
                     for select_star in [True, False]:
-                        with self.subTest(command=command, select_star=select_star), self.table(
-                            test_table
+                        with (
+                            self.subTest(command=command, select_star=select_star),
+                            self.table(test_table),
                         ):
                             observation = Observation()
                             observed_df = df.observe(observation, F.count(F.lit(1)).alias("cnt"))
@@ -237,6 +240,24 @@ class DataFrameObservationTestsMixin:
         assertDataFrameEqual(df, [Row(id=id) for id in range(10)])
 
         self.assertEqual(observation.get, {"map": {"count": 10}})
+
+    def test_observation_errors_propagated_to_client(self):
+        observation = Observation("test_observation")
+        observed_df = self.spark.range(10).observe(
+            observation,
+            F.sum("id").alias("sum_id"),
+            F.raise_error(F.lit("test error")).alias("raise_error"),
+        )
+        actual = observed_df.collect()
+        self.assertEqual(
+            [row.asDict() for row in actual],
+            [{"id": i} for i in range(10)],
+        )
+
+        with self.assertRaises(PySparkException) as cm:
+            _ = observation.get
+
+        self.assertIn("test error", str(cm.exception))
 
 
 class DataFrameObservationTests(

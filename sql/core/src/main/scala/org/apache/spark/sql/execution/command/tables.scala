@@ -35,10 +35,12 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TableIdentifierHelper
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.CommandExecutionMode
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -1078,6 +1080,11 @@ trait ShowCreateTableCommandBase extends SQLConfHelper {
       .foreach(builder.append)
   }
 
+  protected def showTableCollation(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    metadata.collation.map(collation => "DEFAULT COLLATION " + collation + "\n")
+      .foreach(builder.append)
+  }
+
   protected def showTableProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
     if (metadata.properties.nonEmpty) {
       val props =
@@ -1099,6 +1106,7 @@ trait ShowCreateTableCommandBase extends SQLConfHelper {
   protected def showCreateView(metadata: CatalogTable, builder: StringBuilder): Unit = {
     showViewDataColumns(metadata, builder)
     showTableComment(metadata, builder)
+    showTableCollation(metadata, builder)
     showViewProperties(metadata, builder)
     showViewSchemaBinding(metadata, builder)
     showViewText(metadata, builder)
@@ -1121,6 +1129,7 @@ trait ShowCreateTableCommandBase extends SQLConfHelper {
   private def showViewProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
     val viewProps = metadata.properties
       .filter { case (k, _) => !k.startsWith(CatalogTable.VIEW_PREFIX) }
+      .filter { case (k, _) => !k.startsWith(TableCatalog.PROP_COLLATION) }
     if (viewProps.nonEmpty) {
       val props = viewProps.toSeq.sortBy(_._1).map { case (key, value) =>
         s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
@@ -1235,7 +1244,10 @@ case class ShowCreateTableCommand(
 
   private def showDataSourceTableDataColumns(
       metadata: CatalogTable, builder: StringBuilder): Unit = {
-    val columns = metadata.schema.fields.map(_.toDDL)
+    val rawSchema = CharVarcharUtils.getRawSchema(metadata.schema, conf)
+    val schemaWithExplicitCollations = DataTypeUtils.replaceNonCollatedTypesWithExplicitUTF8Binary(
+      rawSchema).asInstanceOf[StructType]
+    val columns = schemaWithExplicitCollations.fields.map(_.toDDL)
     builder ++= concatByMultiLines(columns)
   }
 
@@ -1280,6 +1292,7 @@ case class ShowCreateTableCommand(
     showDataSourceTableOptions(metadata, builder)
     showDataSourceTableNonDataColumns(metadata, builder)
     showTableComment(metadata, builder)
+    showTableCollation(metadata, builder)
     showTableLocation(metadata, builder)
     showTableProperties(metadata, builder)
   }

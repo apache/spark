@@ -75,7 +75,7 @@ class DatetimeIndex(Index):
     yearfirst : bool, default False
         If True parse dates in `data` with the year first order.
     dtype : numpy.dtype or str, default None
-        Note that the only NumPy dtype allowed is ‘datetime64[ns]’.
+        Note that the only NumPy dtype allowed is 'datetime64[ns]'.
     copy : bool, default False
         Make a copy of input ndarray.
     name : label, default None
@@ -160,8 +160,9 @@ class DatetimeIndex(Index):
             raise TypeError("Index.name must be a hashable type")
 
         if isinstance(data, (Series, Index)):
-            if dtype is None:
-                dtype = "datetime64[ns]"
+            if LooseVersion(pd.__version__) < "3.0.0":
+                if dtype is None:
+                    dtype = "datetime64[ns]"
             return cast(DatetimeIndex, Index(data, dtype=dtype, copy=copy, name=name))
 
         return cast(DatetimeIndex, ps.from_pandas(pd.DatetimeIndex(**kwargs)))
@@ -880,7 +881,7 @@ def _test() -> None:
         .appName("pyspark.pandas.indexes.datetimes tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.indexes.datetimes,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
