@@ -157,6 +157,19 @@ For a short summary about useful conda commands, see their
 `cheat sheet <https://docs.conda.io/projects/conda/en/latest/user-guide/cheatsheet.html>`_.
 
 
+Using venv
+----------
+
+If you prefer a lightweight setup without Conda, you can use Python's built-in ``venv`` module
+to create an isolated environment:
+
+.. code-block:: bash
+
+    python3 -m venv .venv
+    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+    pip install pyspark
+
+
 Manually Downloading
 --------------------
 
