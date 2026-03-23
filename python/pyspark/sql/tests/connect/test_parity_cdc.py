@@ -41,13 +41,23 @@ class CDCParityTests(CDCTestsMixin, ReusedConnectTestCase):
 
     # JVM access is needed only for test setup (creating the InMemoryChangelogCatalog
     # table and inserting change rows). The actual changes() API calls in the test
-    # methods go through Spark Connect. We access the underlying classic PySparkSession
-    # that the Connect server runs on.
+    # methods go through Spark Connect.
+    #
+    # We must use the server-side *isolated* session (not _instantiatedSession) because
+    # the Connect server creates a new session via newSession() for each client. Each
+    # session has its own CatalogManager, so the InMemoryChangelogCatalog instance in
+    # the isolated session is different from the one in the base session.
     def _jvm(self):
         return PySparkSession._instantiatedSession._jvm
 
     def _j_spark_session(self):
-        return PySparkSession._instantiatedSession._jsparkSession
+        jvm = self._jvm()
+        service = jvm.org.apache.spark.sql.connect.service.SparkConnectService
+        key = jvm.org.apache.spark.sql.connect.service.SessionKey(
+            self.spark.client._user_id, self.spark.client._session_id
+        )
+        holder = service.sessionManager().getIsolatedSessionIfPresent(key)
+        return holder.get().session()
 
     def _gateway(self):
         return PySparkSession._instantiatedSession.sparkContext._gateway
