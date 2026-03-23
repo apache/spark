@@ -2587,7 +2587,7 @@ case class Get(left: Expression, right: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = left.dataType match {
     case _: ArrayType => Seq(ArrayType, IntegerType)
-    // Do not apply implicit cast if the first arguement is not array type.
+    // Do not apply implicit cast if the first argument is not array type.
     case _ => Nil
   }
 

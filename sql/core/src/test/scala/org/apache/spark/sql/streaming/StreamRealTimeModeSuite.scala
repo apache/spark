@@ -362,7 +362,7 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
   }
 
   test("purge offsetLog when it doesn't match with the commit log") {
-    // Simulate when the query fails after commiting the offset log but before the commit log
+    // Simulate when the query fails after committing the offset log but before the commit log
     // by manually deleting the last entry of the commit log.
     val inputData = LowLatencyMemoryStream[Int](1)
     val mapped = inputData.toDS().map(_ + 1)
