@@ -245,7 +245,7 @@ private[v2] trait V2JDBCTest
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table ADD COLUMNS (C4 STRING)")
     }
-    checkErrorTableNotFoundOmitSearchPath(
+    checkErrorTableNotFound(
       e,
       s"`$catalogName`.`not_existing_table`",
       ExpectedContext(
@@ -282,7 +282,7 @@ private[v2] trait V2JDBCTest
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table DROP COLUMN C1")
     }
-    checkErrorTableNotFoundOmitSearchPath(
+    checkErrorTableNotFound(
       e,
       s"`$catalogName`.`not_existing_table`",
       ExpectedContext(
@@ -309,7 +309,7 @@ private[v2] trait V2JDBCTest
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table ALTER COLUMN id TYPE DOUBLE")
     }
-    checkErrorTableNotFoundOmitSearchPath(
+    checkErrorTableNotFound(
       e,
       s"`$catalogName`.`not_existing_table`",
       ExpectedContext(
@@ -341,7 +341,7 @@ private[v2] trait V2JDBCTest
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table RENAME COLUMN ID TO C")
     }
-    checkErrorTableNotFoundOmitSearchPath(
+    checkErrorTableNotFound(
       e,
       s"`$catalogName`.`not_existing_table`",
       ExpectedContext(
@@ -356,7 +356,7 @@ private[v2] trait V2JDBCTest
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table ALTER COLUMN ID DROP NOT NULL")
     }
-    checkErrorTableNotFoundOmitSearchPath(
+    checkErrorTableNotFound(
       e,
       s"`$catalogName`.`not_existing_table`",
       ExpectedContext(

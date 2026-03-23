@@ -65,8 +65,7 @@ class NoSuchDatabaseException private[analysis] (
   }
 }
 
-// any changes to this class should be backward compatible as it may be used by
-// external connectors
+// any changes to this class should be backward compatible as it may be used by external connectors
 class NoSuchNamespaceException private (
     message: String,
     cause: Option[Throwable],
@@ -97,8 +96,7 @@ class NoSuchNamespaceException private (
   }
 }
 
-// any changes to this class should be backward compatible as it may be used by
-// external connectors
+// any changes to this class should be backward compatible as it may be used by external connectors
 class NoSuchTableException private (
     message: String,
     cause: Option[Throwable],
@@ -151,8 +149,7 @@ class NoSuchTableException private (
   }
 }
 
-// any changes to this class should be backward compatible as it may be used by
-// external connectors
+// any changes to this class should be backward compatible as it may be used by external connectors
 class NoSuchViewException(errorClass: String, messageParameters: Map[String, String])
     extends AnalysisException(errorClass, messageParameters) {
 
@@ -165,8 +162,7 @@ class NoSuchPermanentFunctionException(db: String, func: String)
       errorClass = "ROUTINE_NOT_FOUND",
       Map("routineName" -> (quoteIdentifier(db) + "." + quoteIdentifier(func))))
 
-// any changes to this class should be backward compatible as it may be used by
-// external connectors
+// any changes to this class should be backward compatible as it may be used by external connectors
 class NoSuchFunctionException private (
     message: String,
     cause: Option[Throwable],
@@ -200,8 +196,7 @@ class NoSuchFunctionException private (
 class NoSuchTempFunctionException(func: String)
     extends AnalysisException(errorClass = "ROUTINE_NOT_FOUND", Map("routineName" -> s"`$func`"))
 
-// any changes to this class should be backward compatible as it may be used by
-// external connectors
+// any changes to this class should be backward compatible as it may be used by external connectors
 class NoSuchIndexException private (
     message: String,
     cause: Option[Throwable],

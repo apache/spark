@@ -300,14 +300,16 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     plan.foreach {
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _, _, _) =>
         // Queries/DML: TABLE_OR_VIEW_NOT_FOUND with full search path.
-        val catalogPath = catalogPathForError
-        u.tableNotFound(u.multipartIdentifier, fullSearchPathForError(catalogPath))
+        u.tableNotFound(
+          u.multipartIdentifier,
+          fullSearchPathForError(catalogPathForError))
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
         val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
-        val catalogPath = catalogPathForError
-        write.table.tableNotFound(tblName, fullSearchPathForError(catalogPath))
+        write.table.tableNotFound(
+          tblName,
+          fullSearchPathForError(catalogPathForError))
 
       // We should check for trailing comma errors first, since we would get less obvious
       // unresolved column errors if we do it bottom up
@@ -339,19 +341,22 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
       case u: UnresolvedTable =>
         // DDL: use TABLE_OR_VIEW_NOT_FOUND with search path filtered to system.session + catalog.
-        val catalogPath = catalogPathForError
-        u.tableNotFound(u.multipartIdentifier, ddlSearchPathForError(catalogPath))
+        u.tableNotFound(
+          u.multipartIdentifier,
+          ddlSearchPathForError(catalogPathForError))
 
       case u: UnresolvedView =>
-        val catalogPath = catalogPathForError
-        u.tableNotFound(u.multipartIdentifier, ddlSearchPathForError(catalogPath))
+        u.tableNotFound(
+          u.multipartIdentifier,
+          ddlSearchPathForError(catalogPathForError))
 
       case d: DescribeRelation if !d.relation.resolved =>
         // DESCRIBE TABLE / DESC TABLE: full resolution path (same as DESCRIBE FUNCTION and SELECT).
         // Relation may be wrapped in SubqueryAlias after resolution attempt (e.g. Hive analyzer).
         firstUnresolvedTableOrView(d.relation).foreach { u =>
-          val catalogPath = catalogPathForError
-          u.tableNotFound(u.multipartIdentifier, fullSearchPathForError(catalogPath))
+          u.tableNotFound(
+            u.multipartIdentifier,
+            fullSearchPathForError(catalogPathForError))
         }
 
       case u: UnresolvedTableOrView =>
@@ -369,12 +374,13 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
       case u: UnresolvedRelation =>
         // Queries/DML: full search path (including session-qualified names).
-        val catalogPath = catalogPathForError
-        u.tableNotFound(u.multipartIdentifier, fullSearchPathForError(catalogPath))
+        u.tableNotFound(
+          u.multipartIdentifier,
+          fullSearchPathForError(catalogPathForError))
 
       case u: UnresolvedFunctionName =>
-        val catalogPath = catalogPathForError
-        val searchPath = SQLConf.get.resolutionSearchPath(catalogPath).map(_.quoted)
+        val searchPath =
+          SQLConf.get.resolutionSearchPath(catalogPathForError).map(_.quoted)
         throw QueryCompilationErrors.unresolvedRoutineError(
           u.multipartIdentifier,
           searchPath,
@@ -562,8 +568,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
         operator match {
           case RelationTimeTravel(u: UnresolvedRelation, _, _) =>
-            val catalogPath = catalogPathForError
-            u.tableNotFound(u.multipartIdentifier, fullSearchPathForError(catalogPath))
+            u.tableNotFound(
+              u.multipartIdentifier,
+              fullSearchPathForError(catalogPathForError))
 
           case etw: EventTimeWatermark =>
             etw.eventTime.dataType match {

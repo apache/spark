@@ -456,30 +456,6 @@ trait SparkTestSuite
         "searchPath" -> searchPath),
       queryContext = Array(queryContext))
 
-  /**
-   * Asserts TABLE_OR_VIEW_NOT_FOUND with the given relation name.
-   * The searchPath parameter is not asserted; it is ignored during comparison.
-   */
-  protected def checkErrorTableNotFoundOmitSearchPath(
-      exception: SparkThrowable,
-      tableName: String): Unit =
-    checkError(exception = exception,
-      condition = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relationName" -> tableName))
-
-  /**
-   * Asserts TABLE_OR_VIEW_NOT_FOUND with the given relation name and query context.
-   * The searchPath parameter is not asserted; it is ignored during comparison.
-   */
-  protected def checkErrorTableNotFoundOmitSearchPath(
-      exception: SparkThrowable,
-      tableName: String,
-      queryContext: ExpectedContext): Unit =
-    checkError(exception = exception,
-      condition = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relationName" -> tableName),
-      queryContext = Array(queryContext))
-
   protected def checkErrorTableAlreadyExists(
       exception: SparkThrowable,
       tableName: String): Unit =

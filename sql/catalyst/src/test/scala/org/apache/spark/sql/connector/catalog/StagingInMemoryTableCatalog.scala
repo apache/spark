@@ -111,12 +111,9 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
       maybeSimulateDropBeforeCommit()
       val maybePreCommittedTable = tables.replace(ident, delegateTable)
       if (maybePreCommittedTable == null) {
-        val searchPath = name +: (if (ident.namespace().nonEmpty) {
-          ident.namespace().toSeq
-        } else {
-          defaultNamespace().toSeq
-        })
-        throw QueryCompilationErrors.cannotReplaceMissingTableError(ident, searchPath)
+        throw QueryCompilationErrors.cannotReplaceMissingTableError(
+          ident,
+          CatalogV2Util.searchPathForTableIdentifier(StagingInMemoryTableCatalog.this, ident))
       }
     }
 
