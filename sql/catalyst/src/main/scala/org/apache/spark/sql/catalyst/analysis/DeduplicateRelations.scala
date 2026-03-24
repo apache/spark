@@ -36,7 +36,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
     def noMissingInput(p: LogicalPlan) = !p.exists(_.missingInput.nonEmpty)
 
     newPlan.resolveOperatorsUpWithPruning(
-      _.containsAnyPattern(JOIN, LATERAL_JOIN, AS_OF_JOIN, INTERSECT, EXCEPT, UNION, ZIP, COMMAND),
+      _.containsAnyPattern(JOIN, LATERAL_JOIN, AS_OF_JOIN, INTERSECT, EXCEPT, UNION, COMMAND),
       ruleId) {
       case p: LogicalPlan if !p.childrenResolved => p
       // To resolve duplicate expression IDs for Join.
@@ -56,9 +56,6 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         i.copy(right = dedupRight(left, right))
       case e @ Except(left, right, _) if !e.duplicateResolved && noMissingInput(right) =>
         e.copy(right = dedupRight(left, right))
-      // Resolve duplicate output for Zip.
-      case z @ Zip(left, right) if !z.duplicateResolved && noMissingInput(right) =>
-        z.copy(right = dedupRight(left, right))
       // Only after we finish by-name resolution for Union
       case u: Union if !u.byName && !u.duplicatesResolvedBetweenBranches =>
         val unionWithChildOutputsDeduplicated =
