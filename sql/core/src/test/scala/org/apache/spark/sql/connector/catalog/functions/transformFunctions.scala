@@ -60,21 +60,23 @@ abstract class YearsFunctionBase[O] extends ScalarFunction[Int] with ReducibleFu
   val UTC: ZoneId = ZoneId.of("UTC")
   val EPOCH_LOCAL_DATE: LocalDate = Instant.EPOCH.atZone(UTC).toLocalDate
 
-  def invoke(ts: Long): Int = {
+  protected def doInvoke(ts: Long): Long = {
     val localDate = DateTimeUtils.microsToInstant(ts).atZone(UTC).toLocalDate
-    ChronoUnit.YEARS.between(EPOCH_LOCAL_DATE, localDate).toInt
+    ChronoUnit.YEARS.between(EPOCH_LOCAL_DATE, localDate)
   }
 }
 
 // This `years` function reduces `IntegerType` partition keys to `IntegerType` partition keys when
 // partitions are reduced to partitions of a `days` function, which produces `DateType` keys.
 object YearsFunction extends YearsFunctionBase[Int]  {
+  def invoke(ts: Long): Int = doInvoke(ts).toInt
   override def reducer(otherFunction: ReducibleFunction[_, _]): Reducer[Int, Int] = null
 }
 
 // This `years` function reduces `IntegerType` partition keys to `LongType` partition keys when
 // partitions are reduced to partitions of a `days` function, which produces `DateType` keys.
 object YearsFunctionWithToYearsReducerWithLongResult extends YearsFunctionBase[Long] {
+  def invoke(ts: Long): Int = doInvoke(ts).toInt
   override def reducer(otherFunction: ReducibleFunction[_, _]): Reducer[Int, Long] = {
     if (otherFunction == DaysFunctionWithToYearsReducerWithLongResult) {
       YearsToYearsReducerWithLogResult()
