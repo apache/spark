@@ -321,24 +321,26 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 else:
                     raise
         except TypeError as e:
-            error_msg = (
-                "Exception thrown when converting pandas.Series (%s) "
-                "with name '%s' to Arrow Array (%s)."
-            )
-            raise PySparkTypeError(error_msg % (series.dtype, series.name, arrow_type)) from e
+            raise PySparkTypeError(
+                f"Cannot convert the output value of the column "
+                f"'{series.name}' with type '{series.dtype}' to the "
+                f"specified return type of the column: '{arrow_type}'."
+                f" Please check if the data types match and try again."
+            ) from e
         except ValueError as e:
             error_msg = (
-                "Exception thrown when converting pandas.Series (%s) "
-                "with name '%s' to Arrow Array (%s)."
+                f"Failed to convert the value of the column "
+                f"'{series.name}' with type '{series.dtype}' to Arrow "
+                f"type '{arrow_type}'."
             )
             if self._safecheck:
-                error_msg = error_msg + (
-                    " It can be caused by overflows or other "
-                    "unsafe conversions warned by Arrow. Arrow safe type check "
-                    "can be disabled by using SQL config "
+                error_msg += (
+                    " It can be caused by overflows or other unsafe "
+                    "conversions warned by Arrow. Arrow safe type "
+                    "check can be disabled by using SQL config "
                     "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                 )
-            raise PySparkValueError(error_msg % (series.dtype, series.name, arrow_type)) from e
+            raise PySparkValueError(error_msg) from e
 
     def _create_batch(self, series):
         """
@@ -695,18 +697,22 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
                     )
                 else:
                     raise
-        except pa.lib.ArrowException:
-            # Display the most user-friendly error messages instead of showing
-            # arrow's error message. This also works better with Spark Connect
-            # where the exception messages are by default truncated.
-            raise PySparkRuntimeError(
-                errorClass="UDTF_ARROW_TYPE_CAST_ERROR",
-                messageParameters={
-                    "col_name": series.name,
-                    "col_type": str(series.dtype),
-                    "arrow_type": arrow_type,
-                },
-            ) from None
+        except pa.lib.ArrowException as e:
+            error_msg = (
+                "Exception thrown when converting pandas.Series (%s) "
+                "with name '%s' to Arrow Array (%s)."
+                % (series.dtype, series.name, arrow_type)
+            )
+            if isinstance(e, TypeError):
+                raise PySparkTypeError(error_msg) from e
+            if self._safecheck:
+                error_msg += (
+                    " It can be caused by overflows or other unsafe "
+                    "conversions warned by Arrow. Arrow safe type "
+                    "check can be disabled by using SQL config "
+                    "`spark.sql.execution.pandas.convertToArrowArraySafely`."
+                )
+            raise PySparkValueError(error_msg) from e
 
     def __repr__(self):
         return "ArrowStreamPandasUDTFSerializer"
