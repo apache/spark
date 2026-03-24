@@ -56,13 +56,35 @@ class RocksDBWithChangelogCheckpointStateDataSourceChangeDataReaderSuite extends
       withTempDir { tempDir =>
         runStreamStreamJoinQuery(tempDir.getAbsolutePath)
 
+        // event time in microseconds, timestamp in milliseconds
+        def evtTime(sec: Int): Long = sec * 1000000L
+        def ts(sec: Int): Timestamp = new Timestamp(sec * 1000L)
+
         val keyWithTsToValuesDf = spark.read.format("statestore")
           .option(StateSourceOptions.STORE_NAME, "left-keyWithTsToValues")
           .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
           .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
           .option(StateSourceOptions.CHANGE_END_BATCH_ID, 1)
           .load(tempDir.getAbsolutePath)
-        assert(keyWithTsToValuesDf.count() > 0)
+
+        // Schema: (batch_id, change_type,
+        //   key: (field0: Int, __event_time: Long),
+        //   value: (leftId: Int, leftTime: Timestamp, matched: Boolean),
+        //   partition_id)
+        // Each entry first appears as "append" with matched=false, then an "update"
+        // with matched=true once the join finds a match on the right side.
+        checkAnswer(keyWithTsToValuesDf, Seq(
+          Row(0L, "append", Row(2, evtTime(2)), Row(2, ts(2), false), 4),
+          Row(0L, "update", Row(2, evtTime(2)), Row(2, ts(2), true), 4),
+          Row(0L, "append", Row(4, evtTime(4)), Row(4, ts(4), false), 2),
+          Row(0L, "update", Row(4, evtTime(4)), Row(4, ts(4), true), 2),
+          Row(1L, "append", Row(6, evtTime(6)), Row(6, ts(6), false), 4),
+          Row(1L, "update", Row(6, evtTime(6)), Row(6, ts(6), true), 4),
+          Row(1L, "append", Row(8, evtTime(8)), Row(8, ts(8), false), 3),
+          Row(1L, "update", Row(8, evtTime(8)), Row(8, ts(8), true), 3),
+          Row(1L, "append", Row(10, evtTime(10)), Row(10, ts(10), false), 2),
+          Row(1L, "update", Row(10, evtTime(10)), Row(10, ts(10), true), 2)
+        ))
 
         val tsWithKeyDf = spark.read.format("statestore")
           .option(StateSourceOptions.STORE_NAME, "left-tsWithKey")
@@ -70,7 +92,18 @@ class RocksDBWithChangelogCheckpointStateDataSourceChangeDataReaderSuite extends
           .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
           .option(StateSourceOptions.CHANGE_END_BATCH_ID, 1)
           .load(tempDir.getAbsolutePath)
-        assert(tsWithKeyDf.count() > 0)
+
+        // Schema: (batch_id, change_type,
+        //   key: (field0: Int, __event_time: Long),
+        //   value: (__dummy__: Void),
+        //   partition_id)
+        checkAnswer(tsWithKeyDf, Seq(
+          Row(0L, "append", Row(2, evtTime(2)), Row(null), 4),
+          Row(0L, "append", Row(4, evtTime(4)), Row(null), 2),
+          Row(1L, "append", Row(6, evtTime(6)), Row(null), 4),
+          Row(1L, "append", Row(8, evtTime(8)), Row(null), 3),
+          Row(1L, "append", Row(10, evtTime(10)), Row(null), 2)
+        ))
 
         val rightKeyWithTsToValuesDf = spark.read.format("statestore")
           .option(StateSourceOptions.STORE_NAME, "right-keyWithTsToValues")
@@ -78,7 +111,21 @@ class RocksDBWithChangelogCheckpointStateDataSourceChangeDataReaderSuite extends
           .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
           .option(StateSourceOptions.CHANGE_END_BATCH_ID, 1)
           .load(tempDir.getAbsolutePath)
-        assert(rightKeyWithTsToValuesDf.count() > 0)
+
+        // Schema: (batch_id, change_type,
+        //   key: (field0: Int, __event_time: Long),
+        //   value: (rightId: Int, rightTime: Timestamp, matched: Boolean),
+        //   partition_id)
+        // Right side values are appended with matched=true directly because the
+        // right side is processed after the left side within the same batch,
+        // so the match is found immediately.
+        checkAnswer(rightKeyWithTsToValuesDf, Seq(
+          Row(0L, "append", Row(2, evtTime(2)), Row(2, ts(2), true), 4),
+          Row(0L, "append", Row(4, evtTime(4)), Row(4, ts(4), true), 2),
+          Row(1L, "append", Row(6, evtTime(6)), Row(6, ts(6), true), 4),
+          Row(1L, "append", Row(8, evtTime(8)), Row(8, ts(8), true), 3),
+          Row(1L, "append", Row(10, evtTime(10)), Row(10, ts(10), true), 2)
+        ))
 
         val rightTsWithKeyDf = spark.read.format("statestore")
           .option(StateSourceOptions.STORE_NAME, "right-tsWithKey")
@@ -86,7 +133,18 @@ class RocksDBWithChangelogCheckpointStateDataSourceChangeDataReaderSuite extends
           .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
           .option(StateSourceOptions.CHANGE_END_BATCH_ID, 1)
           .load(tempDir.getAbsolutePath)
-        assert(rightTsWithKeyDf.count() > 0)
+
+        // Schema: (batch_id, change_type,
+        //   key: (field0: Int, __event_time: Long),
+        //   value: (__dummy__: Void),
+        //   partition_id)
+        checkAnswer(rightTsWithKeyDf, Seq(
+          Row(0L, "append", Row(2, evtTime(2)), Row(null), 4),
+          Row(0L, "append", Row(4, evtTime(4)), Row(null), 2),
+          Row(1L, "append", Row(6, evtTime(6)), Row(null), 4),
+          Row(1L, "append", Row(8, evtTime(8)), Row(null), 3),
+          Row(1L, "append", Row(10, evtTime(10)), Row(null), 2)
+        ))
       }
     }
   }
