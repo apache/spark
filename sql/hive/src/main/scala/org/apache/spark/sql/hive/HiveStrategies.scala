@@ -243,8 +243,8 @@ case class RelationConversions(
             overwrite,
             ifPartitionNotExists,
             byName,
-            withSchemaEvolution,
-            replaceCriteriaOpt)
+            replaceCriteriaOpt,
+            withSchemaEvolution)
           if query.resolved && DDLUtils.isHiveTable(r.tableMeta) &&
             ((r.isPartitioned && conf.getConf(HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE)) ||
               (!r.isPartitioned && conf.getConf(HiveUtils.CONVERT_INSERTING_UNPARTITIONED_TABLE)))
@@ -257,8 +257,8 @@ case class RelationConversions(
           overwrite,
           ifPartitionNotExists,
           byName,
-          withSchemaEvolution,
-          replaceCriteriaOpt)
+          replaceCriteriaOpt,
+          withSchemaEvolution)
 
       // Read path
       case relation: HiveTableRelation if doConvertHiveTableRelationForRead(relation) =>

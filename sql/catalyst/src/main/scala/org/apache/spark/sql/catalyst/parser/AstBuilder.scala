@@ -875,7 +875,8 @@ class AstBuilder extends DataTypeAstBuilder
       userSpecifiedCols: Seq[String],
       partitionSpec: Map[String, Option[String]],
       ifPartitionNotExists: Boolean,
-      byName: Boolean)
+      byName: Boolean,
+      replaceCriteriaOpt: Option[InsertReplaceCriteria] = None)
 
   /**
    * Parameters used for writing query to a directory: (isLocal, CatalogStorageFormat, provider).
@@ -966,42 +967,22 @@ class AstBuilder extends DataTypeAstBuilder
           }
         })
       case ctx: InsertIntoReplaceUsingContext =>
-        val options = Option(ctx.optionsClause())
-        val byName = ctx.NAME() != null
-        val replaceUsingCols =
-          Option(ctx.identifierList()).map(visitIdentifierList).getOrElse(Nil)
-        withIdentClause(ctx.identifierReference, Seq(query), (ident, otherPlans) => {
-          InsertIntoStatement(
-            table = createUnresolvedRelation(ctx.identifierReference, ident, options,
-              Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false),
-            partitionSpec = Map.empty,
-            userSpecifiedCols = Seq.empty,
+        val insertParams = visitInsertIntoReplaceUsing(ctx)
+        withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
+          createInsertIntoStatementForReplaceOnOrUsing(
+            insertParams,
+            ident,
             query = otherPlans.head,
-            overwrite = true,
-            ifPartitionNotExists = false,
-            byName = byName,
-            withSchemaEvolution = ctx.EVOLUTION() != null,
-            replaceCriteriaOpt = Some(InsertReplaceUsing(replaceUsingCols)))
+            withSchemaEvolution = ctx.EVOLUTION() != null)
         })
       case ctx: InsertIntoReplaceOnContext =>
-        val options = Option(ctx.optionsClause())
-        val byName = ctx.NAME() != null
-        val replaceOnCond = expression(ctx.replaceOnCondition)
-        val tableAliasOpt =
-          getTableAliasWithoutColumnAlias(ctx.tableAlias(), "INSERT REPLACE ON")
-        withIdentClause(ctx.identifierReference, Seq(query), (ident, otherPlans) => {
-          val queryWithAlias = otherPlans.head
-          InsertIntoStatement(
-            table = createUnresolvedRelation(ctx.identifierReference, ident, options,
-              Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false),
-            partitionSpec = Map.empty,
-            userSpecifiedCols = Seq.empty,
-            query = queryWithAlias,
-            overwrite = true,
-            ifPartitionNotExists = false,
-            byName = byName,
-            withSchemaEvolution = ctx.EVOLUTION() != null,
-            replaceCriteriaOpt = Some(InsertReplaceOn(replaceOnCond, tableAliasOpt)))
+        val insertParams = visitInsertIntoReplaceOn(ctx)
+        withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
+          createInsertIntoStatementForReplaceOnOrUsing(
+            insertParams,
+            ident,
+            query = otherPlans.head,
+            withSchemaEvolution = ctx.EVOLUTION() != null)
         })
       case dir: InsertOverwriteDirContext =>
         val (isLocal, storage, provider) = visitInsertOverwriteDir(dir)
@@ -1063,6 +1044,80 @@ class AstBuilder extends DataTypeAstBuilder
       partitionSpec = partitionSpec,
       ifPartitionNotExists = ctx.EXISTS() != null,
       byName = ctx.NAME() != null)
+  }
+
+  /**
+   * Add an INSERT INTO REPLACE USING operation to the logical plan.
+   */
+  override def visitInsertIntoReplaceUsing(
+      ctx: InsertIntoReplaceUsingContext): InsertTableParams = withOrigin(ctx) {
+    val byName = ctx.NAME() != null
+    val replaceUsingCols = visitIdentifierList(ctx.identifierList())
+
+    createInsertIntoReplaceOnOrUsingParams(
+      relationCtx = ctx.identifierReference(),
+      optionsCtx = ctx.optionsClause(),
+      byName = byName,
+      replaceCriteriaOpt = Some(InsertReplaceUsing(replaceUsingCols))
+    )
+  }
+
+  /**
+   * Add an INSERT INTO REPLACE ON operation to the logical plan.
+   */
+  override def visitInsertIntoReplaceOn(
+      ctx: InsertIntoReplaceOnContext): InsertTableParams = withOrigin(ctx) {
+    val byName = ctx.NAME() != null
+    val replaceOnCond = expression(ctx.replaceOnCondition)
+    val tableAliasOpt = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "INSERT REPLACE ON")
+
+    createInsertIntoReplaceOnOrUsingParams(
+      relationCtx = ctx.identifierReference(),
+      optionsCtx = ctx.optionsClause(),
+      byName = byName,
+      replaceCriteriaOpt = Some(InsertReplaceOn(replaceOnCond, tableAliasOpt))
+    )
+  }
+
+  private def createInsertIntoReplaceOnOrUsingParams(
+      relationCtx: IdentifierReferenceContext,
+      optionsCtx: OptionsClauseContext,
+      byName: Boolean,
+      replaceCriteriaOpt: Option[InsertReplaceCriteria]): InsertTableParams = {
+    InsertTableParams(
+      relationCtx = relationCtx,
+      options = Option(optionsCtx),
+      userSpecifiedCols = Seq.empty,
+      partitionSpec = Map[String, Option[String]](),
+      ifPartitionNotExists = false,
+      byName = byName,
+      replaceCriteriaOpt = replaceCriteriaOpt)
+  }
+
+  /**
+   * Creates an [[InsertIntoStatement]] for INSERT REPLACE USING/ON operations.
+   */
+  private def createInsertIntoStatementForReplaceOnOrUsing(
+      insertParams: InsertTableParams,
+      ident: Seq[String],
+      query: LogicalPlan,
+      withSchemaEvolution: Boolean): InsertIntoStatement = {
+    InsertIntoStatement(
+      table = createUnresolvedRelation(
+        ctx = insertParams.relationCtx,
+        ident = ident,
+        optionsClause = insertParams.options,
+        writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE),
+        isStreaming = false
+      ),
+      partitionSpec = insertParams.partitionSpec,
+      userSpecifiedCols = Seq.empty,
+      query = query,
+      overwrite = true,
+      ifPartitionNotExists = insertParams.ifPartitionNotExists,
+      byName = insertParams.byName,
+      replaceCriteriaOpt = insertParams.replaceCriteriaOpt,
+      withSchemaEvolution = withSchemaEvolution)
   }
 
   /**

@@ -173,8 +173,10 @@ case class QualifiedColType(
  *                             Only valid for static partitions.
  * @param byName               If true, reorder the data columns to match the column names of the
  *                             target table.
+ * @param replaceCriteriaOpt   If specified, we are using INSERT REPLACE ON/USING,
+ *                             which atomically deletes any rows that match the
+ *                             new rows before inserting the new rows into the table.
  * @param withSchemaEvolution  If true, enables automatic schema evolution for the operation.
- * @param replaceCriteriaOpt   Optional replace criteria for INSERT REPLACE ON/USING operations.
  */
 case class InsertIntoStatement(
     table: LogicalPlan,
@@ -184,8 +186,9 @@ case class InsertIntoStatement(
     overwrite: Boolean,
     ifPartitionNotExists: Boolean,
     byName: Boolean = false,
-    withSchemaEvolution: Boolean = false,
-    replaceCriteriaOpt: Option[InsertReplaceCriteria] = None) extends UnaryParsedStatement {
+    replaceCriteriaOpt: Option[InsertReplaceCriteria] = None,
+    withSchemaEvolution: Boolean = false)
+  extends UnaryParsedStatement {
 
   require(overwrite || !ifPartitionNotExists,
     "IF NOT EXISTS is only valid in INSERT OVERWRITE")
@@ -194,37 +197,28 @@ case class InsertIntoStatement(
   require(userSpecifiedCols.isEmpty || !byName,
     "BY NAME is only valid without specified cols")
   require(replaceCriteriaOpt.isEmpty || userSpecifiedCols.isEmpty,
-    "REPLACE ON/USING is not compatible with user specified columns")
+    "userSpecifiedCols is not compatible with REPLACE USING/ON")
   require(replaceCriteriaOpt.isEmpty || partitionSpec.isEmpty,
-    "REPLACE ON/USING is not compatible with a partition spec")
+    "partitionSpec is not compatible with REPLACE USING/ON")
   require(replaceCriteriaOpt.isEmpty || overwrite,
-    "REPLACE ON/USING requires overwrite mode")
+    "overwrite is not compatible with REPLACE USING/ON")
 
   override def child: LogicalPlan = query
   override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoStatement =
     copy(query = newChild)
 }
 
-/**
- * Sealed trait representing the replace criteria for INSERT REPLACE ON/USING operations.
- */
-sealed trait InsertReplaceCriteria
+sealed abstract class InsertReplaceCriteria
 
 /**
- * Replace criteria for INSERT INTO ... REPLACE ON <condition>.
- * Rows matching the condition in the target table are replaced by rows from the source query.
- *
- * @param condition      The boolean expression used to match rows for replacement.
- * @param tableAliasOpt Optional alias for the target table used in the condition.
+ * Rows are matched by comparing equality for this list of specified
+ * columns which must exist in both the table and the query.
+ */
+case class InsertReplaceUsing(cols: Seq[String]) extends InsertReplaceCriteria
+
+/**
+ * Rows are matched based on the specified boolean expression.
  */
 case class InsertReplaceOn(
-    condition: Expression,
+    cond: Expression,
     tableAliasOpt: Option[String]) extends InsertReplaceCriteria
-
-/**
- * Replace criteria for INSERT INTO ... REPLACE USING (<columns>).
- * Rows are replaced based on matching values in the specified columns.
- *
- * @param columns The list of column names used for matching.
- */
-case class InsertReplaceUsing(columns: Seq[String]) extends InsertReplaceCriteria
