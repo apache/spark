@@ -122,15 +122,15 @@ trait ClientTypeOps { self: TypeApiOps =>
    * Formats an external-type value for Hive output.
    *
    * Used by HiveResult.toHiveString. The input is an external-type value (e.g.,
-   * java.time.LocalTime for TimeType), NOT the internal representation.
-   * Most types override this simple version. Types that need different formatting
-   * when nested (e.g., quoting) should override the 2-param overload instead.
+   * java.time.LocalTime for TimeType), NOT the internal representation. Most types override this
+   * simple version. Types that need different formatting when nested (e.g., quoting) should
+   * override the 2-param overload instead.
    */
   def formatExternal(value: Any): String
 
   /**
-   * Formats an external-type value for Hive output with nesting context.
-   * Default delegates to the simple version. Override if nesting affects formatting.
+   * Formats an external-type value for Hive output with nesting context. Default delegates to the
+   * simple version. Override if nesting affects formatting.
    */
   def formatExternal(value: Any, nested: Boolean): String = formatExternal(value)
 
