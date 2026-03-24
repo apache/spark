@@ -338,8 +338,12 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN",
-            messageParameters={"arg_name": "condition", "arg_type": "bool"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column",
+                "arg_name": "condition",
+                "arg_type": "bool",
+            },
         )
 
     def test_sorting_functions_with_column(self):
@@ -1839,8 +1843,12 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_DATATYPE_OR_STR",
-            messageParameters={"arg_name": "schema", "arg_type": "list"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column, str or DataType",
+                "arg_name": "schema",
+                "arg_type": "list",
+            },
         )
 
         # test get_json_object

@@ -537,8 +537,9 @@ class SparkConnectStatTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_BOOL_OR_FLOAT_OR_INT_OR_STR",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "bool, float, int or str",
                 "arg_name": "value",
                 "arg_type": "bytes",
             },
