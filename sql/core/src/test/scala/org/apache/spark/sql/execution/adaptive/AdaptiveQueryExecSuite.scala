@@ -834,6 +834,98 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("Fallback to shuffled join should recover from runtime broadcast size failure") {
+    withTempView("fallback_t1", "fallback_t2") {
+      spark.range(0, 100).selectExpr("id AS k").createOrReplaceTempView("fallback_t1")
+      spark.range(0, 50).selectExpr("id AS k").createOrReplaceTempView("fallback_t2")
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+          SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+          SQLConf.ADAPTIVE_BROADCAST_JOIN_FALLBACK_TO_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.MAX_BROADCAST_TABLE_SIZE.key -> "1",
+          SQLConf.PREFER_SORTMERGEJOIN.key -> "true") {
+        val df = sql(
+          "SELECT /*+ BROADCAST(fallback_t2) */ COUNT(*) " +
+            "FROM fallback_t1 JOIN fallback_t2 ON fallback_t1.k = fallback_t2.k")
+        val adaptivePlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+
+        assert(findTopLevelBroadcastHashJoin(adaptivePlan.executedPlan).nonEmpty)
+
+        checkAnswer(df, Row(50))
+
+        val finalPlan = stripAQEPlan(df.queryExecution.executedPlan)
+        assert(findTopLevelBroadcastHashJoin(finalPlan).isEmpty)
+        assert(findTopLevelSortMergeJoin(finalPlan).nonEmpty)
+      }
+    }
+  }
+
+  test("Fallback to shuffled join should not disable broadcast joins globally") {
+    withTempView("fallback_t1", "fallback_t2", "fallback_t3") {
+      spark.range(0, 100).selectExpr("id AS k").createOrReplaceTempView("fallback_t1")
+      spark.range(0, 50).selectExpr("id AS k").createOrReplaceTempView("fallback_t2")
+      spark.range(0, 5).selectExpr("id AS k").createOrReplaceTempView("fallback_t3")
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+          SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+          SQLConf.ADAPTIVE_BROADCAST_JOIN_FALLBACK_TO_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.PREFER_SORTMERGEJOIN.key -> "true") {
+        withSQLConf(SQLConf.MAX_BROADCAST_TABLE_SIZE.key -> "1") {
+          val fallbackDf = sql(
+            "SELECT /*+ BROADCAST(fallback_t2) */ COUNT(*) " +
+              "FROM fallback_t1 JOIN fallback_t2 ON fallback_t1.k = fallback_t2.k")
+          checkAnswer(fallbackDf, Row(50))
+          val fallbackFinalPlan = stripAQEPlan(fallbackDf.queryExecution.executedPlan)
+          assert(findTopLevelBroadcastHashJoin(fallbackFinalPlan).isEmpty)
+          assert(findTopLevelSortMergeJoin(fallbackFinalPlan).nonEmpty)
+        }
+
+        withSQLConf(SQLConf.MAX_BROADCAST_TABLE_SIZE.key -> "10MB") {
+          val broadcastDf = sql(
+            "SELECT /*+ BROADCAST(fallback_t3) */ COUNT(*) " +
+              "FROM fallback_t1 JOIN fallback_t3 ON fallback_t1.k = fallback_t3.k")
+          checkAnswer(broadcastDf, Row(5))
+          val broadcastFinalPlan = stripAQEPlan(broadcastDf.queryExecution.executedPlan)
+          assert(findTopLevelBroadcastHashJoin(broadcastFinalPlan).nonEmpty)
+        }
+      }
+    }
+  }
+
+  test("Fallback to shuffled join should preserve unrelated broadcast join in same query") {
+    withTempView("fallback_t1", "fallback_t2", "fallback_t3") {
+      spark.range(0, 100).selectExpr("id AS k").createOrReplaceTempView("fallback_t1")
+      spark.range(0, 50)
+        .selectExpr("id AS k", "repeat('x', 200) AS payload")
+        .createOrReplaceTempView("fallback_t2")
+      spark.range(0, 5).selectExpr("id AS k").createOrReplaceTempView("fallback_t3")
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+          SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+          SQLConf.ADAPTIVE_BROADCAST_JOIN_FALLBACK_TO_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.MAX_BROADCAST_TABLE_SIZE.key -> "1KB",
+          SQLConf.PREFER_SORTMERGEJOIN.key -> "true") {
+        val df = sql(
+          "SELECT /*+ BROADCAST(fallback_t2), BROADCAST(fallback_t3) */ COUNT(*) " +
+            "FROM fallback_t1 " +
+            "JOIN fallback_t2 ON fallback_t1.k = fallback_t2.k " +
+            "JOIN fallback_t3 ON fallback_t1.k = fallback_t3.k")
+        val adaptivePlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+
+        assert(findTopLevelBroadcastHashJoin(adaptivePlan.executedPlan).size == 2)
+
+        checkAnswer(df, Row(5))
+
+        val finalPlan = stripAQEPlan(df.queryExecution.executedPlan)
+        assert(findTopLevelBroadcastHashJoin(finalPlan).size == 1)
+        assert(findTopLevelSortMergeJoin(finalPlan).nonEmpty)
+      }
+    }
+  }
+
   test("Re-optimize should preserve input broadcast exchange") {
     val qe = sql("SELECT key FROM testData").queryExecution
     val inputPlan = BroadcastExchangeExec(IdentityBroadcastMode, qe.sparkPlan)
