@@ -956,12 +956,20 @@ def spark_column_equals(left: Column, right: Column) -> bool:
         if not isinstance(left, ConnectColumn):
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={"expected_type": "Column", "arg_name": "left", "arg_type": type(left).__name__},
+                messageParameters={
+                    "expected_type": "Column",
+                    "arg_name": "left",
+                    "arg_type": type(left).__name__,
+                },
             )
         if not isinstance(right, ConnectColumn):
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={"expected_type": "Column", "arg_name": "right", "arg_type": type(right).__name__},
+                messageParameters={
+                    "expected_type": "Column",
+                    "arg_name": "right",
+                    "arg_type": type(right).__name__,
+                },
             )
         return repr(left).replace("`", "") == repr(right).replace("`", "")
     else:
@@ -970,12 +978,20 @@ def spark_column_equals(left: Column, right: Column) -> bool:
         if not isinstance(left, ClassicColumn):
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={"expected_type": "Column", "arg_name": "left", "arg_type": type(left).__name__},
+                messageParameters={
+                    "expected_type": "Column",
+                    "arg_name": "left",
+                    "arg_type": type(left).__name__,
+                },
             )
         if not isinstance(right, ClassicColumn):
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={"expected_type": "Column", "arg_name": "right", "arg_type": type(right).__name__},
+                messageParameters={
+                    "expected_type": "Column",
+                    "arg_name": "right",
+                    "arg_type": type(right).__name__,
+                },
             )
         return left._jc.equals(right._jc)
 

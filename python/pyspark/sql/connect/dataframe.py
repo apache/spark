@@ -815,7 +815,11 @@ class DataFrame(ParentDataFrame):
         if not isinstance(vertical, bool):
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={"expected_type": "bool", "arg_name": "vertical", "arg_type": type(vertical).__name__},
+                messageParameters={
+                    "expected_type": "bool",
+                    "arg_name": "vertical",
+                    "arg_type": type(vertical).__name__,
+                },
             )
 
         _truncate: int = -1
@@ -875,7 +879,11 @@ class DataFrame(ParentDataFrame):
         if not isinstance(col, Column):
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={"expected_type": "Column", "arg_name": "col", "arg_type": type(col).__name__},
+                messageParameters={
+                    "expected_type": "Column",
+                    "arg_name": "col",
+                    "arg_type": type(col).__name__,
+                },
             )
         return DataFrame(
             plan.WithColumns(
@@ -1189,7 +1197,11 @@ class DataFrame(ParentDataFrame):
         if not isinstance(value, (float, int, str, bool, dict)):
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={"expected_type": "bool, dict, float, int or str", "arg_name": "value", "arg_type": type(value).__name__},
+                messageParameters={
+                    "expected_type": "bool, dict, float, int or str",
+                    "arg_name": "value",
+                    "arg_type": type(value).__name__,
+                },
             )
         if isinstance(value, dict):
             if len(value) == 0:
@@ -1360,7 +1372,11 @@ class DataFrame(ParentDataFrame):
         ):
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={"expected_type": "bool, float, int, list, None, str or tuple", "arg_name": "value", "arg_type": type(value).__name__},
+                messageParameters={
+                    "expected_type": "bool, float, int, list, None, str or tuple",
+                    "arg_name": "value",
+                    "arg_type": type(value).__name__,
+                },
             )
 
         if isinstance(to_replace, (list, tuple)) and isinstance(value, (list, tuple)):

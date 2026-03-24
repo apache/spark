@@ -302,7 +302,11 @@ class Column(ParentColumn):
         if not isinstance(condition, Column):
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={"expected_type": "Column", "arg_name": "condition", "arg_type": type(condition).__name__},
+                messageParameters={
+                    "expected_type": "Column",
+                    "arg_name": "condition",
+                    "arg_type": type(condition).__name__,
+                },
             )
 
         if not isinstance(self._expr, CaseWhen):
@@ -528,7 +532,11 @@ class Column(ParentColumn):
         if not isinstance(col, Column):
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={"expected_type": "Column", "arg_name": "col", "arg_type": type(col).__name__},
+                messageParameters={
+                    "expected_type": "Column",
+                    "arg_name": "col",
+                    "arg_type": type(col).__name__,
+                },
             )
 
         return Column(WithField(self._expr, fieldName, col._expr))

@@ -200,7 +200,11 @@ class DataFrameStatTestsMixin:
         self.check_error(
             exception=pe.exception,
             errorClass="NOT_EXPECTED_TYPE",
-            messageParameters={"expected_type": "bool, dict, float, int or str", "arg_name": "value", "arg_type": "list"},
+            messageParameters={
+                "expected_type": "bool, dict, float, int or str",
+                "arg_name": "value",
+                "arg_type": "list",
+            },
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -408,7 +412,11 @@ class DataFrameStatTestsMixin:
         self.check_error(
             exception=pe.exception,
             errorClass="NOT_EXPECTED_TYPE",
-            messageParameters={"expected_type": "bool, dict, float, int, str or tuple", "arg_name": "to_replace", "arg_type": "function"},
+            messageParameters={
+                "expected_type": "bool, dict, float, int, str or tuple",
+                "arg_name": "to_replace",
+                "arg_type": "function",
+            },
         )
 
     def test_unpivot(self):

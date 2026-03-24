@@ -601,7 +601,11 @@ class BaseUDFTestsMixin(object):
             self.check_error(
                 exception=pe.exception,
                 errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={"expected_type": "callable", "arg_name": "func", "arg_type": "str"},
+                messageParameters={
+                    "expected_type": "callable",
+                    "arg_name": "func",
+                    "arg_type": "str",
+                },
             )
 
     def test_non_existed_udf(self):

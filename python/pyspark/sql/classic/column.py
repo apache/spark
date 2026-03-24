@@ -382,7 +382,11 @@ class Column(ParentColumn):
         if not isinstance(col, Column):
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={"expected_type": "Column", "arg_name": "col", "arg_type": type(col).__name__},
+                messageParameters={
+                    "expected_type": "Column",
+                    "arg_name": "col",
+                    "arg_type": type(col).__name__,
+                },
             )
 
         return Column(self._jc.withField(fieldName, col._jc))
@@ -588,7 +592,11 @@ class Column(ParentColumn):
         if not isinstance(condition, Column):
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={"expected_type": "Column", "arg_name": "condition", "arg_type": type(condition).__name__},
+                messageParameters={
+                    "expected_type": "Column",
+                    "arg_name": "condition",
+                    "arg_type": type(condition).__name__,
+                },
             )
         v = value._jc if isinstance(value, Column) else enum_to_value(value)
         jc = self._jc.when(condition._jc, v)
