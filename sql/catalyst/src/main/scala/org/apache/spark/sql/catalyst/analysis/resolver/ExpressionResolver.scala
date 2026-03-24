@@ -43,6 +43,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{
   Aggregate,
   Filter,
   LogicalPlan,
+  Pivot,
   Project,
   Sort
 }
@@ -133,7 +134,6 @@ class ExpressionResolver(
   private val scopes = resolver.getNameScopes
   private val subqueryRegistry = resolver.getSubqueryRegistry
   private val operatorResolutionContextStack = resolver.getOperatorResolutionContextStack
-
   private val aliasResolver = new AliasResolver(this)
   private val timezoneAwareExpressionResolver = new TimezoneAwareExpressionResolver(this)
   private val binaryArithmeticResolver = new BinaryArithmeticResolver(this)
@@ -219,6 +219,53 @@ class ExpressionResolver(
     val (resolvedExpression, _) =
       resolveExpressionTreeInOperatorImpl(unresolvedExpression, parentOperator)
     resolvedExpression
+  }
+
+  /**
+   * Resolve [[Pivot.aggregates]] expressions. This method resolves each expression using
+   * [[resolveExpressionTreeInOperatorImpl]]. We set the `resolvingPivotAggregates` flag to true
+   * to indicate that we are resolving pivot aggregates.
+   */
+  def resolvePivotAggregates(pivot: Pivot): Seq[Expression] = {
+    pivot.aggregates.map { expression =>
+      val (resolved, _) = resolveExpressionTreeInOperatorImpl(
+        unresolvedExpression = expression,
+        parentOperator = pivot,
+        resolvingPivotAggregates = true
+      )
+      resolved
+    }
+  }
+
+  /**
+   * Resolve [[Unpivot.values]] or [[Unpivot.ids]] expressions. This method first expands [[Star]]
+   * expressions, then resolves each expression using [[resolveExpressionTreeInOperatorImpl]].
+   * We set the `shouldPreserveAlias` flag to true since both [[Unpivot.values]] and
+   * [[Unpivot.ids]] are sequences of [[NamedExpression]]s.
+   */
+  def resolveUnpivotArguments(
+      arguments: Seq[Expression],
+      unpivot: LogicalPlan): Seq[NamedExpression] = {
+    val argumentsWithStarsExpanded = traversals.withNewTraversal(unpivot) {
+      expandStarExpressions(arguments)
+    }
+
+    argumentsWithStarsExpanded.map { argument =>
+      val (resolvedExpression, _) = resolveExpressionTreeInOperatorImpl(
+        parentOperator = unpivot,
+        unresolvedExpression = argument,
+        shouldPreserveAlias = true
+      )
+      resolvedExpression.asInstanceOf[NamedExpression]
+    }
+  }
+
+  /**
+   * Expand [[Star]] expressions in the given sequence of expressions.
+   */
+  def expandStarExpressions(expressions: Seq[Expression]): Seq[Expression] = expressions.flatMap {
+    case star: Star => expandStar(star)
+    case other => Seq(other)
   }
 
   /**
@@ -603,7 +650,8 @@ class ExpressionResolver(
       unresolvedExpression: Expression,
       parentOperator: LogicalPlan,
       shouldPreserveAlias: Boolean = false,
-      resolvingGroupingExpressions: Boolean = false
+      resolvingGroupingExpressions: Boolean = false,
+      resolvingPivotAggregates: Boolean = false
   ): (Expression, ExpressionResolutionContext) = {
     traversals.withNewTraversal(
       parentOperator = parentOperator,
@@ -615,7 +663,8 @@ class ExpressionResolver(
         new ExpressionResolutionContext(
           isRoot = true,
           shouldPreserveAlias = shouldPreserveAlias,
-          resolvingGroupingExpressions = resolvingGroupingExpressions
+          resolvingGroupingExpressions = resolvingGroupingExpressions,
+          resolvingPivotAggregates = resolvingPivotAggregates
         )
       )
 

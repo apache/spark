@@ -65,7 +65,7 @@ def main(infile: IO, outfile: IO) -> None:
         connect_url = os.environ["SPARK_CONNECT_LOCAL_URL"]
         session_id = utf8_deserializer.loads(infile)
 
-        print(f"{log_name} is starting with " f"url {connect_url} and sessionId {session_id}.")
+        print(f"{log_name} is starting with url {connect_url} and sessionId {session_id}.")
 
         # To attach to the existing SparkSession, we're setting the session_id in the URL.
         connect_url = connect_url + ";session_id=" + session_id

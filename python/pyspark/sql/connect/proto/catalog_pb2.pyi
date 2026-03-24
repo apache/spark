@@ -282,7 +282,9 @@ class Catalog(google.protobuf.message.Message):
             b"uncache_table",
         ],
     ) -> None: ...
-    def WhichOneof(self, oneof_group: typing_extensions.Literal["cat_type", b"cat_type"]) -> (
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["cat_type", b"cat_type"]
+    ) -> (
         typing_extensions.Literal[
             "current_database",
             "set_current_database",
@@ -707,13 +709,11 @@ class CreateExternalTable(google.protobuf.message.Message):
     @property
     def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
         """(Optional)"""
-
     @property
     def options(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
         """Options could be empty for valid data source format.
         The map key is case insensitive.
         """
-
     def __init__(
         self,
         *,
@@ -815,13 +815,11 @@ class CreateTable(google.protobuf.message.Message):
     @property
     def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
         """(Optional)"""
-
     @property
     def options(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
         """Options could be empty for valid data source format.
         The map key is case insensitive.
         """
-
     def __init__(
         self,
         *,
@@ -985,7 +983,6 @@ class CacheTable(google.protobuf.message.Message):
     @property
     def storage_level(self) -> pyspark.sql.connect.proto.common_pb2.StorageLevel:
         """(Optional)"""
-
     def __init__(
         self,
         *,

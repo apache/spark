@@ -192,8 +192,7 @@ def sql(
         from pyspark.pandas import sql_processor
 
         warnings.warn(
-            "Deprecated in 3.3.0, and the legacy behavior "
-            "will be removed in the future releases.",
+            "Deprecated in 3.3.0, and the legacy behavior will be removed in the future releases.",
             FutureWarning,
         )
         return sql_processor.sql(query, index_col=index_col, **kwargs)

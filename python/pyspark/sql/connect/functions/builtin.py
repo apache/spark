@@ -1681,7 +1681,7 @@ reduce.__doc__ = pysparkfuncs.reduce.__doc__
 
 
 def array(
-    *cols: Union["ColumnOrName", Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]
+    *cols: Union["ColumnOrName", Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]],
 ) -> Column:
     if len(cols) == 1 and isinstance(cols[0], (list, set, tuple)):
         cols = cols[0]  # type: ignore[assignment]
@@ -1853,7 +1853,7 @@ concat.__doc__ = pysparkfuncs.concat.__doc__
 
 
 def create_map(
-    *cols: Union["ColumnOrName", Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]
+    *cols: Union["ColumnOrName", Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]],
 ) -> Column:
     if len(cols) == 1 and isinstance(cols[0], (list, set, tuple)):
         cols = cols[0]  # type: ignore[assignment]
@@ -2052,7 +2052,7 @@ json_tuple.__doc__ = pysparkfuncs.json_tuple.__doc__
 
 
 def map_concat(
-    *cols: Union["ColumnOrName", Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]
+    *cols: Union["ColumnOrName", Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]],
 ) -> Column:
     if len(cols) == 1 and isinstance(cols[0], (list, set, tuple)):
         cols = cols[0]  # type: ignore[assignment]
@@ -2338,7 +2338,7 @@ sort_array.__doc__ = pysparkfuncs.sort_array.__doc__
 
 
 def struct(
-    *cols: Union["ColumnOrName", Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]
+    *cols: Union["ColumnOrName", Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]],
 ) -> Column:
     if len(cols) == 1 and isinstance(cols[0], (list, set, tuple)):
         cols = cols[0]  # type: ignore[assignment]

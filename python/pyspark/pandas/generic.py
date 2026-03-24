@@ -486,7 +486,7 @@ class Frame(object, metaclass=ABCMeta):
         if isinstance(func, tuple):
             func, target = func
             if target in kwargs:
-                raise ValueError("%s is both the pipe target and a keyword " "argument" % target)
+                raise ValueError("%s is both the pipe target and a keyword argument" % target)
             kwargs[target] = self
             return func(*args, **kwargs)
         else:
@@ -1099,9 +1099,7 @@ class Frame(object, metaclass=ABCMeta):
         elif isinstance(self, ps.Series):
             f = pd.Series.to_excel
         else:
-            raise TypeError(
-                "Constructor expects DataFrame or Series; however, " "got [%s]" % (self,)
-            )
+            raise TypeError("Constructor expects DataFrame or Series; however, got [%s]" % (self,))
         return validate_arguments_and_invoke_function(
             psdf._to_internal_pandas(), self.to_excel, f, args
         )
@@ -1219,9 +1217,7 @@ class Frame(object, metaclass=ABCMeta):
         elif isinstance(self, ps.Series):
             f = pd.Series.to_hdf
         else:
-            raise TypeError(
-                "Constructor expects DataFrame or Series; however, " "got [%s]" % (self,)
-            )
+            raise TypeError("Constructor expects DataFrame or Series; however, got [%s]" % (self,))
         return validate_arguments_and_invoke_function(
             psdf._to_internal_pandas(), self.to_hdf, f, args
         )

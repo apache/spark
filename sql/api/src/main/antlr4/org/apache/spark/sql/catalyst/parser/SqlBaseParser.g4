@@ -431,8 +431,9 @@ createPipelineDatasetHeader
     ;
 
 streamRelationPrimary
-    : STREAM multipartIdentifier optionsClause?
-      identifiedByClause? watermarkClause? tableAlias                  #streamTableName
+    : STREAM multipartIdentifier streamChangesClause?
+      optionsClause? identifiedByClause?
+      watermarkClause? tableAlias                                      #streamTableName
     | STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN
       optionsClause? identifiedByClause?
       watermarkClause? tableAlias                                      #streamTableName
@@ -900,6 +901,20 @@ temporalClause
     | FOR? (SYSTEM_TIME | TIMESTAMP) AS OF timestamp=valueExpression
     ;
 
+changesClause
+    : CHANGES FROM (SYSTEM_VERSION | VERSION) startingVersion=version (INCLUSIVE | startExclusive=EXCLUSIVE)?
+        (TO (SYSTEM_VERSION | VERSION) endingVersion=version (INCLUSIVE | endExclusive=EXCLUSIVE)?)?
+    | CHANGES FROM (SYSTEM_TIME | TIMESTAMP) startingTimestamp=valueExpression (INCLUSIVE | startExclusive=EXCLUSIVE)?
+        (TO (SYSTEM_TIME | TIMESTAMP) endingTimestamp=valueExpression (INCLUSIVE | endExclusive=EXCLUSIVE)?)?
+    ;
+
+// Like changesClause but startingVersion/startingTimestamp is optional (streaming can start
+// without an explicit starting point) and there is no ending bound (streaming is open-ended).
+streamChangesClause
+    : CHANGES (FROM (SYSTEM_VERSION | VERSION) startingVersion=version (INCLUSIVE | startExclusive=EXCLUSIVE)?)?
+    | CHANGES (FROM (SYSTEM_TIME | TIMESTAMP) startingTimestamp=valueExpression (INCLUSIVE | startExclusive=EXCLUSIVE)?)?
+    ;
+
 aggregationClause
     : GROUP BY groupingExpressionsWithGroupingAnalytics+=groupByClause
         (COMMA groupingExpressionsWithGroupingAnalytics+=groupByClause)*
@@ -1071,6 +1086,8 @@ identifierComment
 
 relationPrimary
     : streamRelationPrimary                                 #streamRelation
+    | identifierReference changesClause
+      optionsClause? tableAlias                             #changelogTableName
     | identifierReference temporalClause?
       optionsClause? sample? watermarkClause? tableAlias    #tableName
     | LEFT_PAREN query RIGHT_PAREN sample? watermarkClause?
@@ -1916,6 +1933,7 @@ ansiNonReserved
     | CATALOG
     | CATALOGS
     | CHANGE
+    | CHANGES
     | CHAR
     | CHARACTER
     | CLEAR
@@ -1977,6 +1995,7 @@ ansiNonReserved
     | EVOLUTION
     | EXCHANGE
     | EXCLUDE
+    | EXCLUSIVE
     | EXISTS
     | EXIT
     | EXPLAIN
@@ -2012,6 +2031,7 @@ ansiNonReserved
     | IMMEDIATE
     | IMPORT
     | INCLUDE
+    | INCLUSIVE
     | INCREMENT
     | INDEX
     | INDEXES
@@ -2287,6 +2307,7 @@ nonReserved
     | CATALOG
     | CATALOGS
     | CHANGE
+    | CHANGES
     | CHAR
     | CHARACTER
     | CHECK
@@ -2362,6 +2383,7 @@ nonReserved
     | EVOLUTION
     | EXCHANGE
     | EXCLUDE
+    | EXCLUSIVE
     | EXECUTE
     | EXISTS
     | EXIT
@@ -2408,6 +2430,7 @@ nonReserved
     | IMPORT
     | IN
     | INCLUDE
+    | INCLUSIVE
     | INCREMENT
     | INDEX
     | INDEXES
