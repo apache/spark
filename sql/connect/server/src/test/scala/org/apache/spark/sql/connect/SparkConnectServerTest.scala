@@ -39,7 +39,7 @@ import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionKey, SparkConnectService}
 import org.apache.spark.sql.execution.arrow.ArrowAllocatorLeakCheck
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.util.CloseableIterator
+import org.apache.spark.sql.util.{ArrowUtils, CloseableIterator}
 
 /**
  * Base class and utilities for a test suite that starts and tests the real SparkConnectService
@@ -68,18 +68,17 @@ trait SparkConnectServerTest extends SharedSparkSession with ArrowAllocatorLeakC
 
   override def afterAll(): Unit = {
     SparkConnectService.stop()
-    // Cancel any lingering Spark jobs before SparkContext.stop() (called by super.afterAll()).
-    // executionManager.shutdown() does not close execute holders, so execute threads may still
-    // have running Spark jobs when stop() returns. By afterAll() time, tasks from all prior
-    // tests have had time to complete; only the last test's tasks may be running, and they
-    // complete within seconds of cancellation.
-    //
-    // We do NOT wait for Arrow memory to reach 0 here: SparkContext.stop() (inside
-    // super.afterAll()) calls executor.stop() which awaits task-thread termination, so TCLs
-    // on any still-running tasks fire before super.afterAll() returns.  ArrowAllocatorLeakCheck
-    // (mixed in to the right of SharedSparkSession) therefore runs its assertion after all
-    // task memory has been released; no manual pre-stop wait is needed or correct.
     spark.sparkContext.cancelAllJobs()
+    // Executor.stop() calls threadPool.shutdown() but does NOT await termination, so task
+    // threads may still be running (and holding Arrow child-allocator memory) when
+    // SparkContext.stop() returns. Wait here for all Arrow memory to drain before the
+    // ArrowAllocatorLeakCheck assertion fires in super.afterAll().
+    eventuallyWithTimeout {
+      assert(
+        ArrowUtils.rootAllocator.getAllocatedMemory == 0,
+        s"Arrow memory still allocated after cancelAllJobs: " +
+          s"${ArrowUtils.rootAllocator.getAllocatedMemory} bytes")
+    }
     allocator.close()
     super.afterAll()
   }
@@ -105,8 +104,8 @@ trait SparkConnectServerTest extends SharedSparkSession with ArrowAllocatorLeakC
     // Cancel any Spark jobs still running after the execute threads exited. In local mode the
     // executor and driver share the same JVM, so a job submitted by an execute thread may still
     // have tasks running (and holding ArrowBatchWithSchemaIterator allocations) even after the
-    // execute thread itself terminates. Cancelling ensures task completion listeners run and
-    // Arrow memory is released before the ArrowAllocatorLeakCheck fires in afterAll().
+    // execute thread itself terminates. cancelAllJobs() signals cancellation; the afterAll()
+    // wait for getAllocatedMemory == 0 ensures TCLs have actually fired before the check.
     spark.sparkContext.cancelAllJobs()
     SparkConnectService.executionManager.periodicMaintenance(0)
     SparkConnectService.sessionManager.invalidateAllSessions()
