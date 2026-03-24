@@ -24,7 +24,7 @@ import scala.util.{Failure, Success, Try}
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.sql.{AnalysisException, Row}
@@ -142,11 +142,6 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     // Whether to enable arrow batch chunking for large result batches.
     val isResultChunkingEnabled = executePlan.resultChunkingEnabled
 
-    // mkBatches creates an ArrowBatchWithSchemaIterator (AutoCloseable). It is used directly
-    // in the LocalTableScanExec branch so that we can close it in a finally block. The
-    // converter wrapper below returns a plain Scala-mapped iterator that is NOT AutoCloseable,
-    // so if sendBatch throws (e.g., client disconnect) the underlying iterator would leak
-    // 131072 bytes into ArrowUtils.rootAllocator.
     val mkBatches = (rows: Iterator[InternalRow]) =>
       ArrowConverters.toBatchWithSchemaIterator(
         rows,
@@ -157,9 +152,11 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
         errorOnDuplicatedFieldNames = false,
         largeVarTypes = largeVarTypes)
 
+    // toBatchWithSchemaIterator passes TaskContext.get() to ArrowBatchWithSchemaIterator,
+    // which already registers a TaskCompletionListener to close itself on task completion.
+    // No additional TCL is needed here.
     val converter: Iterator[InternalRow] => Iterator[Batch] = rows => {
       val batches = mkBatches(rows)
-      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => batches.close()))
       batches.map(b => b -> batches.rowCountInLastBatch)
     }
 
@@ -220,9 +217,16 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     def sendCollectedRows(rows: Array[InternalRow]): Unit = {
       executePlan.eventsManager.postFinished(Some(rows.length))
       var offset = 0L
-      converter(rows.iterator).foreach { case (bytes, count) =>
-        sendBatch(bytes, count, offset)
-        offset += count
+      val batches = mkBatches(rows.iterator)
+      try {
+        while (batches.hasNext) {
+          val batchBytes = batches.next()
+          val count = batches.rowCountInLastBatch
+          sendBatch(batchBytes, count, offset)
+          offset += count
+        }
+      } finally {
+        batches.close()
       }
     }
     dataframe.queryExecution.executedPlan match {
