@@ -50,7 +50,7 @@ trait ProtoTypeOps extends Serializable {
 
   /**
    * Returns a converter from proto literal to Scala value. The returned converter assumes
-   * non-null input — null handling is done by the caller (LiteralValueProtoConverter wraps with
+   * non-null input - null handling is done by the caller (LiteralValueProtoConverter wraps with
    * `if (v.hasNull) null`).
    */
   def getScalaConverter: proto.Expression.Literal => Any
