@@ -795,6 +795,7 @@ fromStatementBody
       aggregationClause?
       havingClause?
       windowClause?
+      qualifyClause?
       queryOrganization
     ;
 
@@ -812,7 +813,8 @@ querySpecification
       whereClause?
       aggregationClause?
       havingClause?
-      windowClause?                                                         #regularQuerySpecification
+      windowClause?
+      qualifyClause?                                                        #regularQuerySpecification
     ;
 
 transformClause
@@ -881,6 +883,10 @@ whereClause
 
 havingClause
     : HAVING booleanExpression
+    ;
+
+qualifyClause
+    : QUALIFY booleanExpression
     ;
 
 hint
@@ -2118,6 +2124,7 @@ ansiNonReserved
     | PROCEDURES
     | PROPERTIES
     | PURGE
+    | QUALIFY
     | QUARTER
     | QUERY
     | RANGE
@@ -2530,6 +2537,7 @@ nonReserved
     | PROCEDURES
     | PROPERTIES
     | PURGE
+    | QUALIFY
     | QUARTER
     | QUERY
     | RANGE
