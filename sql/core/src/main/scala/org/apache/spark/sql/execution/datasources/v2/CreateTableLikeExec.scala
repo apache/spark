@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, Table, TableCatalog, TableInfo}
+import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, TableInfo}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
@@ -39,9 +39,10 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * [[UnsupportedOperationException]].
  *
  * The [[TableInfo]] passed to [[TableCatalog.createTableLike]] contains strictly user-specified
- * overrides: TBLPROPERTIES, LOCATION, USING provider (only if explicitly given), and owner.
- * Schema, partitioning, source provider, source TBLPROPERTIES, and constraints are NOT
- * pre-populated; connectors read all source metadata directly from [[sourceTable]].
+ * overrides: TBLPROPERTIES, LOCATION, and USING provider (only if explicitly given).
+ * Schema, partitioning, source provider, source TBLPROPERTIES, constraints, and owner are NOT
+ * pre-populated; connectors read all source metadata directly from [[sourceTable]] and are
+ * responsible for setting the owner.
  */
 case class CreateTableLikeExec(
     targetCatalog: TableCatalog,
@@ -57,16 +58,16 @@ case class CreateTableLikeExec(
   override protected def run(): Seq[InternalRow] = {
     if (!targetCatalog.tableExists(targetIdent)) {
       // Build strictly user-specified overrides: explicit TBLPROPERTIES, LOCATION (if given),
-      // USING provider (if given), and the current user as owner. Provider inheritance from
-      // the source is left to the connector — it can read PROP_PROVIDER from
-      // sourceTable.properties() and apply its own format-specific semantics.
+      // and USING provider (if given). Provider and owner are not included here; connectors
+      // are responsible for reading PROP_PROVIDER from sourceTable.properties() and for
+      // setting the owner via CurrentUserContext.getCurrentUser.
       val locationProp: Option[(String, String)] =
         location.map(uri => TableCatalog.PROP_LOCATION -> CatalogUtils.URIToString(uri))
 
-      val finalProps = CatalogV2Util.withDefaultOwnership(
+      val finalProps =
         properties ++
           provider.map(TableCatalog.PROP_PROVIDER -> _) ++
-          locationProp)
+          locationProp
 
       try {
         val userSpecifiedOverrides = new TableInfo.Builder()

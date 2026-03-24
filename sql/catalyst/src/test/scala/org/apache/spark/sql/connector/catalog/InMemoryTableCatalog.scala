@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{CurrentUserContext, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NonEmptyNamespaceException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
@@ -251,9 +251,12 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
       case _ =>
         sourceTable.columns()
     }
-    // Merge source properties with user overrides (user overrides win), copy constraints.
+    // Merge source properties with user overrides (user overrides win), then set current user
+    // as owner (overrides source owner). Connectors are responsible for setting the owner.
     val mergedProps =
-      (sourceTable.properties().asScala ++ userSpecifiedOverrides.properties().asScala).asJava
+      (sourceTable.properties().asScala ++
+        userSpecifiedOverrides.properties().asScala ++
+        Map(TableCatalog.PROP_OWNER -> CurrentUserContext.getCurrentUser)).asJava
     createTable(ident, columns, sourceTable.partitioning(), mergedProps,
       Distributions.unspecified(), Array.empty, None, None, sourceTable.constraints())
   }

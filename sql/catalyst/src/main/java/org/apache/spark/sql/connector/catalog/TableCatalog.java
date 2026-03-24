@@ -300,13 +300,13 @@ public interface TableCatalog extends CatalogPlugin {
    * <p>
    * This method is called for {@code CREATE TABLE ... LIKE ...} statements targeting this catalog.
    * The {@code userSpecifiedOverrides} parameter contains strictly user-specified overrides:
-   * TBLPROPERTIES, LOCATION, the USING provider (only if explicitly specified), and the
-   * current user as owner.
-   * It does NOT contain schema, partitioning, properties, or constraints from the source table.
-   * Connectors must read all source metadata directly from {@code sourceTable}, including
+   * TBLPROPERTIES, LOCATION, and the USING provider (only if explicitly specified).
+   * It does NOT contain schema, partitioning, properties, constraints, or owner from the source
+   * table. Connectors must read all source metadata directly from {@code sourceTable}, including
    * columns ({@link Table#columns()}), partitioning ({@link Table#partitioning()}),
    * constraints ({@link Table#constraints()}), and format-specific properties
-   * ({@link Table#properties()}).
+   * ({@link Table#properties()}). Connectors are also responsible for setting the owner of the
+   * new table (e.g. via {@code org.apache.spark.sql.catalyst.CurrentUserContext#getCurrentUser}).
    * <p>
    * The default implementation throws {@link UnsupportedOperationException}. Connectors that
    * support {@code CREATE TABLE ... LIKE ...} must override this method.
@@ -315,8 +315,8 @@ public interface TableCatalog extends CatalogPlugin {
    * @param sourceTable the resolved source table; connectors read schema, partitioning,
    *                    constraints, properties, and any format-specific metadata from this object
    * @param userSpecifiedOverrides strictly user-specified overrides: TBLPROPERTIES, LOCATION,
-   *                               USING provider (if explicitly given), and owner; source schema,
-   *                               partitioning, provider, and constraints are NOT included
+   *                               and USING provider (if explicitly given); source schema,
+   *                               partitioning, provider, constraints, and owner are NOT included
    * @return metadata for the new table
    *
    * @throws TableAlreadyExistsException If a table or view already exists for the identifier
