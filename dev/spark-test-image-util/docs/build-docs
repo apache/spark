@@ -68,6 +68,7 @@ if [[ "$SKIP_RDOC" != "1" ]]; then
   export SKIP_PYTHONDOC=1
   export SKIP_SQLDOC=1
   cd docs
+  bundle install
   bundle exec jekyll build
 fi
 

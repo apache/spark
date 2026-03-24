@@ -61,6 +61,7 @@ If you'd like to generate R API documentation, install these libraries:
 
 ```sh
 $ sudo Rscript -e 'install.packages(c("knitr", "devtools", "testthat", "rmarkdown", "remotes"), repos="https://cloud.r-project.org/")'
+$ sudo Rscript -e 'remotes::install_version("markdown", version="1.12", repos="https://cloud.r-project.org")'
 $ sudo Rscript -e 'devtools::install_version("roxygen2", version = "7.1.2", repos="https://cloud.r-project.org/")'
 $ sudo Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
 $ sudo Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
