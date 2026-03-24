@@ -241,8 +241,8 @@ class GroupedData:
             for v in values:
                 if not isinstance(v, (bool, float, int, str)):
                     raise PySparkTypeError(
-                        errorClass="NOT_BOOL_OR_FLOAT_OR_INT_OR_STR",
-                        messageParameters={"arg_name": "value", "arg_type": type(v).__name__},
+                        errorClass="NOT_EXPECTED_TYPE",
+                        messageParameters={"expected_type": "bool, float, int or str", "arg_name": "value", "arg_type": type(v).__name__},
                     )
 
         return GroupedData(

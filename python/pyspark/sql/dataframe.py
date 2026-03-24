@@ -2189,8 +2189,9 @@ class DataFrame:
         else:
             argtypes = [type(arg).__name__ for arg in [withReplacement, fraction, seed]]
             raise PySparkTypeError(
-                errorClass="NOT_BOOL_OR_FLOAT_OR_INT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
+                    "expected_type": "bool, float or int",
                     "arg_name": "withReplacement (optional), "
                     + "fraction (required) and seed (optional)",
                     "arg_type": ", ".join(argtypes),

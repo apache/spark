@@ -445,8 +445,8 @@ def when(condition: Column, value: Any) -> Column:
     # Explicitly not using ColumnOrName type here to make reading condition less opaque
     if not isinstance(condition, Column):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN",
-            messageParameters={"arg_name": "condition", "arg_type": type(condition).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "Column", "arg_name": "condition", "arg_type": type(condition).__name__},
         )
 
     value = _enum_to_value(value)
@@ -1957,8 +1957,8 @@ def from_json(
         _schema = lit(schema.json())
     else:
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_DATATYPE_OR_STR",
-            messageParameters={"arg_name": "schema", "arg_type": type(schema).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "Column, str or DataType", "arg_name": "schema", "arg_type": type(schema).__name__},
         )
 
     if options is None:

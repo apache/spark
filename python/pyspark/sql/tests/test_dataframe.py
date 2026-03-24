@@ -529,8 +529,9 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_BOOL_OR_FLOAT_OR_INT",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "bool, float or int",
                 "arg_name": "withReplacement (optional), fraction (required) and seed (optional)",
                 "arg_type": "NoneType, NoneType, NoneType",
             },
@@ -845,8 +846,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_BOOL",
-            messageParameters={"arg_name": "vertical", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "bool", "arg_name": "vertical", "arg_type": "str"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -854,8 +855,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_BOOL",
-            messageParameters={"arg_name": "truncate", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "bool", "arg_name": "truncate", "arg_type": "str"},
         )
 
     def test_df_merge_into(self):

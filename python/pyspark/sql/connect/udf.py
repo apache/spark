@@ -142,8 +142,8 @@ class UserDefinedFunction:
     ):
         if not callable(func):
             raise PySparkTypeError(
-                errorClass="NOT_CALLABLE",
-                messageParameters={"arg_name": "func", "arg_type": type(func).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={"expected_type": "callable", "arg_name": "func", "arg_type": type(func).__name__},
             )
 
         if not isinstance(returnType, (DataType, str)):
