@@ -41,9 +41,9 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{JOIN, UNION}
  * where each `condK` has the Union output attributes rewritten to the corresponding child's
  * output attributes.
  *
- * This is beneficial when the right side is small enough to broadcast, because it avoids
- * shuffling the (potentially very large) Union result before the Join. Instead, each Union
- * branch joins independently with the broadcasted right side.
+ * This is beneficial when the right side is small enough to broadcast, because each Union
+ * branch can directly perform a broadcast join with the right side, avoiding the need to
+ * materialize the entire (potentially very large) Union result before the Join.
  *
  * Applicable join types: Inner, LeftOuter.
  */
