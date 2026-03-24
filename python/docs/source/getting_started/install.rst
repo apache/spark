@@ -47,11 +47,11 @@ If you want to install extra dependencies for a specific component, you can inst
 .. code-block:: bash
 
     # Spark SQL
-    pip install pyspark[sql]
+    pip install "pyspark[sql]"
     # pandas API on Spark
-    pip install pyspark[pandas_on_spark] plotly  # to plot your data, you can install plotly together.
+    pip install "pyspark[pandas_on_spark]" plotly  # to plot your data, you can install plotly together.
     # Spark Connect
-    pip install pyspark[connect]
+    pip install "pyspark[connect]"
 
 
 See :ref:`optional-dependencies` for more detail about extra dependencies.
