@@ -2914,9 +2914,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             def process_results():
                 for result in verified_iter:
                     batch = pa.RecordBatch.from_arrays([result], ["_0"])
-                    yield ArrowBatchTransformer.enforce_schema(
-                        batch, target_schema, safecheck=True
-                    )
+                    yield ArrowBatchTransformer.enforce_schema(batch, target_schema, safecheck=True)
 
             # Apply row limit check (fail-fast)
             # TODO(SPARK-55579): Create Arrow-specific error class (e.g., ARROW_UDF_OUTPUT_EXCEEDS_INPUT_ROWS)

@@ -586,9 +586,7 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
             names = ["_%d" % i for i in range(len(arr_tuples))]
             arrs = [arr for arr, _ in arr_tuples]
             batch = pa.RecordBatch.from_arrays(arrs, names)
-            target_schema = pa.schema(
-                [pa.field(n, t) for n, (_, t) in zip(names, arr_tuples)]
-            )
+            target_schema = pa.schema([pa.field(n, t) for n, (_, t) in zip(names, arr_tuples)])
             return ArrowBatchTransformer.enforce_schema(
                 batch, target_schema, safecheck=self._safecheck, arrow_cast=self._arrow_cast
             )
