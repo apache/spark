@@ -202,9 +202,9 @@ abstract class FileTable(
       }
 
       override def build(): Write = {
-        // Note: fileIndex.partitionSchema may be empty for new paths.
-        // DataFrame API partitionBy() columns are not plumbed here yet;
-        // that is handled by userSpecifiedPartitioning in a follow-up patch.
+        // TODO: SPARK-56175 fileIndex.partitionSchema may be empty for
+        // new paths. DataFrame API partitionBy() columns are not plumbed
+        // here yet.
         buildWrite(mergedWriteInfo(info), fileIndex.partitionSchema,
           isDynamicOverwrite, isTruncate)
       }

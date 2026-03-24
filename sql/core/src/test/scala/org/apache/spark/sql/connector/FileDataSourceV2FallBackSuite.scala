@@ -263,9 +263,9 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
     // which falls back to V1 since FileDataSourceV2 doesn't implement
     // SupportsCatalogOptions. Also, FileDataSourceV2.getTable ignores
     // partitioning transforms, so even with Append mode the V2 path
-    // doesn't know about partition columns. Full V2 partitioned write
-    // via DataFrame API requires userSpecifiedPartitioning plumbing
-    // (handled in a follow-up patch).
+    // doesn't know about partition columns.
+    // TODO: SPARK-56175 Full V2 partitioned write via DataFrame API
+    // requires userSpecifiedPartitioning plumbing.
     Seq("parquet", "orc", "json", "csv").foreach { format =>
       withSQLConf(
         SQLConf.USE_V1_SOURCE_LIST.key -> "",
@@ -435,9 +435,9 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
   }
 
   test("DataFrame API partitioned write with V2 flag enabled") {
-    // Note: df.write.partitionBy("part").parquet(path) uses ErrorIfExists mode by default,
-    // which falls back to V1 since FileDataSourceV2 doesn't implement SupportsCatalogOptions.
-    // Partitioned writes via the V2 DataFrame API path require catalog integration (Sub-4).
+    // TODO: SPARK-56174 df.write.partitionBy("part").parquet(path) uses ErrorIfExists mode
+    // by default, which falls back to V1 since FileDataSourceV2 doesn't implement
+    // SupportsCatalogOptions.
     // This test verifies the write still succeeds (via V1 fallback).
     withSQLConf(
       SQLConf.USE_V1_SOURCE_LIST.key -> "",
@@ -483,9 +483,9 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Catalog table partitioned INSERT INTO uses V2 path") {
-    // Note: FileDataSourceV2.getTable ignores partitioning transforms,
-    // so data is written flat (not in partition directories) via V2.
-    // Physical partitioning requires userSpecifiedPartitioning (Sub-4).
+    // TODO: SPARK-56175 FileDataSourceV2.getTable ignores partitioning
+    // transforms, so data is written flat (not in partition directories)
+    // via V2. Physical partitioning requires userSpecifiedPartitioning.
     // This test verifies data correctness, not physical layout.
     withSQLConf(
       SQLConf.USE_V1_SOURCE_LIST.key -> "",
@@ -515,7 +515,4 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  // TODO: "INSERT INTO writes to custom partition location" test
-  // deferred to Sub-3/Sub-5 when catalogTable is set on FileTable
-  // and getCustomPartitionLocations returns real values.
 }
