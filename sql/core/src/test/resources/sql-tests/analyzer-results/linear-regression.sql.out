@@ -407,3 +407,29 @@ Aggregate [k#x], [k#x, regr_intercept(cast(y#x as double), cast(x#x as double)) 
             +- Project [k#x, y#x, x#x]
                +- SubqueryAlias testRegression
                   +- LocalRelation [k#x, y#x, x#x]
+
+
+-- !query
+SELECT regr_r2(k, x) FROM testRegression where k=2
+-- !query analysis
+Aggregate [regr_r2(cast(k#x as double), cast(x#x as double)) AS regr_r2(k, x)#x]
++- Filter (k#x = 2)
+   +- SubqueryAlias testregression
+      +- View (`testRegression`, [k#x, y#x, x#x])
+         +- Project [cast(k#x as int) AS k#x, cast(y#x as int) AS y#x, cast(x#x as int) AS x#x]
+            +- Project [k#x, y#x, x#x]
+               +- SubqueryAlias testRegression
+                  +- LocalRelation [k#x, y#x, x#x]
+
+
+-- !query
+SELECT regr_r2(y, k) FROM testRegression where k=2
+-- !query analysis
+Aggregate [regr_r2(cast(y#x as double), cast(k#x as double)) AS regr_r2(y, k)#x]
++- Filter (k#x = 2)
+   +- SubqueryAlias testregression
+      +- View (`testRegression`, [k#x, y#x, x#x])
+         +- Project [cast(k#x as int) AS k#x, cast(y#x as int) AS y#x, cast(x#x as int) AS x#x]
+            +- Project [k#x, y#x, x#x]
+               +- SubqueryAlias testRegression
+                  +- LocalRelation [k#x, y#x, x#x]
