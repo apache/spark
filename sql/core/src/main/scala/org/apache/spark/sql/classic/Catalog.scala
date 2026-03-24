@@ -979,8 +979,7 @@ private[sql] object Catalog {
 
     val ERROR_HANDLING_RULES: Map[String, ErrorHandlingAction] = Map(
       "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE" -> ReturnPartialResults,
-      "TABLE_OR_VIEW_NOT_FOUND" -> Skip,
-      "DATA_SOURCE_NOT_FOUND" -> ReturnPartialResults
+      "TABLE_OR_VIEW_NOT_FOUND" -> Skip
     )
   }
 }
