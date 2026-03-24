@@ -278,7 +278,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
         // Note: subExprs.exprCodesNeedEvaluate is intentionally not used here, unlike ProjectExec.
         // evaluateRequiredVariables above cleared input[i].code = EmptyBlock for all
         // otherPredInputAttrs before CSE analysis ran, so getLocalInputVariableValues never
-        // adds them to exprCodesNeedEvaluate — it is always empty. Do NOT replace the
+        // adds them to exprCodesNeedEvaluate -- it is always empty. Do NOT replace the
         // pre-evaluation above with evaluateVariables(subExprs.exprCodesNeedEvaluate):
         // that would leave notNullPreds referencing undeclared variables (Janino: "Unknown
         // variable or type") for any input column shared between notNullPreds and otherPreds.
