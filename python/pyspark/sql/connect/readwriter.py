@@ -33,7 +33,12 @@ from pyspark.sql.readwriter import (
     DataFrameReader as PySparkDataFrameReader,
     DataFrameWriterV2 as PySparkDataFrameWriterV2,
 )
-from pyspark.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError
+from pyspark.errors import (
+    AnalysisException,
+    PySparkAttributeError,
+    PySparkTypeError,
+    PySparkValueError,
+)
 from pyspark.sql.connect.functions import builtin as F
 
 if TYPE_CHECKING:
@@ -147,6 +152,12 @@ class DataFrameReader(OptionUtils):
     table.__doc__ = PySparkDataFrameReader.table.__doc__
 
     def changes(self, tableName: str) -> "DataFrame":
+        if self._schema:
+            raise AnalysisException(
+                "User specified schema not supported with `changes`.",
+                errorClass="_LEGACY_ERROR_TEMP_1189",
+                messageParameters={"operation": "changes"},
+            )
         return self._df(RelationChanges(tableName, self._options))
 
     changes.__doc__ = PySparkDataFrameReader.changes.__doc__

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import java.util.concurrent.ConcurrentHashMap
+
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -31,13 +33,12 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 /**
  * An [[InMemoryTableCatalog]] that implements [[TableCatalog.loadChangelog()]].
  *
- * Change rows can be pre-populated via [[addChangeRows()]] before querying.
+ * Change rows can be pre-populated via [[InMemoryChangelogCatalog.addChangeRows()]]
+ * before querying. Change data is stored in the companion object so that it is shared
+ * across catalog instances (important for Spark Connect where the server session uses
+ * a different catalog instance from the test setup session).
  */
 class InMemoryChangelogCatalog extends InMemoryCatalog {
-
-  // tableName -> list of change rows (each row: Array[Any] matching changelog schema)
-  private val changeData: mutable.Map[String, mutable.ArrayBuffer[InternalRow]] =
-    mutable.Map.empty
 
   // Stores the most recent ChangelogInfo passed to loadChangelog(), so tests can verify
   // that the parser/DataFrame API correctly constructed and forwarded it.
@@ -52,12 +53,11 @@ class InMemoryChangelogCatalog extends InMemoryCatalog {
       throw new NoSuchTableException(ident.asMultipartIdentifier)
     }
     val table = loadTable(ident)
-    val allRows = changeData.getOrElse(
-      ident.toString, mutable.ArrayBuffer.empty)
+    val allRows = InMemoryChangelogCatalog.getChangeRows(ident)
     val numDataCols = table.columns.length
     // _commit_version is at index numDataCols + 1 (after _change_type)
     val commitVersionIdx = numDataCols + 1
-    val filtered = filterByRange(allRows.toSeq, commitVersionIdx, changelogInfo.range())
+    val filtered = filterByRange(allRows, commitVersionIdx, changelogInfo.range())
     new InMemoryChangelog(
       table.name + "_changelog", table.columns, filtered)
   }
@@ -94,18 +94,39 @@ class InMemoryChangelogCatalog extends InMemoryCatalog {
       rows
   }
 
+  /** Instance-level convenience that delegates to the companion object. */
+  def addChangeRows(ident: Identifier, rows: Seq[InternalRow]): Unit = {
+    InMemoryChangelogCatalog.addChangeRows(ident, rows)
+  }
+
+  /** Instance-level convenience that delegates to the companion object. */
+  def clearChangeRows(ident: Identifier): Unit = {
+    InMemoryChangelogCatalog.clearChangeRows(ident)
+  }
+}
+
+object InMemoryChangelogCatalog {
+  // Shared across all catalog instances so that change data populated in one session
+  // (e.g. test setup via _instantiatedSession) is visible in another session
+  // (e.g. the Spark Connect server's isolated session).
+  private val changeData = new ConcurrentHashMap[String, mutable.ArrayBuffer[InternalRow]]()
+
   /**
    * Add change rows for a table. Each row should match the changelog schema:
    * (data columns..., _change_type STRING, _commit_version LONG, _commit_timestamp LONG).
    */
   def addChangeRows(ident: Identifier, rows: Seq[InternalRow]): Unit = {
-    val buf = changeData.getOrElseUpdate(
-      ident.toString, mutable.ArrayBuffer.empty)
-    buf ++= rows
+    val buf = changeData.computeIfAbsent(ident.toString, _ => mutable.ArrayBuffer.empty)
+    buf.synchronized { buf ++= rows }
   }
 
   def clearChangeRows(ident: Identifier): Unit = {
     changeData.remove(ident.toString)
+  }
+
+  private[catalog] def getChangeRows(ident: Identifier): Seq[InternalRow] = {
+    val buf = changeData.get(ident.toString)
+    if (buf != null) buf.synchronized { buf.toSeq } else Seq.empty
   }
 }
 

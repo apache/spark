@@ -38,7 +38,12 @@ from pyspark.sql.streaming.readwriter import (
 from pyspark.sql.streaming.listener import QueryStartedEvent
 from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.types import Row, StructType
-from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkPicklingError
+from pyspark.errors import (
+    AnalysisException,
+    PySparkTypeError,
+    PySparkValueError,
+    PySparkPicklingError,
+)
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
@@ -421,6 +426,12 @@ class DataStreamReader(OptionUtils):
     table.__doc__ = PySparkDataStreamReader.table.__doc__
 
     def changes(self, tableName: str) -> "DataFrame":
+        if self._schema:
+            raise AnalysisException(
+                "User specified schema not supported with `changes`.",
+                errorClass="_LEGACY_ERROR_TEMP_1189",
+                messageParameters={"operation": "changes"},
+            )
         return self._df(RelationChanges(tableName, self._options, is_streaming=True))
 
     changes.__doc__ = PySparkDataStreamReader.changes.__doc__

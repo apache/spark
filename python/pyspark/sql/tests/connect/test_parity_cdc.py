@@ -17,9 +17,8 @@
 
 import unittest
 
-from pyspark.sql import SparkSession as PySparkSession
 from pyspark.sql.tests.test_cdc import CDCTestsMixin, _find_catalyst_test_jar
-from pyspark.testing.connectutils import should_test_connect, ReusedConnectTestCase
+from pyspark.testing.connectutils import should_test_connect, ReusedMixedTestCase
 
 _catalyst_test_jar = _find_catalyst_test_jar()
 
@@ -28,7 +27,7 @@ _catalyst_test_jar = _find_catalyst_test_jar()
     not should_test_connect or _catalyst_test_jar is None,
     "Spark Connect test or catalyst test JAR not available",
 )
-class CDCParityTests(CDCTestsMixin, ReusedConnectTestCase):
+class CDCParityTests(CDCTestsMixin, ReusedMixedTestCase):
     @classmethod
     def conf(cls):
         conf = super().conf()
@@ -39,28 +38,43 @@ class CDCParityTests(CDCTestsMixin, ReusedConnectTestCase):
         )
         return conf
 
-    # JVM access is needed only for test setup (creating the InMemoryChangelogCatalog
-    # table and inserting change rows). The actual changes() API calls in the test
-    # methods go through Spark Connect.
-    #
-    # We must use the server-side *isolated* session (not _instantiatedSession) because
-    # the Connect server creates a new session via newSession() for each client. Each
-    # session has its own CatalogManager, so the InMemoryChangelogCatalog instance in
-    # the isolated session is different from the one in the base session.
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls._classic_spark = cls.spark
+
     def _jvm(self):
-        return PySparkSession._instantiatedSession._jvm
+        return self._classic_spark._jvm
 
     def _j_spark_session(self):
-        jvm = self._jvm()
-        service = jvm.org.apache.spark.sql.connect.service.SparkConnectService
-        key = jvm.org.apache.spark.sql.connect.service.SessionKey(
-            self.spark.client._user_id, self.spark.client._session_id
-        )
-        holder = service.sessionManager().getIsolatedSessionIfPresent(key)
-        return holder.get().session()
+        return self._classic_spark._jsparkSession
 
     def _gateway(self):
-        return PySparkSession._instantiatedSession.sparkContext._gateway
+        return self._classic_spark.sparkContext._gateway
+
+    def setUp(self):
+        # Skip CDCTestsMixin.setUp() which creates tables via per-instance JVM
+        # catalog API. The Connect server creates an isolated session with its own
+        # CatalogManager and catalog instances. Tables must exist on the server's
+        # catalog, so we create them via SQL through the Connect session.
+        # Change data is shared across all catalog instances via the companion
+        # object in InMemoryChangelogCatalog, so _add_change_rows() works from
+        # any catalog instance (including the classic session's).
+        ReusedMixedTestCase.setUp(self)
+
+        self.connect.sql(f"DROP TABLE IF EXISTS {self.full_table_name}").collect()
+        self.connect.sql(f"CREATE TABLE {self.full_table_name} (id BIGINT, data STRING)").collect()
+
+        # Clear shared change data (instance method delegates to companion object)
+        catalog = self._catalog()
+        ident = self._ident()
+        catalog.clearChangeRows(ident)
+
+        self.spark = self.connect
+
+    def tearDown(self):
+        self.spark = self._classic_spark
+        super().tearDown()
 
 
 if __name__ == "__main__":
