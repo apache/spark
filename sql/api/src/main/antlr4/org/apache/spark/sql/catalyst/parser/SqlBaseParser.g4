@@ -1050,7 +1050,9 @@ joinCriteria
     ;
 
 sample
-    : TABLESAMPLE LEFT_PAREN sampleMethod? RIGHT_PAREN (REPEATABLE LEFT_PAREN seed=integerValue RIGHT_PAREN)?
+    : TABLESAMPLE (sampleType=(SYSTEM | BERNOULLI))?
+      LEFT_PAREN sampleMethod? RIGHT_PAREN
+      (REPEATABLE LEFT_PAREN seed=integerValue RIGHT_PAREN)?
     ;
 
 sampleMethod
@@ -1918,6 +1920,7 @@ ansiNonReserved
     | AT
     | ATOMIC
     | BEGIN
+    | BERNOULLI
     | BETWEEN
     | BIGINT
     | BINARY
@@ -2185,6 +2188,7 @@ ansiNonReserved
     | SUBSTR
     | SUBSTRING
     | SYNC
+    | SYSTEM
     | SYSTEM_TIME
     | SYSTEM_VERSION
     | TABLES
@@ -2289,6 +2293,7 @@ nonReserved
     | ATOMIC
     | AUTHORIZATION
     | BEGIN
+    | BERNOULLI
     | BETWEEN
     | BIGINT
     | BINARY
@@ -2602,6 +2607,7 @@ nonReserved
     | SUBSTR
     | SUBSTRING
     | SYNC
+    | SYSTEM
     | SYSTEM_TIME
     | SYSTEM_VERSION
     | TABLE
