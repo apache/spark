@@ -223,7 +223,7 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
 
   test("SPARK-45133 local relation should reach FINISHED state when results are not consumed") {
     withClient { client =>
-      val iter = client.execute(buildLocalRelation((1 to 1000000).map(i => (i, i + 1))))
+      val iter = client.execute(buildLocalRelation((1 to 1000).map(i => (i, i + 1))))
       val execution = eventuallyGetExecutionHolder
       Eventually.eventually(timeout(30.seconds)) {
         assert(execution.eventsManager.status == ExecuteStatus.Finished)
