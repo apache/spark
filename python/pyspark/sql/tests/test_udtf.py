@@ -3096,7 +3096,9 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             "x: array<int>",
         ]:
             with self.subTest(ret_type=ret_type):
-                with self.assertRaisesRegex(PythonException, "Exception thrown when converting pandas.Series"):
+                with self.assertRaisesRegex(
+                    PythonException, "Exception thrown when converting pandas.Series"
+                ):
                     udtf(TestUDTF, returnType=ret_type)().collect()
 
 

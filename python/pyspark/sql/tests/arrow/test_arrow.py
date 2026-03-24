@@ -633,7 +633,7 @@ class ArrowTestsMixin:
             self.assertEqual(len(exception.args), 1)
             self.assertRegex(
                 exception.args[0],
-                "with name '7_date_t' " "to Arrow Array \\(decimal128\\(38, 18\\)\\)",
+                "column '7_date_t'.*specified return type.*decimal128\\(38, 18\\)",
             )
 
             # the inner exception provides us with the incorrect types

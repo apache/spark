@@ -700,8 +700,7 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
         except pa.lib.ArrowException as e:
             error_msg = (
                 "Exception thrown when converting pandas.Series (%s) "
-                "with name '%s' to Arrow Array (%s)."
-                % (series.dtype, series.name, arrow_type)
+                "with name '%s' to Arrow Array (%s)." % (series.dtype, series.name, arrow_type)
             )
             if isinstance(e, TypeError):
                 raise PySparkTypeError(error_msg) from e
