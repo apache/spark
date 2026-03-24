@@ -170,10 +170,12 @@ class ArrowBatchTransformerTests(unittest.TestCase):
             ],
             names=["s", "l"],
         )
-        target = pa.schema([
-            ("s", pa.struct([("a", pa.int64()), ("b", pa.float64())])),
-            ("l", pa.list_(pa.int64())),
-        ])
+        target = pa.schema(
+            [
+                ("s", pa.struct([("a", pa.int64()), ("b", pa.float64())])),
+                ("l", pa.list_(pa.int64())),
+            ]
+        )
         result = ArrowBatchTransformer.enforce_schema(batch, target)
         self.assertEqual(result.schema, target)
 
