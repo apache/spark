@@ -195,7 +195,7 @@ class SparkConnectServerTestSuite extends SparkConnectServerTest {
 
   test("eventuallyGetExecutionHolder: retrieves active execution") {
     withRawBlockingStub { stub =>
-      val request = buildExecutePlanRequest(buildPlan("SELECT * FROM range(1000000)"))
+      val request = buildExecutePlanRequest(buildPlan("SELECT * FROM range(100000)"))
       val iter = stub.executePlan(request)
       iter.hasNext // trigger execution
 
