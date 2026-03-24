@@ -17,10 +17,15 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, BroadcastQueryStageExec}
+import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class PushDownJoinThroughUnionSuite extends QueryTest with SharedSparkSession {
+class PushDownJoinThroughUnionSuite
+    extends QueryTest
+    with SharedSparkSession
+    with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   test("UNION ALL + broadcast JOIN produces correct results") {
@@ -175,6 +180,41 @@ class PushDownJoinThroughUnionSuite extends QueryTest with SharedSparkSession {
           Row(3, "z")
         ))
       }
+    }
+  }
+
+  test("2-way UNION ALL reuses broadcast exchange") {
+    withTempView("fact1", "fact2", "dim") {
+      val fact1 = Seq((1, "a"), (2, "b")).toDF("id", "val1")
+      val fact2 = Seq((3, "c"), (4, "d")).toDF("id", "val1")
+      val dim = Seq((1, "x"), (2, "y"), (3, "z")).toDF("id", "label")
+
+      fact1.createOrReplaceTempView("fact1")
+      fact2.createOrReplaceTempView("fact2")
+      dim.createOrReplaceTempView("dim")
+
+      val result = sql(
+        """SELECT /*+ BROADCAST(d) */ f.id, f.val1, d.label
+          |FROM (SELECT * FROM fact1 UNION ALL SELECT * FROM fact2) f
+          |JOIN dim d ON f.id = d.id
+        """.stripMargin)
+
+      result.collect()
+      val plan = result.queryExecution.executedPlan
+
+      val broadcastStages = collect(plan) {
+        case b: BroadcastQueryStageExec => b
+      }
+      val reusedBroadcasts = collectWithSubqueries(plan) {
+        case BroadcastQueryStageExec(_, e: ReusedExchangeExec, _) => e
+      }
+
+      assert(broadcastStages.size == 2,
+        "Expected 2 BroadcastQueryStageExec (1 original + 1 reused) but found " +
+          broadcastStages.size)
+      assert(reusedBroadcasts.size == 1,
+        "Expected exactly 1 ReusedExchangeExec inside BroadcastQueryStageExec but found " +
+          reusedBroadcasts.size)
     }
   }
 
