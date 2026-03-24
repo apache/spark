@@ -164,8 +164,8 @@ private[sql] object DataSourceV2Utils extends Logging {
     // `HiveFileFormat`, when running tests in sql/core.
     if (DDLUtils.isHiveTable(Some(provider))) return None
     DataSource.lookupDataSourceV2(provider, conf) match {
-      // TODO(SPARK-28396): Currently file source v2 can't work with tables.
-      case Some(p) if !p.isInstanceOf[FileDataSourceV2] => Some(p)
+      case Some(_: FileDataSourceV2) if !conf.getConf(SQLConf.V2_FILE_WRITE_ENABLED) => None
+      case Some(p) => Some(p)
       case _ => None
     }
   }

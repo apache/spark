@@ -194,10 +194,17 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           if (curmode == SaveMode.Append) {
             AppendData.byName(relation, df.logicalPlan, finalOptions)
           } else {
-            // Truncate the table. TableCapabilityCheck will throw a nice exception if this
-            // isn't supported
-            OverwriteByExpression.byName(
-              relation, df.logicalPlan, Literal(true), finalOptions)
+            val dynamicOverwrite =
+              df.sparkSession.sessionState.conf.partitionOverwriteMode ==
+                PartitionOverwriteMode.DYNAMIC &&
+              partitioningColumns.exists(_.nonEmpty)
+            if (dynamicOverwrite) {
+              OverwritePartitionsDynamic.byName(
+                relation, df.logicalPlan, finalOptions)
+            } else {
+              OverwriteByExpression.byName(
+                relation, df.logicalPlan, Literal(true), finalOptions)
+            }
           }
 
         case createMode =>
@@ -595,8 +602,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
 
   private def lookupV2Provider(): Option[TableProvider] = {
     DataSource.lookupDataSourceV2(source, df.sparkSession.sessionState.conf) match {
-      // TODO(SPARK-28396): File source v2 write path is currently broken.
-      case Some(_: FileDataSourceV2) => None
+      case Some(_: FileDataSourceV2)
+          if !df.sparkSession.sessionState.conf.getConf(SQLConf.V2_FILE_WRITE_ENABLED) =>
+        None
+      // File source V2 supports Append and Overwrite via the DataFrame API V2 write path.
+      // ErrorIfExists and Ignore require SupportsCatalogOptions (catalog integration),
+      // so fall back to V1 for these modes.
+      case Some(_: FileDataSourceV2)
+          if curmode != SaveMode.Append && curmode != SaveMode.Overwrite =>
+        None
       case other => other
     }
   }
