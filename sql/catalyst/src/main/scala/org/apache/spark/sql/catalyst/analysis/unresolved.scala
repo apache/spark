@@ -1136,6 +1136,20 @@ case class UnresolvedHaving(
 }
 
 /**
+ * Marks a filter predicate originating from a QUALIFY clause until window extraction finishes.
+ */
+case class QualifyExpression(
+    child: Expression,
+    selectListHasWindowFunction: Boolean)
+  extends UnaryExpression with Unevaluable {
+  override def dataType: DataType = child.dataType
+  override def nullable: Boolean = child.nullable
+  override lazy val resolved: Boolean = child.resolved
+  override protected def withNewChildInternal(newChild: Expression): QualifyExpression =
+    copy(child = newChild)
+}
+
+/**
  * A place holder expression used in random functions, will be replaced after analyze.
  */
 case object UnresolvedSeed extends LeafExpression with Unevaluable {
