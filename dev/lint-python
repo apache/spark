@@ -33,7 +33,7 @@ function exit_with_usage {
   echo "lint-python - linter for Python"
   echo ""
   echo "usage:"
-  cl_options="[--compile] [--black] [--custom-pyspark-error] [--ruff] [--mypy] [--mypy-examples] [--mypy-data]"
+  cl_options="[--compile] [--custom-pyspark-error] [--ruff] [--mypy] [--mypy-examples] [--mypy-data]"
   echo "lint-python $cl_options"
   echo ""
   exit 1
@@ -74,9 +74,8 @@ while (( "$#" )); do
   shift
 done
 
-if [[ -z "$COMPILE_TEST$PYSPARK_CUSTOM_ERRORS_CHECK_TEST$FLAKE8_TEST$RUFF_TEST$MYPY_TEST$MYPY_EXAMPLES_TEST$MYPY_DATA_TEST" ]]; then
+if [[ -z "$COMPILE_TEST$BLACK_TEST$PYSPARK_CUSTOM_ERRORS_CHECK_TEST$FLAKE8_TEST$RUFF_TEST$MYPY_TEST$MYPY_EXAMPLES_TEST$MYPY_DATA_TEST" ]]; then
   COMPILE_TEST=true
-  BLACK_TEST=true
   PYSPARK_CUSTOM_ERRORS_CHECK_TEST=true
   RUFF_TEST=true
   MYPY_TEST=true

@@ -547,6 +547,12 @@
     ],
     "sqlState" : "58030"
   },
+  "CANNOT_TRUNCATE_EXTERNAL_TABLE" : {
+    "message" : [
+      "Operation not allowed: TRUNCATE TABLE on external tables: <tableName>."
+    ],
+    "sqlState" : "0A000"
+  },
   "CANNOT_UPDATE_FIELD" : {
     "message" : [
       "Cannot update <table> field <fieldName> type:"
@@ -6541,6 +6547,14 @@
     ],
     "sqlState" : "42601"
   },
+  "STORAGE_PARTITION_JOIN_INCOMPATIBLE_REDUCED_TYPES" : {
+    "message" : [
+      "Storage-partition join partition transforms produced incompatible reduced types,",
+      "left reducers: <leftReducers> returned: <leftReducedDataTypes>,",
+      "right reducers: <rightReducers> returned: <rightReducedDataTypes>."
+    ],
+    "sqlState" : "42K09"
+  },
   "STREAMING_CHECKPOINT_MISSING_METADATA_FILE" : {
     "message" : [
       "Checkpoint location <checkpointLocation> is in an inconsistent state: the metadata file is missing but offset and/or commit logs contain data. Please restore the metadata file or create a new checkpoint directory."
@@ -9144,11 +9158,6 @@
   "_LEGACY_ERROR_TEMP_1264" : {
     "message" : [
       "LOAD DATA target table <tableIdentWithDB> is not partitioned, but a partition spec was provided."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1266" : {
-    "message" : [
-      "Operation not allowed: TRUNCATE TABLE on external tables: <tableIdentWithDB>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1267" : {

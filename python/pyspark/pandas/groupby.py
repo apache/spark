@@ -754,12 +754,15 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         if not 0 <= q <= 1:
             raise ValueError("'q' must be between 0 and 1. Got '%s' instead" % q)
         if any(isinstance(_agg_col.spark.data_type, BooleanType) for _agg_col in self._agg_columns):
-            warnings.warn(
-                f"Allowing bool dtype in {self.__class__.__name__}.quantile is deprecated "
-                "and will raise in a future version, matching the Series/DataFrame behavior. "
-                "Cast to uint8 dtype before calling quantile instead.",
-                FutureWarning,
-            )
+            if LooseVersion(pd.__version__) < "3.0.0":
+                warnings.warn(
+                    f"Allowing bool dtype in {self.__class__.__name__}.quantile is deprecated "
+                    "and will raise in a future version, matching the Series/DataFrame behavior. "
+                    "Cast to uint8 dtype before calling quantile instead.",
+                    FutureWarning,
+                )
+            else:
+                raise TypeError("Cannot use quantile with bool dtype")
 
         return self._reduce_for_stat_function(
             lambda col: F.percentile_approx(col.cast(DoubleType()), q, accuracy),

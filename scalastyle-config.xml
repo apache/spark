@@ -534,6 +534,11 @@ This file is divided into 3 sections:
     <customMessage>Use Java String.substring instead.</customMessage>
   </check>
 
+  <check customId="hadoopstringifyexception" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bStringUtils\.stringifyException\b</parameter></parameters>
+    <customMessage>Use org.apache.spark.util.Utils.stringifyException instead.</customMessage>
+  </check>
+
   <check customId="uribuilder" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">\bUriBuilder\.fromUri\b</parameter></parameters>
     <customMessage>Use Utils.getUriBuilder instead.</customMessage>
