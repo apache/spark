@@ -252,12 +252,18 @@ trait QueryTestBase extends PlanTestBase with SparkSessionProvider { self: Suite
   }
 
   protected def getCurrentClassCallSitePattern: String = {
-    val cs = Thread.currentThread().getStackTrace()(2)
+    val cs = Thread.currentThread().getStackTrace
+      .drop(1)
+      .dropWhile(_.getMethodName == "getCurrentClassCallSitePattern")
+      .head
     s"${cs.getClassName}\\..*\\(${cs.getFileName}:\\d+\\)"
   }
 
   protected def getNextLineCallSitePattern(lines: Int = 1): String = {
-    val cs = Thread.currentThread().getStackTrace()(2)
+    val cs = Thread.currentThread().getStackTrace
+      .drop(1)
+      .dropWhile(_.getMethodName == "getNextLineCallSitePattern")
+      .head
     Pattern.quote(
       s"${cs.getClassName}.${cs.getMethodName}(${cs.getFileName}:${cs.getLineNumber + lines})")
   }
