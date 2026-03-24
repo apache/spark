@@ -79,14 +79,14 @@ object YearsFunctionWithToYearsReducerWithLongResult extends YearsFunctionBase[L
   def invoke(ts: Long): Int = doInvoke(ts).toInt
   override def reducer(otherFunction: ReducibleFunction[_, _]): Reducer[Int, Long] = {
     if (otherFunction == DaysFunctionWithToYearsReducerWithLongResult) {
-      YearsToYearsReducerWithLogResult()
+      YearsToYearsReducerWithLongResult()
     } else {
       null
     }
   }
 }
 
-case class YearsToYearsReducerWithLogResult() extends Reducer[Int, Long] {
+case class YearsToYearsReducerWithLongResult() extends Reducer[Int, Long] {
   override def resultType(): DataType = LongType
   override def reduce(days: Int): Long = days.toLong
 }
