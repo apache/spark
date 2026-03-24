@@ -23,7 +23,6 @@ import faulthandler
 import gc
 import itertools
 import os
-import platform
 import re
 import sys
 import threading
@@ -274,10 +273,6 @@ def try_simplify_traceback(tb: TracebackType) -> Optional[TracebackType]:
     >>> exc_info_b.count("pyspark/util.py")
     1
     """
-    if "pypy" in platform.python_implementation().lower():
-        # Traceback modification is not supported with PyPy in PySpark.
-        return None
-
     import pyspark
 
     root = os.path.dirname(pyspark.__file__)
@@ -1038,15 +1033,14 @@ enable_faulthandler = _faulthandler_helper.enable_faulthandler
 
 
 if __name__ == "__main__":
-    if "pypy" not in platform.python_implementation().lower():
-        import doctest
-        import pyspark.util
-        from pyspark.core.context import SparkContext
+    import doctest
+    import pyspark.util
+    from pyspark.core.context import SparkContext
 
-        globs = pyspark.util.__dict__.copy()
-        globs["sc"] = SparkContext("local[4]", "PythonTest")
-        failure_count, test_count = doctest.testmod(pyspark.util, globs=globs)
-        globs["sc"].stop()
+    globs = pyspark.util.__dict__.copy()
+    globs["sc"] = SparkContext("local[4]", "PythonTest")
+    failure_count, test_count = doctest.testmod(pyspark.util, globs=globs)
+    globs["sc"].stop()
 
-        if failure_count:
-            sys.exit(-1)
+    if failure_count:
+        sys.exit(-1)
