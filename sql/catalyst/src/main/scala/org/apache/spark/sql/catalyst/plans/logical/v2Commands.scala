@@ -57,11 +57,11 @@ trait KeepAnalyzedQuery extends Command {
 /**
  * Trait that gathers schema evolution logic shared by V2 write commands and MERGE INTO.
  */
-trait WriteSupportsSchemaEvolution extends LogicalPlan {
+trait WriteWithSchemaEvolution extends LogicalPlan {
   /** The target of the write operation. */
   def table: LogicalPlan
 
-  def withNewTable(newTable: NamedRelation): WriteSupportsSchemaEvolution
+  def withNewTable(newTable: NamedRelation): WriteWithSchemaEvolution
 
   /** Whether schema evolution is enabled for the write operation. */
   def withSchemaEvolution: Boolean
@@ -98,7 +98,7 @@ trait V2WriteCommand
     extends UnaryCommand
     with KeepAnalyzedQuery
     with CTEInChildren
-    with WriteSupportsSchemaEvolution {
+    with WriteWithSchemaEvolution {
   def table: NamedRelation
   def query: LogicalPlan
   def isByName: Boolean
@@ -963,7 +963,7 @@ case class MergeIntoTable(
     notMatchedActions: Seq[MergeAction],
     notMatchedBySourceActions: Seq[MergeAction],
     withSchemaEvolution: Boolean)
-    extends BinaryCommand with WriteSupportsSchemaEvolution with SupportsSubquery {
+    extends BinaryCommand with WriteWithSchemaEvolution with SupportsSubquery {
 
   override val table: LogicalPlan = EliminateSubqueryAliases(targetTable)
 

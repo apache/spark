@@ -18,16 +18,18 @@
 package org.apache.spark.sql.connector.catalog;
 
 import org.apache.spark.annotation.Experimental;
+import org.apache.spark.sql.connector.catalog.TableChange.ColumnChange;
 
 /**
  * A mix-in interface for {@link Table} schema evolution support. Data sources can implement this
- * interface to indicate they support evolving their schema during write operations.
+ * interface to indicate the schema changes they support during write operations. Tables must
+ * report capability {@link TableCapability#AUTOMATIC_SCHEMA_EVOLUTION} for schema evolution to
+ * happen.
  * <p>
  * During automatic schema evolution, Spark computes the set of column changes (e.g. adding a new
  * column, widening a column type) needed to make the target table schema compatible with the
  * source data schema. Each candidate change is passed to {@link #supportsColumnChange} to
- * determine whether the data source can apply it. Changes that are not supported are reported
- * as errors.
+ * determine whether the data source can apply it. Changes that are not supported are skipped.
  *
  * @since 4.2.0
  */
@@ -39,5 +41,5 @@ public interface SupportsSchemaEvolution extends Table {
    * evolution. This should return {@code true} when the data source can physically apply the
    * change, for example adding a new column or performing a lossless type widening.
    */
-  boolean supportsColumnChange(TableChange.ColumnChange change);
+  boolean supportsColumnChange(ColumnChange change);
 }
