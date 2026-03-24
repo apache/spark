@@ -845,8 +845,6 @@ case class Zip(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(ZIP)
 
-  def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
-
   // Always unresolved -- must be rewritten by ResolveZip during analysis.
   override lazy val resolved: Boolean = false
 
