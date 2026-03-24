@@ -728,12 +728,6 @@
     ],
     "sqlState": "42K09"
   },
-  "NOT_FLOAT_OR_INT_OR_LIST_OR_STR": {
-    "message": [
-      "Argument `<arg_name>` should be a float, int, list or str, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
   "NOT_IMPLEMENTED": {
     "message": [
       "<feature> is not implemented."
@@ -770,12 +764,6 @@
     "sqlState": "42K09"
   },
   "NOT_LIST_OF_COLUMN": {
-    "message": [
-      "Argument `<arg_name>` should be a list[Column]."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_LIST_OF_COLUMN_OR_STR": {
     "message": [
       "Argument `<arg_name>` should be a list[Column]."
     ],
@@ -972,11 +960,6 @@
   "PLOT_INVALID_TYPE_COLUMN": {
     "message": [
       "Column <col_name> must be one of <valid_types> for plotting, got <col_type>."
-    ]
-  },
-  "PLOT_NOT_NUMERIC_COLUMN_ARGUMENT": {
-    "message": [
-      "Argument <arg_name> must be a numerical column for plotting, got <arg_type>."
     ]
   },
   "PROTOCOL_ERROR": {
@@ -1321,11 +1304,6 @@
       "<data_type> is not supported in conversion to Arrow."
     ]
   },
-  "UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION": {
-    "message": [
-      "<data_type> is only supported with pyarrow 2.0.0 and above."
-    ]
-  },
   "UNSUPPORTED_JOIN_TYPE": {
     "message": [
       "Unsupported join type: '<typ>'. Supported join types include: <supported>."
@@ -1389,11 +1367,6 @@
   "UNSUPPORTED_SIGNATURE": {
     "message": [
       "Unsupported signature: <signature>."
-    ]
-  },
-  "UNSUPPORTED_WITH_ARROW_OPTIMIZATION": {
-    "message": [
-      "<feature> is not supported with Arrow optimization enabled in Python UDFs. Disable 'spark.sql.execution.pythonUDF.arrow.enabled' to workaround."
     ]
   },
   "VALUE_ALLOWED": {
