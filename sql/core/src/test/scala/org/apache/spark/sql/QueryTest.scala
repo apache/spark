@@ -264,8 +264,7 @@ trait QueryTestBase extends PlanTestBase with SparkSessionProvider { self: Suite
 
 }
 
-abstract class QueryTest extends SparkFunSuite with QueryTestBase {
-}
+abstract class QueryTest extends SparkFunSuite with QueryTestBase
 
 object QueryTest extends Assertions {
   /**
