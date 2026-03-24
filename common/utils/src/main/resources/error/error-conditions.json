@@ -1439,6 +1439,78 @@
     ],
     "sqlState" : "KD011"
   },
+  "DATASOURCE_BATCH_SCAN_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: Batch scan is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATASOURCE_BATCH_WRITE_BUILD_NOT_SUPPORTED" : {
+    "message" : [
+      "<class> does not support batch write."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATASOURCE_BATCH_WRITE_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: Batch write is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATASOURCE_COLUMNAR_READER_NOT_SUPPORTED" : {
+    "message" : [
+      "Cannot create columnar reader."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATASOURCE_CONTINUOUS_SCAN_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: Continuous scan is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATASOURCE_DELTA_BATCH_WRITE_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: Delta batch write is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATASOURCE_DELTA_WRITE_BUILD_NOT_IMPLEMENTED" : {
+    "message" : [
+      "<class> does not implement build."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATASOURCE_METADATA_SCHEMA_NOT_IMPLEMENTED" : {
+    "message" : [
+      "<class> does not implement metadataSchema."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATASOURCE_MICRO_BATCH_SCAN_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: Micro-batch scan is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATASOURCE_ROW_ID_SCHEMA_NOT_IMPLEMENTED" : {
+    "message" : [
+      "<class> does not implement rowIdSchema."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATASOURCE_STREAMING_WRITE_BUILD_NOT_SUPPORTED" : {
+    "message" : [
+      "<class> does not support streaming write."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATASOURCE_STREAMING_WRITE_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: Streaming write is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "DATATYPE_CANNOT_ORDER" : {
     "message" : [
       "Type <dataType> does not support ordered operations."
@@ -1780,78 +1852,6 @@
       "Expected schema: <expectedSchema>"
     ],
     "sqlState" : "42K03"
-  },
-  "DATASOURCE_BATCH_SCAN_NOT_SUPPORTED" : {
-    "message" : [
-      "<description>: Batch scan is not supported."
-    ],
-    "sqlState" : "0A000"
-  },
-  "DATASOURCE_BATCH_WRITE_BUILD_NOT_SUPPORTED" : {
-    "message" : [
-      "<class> does not support batch write."
-    ],
-    "sqlState" : "0A000"
-  },
-  "DATASOURCE_BATCH_WRITE_NOT_SUPPORTED" : {
-    "message" : [
-      "<description>: Batch write is not supported."
-    ],
-    "sqlState" : "0A000"
-  },
-  "DATASOURCE_COLUMNAR_READER_NOT_SUPPORTED" : {
-    "message" : [
-      "Cannot create columnar reader."
-    ],
-    "sqlState" : "0A000"
-  },
-  "DATASOURCE_CONTINUOUS_SCAN_NOT_SUPPORTED" : {
-    "message" : [
-      "<description>: Continuous scan is not supported."
-    ],
-    "sqlState" : "0A000"
-  },
-  "DATASOURCE_DELTA_BATCH_WRITE_NOT_SUPPORTED" : {
-    "message" : [
-      "<description>: Delta batch write is not supported."
-    ],
-    "sqlState" : "0A000"
-  },
-  "DATASOURCE_DELTA_WRITE_BUILD_NOT_IMPLEMENTED" : {
-    "message" : [
-      "<class> does not implement build."
-    ],
-    "sqlState" : "0A000"
-  },
-  "DATASOURCE_METADATA_SCHEMA_NOT_IMPLEMENTED" : {
-    "message" : [
-      "<class> does not implement metadataSchema."
-    ],
-    "sqlState" : "0A000"
-  },
-  "DATASOURCE_MICRO_BATCH_SCAN_NOT_SUPPORTED" : {
-    "message" : [
-      "<description>: Micro-batch scan is not supported."
-    ],
-    "sqlState" : "0A000"
-  },
-  "DATASOURCE_ROW_ID_SCHEMA_NOT_IMPLEMENTED" : {
-    "message" : [
-      "<class> does not implement rowIdSchema."
-    ],
-    "sqlState" : "0A000"
-  },
-  "DATASOURCE_STREAMING_WRITE_BUILD_NOT_SUPPORTED" : {
-    "message" : [
-      "<class> does not support streaming write."
-    ],
-    "sqlState" : "0A000"
-  },
-  "DATASOURCE_STREAMING_WRITE_NOT_SUPPORTED" : {
-    "message" : [
-      "<description>: Streaming write is not supported."
-    ],
-    "sqlState" : "0A000"
   },
   "DATETIME_FIELD_OUT_OF_BOUNDS" : {
     "message" : [
