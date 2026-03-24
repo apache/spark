@@ -38,8 +38,8 @@ cd /__w/spark/spark/docs
 bundle install
 
 # 3.Build docs, includes: `error docs`, `scala doc`, `python doc`, `sql doc`, excludes: `r doc`.
-# We need this link to make sure `python3` points to `python3.12` which contains the prerequisite packages.
-ln -s "$(which python3.12)" ~/.bin/python3
+# Activate the venv with mkdocs and friends.
+. $VIRTUAL_ENV/bin/activate
 
 # Build docs first with SKIP_API to ensure they are buildable without requiring any
 # language docs to be built beforehand.
