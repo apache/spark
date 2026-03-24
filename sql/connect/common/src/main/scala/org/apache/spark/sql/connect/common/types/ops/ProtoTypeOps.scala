@@ -48,9 +48,11 @@ trait ProtoTypeOps extends Serializable {
       dt: DataType,
       builder: proto.Expression.Literal.Builder): proto.Expression.Literal.Builder
 
-  /** Returns a converter from proto literal to Scala value.
-   *  The returned converter assumes non-null input — null handling is done by the caller
-   *  (LiteralValueProtoConverter wraps with `if (v.hasNull) null`). */
+  /**
+   * Returns a converter from proto literal to Scala value. The returned converter assumes
+   * non-null input — null handling is done by the caller (LiteralValueProtoConverter wraps with
+   * `if (v.hasNull) null`).
+   */
   def getScalaConverter: proto.Expression.Literal => Any
 
   /** Returns a proto DataType inferred from a proto literal (for type inference). */
