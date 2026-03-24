@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.util.TimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Extracts the microsecond component from a TIME value.
@@ -196,4 +197,208 @@ case class MakeTime(
       newThird: Expression,
       newFourth: Expression): MakeTime =
     copy(hour = newFirst, minute = newSecond, sec = newThird, microsecond = newFourth)
+}
+
+/**
+ * Converts a TIME value to the number of milliseconds since midnight.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(time) - Returns the number of milliseconds since midnight for a TIME value.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(TIME '14:30:00.5');
+       52200500
+  """,
+  since = "4.0.0",
+  group = "datetime_funcs")
+case class TimeToMillis(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimeType)
+  override def dataType: DataType = LongType
+
+  override protected def nullSafeEval(time: Any): Any = {
+    time.asInstanceOf[Long] / 1000L
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, time => s"$time / 1000L")
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): TimeToMillis =
+    copy(child = newChild)
+}
+
+/**
+ * Creates a TIME value from the number of milliseconds since midnight.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(millis) - Creates a TIME value from the number of milliseconds since midnight.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(52200500);
+       14:30:00.500000
+  """,
+  since = "4.0.0",
+  group = "datetime_funcs")
+case class TimeFromMillis(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(LongType)
+  override def dataType: DataType = TimeType
+
+  override protected def nullSafeEval(millis: Any): Any = {
+    val micros = millis.asInstanceOf[Long] * 1000L
+    if (TimeUtils.isValidTime(micros)) micros else null
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val timeUtils = TimeUtils.getClass.getName.stripSuffix("$")
+    nullSafeCodeGen(ctx, ev, millis =>
+      s"""
+         |long micros = $millis * 1000L;
+         |if ($timeUtils.isValidTime(micros)) {
+         |  ${ev.value} = micros;
+         |} else {
+         |  ${ev.isNull} = true;
+         |}
+       """.stripMargin)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): TimeFromMillis =
+    copy(child = newChild)
+}
+
+/**
+ * Converts a TIME value to the number of microseconds since midnight.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(time) - Returns the number of microseconds since midnight for a TIME value.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(TIME '14:30:00.5');
+       52200500000
+  """,
+  since = "4.0.0",
+  group = "datetime_funcs")
+case class TimeToMicros(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimeType)
+  override def dataType: DataType = LongType
+
+  override protected def nullSafeEval(time: Any): Any = time
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, time => time)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): TimeToMicros =
+    copy(child = newChild)
+}
+
+/**
+ * Creates a TIME value from the number of microseconds since midnight.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(micros) - Creates a TIME value from the number of microseconds since midnight.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(52200500000);
+       14:30:00.500000
+  """,
+  since = "4.0.0",
+  group = "datetime_funcs")
+case class TimeFromMicros(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(LongType)
+  override def dataType: DataType = TimeType
+
+  override protected def nullSafeEval(micros: Any): Any = {
+    val m = micros.asInstanceOf[Long]
+    if (TimeUtils.isValidTime(m)) m else null
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val timeUtils = TimeUtils.getClass.getName.stripSuffix("$")
+    nullSafeCodeGen(ctx, ev, micros =>
+      s"""
+         |if ($timeUtils.isValidTime($micros)) {
+         |  ${ev.value} = $micros;
+         |} else {
+         |  ${ev.isNull} = true;
+         |}
+       """.stripMargin)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): TimeFromMicros =
+    copy(child = newChild)
+}
+
+/**
+ * Converts a TIME value to a formatted string representation.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(time, pattern) - Converts a TIME value to a formatted string.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(TIME '14:30:45', 'HH:mm:ss');
+       14:30:45
+      > SELECT _FUNC_(TIME '14:30:45', 'hh:mm:ss a');
+       02:30:45 PM
+  """,
+  since = "4.0.0",
+  group = "datetime_funcs")
+case class TimeFormat(
+    left: Expression,
+    right: Expression,
+    timeZoneId: Option[String] = None)
+  extends BinaryExpression
+  with TimeZoneAwareExpression
+  with ImplicitCastInputTypes
+  with NullIntolerant {
+
+  def this(left: Expression, right: Expression) = this(left, right, None)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimeType, StringType)
+  override def dataType: DataType = StringType
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  @transient private lazy val formatterOption: Option[java.time.format.DateTimeFormatter] =
+    if (right.foldable) {
+      Option(right.eval()).map { fmt =>
+        java.time.format.DateTimeFormatter.ofPattern(fmt.toString)
+      }
+    } else None
+
+  override protected def nullSafeEval(time: Any, pattern: Any): Any = {
+    val fmt = pattern.toString
+    val formatter = formatterOption.getOrElse(java.time.format.DateTimeFormatter.ofPattern(fmt))
+    val localTime = TimeUtils.microsToLocalTime(time.asInstanceOf[Long])
+    val localDateTime = localTime.atDate(java.time.LocalDate.ofEpochDay(0))
+    UTF8String.fromString(localDateTime.format(formatter))
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[java.time.ZoneId].getName)
+    val timeUtils = TimeUtils.getClass.getName.stripSuffix("$")
+    nullSafeCodeGen(ctx, ev, (time, pattern) => {
+      s"""
+         |java.time.format.DateTimeFormatter formatter =
+         |  java.time.format.DateTimeFormatter.ofPattern($pattern.toString());
+         |java.time.LocalTime localTime = $timeUtils.microsToLocalTime($time);
+         |java.time.LocalDateTime localDateTime =
+         |  localTime.atDate(java.time.LocalDate.ofEpochDay(0));
+         |${ev.value} = UTF8String.fromString(localDateTime.format(formatter));
+       """.stripMargin
+    })
+  }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): TimeFormat =
+    copy(left = newLeft, right = newRight)
 }

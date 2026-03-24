@@ -663,6 +663,16 @@ object FunctionRegistry {
     expression[UnixMicros]("unix_micros"),
     expression[ConvertTimezone]("convert_timezone"),
 
+    // time functions
+    expression[MicrosecondOfTime]("microsecond"),
+    expression[CurrentTime]("current_time"),
+    expression[MakeTime]("make_time"),
+    expression[TimeToMillis]("time_to_millis"),
+    expression[TimeFromMillis]("time_from_millis"),
+    expression[TimeToMicros]("time_to_micros"),
+    expression[TimeFromMicros]("time_from_micros"),
+    expression[TimeFormat]("time_format"),
+
     // collection functions
     expression[CreateArray]("array"),
     expression[ArrayContains]("array_contains"),
