@@ -256,15 +256,15 @@ trait QueryTestBase extends PlanTestBase with SparkSessionProvider { self: Suite
     s"${cs.getClassName}\\..*\\(${cs.getFileName}:\\d+\\)"
   }
 
-}
-
-abstract class QueryTest extends SparkFunSuite with QueryTestBase {
-
   protected def getNextLineCallSitePattern(lines: Int = 1): String = {
     val cs = Thread.currentThread().getStackTrace()(2)
     Pattern.quote(
       s"${cs.getClassName}.${cs.getMethodName}(${cs.getFileName}:${cs.getLineNumber + lines})")
   }
+
+}
+
+abstract class QueryTest extends SparkFunSuite with QueryTestBase {
 }
 
 object QueryTest extends Assertions {
