@@ -1113,31 +1113,11 @@ class SparkSqlAstBuilder extends AstBuilder {
       location: Option[String],
       maybeSerdeInfo: Option[SerdeInfo],
       ctx: ParserRuleContext): CatalogStorageFormat = {
-    if (maybeSerdeInfo.isEmpty) {
-      CatalogStorageFormat.empty.copy(locationUri = location.map(CatalogUtils.stringToURI))
-    } else {
-      val serdeInfo = maybeSerdeInfo.get
-      if (serdeInfo.storedAs.isEmpty) {
-        CatalogStorageFormat.empty.copy(
-          locationUri = location.map(CatalogUtils.stringToURI),
-          inputFormat = serdeInfo.formatClasses.map(_.input),
-          outputFormat = serdeInfo.formatClasses.map(_.output),
-          serde = serdeInfo.serde,
-          properties = serdeInfo.serdeProperties)
-      } else {
-        HiveSerDe.sourceToSerDe(serdeInfo.storedAs.get) match {
-          case Some(hiveSerde) =>
-            CatalogStorageFormat.empty.copy(
-              locationUri = location.map(CatalogUtils.stringToURI),
-              inputFormat = hiveSerde.inputFormat,
-              outputFormat = hiveSerde.outputFormat,
-              serde = serdeInfo.serde.orElse(hiveSerde.serde),
-              properties = serdeInfo.serdeProperties)
-          case _ =>
-            operationNotAllowed(s"STORED AS with file format '${serdeInfo.storedAs.get}'", ctx)
-        }
-      }
-    }
+    HiveSerDe.buildStorageFormat(
+      location,
+      maybeSerdeInfo,
+      si => QueryParsingErrors.operationNotAllowedError(
+        s"STORED AS with file format '${si.storedAs.get}'", ctx))
   }
 
   /**
@@ -1183,14 +1163,14 @@ class SparkSqlAstBuilder extends AstBuilder {
       case _ =>
     }
 
-    val storage = toStorageFormat(location, serdeInfo, ctx)
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val cleanedProperties = cleanTableProperties(ctx, properties)
     CreateTableLike(
       name = withIdentClause(ctx.target, UnresolvedIdentifier(_)),
       source = createUnresolvedTableOrView(ctx.source, "CREATE TABLE LIKE", allowTempView = true),
-      fileFormat = storage,
+      location = location,
       provider = provider,
+      serdeInfo = serdeInfo,
       properties = cleanedProperties,
       ifNotExists = ctx.EXISTS != null)
   }

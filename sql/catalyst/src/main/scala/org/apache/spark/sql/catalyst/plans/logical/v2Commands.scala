@@ -21,7 +21,7 @@ import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkUns
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, ResolveSchemaEvolution, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, FunctionResource, RoutineLanguage}
+import org.apache.spark.sql.catalyst.catalog.{FunctionResource, RoutineLanguage}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
@@ -623,20 +623,22 @@ case class CreateTable(
  *                    ResolvedIdentifier by ResolveCatalogs.
  * @param source      Source table or view. Starts as UnresolvedTableOrView, resolved to
  *                    ResolvedTable / ResolvedPersistentView / ResolvedTempView by ResolveRelations.
- * @param fileFormat  User-specified STORED AS / ROW FORMAT (Hive-style). Empty if not specified.
- *                    [[CatalogStorageFormat]] is carried here because ResolveSessionCatalog
- *                    passes the full format (including serde info) to [[CreateTableLikeCommand]]
- *                    for the V1 fallback path. The V2 execution path (DataSourceV2Strategy)
- *                    extracts only [[CatalogStorageFormat#locationUri]] from this field.
+ * @param location    User-specified LOCATION. None if not specified.
  * @param provider    User-specified USING provider. None if not specified.
+ * @param serdeInfo   User-specified STORED AS / ROW FORMAT (Hive-style). None if not specified.
+ *                    Kept separate from [[location]] so that [[ResolveSessionCatalog]] can
+ *                    reconstruct the full
+ *                    [[org.apache.spark.sql.catalyst.catalog.CatalogStorageFormat]]
+ *                    for the V1 fallback path without pulling V1 catalog types into this plan.
  * @param properties  User-specified TBLPROPERTIES.
  * @param ifNotExists IF NOT EXISTS flag.
  */
 case class CreateTableLike(
     name: LogicalPlan,
     source: LogicalPlan,
-    fileFormat: CatalogStorageFormat,
+    location: Option[String],
     provider: Option[String],
+    serdeInfo: Option[SerdeInfo],
     properties: Map[String, String],
     ifNotExists: Boolean) extends BinaryCommand {
 

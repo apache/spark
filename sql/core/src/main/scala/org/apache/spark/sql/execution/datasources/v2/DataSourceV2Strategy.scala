@@ -25,7 +25,7 @@ import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogUtils}
+import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
@@ -245,13 +245,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     // Views are wrapped in V1Table so the exec can extract schema and provider uniformly.
     case CreateTableLike(
         ResolvedIdentifier(catalog, ident), source,
-        fileFormat: CatalogStorageFormat, provider, properties, ifNotExists) =>
+        locationStr, provider, _, properties, ifNotExists) =>
       val table = source match {
         case ResolvedTable(_, _, t, _) => t
         case ResolvedPersistentView(_, _, meta) => V1Table(meta)
         case ResolvedTempView(_, meta) => V1Table(meta)
       }
-      val location = fileFormat.locationUri.map { uri =>
+      val location = locationStr.map { loc =>
+        val uri = CatalogUtils.stringToURI(loc)
         if (uri.isAbsolute) uri
         else if (new Path(uri).isAbsolute) CatalogUtils.makeQualifiedPath(uri, hadoopConf)
         else uri

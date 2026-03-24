@@ -726,71 +726,70 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     // CreateTableLikeCommand; the name is an UnresolvedIdentifier and the source is
     // an UnresolvedTableOrView.
     def extract(sql: String): (Seq[String], Seq[String],
-        org.apache.spark.sql.catalyst.catalog.CatalogStorageFormat,
-        Option[String], Map[String, String], Boolean) =
+        Option[String], Option[String], Map[String, String], Boolean) =
       parser.parsePlan(sql).collect {
       case CreateTableLike(
           UnresolvedIdentifier(targetParts, _),
           UnresolvedTableOrView(sourceParts, _, _),
-          f, p, pr, e) =>
-        (targetParts, sourceParts, f, p, pr, e)
+          loc, p, _, pr, e) =>
+        (targetParts, sourceParts, loc, p, pr, e)
     }.head
 
-    val (target, source, fileFormat, provider, properties, exists) =
+    val (target, source, location, provider, properties, exists) =
       extract("CREATE TABLE table1 LIKE table2")
     assert(exists == false)
     assert(target == Seq("table1"))
     assert(source == Seq("table2"))
-    assert(fileFormat.locationUri.isEmpty)
+    assert(location.isEmpty)
     assert(provider.isEmpty)
 
-    val (target2, source2, fileFormat2, provider2, properties2, exists2) =
+    val (target2, source2, location2, provider2, properties2, exists2) =
       extract("CREATE TABLE IF NOT EXISTS table1 LIKE table2")
     assert(exists2)
     assert(target2 == Seq("table1"))
     assert(source2 == Seq("table2"))
-    assert(fileFormat2.locationUri.isEmpty)
+    assert(location2.isEmpty)
     assert(provider2.isEmpty)
 
-    val (target3, source3, fileFormat3, provider3, properties3, exists3) =
+    val (target3, source3, location3, provider3, properties3, exists3) =
       extract("CREATE TABLE table1 LIKE table2 LOCATION '/spark/warehouse'")
     assert(!exists3)
     assert(target3 == Seq("table1"))
     assert(source3 == Seq("table2"))
-    assert(fileFormat3.locationUri.map(_.toString) == Some("/spark/warehouse"))
+    assert(location3 == Some("/spark/warehouse"))
     assert(provider3.isEmpty)
 
-    val (target4, source4, fileFormat4, provider4, properties4, exists4) =
+    val (target4, source4, location4, provider4, properties4, exists4) =
       extract("CREATE TABLE IF NOT EXISTS table1 LIKE table2 LOCATION '/spark/warehouse'")
     assert(exists4)
     assert(target4 == Seq("table1"))
     assert(source4 == Seq("table2"))
-    assert(fileFormat4.locationUri.map(_.toString) == Some("/spark/warehouse"))
+    assert(location4 == Some("/spark/warehouse"))
     assert(provider4.isEmpty)
 
-    val (target5, source5, fileFormat5, provider5, properties5, exists5) =
+    val (target5, source5, location5, provider5, properties5, exists5) =
       extract("CREATE TABLE IF NOT EXISTS table1 LIKE table2 USING parquet")
     assert(exists5)
     assert(target5 == Seq("table1"))
     assert(source5 == Seq("table2"))
-    assert(fileFormat5.locationUri.isEmpty)
+    assert(location5.isEmpty)
     assert(provider5 == Some("parquet"))
 
-    val (target6, source6, fileFormat6, provider6, properties6, exists6) =
+    val (target6, source6, location6, provider6, properties6, exists6) =
       extract("CREATE TABLE IF NOT EXISTS table1 LIKE table2 USING ORC")
     assert(exists6)
     assert(target6 == Seq("table1"))
     assert(source6 == Seq("table2"))
-    assert(fileFormat6.locationUri.isEmpty)
+    assert(location6.isEmpty)
     assert(provider6 == Some("ORC"))
 
     // 3-part names: catalog.namespace.table
-    val (target7, source7, fileFormat7, provider7, properties7, exists7) =
+    val (target7, source7, location7, provider7, properties7, exists7) =
       extract("CREATE TABLE testcat.ns.dst LIKE testcat.ns.src")
     assert(!exists7)
     assert(target7 == Seq("testcat", "ns", "dst"))
     assert(source7 == Seq("testcat", "ns", "src"))
-    assert(fileFormat7.locationUri.isEmpty)
+    assert(location7.isEmpty)
     assert(provider7.isEmpty)
   }
 
