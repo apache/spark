@@ -1544,18 +1544,31 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
           StopStream
         )
 
-        val stateSnapshotDf = spark.read.format("statestore")
+        val stateSnapshotDfLeft = spark.read.format("statestore")
           .option("snapshotPartitionId", 2)
           .option("snapshotStartBatchId", 0)
           .option("joinSide", "left")
           .load(tmpDir.getCanonicalPath)
 
-        val stateDf = spark.read.format("statestore")
+        val stateDfLeft = spark.read.format("statestore")
           .option("joinSide", "left")
           .load(tmpDir.getCanonicalPath)
           .filter(col("partition_id") === 2)
 
-        checkAnswer(stateSnapshotDf, stateDf)
+        checkAnswer(stateSnapshotDfLeft, stateDfLeft)
+
+        val stateSnapshotDfRight = spark.read.format("statestore")
+          .option("snapshotPartitionId", 2)
+          .option("snapshotStartBatchId", 0)
+          .option("joinSide", "right")
+          .load(tmpDir.getCanonicalPath)
+
+        val stateDfRight = spark.read.format("statestore")
+          .option("joinSide", "right")
+          .load(tmpDir.getCanonicalPath)
+          .filter(col("partition_id") === 2)
+
+        checkAnswer(stateSnapshotDfRight, stateDfRight)
       }
     }
   }

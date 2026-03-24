@@ -132,8 +132,12 @@ object StreamStreamJoinStateHelper {
           providerId, newHadoopConf, oldSchemaFilePaths, createSchemaDir = false)
         val schemas = manager.readSchemaFile()
 
-        val kSchema = schemas.find(_.colFamilyName == v4Names(0)).map(_.keySchema).get
-        val vSchema = schemas.find(_.colFamilyName == v4Names(0)).map(_.valueSchema).get
+        // In v4, the primary CF (keyWithTsToValues) stores both the key and value schemas.
+        // This differs from v3 where keyToNumValues has the key schema and
+        // keyWithIndexToValue has the value schema.
+        val primaryCF = v4Names(0)
+        val kSchema = schemas.find(_.colFamilyName == primaryCF).map(_.keySchema).get
+        val vSchema = schemas.find(_.colFamilyName == primaryCF).map(_.valueSchema).get
 
         (kSchema, vSchema)
 

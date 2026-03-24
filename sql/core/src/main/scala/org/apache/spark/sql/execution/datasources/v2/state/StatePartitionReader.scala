@@ -49,10 +49,10 @@ private[state] object StatePartitionReaderUtils {
     SymmetricHashJoinStateManager.allStateStoreNamesV4(LeftSide, RightSide).toSet
 
   def isMultiValuedCF(
-      colFamilyName: String,
+      colFamilyNameOpt: Option[String],
       stateVariableInfoOpt: Option[TransformWithStateVariableInfo]): Boolean = {
     SchemaUtil.checkVariableType(stateVariableInfoOpt, StateVariableType.ListState) ||
-      v4JoinCFNames.contains(colFamilyName)
+      colFamilyNameOpt.exists(v4JoinCFNames.contains)
   }
 }
 
@@ -159,7 +159,7 @@ abstract class StatePartitionReaderBase(
     val useColFamilies = stateVariableInfoOpt.isDefined || joinColFamilyOpt.isDefined
 
     val useMultipleValuesPerKey = StatePartitionReaderUtils.isMultiValuedCF(
-      joinColFamilyOpt.getOrElse(""), stateVariableInfoOpt)
+      joinColFamilyOpt, stateVariableInfoOpt)
 
     val provider = StateStoreProvider.createAndInit(
       stateStoreProviderId, keySchema, valueSchema, keyStateEncoderSpec,
@@ -348,7 +348,7 @@ class StatePartitionAllColumnFamiliesReader(
 
   private def isMultiValuedCF(colFamilyName: String): Boolean = {
     StatePartitionReaderUtils.isMultiValuedCF(
-      colFamilyName,
+      Some(colFamilyName),
       stateVariableInfos.find(info => info.stateName == colFamilyName))
   }
 

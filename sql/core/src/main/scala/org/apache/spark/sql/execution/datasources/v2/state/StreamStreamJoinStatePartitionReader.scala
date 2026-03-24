@@ -118,6 +118,8 @@ class StreamStreamJoinStatePartitionReader(
 
   private val (inputAttributes, formatVersion) = {
     val maybeMatchedColumn = valueSchema.last
+    // If there is a matched column, version is higher than 1. We need to drop the matched
+    // column from the value schema to get the actual fields.
     val (fields, version) = joinStateFormatVersion match {
       // Use explicit format version when available from offset log
       case Some(v) if v >= 2 =>
