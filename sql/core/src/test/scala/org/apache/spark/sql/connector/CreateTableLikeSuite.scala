@@ -202,8 +202,9 @@ class CreateTableLikeSuite extends DatasourceV2SQLBase {
   }
 
   test("source provider is copied to v2 target when no USING override") {
-    // When no USING clause is given, CreateTableLikeExec copies the provider from the
-    // source table into PROP_PROVIDER of the target's TableInfo properties.
+    // When no USING clause is given, provider inheritance is handled by the connector:
+    // InMemoryTableCatalog.createTableLike merges sourceTable.properties() into the target,
+    // which includes PROP_PROVIDER set by the source table.
     withTable("src", "testcat.dst") {
       sql("CREATE TABLE src (id bigint) USING parquet")
       sql("CREATE TABLE testcat.dst LIKE src")

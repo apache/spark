@@ -24,9 +24,9 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.internal.LogKeys.TABLE_NAME
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils}
+import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, Table, TableCatalog, TableInfo, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, Table, TableCatalog, TableInfo}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
@@ -38,10 +38,10 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * must override [[TableCatalog.createTableLike]]; the default implementation throws
  * [[UnsupportedOperationException]].
  *
- * The [[TableInfo]] passed to [[TableCatalog.createTableLike]] contains only user-specified
- * overrides (TBLPROPERTIES, LOCATION), the resolved provider, and the current user as owner.
- * Schema, partitioning, source TBLPROPERTIES, and constraints are NOT pre-populated; connectors
- * read all source metadata directly from [[sourceTable]].
+ * The [[TableInfo]] passed to [[TableCatalog.createTableLike]] contains strictly user-specified
+ * overrides: TBLPROPERTIES, LOCATION, USING provider (only if explicitly given), and owner.
+ * Schema, partitioning, source provider, source TBLPROPERTIES, and constraints are NOT
+ * pre-populated; connectors read all source metadata directly from [[sourceTable]].
  */
 case class CreateTableLikeExec(
     targetCatalog: TableCatalog,
@@ -56,32 +56,16 @@ case class CreateTableLikeExec(
 
   override protected def run(): Seq[InternalRow] = {
     if (!targetCatalog.tableExists(targetIdent)) {
-      // Resolve provider: USING clause overrides, else inherit from source.
-      // The source provider is inherited so that the target uses the same format,
-      // matching V1 CreateTableLikeCommand behavior. Whether the target catalog validates
-      // or uses this property is catalog-specific (e.g. V2SessionCatalog validates it).
-      val resolvedProvider = provider.orElse {
-        sourceTable match {
-          case v1: V1Table if v1.catalogTable.tableType == CatalogTableType.VIEW =>
-            // When the source is a view, default to the session's default data source.
-            // This matches V1 CreateTableLikeCommand behavior.
-            Some(session.sessionState.conf.defaultDataSourceName)
-          case v1: V1Table =>
-            v1.catalogTable.provider
-          case _ =>
-            Option(sourceTable.properties.get(TableCatalog.PROP_PROVIDER))
-        }
-      }
-
-      // Build overrides-only properties: user TBLPROPERTIES, resolved provider, location, owner.
-      // Schema, partitioning, source TBLPROPERTIES, and constraints are NOT included here;
-      // connectors read them directly from sourceTable.
+      // Build strictly user-specified overrides: explicit TBLPROPERTIES, LOCATION (if given),
+      // USING provider (if given), and the current user as owner. Provider inheritance from
+      // the source is left to the connector — it can read PROP_PROVIDER from
+      // sourceTable.properties() and apply its own format-specific semantics.
       val locationProp: Option[(String, String)] =
         location.map(uri => TableCatalog.PROP_LOCATION -> CatalogUtils.URIToString(uri))
 
       val finalProps = CatalogV2Util.withDefaultOwnership(
         properties ++
-          resolvedProvider.map(TableCatalog.PROP_PROVIDER -> _) ++
+          provider.map(TableCatalog.PROP_PROVIDER -> _) ++
           locationProp)
 
       try {

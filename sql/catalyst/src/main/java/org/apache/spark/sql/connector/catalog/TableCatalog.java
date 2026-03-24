@@ -299,9 +299,9 @@ public interface TableCatalog extends CatalogPlugin {
    * Create a table in the catalog by copying metadata from an existing source table.
    * <p>
    * This method is called for {@code CREATE TABLE ... LIKE ...} statements targeting this catalog.
-   * The {@code userSpecifiedOverrides} parameter contains user-specified overrides
-   * (TBLPROPERTIES, LOCATION), the resolved provider (from the USING clause or inherited
-   * from the source table), and the current user as owner.
+   * The {@code userSpecifiedOverrides} parameter contains strictly user-specified overrides:
+   * TBLPROPERTIES, LOCATION, the USING provider (only if explicitly specified), and the
+   * current user as owner.
    * It does NOT contain schema, partitioning, properties, or constraints from the source table.
    * Connectors must read all source metadata directly from {@code sourceTable}, including
    * columns ({@link Table#columns()}), partitioning ({@link Table#partitioning()}),
@@ -314,9 +314,9 @@ public interface TableCatalog extends CatalogPlugin {
    * @param ident a table identifier for the new table
    * @param sourceTable the resolved source table; connectors read schema, partitioning,
    *                    constraints, properties, and any format-specific metadata from this object
-   * @param userSpecifiedOverrides user-specified overrides: TBLPROPERTIES, LOCATION, resolved
-   *                               provider, and owner; source schema, partitioning, and
-   *                               constraints are NOT included
+   * @param userSpecifiedOverrides strictly user-specified overrides: TBLPROPERTIES, LOCATION,
+   *                               USING provider (if explicitly given), and owner; source schema,
+   *                               partitioning, provider, and constraints are NOT included
    * @return metadata for the new table
    *
    * @throws TableAlreadyExistsException If a table or view already exists for the identifier
