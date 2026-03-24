@@ -488,8 +488,11 @@ class SeriesTestsMixin:
         psser = ps.from_pandas(pser)
 
         # dict correspondence
-        # Currently pandas API on Spark doesn't return NaN as pandas does.
-        self.assert_eq(psser.map({}), pser.map({}).replace({np.nan: None}))
+        if LooseVersion(pd.__version__) < "3.0.0":
+            # Currently pandas API on Spark doesn't return NaN as pandas does.
+            self.assert_eq(psser.map({}), pser.map({}).replace({np.nan: None}))
+        else:
+            self.assert_eq(psser.map({}), pser.map({}))
 
         d = defaultdict(lambda: "abc")
         self.assertTrue("abc" in repr(psser.map(d)))
@@ -510,7 +513,7 @@ class SeriesTestsMixin:
         )
 
         def to_upper(string) -> str:
-            return string.upper() if string else ""
+            return string.upper() if isinstance(string, str) else ""
 
         self.assert_eq(psser.map(to_upper), pser.map(to_upper))
 
