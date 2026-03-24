@@ -468,4 +468,54 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("Catalog table INSERT INTO uses V2 path") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_LIST.key -> "",
+      SQLConf.V2_FILE_WRITE_ENABLED.key -> "true") {
+      withTable("t") {
+        sql("CREATE TABLE t (id BIGINT, value BIGINT) USING parquet")
+        sql("INSERT INTO t VALUES (1, 10), (2, 20), (3, 30)")
+        checkAnswer(sql("SELECT * FROM t"),
+          Seq((1L, 10L), (2L, 20L), (3L, 30L)).map(Row.fromTuple))
+      }
+    }
+  }
+
+  test("Catalog table partitioned INSERT INTO uses V2 path") {
+    // Note: FileDataSourceV2.getTable ignores partitioning transforms,
+    // so data is written flat (not in partition directories) via V2.
+    // Physical partitioning requires userSpecifiedPartitioning (Sub-4).
+    // This test verifies data correctness, not physical layout.
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_LIST.key -> "",
+      SQLConf.V2_FILE_WRITE_ENABLED.key -> "true") {
+      withTable("t") {
+        sql("CREATE TABLE t (id BIGINT, part BIGINT) " +
+          "USING parquet PARTITIONED BY (part)")
+        sql("INSERT INTO t VALUES (1, 1), (2, 1), (3, 2), (4, 2)")
+        checkAnswer(sql("SELECT * FROM t ORDER BY id"),
+          Seq((1L, 1L), (2L, 1L), (3L, 2L), (4L, 2L))
+            .map(Row.fromTuple))
+      }
+    }
+  }
+
+  test("CTAS uses V2 path") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_LIST.key -> "",
+      SQLConf.V2_FILE_WRITE_ENABLED.key -> "true") {
+      withTable("t") {
+        sql("CREATE TABLE t USING parquet " +
+          "AS SELECT id, id * 2 as value FROM range(10)")
+        checkAnswer(
+          sql("SELECT count(*) FROM t"),
+          Seq(Row(10L)))
+      }
+    }
+  }
+
+  // TODO: "INSERT INTO writes to custom partition location" test
+  // deferred to Sub-3/Sub-5 when catalogTable is set on FileTable
+  // and getCustomPartitionLocations returns real values.
 }
