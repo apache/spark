@@ -831,9 +831,10 @@ case class Join(
 
 /**
  * A logical plan that combines the columns of two DataFrames that derive from the same
- * base plan through chains of Project nodes. During optimization, this node is rewritten
- * into a single Project over the shared base plan. If the two children do not share the
- * same base plan (after stripping Project nodes), analysis will fail with an error.
+ * base plan through chains of Project nodes. This node is always unresolved and must be
+ * rewritten by [[ResolveZip]] into a single Project over the shared base plan during
+ * analysis. If the two children do not share the same base plan (after stripping Project
+ * nodes), analysis will fail with an error.
  */
 case class Zip(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   override def output: Seq[Attribute] = left.output ++ right.output
@@ -846,7 +847,8 @@ case class Zip(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
 
   def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 
-  override lazy val resolved: Boolean = childrenResolved && duplicateResolved
+  // Always unresolved -- must be rewritten by ResolveZip during analysis.
+  override lazy val resolved: Boolean = false
 
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): Zip = copy(left = newLeft, right = newRight)

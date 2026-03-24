@@ -116,7 +116,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         // Operator combine
         CollapseRepartition,
         CollapseProject,
-        CollapseZip,
         OptimizeWindowFunctions,
         CollapseWindow,
         EliminateOffsets,
@@ -1596,43 +1595,6 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     // child.
     case r @ RebalancePartitions(_, child: RebalancePartitions, _, _) =>
       r.withNewChildren(child.children)
-  }
-}
-
-/**
- * Collapses a [[Zip]] node into a single [[Project]] over the shared base plan.
- *
- * Both children of Zip must derive from the same base plan through chains of Project nodes.
- * After CollapseProject has flattened each side, this rule:
- * 1. Extracts the project list and base plan from each side
- * 2. Remaps the right side's attribute references to the left base plan's output
- * 3. Produces a single Project that combines both sides' expressions
- */
-object CollapseZip extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsPattern(ZIP), ruleId) {
-    case z: Zip =>
-      val (leftExprs, leftBase) = extractProjectAndBase(z.left)
-      val (rightExprs, rightBase) = extractProjectAndBase(z.right)
-      if (leftBase.sameResult(rightBase)) {
-        // Build an attribute mapping from rightBase output to leftBase output (by position)
-        val attrMapping = AttributeMap(rightBase.output.zip(leftBase.output))
-        // Remap right expressions to reference leftBase's attributes
-        val remappedRightExprs = rightExprs.map { expr =>
-          expr.transform {
-            case a: Attribute => attrMapping.getOrElse(a, a)
-          }.asInstanceOf[NamedExpression]
-        }
-        Project(leftExprs ++ remappedRightExprs, leftBase)
-      } else {
-        z
-      }
-  }
-
-  private def extractProjectAndBase(
-      plan: LogicalPlan): (Seq[NamedExpression], LogicalPlan) = plan match {
-    case Project(projectList, child) => (projectList, child)
-    case other => (other.output, other)
   }
 }
 
