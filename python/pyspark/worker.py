@@ -1048,45 +1048,6 @@ def wrap_grouped_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_type, ru
     )
 
 
-def wrap_grouped_agg_arrow_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
-    func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
-
-    arrow_return_type = to_arrow_type(
-        return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
-    )
-
-    def wrapped(*series):
-        import pyarrow as pa
-
-        result = func(*series)
-        return pa.array([result])
-
-    return (
-        args_kwargs_offsets,
-        lambda *a: (wrapped(*a), arrow_return_type),
-    )
-
-
-def wrap_grouped_agg_arrow_iter_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
-    func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
-
-    arrow_return_type = to_arrow_type(
-        return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
-    )
-
-    def wrapped(batch_iter):
-        import pyarrow as pa
-
-        # batch_iter: Iterator[pa.Array] (single) or Iterator[Tuple[pa.Array, ...]] (multiple)
-        result = func(batch_iter)
-        return pa.array([result])
-
-    return (
-        args_kwargs_offsets,
-        lambda *a: (wrapped(*a), arrow_return_type),
-    )
-
-
 def wrap_grouped_agg_pandas_iter_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
 
@@ -1456,14 +1417,11 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         return wrap_grouped_agg_pandas_udf(
             func, args_offsets, kwargs_offsets, return_type, runner_conf
         )
-    elif eval_type == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF:
-        return wrap_grouped_agg_arrow_udf(
-            func, args_offsets, kwargs_offsets, return_type, runner_conf
-        )
-    elif eval_type == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF:
-        return wrap_grouped_agg_arrow_iter_udf(
-            func, args_offsets, kwargs_offsets, return_type, runner_conf
-        )
+    elif eval_type in (
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
+    ):
+        return func, args_offsets, kwargs_offsets, return_type
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF:
         return wrap_grouped_agg_pandas_iter_udf(
             func, args_offsets, kwargs_offsets, return_type, runner_conf
@@ -2686,8 +2644,9 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
         elif eval_type in (
             PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
             PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
-            PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
         ):
+            ser = ArrowStreamSerializer(write_start_stream=True, num_dfs=1)
+        elif eval_type == PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF:
             ser = ArrowStreamAggArrowUDFSerializer(safecheck=True, arrow_cast=True)
         elif eval_type in (
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
@@ -2938,6 +2897,79 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 args_iter,
                 error_class="INPUT_NOT_FULLY_CONSUMED",
             )
+
+        # profiling is not supported for UDF
+        return func, None, ser, ser
+
+    if eval_type == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF:
+        import pyarrow as pa
+
+        # Pre-compute target schema for output coercion
+        col_names = ["_%d" % i for i in range(len(udfs))]
+        return_schema = to_arrow_schema(
+            StructType([StructField(name, rt) for name, (_, _, _, rt) in zip(col_names, udfs)]),
+            timezone="UTC",
+            prefers_large_types=runner_conf.use_large_var_types,
+        )
+
+        def func(split_index: int, batches: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+            """Apply grouped aggregate Arrow UDFs."""
+            for group_batches in batches:
+                # Concatenate all batches in this group into one
+                batch_list = list(group_batches)
+                if not batch_list:
+                    continue
+                concatenated = pa.concat_batches(batch_list)
+
+                # Call each UDF with appropriate columns
+                result_arrays = [
+                    pa.array(
+                        [
+                            udf_func(
+                                *[concatenated.column(o) for o in args_offsets],
+                                **{k: concatenated.column(v) for k, v in kwargs_offsets.items()},
+                            )
+                        ]
+                    )
+                    for udf_func, args_offsets, kwargs_offsets, _ in udfs
+                ]
+                batch = pa.RecordBatch.from_arrays(result_arrays, col_names)
+                yield ArrowBatchTransformer.enforce_schema(batch, return_schema)
+
+        # profiling is not supported for UDF
+        return func, None, ser, ser
+
+    if eval_type == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF:
+        import pyarrow as pa
+
+        assert num_udfs == 1, "One GROUPED_AGG_ARROW_ITER UDF expected here."
+        udf_func, args_offsets, kwargs_offsets, return_type = udfs[0]
+
+        return_schema = to_arrow_schema(
+            StructType([StructField("_0", return_type)]),
+            timezone="UTC",
+            prefers_large_types=runner_conf.use_large_var_types,
+        )
+
+        def func(split_index: int, batches: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+            """Apply grouped aggregate Arrow iterator UDF."""
+            for group_batches in batches:
+                # Convert RecordBatch iterator to column iterator
+                if len(args_offsets) == 1:
+                    batch_iter = (batch.column(args_offsets[0]) for batch in group_batches)
+                else:
+                    batch_iter = (
+                        tuple(batch.column(o) for o in args_offsets) for batch in group_batches
+                    )
+
+                result = udf_func(batch_iter)
+
+                # Drain any remaining batches to maintain stream position
+                for _ in batch_iter:
+                    pass
+
+                batch = pa.RecordBatch.from_arrays([pa.array([result])], ["_0"])
+                yield ArrowBatchTransformer.enforce_schema(batch, return_schema)
 
         # profiling is not supported for UDF
         return func, None, ser, ser
@@ -3342,22 +3374,6 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             df2_vals = table_from_batches(a[1], parsed_offsets[1][1])
             return f(df1_keys, df1_vals, df2_keys, df2_vals)
 
-    elif eval_type == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF:
-        # We assume there is only one UDF here because grouped agg doesn't
-        # support combining multiple UDFs.
-        assert num_udfs == 1
-
-        arg_offsets, f = udfs[0]
-
-        # Convert to iterator of batches: Iterator[pa.Array] for single column,
-        # or Iterator[Tuple[pa.Array, ...]] for multiple columns
-        def mapper(a):
-            if len(arg_offsets) == 1:
-                batch_iter = (batch_columns[arg_offsets[0]] for batch_columns in a)
-            else:
-                batch_iter = (tuple(batch_columns[o] for o in arg_offsets) for batch_columns in a)
-            return f(batch_iter)
-
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF:
         # We assume there is only one UDF here because grouped agg doesn't
         # support combining multiple UDFs.
@@ -3382,13 +3398,10 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 )
             return f(series_iter)
 
-    elif eval_type in (
-        PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
-        PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
-    ):
+    elif eval_type == PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF:
         import pyarrow as pa
 
-        # For SQL_GROUPED_AGG_ARROW_UDF and SQL_WINDOW_AGG_ARROW_UDF,
+        # For SQL_WINDOW_AGG_ARROW_UDF,
         # convert iterator of batch columns to a concatenated RecordBatch
         def mapper(a):
             # a is Iterator[Tuple[pa.Array, ...]] - convert to RecordBatch
