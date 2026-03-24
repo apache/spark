@@ -57,7 +57,6 @@ object PushDownJoinThroughUnion
     case join @ Join(u: Union, right, joinType, joinCond, hint)
       if (joinType == Inner || joinType == LeftOuter) &&
         canPlanAsBroadcastHashJoin(join, conf) &&
-        joinCond.forall(_.deterministic) &&
         // Exclude right subtrees containing subqueries, as DeduplicateRelations
         // may not correctly handle correlated references when cloning.
         !right.exists(_.expressions.exists(SubqueryExpression.hasSubquery)) =>

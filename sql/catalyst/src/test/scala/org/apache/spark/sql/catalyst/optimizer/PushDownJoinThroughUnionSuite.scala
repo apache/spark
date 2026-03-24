@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Explode, Rand}
+import org.apache.spark.sql.catalyst.expressions.Explode
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint, LocalRelation, LogicalPlan, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Union}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
@@ -234,23 +234,6 @@ class PushDownJoinThroughUnionSuite extends PlanTest {
         assert(ids_i.intersect(ids_j).isEmpty,
           s"Union children $i and $j share ExprIds: ${ids_i.intersect(ids_j)}")
       }
-    }
-  }
-
-  test("Do not push down when join condition is non-deterministic") {
-    withSQLConf(
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000") {
-      val union = Union(testRelation1, testRelation2).analyze
-      // Build the Join directly with a non-deterministic condition, bypassing
-      // analyze (which rejects non-deterministic join conditions).
-      val nonDetCond = Some(union.output(0) === testRelation3.output(0) && Rand(0) > 0.5)
-      val query = Join(union, testRelation3, Inner, nonDetCond, JoinHint.NONE)
-      val optimized = Optimize.execute(query)
-
-      // Should not be pushed down - plan should remain unchanged.
-      // Cannot use comparePlans here because it runs checkAnalysis,
-      // which rejects non-deterministic join conditions.
-      assert(!optimized.isInstanceOf[Union])
     }
   }
 
