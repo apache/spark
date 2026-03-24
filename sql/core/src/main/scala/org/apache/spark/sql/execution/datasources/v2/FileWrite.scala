@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.Locale
-
 import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
@@ -96,7 +94,7 @@ trait FileWrite extends Write
     }
 
     // For truncate (full overwrite), delete existing data before writing.
-    // TODO: This is not atomic — if the write fails after deletion, old data is lost.
+    // TODO: This is not atomic - if the write fails after deletion, old data is lost.
     // Consider moving into FileBatchWrite.commit() for atomic overwrite semantics.
     if (isTruncate && fs.exists(qualifiedPath)) {
       fs.listStatus(qualifiedPath).foreach { status =>
@@ -160,13 +158,10 @@ trait FileWrite extends Write
     // Partition columns may use types unsupported by the format
     // (e.g., INT in text) since they are written as directory
     // names, not as data values.
-    val partColNames = partitionSchema.fieldNames.map { name =>
-      if (caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
-    }.toSet
+    val resolver = sqlConf.resolver
+    val partColNames = partitionSchema.fieldNames
     schema.foreach { field =>
-      val fieldName =
-        if (caseSensitiveAnalysis) field.name else field.name.toLowerCase(Locale.ROOT)
-      if (!partColNames.contains(fieldName) &&
+      if (!partColNames.exists(resolver(_, field.name)) &&
           !supportsDataType(field.dataType)) {
         throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(formatName, field)
       }
