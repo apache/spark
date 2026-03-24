@@ -49,6 +49,8 @@ public interface Transaction extends Closeable {
    * <p>
    * This method will be called exactly once per transaction. Spark calls {@link #close()}
    * immediately after this method returns.
+   *
+   * @throws IllegalStateException if the transaction has already been committed or aborted.
    */
   void commit();
 
