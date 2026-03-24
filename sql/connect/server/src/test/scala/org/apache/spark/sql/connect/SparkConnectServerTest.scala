@@ -72,8 +72,10 @@ trait SparkConnectServerTest extends SharedSparkSession with ArrowAllocatorLeakC
     // Executor.stop() calls threadPool.shutdown() but does NOT await termination, so task
     // threads may still be running (and holding Arrow child-allocator memory) when
     // SparkContext.stop() returns. Wait here for all Arrow memory to drain before the
-    // ArrowAllocatorLeakCheck assertion fires in super.afterAll().
-    eventuallyWithTimeout {
+    // ArrowAllocatorLeakCheck assertion fires in super.afterAll(). Use a 3-minute timeout
+    // (instead of the default 30 seconds) to accommodate slow CI runners where Arrow
+    // serialization of a large result set can take well over 30 seconds.
+    Eventually.eventually(timeout(3.minutes), interval(500.millis)) {
       assert(
         ArrowUtils.rootAllocator.getAllocatedMemory == 0,
         s"Arrow memory still allocated after cancelAllJobs: " +
