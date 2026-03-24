@@ -81,6 +81,17 @@ class ResolveZipSuite extends AnalysisTest {
     assert(resolved.isInstanceOf[Zip])
   }
 
+  test("resolve Zip: skipped when children are unresolved") {
+    val unresolvedChild = Project(
+      Seq(UnresolvedAttribute("a")),
+      UnresolvedRelation(Seq("t")))
+    val zip = Zip(unresolvedChild, unresolvedChild)
+
+    val result = Resolve.execute(zip)
+    // Zip should remain unchanged because children are not resolved
+    assert(result.isInstanceOf[Zip])
+  }
+
   test("CheckAnalysis: different base plans throws ZIP_PLANS_NOT_MERGEABLE") {
     val base2 = LocalRelation($"x".int, $"y".int, $"z".int, $"w".int)
     val left = Project(Seq(base.output(0)), base)
