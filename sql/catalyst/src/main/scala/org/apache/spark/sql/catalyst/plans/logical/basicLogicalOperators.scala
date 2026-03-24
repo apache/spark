@@ -830,6 +830,29 @@ case class Join(
 }
 
 /**
+ * A logical plan that combines the columns of two DataFrames that derive from the same
+ * base plan through chains of Project nodes. During optimization, this node is rewritten
+ * into a single Project over the shared base plan. If the two children do not share the
+ * same base plan (after stripping Project nodes), analysis will fail with an error.
+ */
+case class Zip(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
+  override def output: Seq[Attribute] = left.output ++ right.output
+
+  override def maxRows: Option[Long] = left.maxRows
+
+  override def maxRowsPerPartition: Option[Long] = left.maxRowsPerPartition
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ZIP)
+
+  def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
+
+  override lazy val resolved: Boolean = childrenResolved && duplicateResolved
+
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): Zip = copy(left = newLeft, right = newRight)
+}
+
+/**
  * Insert query result into a directory.
  *
  * @param isLocal Indicates whether the specified directory is local directory

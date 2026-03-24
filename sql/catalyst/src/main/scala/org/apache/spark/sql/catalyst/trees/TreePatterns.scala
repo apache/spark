@@ -176,6 +176,7 @@ object TreePattern extends Enumeration  {
   val TRANSPOSE: Value = Value
   val UNION: Value = Value
   val UNPIVOT: Value = Value
+  val ZIP: Value = Value
   val UPDATE_EVENT_TIME_WATERMARK_COLUMN: Value = Value
   val TYPED_FILTER: Value = Value
   val WINDOW: Value = Value

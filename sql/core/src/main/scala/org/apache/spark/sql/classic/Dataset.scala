@@ -707,6 +707,19 @@ class Dataset[T] private[sql](
     Join(logicalPlan, right.logicalPlan, joinType = Cross, None, JoinHint.NONE)
   }
 
+  /**
+   * Combines the columns of this DataFrame with another DataFrame that derives from the same
+   * base plan through Project operations. The optimizer rewrites the resulting Zip node into a
+   * single Project over the shared base plan.
+   *
+   * @param other another DataFrame that shares the same base plan
+   * @return a new DataFrame with columns from both sides
+   * @throws AnalysisException if the two DataFrames do not derive from the same base plan
+   */
+  def zip(other: sql.Dataset[_]): DataFrame = withPlan {
+    Zip(logicalPlan, other.logicalPlan)
+  }
+
   /** @inheritdoc */
   def joinWith[U](other: sql.Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
     // Creates a Join node and resolve it first, to get join condition resolved, self-join resolved,
