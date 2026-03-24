@@ -166,7 +166,7 @@ object ClientTypeOps {
    *   Some(ClientTypeOps) if supported, None otherwise
    */
   // Delegates to TypeApiOps and narrows: a type must implement TypeApiOps AND mix in
-  // ClientTypeOps to be found here. No separate registration needed — the collect
+  // ClientTypeOps to be found here. No separate registration needed - the collect
   // filter handles incremental trait adoption automatically.
   def apply(dt: DataType): Option[ClientTypeOps] =
     TypeApiOps(dt).collect { case co: ClientTypeOps => co }
