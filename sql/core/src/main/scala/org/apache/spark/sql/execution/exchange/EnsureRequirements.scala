@@ -517,7 +517,9 @@ case class EnsureRequirements(
         val (rightReducedDataTypes, rightReducedKeys) = rightReducers.fold(
           (rightPartitioning.expressionDataTypes, rightPartitioning.partitionKeys)
         )(rightPartitioning.reduceKeys)
-        if (leftReducedDataTypes != rightReducedDataTypes) {
+        val reducedDataTypes = if (leftReducedDataTypes == rightReducedDataTypes) {
+          leftReducedDataTypes
+        } else {
           throw QueryExecutionErrors.storagePartitionJoinIncompatibleReducedTypesError(
             leftReducers = leftReducers,
             leftReducedDataTypes = leftReducedDataTypes,
@@ -525,7 +527,7 @@ case class EnsureRequirements(
             rightReducedDataTypes = rightReducedDataTypes)
         }
 
-        val reducedKeyRowOrdering = RowOrdering.createNaturalAscendingOrdering(leftReducedDataTypes)
+        val reducedKeyRowOrdering = RowOrdering.createNaturalAscendingOrdering(reducedDataTypes)
         val reducedKeyOrdering =
           reducedKeyRowOrdering.on((t: InternalRowComparableWrapper) => t.row)
 

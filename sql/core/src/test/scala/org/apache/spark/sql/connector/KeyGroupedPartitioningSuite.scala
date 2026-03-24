@@ -88,7 +88,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       (id, oldFn)
     }
     try f finally {
-      oldFns.foreach { case (id, oldFn ) =>
+      oldFns.foreach { case (id, oldFn) =>
         catalog.dropFunction(id)
         oldFn.foreach(catalog.createFunction(id, _))
       }
