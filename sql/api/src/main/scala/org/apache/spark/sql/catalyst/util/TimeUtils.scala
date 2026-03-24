@@ -148,16 +148,7 @@ object TimeUtils {
   }
 
   /**
-   * Converts microseconds since midnight to java.sql.Time.
-   */
-  def microsToSqlTime(micros: Long): Time = {
-    require(micros >= 0 && micros < MICROS_PER_DAY,
-      s"Time value $micros is out of valid range [0, $MICROS_PER_DAY)")
-    Time.valueOf(microsToLocalTime(micros))
-  }
-
-  /**
-   * Extracts hour from TIME value (0-23).
+   * Returns hour component of the time (0-23).
    */
   def getHour(micros: Long): Int = {
     (micros / MICROS_PER_HOUR).toInt

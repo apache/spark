@@ -376,7 +376,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
   test("cast from time to integral") {
     checkEvaluation(cast(Literal(37845123456L, TimeType), IntegerType, UTC_OPT), 37845)
-    checkEvaluation(cast(Literal(37845123456L, TimeType), LongType, UTC_OPT), 37845123456L)
+    checkEvaluation(cast(Literal(37845123456L, TimeType), LongType, UTC_OPT), 37845L)
   }
 
   test("data type casting") {

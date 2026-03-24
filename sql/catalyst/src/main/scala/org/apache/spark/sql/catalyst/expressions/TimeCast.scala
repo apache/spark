@@ -30,57 +30,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 object TimeCast {
 
-  // Convenience methods for testing and direct usage
-  def timeToString(timeMicros: Long): UTF8String = castTimeToString(timeMicros)
-  def stringToTime(from: UTF8String): Option[Long] = {
-    TimeUtils.stringToTime(from)
-  }
-  def timeToLong(timeMicros: Long): Long = castTimeToLong(timeMicros)
-  def longToTime(micros: Long): Option[Long] = {
-    if (TimeUtils.isValidTime(micros)) Some(micros) else None
-  }
-  def timeToInt(timeMicros: Long): Int = castTimeToInt(timeMicros)
-  def intToTime(seconds: Int): Option[Long] = {
-    val micros = seconds.toLong * TimeUtils.MICROS_PER_SECOND
-    if (TimeUtils.isValidTime(micros)) Some(micros) else None
-  }
-  def timeToDouble(timeMicros: Long): Double = {
-    timeMicros.toDouble / TimeUtils.MICROS_PER_SECOND
-  }
-  def doubleToTime(seconds: Double): Option[Long] = {
-    if (seconds.isNaN || seconds.isInfinite || seconds < 0.0 || seconds >= 86400.0) {
-      None
-    } else {
-      val micros = (seconds * TimeUtils.MICROS_PER_SECOND).toLong
-      if (TimeUtils.isValidTime(micros)) Some(micros) else None
-    }
-  }
-  def timeToFloat(timeMicros: Long): Float = {
-    (timeMicros.toDouble / TimeUtils.MICROS_PER_SECOND).toFloat
-  }
-  def floatToTime(seconds: Float): Option[Long] = {
-    if (seconds.isNaN || seconds.isInfinite || seconds < 0.0f || seconds >= 86400.0f) {
-      None
-    } else {
-      val micros = (seconds.toDouble * TimeUtils.MICROS_PER_SECOND).toLong
-      if (TimeUtils.isValidTime(micros)) Some(micros) else None
-    }
-  }
-  def timeToBoolean(timeMicros: Long): Boolean = timeMicros != 0L
-  def booleanToTime(value: Boolean): Long = if (value) 1L else 0L
-  def timeToDate(timeMicros: Long): Int = castTimeToDate(timeMicros)
-  def dateToTime(days: Int): Long = castDateToTime(days)
-  def timeToTimestamp(timeMicros: Long): java.time.Instant = {
-    val epochDate = java.time.LocalDate.ofEpochDay(0)
-    val localTime = TimeUtils.microsToLocalTime(timeMicros)
-    val localDateTime = java.time.LocalDateTime.of(epochDate, localTime)
-    localDateTime.toInstant(java.time.ZoneOffset.UTC)
-  }
-  def timestampToTime(timestampMicros: Long): Long = {
-    castTimestampToTime(timestampMicros, java.time.ZoneId.of("UTC"))
-  }
-  def binaryToTime(bytes: Array[Byte]): Option[Long] = None
-  def timeToBinary(timeMicros: Long): Option[Array[Byte]] = None
+
 
   /**
    * Cast from String to TimeType.
@@ -193,30 +143,6 @@ object TimeCast {
     } else {
       throw new IllegalArgumentException(
         s"Cannot cast $d to TIME. Valid range is 0 to 86399.999999. $errorContext")
-    }
-  }
-
-  /**
-   * Cast from Int to TimeType.
-   * Interprets the int value as seconds since midnight.
-   */
-  def castIntToTime(seconds: Int): Any = {
-    val micros = seconds.toLong * TimeUtils.MICROS_PER_SECOND
-    if (TimeUtils.isValidTime(micros)) micros else null
-  }
-
-  /**
-   * Cast from Int to TimeType in ANSI mode.
-   * Throws an exception if the value is out of range.
-   */
-  def castIntToTimeAnsi(seconds: Int, errorContext: SQLQueryContext): Long = {
-    val micros = seconds.toLong * TimeUtils.MICROS_PER_SECOND
-    if (TimeUtils.isValidTime(micros)) {
-      micros
-    } else {
-      val maxSeconds = 86400 - 1
-      throw new IllegalArgumentException(
-        s"Cannot cast $seconds to TIME. Valid range is 0 to $maxSeconds. $errorContext")
     }
   }
 

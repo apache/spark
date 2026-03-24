@@ -232,11 +232,10 @@ class TimeUtilsSuite extends SparkFunSuite {
     assert(TimeUtils.stringToTime(UTF8String.fromString("23:59:59.999999")).contains(86399999999L))
   }
 
-  test("sqlTimeToMicros and microsToSqlTime") {
+  test("sqlTimeToMicros - conversion") {
     val time = java.sql.Time.valueOf("12:30:45")
     val micros = TimeUtils.sqlTimeToMicros(time)
-    val result = TimeUtils.microsToSqlTime(micros)
-    assert(result.toLocalTime === time.toLocalTime)
+    assert(micros === 45045000000L)
   }
 
   test("currentTime - valid range") {

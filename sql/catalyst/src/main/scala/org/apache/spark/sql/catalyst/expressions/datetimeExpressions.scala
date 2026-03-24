@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegist
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, TimestampFormatter, TimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.SIMPLE_DATE_FORMAT
@@ -392,18 +392,50 @@ trait GetTimeField extends UnaryExpression
 
   @transient protected lazy val zoneIdInEval: ZoneId = zoneIdForType(child.dataType)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(AnyTimestampType, TimeType))
 
   override def dataType: DataType = IntegerType
 
-  override protected def nullSafeEval(timestamp: Any): Any = {
-    func(timestamp.asInstanceOf[Long], zoneIdInEval)
+  override protected def nullSafeEval(value: Any): Any = {
+    if (child.dataType == TimeType) {
+      val micros = value.asInstanceOf[Long]
+      funcName match {
+        case "getHours" => TimeUtils.getHour(micros)
+        case "getMinutes" => TimeUtils.getMinute(micros)
+        case "getSeconds" => TimeUtils.getSecond(micros)
+        case "getSecondsWithFraction" =>
+          val s = TimeUtils.getSecond(micros)
+          val us = TimeUtils.getMicrosecond(micros)
+          Decimal(s + us / 1000000.0, 8, 6)
+        case _ => throw new UnsupportedOperationException(s"Unsupported time function: $funcName")
+      }
+    } else {
+      func(value.asInstanceOf[Long], zoneIdInEval)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.$funcName($c, $zid)")
+    if (child.dataType == TimeType) {
+      val timeUtils = TimeUtils.getClass.getName.stripSuffix("$")
+      funcName match {
+        case "getHours" =>
+          defineCodeGen(ctx, ev, c => s"$timeUtils.getHour($c)")
+        case "getMinutes" =>
+          defineCodeGen(ctx, ev, c => s"$timeUtils.getMinute($c)")
+        case "getSeconds" =>
+          defineCodeGen(ctx, ev, c => s"$timeUtils.getSecond($c)")
+        case "getSecondsWithFraction" =>
+          defineCodeGen(ctx, ev, c => {
+            s"Decimal.apply((double) $timeUtils.getSecond($c) + " +
+              s"(double) $timeUtils.getMicrosecond($c) / 1000000.0, 8, 6)"
+          })
+        case _ => throw new UnsupportedOperationException(s"Unsupported time function: $funcName")
+      }
+    } else {
+      val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+      defineCodeGen(ctx, ev, c => s"$dtu.$funcName($c, $zid)")
+    }
   }
 }
 
