@@ -57,19 +57,20 @@ object PushDownJoinThroughUnion
     case join @ Join(u: Union, right, joinType, joinCond, hint)
       if (joinType == Inner || joinType == LeftOuter) &&
         canPlanAsBroadcastHashJoin(join, conf) &&
+        joinCond.forall(_.deterministic) &&
         // Exclude right subtrees containing subqueries, as DeduplicateRelations
         // may not correctly handle correlated references when cloning.
         !right.exists(_.expressions.exists(SubqueryExpression.hasSubquery)) =>
 
       val unionHeadOutput = u.children.head.output
       val newChildren = u.children.zipWithIndex.map { case (child, idx) =>
-        val newRight = if (idx == 0) right else dedupRight(right)
-        val leftRewrites = AttributeMap(unionHeadOutput.zip(child.output))
-        val rightRewrites = if (idx == 0) {
-          AttributeMap.empty[Attribute]
+        val (newRight, rightRewrites) = if (idx == 0) {
+          (right, AttributeMap.empty[Attribute])
         } else {
-          AttributeMap(right.output.zip(newRight.output))
+          val deduped = dedupRight(right)
+          (deduped, AttributeMap(right.output.zip(deduped.output)))
         }
+        val leftRewrites = AttributeMap(unionHeadOutput.zip(child.output))
         val newCond = joinCond.map(_.transform {
           case a: Attribute if leftRewrites.contains(a) => leftRewrites(a)
           case a: Attribute if rightRewrites.contains(a) => rightRewrites(a)
