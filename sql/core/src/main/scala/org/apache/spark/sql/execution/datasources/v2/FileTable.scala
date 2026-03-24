@@ -26,7 +26,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoImpl}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoImpl, SupportsDynamicOverwrite, SupportsTruncate, Write, WriteBuilder}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.streaming.runtime.MetadataLogFileIndex
@@ -174,8 +174,45 @@ abstract class FileTable(
       writeInfo.rowIdSchema(),
       writeInfo.metadataSchema())
   }
+
+  /**
+   * Creates a [[WriteBuilder]] that supports truncate and dynamic partition overwrite
+   * for file-based tables.
+   *
+   * @param info the logical write info
+   * @param buildWrite factory function that creates the [[Write]] given write info,
+   *                   partition schema, dynamic partition overwrite flag,
+   *                   and truncate flag
+   */
+  protected def createFileWriteBuilder(
+      info: LogicalWriteInfo)(
+      buildWrite: (LogicalWriteInfo, StructType, Boolean, Boolean) => Write): WriteBuilder = {
+    new WriteBuilder with SupportsDynamicOverwrite with SupportsTruncate {
+      private var isDynamicOverwrite = false
+      private var isTruncate = false
+
+      override def overwriteDynamicPartitions(): WriteBuilder = {
+        isDynamicOverwrite = true
+        this
+      }
+
+      override def truncate(): WriteBuilder = {
+        isTruncate = true
+        this
+      }
+
+      override def build(): Write = {
+        // Note: fileIndex.partitionSchema may be empty for new paths.
+        // DataFrame API partitionBy() columns are not plumbed here yet;
+        // that is handled by userSpecifiedPartitioning in a follow-up patch.
+        buildWrite(mergedWriteInfo(info), fileIndex.partitionSchema,
+          isDynamicOverwrite, isTruncate)
+      }
+    }
+  }
 }
 
 object FileTable {
-  private val CAPABILITIES = util.EnumSet.of(BATCH_READ, BATCH_WRITE)
+  private val CAPABILITIES = util.EnumSet.of(
+    BATCH_READ, BATCH_WRITE, TRUNCATE, OVERWRITE_DYNAMIC)
 }

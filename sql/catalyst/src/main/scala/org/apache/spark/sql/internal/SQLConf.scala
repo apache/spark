@@ -4750,6 +4750,15 @@ object SQLConf {
     .stringConf
     .createWithDefault("avro,csv,json,kafka,orc,parquet,text")
 
+  val V2_FILE_WRITE_ENABLED = buildConf("spark.sql.sources.v2.file.write.enabled")
+    .internal()
+    .doc("When true, the file source V2 write path is used for INSERT INTO statements " +
+      "targeting file-based V2 tables. When false, these writes fall back to the V1 write " +
+      "path via FallBackFileSourceV2.")
+    .version("4.2.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val ALLOW_EMPTY_SCHEMAS_FOR_WRITES = buildConf("spark.sql.legacy.allowEmptySchemaWrite")
     .internal()
     .doc("When this option is set to true, validation of empty or empty nested schemas that " +

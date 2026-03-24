@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, Logical
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.datasources.v2.{ExtractV2Table, FileTable}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Replace the File source V2 table in [[InsertIntoStatement]] to V1 [[FileFormat]].
@@ -33,17 +34,22 @@ import org.apache.spark.sql.execution.datasources.v2.{ExtractV2Table, FileTable}
  * removed when Catalog support of file data source v2 is finished.
  */
 class FallBackFileSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoStatement(
-        d @ ExtractV2Table(table: FileTable), _, _, _, _, _, _, _) =>
-      val v1FileFormat = table.fallbackFileFormat.getDeclaredConstructor().newInstance()
-      val relation = HadoopFsRelation(
-        table.fileIndex,
-        table.fileIndex.partitionSchema,
-        table.schema,
-        None,
-        v1FileFormat,
-        d.options.asScala.toMap)(sparkSession)
-      i.copy(table = LogicalRelation(relation))
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    if (sparkSession.sessionState.conf.getConf(SQLConf.V2_FILE_WRITE_ENABLED)) {
+      return plan
+    }
+    plan resolveOperators {
+      case i @ InsertIntoStatement(
+          d @ ExtractV2Table(table: FileTable), _, _, _, _, _, _, _) =>
+        val v1FileFormat = table.fallbackFileFormat.getDeclaredConstructor().newInstance()
+        val relation = HadoopFsRelation(
+          table.fileIndex,
+          table.fileIndex.partitionSchema,
+          table.schema,
+          None,
+          v1FileFormat,
+          d.options.asScala.toMap)(sparkSession)
+        i.copy(table = LogicalRelation(relation))
+    }
   }
 }
