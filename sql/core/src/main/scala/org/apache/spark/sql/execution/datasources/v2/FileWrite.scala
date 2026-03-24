@@ -94,8 +94,8 @@ trait FileWrite extends Write
     }
 
     // For truncate (full overwrite), delete existing data before writing.
-    // TODO: SPARK-56173 This is not atomic - if the write fails after deletion, old data is lost.
-    // Consider moving into FileBatchWrite.commit() for atomic overwrite semantics.
+    // Note: this is not atomic (same as V1 InsertIntoHadoopFsRelationCommand) -
+    // if the write fails after deletion, old data is lost.
     if (isTruncate && fs.exists(qualifiedPath)) {
       fs.listStatus(qualifiedPath).foreach { status =>
         // Preserve hidden files/dirs (e.g., _SUCCESS, .spark-staging-*)
