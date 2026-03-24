@@ -94,7 +94,7 @@ trait FileWrite extends Write
     }
 
     // For truncate (full overwrite), delete existing data before writing.
-    // TODO: This is not atomic - if the write fails after deletion, old data is lost.
+    // TODO: SPARK-56173 This is not atomic - if the write fails after deletion, old data is lost.
     // Consider moving into FileBatchWrite.commit() for atomic overwrite semantics.
     if (isTruncate && fs.exists(qualifiedPath)) {
       fs.listStatus(qualifiedPath).foreach { status =>
