@@ -143,8 +143,12 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_DATAFRAME",
-            messageParameters={"arg_name": "df", "arg_type": "Column"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "DataFrame",
+                "arg_name": "df",
+                "arg_type": "Column",
+            },
         )
 
     def test_normal_functions(self):
@@ -1217,8 +1221,12 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_INT_OR_STR",
-            messageParameters={"arg_name": "start", "arg_type": "float"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column, int or str",
+                "arg_name": "start",
+                "arg_type": "float",
+            },
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1226,8 +1234,12 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_INT_OR_STR",
-            messageParameters={"arg_name": "length", "arg_type": "float"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column, int or str",
+                "arg_name": "length",
+                "arg_type": "float",
+            },
         )
 
         # test sort_array
@@ -1984,8 +1996,12 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR_OR_STRUCT",
-            messageParameters={"arg_name": "schema", "arg_type": "list"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "StructType, Column or str",
+                "arg_name": "schema",
+                "arg_type": "list",
+            },
         )
 
         # test schema_of_xml
