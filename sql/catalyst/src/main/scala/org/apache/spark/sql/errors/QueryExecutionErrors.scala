@@ -719,7 +719,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def unsupportedTableChangeError(e: IllegalArgumentException): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2045",
+      errorClass = "UNSUPPORTED_TABLE_CHANGE",
       messageParameters = Map("message" -> e.getMessage),
       cause = e)
   }
