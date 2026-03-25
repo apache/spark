@@ -661,6 +661,23 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertIn("RelationChanges", rc.print())
         self.assertIn("myTable", rc.print())
 
+    def test_relation_changes_rejects_user_schema(self):
+        from pyspark.errors import AnalysisException
+
+        reader = DataFrameReader(self.connect).schema("id LONG, data STRING")
+        with self.assertRaises(AnalysisException) as ctx:
+            reader.option("startingVersion", "1").changes("myTable")
+        self.assertIn("changes", str(ctx.exception))
+
+    def test_relation_changes_streaming_rejects_user_schema(self):
+        from pyspark.errors import AnalysisException
+        from pyspark.sql.connect.streaming.readwriter import DataStreamReader
+
+        reader = DataStreamReader(self.connect).schema("id LONG, data STRING")
+        with self.assertRaises(AnalysisException) as ctx:
+            reader.option("startingVersion", "1").changes("myTable")
+        self.assertIn("changes", str(ctx.exception))
+
     def test_all_the_plans(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         df = df.select(df.col1).filter(df.col2 == 2).sort(df.col3.asc())
