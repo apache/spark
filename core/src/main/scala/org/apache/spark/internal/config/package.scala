@@ -2786,7 +2786,7 @@ package object config {
       .stringConf
       .toSequence
       .createWithDefault(
-        Seq("https://repository.apache.org/content/repositories/orgapachehadoop-1469/"))
+        Seq("https://repository.apache.org/content/repositories/orgapachehadoop-1470/"))
 
   private[spark] val APP_ATTEMPT_ID =
     ConfigBuilder("spark.app.attempt.id")

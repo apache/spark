@@ -5707,7 +5707,7 @@ object SQLConf {
       .createWithDefault(
         sys.env.getOrElse("DEFAULT_ARTIFACT_REPOSITORY",
           "https://maven-central.storage-download.googleapis.com/maven2/," +
-          "https://repository.apache.org/content/repositories/orgapachehadoop-1469"))
+          "https://repository.apache.org/content/repositories/orgapachehadoop-1470"))
 
   val LEGACY_FROM_DAYTIME_STRING =
     buildConf("spark.sql.legacy.fromDayTimeString.enabled")
