@@ -184,7 +184,7 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <!-- Should be consistent with SparkBuild.scala and docs -->
-    <fasterxml.jackson.version>2.21.1</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.21.2</fasterxml.jackson.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.8</snappy.version>
     <netlib.ludovic.dev.version>3.1.1</netlib.ludovic.dev.version>
@@ -215,12 +215,12 @@
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.11.0</commons-cli.version>
     <bouncycastle.version>1.83</bouncycastle.version>
-    <tink.version>1.19.0</tink.version>
+    <tink.version>1.20.0</tink.version>
     <datasketches.version>6.2.0</datasketches.version>
     <netty.version>4.2.10.Final</netty.version>
-    <netty-tcnative.version>2.0.74.Final</netty-tcnative.version>
+    <netty-tcnative.version>2.0.75.Final</netty-tcnative.version>
     <icu4j.version>78.2</icu4j.version>
-    <junit.version>6.0.1</junit.version>
+    <junit.version>6.0.3</junit.version>
     <jline.version>2.14.6</jline.version>
     <!--
       SPARK-50299: When updating `sbt-jupiter-interface.version`,
@@ -232,7 +232,7 @@
     ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py,
     ./python/packaging/client/setup.py, and ./python/packaging/connect/setup.py too.
     -->
-    <arrow.version>18.3.0</arrow.version>
+    <arrow.version>19.0.0</arrow.version>
     <ammonite.version>3.0.8</ammonite.version>
     <jjwt.version>0.13.0</jjwt.version>
 
@@ -332,7 +332,6 @@
       --add-opens=java.base/sun.nio.cs=ALL-UNNAMED
       --add-opens=java.base/sun.security.action=ALL-UNNAMED
       --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
-      -Djdk.reflect.useDirectMethodHandle=false
       -Dio.netty.tryReflectionSetAccessible=true
       -Dio.netty.allocator.type=pooled
       -Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE
@@ -344,7 +343,7 @@
     <postgresql.version>42.7.10</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
     <mssql.jdbc.version>13.2.1.jre11</mssql.jdbc.version>
-    <ojdbc17.version>23.6.0.24.10</ojdbc17.version>
+    <ojdbc17.version>23.26.1.0.0</ojdbc17.version>
     <databricks.jdbc.version>2.7.1</databricks.jdbc.version>
     <snowflake.jdbc.version>4.0.2</snowflake.jdbc.version>
     <terajdbc.version>20.00.00.39</terajdbc.version>
@@ -443,7 +442,7 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>mockito-5-12_${scala.binary.version}</artifactId>
+      <artifactId>mockito-5-18_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -1248,7 +1247,7 @@
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>mockito-5-12_${scala.binary.version}</artifactId>
+        <artifactId>mockito-5-18_${scala.binary.version}</artifactId>
         <version>3.2.19.0</version>
         <scope>test</scope>
       </dependency>
@@ -1267,7 +1266,7 @@
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
-        <version>5.12.0</version>
+        <version>5.23.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1603,7 +1602,7 @@
       <dependency>
         <groupId>org.tukaani</groupId>
         <artifactId>xz</artifactId>
-        <version>1.10</version>
+        <version>1.12</version>
       </dependency>
       <dependency>
         <groupId>org.apache.zookeeper</groupId>

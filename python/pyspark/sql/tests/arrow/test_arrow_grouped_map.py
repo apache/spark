@@ -419,7 +419,7 @@ class ApplyInArrowTestsMixin:
                 [
                     Row(
                         level="WARNING",
-                        msg=f"arrow grouped map: {dict(id=lst, value=[v*10 for v in lst])}",
+                        msg=f"arrow grouped map: {dict(id=lst, value=[v * 10 for v in lst])}",
                         context={"func_name": func_with_logging.__name__},
                         logger="test_arrow_grouped_map",
                     )
@@ -459,7 +459,7 @@ class ApplyInArrowTestsMixin:
                 [
                     Row(
                         level="WARNING",
-                        msg=f"arrow grouped map: {dict(id=lst, value=[v*10 for v in lst])}",
+                        msg=f"arrow grouped map: {dict(id=lst, value=[v * 10 for v in lst])}",
                         context={"func_name": func_with_logging.__name__},
                         logger="test_arrow_grouped_map",
                     )

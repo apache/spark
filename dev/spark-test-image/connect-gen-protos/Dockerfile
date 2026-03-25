@@ -53,7 +53,7 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 RUN python3.12 -m pip install \
     'mypy==1.19.1' \
     'mypy-protobuf==3.3.0' \
-    'black==26.3.1'
+    'ruff==0.14.8'
 
 # Mount the Spark repo at /spark
 WORKDIR /spark

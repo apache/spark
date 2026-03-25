@@ -62,9 +62,13 @@ case class SortExec(
     "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
-  // Each task has its own instance of UnsafeExternalRowSorter. It is created in the
-  // createSorter method and stored in a ThreadLocal variable.
-  private[sql] var rowSorter: ThreadLocal[UnsafeExternalRowSorter] = _
+  // Each task thread has its own UnsafeExternalRowSorter instance stored here.
+  // Using a stable lazy val (rather than a reassigned var) ensures that the ThreadLocal
+  // object itself is never replaced: concurrent tasks on different threads each get their
+  // own independent slot in the same ThreadLocal, so one task can never observe or clobber
+  // another task's sorter reference.
+  @transient private[sql] lazy val rowSorter: ThreadLocal[UnsafeExternalRowSorter] =
+    new ThreadLocal[UnsafeExternalRowSorter]()
 
   /**
    * This method gets invoked only once for each SortExec instance to initialize an
@@ -73,8 +77,6 @@ case class SortExec(
    * should make it public.
    */
   def createSorter(): UnsafeExternalRowSorter = {
-    rowSorter = new ThreadLocal[UnsafeExternalRowSorter]()
-
     val ordering = RowOrdering.create(sortOrder, output)
 
     // The comparator for comparing prefix
@@ -196,13 +198,13 @@ case class SortExec(
   }
 
   /**
-   * In SortExec, we overwrites cleanupResources to close UnsafeExternalRowSorter.
+   * In SortExec, we overwrite cleanupResources to close UnsafeExternalRowSorter.
+   * There's possible for rowSorter to be null here, for example, in the scenario of empty iterator
+   * in the current task, the downstream physical node (like SortMergeJoinExec) will trigger
+   * cleanupResources before rowSorter is initialized in createSorter.
    */
   override protected[sql] def cleanupResources(): Unit = {
-    if (rowSorter != null && rowSorter.get() != null) {
-      // There's possible for rowSorter is null here, for example, in the scenario of empty
-      // iterator in the current task, the downstream physical node(like SortMergeJoinExec) will
-      // trigger cleanupResources before rowSorter initialized in createSorter.
+    if (rowSorter.get() != null) {
       rowSorter.get().cleanupResources()
     }
     super.cleanupResources()

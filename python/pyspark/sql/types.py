@@ -1469,9 +1469,9 @@ class StructType(DataType):
         else:
             self.fields = fields
             self.names = [f.name for f in fields]
-            assert all(
-                isinstance(f, StructField) for f in fields
-            ), "fields should be a list of StructField"
+            assert all(isinstance(f, StructField) for f in fields), (
+                "fields should be a list of StructField"
+            )
         # Precalculated list of fields that need conversion with fromInternal/toInternal functions
         self._needConversion = [f.needConversion() for f in self]
         self._needSerializeAnyField = any(self._needConversion)
@@ -1587,8 +1587,12 @@ class StructType(DataType):
             return StructType(self.fields[key])
         else:
             raise PySparkTypeError(
-                errorClass="NOT_INT_OR_SLICE_OR_STR",
-                messageParameters={"arg_name": "key", "arg_type": type(key).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "int, slice or str",
+                    "arg_name": "key",
+                    "arg_type": type(key).__name__,
+                },
             )
 
     def simpleString(self) -> str:
@@ -2059,8 +2063,12 @@ class VariantVal:
     @classmethod
     def parseJson(cls, json_str: str) -> "VariantVal":
         """
-        Convert the VariantVal to a nested Python object of Python data types.
-        :return: Python representation of the Variant nested structure
+        Parse a JSON string and construct a VariantVal.
+
+        Returns
+        -------
+        VariantVal
+            A VariantVal representing the parsed Variant value.
         """
         value, metadata = VariantUtils.parse_json(json_str)
         return VariantVal(value, metadata)

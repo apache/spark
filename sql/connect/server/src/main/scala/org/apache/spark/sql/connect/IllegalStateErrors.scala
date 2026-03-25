@@ -46,16 +46,18 @@ object IllegalStateErrors {
         "validStatuses" -> validStatuses.map(_.toString).mkString(", "),
         "eventStatus" -> eventStatus.toString))
 
-  def executionStateTransitionInvalidSessionNotStarted(
+  def executionStateTransitionInvalidSessionStatus(
       sessionId: String,
       sessionStatus: SessionStatus,
+      validStatuses: List[SessionStatus],
       eventStatus: ExecuteStatus): SparkIllegalStateException =
     new SparkIllegalStateException(
       errorClass = "SPARK_CONNECT_ILLEGAL_STATE." +
-        "STATE_CONSISTENCY_EXECUTION_STATE_TRANSITION_INVALID_SESSION_NOT_STARTED",
+        "STATE_CONSISTENCY_EXECUTION_STATE_TRANSITION_INVALID_SESSION_STATUS_MISMATCH",
       messageParameters = Map(
         "sessionId" -> sessionId,
         "sessionStatus" -> sessionStatus.toString,
+        "validStatuses" -> validStatuses.map(_.toString).mkString(", "),
         "eventStatus" -> eventStatus.toString))
 
   def executeHolderAlreadyExists(operationId: String): SparkIllegalStateException =

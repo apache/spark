@@ -40,6 +40,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.{LogEntry, Logging, LogKeys}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.streaming.checkpointing.ChecksumCheckpointFileManager
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{NextIterator, Utils}
 
@@ -152,11 +153,19 @@ class RocksDB(
 
   private val workingDir = createTempDir("workingDir")
 
-  // We need 2 threads per fm caller to avoid blocking
-  // (one for main file and another for checksum file).
-  // Since this fm is used by both query task and maintenance thread,
-  // then we need 2 * 2 = 4 threads.
-  protected val fileChecksumThreadPoolSize: Option[Int] = Some(4)
+  // To avoid blocking, we need 2 threads per fm caller (one for main file, one for checksum file).
+  // Since this fm is used by both query task and maintenance thread, the recommended default is
+  // 2 * 2 = 4 threads. A value of 0 disables the thread pool (sequential execution).
+  protected val fileChecksumThreadPoolSize: Option[Int] = {
+    val size = conf.fileChecksumThreadPoolSize
+    if (size < ChecksumCheckpointFileManager.DEFAULT_THREAD_POOL_SIZE) {
+      logWarning(s"fileChecksumThreadPoolSize for the state store file checksum thread pool " +
+        s"is set to $size, which is below the recommended default of " +
+        s"${ChecksumCheckpointFileManager.DEFAULT_THREAD_POOL_SIZE}. " +
+        "This may have performance impact.")
+    }
+    Some(size)
+  }
 
   protected def createFileManager(
       dfsRootDir: String,
@@ -243,6 +252,9 @@ class RocksDB(
 
   // Was snapshot auto repair performed when loading the current version
   @volatile private var performedSnapshotAutoRepair = false
+
+  // Was state loaded from DFS during the current load operation
+  @volatile private var loadedFromDfs = false
 
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
 
@@ -517,7 +529,8 @@ class RocksDB(
 
         val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion,
           workingDir, rocksDBFileMapping, latestSnapshotUniqueId)
-
+        // version 0 is the empty initial state; loadCheckpointFromDfs skips DFS for it
+        loadedFromDfs = version > 0
         loadedVersion = latestSnapshotVersion
 
         // reset the last snapshot version to the latest available snapshot version
@@ -622,6 +635,8 @@ class RocksDB(
         } else {
           // load the latest snapshot
           loadSnapshotWithoutCheckpointId(version)
+          // version 0 is the empty initial state; loadCheckpointFromDfs skips DFS for it
+          loadedFromDfs = version > 0
 
           if (loadedVersion != version) {
             val versionsAndUniqueIds: Array[(Long, Option[String])] =
@@ -782,6 +797,7 @@ class RocksDB(
     assert(version >= 0)
     recordedMetrics = None
     performedSnapshotAutoRepair = false
+    loadedFromDfs = false
     // Reset the load metrics before loading
     loadMetrics.clear()
 
@@ -842,6 +858,9 @@ class RocksDB(
         endVersion,
         snapshotVersionStateStoreCkptId,
         endVersionStateStoreCkptId)
+
+      // version 0 is the empty initial state; loadCheckpointFromDfs skips DFS for it
+      loadedFromDfs = endVersion > 0
 
       logInfo(
         log"Loaded snapshot at version ${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and apply " +
@@ -2044,7 +2063,8 @@ class RocksDB(
       lastUploadedSnapshotVersion = lastUploadedSnapshotVersion.get(),
       zipFileBytesUncompressed = fileManagerMetrics.zipFileBytesUncompressed,
       nativeOpsMetrics = nativeOpsMetrics,
-      numSnapshotsAutoRepaired = if (performedSnapshotAutoRepair) 1 else 0)
+      numSnapshotsAutoRepaired = if (performedSnapshotAutoRepair) 1 else 0,
+      loadedFromDfs = if (this.loadedFromDfs) 1 else 0)
   }
 
   /**
@@ -2520,6 +2540,7 @@ case class RocksDBConf(
     reportSnapshotUploadLag: Boolean,
     maxVersionsToDeletePerMaintenance: Int,
     fileChecksumEnabled: Boolean,
+    fileChecksumThreadPoolSize: Int,
     rowChecksumEnabled: Boolean,
     rowChecksumReadVerificationRatio: Long,
     mergeOperatorVersion: Int,
@@ -2742,6 +2763,7 @@ object RocksDBConf {
       storeConf.reportSnapshotUploadLag,
       storeConf.maxVersionsToDeletePerMaintenance,
       storeConf.checkpointFileChecksumEnabled,
+      storeConf.fileChecksumThreadPoolSize,
       storeConf.rowChecksumEnabled,
       storeConf.rowChecksumReadVerificationRatio,
       getPositiveIntConf(MERGE_OPERATOR_VERSION_CONF),
@@ -2768,7 +2790,8 @@ case class RocksDBMetrics(
     zipFileBytesUncompressed: Option[Long],
     nativeOpsMetrics: Map[String, Long],
     lastUploadedSnapshotVersion: Long,
-    numSnapshotsAutoRepaired: Long) {
+    numSnapshotsAutoRepaired: Long,
+    loadedFromDfs: Long) {
   def json: String = Serialization.write(this)(RocksDBMetrics.format)
 }
 

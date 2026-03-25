@@ -71,7 +71,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`showdb`.`badtable`"
+    "relationName" : "`showdb`.`badtable`",
+    "searchPath" : "[`system`.`session`, `spark_catalog`.`showdb`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -117,7 +118,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`showdb`.`showcolumn3`"
+    "relationName" : "`showdb`.`showcolumn3`",
+    "searchPath" : "[`system`.`session`, `spark_catalog`.`showdb`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -137,7 +139,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`showdb`.`showcolumn3`"
+    "relationName" : "`showdb`.`showcolumn3`",
+    "searchPath" : "[`system`.`session`, `spark_catalog`.`showdb`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -157,7 +160,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`showcolumn4`"
+    "relationName" : "`showcolumn4`",
+    "searchPath" : "[`system`.`session`, `spark_catalog`.`showdb`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -178,7 +182,7 @@ ShowColumnsCommand `global_temp`.`showcolumn4`, [col_name#x]
 -- !query
 SHOW COLUMNS IN showcolumn4 FROM global_temp
 -- !query analysis
-ShowColumnsCommand global_temp, `global_temp`.`showcolumn4`, [col_name#x]
+ShowColumnsCommand global_temp, `showcolumn4`, [col_name#x]
 
 
 -- !query
@@ -198,13 +202,13 @@ DropTable false, false
 -- !query
 DROP VIEW  showcolumn3
 -- !query analysis
-DropTempViewCommand showcolumn3
+DropTempViewCommand showcolumn3, false
 
 
 -- !query
 DROP VIEW  global_temp.showcolumn4
 -- !query analysis
-DropTempViewCommand global_temp.showcolumn4
+DropTempViewCommand global_temp.showcolumn4, false
 
 
 -- !query

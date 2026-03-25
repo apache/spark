@@ -1136,26 +1136,6 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     }
   }
 
-  test("SPARK-55957: listTables returns partial results when a table has DATA_SOURCE_NOT_FOUND") {
-    // Create a normal table (resolvable)
-    createTable("good_table")
-    // Create a table with a non-existent provider so resolution throws DATA_SOURCE_NOT_FOUND
-    val badTableMeta = utils.newTable("bad_table", None).copy(
-      provider = Some("non.existent.ProviderClass"))
-    sessionCatalog.createTable(badTableMeta, ignoreIfExists = false)
-    // Without ERROR_HANDLING_RULES for DATA_SOURCE_NOT_FOUND, listTables() would throw.
-    // With the fix, we get partial results: good_table fully resolved, bad_table as placeholder.
-    val tables = spark.catalog.listTables().collect()
-    assert(tables.length == 2, s"Expected 2 tables, got: ${tables.map(_.name).toList}")
-    val names = tables.map(_.name).toSet
-    assert(names == Set("good_table", "bad_table"),
-      s"Expected good_table and bad_table, got: $names")
-    val goodTable = tables.find(_.name == "good_table").get
-    val badTable = tables.find(_.name == "bad_table").get
-    assert(goodTable.tableType != null, "good_table should be fully resolved")
-    assert(badTable.tableType == null, "bad_table should be partial result (tableType null)")
-  }
-
   private def getConstructorParameterValues(obj: DefinedByConstructorParams): Seq[AnyRef] = {
     ScalaReflection.getConstructorParameterNames(obj.getClass).map { name =>
       obj.getClass.getMethod(name).invoke(obj)

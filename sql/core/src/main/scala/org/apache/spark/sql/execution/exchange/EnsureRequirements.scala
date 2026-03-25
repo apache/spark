@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions.Reducer
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.v2.GroupPartitionsExec
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
@@ -509,15 +510,30 @@ case class EnsureRequirements(
         // in case of compatible but not identical partition expressions, we apply 'reduce'
         // transforms to group one side's partitions as well as the common partition values
         val leftReducers = leftSpec.reducers(rightSpec)
-        val leftReducedKeys =
-          leftReducers.fold(leftPartitioning.partitionKeys)(leftPartitioning.reduceKeys)
         val rightReducers = rightSpec.reducers(leftSpec)
-        val rightReducedKeys =
-          rightReducers.fold(rightPartitioning.partitionKeys)(rightPartitioning.reduceKeys)
+        val (leftReducedDataTypes, leftReducedKeys) = leftReducers.fold(
+          (leftPartitioning.expressionDataTypes, leftPartitioning.partitionKeys)
+        )(leftPartitioning.reduceKeys)
+        val (rightReducedDataTypes, rightReducedKeys) = rightReducers.fold(
+          (rightPartitioning.expressionDataTypes, rightPartitioning.partitionKeys)
+        )(rightPartitioning.reduceKeys)
+        val reducedDataTypes = if (leftReducedDataTypes == rightReducedDataTypes) {
+          leftReducedDataTypes
+        } else {
+          throw QueryExecutionErrors.storagePartitionJoinIncompatibleReducedTypesError(
+            leftReducers = leftReducers,
+            leftReducedDataTypes = leftReducedDataTypes,
+            rightReducers = rightReducers,
+            rightReducedDataTypes = rightReducedDataTypes)
+        }
+
+        val reducedKeyRowOrdering = RowOrdering.createNaturalAscendingOrdering(reducedDataTypes)
+        val reducedKeyOrdering =
+          reducedKeyRowOrdering.on((t: InternalRowComparableWrapper) => t.row)
 
         // merge values on both sides
         var mergedPartitionKeys =
-          mergePartitions(leftReducedKeys, rightReducedKeys, joinType, leftPartitioning.keyOrdering)
+          mergeAndDedupPartitions(leftReducedKeys, rightReducedKeys, joinType, reducedKeyOrdering)
             .map((_, 1))
 
         logInfo(log"After merging, there are " +
@@ -752,28 +768,29 @@ case class EnsureRequirements(
   }
 
   /**
-   * Merge and sort partitions keys for SPJ and optionally enable partition filtering.
+   * Merge, dedup and sort partitions keys for SPJ and optionally enable partition filtering.
    * Both sides must have matching partition expressions.
    * @param leftPartitionKeys left side partition keys
    * @param rightPartitionKeys right side partition keys
    * @param joinType join type for optional partition filtering
-   * @keyOrdering ordering to sort partition keys
+   * @param keyOrdering ordering to sort partition keys
    * @return merged and sorted partition values
    */
-  def mergePartitions(
+  def mergeAndDedupPartitions(
       leftPartitionKeys: Seq[InternalRowComparableWrapper],
       rightPartitionKeys: Seq[InternalRowComparableWrapper],
       joinType: JoinType,
       keyOrdering: Ordering[InternalRowComparableWrapper]): Seq[InternalRowComparableWrapper] = {
     val merged = if (SQLConf.get.getConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED)) {
       joinType match {
-        case Inner => mergePartitionKeys(leftPartitionKeys, rightPartitionKeys, intersect = true)
-        case LeftOuter => leftPartitionKeys
-        case RightOuter => rightPartitionKeys
-        case _ => mergePartitionKeys(leftPartitionKeys, rightPartitionKeys)
+        case Inner =>
+          mergeAndDedupPartitionKeys(leftPartitionKeys, rightPartitionKeys, intersect = true)
+        case LeftOuter => leftPartitionKeys.distinct
+        case RightOuter => rightPartitionKeys.distinct
+        case _ => mergeAndDedupPartitionKeys(leftPartitionKeys, rightPartitionKeys)
       }
     } else {
-      mergePartitionKeys(leftPartitionKeys, rightPartitionKeys)
+      mergeAndDedupPartitionKeys(leftPartitionKeys, rightPartitionKeys)
     }
 
     // SPARK-41471: We keep to order of partitions to make sure the order of
@@ -781,7 +798,7 @@ case class EnsureRequirements(
     merged.sorted(keyOrdering)
   }
 
-  private def mergePartitionKeys(
+  private def mergeAndDedupPartitionKeys(
       leftPartitionKeys: Seq[InternalRowComparableWrapper],
       rightPartitionKeys: Seq[InternalRowComparableWrapper],
       intersect: Boolean = false) = {

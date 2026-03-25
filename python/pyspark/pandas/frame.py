@@ -829,6 +829,13 @@ class DataFrame(Frame, Generic[T]):
                 internal = InternalFrame(
                     spark_frame=sdf,
                     index_spark_columns=[scol_for(sdf, SPARK_DEFAULT_INDEX_NAME)],
+                    index_fields=(
+                        None
+                        if LooseVersion(pd.__version__) < "3.0.0"
+                        # Explicitly specify the dtype as "object" to avoid converting to `nan`
+                        # due to pandas 3's default string type (`str`) behavior.
+                        else [InternalField(np.dtype("object"))]
+                    ),
                     column_labels=new_column_labels,
                     column_label_names=self._internal.column_label_names,
                 )
@@ -4093,7 +4100,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ]
         return DataFrame(
             psdf._internal.with_new_columns(
-                data_spark_columns, column_labels=self._internal.column_labels  # TODO: dtypes?
+                data_spark_columns,
+                column_labels=self._internal.column_labels,  # TODO: dtypes?
             )
         )
 
@@ -4993,7 +5001,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     spark_frame=sdf,
                     index_spark_columns=[scol_for(sdf, SPARK_DEFAULT_INDEX_NAME)],
                     index_names=[None],
-                    index_fields=[None],
+                    index_fields=(
+                        [None]
+                        if LooseVersion(pd.__version__) < "3.0.0"
+                        # Explicitly specify the dtype as "object" to avoid converting to `nan`
+                        # due to pandas 3's default string type (`str`) behavior.
+                        else [InternalField(np.dtype("object"))]
+                    ),
                     data_spark_columns=[
                         scol_for(sdf, col) for col in self._internal.data_spark_column_names
                     ],
@@ -5709,7 +5723,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             ) or isinstance(v, MultiIndex)
             if is_invalid_assignee:
                 raise TypeError(
-                    "Column assignment doesn't support type " "{0}".format(type(v).__name__)
+                    "Column assignment doesn't support type {0}".format(type(v).__name__)
                 )
             if callable(v):
                 kwargs[k] = v(self)
@@ -5718,7 +5732,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             (k if is_name_like_tuple(k) else (k,)): (
                 (v.spark.column, v._internal.data_fields[0])
                 if isinstance(v, IndexOpsMixin) and not isinstance(v, MultiIndex)
-                else (v, None) if isinstance(v, PySparkColumn) else (F.lit(v), None)
+                else (v, None)
+                if isinstance(v, PySparkColumn)
+                else (F.lit(v), None)
             )
             for k, v in kwargs.items()
         }
@@ -6253,7 +6269,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             method = None
 
         return self._fillna_with_method(
-            value=value, method=method, axis=axis, inplace=inplace, limit=limit  # type: ignore[arg-type]
+            value=value,
+            method=method,  # type: ignore[arg-type]
+            axis=axis,
+            inplace=inplace,
+            limit=limit,
         )
 
     def _fillna_with_method(
@@ -6501,7 +6521,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             def op(psser: ps.Series) -> ps.Series:
                 if psser.name in to_replace_dict:
                     return psser.replace(
-                        to_replace=to_replace_dict[psser.name], value=value, regex=regex  # type: ignore[arg-type]
+                        to_replace=to_replace_dict[psser.name],
+                        value=value,  # type: ignore[arg-type]
+                        regex=regex,
                     )
                 else:
                     return psser
@@ -6517,7 +6539,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             def op(psser: ps.Series) -> ps.Series:
                 return psser.replace(
-                    to_replace=to_replace, value=value, regex=regex  # type: ignore[arg-type]
+                    to_replace=to_replace,
+                    value=value,  # type: ignore[arg-type]
+                    regex=regex,
                 )
 
         psdf = self._apply_series_op(op)
@@ -6897,13 +6921,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
         ):
             raise TypeError(
-                "aggfunc must be a dict mapping from column name "
-                "to aggregate functions (string)."
+                "aggfunc must be a dict mapping from column name to aggregate functions (string)."
             )
 
         if isinstance(aggfunc, dict) and index is None:
             raise NotImplementedError(
-                "pivot_table doesn't support aggfunc" " as dict and without index."
+                "pivot_table doesn't support aggfunc as dict and without index."
             )
         if isinstance(values, list) and index is None:
             raise NotImplementedError("values can't be a list without index.")
@@ -7413,7 +7436,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             exclude_list = list(exclude)
 
         if not any((include_list, exclude_list)):
-            raise ValueError("at least one of include or exclude must be " "nonempty")
+            raise ValueError("at least one of include or exclude must be nonempty")
 
         # can't both include AND exclude!
         if set(include_list).intersection(set(exclude_list)):
@@ -7592,6 +7615,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         axis: Optional[Axis] = 0,
         index: Union[Name, List[Name]] = None,
         columns: Union[Name, List[Name]] = None,
+        errors: str = "raise",
     ) -> "DataFrame":
         """
         Drop specified labels from columns.
@@ -7617,6 +7641,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         columns : single label or list-like
             Alternative to specifying axis (``labels, axis=1``
             is equivalent to ``columns=labels``).
+        errors : {{'ignore', 'raise'}}, default 'raise'
+            If 'ignore', suppress error and only existing labels are dropped.
+
+            .. versionadded:: 4.1.0
 
         Returns
         -------
@@ -7680,14 +7708,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         -----
         Currently, dropping rows of a MultiIndex DataFrame is not supported yet.
         """
+        if errors not in ("raise", "ignore"):
+            raise ValueError("errors must be either 'raise' or 'ignore'")
         if labels is not None:
             if index is not None or columns is not None:
                 raise ValueError("Cannot specify both 'labels' and 'index'/'columns'")
             axis = validate_axis(axis)
             if axis == 1:
-                return self.drop(index=index, columns=labels)
+                return self.drop(index=index, columns=labels, errors=errors)
             else:
-                return self.drop(index=labels, columns=columns)
+                return self.drop(index=labels, columns=columns, errors=errors)
         else:
             if index is None and columns is None:
                 raise ValueError("Need to specify at least one of 'labels' or 'columns' or 'index'")
@@ -7740,8 +7770,17 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         for col in columns
                         if label[: len(col)] == col
                     )
+                    if errors == "raise":
+                        missing = [
+                            col
+                            for col in columns
+                            if not any(label[: len(col)] == col for label in internal.column_labels)
+                        ]
+                        if missing:
+                            raise KeyError(missing)
+
                     if len(drop_column_labels) == 0:
-                        raise KeyError(columns)
+                        return DataFrame(internal)
 
                     keep_columns_and_labels = [
                         (column, label)
@@ -8035,7 +8074,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             by = self._internal.index_spark_columns
         elif is_list_like(level):
             by = [
-                self._internal.index_spark_columns[lvl] for lvl in level  # type: ignore[union-attr]
+                self._internal.index_spark_columns[lvl]
+                for lvl in level  # type: ignore[union-attr]
             ]
         else:
             by = [self._internal.index_spark_columns[level]]  # type: ignore[index]
@@ -9088,7 +9128,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             common = list(self.columns.intersection(right.columns))
         if len(common) > 0 and not lsuffix and not rsuffix:
             raise ValueError(
-                "columns overlap but no suffix specified: " "{rename}".format(rename=common)
+                "columns overlap but no suffix specified: {rename}".format(rename=common)
             )
 
         need_set_index = False
@@ -9741,8 +9781,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             for col_name in dtype_dict.keys():
                 if col_name not in self.columns:
                     raise KeyError(
-                        "Only a column name can be used for the "
-                        "key in a dtype mappings argument."
+                        "Only a column name can be used for the key in a dtype mappings argument."
                     )
             for col_name, col in self.items():
                 if col_name in dtype_dict:
@@ -10162,7 +10201,18 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # For timestamp type columns, we should cast the column type to string.
             for key, spark_data_type in zip(column_name_stats_kv, spark_data_types):
                 if isinstance(spark_data_type, (TimestampType, TimestampNTZType)):
-                    column_name_stats_kv[key] = [str(value) for value in column_name_stats_kv[key]]
+                    if LooseVersion(pd.__version__) < "3.0.0":
+                        # In pandas 2, use str(value) for all values, including None
+                        column_name_stats_kv[key] = [
+                            str(value) for value in column_name_stats_kv[key]
+                        ]
+                    else:
+                        # In pandas 3, preserve None to match empty timestamp describe() results
+                        # after string conversion in pandas-based expectations.
+                        column_name_stats_kv[key] = [
+                            str(value) if value is not None else None
+                            for value in column_name_stats_kv[key]
+                        ]
 
             result: DataFrame = DataFrame(  # type: ignore[no-redef]
                 data=column_name_stats_kv,
@@ -10430,8 +10480,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         if index is not None and not is_list_like(index):
             raise TypeError(
-                "Index must be called with a collection of some kind, "
-                "%s was passed" % type(index)
+                "Index must be called with a collection of some kind, %s was passed" % type(index)
             )
 
         if columns is not None and not is_list_like(columns):
@@ -10459,9 +10508,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     ) -> "DataFrame":
         # When axis is index, we can mimic pandas by a right outer join.
         nlevels = self._internal.index_level
-        assert nlevels <= 1 or (
-            isinstance(index, ps.MultiIndex) and nlevels == index.nlevels
-        ), "MultiIndex DataFrame can only be reindexed with a similar pandas-on-Spark MultiIndex."
+        assert nlevels <= 1 or (isinstance(index, ps.MultiIndex) and nlevels == index.nlevels), (
+            "MultiIndex DataFrame can only be reindexed with a similar pandas-on-Spark MultiIndex."
+        )
 
         index_columns = self._internal.index_spark_column_names
         frame = self._internal.resolved_copy.spark_frame.drop(NATURAL_ORDER_COLUMN_NAME)
@@ -10770,7 +10819,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     id_vars = [idv if is_name_like_tuple(idv) else (idv,) for idv in id_vars]
                 else:
                     raise ValueError(
-                        "id_vars must be a list of tuples" " when columns are a MultiIndex"
+                        "id_vars must be a list of tuples when columns are a MultiIndex"
                     )
             elif is_name_like_value(id_vars):
                 id_vars = [(id_vars,)]
@@ -10785,8 +10834,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 ]
                 if len(missing) != 0:
                     raise KeyError(
-                        "The following 'id_vars' are not present"
-                        " in the DataFrame: {}".format(missing)
+                        "The following 'id_vars' are not present in the DataFrame: {}".format(
+                            missing
+                        )
                     )
                 else:
                     raise KeyError(
@@ -10803,7 +10853,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     ]
                 else:
                     raise ValueError(
-                        "value_vars must be a list of tuples" " when columns are a MultiIndex"
+                        "value_vars must be a list of tuples when columns are a MultiIndex"
                     )
             elif is_name_like_value(value_vars):
                 value_vars = [(value_vars,)]
@@ -10818,8 +10868,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 ]
                 if len(missing) != 0:
                     raise KeyError(
-                        "The following 'value_vars' are not present"
-                        " in the DataFrame: {}".format(missing)
+                        "The following 'value_vars' are not present in the DataFrame: {}".format(
+                            missing
+                        )
                     )
                 else:
                     raise KeyError(
@@ -11831,9 +11882,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Name: one, dtype: int64
         """
         if sum(x is not None for x in (items, like, regex)) > 1:
-            raise TypeError(
-                "Keyword arguments `items`, `like`, or `regex` " "are mutually exclusive"
-            )
+            raise TypeError("Keyword arguments `items`, `like`, or `regex` are mutually exclusive")
 
         axis = validate_axis(axis, none_axis=1)
 
@@ -12059,8 +12108,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     return mapper_fn, dtype, spark_return_type
             else:
                 raise ValueError(
-                    "`mapper` or `index` or `columns` should be "
-                    "either dict-like or function type."
+                    "`mapper` or `index` or `columns` should be either dict-like or function type."
                 )
 
         index_mapper_fn = None
@@ -12298,8 +12346,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 newnames = [v_callable(name) for name in curnames]
             else:
                 raise ValueError(
-                    "`mapper` or `index` or `columns` should be "
-                    "either dict-like or function type."
+                    "`mapper` or `index` or `columns` should be either dict-like or function type."
                 )
 
             if len(newnames) != len(curnames):
@@ -12549,6 +12596,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             result = F.when(max_value == float("-inf"), F.lit(None)).otherwise(result)
 
+            if LooseVersion(pd.__version__) >= "3.0.0":
+                result = F.when(
+                    result.isNull(), F.raise_error("Encountered all NA values")
+                ).otherwise(result)
+
             internal = self._internal.with_new_columns(
                 [result.alias(SPARK_DEFAULT_SERIES_NAME)],
                 column_labels=[None],
@@ -12678,6 +12730,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 )
 
             result = F.when(min_value == float("inf"), F.lit(None)).otherwise(result)
+
+            if LooseVersion(pd.__version__) >= "3.0.0":
+                result = F.when(
+                    result.isNull(), F.raise_error("Encountered all NA values")
+                ).otherwise(result)
 
             internal = self._internal.with_new_columns(
                 [result.alias(SPARK_DEFAULT_SERIES_NAME)],

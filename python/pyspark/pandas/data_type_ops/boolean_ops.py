@@ -39,6 +39,7 @@ from pyspark.pandas.data_type_ops.base import (
 from pyspark.pandas.typedef.typehints import (
     as_spark_type,
     handle_dtype_as_extension_dtype,
+    is_str_dtype,
     pandas_on_spark_type,
 )
 from pyspark.pandas.utils import is_ansi_mode_enabled
@@ -326,12 +327,12 @@ class BooleanOps(DataTypeOps):
         elif isinstance(spark_type, BooleanType):
             return _as_bool_type(index_ops, dtype)
         elif isinstance(spark_type, StringType):
-            if handle_dtype_as_extension_dtype(dtype):
+            if handle_dtype_as_extension_dtype(dtype) or is_str_dtype(dtype):
                 scol = F.when(
                     index_ops.spark.column.isNotNull(),
                     F.when(index_ops.spark.column, "True").otherwise("False"),
                 )
-                nullable = index_ops.spark.nullable
+                nullable = index_ops.spark.nullable or is_str_dtype(dtype)
             else:
                 null_str = str(pd.NA) if isinstance(self, BooleanExtensionOps) else str(None)
                 casted = F.when(index_ops.spark.column, "True").otherwise("False")

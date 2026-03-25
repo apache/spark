@@ -349,10 +349,12 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
           } else {
             CalendarIntervalType
           }
+        case TIMESTAMP if currentCtx.withLocalTimeZone() != null =>
+          TimestampType
+        case TIMESTAMP if currentCtx.withoutTimeZone() != null =>
+          TimestampNTZType
         case TIMESTAMP =>
-          if (currentCtx.WITHOUT() == null) {
-            SqlApiConf.get.timestampType
-          } else TimestampNTZType
+          SqlApiConf.get.timestampType
         case TIME =>
           val precision = if (currentCtx.precision == null) {
             TimeType.DEFAULT_PRECISION
