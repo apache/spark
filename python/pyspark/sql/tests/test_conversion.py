@@ -191,11 +191,11 @@ class PandasToArrowConversionTests(unittest.TestCase):
         result = PandasToArrowConversion.convert(df, schema)
         self.assertEqual(result.num_rows, 0)
 
-        # Empty schema (0 columns)
-        # TODO(SPARK-55350): Pandas - > PyArrow should preserve row count with 0 columns. It is a bug.
+        # Empty schema (0 columns) should preserve row count
+        df = pd.DataFrame({"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]})
         result = PandasToArrowConversion.convert(df, StructType([]))
         self.assertEqual(result.num_columns, 0)
-        self.assertEqual(result.num_rows, 0)
+        self.assertEqual(result.num_rows, 3)
 
     def test_convert_assign_cols_by_name(self):
         """Test assign_cols_by_name reorders columns to match schema."""

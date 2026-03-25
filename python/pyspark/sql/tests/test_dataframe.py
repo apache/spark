@@ -311,8 +311,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_DICT",
-            messageParameters={"arg_name": "colsMap", "arg_type": "tuple"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "dict", "arg_name": "colsMap", "arg_type": "tuple"},
         )
 
     def test_with_columns_renamed_with_duplicated_names(self):
@@ -529,8 +529,9 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_BOOL_OR_FLOAT_OR_INT",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "bool, float or int",
                 "arg_name": "withReplacement (optional), fraction (required) and seed (optional)",
                 "arg_type": "NoneType, NoneType, NoneType",
             },
@@ -800,8 +801,12 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_DATAFRAME",
-            messageParameters={"arg_name": "other", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "DataFrame",
+                "arg_name": "other",
+                "arg_type": "int",
+            },
         )
 
     def test_input_files(self):
@@ -836,8 +841,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_INT",
-            messageParameters={"arg_name": "n", "arg_type": "bool"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "int", "arg_name": "n", "arg_type": "bool"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -845,8 +850,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_BOOL",
-            messageParameters={"arg_name": "vertical", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "bool", "arg_name": "vertical", "arg_type": "str"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -854,8 +859,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_BOOL",
-            messageParameters={"arg_name": "truncate", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "bool", "arg_name": "truncate", "arg_type": "str"},
         )
 
     def test_df_merge_into(self):
@@ -1005,8 +1010,12 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "condition", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "condition",
+                "arg_type": "int",
+            },
         )
 
     def test_duplicate_field_names(self):

@@ -55,7 +55,7 @@ from pyspark.util import is_remote_only
 if not is_remote_only():
     from pyspark.core.rdd import RDD, RDDBarrier
     from pyspark.core.files import SparkFiles
-    from pyspark.core.status import StatusTracker, SparkJobInfo, SparkStageInfo
+    from pyspark.core.status import StatusTracker, SparkJobInfo, SparkStageInfo, SparkExecutorInfo
     from pyspark.core.broadcast import Broadcast
     from pyspark.core import rdd, files, status, broadcast
 
@@ -144,6 +144,7 @@ __all__ = [
     "StatusTracker",
     "SparkJobInfo",
     "SparkStageInfo",
+    "SparkExecutorInfo",
     "Profiler",
     "BasicProfiler",
     "TaskContext",

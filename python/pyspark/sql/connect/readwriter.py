@@ -557,8 +557,9 @@ class DataFrameWriter(OptionUtils):
         if isinstance(col, (list, tuple)):
             if cols:
                 raise PySparkValueError(
-                    errorClass="NOT_INT",
+                    errorClass="NOT_EXPECTED_TYPE",
                     messageParameters={
+                        "expected_type": "int",
                         "arg_list": "numBuckets",
                     },
                 )

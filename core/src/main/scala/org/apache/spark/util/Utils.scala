@@ -1887,6 +1887,23 @@ private[spark] object Utils
   }
 
   /**
+   * Upload a file to a Hadoop-compatible filesystem.
+   */
+  def uploadFileToHadoopCompatibleFS(
+      src: Path,
+      dest: Path,
+      fs: FileSystem,
+      delSrc: Boolean = false,
+      overwrite: Boolean = true): Unit = {
+    try {
+      fs.copyFromLocalFile(delSrc, overwrite, src, dest)
+    } catch {
+      case e: IOException =>
+        throw new SparkException(s"Error uploading file ${src.getName}", e)
+    }
+  }
+
+  /**
    * Whether the underlying JVM prefer IPv6 addresses.
    */
   val preferIPv6 = "true".equals(System.getProperty("java.net.preferIPv6Addresses"))
@@ -2147,11 +2164,11 @@ private[spark] object Utils
   def getHeapHistogram(): Array[String] = {
     // SPARK-55809: Use DiagnosticCommandMBean in-process instead of spawning jmap as
     // a subprocess.
-    // Spawning `jmap -histo <pid>` requires a self-attach via signal/socket handshake.
-    // Any concurrent GC (G1, ZGC, Shenandoah) can put the JVM into states where the
-    // Signal Dispatcher cannot service the attachment handshake, causing jmap to hang.
+    // JDK 25 (JDK-8354460) changed `jmap -histo` to use streaming output. When jmap is
+    // spawned as a subprocess, its stdout must be drained continuously; if the caller
+    // blocks on waitFor() without reading, the pipe buffer fills up and jmap hangs.
     // DiagnosticCommandMBean runs gcClassHistogram in-process and coordinates with GC
-    // through internal JVM APIs, avoiding the unreliable inter-process attach.
+    // through internal JVM APIs, avoiding the subprocess pipe-buffer issue entirely.
     val server = ManagementFactory.getPlatformMBeanServer
     val on = new ObjectName("com.sun.management:type=DiagnosticCommand")
     val result = server.invoke(on, "gcClassHistogram",

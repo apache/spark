@@ -39,7 +39,6 @@ module.exports = {
   "ignorePatterns": [
     "*.min.js",
     "sorttable.js",
-    "jquery.mustache.js",
     "dataTables.rowsGroup.js"
   ],
   "parserOptions": {

@@ -547,6 +547,12 @@
     ],
     "sqlState" : "58030"
   },
+  "CANNOT_TRUNCATE_EXTERNAL_TABLE" : {
+    "message" : [
+      "Operation not allowed: TRUNCATE TABLE on external tables: <tableName>."
+    ],
+    "sqlState" : "0A000"
+  },
   "CANNOT_UPDATE_FIELD" : {
     "message" : [
       "Cannot update <table> field <fieldName> type:"
@@ -1984,6 +1990,18 @@
       "Failed to parse an empty string for data type <dataType>."
     ],
     "sqlState" : "42604"
+  },
+  "EMPTY_PARTITION_COLUMN_NAME" : {
+    "message" : [
+      "Found an empty partition column name in the path segment '<columnSpec>'. Each partition directory must have a non-empty column name before the '=' sign (e.g., 'col=value')."
+    ],
+    "sqlState" : "KD009"
+  },
+  "EMPTY_PARTITION_COLUMN_VALUE" : {
+    "message" : [
+      "Found an empty partition column value in the path segment '<columnSpec>'. Each partition directory must have a non-empty value after the '=' sign (e.g., 'col=value')."
+    ],
+    "sqlState" : "KD009"
   },
   "EMPTY_SCHEMA_NOT_SUPPORTED_FOR_DATASOURCE" : {
     "message" : [
@@ -5457,6 +5475,12 @@
     ],
     "sqlState" : "HY008"
   },
+  "OPTION_VALUE_EXCEEDS_ONE_CHARACTER" : {
+    "message" : [
+      "The value of <paramName> cannot be more than one character, but got <actualValue>."
+    ],
+    "sqlState" : "22023"
+  },
   "ORDER_BY_POS_OUT_OF_RANGE" : {
     "message" : [
       "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
@@ -6964,6 +6988,12 @@
     ],
     "sqlState" : "42K09"
   },
+  "UNEXPECTED_OPERATOR_IN_CORRELATED_SUBQUERY" : {
+    "message" : [
+      "Unexpected operator <operator> in correlated subquery<positionHint>."
+    ],
+    "sqlState" : "XX000"
+  },
   "UNEXPECTED_POSITIONAL_ARGUMENT" : {
     "message" : [
       "Cannot invoke routine <routineName> because it contains positional argument(s) following the named argument assigned to <parameterName>; please rearrange them so the positional arguments come first and then retry the query again."
@@ -8075,6 +8105,12 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_TABLE_CHANGE" : {
+    "message" : [
+      "Unsupported table change: <message>"
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG" : {
     "message" : [
       "The table change <change> is not supported for the JDBC catalog on table <tableName>. Supported changes include: AddColumn, RenameColumn, DeleteColumn, UpdateColumnType, UpdateColumnNullability."
@@ -9155,11 +9191,6 @@
       "LOAD DATA target table <tableIdentWithDB> is not partitioned, but a partition spec was provided."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1266" : {
-    "message" : [
-      "Operation not allowed: TRUNCATE TABLE on external tables: <tableIdentWithDB>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1267" : {
     "message" : [
       "Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported for tables that are not partitioned: <tableIdentWithDB>."
@@ -9350,11 +9381,6 @@
       "Failed to convert value <value> (class of <cls>) with the type of <dataType> to JSON."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2027" : {
-    "message" : [
-      "Unexpected operator <op> in correlated subquery<pos>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2028" : {
     "message" : [
       "This line should be unreachable<err>."
@@ -9418,11 +9444,6 @@
   "_LEGACY_ERROR_TEMP_2041" : {
     "message" : [
       "<methodName> is not implemented."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2045" : {
-    "message" : [
-      "Unsupported table change: <message>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2046" : {
@@ -9720,11 +9741,6 @@
   "_LEGACY_ERROR_TEMP_2144" : {
     "message" : [
       "Unable to find constructor for <tpe>. This could happen if <tpe> is an interface, or a trait without companion object constructor."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2145" : {
-    "message" : [
-      "<paramName> cannot be more than one character."
     ]
   },
   "_LEGACY_ERROR_TEMP_2146" : {
