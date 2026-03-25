@@ -426,8 +426,8 @@ trait GetTimeField extends UnaryExpression
           defineCodeGen(ctx, ev, c => s"$timeUtils.getSecond($c)")
         case "getSecondsWithFraction" =>
           defineCodeGen(ctx, ev, c => {
-            s"Decimal.apply((double) $timeUtils.getSecond($c) + " +
-              s"(double) $timeUtils.getMicrosecond($c) / 1000000.0, 8, 6)"
+            s"Decimal.apply(new java.math.BigDecimal(String.valueOf((double) $timeUtils.getSecond($c) + " +
+              s"(double) $timeUtils.getMicrosecond($c) / 1000000.0)), 8, 6)"
           })
         case _ => throw new UnsupportedOperationException(s"Unsupported time function: $funcName")
       }

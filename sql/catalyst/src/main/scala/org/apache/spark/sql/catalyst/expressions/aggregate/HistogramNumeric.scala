@@ -24,10 +24,10 @@ import com.google.common.primitives.{Doubles, Ints}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExpressionDescription, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.GenericArrayData
-import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.NumericHistogram
@@ -73,15 +73,17 @@ case class HistogramNumeric(
   private lazy val nb = nBins.eval() match {
     case null => null
     case n: Int => n
+    case other =>
+      throw QueryExecutionErrors.dataTypeUnexpectedError(nBins.dataType)
   }
 
   private lazy val propagateInputType: Boolean = SQLConf.get.histogramNumericPropagateInputType
 
   override def inputTypes: Seq[AbstractDataType] = {
-    // Support NumericType, DateType, TimestampType and TimestampNTZType, YearMonthIntervalType,
-    // DayTimeIntervalType since their internal types are all numeric,
+    // Support NumericType, DateType, TimestampType, TimestampNTZType, TimeType,
+    // YearMonthIntervalType, DayTimeIntervalType since their internal types are all numeric,
     // and can be easily cast to double for processing.
-    Seq(TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType,
+    Seq(TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType, TimeType,
       YearMonthIntervalType, DayTimeIntervalType), IntegerType)
   }
 
@@ -96,6 +98,17 @@ case class HistogramNumeric(
           "inputName" -> "nb",
           "inputType" -> toSQLType(nBins.dataType),
           "inputExpr" -> toSQLExpr(nBins))
+      )
+    } else if (nBins.isInstanceOf[Cast] &&
+        !nBins.asInstanceOf[Cast].child.dataType.isInstanceOf[IntegralType]) {
+      val child = nBins.asInstanceOf[Cast].child
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "2",
+          "requiredType" -> toSQLType(IntegerType),
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType))
       )
     } else if (nb == null) {
       DataTypeMismatch(

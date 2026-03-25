@@ -1026,7 +1026,8 @@ object HiveHashFunction extends InterpretedHashFunction {
         result
 
       case d: Decimal => normalizeDecimal(d.toJavaBigDecimal).hashCode()
-      case timestamp: Long if dataType.isInstanceOf[TimestampType] => hashTimestamp(timestamp)
+      case timestamp: Long if dataType.isInstanceOf[TimestampType] || dataType == TimeType =>
+        hashTimestamp(timestamp)
       case calendarInterval: CalendarInterval => hashCalendarInterval(calendarInterval)
       case _ => super.hash(value, dataType, 0)
     }

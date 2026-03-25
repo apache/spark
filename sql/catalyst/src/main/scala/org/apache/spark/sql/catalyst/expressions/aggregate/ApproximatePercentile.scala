@@ -101,9 +101,9 @@ case class ApproximatePercentile(
   private lazy val accuracy: Long = accuracyNum.longValue
 
   override def inputTypes: Seq[AbstractDataType] = {
-    // Support NumericType, DateType, TimestampType and TimestampNTZType since their internal types
-    // are all numeric, and can be easily cast to double for processing.
-    Seq(TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType,
+    // Support NumericType, DateType, TimestampType, TimestampNTZType and TimeType since their
+    // internal types are all numeric, and can be easily cast to double for processing.
+    Seq(TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType, TimeType,
       YearMonthIntervalType, DayTimeIntervalType),
       TypeCollection(DoubleType, ArrayType(DoubleType, containsNull = false)), IntegralType)
   }
