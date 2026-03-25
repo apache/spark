@@ -53,19 +53,18 @@ class CDCParityTests(CDCTestsMixin, ReusedMixedTestCase):
         return self._classic_spark.sparkContext._gateway
 
     def setUp(self):
-        # Skip CDCTestsMixin.setUp() which creates tables via per-instance JVM
-        # catalog API. The Connect server creates an isolated session with its own
-        # CatalogManager and catalog instances. Tables must exist on the server's
-        # catalog, so we create them via SQL through the Connect session.
+        # The Connect server creates an isolated session with its own
+        # CatalogManager, so tables must exist on the server's catalog.
+        # We create them via SQL through the Connect session, then swap
+        # self.spark to Connect so test methods exercise the Connect path.
         # Change data is shared across all catalog instances via the companion
-        # object in InMemoryChangelogCatalog, so _add_change_rows() works from
+        # object in InMemoryChangelogCatalog, so _add_change_row() works from
         # any catalog instance (including the classic session's).
         ReusedMixedTestCase.setUp(self)
 
         self.connect.sql(f"DROP TABLE IF EXISTS {self.full_table_name}").collect()
         self.connect.sql(f"CREATE TABLE {self.full_table_name} (id BIGINT, data STRING)").collect()
 
-        # Clear shared change data (instance method delegates to companion object)
         catalog = self._catalog()
         ident = self._ident()
         catalog.clearChangeRows(ident)

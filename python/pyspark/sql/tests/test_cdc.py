@@ -67,46 +67,18 @@ class CDCTestsMixin:
         empty_ns = gw.new_array(jvm.java.lang.String, 0)
         return jvm.org.apache.spark.sql.connector.catalog.Identifier.of(empty_ns, self.test_table)
 
-    def _make_change_row(self, id, data, change_type, commit_version, commit_timestamp):
-        jvm = self._jvm()
-        UTF8String = jvm.org.apache.spark.unsafe.types.UTF8String
-        row = jvm.org.apache.spark.sql.catalyst.expressions.GenericInternalRow(5)
-        row.setLong(0, id)
-        row.update(1, UTF8String.fromString(data))
-        row.update(2, UTF8String.fromString(change_type))
-        row.setLong(3, commit_version)
-        row.setLong(4, commit_timestamp)
-        return row
-
-    def _add_change_rows(self, rows):
-        jvm = self._jvm()
+    def _add_change_row(self, id, data, change_type, commit_version, commit_timestamp):
+        """Add a single change row to the test table via the catalog helper."""
         catalog = self._catalog()
         ident = self._ident()
-        java_list = jvm.java.util.ArrayList()
-        for row in rows:
-            java_list.add(row)
-        scala_seq = jvm.scala.jdk.CollectionConverters.ListHasAsScala(java_list).asScala().toSeq()
-        catalog.addChangeRows(ident, scala_seq)
+        catalog.addChangeRow(ident, id, data, change_type, commit_version, commit_timestamp)
 
     def setUp(self):
         super().setUp()
-        jvm = self._jvm()
-        gw = self._gateway()
+        self.spark.sql(f"DROP TABLE IF EXISTS {self.full_table_name}")
+        self.spark.sql(f"CREATE TABLE {self.full_table_name} (id BIGINT, data STRING)")
         catalog = self._catalog()
         ident = self._ident()
-
-        if catalog.tableExists(ident):
-            catalog.dropTable(ident)
-
-        Column = jvm.org.apache.spark.sql.connector.catalog.Column
-        DataTypes = jvm.org.apache.spark.sql.types.DataTypes
-        columns = gw.new_array(jvm.org.apache.spark.sql.connector.catalog.Column, 2)
-        columns[0] = Column.create("id", DataTypes.LongType)
-        columns[1] = Column.create("data", DataTypes.StringType)
-
-        transforms = gw.new_array(jvm.org.apache.spark.sql.connector.expressions.Transform, 0)
-        props = jvm.java.util.HashMap()
-        catalog.createTable(ident, columns, transforms, props)
         catalog.clearChangeRows(ident)
 
     @staticmethod
@@ -117,12 +89,8 @@ class CDCTestsMixin:
     # ---------- Batch: basic data retrieval ----------
 
     def test_changes_returns_data(self):
-        self._add_change_rows(
-            [
-                self._make_change_row(1, "a", "insert", 1, 1000000),
-                self._make_change_row(2, "b", "delete", 2, 2000000),
-            ]
-        )
+        self._add_change_row(1, "a", "insert", 1, 1000000)
+        self._add_change_row(2, "b", "delete", 2, 2000000)
 
         expected = [
             Row(
@@ -156,13 +124,9 @@ class CDCTestsMixin:
         self.assertEqual(sorted(df_sql.collect()), sorted(expected))
 
     def test_changes_open_ended_version_range(self):
-        self._add_change_rows(
-            [
-                self._make_change_row(1, "a", "insert", 1, 1000000),
-                self._make_change_row(2, "b", "insert", 2, 2000000),
-                self._make_change_row(3, "c", "insert", 3, 3000000),
-            ]
-        )
+        self._add_change_row(1, "a", "insert", 1, 1000000)
+        self._add_change_row(2, "b", "insert", 2, 2000000)
+        self._add_change_row(3, "c", "insert", 3, 3000000)
 
         expected = [
             Row(
@@ -201,12 +165,8 @@ class CDCTestsMixin:
     # ---------- Batch: projection, filter, aggregation ----------
 
     def test_changes_select_cdc_metadata_columns(self):
-        self._add_change_rows(
-            [
-                self._make_change_row(1, "a", "insert", 1, 1000000),
-                self._make_change_row(2, "b", "delete", 2, 2000000),
-            ]
-        )
+        self._add_change_row(1, "a", "insert", 1, 1000000)
+        self._add_change_row(2, "b", "delete", 2, 2000000)
 
         expected = [
             Row(id=1, _change_type="insert", _commit_version=1),
@@ -229,13 +189,9 @@ class CDCTestsMixin:
         self.assertEqual(sorted(df_sql.collect()), sorted(expected))
 
     def test_changes_with_projection_and_filter(self):
-        self._add_change_rows(
-            [
-                self._make_change_row(1, "a", "insert", 1, 1000000),
-                self._make_change_row(2, "b", "insert", 1, 1000000),
-                self._make_change_row(1, "a2", "insert", 2, 2000000),
-            ]
-        )
+        self._add_change_row(1, "a", "insert", 1, 1000000)
+        self._add_change_row(2, "b", "insert", 1, 1000000)
+        self._add_change_row(1, "a2", "insert", 2, 2000000)
 
         expected = [Row(id=1, data="a2")]
 
@@ -256,13 +212,9 @@ class CDCTestsMixin:
         self.assertEqual(df_sql.collect(), expected)
 
     def test_changes_with_aggregation(self):
-        self._add_change_rows(
-            [
-                self._make_change_row(1, "a", "insert", 1, 1000000),
-                self._make_change_row(2, "b", "insert", 1, 1000000),
-                self._make_change_row(1, "a", "delete", 2, 2000000),
-            ]
-        )
+        self._add_change_row(1, "a", "insert", 1, 1000000)
+        self._add_change_row(2, "b", "insert", 1, 1000000)
+        self._add_change_row(1, "a", "delete", 2, 2000000)
 
         expected = [
             Row(_change_type="delete", count=1),
@@ -287,7 +239,7 @@ class CDCTestsMixin:
         self.assertEqual(sorted(df_sql.collect()), sorted(expected))
 
     def test_schema_includes_cdc_metadata(self):
-        self._add_change_rows([self._make_change_row(1, "a", "insert", 1, 1000000)])
+        self._add_change_row(1, "a", "insert", 1, 1000000)
 
         df = self.spark.read.option("startingVersion", "1").changes(self.full_table_name)
         self.assertEqual(
@@ -298,14 +250,10 @@ class CDCTestsMixin:
     # ---------- Batch: version range filtering ----------
 
     def test_changes_version_range_filters(self):
-        self._add_change_rows(
-            [
-                self._make_change_row(1, "a", "insert", 1, 1000000),
-                self._make_change_row(2, "b", "insert", 2, 2000000),
-                self._make_change_row(3, "c", "insert", 3, 3000000),
-                self._make_change_row(4, "d", "insert", 4, 4000000),
-            ]
-        )
+        self._add_change_row(1, "a", "insert", 1, 1000000)
+        self._add_change_row(2, "b", "insert", 2, 2000000)
+        self._add_change_row(3, "c", "insert", 3, 3000000)
+        self._add_change_row(4, "d", "insert", 4, 4000000)
 
         expected = [
             Row(
@@ -341,13 +289,9 @@ class CDCTestsMixin:
     # ---------- Batch: bound inclusivity ----------
 
     def test_changes_default_bounds_inclusive(self):
-        self._add_change_rows(
-            [
-                self._make_change_row(1, "a", "insert", 1, 1000000),
-                self._make_change_row(2, "b", "insert", 2, 2000000),
-                self._make_change_row(3, "c", "insert", 3, 3000000),
-            ]
-        )
+        self._add_change_row(1, "a", "insert", 1, 1000000)
+        self._add_change_row(2, "b", "insert", 2, 2000000)
+        self._add_change_row(3, "c", "insert", 3, 3000000)
 
         # DataFrame API
         df = (
@@ -364,13 +308,9 @@ class CDCTestsMixin:
         self.assertEqual(len(df_sql.collect()), 3)
 
     def test_changes_starting_bound_exclusive(self):
-        self._add_change_rows(
-            [
-                self._make_change_row(1, "a", "insert", 1, 1000000),
-                self._make_change_row(2, "b", "insert", 2, 2000000),
-                self._make_change_row(3, "c", "insert", 3, 3000000),
-            ]
-        )
+        self._add_change_row(1, "a", "insert", 1, 1000000)
+        self._add_change_row(2, "b", "insert", 2, 2000000)
+        self._add_change_row(3, "c", "insert", 3, 3000000)
 
         # DataFrame API — version 1 excluded
         df = (
@@ -391,13 +331,9 @@ class CDCTestsMixin:
         self.assertEqual(len(df_sql.collect()), 2)
 
     def test_changes_ending_bound_exclusive(self):
-        self._add_change_rows(
-            [
-                self._make_change_row(1, "a", "insert", 1, 1000000),
-                self._make_change_row(2, "b", "insert", 2, 2000000),
-                self._make_change_row(3, "c", "insert", 3, 3000000),
-            ]
-        )
+        self._add_change_row(1, "a", "insert", 1, 1000000)
+        self._add_change_row(2, "b", "insert", 2, 2000000)
+        self._add_change_row(3, "c", "insert", 3, 3000000)
 
         # DataFrame API — version 3 excluded
         df = (
@@ -418,13 +354,9 @@ class CDCTestsMixin:
         self.assertEqual(len(df_sql.collect()), 2)
 
     def test_changes_both_bounds_exclusive(self):
-        self._add_change_rows(
-            [
-                self._make_change_row(1, "a", "insert", 1, 1000000),
-                self._make_change_row(2, "b", "insert", 2, 2000000),
-                self._make_change_row(3, "c", "insert", 3, 3000000),
-            ]
-        )
+        self._add_change_row(1, "a", "insert", 1, 1000000)
+        self._add_change_row(2, "b", "insert", 2, 2000000)
+        self._add_change_row(3, "c", "insert", 3, 3000000)
 
         # DataFrame API — only version 2
         df = (
@@ -457,13 +389,9 @@ class CDCTestsMixin:
     # ---------- Streaming ----------
 
     def test_streaming_changes_returns_data(self):
-        self._add_change_rows(
-            [
-                self._make_change_row(1, "a", "insert", 1, 1000000),
-                self._make_change_row(2, "b", "insert", 1, 1000000),
-                self._make_change_row(1, "a", "delete", 2, 2000000),
-            ]
-        )
+        self._add_change_row(1, "a", "insert", 1, 1000000)
+        self._add_change_row(2, "b", "insert", 1, 1000000)
+        self._add_change_row(1, "a", "delete", 2, 2000000)
 
         expected = [
             Row(
@@ -514,13 +442,9 @@ class CDCTestsMixin:
             q2.stop()
 
     def test_streaming_changes_with_starting_version(self):
-        self._add_change_rows(
-            [
-                self._make_change_row(1, "a", "insert", 1, 1000000),
-                self._make_change_row(2, "b", "insert", 1, 1000000),
-                self._make_change_row(1, "a", "delete", 2, 2000000),
-            ]
-        )
+        self._add_change_row(1, "a", "insert", 1, 1000000)
+        self._add_change_row(2, "b", "insert", 1, 1000000)
+        self._add_change_row(1, "a", "delete", 2, 2000000)
 
         expected = [
             Row(
@@ -557,13 +481,9 @@ class CDCTestsMixin:
             q2.stop()
 
     def test_streaming_changes_with_projection_and_filter(self):
-        self._add_change_rows(
-            [
-                self._make_change_row(1, "a", "insert", 1, 1000000),
-                self._make_change_row(2, "b", "insert", 1, 1000000),
-                self._make_change_row(3, "c", "insert", 2, 2000000),
-            ]
-        )
+        self._add_change_row(1, "a", "insert", 1, 1000000)
+        self._add_change_row(2, "b", "insert", 1, 1000000)
+        self._add_change_row(3, "c", "insert", 2, 2000000)
 
         expected = [Row(id=1, data="a"), Row(id=2, data="b")]
 

@@ -23,12 +23,14 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.ChangelogRange.{TimestampRange, UnboundedRange, VersionRange}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * An [[InMemoryTableCatalog]] that implements [[TableCatalog.loadChangelog()]].
@@ -99,6 +101,22 @@ class InMemoryChangelogCatalog extends InMemoryCatalog {
     InMemoryChangelogCatalog.addChangeRows(ident, rows)
   }
 
+  /**
+   * Add a single change row with primitive-typed arguments.
+   * This avoids the need to construct [[GenericInternalRow]] / [[UTF8String]]
+   * from external test code (e.g. PySpark tests via Py4J).
+   */
+  def addChangeRow(
+      ident: Identifier,
+      id: Long,
+      data: String,
+      changeType: String,
+      commitVersion: Long,
+      commitTimestamp: Long): Unit = {
+    InMemoryChangelogCatalog.addChangeRow(
+      ident, id, data, changeType, commitVersion, commitTimestamp)
+  }
+
   /** Instance-level convenience that delegates to the companion object. */
   def clearChangeRows(ident: Identifier): Unit = {
     InMemoryChangelogCatalog.clearChangeRows(ident)
@@ -118,6 +136,27 @@ object InMemoryChangelogCatalog {
   def addChangeRows(ident: Identifier, rows: Seq[InternalRow]): Unit = {
     val buf = changeData.computeIfAbsent(ident.toString, _ => mutable.ArrayBuffer.empty)
     buf.synchronized { buf ++= rows }
+  }
+
+  /**
+   * Add a single change row from primitive-typed arguments, constructing the
+   * [[InternalRow]] internally. The row schema must be
+   * (id LONG, data STRING, _change_type STRING, _commit_version LONG, _commit_timestamp LONG).
+   */
+  def addChangeRow(
+      ident: Identifier,
+      id: Long,
+      data: String,
+      changeType: String,
+      commitVersion: Long,
+      commitTimestamp: Long): Unit = {
+    val row = new GenericInternalRow(5)
+    row.setLong(0, id)
+    row.update(1, UTF8String.fromString(data))
+    row.update(2, UTF8String.fromString(changeType))
+    row.setLong(3, commitVersion)
+    row.setLong(4, commitTimestamp)
+    addChangeRows(ident, Seq(row))
   }
 
   def clearChangeRows(ident: Identifier): Unit = {
