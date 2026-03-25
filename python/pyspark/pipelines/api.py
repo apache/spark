@@ -85,8 +85,9 @@ def _validate_stored_dataset_args(
         )
     if table_properties is not None and not isinstance(table_properties, dict):
         raise PySparkTypeError(
-            errorClass="NOT_DICT",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "dict",
                 "arg_name": "table_properties",
                 "arg_type": type(table_properties).__name__,
             },
@@ -434,8 +435,9 @@ def create_streaming_table(
         )
     if table_properties is not None and not isinstance(table_properties, dict):
         raise PySparkTypeError(
-            errorClass="NOT_DICT",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "dict",
                 "arg_name": "table_properties",
                 "arg_type": type(table_properties).__name__,
             },
@@ -484,8 +486,9 @@ def create_sink(
         )
     if options is not None and not isinstance(options, dict):
         raise PySparkTypeError(
-            errorClass="NOT_DICT",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "dict",
                 "arg_name": "options",
                 "arg_type": type(options).__name__,
             },

@@ -235,8 +235,12 @@ class GroupedData:
         if values is not None:
             if not isinstance(values, list):
                 raise PySparkTypeError(
-                    errorClass="NOT_LIST",
-                    messageParameters={"arg_name": "values", "arg_type": type(values).__name__},
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "expected_type": "list",
+                        "arg_name": "values",
+                        "arg_type": type(values).__name__,
+                    },
                 )
             for v in values:
                 if not isinstance(v, (bool, float, int, str)):

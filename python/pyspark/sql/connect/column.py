@@ -116,8 +116,12 @@ class Column(ParentColumn):
     def __init__(self, expr: "Expression") -> None:
         if not isinstance(expr, Expression):
             raise PySparkTypeError(
-                errorClass="NOT_EXPRESSION",
-                messageParameters={"arg_name": "expr", "arg_type": type(expr).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "Expression",
+                    "arg_name": "expr",
+                    "arg_type": type(expr).__name__,
+                },
             )
         self._expr = expr
 
@@ -377,8 +381,12 @@ class Column(ParentColumn):
             start_expr = _to_expr(startPos)
         else:
             raise PySparkTypeError(
-                errorClass="NOT_COLUMN_OR_INT",
-                messageParameters={"arg_name": "startPos", "arg_type": type(length).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "Column or int",
+                    "arg_name": "startPos",
+                    "arg_type": type(length).__name__,
+                },
             )
         return Column(UnresolvedFunction("substr", [self._expr, start_expr, length_expr]))
 
@@ -434,8 +442,12 @@ class Column(ParentColumn):
             return Column(CastExpression(expr=self._expr, data_type=dataType))
         else:
             raise PySparkTypeError(
-                errorClass="NOT_DATATYPE_OR_STR",
-                messageParameters={"arg_name": "dataType", "arg_type": type(dataType).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "DataType or str",
+                    "arg_name": "dataType",
+                    "arg_type": type(dataType).__name__,
+                },
             )
 
     astype = cast
@@ -451,8 +463,12 @@ class Column(ParentColumn):
             )
         else:
             raise PySparkTypeError(
-                errorClass="NOT_DATATYPE_OR_STR",
-                messageParameters={"arg_name": "dataType", "arg_type": type(dataType).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "DataType or str",
+                    "arg_name": "dataType",
+                    "arg_type": type(dataType).__name__,
+                },
             )
 
     def __repr__(self) -> str:

@@ -275,8 +275,9 @@ class SparkConnectStatTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_FLOAT_OR_INT",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "float or int",
                 "arg_name": "relativeError",
                 "arg_type": "str",
             },

@@ -152,8 +152,9 @@ class UserDefinedFunction:
 
         if not isinstance(returnType, (DataType, str)):
             raise PySparkTypeError(
-                errorClass="NOT_DATATYPE_OR_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
+                    "expected_type": "DataType or str",
                     "arg_name": "returnType",
                     "arg_type": type(returnType).__name__,
                 },
@@ -161,8 +162,12 @@ class UserDefinedFunction:
 
         if not isinstance(evalType, int):
             raise PySparkTypeError(
-                errorClass="NOT_INT",
-                messageParameters={"arg_name": "evalType", "arg_type": type(evalType).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "int",
+                    "arg_name": "evalType",
+                    "arg_type": type(evalType).__name__,
+                },
             )
 
         self.func = func

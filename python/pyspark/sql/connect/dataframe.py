@@ -223,13 +223,21 @@ class DataFrame(ParentDataFrame):
         def _raise() -> NoReturn:
             if allow_ordinal:
                 raise PySparkTypeError(
-                    errorClass="NOT_COLUMN_OR_INT_OR_STR",
-                    messageParameters={"arg_name": arg_name, "arg_type": type(c).__name__},
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "expected_type": "Column, int or str",
+                        "arg_name": arg_name,
+                        "arg_type": type(c).__name__,
+                    },
                 )
             else:
                 raise PySparkTypeError(
-                    errorClass="NOT_COLUMN_OR_STR",
-                    messageParameters={"arg_name": arg_name, "arg_type": type(c).__name__},
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "expected_type": "Column or str",
+                        "arg_name": arg_name,
+                        "arg_type": type(c).__name__,
+                    },
                 )
 
         if (
@@ -417,8 +425,9 @@ class DataFrame(ParentDataFrame):
             )
         else:
             raise PySparkTypeError(
-                errorClass="NOT_COLUMN_OR_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
+                    "expected_type": "Column or str",
                     "arg_name": "numPartitions",
                     "arg_type": type(numPartitions).__name__,
                 },
@@ -460,8 +469,9 @@ class DataFrame(ParentDataFrame):
             )
         else:
             raise PySparkTypeError(
-                errorClass="NOT_COLUMN_OR_INT_OR_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
+                    "expected_type": "Column, int or str",
                     "arg_name": "numPartitions",
                     "arg_type": type(numPartitions).__name__,
                 },
@@ -474,8 +484,9 @@ class DataFrame(ParentDataFrame):
     ) -> ParentDataFrame:
         if not isinstance(numPartitions, int) or isinstance(numPartitions, bool):
             raise PySparkTypeError(
-                errorClass="NOT_INT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
+                    "expected_type": "int",
                     "arg_name": "numPartitions",
                     "arg_type": type(numPartitions).__name__,
                 },
@@ -563,8 +574,12 @@ class DataFrame(ParentDataFrame):
         _cols = list(cols)
         if any(not isinstance(c, (str, Column)) for c in _cols):
             raise PySparkTypeError(
-                errorClass="NOT_COLUMN_OR_STR",
-                messageParameters={"arg_name": "cols", "arg_type": type(cols).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "Column or str",
+                    "arg_name": "cols",
+                    "arg_type": type(cols).__name__,
+                },
             )
 
         return DataFrame(
@@ -798,8 +813,12 @@ class DataFrame(ParentDataFrame):
     def withColumnsRenamed(self, colsMap: Dict[str, str]) -> ParentDataFrame:
         if not isinstance(colsMap, dict):
             raise PySparkTypeError(
-                errorClass="NOT_DICT",
-                messageParameters={"arg_name": "colsMap", "arg_type": type(colsMap).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "dict",
+                    "arg_name": "colsMap",
+                    "arg_type": type(colsMap).__name__,
+                },
             )
 
         return DataFrame(plan.WithColumnsRenamed(self._plan, colsMap), self._session)
@@ -809,8 +828,12 @@ class DataFrame(ParentDataFrame):
     ) -> str:
         if not isinstance(n, int) or isinstance(n, bool):
             raise PySparkTypeError(
-                errorClass="NOT_INT",
-                messageParameters={"arg_name": "n", "arg_type": type(n).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "int",
+                    "arg_name": "n",
+                    "arg_type": type(n).__name__,
+                },
             )
         if not isinstance(vertical, bool):
             raise PySparkTypeError(
@@ -856,8 +879,12 @@ class DataFrame(ParentDataFrame):
 
         if not isinstance(colsMap, dict):
             raise PySparkTypeError(
-                errorClass="NOT_DICT",
-                messageParameters={"arg_name": "colsMap", "arg_type": type(colsMap).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "dict",
+                    "arg_name": "colsMap",
+                    "arg_type": type(colsMap).__name__,
+                },
             )
 
         names: List[str] = []
@@ -897,8 +924,12 @@ class DataFrame(ParentDataFrame):
     def withMetadata(self, columnName: str, metadata: Dict[str, Any]) -> ParentDataFrame:
         if not isinstance(metadata, dict):
             raise PySparkTypeError(
-                errorClass="NOT_DICT",
-                messageParameters={"arg_name": "metadata", "arg_type": type(metadata).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "dict",
+                    "arg_name": "metadata",
+                    "arg_type": type(metadata).__name__,
+                },
             )
 
         return DataFrame(
@@ -1180,8 +1211,12 @@ class DataFrame(ParentDataFrame):
     def where(self, condition: Union[Column, str]) -> ParentDataFrame:
         if not isinstance(condition, (str, Column)):
             raise PySparkTypeError(
-                errorClass="NOT_COLUMN_OR_STR",
-                messageParameters={"arg_name": "condition", "arg_type": type(condition).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "Column or str",
+                    "arg_name": "condition",
+                    "arg_type": type(condition).__name__,
+                },
             )
         return self.filter(condition)
 
@@ -1284,8 +1319,12 @@ class DataFrame(ParentDataFrame):
         if thresh is not None:
             if not isinstance(thresh, int):
                 raise PySparkTypeError(
-                    errorClass="NOT_INT",
-                    messageParameters={"arg_name": "thresh", "arg_type": type(thresh).__name__},
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "expected_type": "int",
+                        "arg_name": "thresh",
+                        "arg_type": type(thresh).__name__,
+                    },
                 )
 
             # 'thresh' overwrites 'how'
@@ -1567,8 +1606,9 @@ class DataFrame(ParentDataFrame):
 
         if not isinstance(relativeError, (float, int)):
             raise PySparkTypeError(
-                errorClass="NOT_FLOAT_OR_INT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
+                    "expected_type": "float or int",
                     "arg_name": "relativeError",
                     "arg_type": type(relativeError).__name__,
                 },
@@ -1633,13 +1673,21 @@ class DataFrame(ParentDataFrame):
     ) -> ParentDataFrame:
         if not isinstance(col, (str, Column)):
             raise PySparkTypeError(
-                errorClass="NOT_COLUMN_OR_STR",
-                messageParameters={"arg_name": "col", "arg_type": type(col).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "Column or str",
+                    "arg_name": "col",
+                    "arg_type": type(col).__name__,
+                },
             )
         if not isinstance(fractions, dict):
             raise PySparkTypeError(
-                errorClass="NOT_DICT",
-                messageParameters={"arg_name": "fractions", "arg_type": type(fractions).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "dict",
+                    "arg_name": "fractions",
+                    "arg_type": type(fractions).__name__,
+                },
             )
 
         _fractions = []
@@ -1751,8 +1799,12 @@ class DataFrame(ParentDataFrame):
             return F.col(self.columns[item])
         else:
             raise PySparkTypeError(
-                errorClass="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
-                messageParameters={"arg_name": "item", "arg_type": type(item).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "Column, int, list, str or tuple",
+                    "arg_name": "item",
+                    "arg_type": type(item).__name__,
+                },
             )
 
     def _col(self, name: str, is_metadata_column: bool = False) -> Column:
@@ -2162,8 +2214,12 @@ class DataFrame(ParentDataFrame):
     def sameSemantics(self, other: ParentDataFrame) -> bool:
         if not isinstance(other, DataFrame):
             raise PySparkTypeError(
-                errorClass="NOT_DATAFRAME",
-                messageParameters={"arg_name": "other", "arg_type": type(other).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "DataFrame",
+                    "arg_name": "other",
+                    "arg_type": type(other).__name__,
+                },
             )
         other = self._check_same_session(other)
         return self._session.client.same_semantics(
