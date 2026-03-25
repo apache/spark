@@ -492,6 +492,13 @@ class RocksDB(
 
         // Build initial lineage for version > 0. Version 0 is the empty initial state
         // with no checkpoint files, so lineage stays empty.
+        if (version == 0) {
+          assert(stateStoreCkptId.isEmpty,
+            "stateStoreCkptId should be empty when version is zero")
+          // Clear stale lineage from a previous session so that
+          // loadSnapshotWithCheckpointId only considers version 0 (empty state).
+          currVersionLineage = Array.empty
+        }
         if (version > 0) {
           // If the exact snapshot file exists on DFS, use a sparse lineage (just the
           // target version) as an optimization to skip reading the changelog header.
@@ -508,7 +515,8 @@ class RocksDB(
 
         // Delegate to AutoSnapshotLoader which handles both the happy path
         // and auto-repair fallback to older snapshots.
-        loadSnapshotWithCheckpointId(version, stateStoreCkptId, currVersionLineage)
+        currVersionLineage =
+          loadSnapshotWithCheckpointId(version, stateStoreCkptId, currVersionLineage)
         loadedFromDfs = version > 0
         lineageManager.resetLineage(currVersionLineage)
         // After changelog replay the numKeysOnWritingVersion will be updated to
@@ -696,11 +704,13 @@ class RocksDB(
    * @param stateStoreCkptId The checkpoint ID for the target version (for lineage enrichment)
    * @param initialLineage The lineage for the target version (may be enriched by
    *                       getEligibleSnapshotsForRepair during auto-repair)
+   * @return The (potentially enriched) lineage after loading. During auto-repair,
+   *         this may contain more entries than the initial sparse lineage.
    */
   private def loadSnapshotWithCheckpointId(
       versionToLoad: Long,
       stateStoreCkptId: Option[String],
-      initialLineage: Array[LineageItem]): Unit = {
+      initialLineage: Array[LineageItem]): Array[LineageItem] = {
     // Local var so that beforeRepair can enrich the lineage and getEligibleSnapshots
     // (re-called after beforeRepair) sees the updated lineage.
     var currVersionLineage = initialLineage
@@ -713,7 +723,6 @@ class RocksDB(
     // Side-channel map: version -> uniqueId, populated by getEligibleSnapshots,
     // consumed by loadSnapshotFromCheckpoint
     val eligibleSnapshotUniqueIds = mutable.Map[Long, String]()
-    var loadedSnapshotUniqueId: Option[String] = None
 
     val snapshotLoader = new AutoSnapshotLoader(
       allowAutoSnapshotRepair,
@@ -728,7 +737,7 @@ class RocksDB(
           workingDir, rocksDBFileMapping, uniqueId)
 
         loadedVersion = snapshotVersion
-        fileManager.setMaxSeenVersion(snapshotVersion)
+        fileManager.setMaxSeenVersion(versionToLoad)
         openLocalRocksDB(remoteMetaData)
         lastSnapshotVersion = snapshotVersion
         reportSnapshotUploadToCoordinator(snapshotVersion)
@@ -743,7 +752,6 @@ class RocksDB(
           loadedVersion = versionToLoad
         }
 
-        loadedSnapshotUniqueId = uniqueId
       }
 
       override protected def onLoadSnapshotFromCheckpointFailure(): Unit = {
@@ -769,7 +777,10 @@ class RocksDB(
           try {
             currVersionLineage = getFullLineage(1, versionToLoad, stateStoreCkptId)
           } catch {
-            case NonFatal(_) => // keep existing lineage; may limit fallback options
+            case NonFatal(e) =>
+              logWarning(log"Failed to enrich lineage via getFullLineage during " +
+                log"auto-repair for version ${MDC(LogKeys.VERSION_NUM, versionToLoad)}. " +
+                log"Falling back to existing lineage; repair options may be limited.", e)
           }
         }
         // Re-discover eligible snapshots from the (potentially enriched) lineage
@@ -779,6 +790,7 @@ class RocksDB(
 
     val (_, autoRepairCompleted) = snapshotLoader.loadSnapshot(versionToLoad)
     performedSnapshotAutoRepair = autoRepairCompleted
+    currVersionLineage
   }
 
   /**
