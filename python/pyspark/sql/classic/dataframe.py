@@ -301,8 +301,12 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     ) -> str:
         if not isinstance(n, int) or isinstance(n, bool):
             raise PySparkTypeError(
-                errorClass="NOT_INT",
-                messageParameters={"arg_name": "n", "arg_type": type(n).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "int",
+                    "arg_name": "n",
+                    "arg_type": type(n).__name__,
+                },
             )
 
         if not isinstance(vertical, bool):
@@ -565,8 +569,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             return DataFrame(self._jdf.repartition(self._jcols(*cols)), self.sparkSession)
         else:
             raise PySparkTypeError(
-                errorClass="NOT_COLUMN_OR_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
+                    "expected_type": "Column or str",
                     "arg_name": "numPartitions",
                     "arg_type": type(numPartitions).__name__,
                 },
@@ -591,8 +596,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             return DataFrame(self._jdf.repartitionByRange(self._jcols(*cols)), self.sparkSession)
         else:
             raise PySparkTypeError(
-                errorClass="NOT_COLUMN_OR_INT_OR_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
+                    "expected_type": "Column, int or str",
                     "arg_name": "numPartitions",
                     "arg_type": type(numPartitions).__name__,
                 },
@@ -603,8 +609,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     ) -> ParentDataFrame:
         if not isinstance(numPartitions, (int, bool)):
             raise PySparkTypeError(
-                errorClass="NOT_INT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
+                    "expected_type": "int",
                     "arg_name": "numPartitions",
                     "arg_type": type(numPartitions).__name__,
                 },
@@ -653,13 +660,21 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             col = Column(col)
         elif not isinstance(col, Column):
             raise PySparkTypeError(
-                errorClass="NOT_COLUMN_OR_STR",
-                messageParameters={"arg_name": "col", "arg_type": type(col).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "Column or str",
+                    "arg_name": "col",
+                    "arg_type": type(col).__name__,
+                },
             )
         if not isinstance(fractions, dict):
             raise PySparkTypeError(
-                errorClass="NOT_DICT",
-                messageParameters={"arg_name": "fractions", "arg_type": type(fractions).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "dict",
+                    "arg_name": "fractions",
+                    "arg_type": type(fractions).__name__,
+                },
             )
         for k, v in fractions.items():
             if not isinstance(k, (float, int, str)):
@@ -1069,8 +1084,12 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             jdf = self._jdf.filter(condition._jc)
         else:
             raise PySparkTypeError(
-                errorClass="NOT_COLUMN_OR_STR",
-                messageParameters={"arg_name": "condition", "arg_type": type(condition).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "Column or str",
+                    "arg_name": "condition",
+                    "arg_type": type(condition).__name__,
+                },
             )
         return DataFrame(jdf, self.sparkSession)
 
@@ -1544,8 +1563,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
 
         if not isinstance(relativeError, (float, int)):
             raise PySparkTypeError(
-                errorClass="NOT_FLOAT_OR_INT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
+                    "expected_type": "float or int",
                     "arg_name": "relativeError",
                     "arg_type": type(relativeError).__name__,
                 },
@@ -1649,8 +1669,12 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
 
         if not isinstance(colsMap, dict):
             raise PySparkTypeError(
-                errorClass="NOT_DICT",
-                messageParameters={"arg_name": "colsMap", "arg_type": type(colsMap).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "dict",
+                    "arg_name": "colsMap",
+                    "arg_type": type(colsMap).__name__,
+                },
             )
 
         col_names = list(colsMap.keys())
@@ -1679,8 +1703,12 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def withColumnsRenamed(self, colsMap: Dict[str, str]) -> ParentDataFrame:
         if not isinstance(colsMap, dict):
             raise PySparkTypeError(
-                errorClass="NOT_DICT",
-                messageParameters={"arg_name": "colsMap", "arg_type": type(colsMap).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "dict",
+                    "arg_name": "colsMap",
+                    "arg_type": type(colsMap).__name__,
+                },
             )
 
         col_names: List[str] = []
@@ -1701,8 +1729,12 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
 
         if not isinstance(metadata, dict):
             raise PySparkTypeError(
-                errorClass="NOT_DICT",
-                messageParameters={"arg_name": "metadata", "arg_type": type(metadata).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "dict",
+                    "arg_name": "metadata",
+                    "arg_type": type(metadata).__name__,
+                },
             )
         sc = get_active_spark_context()
         jmeta = cast(JVMView, sc._jvm).org.apache.spark.sql.types.Metadata.fromJson(
@@ -1721,8 +1753,12 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                 java_columns.append(c._jc)
             else:
                 raise PySparkTypeError(
-                    errorClass="NOT_COLUMN_OR_STR",
-                    messageParameters={"arg_name": "col", "arg_type": type(c).__name__},
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "expected_type": "Column or str",
+                        "arg_name": "col",
+                        "arg_type": type(c).__name__,
+                    },
                 )
 
         jdf = self._jdf
@@ -1756,8 +1792,12 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def sameSemantics(self, other: ParentDataFrame) -> bool:
         if not isinstance(other, DataFrame):
             raise PySparkTypeError(
-                errorClass="NOT_DATAFRAME",
-                messageParameters={"arg_name": "other", "arg_type": type(other).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "DataFrame",
+                    "arg_name": "other",
+                    "arg_type": type(other).__name__,
+                },
             )
         return self._jdf.sameSemantics(other._jdf)
 

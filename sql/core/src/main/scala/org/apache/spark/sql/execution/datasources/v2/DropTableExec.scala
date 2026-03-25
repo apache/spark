@@ -38,8 +38,8 @@ case class DropTableExec(
       invalidateCache()
       if (purge) catalog.purgeTable(ident) else catalog.dropTable(ident)
     } else if (!ifExists) {
-      throw QueryCompilationErrors.noSuchTableError(
-        (catalog.name() +: ident.namespace() :+ ident.name()).toImmutableArraySeq)
+      val nameParts = (catalog.name() +: ident.namespace() :+ ident.name()).toImmutableArraySeq
+      throw QueryCompilationErrors.noSuchTableError(nameParts)
     }
 
     Seq.empty

@@ -548,8 +548,9 @@ class DataFrameWriter(OptionUtils):
     ) -> "DataFrameWriter":
         if not isinstance(numBuckets, int):
             raise PySparkTypeError(
-                errorClass="NOT_INT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
+                    "expected_type": "int",
                     "arg_name": "numBuckets",
                     "arg_type": type(numBuckets).__name__,
                 },

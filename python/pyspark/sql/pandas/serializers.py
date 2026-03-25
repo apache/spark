@@ -162,14 +162,19 @@ class ArrowStreamSerializer(Serializer):
             if writer is not None:
                 writer.close()
 
+    @classmethod
+    def _read_arrow_stream(cls, stream) -> Iterator["pa.RecordBatch"]:
+        """Read a plain Arrow IPC stream, yielding one RecordBatch per message."""
+        import pyarrow as pa
+
+        reader = pa.ipc.open_stream(stream)
+        for batch in reader:
+            yield batch
+
     def load_stream(self, stream):
         """Load batches: plain stream if num_dfs=0, grouped otherwise."""
         if self._num_dfs == 0:
-            import pyarrow as pa
-
-            reader = pa.ipc.open_stream(stream)
-            for batch in reader:
-                yield batch
+            yield from self._read_arrow_stream(stream)
         elif self._num_dfs == 1:
             # Grouped loading: yield single dataframe groups
             for (batches,) in self._load_group_dataframes(stream, num_dfs=1):
@@ -193,14 +198,11 @@ class ArrowStreamSerializer(Serializer):
             if dataframes_in_group == num_dfs:
                 if num_dfs == 1:
                     # Single dataframe: can use lazy iterator
-                    yield (ArrowStreamSerializer.load_stream(self, stream),)
+                    yield (self._read_arrow_stream(stream),)
                 else:
                     # Multiple dataframes: must eagerly load sequentially
                     # to maintain correct stream position
-                    yield tuple(
-                        list(ArrowStreamSerializer.load_stream(self, stream))
-                        for _ in range(num_dfs)
-                    )
+                    yield tuple(list(self._read_arrow_stream(stream)) for _ in range(num_dfs))
             elif dataframes_in_group > 0:
                 raise PySparkValueError(
                     errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
@@ -259,7 +261,7 @@ class ArrowStreamUDTFSerializer(ArrowStreamUDFSerializer):
     """
 
     def load_stream(self, stream):
-        return ArrowStreamSerializer.load_stream(self, stream)
+        return self._read_arrow_stream(stream)
 
 
 class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
