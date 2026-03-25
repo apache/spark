@@ -80,9 +80,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
       // `postScanFilters` need to be evaluated after the scan.
       // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
-      val partitionSchema = PushDownUtils.getPartitionPredicateSchema(sHolder.relation)
+      val partitionPredicateFields = PushDownUtils.getPartitionSchemaInfo(sHolder.relation)
       val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
-        sHolder.builder, normalizedFiltersWithoutSubquery, partitionSchema)
+        sHolder.builder, normalizedFiltersWithoutSubquery, partitionPredicateFields)
       val pushedFiltersStr = if (pushedFilters.isLeft) {
         pushedFilters.swap
           .getOrElse(throw new NoSuchElementException("The left node doesn't have pushedFilters"))

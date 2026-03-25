@@ -15,25 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions;
+package org.apache.spark.sql.internal.connector
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.catalog.Table;
+import org.apache.spark.sql.connector.expressions.PartitionFieldReference
 
 /**
- * A reference to a partition column in {@link Table#partitioning()}.
- * <p>
- * {@link #fieldNames()} returns the partition column name (or names) as reported by
- * the table's partition schema.
- * {@link #ordinal()} returns the 0-based position in {@link Table#partitioning()}.
- *
- * @since 4.2.0
+ * Implementation of [[PartitionFieldReference]] that carries the position ordinal in
+ * Table.partitioning() and the partition field name(s) for that position.
  */
-@Evolving
-public interface PartitionColumnReference extends NamedReference {
-
-  /**
-   * Returns the 0-based ordinal of this partition column in {@link Table#partitioning()}.
-   */
-  int ordinal();
-}
+private[connector] case class PartitionFieldReferenceImpl(
+    ordinal: Int,
+    fieldNames: Array[String])
+  extends PartitionFieldReference

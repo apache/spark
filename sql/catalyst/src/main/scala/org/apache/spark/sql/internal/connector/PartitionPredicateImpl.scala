@@ -21,6 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Expression => CatalystExpression, Predicate => CatalystPredicate}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
 
@@ -30,8 +31,11 @@ import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
  */
 class PartitionPredicateImpl private (
     private val catalystExpr: CatalystExpression,
-    private val partitionSchema: Seq[AttributeReference])
+    private val partitionFields: Seq[PartitionPredicateField])
   extends PartitionPredicate with Logging {
+
+  @transient private lazy val partitionAttrs: Seq[AttributeReference] =
+    partitionFields.map(c => DataTypeUtils.toAttribute(c.structField))
 
   /** The wrapped partition filter Catalyst Expression. */
   def expression: CatalystExpression = catalystExpr
@@ -40,20 +44,20 @@ class PartitionPredicateImpl private (
   @transient private lazy val boundPredicate: InternalRow => Boolean = {
     val boundExpr = catalystExpr.transform {
       case a: AttributeReference =>
-        val index = partitionSchema.indexWhere(_.name == a.name)
+        val index = partitionAttrs.indexWhere(_.name == a.name)
         require(index >= 0, s"Column ${a.name} not found in partition schema")
-        BoundReference(index, partitionSchema(index).dataType, nullable = a.nullable)
+        BoundReference(index, partitionAttrs(index).dataType, nullable = a.nullable)
     }
     val predicate = CatalystPredicate.createInterpreted(boundExpr)
     predicate.eval
   }
 
   override def eval(partitionValues: InternalRow): Boolean = {
-    if (partitionValues.numFields != partitionSchema.length) {
+    if (partitionValues.numFields != partitionFields.length) {
       logWarning(
         log"Cannot evaluate partition predicate ${MDC(LogKeys.EXPR, catalystExpr.sql)}: " +
         log"partition value field count (${MDC(LogKeys.COUNT, partitionValues.numFields)}) " +
-        log"does not match schema (${MDC(LogKeys.NUM_PARTITIONS, partitionSchema.length)}). " +
+        log"does not match schema (${MDC(LogKeys.NUM_PARTITIONS, partitionFields.length)}). " +
         log"Including partition in scan result to avoid incorrect filtering.")
       return true
     }
@@ -72,20 +76,24 @@ class PartitionPredicateImpl private (
 
   @transient override lazy val references: Array[NamedReference] = {
     val refNames = catalystExpr.references.map(_.name).toSet
-    partitionSchema.zipWithIndex
+    partitionAttrs.zipWithIndex
       .filter { case (attr, _) => refNames.contains(attr.name) }
-      .map { case (attr, ordinal) => PartitionColumnReferenceImpl(ordinal, Array(attr.name)) }
+      .map { case (_, ordinal) =>
+        PartitionFieldReferenceImpl(
+          ordinal, partitionFields(ordinal).identityRef.fieldNames())
+      }
       .toArray
   }
 
   override def equals(obj: Any): Boolean = obj match {
     case other: PartitionPredicateImpl =>
-      catalystExpr.semanticEquals(other.catalystExpr) && partitionSchema == other.partitionSchema
+      catalystExpr.semanticEquals(other.catalystExpr) &&
+        partitionFields == other.partitionFields
     case _ => false
   }
 
   override def hashCode(): Int = {
-    31 * catalystExpr.semanticHash() + partitionSchema.hashCode()
+    31 * catalystExpr.semanticHash() + partitionFields.hashCode()
   }
 
   override def toString(): String = s"PartitionPredicate(${catalystExpr.sql})"
@@ -95,18 +103,26 @@ object PartitionPredicateImpl {
 
   def apply(
       catalystExpr: CatalystExpression,
-      partitionSchema: Seq[AttributeReference]): PartitionPredicateImpl = {
-    if (partitionSchema.isEmpty) {
+      partitionFields: Seq[PartitionPredicateField]): PartitionPredicateImpl = {
+    validateAndCreate(catalystExpr, partitionFields)
+  }
+
+  private def validateAndCreate(
+      catalystExpr: CatalystExpression,
+      partitionFields: Seq[PartitionPredicateField]): PartitionPredicateImpl = {
+    if (partitionFields.isEmpty) {
       throw SparkException.internalError(
-        s"Cannot evaluate partition predicate ${catalystExpr.sql}: partition schema is empty")
+        s"Cannot evaluate partition predicate ${catalystExpr.sql}: partition fields are empty")
     }
-    val partitionNames = partitionSchema.map(_.name).toSet
+    val partitionNames = partitionFields.map(_.structField.name).toSet
     val refNames = catalystExpr.references.map(_.name).toSet
     if (!refNames.subsetOf(partitionNames)) {
+      val refsStr = refNames.mkString(", ")
+      val fieldsStr = partitionNames.mkString(", ")
       throw SparkException.internalError(
         s"Cannot evaluate partition predicate ${catalystExpr.sql}: expression references " +
-        s"${refNames.mkString(", ")} not all in partition columns ${partitionNames.mkString(", ")}")
+          s"$refsStr not all in partition fields $fieldsStr")
     }
-    new PartitionPredicateImpl(catalystExpr, partitionSchema)
+    new PartitionPredicateImpl(catalystExpr, partitionFields)
   }
 }

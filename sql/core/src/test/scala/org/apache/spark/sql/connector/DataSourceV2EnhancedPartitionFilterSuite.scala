@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, In, PredicateHelpe
 import org.apache.spark.sql.connector.catalog.BufferedRows
 import org.apache.spark.sql.connector.catalog.InMemoryEnhancedPartitionFilterTable
 import org.apache.spark.sql.connector.catalog.InMemoryTableEnhancedPartitionFilterCatalog
-import org.apache.spark.sql.connector.expressions.PartitionColumnReference
+import org.apache.spark.sql.connector.expressions.PartitionFieldReference
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.FilterExec
@@ -220,6 +220,25 @@ class DataSourceV2EnhancedPartitionFilterSuite
     }
   }
 
+  test("nested identity partition: second-pass PartitionPredicate with UDF on nested key") {
+    withTable(partFilterTableName) {
+      sql(s"CREATE TABLE $partFilterTableName " +
+        s"(s struct<tz: string, x: int>, data string) USING $v2Source PARTITIONED BY (s.tz)")
+      sql(s"INSERT INTO $partFilterTableName VALUES " +
+        "(named_struct('tz', 'LA', 'x', 1), 'a'), (named_struct('tz', 'NY', 'x', 2), 'b')")
+
+      spark.udf.register("my_upper_nested", (s: String) =>
+        if (s == null) null else s.toUpperCase(Locale.ROOT))
+
+      val df = sql(
+        s"SELECT * FROM $partFilterTableName WHERE my_upper_nested(s.tz) = 'LA'")
+      checkAnswer(df, Seq(Row(Row("LA", 1), "a")))
+      assertPushedPartitionPredicates(df, 1)
+      assertScanReturnsPartitionKeys(df, Set("LA"))
+      assertReferencedPartitionColumnOrdinals(df, Array(0), Array("s.tz"))
+    }
+  }
+
   test("referenced partition column ordinals: partition predicate same column twice " +
     "has de-duped ordinals") {
     withTable(partFilterTableName) {
@@ -401,16 +420,16 @@ class DataSourceV2EnhancedPartitionFilterSuite
     val names = expectedPartitionColumnNames
   predicates.foreach { p =>
       val refs = p.references()
-      val ordinals = refs.map(_.asInstanceOf[PartitionColumnReference].ordinal()).sorted
+      val ordinals = refs.map(_.asInstanceOf[PartitionFieldReference].ordinal()).sorted
       assert(ordinals.sameElements(expectedOrdinals.sorted),
         s"Expected references().map(_.ordinal()) " +
           s"${expectedOrdinals.sorted.mkString("[", ", ", "]")}, " +
           s"got ${ordinals.mkString("[", ", ", "]")}")
 
       refs.foreach { ref =>
-        assert(ref.isInstanceOf[PartitionColumnReference],
+        assert(ref.isInstanceOf[PartitionFieldReference],
           s"Expected PartitionColumnReference, got ${ref.getClass.getName}")
-        val partRef = ref.asInstanceOf[PartitionColumnReference]
+        val partRef = ref.asInstanceOf[PartitionFieldReference]
         assert(partRef.fieldNames().nonEmpty,
           s"PartitionColumnReference.ordinal=${partRef.ordinal()} has empty fieldNames")
         assert(partRef.ordinal() < names.length,

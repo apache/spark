@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, GetStructField, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.{IdentityTransform, SortOrder, Transform}
@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.{PartitionPredicateImpl, SupportsPushDownCatalystFilters}
+import org.apache.spark.sql.internal.connector.{PartitionPredicateField, PartitionPredicateImpl, SupportsPushDownCatalystFilters}
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
@@ -40,15 +40,15 @@ object PushDownUtils {
    *
    * @param scanBuilder The scan builder to push filters to.
    * @param filters Catalyst filter expressions to push down.
-   * @param partitionSchema The schema of [[Table#partitioning() partitioning]].
-   *   When set and the scan supports V2 filters,
-   *   [[PartitionPredicate]] can be pushed for a second pass.
+   * @param partitionFields When non-empty, metadata for [[Table#partitioning()]].
+   *                        When set and the scan supports V2 filters,
+   *                        [[PartitionPredicate]] can be pushed for a second pass.
    * @return pushed filter and post-scan filters.
    */
   def pushFilters(
       scanBuilder: ScanBuilder,
       filters: Seq[Expression],
-      partitionSchema: Option[StructType])
+      partitionFields: Option[Seq[PartitionPredicateField]])
       : (Either[Seq[sources.Filter], Seq[Predicate]], Seq[Expression]) = {
     scanBuilder match {
       case r: SupportsPushDownFilters =>
@@ -109,11 +109,12 @@ object PushDownUtils {
         }
 
         val remainingFilters = (rejectedFilters ++ untranslatableExprs).toSeq
-        val postScanFilters = if (partitionSchema.isEmpty || !r.supportsIterativePushdown) {
-          remainingFilters
-        } else {
-          pushPartitionPredicates(r, partitionSchema.get, remainingFilters)
-        }
+        val postScanFilters =
+          if (!partitionFields.exists(_.nonEmpty) || !r.supportsIterativePushdown) {
+            remainingFilters
+          } else {
+            pushPartitionPredicates(r, partitionFields.get, remainingFilters)
+          }
 
         val orderedPostScanFilters = prioritizeFilters(postScanFilters,
           ExpressionSet(untranslatableExprs))
@@ -144,13 +145,16 @@ object PushDownUtils {
    */
   private def pushPartitionPredicates(
       scanBuilder: SupportsPushDownV2Filters,
-      partitionSchema: StructType,
+      partitionFields: Seq[PartitionPredicateField],
       remainingFilters: Seq[Expression]): Seq[Expression] = {
+    val partitionSchema = StructType(partitionFields.map(_.structField))
+    val normalizedFilters = remainingFilters.map(
+      normalizePartitionRefs(_, partitionFields, SQLConf.get.resolver))
     val (partitionFilters, nonPartitionFilters) =
-      DataSourceUtils.getPartitionFiltersAndDataFilters(partitionSchema, remainingFilters)
+      DataSourceUtils.getPartitionFiltersAndDataFilters(partitionSchema, normalizedFilters)
     val (pushable, nonPushable) = partitionFilters.partition(isPushablePartitionFilter)
-    val partitionAttrs = toAttributes(partitionSchema)
-    val partitionPredicates = pushable.map(expr => PartitionPredicateImpl(expr, partitionAttrs))
+    val partitionPredicates = pushable.map(
+      expr => PartitionPredicateImpl(expr, partitionFields))
     val rejectedPartitionFilters = scanBuilder.pushPredicates(partitionPredicates.toArray).map {
       predicate => predicate.asInstanceOf[PartitionPredicateImpl].expression
     }
@@ -158,18 +162,26 @@ object PushDownUtils {
   }
 
   /**
-   * Returns a table's partitioning expression schema as a StructType, if creation of a
-   * PartitionPredicate is supported for the schema.
-   * Currently only supported if all partitioning expressions are identity transforms on simple
-   * (single-name, non-nested) field references.
-   *
-   * @return Some(StructType) representing partition transform expression types, if schema
-   *         is supported for PartitionPredicate. None if not supported.
+   * Return a Seq of [[PartitionPredicateField]] representing the fields of a table's
+   * partitioning, only when every partition transform is a resolvable identity transform.
    */
-  def getPartitionPredicateSchema(relation: DataSourceV2Relation): Option[StructType] = {
+  def getPartitionSchemaInfo(
+      relation: DataSourceV2Relation): Option[Seq[PartitionPredicateField]] = {
     val transforms = relation.table.partitioning
-    val fields = transforms.flatMap(toSupportedPartitionField(_, relation))
-    Option.when(transforms.nonEmpty && fields.length == transforms.length)(StructType(fields))
+    if (transforms.isEmpty) {
+      None
+    } else {
+      val fields = transforms.map {
+        case t: IdentityTransform =>
+          toSupportedPartitionField(t, relation.output).map(PartitionPredicateField(_, t.ref))
+        case _ => None
+      }
+      if (fields.forall(_.isDefined)) {
+        Some(fields.map(_.get).toIndexedSeq)
+      } else {
+        None
+      }
+    }
   }
 
   /**
@@ -178,16 +190,98 @@ object PushDownUtils {
    */
   private def toSupportedPartitionField(
       transform: Transform,
-      relation: DataSourceV2Relation): Option[StructField] = {
+      relationOutput: Seq[AttributeReference]): Option[StructField] = {
     transform match {
-      case t: IdentityTransform if t.ref.fieldNames.length == 1 =>
-        val colName = t.ref.fieldNames.head
-        relation.output
-          .find(_.name == colName)
-          .map(attr => StructField(colName, attr.dataType, attr.nullable))
+      case t: IdentityTransform =>
+        val names = t.ref.fieldNames.toIndexedSeq
+        resolveIdentityPartitionField(names, relationOutput)
       case _ =>
         None
     }
+  }
+
+  /**
+   * Resolves an identity partition column path to a StructField.
+   */
+  private def resolveIdentityPartitionField(
+      names: Seq[String],
+      relationOutput: Seq[AttributeReference]): Option[StructField] = {
+    if (names.isEmpty) {
+      None
+    } else {
+      val resolver = SQLConf.get.resolver
+      val rootStruct =
+        StructType(relationOutput.map(a => StructField(a.name, a.dataType, a.nullable)))
+      rootStruct.findNestedField(names, resolver = resolver).map {
+        case (_, leaf) =>
+          StructField(names.mkString("."), leaf.dataType, leaf.nullable)
+      }
+    }
+  }
+
+  /**
+   * Normalizes filter expressions so that nested struct accesses on partition fields are
+   * replaced with flat [[AttributeReference]]s whose names match the partition schema.
+   *
+   * For example, given a table partitioned by `s.tz` (identity transform on a nested field),
+   * the analyzer produces `GetStructField(attr("s"), "tz")`. This method replaces that chain
+   * with `attr("s.tz")`.
+   */
+  private def normalizePartitionRefs(
+      expr: Expression,
+      partitionFields: Seq[PartitionPredicateField],
+      resolver: (String, String) => Boolean): Expression = {
+    val partitionAttrs = toAttributes(StructType(partitionFields.map(_.structField)))
+    val pathToAttr: Map[Seq[String], AttributeReference] =
+      partitionFields.map(_.identityRef).zip(partitionAttrs)
+        .map { case (ref, attr) => ref.fieldNames().toIndexedSeq -> attr}.toMap
+    doNormalizePartitionRefs(expr, pathToAttr, resolver)
+  }
+
+  private def doNormalizePartitionRefs(
+      expr: Expression,
+      pathToAttr: Map[Seq[String], AttributeReference],
+      resolver: (String, String) => Boolean): Expression = {
+    expr.mapChildren(doNormalizePartitionRefs(_, pathToAttr, resolver)) match {
+      case g: GetStructField =>
+        flattenStructFieldChain(g) match {
+          case Some((root, suffix)) =>
+            val fullPath = root.name +: suffix
+            pathToAttr.collectFirst {
+              case (path, attr) if pathsMatch(fullPath, path, resolver) =>
+                attr.withNullability(g.nullable)
+            }.getOrElse(g) // Not partition filter
+          case None => g
+        }
+      case other => other
+    }
+  }
+
+  /**
+   * Flattens a nested [[GetStructField]] chain into the root
+   * [[AttributeReference]] and its field-name path. Returns `None`
+   * when the expression is not a nested struct access.
+   *
+   * Example: `GetStructField(GetStructField(a#1, "x"), "y")`
+   *   returns `Some((a#1, Seq("x", "y")))`.
+   */
+  private def flattenStructFieldChain(
+      expr: Expression): Option[(AttributeReference, Seq[String])] = {
+    def flatten(e: Expression): Option[(AttributeReference, Seq[String])] = e match {
+      case ar: AttributeReference => Some((ar, Seq.empty))
+      case g: GetStructField =>
+        flatten(g.child).map { case (ar, tail) => (ar, tail :+ g.extractFieldName) }
+      case _ => None
+    }
+    flatten(expr).filter(_._2.nonEmpty)
+  }
+
+  private def pathsMatch(
+      left: Seq[String],
+      right: Seq[String],
+      resolver: (String, String) => Boolean): Boolean = {
+    left.length == right.length &&
+      left.zip(right).forall { case (a, b) => resolver(a, b) }
   }
 
   /**

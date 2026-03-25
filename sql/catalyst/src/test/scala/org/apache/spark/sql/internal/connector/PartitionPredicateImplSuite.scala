@@ -20,9 +20,11 @@ package org.apache.spark.sql.internal.connector
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerInstance}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterThan, Literal}
-import org.apache.spark.sql.connector.expressions.PartitionColumnReference
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.catalyst.expressions.{GreaterThan, Literal}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.connector.expressions.{FieldReference, PartitionFieldReference}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField}
+import org.apache.spark.unsafe.types.UTF8String
 
 class PartitionPredicateImplSuite extends SparkFunSuite {
 
@@ -38,12 +40,25 @@ class PartitionPredicateImplSuite extends SparkFunSuite {
     checkPartitionPredicateImplAfterSerialization(serializer)
   }
 
+  test("Kryo: nested partition path in references survives round-trip") {
+    val conf = new SparkConf()
+    val serializer = new KryoSerializer(conf).newInstance()
+    checkNestedPartitionPathReferencesAfterSerialization(serializer)
+  }
+
+  test("Java serialization: nested partition path in references survives round-trip") {
+    val conf = new SparkConf()
+    val serializer = new JavaSerializer(conf).newInstance()
+    checkNestedPartitionPathReferencesAfterSerialization(serializer)
+  }
+
   private def checkPartitionPredicateImplAfterSerialization(
       serializer: SerializerInstance): Unit = {
-    val partitionSchema = Seq(AttributeReference("p", IntegerType)())
-    val ref = AttributeReference("p", IntegerType)()
+    val field = StructField("p", IntegerType, nullable = true)
+    val ref = DataTypeUtils.toAttribute(field)
     val expr = GreaterThan(ref, Literal(5))
-    val predicate = PartitionPredicateImpl(expr, partitionSchema)
+    val fields = Seq(PartitionPredicateField(field, FieldReference(Seq("p"))))
+    val predicate = PartitionPredicateImpl(expr, fields)
 
     val deserialized = serializer.deserialize[PartitionPredicateImpl](
       serializer.serialize(predicate))
@@ -59,8 +74,36 @@ class PartitionPredicateImplSuite extends SparkFunSuite {
     assert(deserialized.equals(predicate))
   }
 
+  private def checkNestedPartitionPathReferencesAfterSerialization(
+      serializer: SerializerInstance): Unit = {
+    val field = StructField("ts.timezone", StringType, nullable = false)
+    val ref = DataTypeUtils.toAttribute(field)
+    val expr = GreaterThan(ref, Literal("x"))
+    val fields = Seq(PartitionPredicateField(field, FieldReference(Seq("ts", "timezone"))))
+    val predicate = PartitionPredicateImpl(expr, fields)
+
+    val deserialized = serializer.deserialize[PartitionPredicateImpl](
+      serializer.serialize(predicate))
+
+    assert(deserialized.eval(InternalRow(UTF8String.fromString("z"))) === true)
+    assert(deserialized.eval(InternalRow(UTF8String.fromString("a"))) === false)
+
+    val expectedRefs = Seq((0, Seq("ts", "timezone")))
+    assert(partitionRefDetails(predicate.references.toSeq) === expectedRefs)
+    assert(partitionRefDetails(deserialized.references.toSeq) === expectedRefs)
+
+    assert(deserialized.equals(predicate))
+  }
+
+  private def partitionRefDetails(refs: Seq[AnyRef]): Seq[(Int, Seq[String])] = refs.map {
+    case r: PartitionFieldReference =>
+      (r.ordinal(), r.fieldNames().toIndexedSeq)
+    case other =>
+      fail(s"Expected PartitionColumnReference, got ${other.getClass.getName}: $other")
+  }
+
   private def refsWithOrdinals(refs: Seq[AnyRef]): Seq[(String, Int)] = refs.map {
-      case r: PartitionColumnReference =>
+      case r: PartitionFieldReference =>
         (r.fieldNames().mkString("."), r.ordinal())
       case other =>
         fail(s"Expected PartitionColumnReference, got ${other.getClass.getName}: $other")
