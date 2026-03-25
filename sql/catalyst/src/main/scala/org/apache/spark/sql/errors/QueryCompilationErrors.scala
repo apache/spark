@@ -950,8 +950,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
    *
    * @param quotedResolutionPathEntries each string is already a display-ready path entry (typically
    *        `toSQLId` of each segment from `SQLConf.resolutionSearchPath`). They are joined with
-   *        ", " inside square brackets. This differs from [[noSuchTableError]]'s second parameter,
-   *        which expects raw catalog/namespace name segments joined with "." after quoting.
+   *        ", " inside square brackets. This differs from [[noSuchTableError]](nameParts:
+   *        Seq[String]), which builds one dotted bracketed path from `nameParts.dropRight(1)` via
+   *        [[org.apache.spark.sql.catalyst.analysis.NoSuchTableException]].
    */
   def tableOrViewNotFoundWithSearchPath(
       name: Seq[String],
@@ -1607,37 +1608,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def noSuchTableError(catalogName: String, ident: Identifier): NoSuchTableException = {
-    noSuchTableError(
-      catalogName +: ident.asMultipartIdentifier,
-      catalogName +: ident.namespace().toSeq).asInstanceOf[NoSuchTableException]
-  }
-
-  def noSuchTableError(nameParts: Seq[String]): Throwable = {
-    new NoSuchTableException(nameParts)
+    new NoSuchTableException(catalogName +: ident.asMultipartIdentifier)
   }
 
   /**
-   * [[NoSuchTableException]] with TABLE_OR_VIEW_NOT_FOUND including a search path derived from
-   * catalog/namespace segments.
-   *
-   * @param catalogPathSegmentsUnquoted raw catalog and namespace components (not the table name);
-   *        each segment is quoted with [[quoteIdentifier]] and the list is joined with `.` inside
-   *        brackets. For pre-formatted path entries joined with ", ", build the message via
-   *        [[tableOrViewNotFoundWithSearchPath]] instead.
+   * Table or view not found (TABLE_OR_VIEW_NOT_FOUND). The `searchPath` segment uses
+   * `nameParts.dropRight(1)` when `nameParts` has more than one part (catalog plus namespace);
+   * see [[NoSuchTableException]].
    */
-  def noSuchTableError(
-      nameParts: Seq[String],
-      catalogPathSegmentsUnquoted: Seq[String]): Throwable = {
-    val formattedPath =
-      if (catalogPathSegmentsUnquoted.isEmpty) {
-        "not available"
-      } else {
-        "[" + catalogPathSegmentsUnquoted.map(toSQLId).mkString(".") + "]"
-      }
-    new NoSuchTableException(
-      "TABLE_OR_VIEW_NOT_FOUND",
-      Map("relationName" -> toSQLId(nameParts), "searchPath" -> formattedPath),
-      None)
+  def noSuchTableError(nameParts: Seq[String]): Throwable = {
+    new NoSuchTableException(nameParts)
   }
 
   def noSuchNamespaceError(namespace: Array[String]): Throwable = {
