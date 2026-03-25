@@ -48,7 +48,7 @@ object GroupBasedRowLevelOperationScanPlanning extends Rule[LogicalPlan] with Pr
 
       val table = relation.table.asRowLevelOperationTable
       val scanBuilder = table.newScanBuilder(relation.options)
-      val partitionPredicateFields = PushDownUtils.getPartitionSchemaInfo(relation)
+      val partitionPredicateFields = PushDownUtils.getPartitionPredicateSchema(relation)
 
       val (pushedFilters, evaluatedFilters, postScanFilters) =
         pushFilters(cond, relation.output, scanBuilder, partitionPredicateFields)

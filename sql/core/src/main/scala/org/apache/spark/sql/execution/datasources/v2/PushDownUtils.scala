@@ -129,24 +129,49 @@ object PushDownUtils extends Logging {
   }
 
   /**
-   * Return a Seq of [[PartitionPredicateField]] representing the fields of a table's
-   * partitioning, only when every partition transform is a resolvable identity transform.
+   * Return a Seq of [[PartitionPredicateField]] representing partition transform expression types,
+   * if schema is supported for [[PartitionPredicate]] push down. None if not supported.
    */
-  def getPartitionSchemaInfo(relation: DataSourceV2Relation)
+  def getPartitionPredicateSchema(relation: DataSourceV2Relation)
   : Option[Seq[PartitionPredicateField]] = {
     val transforms = relation.table.partitioning
-    if (transforms.isEmpty) return None
-    val rootStruct = StructType(relation.output.map(
-      a => StructField(a.name, a.dataType, a.nullable)))
-    val fields = transforms.flatMap {
-      case t: IdentityTransform =>
-        toSupportedPartitionField(t, rootStruct, SQLConf.get.resolver)
-          .map(PartitionPredicateField(_, t.ref))
-      case _ => None
+    if (transforms.isEmpty) {
+      None
+    } else {
+      val rootStruct = StructType(relation.output.map { a =>
+        StructField(a.name, a.dataType, a.nullable)})
+      val fields = transforms.flatMap {
+        case t: IdentityTransform =>
+          resolveIdentityPartitionField(t, rootStruct).map(PartitionPredicateField(_, t.ref))
+        case _ => None
+      }
+      if (fields.length == transforms.length) {
+        Some(fields.toSeq)
+      } else {
+        None
+      }
     }
-    if (fields.length == transforms.length) {
-      Some(fields.toIndexedSeq)
-    } else None
+  }
+
+  /**
+   * Returns a [[StructField]] for the given identity partition
+   * transform if it can be resolved, or `None` if it cannot be resolved.
+   */
+  private def resolveIdentityPartitionField(
+      transform: IdentityTransform,
+      rootStruct: StructType) = {
+    val names = transform.ref.fieldNames().toSeq
+    try {
+      rootStruct.findNestedField(names, resolver = SQLConf.get.resolver).map {
+        case (_, leaf) => StructField(names.mkString("."), leaf.dataType, leaf.nullable)
+      }
+    } catch {
+      case _: AnalysisException =>
+        logWarning(log"Invalid partition reference: " +
+          log"${MDC(LogKeys.FIELD_NAME, names.mkString("."))}," +
+          log" skipping creation of PartitionPredicate.")
+        None
+    }
   }
 
   /**
@@ -221,31 +246,6 @@ object PushDownUtils extends Logging {
       }
     case ar: AttributeReference => Set(Seq(ar.name))
     case _ => expr.children.flatMap(collectColumnPaths).toSet
-  }
-
-  /**
-   * Returns a [[StructField]] for the given identity partition
-   * transform if supported. Returns `None` when the field names
-   * are empty, unresolvable, or drill into a non-struct type.
-   */
-  private def toSupportedPartitionField(
-      transform: IdentityTransform,
-      rootStruct: StructType,
-      resolver: (String, String) => Boolean)
-  : Option[StructField] = {
-    val names = transform.ref.fieldNames().toIndexedSeq
-    if (names.isEmpty) return None
-    try {
-      rootStruct.findNestedField(names, resolver = resolver).map { case (_, leaf) =>
-        StructField(names.mkString("."), leaf.dataType, leaf.nullable)
-      }
-    } catch {
-      case _: AnalysisException =>
-        logWarning(log"Invalid partition reference: " +
-          log"${MDC(LogKeys.FIELD_NAME, names.mkString("."))}," +
-          log" skipping creation of PartitionPredicate.")
-        None
-    }
   }
 
   /**
