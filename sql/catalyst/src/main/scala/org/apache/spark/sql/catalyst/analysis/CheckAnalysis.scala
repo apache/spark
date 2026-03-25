@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
-import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, SupportsPartitionManagement}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -95,6 +95,19 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
    */
   private def tempViewOnlySearchPathForError(): Seq[String] = {
     Seq(toSQLId(Seq("system", "session")))
+  }
+
+  /**
+   * Search path for TABLE_OR_VIEW_NOT_FOUND on unresolved relations in SELECT/DML/INSERT/time
+   * travel. Three-part `system.session.name` resolves only to session temp views, so only that
+   * scope is listed. Other names use [[fullSearchPathForError]] (resolutionSearchPath order).
+   */
+  private def searchPathForUnresolvedRelation(multipartIdentifier: Seq[String]): Seq[String] = {
+    if (CatalogManager.isFullyQualifiedSystemSessionViewName(multipartIdentifier)) {
+      tempViewOnlySearchPathForError()
+    } else {
+      fullSearchPathForError(catalogPathForError)
+    }
   }
 
   /**
@@ -301,14 +314,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _, _, _) =>
         u.tableNotFound(
           u.multipartIdentifier,
-          fullSearchPathForError(catalogPathForError))
+          searchPathForUnresolvedRelation(u.multipartIdentifier))
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
         val ur = write.table.asInstanceOf[UnresolvedRelation]
         write.table.tableNotFound(
           ur.multipartIdentifier,
-          fullSearchPathForError(catalogPathForError))
+          searchPathForUnresolvedRelation(ur.multipartIdentifier))
 
       // We should check for trailing comma errors first, since we would get less obvious
       // unresolved column errors if we do it bottom up
@@ -350,12 +363,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           ddlSearchPathForError(catalogPathForError))
 
       case d: DescribeRelation if !d.relation.resolved =>
-        // DESCRIBE TABLE / DESC TABLE: full resolution path (same as DESCRIBE FUNCTION and SELECT).
-        // Relation may be wrapped in SubqueryAlias after resolution attempt (e.g. Hive analyzer).
+        // DESCRIBE TABLE / DESC TABLE: same search path as SELECT
+        // (searchPathForUnresolvedRelation). Relation may be wrapped in SubqueryAlias (e.g. Hive).
         firstUnresolvedTableOrView(d.relation).foreach { u =>
           u.tableNotFound(
             u.multipartIdentifier,
-            fullSearchPathForError(catalogPathForError))
+            searchPathForUnresolvedRelation(u.multipartIdentifier))
         }
 
       case u: UnresolvedTableOrView =>
@@ -364,7 +377,11 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           tempViewOnlySearchPathForError()
         } else if (u.commandName.toUpperCase(Locale.ROOT).startsWith("DESCRIBE") ||
             u.commandName.toUpperCase(Locale.ROOT).startsWith("DESC ")) {
-          fullSearchPathForError(catalogPath)
+          if (CatalogManager.isFullyQualifiedSystemSessionViewName(u.multipartIdentifier)) {
+            tempViewOnlySearchPathForError()
+          } else {
+            fullSearchPathForError(catalogPath)
+          }
         } else {
           ddlSearchPathForError(catalogPath)
         }
@@ -373,7 +390,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       case u: UnresolvedRelation =>
         u.tableNotFound(
           u.multipartIdentifier,
-          fullSearchPathForError(catalogPathForError))
+          searchPathForUnresolvedRelation(u.multipartIdentifier))
 
       case u: UnresolvedFunctionName =>
         val searchPath =
@@ -567,7 +584,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           case RelationTimeTravel(u: UnresolvedRelation, _, _) =>
             u.tableNotFound(
               u.multipartIdentifier,
-              fullSearchPathForError(catalogPathForError))
+              searchPathForUnresolvedRelation(u.multipartIdentifier))
 
           case etw: EventTimeWatermark =>
             etw.eventTime.dataType match {

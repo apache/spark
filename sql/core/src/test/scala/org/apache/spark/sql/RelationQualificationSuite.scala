@@ -238,4 +238,16 @@ class RelationQualificationSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("SECTION 14: Three-part system.session.missing - search path lists temp scope only") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT * FROM system.session.no_such_view_xyz")
+      },
+      condition = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map(
+        "relationName" -> "`system`.`session`.`no_such_view_xyz`",
+        "searchPath" -> "[`system`.`session`]"),
+      context = ExpectedContext("system.session.no_such_view_xyz"))
+  }
 }
