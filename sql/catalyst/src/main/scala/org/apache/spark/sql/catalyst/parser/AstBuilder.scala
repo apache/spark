@@ -945,38 +945,40 @@ class AstBuilder extends DataTypeAstBuilder
             byName = insertParams.byName,
             withSchemaEvolution = table.EVOLUTION() != null)
         })
-      case ctx: InsertIntoReplaceWhereContext =>
-        val options = Option(ctx.optionsClause())
-        withIdentClause(ctx.identifierReference, Seq(query), (ident, otherPlans) => {
-          val table = createUnresolvedRelation(ctx.identifierReference, ident, options,
-            Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false)
-          val deleteExpr = expression(ctx.whereClause().booleanExpression())
-          val isByName = ctx.NAME() != null
-          if (isByName) {
-            OverwriteByExpression.byName(
-              table,
-              df = otherPlans.head,
-              deleteExpr,
-              withSchemaEvolution = ctx.EVOLUTION() != null)
-          } else {
-            OverwriteByExpression.byPosition(
-              table,
+      case ctx: InsertIntoReplaceWhereOrOnContext =>
+        if (ctx.WHERE() != null) {
+          val options = Option(ctx.optionsClause())
+          withIdentClause(ctx.identifierReference, Seq(query), (ident, otherPlans) => {
+            val table = createUnresolvedRelation(ctx.identifierReference, ident, options,
+              Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false)
+            val deleteExpr = expression(ctx.replaceCondition)
+            val isByName = ctx.NAME() != null
+            if (isByName) {
+              OverwriteByExpression.byName(
+                table,
+                df = otherPlans.head,
+                deleteExpr,
+                withSchemaEvolution = ctx.EVOLUTION() != null)
+            } else {
+              OverwriteByExpression.byPosition(
+                table,
+                query = otherPlans.head,
+                deleteExpr,
+                withSchemaEvolution = ctx.EVOLUTION() != null)
+            }
+          })
+        } else {
+          val insertParams = visitInsertIntoReplaceWhereOrOn(ctx)
+          withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
+            createInsertIntoStatementForReplaceOnOrUsing(
+              insertParams,
+              ident,
               query = otherPlans.head,
-              deleteExpr,
               withSchemaEvolution = ctx.EVOLUTION() != null)
-          }
-        })
+          })
+        }
       case ctx: InsertIntoReplaceUsingContext =>
         val insertParams = visitInsertIntoReplaceUsing(ctx)
-        withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
-          createInsertIntoStatementForReplaceOnOrUsing(
-            insertParams,
-            ident,
-            query = otherPlans.head,
-            withSchemaEvolution = ctx.EVOLUTION() != null)
-        })
-      case ctx: InsertIntoReplaceOnContext =>
-        val insertParams = visitInsertIntoReplaceOn(ctx)
         withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
           createInsertIntoStatementForReplaceOnOrUsing(
             insertParams,
@@ -1064,12 +1066,14 @@ class AstBuilder extends DataTypeAstBuilder
 
   /**
    * Add an INSERT INTO REPLACE ON operation to the logical plan.
+   * Called only for the ON variant of the unified REPLACE WHERE/ON rule.
    */
-  override def visitInsertIntoReplaceOn(
-      ctx: InsertIntoReplaceOnContext): InsertTableParams = withOrigin(ctx) {
+  override def visitInsertIntoReplaceWhereOrOn(
+      ctx: InsertIntoReplaceWhereOrOnContext): InsertTableParams = withOrigin(ctx) {
     val byName = ctx.NAME() != null
-    val replaceOnCond = expression(ctx.replaceOnCondition)
-    val tableAliasOpt = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "INSERT REPLACE ON")
+    val replaceOnCond = expression(ctx.replaceCondition)
+    val tableAliasOpt =
+      getTableAliasWithoutColumnAlias(ctx.tableAlias(), "INSERT REPLACE ON")
 
     createInsertIntoReplaceOnOrUsingParams(
       relationCtx = ctx.identifierReference(),
