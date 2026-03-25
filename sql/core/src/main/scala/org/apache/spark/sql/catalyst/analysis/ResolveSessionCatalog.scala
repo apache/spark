@@ -311,12 +311,16 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DropTable(ResolvedIdentifier(FakeSystemCatalog, ident), _, _) =>
       DropTempViewCommand(ident)
 
+    // Session-qualified temp view: same execution path as FakeSystemCatalog DROP VIEW.
+    case DropView(ResolvedTempView(ident, _), ifExists) =>
+      DropTempViewCommand(ident, ifExists)
+
     case DropView(DropViewInSessionCatalog(ident), ifExists) =>
       DropTableCommand(ident, ifExists, isView = true, purge = false)
 
-    case DropView(r @ ResolvedIdentifier(catalog, ident), _) =>
+    case DropView(r @ ResolvedIdentifier(catalog, ident), ifExists) =>
       if (catalog == FakeSystemCatalog) {
-        DropTempViewCommand(ident)
+        DropTempViewCommand(ident, ifExists)
       } else {
         throw QueryCompilationErrors.catalogOperationNotSupported(catalog, "views")
       }
@@ -427,7 +431,21 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         output,
         pattern.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
 
-    case ShowColumns(ResolvedV1TableOrViewIdentifier(ident), ns, output) =>
+    case ShowColumns(ResolvedViewIdentifier(ident), ns, output) =>
+      val resolver = conf.resolver
+      val db = ns match {
+        case Some(nsSeq) if ident.database.exists(!resolver(_, nsSeq.head)) =>
+          throw QueryCompilationErrors.showColumnsWithConflictNamespacesError(
+            Seq(nsSeq.head), Seq(ident.database.get))
+        case _ => ns.map(_.head)
+      }
+      // Use unqualified table name when namespace comes from FROM clause so analyzer output
+      // matches expected format (e.g. "SHOW COLUMNS IN showcolumn4 FROM global_temp").
+      val tableNameForCommand =
+        if (db.isDefined && ident.database == db) TableIdentifier(ident.table, None) else ident
+      ShowColumnsCommand(db, tableNameForCommand, output)
+
+    case ShowColumns(ResolvedV1TableIdentifier(ident), ns, output) =>
       val v1TableName = ident
       val resolver = conf.resolver
       val db = ns match {
@@ -750,7 +768,12 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
 
       case ResolvedTempView(ident, _) =>
-        Some(TableIdentifier(ident.name(), ident.namespace().headOption))
+        // Global temp views have a namespace (e.g. global_temp); preserve it so ALTER VIEW
+        // and DROP VIEW find the view. Local temp views are keyed by table name only.
+        // system.session.viewName -> use database "session" so SessionCatalog resolves
+        // it as a temp view.
+        val db = CatalogManager.databaseForSessionQualifiedViewIdentifier(ident.namespace().toSeq)
+        Some(TableIdentifier(ident.name(), db))
 
       case _ => None
     }
@@ -811,6 +834,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
             throw QueryCompilationErrors.operationNotAllowedOnBuiltinNamespaceError(
               statement, objectType, ident.name())
           }
+          // Pass full identifier (namespace + name) so error shows e.g. "`a`.`b`.`c`"
           throw QueryCompilationErrors
             .requiresSinglePartNamespaceError(ident.namespace().toSeq :+ ident.name())
         }

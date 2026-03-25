@@ -2246,7 +2246,7 @@ Project [c1#x]
 -- !query
 DROP VIEW v
 -- !query analysis
-DropTempViewCommand v
+DropTempViewCommand v, false
 
 
 -- !query
