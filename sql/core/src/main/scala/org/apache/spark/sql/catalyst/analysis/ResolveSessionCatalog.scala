@@ -293,6 +293,17 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c
       }
 
+    // For CREATE TABLE LIKE, use the v1 command if both the target and source are in the session
+    // catalog (or a V1-compatible catalog extension). If source is in a different catalog, fall
+    // through to the V2 execution path (CreateTableLikeExec via DataSourceV2Strategy).
+    case CreateTableLike(
+        ResolvedV1Identifier(targetIdent),
+        ResolvedV1TableOrViewIdentifier(sourceIdent),
+        location, provider, serdeInfo, properties, ifNotExists) =>
+      val fileFormat = buildStorageFormatFromSerdeInfo(location, serdeInfo)
+      CreateTableLikeCommand(
+        targetIdent, sourceIdent, fileFormat, provider, properties, ifNotExists)
+
     case DropTable(ResolvedV1Identifier(ident), ifExists, purge) if conf.useV1Command =>
       DropTableCommand(ident, ifExists, isView = false, purge = purge)
 
@@ -624,6 +635,15 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       tableSpec.comment, tableSpec.collation, storageFormat, tableSpec.external)
     val mode = if (ignoreIfExists) SaveMode.Ignore else SaveMode.ErrorIfExists
     CreateTableV1(tableDesc, mode, query)
+  }
+
+  private def buildStorageFormatFromSerdeInfo(
+      location: Option[String],
+      maybeSerdeInfo: Option[SerdeInfo]): CatalogStorageFormat = {
+    HiveSerDe.buildStorageFormat(
+      location,
+      maybeSerdeInfo,
+      si => QueryCompilationErrors.invalidFileFormatForStoredAsError(si))
   }
 
   private def getStorageFormatAndProvider(
