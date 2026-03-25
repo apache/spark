@@ -69,10 +69,12 @@ class RelationQualificationSuite extends QueryTest with SharedSparkSession {
     intercept[AnalysisException](sql("SELECT * FROM drop_v2"))
   }
 
-  test("SECTION 4: Session-qualified name not found does not fall back to persistent") {
-    sql("CREATE TABLE default.persist_t (id INT) USING parquet")
-    try {
-      // session.nonexistent should not resolve to a persistent table named nonexistent in session
+  test("SECTION 4: session.name does not resolve to same-named persistent table in default") {
+    // Table `default.nonexistent` shares the leaf name with two-part `session.nonexistent`, but
+    // resolution only checks temp `nonexistent` and `spark_catalog.session.nonexistent`, not
+    // `spark_catalog.default.nonexistent`.
+    withTable("default.nonexistent") {
+      sql("CREATE TABLE default.nonexistent (id INT) USING parquet")
       checkError(
         exception = intercept[AnalysisException] { sql("SELECT * FROM session.nonexistent") },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
@@ -82,19 +84,21 @@ class RelationQualificationSuite extends QueryTest with SharedSparkSession {
             "[`system`.`builtin`, `system`.`session`, " +
             "`spark_catalog`.`default`]")),
         context = ExpectedContext("session.nonexistent"))
-      // Unqualified nonexistent fails with search path
-      val sqlText = "SELECT * FROM nonexistent"
+      // Unqualified check uses another missing name so we do not resolve to default.nonexistent.
+      val missing = "missing_rel_rqs4"
+      val sqlText = s"SELECT * FROM $missing"
       checkError(
         exception = intercept[AnalysisException] { sql(sqlText) },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map(
-          "relationName" -> "`nonexistent`",
+          "relationName" -> "`missing_rel_rqs4`",
           "searchPath" -> (
             "[`system`.`builtin`, `system`.`session`, " +
             "`spark_catalog`.`default`]")),
-        context = ExpectedContext(fragment = "nonexistent", start = 14, stop = 24))
-    } finally {
-      sql("DROP TABLE IF EXISTS default.persist_t")
+        context = ExpectedContext(
+          fragment = missing,
+          start = 14,
+          stop = 14 + missing.length - 1))
     }
   }
 
