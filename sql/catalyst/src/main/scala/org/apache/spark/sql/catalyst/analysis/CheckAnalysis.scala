@@ -77,8 +77,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
   }
 
   /**
-   * Full resolution search path for TABLE_OR_VIEW_NOT_FOUND (queries, DML, DESCRIBE TABLE).
-   * Uses the same order as resolution via SQLConf.resolutionSearchPath(catalogPath).
+   * `SQLConf.resolutionSearchPath` entries formatted with [[toSQLId]] for TABLE_OR_VIEW_NOT_FOUND.
+   * Same ordering as relation resolution and routine resolution search paths.
    */
   private def fullSearchPathForError(catalogPath: Seq[String]): Seq[String] = {
     SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
@@ -299,16 +299,15 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     // top-down traversal.
     plan.foreach {
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _, _, _) =>
-        // Queries/DML: TABLE_OR_VIEW_NOT_FOUND with full search path.
         u.tableNotFound(
           u.multipartIdentifier,
           fullSearchPathForError(catalogPathForError))
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
-        val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
+        val ur = write.table.asInstanceOf[UnresolvedRelation]
         write.table.tableNotFound(
-          tblName,
+          ur.multipartIdentifier,
           fullSearchPathForError(catalogPathForError))
 
       // We should check for trailing comma errors first, since we would get less obvious
@@ -365,7 +364,6 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           tempViewOnlySearchPathForError()
         } else if (u.commandName.toUpperCase(Locale.ROOT).startsWith("DESCRIBE") ||
             u.commandName.toUpperCase(Locale.ROOT).startsWith("DESC ")) {
-          // DESCRIBE TABLE / DESC TABLE: full path (same as SELECT).
           fullSearchPathForError(catalogPath)
         } else {
           ddlSearchPathForError(catalogPath)
@@ -373,7 +371,6 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         u.tableNotFound(u.multipartIdentifier, searchPath)
 
       case u: UnresolvedRelation =>
-        // Queries/DML: full search path (including session-qualified names).
         u.tableNotFound(
           u.multipartIdentifier,
           fullSearchPathForError(catalogPathForError))

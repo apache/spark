@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * Test suite for temporary relation (view, and future temp table) qualification and resolution
  * search path. Tests session.v, system.session.v qualification and configurable resolution order
- * (spark.sql.sessionFunctionResolutionOrder, a.k.a. sessionOrder in the function-resolution API)
- * for shadowing between temp relations and persistent tables/views.
+ * (spark.sql.functionResolution.sessionOrder for unqualified names;
+ * spark.sql.legacy.persistentCatalogFirst for two-part session.name vs persistent schema session).
  */
 class RelationQualificationSuite extends QueryTest with SharedSparkSession {
 
@@ -213,6 +214,27 @@ class RelationQualificationSuite extends QueryTest with SharedSparkSession {
       } finally {
         sql("DROP VIEW IF EXISTS shadow_persist")
         sql("DROP VIEW IF EXISTS default.shadow_persist")
+      }
+    }
+  }
+
+  test("SECTION 13: Two-part session.name - persistentCatalogFirst controls temp vs persistent") {
+    // Persistent object is spark_catalog.session.order_probe_tbl; temp view is order_probe_tbl.
+    withDatabase("session") {
+      sql("CREATE DATABASE session")
+      sql("CREATE TABLE session.order_probe_tbl (id INT) USING parquet")
+      sql("INSERT INTO session.order_probe_tbl VALUES (100)")
+      sql("CREATE TEMPORARY VIEW order_probe_tbl AS SELECT 200 AS id")
+      try {
+        // Default: prioritize system session temp (local view) before persistent schema `session`.
+        checkAnswer(sql("SELECT * FROM session.order_probe_tbl"), Row(200))
+        withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> "true") {
+          checkAnswer(sql("SELECT * FROM session.order_probe_tbl"), Row(100))
+        }
+        // Back to default inside the same session after nested conf block.
+        checkAnswer(sql("SELECT * FROM session.order_probe_tbl"), Row(200))
+      } finally {
+        sql("DROP VIEW IF EXISTS order_probe_tbl")
       }
     }
   }

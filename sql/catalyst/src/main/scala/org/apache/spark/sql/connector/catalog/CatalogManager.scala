@@ -184,4 +184,24 @@ private[sql] object CatalogManager {
       Some(namespace.head)
     }
   }
+
+  /**
+   * True only for fully qualified `system.session.view` (3 parts). Persistent catalog is never
+   * consulted for this form; see [[isSessionQualifiedViewName]] for 2-part `session.view`.
+   */
+  def isFullyQualifiedSystemSessionViewName(nameParts: Seq[String]): Boolean = {
+    nameParts.length == 3 &&
+      nameParts(0).equalsIgnoreCase(SYSTEM_CATALOG_NAME) &&
+      nameParts(1).equalsIgnoreCase(SESSION_NAMESPACE)
+  }
+
+  /**
+   * True if the multipart name uses the session temp view namespace: two-part `session.view`
+   * or three-part `system.session.view`. The two-part form can also denote a persistent relation
+   * in schema `session`; resolution order is controlled by [[SQLConf.prioritizeSystemCatalog]].
+   */
+  def isSessionQualifiedViewName(nameParts: Seq[String]): Boolean = {
+    (nameParts.length == 2 && nameParts.head.equalsIgnoreCase(SESSION_NAMESPACE)) ||
+      isFullyQualifiedSystemSessionViewName(nameParts)
+  }
 }

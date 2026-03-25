@@ -39,8 +39,10 @@ case class DropTableExec(
       if (purge) catalog.purgeTable(ident) else catalog.dropTable(ident)
     } else if (!ifExists) {
       val nameParts = (catalog.name() +: ident.namespace() :+ ident.name()).toImmutableArraySeq
-      val searchPath = (catalog.name() +: ident.namespace()).toSeq
-      throw QueryCompilationErrors.noSuchTableError(nameParts, searchPath)
+      val catalogPathSegments = (catalog.name() +: ident.namespace()).toSeq
+      throw QueryCompilationErrors.noSuchTableError(
+        nameParts,
+        catalogPathSegmentsUnquoted = catalogPathSegments)
     }
 
     Seq.empty

@@ -91,7 +91,7 @@ class RelationResolution(
       return None
     }
 
-    val lookupIdentifier = if (isSessionQualifiedViewName(identifier)) {
+    val lookupIdentifier = if (CatalogManager.isSessionQualifiedViewName(identifier)) {
       normalizeSessionQualifiedViewIdentifier(identifier)
     } else {
       identifier
@@ -100,19 +100,8 @@ class RelationResolution(
   }
 
   /**
-   * True if the identifier is explicitly qualified as a session (local temp) view:
-   * session.viewName (2-part) or system.session.viewName (3-part).
-   */
-  private def isSessionQualifiedViewName(nameParts: Seq[String]): Boolean = {
-    (nameParts.length == 2 && nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) ||
-    (nameParts.length == 3 &&
-      nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-      nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE))
-  }
-
-  /**
    * For session-qualified view names (session.v or system.session.v), returns Seq(v).
-   * Call only when isSessionQualifiedViewName is true.
+   * Call only when [[CatalogManager.isSessionQualifiedViewName]] is true.
    */
   private def normalizeSessionQualifiedViewIdentifier(nameParts: Seq[String]): Seq[String] = {
     Seq(nameParts.last)
@@ -169,14 +158,30 @@ class RelationResolution(
     val finalTimeTravelSpec = timeTravelSpec.orElse(timeTravelSpecFromOptions)
     val identifier = u.multipartIdentifier
 
-    // Session-qualified (session.v or system.session.v): resolve only from temp views; no fallback.
-    if (isSessionQualifiedViewName(identifier)) {
+    // system.session.v (3 parts): only local temp view by name; same as SessionCatalog matching.
+    if (CatalogManager.isFullyQualifiedSystemSessionViewName(identifier)) {
       val normalized = normalizeSessionQualifiedViewIdentifier(identifier)
       return resolveTempView(
         normalized,
         u.isStreaming,
         finalTimeTravelSpec.isDefined
       )
+    }
+
+    // Two-part session.v: local temp view `v`, or persistent relation `v` in schema `session`.
+    // Order follows [[SQLConf.prioritizeSystemCatalog]] (inverse of `PERSISTENT_CATALOG_FIRST`).
+    if (identifier.length == 2 &&
+        identifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
+      val viewNameOnly = Seq(identifier.last)
+      val tempSession = () =>
+        resolveTempView(viewNameOnly, u.isStreaming, finalTimeTravelSpec.isDefined)
+      val persistentSessionDb = () =>
+        tryResolvePersistent(u, identifier, finalTimeTravelSpec)
+      return if (conf.prioritizeSystemCatalog) {
+        tempSession().orElse(persistentSessionDb())
+      } else {
+        persistentSessionDb().orElse(tempSession())
+      }
     }
 
     // Multi-part (but not session-qualified): try temp view first (e.g. global_temp.tbl1), then
@@ -189,8 +194,8 @@ class RelationResolution(
       ).orElse(tryResolvePersistent(u, identifier, finalTimeTravelSpec))
     }
 
-    // 1-part name: try each scope in relationResolutionSearchPath order (mirrors
-    // FunctionResolution.resolutionCandidates / resolutionSearchPath).
+    // 1-part name: try each scope in relationResolutionSearchPath order (from
+    // [[SQLConf.resolutionSearchPath]]).
     val candidates = relationResolutionSearchPath
     for (scope <- candidates) {
       val result = scope match {
