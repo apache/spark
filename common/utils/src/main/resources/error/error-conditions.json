@@ -6248,6 +6248,14 @@
     },
     "sqlState" : "55019"
   },
+  "STATE_STORE_BASE_CHECKPOINT_ID_MISMATCH" : {
+    "message" : [
+      "State store checkpoint validation failed for batch <batchVersion>.",
+      "The base checkpoint ID reported by partition <partitionId> of operator <operatorId> does not match the expected checkpoint ID.",
+      "Expected: <expectedBaseId>. Actual: <actualBaseId>."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS" : {
     "message" : [
       "Failed to create column family with unsupported starting character and name=<colFamilyName>."
