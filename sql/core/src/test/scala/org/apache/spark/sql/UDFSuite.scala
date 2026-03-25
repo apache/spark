@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{QueryExecution, SimpleMode}
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF}
-import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.columnar.CachedRelation
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, SparkUserDefinedFunction, UserDefinedAggregateFunction}
@@ -423,10 +423,10 @@ class UDFSuite extends QueryTest with SharedSparkSession {
           override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
             qe.withCachedData match {
               case c: CreateDataSourceTableAsSelectCommand
-                  if c.query.isInstanceOf[InMemoryRelation] =>
+                  if CachedRelation.unapply(c.query).isDefined =>
                 numTotalCachedHit += 1
               case i: InsertIntoHadoopFsRelationCommand
-                  if i.query.isInstanceOf[InMemoryRelation] =>
+                  if CachedRelation.unapply(i.query).isDefined =>
                 numTotalCachedHit += 1
               case _ =>
             }

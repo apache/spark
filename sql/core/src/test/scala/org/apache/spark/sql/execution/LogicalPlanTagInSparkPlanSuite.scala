@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Generate, Join, LocalRelation, LogicalPlan, Range, Sample, Union, Window, WithCTE}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
-import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
+import org.apache.spark.sql.execution.columnar.{CachedRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
@@ -119,7 +119,7 @@ class LogicalPlanTagInSparkPlanSuite extends TPCDSQuerySuite with DisableAdaptiv
         physicalLeaves.head match {
           case _: RangeExec => logicalLeaves.head.isInstanceOf[Range]
           case _: DataSourceScanExec => logicalLeaves.head.isInstanceOf[LogicalRelation]
-          case _: InMemoryTableScanExec => logicalLeaves.head.isInstanceOf[InMemoryRelation]
+          case _: InMemoryTableScanExec => CachedRelation.unapply(logicalLeaves.head).isDefined
           case _: LocalTableScanExec => logicalLeaves.head.isInstanceOf[LocalRelation]
           case _: ExternalRDDScanExec[_] => logicalLeaves.head.isInstanceOf[ExternalRDD[_]]
           case _: BatchScanExec => logicalLeaves.head.isInstanceOf[DataSourceV2Relation]

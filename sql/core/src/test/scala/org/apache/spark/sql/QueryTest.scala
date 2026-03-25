@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
-import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.columnar.CachedRelation
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
@@ -204,7 +204,7 @@ abstract class QueryTest extends PlanTest with SparkSessionProvider {
   def assertCached(query: Dataset[_], numCachedTables: Int = 1): Unit = {
     val planWithCaching = query.queryExecution.withCachedData
     val cachedData = planWithCaching collect {
-      case cached: InMemoryRelation => cached
+      case CachedRelation(cached) => cached
     }
 
     assert(
@@ -220,7 +220,7 @@ abstract class QueryTest extends PlanTest with SparkSessionProvider {
   def assertCached(query: Dataset[_], cachedName: String, storageLevel: StorageLevel): Unit = {
     val planWithCaching = query.queryExecution.withCachedData
     val matched = planWithCaching.exists {
-      case cached: InMemoryRelation =>
+      case CachedRelation(cached) =>
         val cacheBuilder = cached.cacheBuilder
         cachedName == cacheBuilder.tableName.get && (storageLevel == cacheBuilder.storageLevel)
       case _ => false

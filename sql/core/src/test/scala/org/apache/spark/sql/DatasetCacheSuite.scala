@@ -24,7 +24,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.execution.ColumnarToRowExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
+import org.apache.spark.sql.execution.columnar.{CachedRelation, InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -44,8 +44,8 @@ class DatasetCacheSuite extends QueryTest
    */
   private def assertCacheDependency(df: DataFrame, numOfCachesDependedUpon: Int = 1): Unit = {
     val plan = df.queryExecution.withCachedData
-    assert(plan.isInstanceOf[InMemoryRelation])
-    val internalPlan = plan.asInstanceOf[InMemoryRelation].cacheBuilder.cachedPlan
+    assert(CachedRelation.unapply(plan).isDefined)
+    val internalPlan = CachedRelation.unapply(plan).get.cacheBuilder.cachedPlan
     assert(find(internalPlan)(_.isInstanceOf[InMemoryTableScanExec]).size
       == numOfCachesDependedUpon)
   }
@@ -245,7 +245,7 @@ class DatasetCacheSuite extends QueryTest
     // before df.unpersist().
     val df1Limit = df1.limit(2)
     val df1LimitInnerPlan = df1Limit.queryExecution.withCachedData.collectFirst {
-      case i: InMemoryRelation => i.cacheBuilder.cachedPlan
+      case CachedRelation(i) => i.cacheBuilder.cachedPlan
     }
     assert(df1LimitInnerPlan.isDefined && df1LimitInnerPlan.get == df1InnerPlan)
 
@@ -253,7 +253,7 @@ class DatasetCacheSuite extends QueryTest
     // on df, since df2's cache had not been loaded before df.unpersist().
     val df2Limit = df2.limit(2)
     val df2LimitInnerPlan = df2Limit.queryExecution.withCachedData.collectFirst {
-      case i: InMemoryRelation => i.cacheBuilder.cachedPlan
+      case CachedRelation(i) => i.cacheBuilder.cachedPlan
     }
     assert(df2LimitInnerPlan.isDefined &&
       !df2LimitInnerPlan.get.exists(_.isInstanceOf[InMemoryTableScanExec]))
@@ -271,7 +271,7 @@ class DatasetCacheSuite extends QueryTest
       df.cache()
       df.count()
       df.queryExecution.withCachedData match {
-        case i: InMemoryRelation =>
+        case CachedRelation(i) =>
           // Optimized plan has non-default size in bytes
           assert(i.statsOfPlanToCache.sizeInBytes !==
             df.sparkSession.sessionState.conf.defaultSizeInBytes)
