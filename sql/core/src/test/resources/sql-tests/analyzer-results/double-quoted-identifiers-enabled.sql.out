@@ -420,7 +420,7 @@ CreateViewCommand `v`, [(c1,Some(hello))], SELECT 1, false, false, LocalTempView
 -- !query
 DROP VIEW v
 -- !query analysis
-DropTempViewCommand v
+DropTempViewCommand v, false
 
 
 -- !query
@@ -476,7 +476,7 @@ Project [a1#x AS a2#x]
 -- !query
 DROP TABLE "myview"
 -- !query analysis
-DropTempViewCommand myview
+DropTempViewCommand myview, false
 
 
 -- !query

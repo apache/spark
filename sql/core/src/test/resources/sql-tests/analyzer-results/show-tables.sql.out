@@ -207,13 +207,13 @@ DropTable false, false
 -- !query
 DROP VIEW  show_t3
 -- !query analysis
-DropTempViewCommand show_t3
+DropTempViewCommand show_t3, false
 
 
 -- !query
 DROP VIEW  global_temp.show_t4
 -- !query analysis
-DropTempViewCommand global_temp.show_t4
+DropTempViewCommand global_temp.show_t4, false
 
 
 -- !query

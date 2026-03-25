@@ -1193,19 +1193,19 @@ WithCTE
 -- !query
 DROP VIEW IF EXISTS t
 -- !query analysis
-DropTempViewCommand t
+DropTempViewCommand t, true
 
 
 -- !query
 DROP VIEW IF EXISTS t2
 -- !query analysis
-DropTempViewCommand t2
+DropTempViewCommand t2, true
 
 
 -- !query
 DROP VIEW IF EXISTS t3
 -- !query analysis
-DropTempViewCommand t3
+DropTempViewCommand t3, true
 
 
 -- !query

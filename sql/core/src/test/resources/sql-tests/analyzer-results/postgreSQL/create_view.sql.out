@@ -1909,10 +1909,10 @@ DropNamespace false, true
 -- !query
 DROP VIEW temp_table
 -- !query analysis
-DropTempViewCommand temp_table
+DropTempViewCommand temp_table, false
 
 
 -- !query
 DROP VIEW tt
 -- !query analysis
-DropTempViewCommand tt
+DropTempViewCommand tt, false

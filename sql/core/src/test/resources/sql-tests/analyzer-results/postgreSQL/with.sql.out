@@ -1890,13 +1890,13 @@ DropTable false, false
 -- !query
 DROP VIEW nums
 -- !query analysis
-DropTempViewCommand nums
+DropTempViewCommand nums, false
 
 
 -- !query
 DROP VIEW vsubdepartment
 -- !query analysis
-DropTempViewCommand vsubdepartment
+DropTempViewCommand vsubdepartment, false
 
 
 -- !query

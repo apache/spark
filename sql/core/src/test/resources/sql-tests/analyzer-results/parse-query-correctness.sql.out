@@ -938,7 +938,7 @@ Project [num#x, a#x]
 -- !query
 DROP VIEW v1
 -- !query analysis
-DropTempViewCommand v1
+DropTempViewCommand v1, false
 
 
 -- !query

@@ -435,7 +435,7 @@ CreateViewCommand `v`, [(c1,None)], VALUES(1), false, false, LocalTempView, UNSU
 -- !query
 DROP VIEW IDENTIFIER('v')
 -- !query analysis
-DropTempViewCommand v
+DropTempViewCommand v, false
 
 
 -- !query
@@ -1098,13 +1098,13 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 -- !query
 drop view v1
 -- !query analysis
-DropTempViewCommand v1
+DropTempViewCommand v1, false
 
 
 -- !query
 drop table t1
 -- !query analysis
-DropTempViewCommand t1
+DropTempViewCommand t1, false
 
 
 -- !query
@@ -1991,7 +1991,7 @@ Project [test_col#x]
 -- !query
 DROP VIEW test_view
 -- !query analysis
-DropTempViewCommand test_view
+DropTempViewCommand test_view, false
 
 
 -- !query

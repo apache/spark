@@ -167,7 +167,7 @@ WithCTE
 -- !query
 DROP VIEW ZeroAndOne
 -- !query analysis
-DropTempViewCommand ZeroAndOne
+DropTempViewCommand ZeroAndOne, false
 
 
 -- !query
@@ -291,7 +291,7 @@ WithCTE
 -- !query
 DROP VIEW ZeroAndOne
 -- !query analysis
-DropTempViewCommand ZeroAndOne
+DropTempViewCommand ZeroAndOne, false
 
 
 -- !query
@@ -1053,7 +1053,7 @@ Project [level#x]
 -- !query
 DROP VIEW rv
 -- !query analysis
-DropTempViewCommand rv
+DropTempViewCommand rv, false
 
 
 -- !query
@@ -1404,7 +1404,7 @@ WithCTE
 -- !query
 DROP VIEW routes
 -- !query analysis
-DropTempViewCommand routes
+DropTempViewCommand routes, false
 
 
 -- !query

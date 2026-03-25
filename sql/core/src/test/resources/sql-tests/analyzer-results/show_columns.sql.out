@@ -202,13 +202,13 @@ DropTable false, false
 -- !query
 DROP VIEW  showcolumn3
 -- !query analysis
-DropTempViewCommand showcolumn3
+DropTempViewCommand showcolumn3, false
 
 
 -- !query
 DROP VIEW  global_temp.showcolumn4
 -- !query analysis
-DropTempViewCommand global_temp.showcolumn4
+DropTempViewCommand global_temp.showcolumn4, false
 
 
 -- !query
