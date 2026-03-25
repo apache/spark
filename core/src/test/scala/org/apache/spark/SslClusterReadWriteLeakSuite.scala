@@ -36,20 +36,42 @@ class SslClusterReadWriteLeakSuite extends SparkFunSuite with LocalSparkContext 
 
   private val reportedLeaks = new AtomicInteger(0)
 
+  private var previousLeakLevel: ResourceLeakDetector.Level = _
+  private var previousLeakFactory: ResourceLeakDetectorFactory = _
+
   override def beforeAll(): Unit = {
     super.beforeAll()
+    // Capture the original leak detection settings so we can restore them in afterAll().
+    previousLeakLevel = ResourceLeakDetector.getLevel
+    previousLeakFactory = ResourceLeakDetectorFactory.instance()
     installLeakCountingDetector()
   }
 
   override def afterAll(): Unit = {
     try {
-      ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.DISABLED)
+      // Restore the original leak detection settings so that other suites running
+      // in the same JVM are not affected.
+      ResourceLeakDetector.setLevel(previousLeakLevel)
+      ResourceLeakDetectorFactory.setResourceLeakDetectorFactory(previousLeakFactory)
     } finally {
       super.afterAll()
     }
   }
 
   test("SSL shuffle with large data produces no ByteBuf memory leaks") {
+    // Verify that our custom leak-counting detector is the one actually installed in
+    // AbstractByteBuf.leakDetector (a static final field). In a shared JVM, an earlier
+    // suite may have triggered class loading of AbstractByteBuf, causing the default
+    // detector to be installed instead of ours. In that case, skip the test rather than
+    // silently producing false negatives.
+    val field = classOf[_root_.io.netty.buffer.AbstractByteBuf].getDeclaredField("leakDetector")
+    field.setAccessible(true)
+    val detector = field.get(null)
+    assume(
+      detector.getClass.getEnclosingClass == classOf[SslClusterReadWriteLeakSuite],
+      "Leak-counting detector is not active — AbstractByteBuf.leakDetector was " +
+        "initialised by an earlier test in this JVM. Skipping leak assertions.")
+
     val myConf = new SparkConf()
       .setMaster("local-cluster[2,1,1024]")
       .setAppName("ssl-leak-test")
