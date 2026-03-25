@@ -1347,6 +1347,46 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     )
   }
 
+  test("INSERT INTO REPLACE ON is blocked when feature flag is disabled") {
+    withSQLConf(SQLConf.INSERT_INTO_REPLACE_ON_ENABLED.key -> "false") {
+      val ex = intercept[ParseException] {
+        parseAndResolve(
+          "INSERT INTO testcat.tab AS t REPLACE ON t.i = 1 SELECT * FROM v2Table")
+      }
+      assert(ex.getCondition === "INSERT_REPLACE_ON_NOT_ENABLED")
+    }
+  }
+
+  test("INSERT INTO REPLACE USING is blocked when feature flag is disabled") {
+    withSQLConf(SQLConf.INSERT_INTO_REPLACE_USING_ENABLED.key -> "false") {
+      val ex = intercept[ParseException] {
+        parseAndResolve(
+          "INSERT INTO testcat.tab AS t REPLACE USING (i) SELECT * FROM v2Table")
+      }
+      assert(ex.getCondition === "INSERT_REPLACE_USING_NOT_ENABLED")
+    }
+  }
+
+  test("INSERT INTO BY NAME REPLACE ON is blocked when feature flag is disabled") {
+    withSQLConf(SQLConf.INSERT_INTO_REPLACE_ON_BY_NAME_ENABLED.key -> "false") {
+      val ex = intercept[ParseException] {
+        parseAndResolve(
+          "INSERT INTO testcat.tab AS t BY NAME REPLACE ON t.i = 1 SELECT * FROM v2Table")
+      }
+      assert(ex.getCondition === "INSERT_REPLACE_ON_BY_NAME_NOT_ENABLED")
+    }
+  }
+
+  test("INSERT INTO BY NAME REPLACE USING is blocked when feature flag is disabled") {
+    withSQLConf(SQLConf.INSERT_INTO_REPLACE_USING_BY_NAME_ENABLED.key -> "false") {
+      val ex = intercept[ParseException] {
+        parseAndResolve(
+          "INSERT INTO testcat.tab AS t BY NAME REPLACE USING (i) SELECT * FROM v2Table")
+      }
+      assert(ex.getCondition === "INSERT_REPLACE_USING_BY_NAME_NOT_ENABLED")
+    }
+  }
+
   test("alter table: alter column") {
     Seq("v1Table" -> true, "v2Table" -> false, "testcat.tab" -> false).foreach {
       case (tblName, useV1Command) =>

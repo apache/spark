@@ -2017,8 +2017,8 @@ class DDLParserSuite extends AnalysisTest {
         partitionSpec = Map.empty,
         userSpecifiedCols = Seq.empty,
         query = SubqueryAlias(
-          identifier = AliasIdentifier("s", Seq()),
-          child = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source")))),
+          "s",
+          Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source")))),
         overwrite = true,
         ifPartitionNotExists = false,
         byName = false,
