@@ -5978,9 +5978,9 @@
           "operationId: <operationId> with status <currentStatus> is not within statuses <validStatuses> for event <eventStatus>"
         ]
       },
-      "STATE_CONSISTENCY_EXECUTION_STATE_TRANSITION_INVALID_SESSION_NOT_STARTED" : {
+      "STATE_CONSISTENCY_EXECUTION_STATE_TRANSITION_INVALID_SESSION_STATUS_MISMATCH" : {
         "message" : [
-          "sessionId: <sessionId> with status <sessionStatus> is not Started for event <eventStatus>"
+          "sessionId: <sessionId> with status <sessionStatus> is not within valid statuses <validStatuses> for event <eventStatus>"
         ]
       },
       "STATE_CONSISTENCY_NO_BATCHES_AVAILABLE" : {

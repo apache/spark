@@ -361,10 +361,12 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
         validStatuses,
         eventStatus)
     }
-    if (sessionHolder.eventManager.status != SessionStatus.Started) {
-      throw IllegalStateErrors.executionStateTransitionInvalidSessionNotStarted(
+    val validSessionStatuses = List(SessionStatus.Started, SessionStatus.Closed)
+    if (!validSessionStatuses.contains(sessionHolder.eventManager.status)) {
+      throw IllegalStateErrors.executionStateTransitionInvalidSessionStatus(
         sessionHolder.sessionId,
         sessionStatus,
+        validSessionStatuses,
         eventStatus)
     }
     _status = eventStatus
