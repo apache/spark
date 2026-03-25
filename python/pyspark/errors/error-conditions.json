@@ -194,7 +194,7 @@
   },
   "DATA_SOURCE_EXTRANEOUS_FILTERS": {
     "message": [
-      "<type>.pushFilters() returned filters that are not part of the input. Make sure that each returned filter is one of the input filters by reference."
+      "<type>.pushFilters() returned filters that are not part of the input <input>. Extraneous filters: <extraneous>. Make sure that each returned filter is one of the input filters by reference."
     ]
   },
   "DATA_SOURCE_INVALID_RETURN_TYPE": {
@@ -412,7 +412,7 @@
   },
   "INVALID_MULTIPLE_ARGUMENT_CONDITIONS": {
     "message": [
-      "[{arg_names}] cannot be <condition>."
+      "[<arg_names>] cannot be <condition>."
     ]
   },
   "INVALID_NDARRAY_DIMENSION": {
@@ -1249,6 +1249,11 @@
       "<data_type> is not supported in conversion to Arrow."
     ]
   },
+  "UNSUPPORTED_FILTER": {
+    "message": [
+      "<name> is not a supported filter."
+    ]
+  },
   "UNSUPPORTED_JOIN_TYPE": {
     "message": [
       "Unsupported join type: '<typ>'. Supported join types include: <supported>."
@@ -1367,6 +1372,11 @@
   "VALUE_OUT_OF_BOUNDS": {
     "message": [
       "Value for `<arg_name>` must be between <lower_bound> and <upper_bound> (inclusive), got <actual>"
+    ]
+  },
+  "VARIANT_SIZE_LIMIT_EXCEEDED": {
+    "message": [
+      "Variant size (<actual_size> bytes) exceeds the limit (<size_limit> bytes)."
     ]
   },
   "WKB_PARSE_ERROR" : {
