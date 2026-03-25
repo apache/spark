@@ -157,8 +157,7 @@ def _main(infile: IO, outfile: IO) -> None:
                     errorClass="DATA_SOURCE_TYPE_MISMATCH",
                     messageParameters={
                         "expected": (
-                            "an instance of DataSourceStreamWriter or "
-                            "DataSourceStreamArrowWriter"
+                            "an instance of DataSourceStreamWriter or DataSourceStreamArrowWriter"
                         ),
                         "actual": f"'{type(writer).__name__}'",
                     },
@@ -210,9 +209,7 @@ def _main(infile: IO, outfile: IO) -> None:
             raise PySparkRuntimeError(
                 errorClass="DATA_SOURCE_TYPE_MISMATCH",
                 messageParameters={
-                    "expected": (
-                        "'WriterCommitMessage' as the return type of " "the `write` method"
-                    ),
+                    "expected": ("'WriterCommitMessage' as the return type of the `write` method"),
                     "actual": type(res).__name__,
                 },
             )

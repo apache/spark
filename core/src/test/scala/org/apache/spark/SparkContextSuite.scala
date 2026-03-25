@@ -849,7 +849,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     val listener = new SparkListener {
       override def onExecutorMetricsUpdate(
           executorMetricsUpdate: SparkListenerExecutorMetricsUpdate): Unit = {
-        if (executorMetricsUpdate.execId != SparkContext.DRIVER_IDENTIFIER) {
+        if (!SparkContext.isDriver(executorMetricsUpdate.execId)) {
           runningTaskIds = executorMetricsUpdate.accumUpdates.map(_._1)
         }
       }

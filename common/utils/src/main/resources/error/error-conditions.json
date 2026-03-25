@@ -3090,6 +3090,44 @@
     ],
     "sqlState" : "22P03"
   },
+  "INVALID_CDC_OPTION" : {
+    "message" : [
+      "Invalid Change Data Capture (CDC) option."
+    ],
+    "subClass" : {
+      "CONFLICTING_RANGE_TYPES" : {
+        "message" : [
+          "Cannot specify both version and timestamp ranges for CDC queries. Use either `startingVersion`/`endingVersion` or `startingTimestamp`/`endingTimestamp`."
+        ]
+      },
+      "INVALID_DEDUPLICATION_MODE" : {
+        "message" : [
+          "Invalid `deduplicationMode`: '<mode>'. Expected one of: none, dropCarryovers, netChanges."
+        ]
+      },
+      "INVALID_TIMESTAMP" : {
+        "message" : [
+          "The timestamp '<timestamp>' cannot be cast to TIMESTAMP type for CDC queries."
+        ]
+      },
+      "INVALID_TIMESTAMP_EXPR" : {
+        "message" : [
+          "The timestamp expression for CDC queries must not contain subqueries."
+        ]
+      },
+      "MISSING_STARTING_TIMESTAMP" : {
+        "message" : [
+          "`startingTimestamp` is required when `endingTimestamp` is specified for CDC queries."
+        ]
+      },
+      "MISSING_STARTING_VERSION" : {
+        "message" : [
+          "`startingVersion` is required when `endingVersion` is specified for CDC queries."
+        ]
+      }
+    },
+    "sqlState" : "42K03"
+  },
   "INVALID_CLONE_SESSION_REQUEST" : {
     "message" : [
       "Invalid session clone request."
@@ -6503,6 +6541,14 @@
     ],
     "sqlState" : "42601"
   },
+  "STORAGE_PARTITION_JOIN_INCOMPATIBLE_REDUCED_TYPES" : {
+    "message" : [
+      "Storage-partition join partition transforms produced incompatible reduced types,",
+      "left reducers: <leftReducers> returned: <leftReducedDataTypes>,",
+      "right reducers: <rightReducers> returned: <rightReducedDataTypes>."
+    ],
+    "sqlState" : "42K09"
+  },
   "STREAMING_CHECKPOINT_MISSING_METADATA_FILE" : {
     "message" : [
       "Checkpoint location <checkpointLocation> is in an inconsistent state: the metadata file is missing but offset and/or commit logs contain data. Please restore the metadata file or create a new checkpoint directory."
@@ -7372,6 +7418,16 @@
       "CATALOG_OPERATION" : {
         "message" : [
           "Catalog <catalogName> does not support <operation>."
+        ]
+      },
+      "CHANGE_DATA_CAPTURE" : {
+        "message" : [
+          "Catalog <catalogName> does not support Change Data Capture (CDC)."
+        ]
+      },
+      "CHANGE_DATA_CAPTURE_ON_RELATION" : {
+        "message" : [
+          "Relation <relationId> does not support Change Data Capture (CDC)."
         ]
       },
       "CLAUSE_WITH_PIPE_OPERATORS" : {

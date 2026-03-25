@@ -253,8 +253,33 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    val predicateCode = generatePredicateCode(
-      ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes)
+    // Apply CSE to otherPreds only (notNullPreds are simple IsNotNull checks with no CSE value).
+    val (inputVarsCode, subExprsCode, predicateCode) =
+      if (conf.subexpressionEliminationEnabled && otherPreds.nonEmpty) {
+        val boundOtherPreds = otherPreds.map(
+          BindReferences.bindReference(_, output))
+        // Pre-evaluate input variables before CSE analysis: CSE clears
+        // ctx.currentVars[i].code as a side effect, which causes "is not an rvalue"
+        // errors if notNullPreds reference the same inputs.
+        val otherPredInputAttrs = AttributeSet(otherPreds.flatMap(_.references))
+        val inputVarsEvalCode = evaluateRequiredVariables(
+          child.output, input, otherPredInputAttrs)
+
+        val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundOtherPreds)
+        val predCode: String = {
+          var code = ""
+          ctx.withSubExprEliminationExprs(subExprs.states) {
+            code = generatePredicateCode(
+              ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes)
+            Seq.empty
+          }
+          code
+        }
+        (inputVarsEvalCode, ctx.evaluateSubExprEliminationState(subExprs.states.values), predCode)
+      } else {
+        ("", "", generatePredicateCode(
+          ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes))
+      }
 
     // Reset the isNull to false for the not-null columns, then the followed operators could
     // generate better code (remove dead branches).
@@ -268,6 +293,8 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // Note: wrap in "do { } while (false);", so the generated checks can jump out with "continue;"
     s"""
        |do {
+       |  $inputVarsCode
+       |  $subExprsCode
        |  $predicateCode
        |  $numOutput.add(1);
        |  ${consume(ctx, resultVars)}

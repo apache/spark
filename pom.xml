@@ -219,7 +219,7 @@
     <netty.version>4.2.10.Final</netty.version>
     <netty-tcnative.version>2.0.75.Final</netty-tcnative.version>
     <icu4j.version>78.2</icu4j.version>
-    <junit.version>6.0.1</junit.version>
+    <junit.version>6.0.3</junit.version>
     <jline.version>2.14.6</jline.version>
     <!--
       SPARK-50299: When updating `sbt-jupiter-interface.version`,
@@ -441,7 +441,7 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>mockito-5-12_${scala.binary.version}</artifactId>
+      <artifactId>mockito-5-18_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -1246,7 +1246,7 @@
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>mockito-5-12_${scala.binary.version}</artifactId>
+        <artifactId>mockito-5-18_${scala.binary.version}</artifactId>
         <version>3.2.19.0</version>
         <scope>test</scope>
       </dependency>
@@ -1265,7 +1265,7 @@
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
-        <version>5.12.0</version>
+        <version>5.23.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>

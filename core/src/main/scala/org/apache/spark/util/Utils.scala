@@ -32,6 +32,7 @@ import java.util.{HexFormat, Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.TimeUnit.NANOSECONDS
 import java.util.zip.{GZIPInputStream, ZipInputStream}
+import javax.management.ObjectName
 
 import scala.annotation.tailrec
 import scala.collection.Map
@@ -2144,19 +2145,18 @@ private[spark] object Utils
 
   /** Return a heap dump. Used to capture dumps for the web UI */
   def getHeapHistogram(): Array[String] = {
-    val pid = String.valueOf(ProcessHandle.current().pid())
-    val jmap = System.getProperty("java.home") + "/bin/jmap"
-    val builder = new ProcessBuilder(jmap, "-histo:live", pid)
-    val p = builder.start()
-    val rows = ArrayBuffer.empty[String]
-    Utils.tryWithResource(new BufferedReader(new InputStreamReader(p.getInputStream()))) { r =>
-      var line = ""
-      while (line != null) {
-        if (line.nonEmpty) rows += line
-        line = r.readLine()
-      }
-    }
-    rows.toArray
+    // SPARK-55809: Use DiagnosticCommandMBean in-process instead of spawning jmap as
+    // a subprocess.
+    // Spawning `jmap -histo <pid>` requires a self-attach via signal/socket handshake.
+    // Any concurrent GC (G1, ZGC, Shenandoah) can put the JVM into states where the
+    // Signal Dispatcher cannot service the attachment handshake, causing jmap to hang.
+    // DiagnosticCommandMBean runs gcClassHistogram in-process and coordinates with GC
+    // through internal JVM APIs, avoiding the unreliable inter-process attach.
+    val server = ManagementFactory.getPlatformMBeanServer
+    val on = new ObjectName("com.sun.management:type=DiagnosticCommand")
+    val result = server.invoke(on, "gcClassHistogram",
+      Array[AnyRef](Array[String]()), Array[String]("[Ljava.lang.String;"))
+    result.asInstanceOf[String].split("\n").filter(_.nonEmpty)
   }
 
   def getThreadDumpForThread(threadId: Long): Option[ThreadStackTrace] = {
@@ -3192,19 +3192,25 @@ private[spark] object Utils
   lazy val isShenandoahGC: Boolean = checkUseGC("UseShenandoahGC")
 
   def checkUseGC(useGCObjectStr: String): Boolean = {
-    Try {
-      val clazz = Utils.classForName("com.sun.management.HotSpotDiagnosticMXBean")
-        .asInstanceOf[Class[_ <: PlatformManagedObject]]
-      val vmOptionClazz = Utils.classForName("com.sun.management.VMOption")
-      val hotSpotDiagnosticMXBean = ManagementFactory.getPlatformMXBean(clazz)
-      val vmOptionMethod = clazz.getMethod("getVMOption", classOf[String])
-      val valueMethod = vmOptionClazz.getMethod("getValue")
-
-      val useGCObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, useGCObjectStr)
-      val useGC = valueMethod.invoke(useGCObject).asInstanceOf[String]
-      "true".equals(useGC)
-    }.getOrElse(false)
+    getVMOptionValue(useGCObjectStr).contains("true")
   }
+
+  /**
+   * Retrieves the value of a HotSpot VM option via the HotSpotDiagnosticMXBean.
+   * Returns Some with the option value string on success, or None if the option
+   * cannot be read (e.g. on non-HotSpot JVMs or when the option does not exist).
+   */
+  def getVMOptionValue(option: String): Option[String] = Try {
+    val clazz = Utils.classForName("com.sun.management.HotSpotDiagnosticMXBean")
+      .asInstanceOf[Class[_ <: PlatformManagedObject]]
+    val vmOptionClazz = Utils.classForName("com.sun.management.VMOption")
+    val hotSpotDiagnosticMXBean = ManagementFactory.getPlatformMXBean(clazz)
+    val vmOptionMethod = clazz.getMethod("getVMOption", classOf[String])
+    val valueMethod = vmOptionClazz.getMethod("getValue")
+
+    val useGCObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, option)
+    valueMethod.invoke(useGCObject).asInstanceOf[String]
+  }.toOption
 
   /**
    * Return a string of printStackTrace result.
