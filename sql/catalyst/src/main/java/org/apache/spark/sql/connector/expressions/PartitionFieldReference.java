@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.catalog.Table;
 public interface PartitionFieldReference extends NamedReference {
 
   /**
-   * Returns the 0-based ordinal of this partition column in {@link Table#partitioning()}.
+   * Returns the 0-based ordinal of this partition field in {@link Table#partitioning()}.
    */
   int ordinal();
 }

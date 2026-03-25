@@ -239,6 +239,41 @@ class DataSourceV2EnhancedPartitionFilterSuite
     }
   }
 
+  test("nested identity partition: second-pass rejection returns filter to post-scan") {
+    withTable(partFilterTableName) {
+      sql(s"CREATE TABLE $partFilterTableName " +
+        s"(s struct<tz: string, x: int>, data string) USING $v2Source " +
+        "PARTITIONED BY (s.tz) " +
+        "TBLPROPERTIES('accept-partition-predicates' = 'false')")
+      sql(s"INSERT INTO $partFilterTableName VALUES " +
+        "(named_struct('tz', 'LA', 'x', 1), 'a'), " +
+        "(named_struct('tz', 'NY', 'x', 2), 'b')")
+
+      val df = sql(
+        s"SELECT * FROM $partFilterTableName WHERE s.tz = 'LA'")
+      checkAnswer(df, Seq(Row(Row("LA", 1), "a")))
+      assertPushedPartitionPredicates(df, 0)
+      assertScanReturnsPartitionKeys(df, Set("LA", "NY"))
+    }
+  }
+
+  test("partition filter with data array col filter") {
+    withTable(partFilterTableName) {
+      sql(s"CREATE TABLE $partFilterTableName " +
+        s"(part_col string, arr array<string>, data string) USING $v2Source " +
+        "PARTITIONED BY (part_col)")
+      sql(s"INSERT INTO $partFilterTableName VALUES " +
+        "('a', array('x','y'), 'd1'), ('b', array('z'), 'd2')")
+
+      val df = sql(
+        s"SELECT * FROM $partFilterTableName " +
+        "WHERE part_col LIKE 'a%' AND size(arr) > 1")
+      checkAnswer(df, Seq(Row("a", Seq("x", "y"), "d1")))
+      assertPushedPartitionPredicates(df, 1)
+      assertScanReturnsPartitionKeys(df, Set("a"))
+    }
+  }
+
   test("referenced partition column ordinals: partition predicate same column twice " +
     "has de-duped ordinals") {
     withTable(partFilterTableName) {

@@ -99,13 +99,13 @@ class PartitionPredicateImplSuite extends SparkFunSuite {
     case r: PartitionFieldReference =>
       (r.ordinal(), r.fieldNames().toIndexedSeq)
     case other =>
-      fail(s"Expected PartitionColumnReference, got ${other.getClass.getName}: $other")
+      fail(s"Expected PartitionFieldReference, got ${other.getClass.getName}: $other")
   }
 
   private def refsWithOrdinals(refs: Seq[AnyRef]): Seq[(String, Int)] = refs.map {
       case r: PartitionFieldReference =>
         (r.fieldNames().mkString("."), r.ordinal())
       case other =>
-        fail(s"Expected PartitionColumnReference, got ${other.getClass.getName}: $other")
+        fail(s"Expected PartitionFieldReference, got ${other.getClass.getName}: $other")
     }
 }

@@ -79,8 +79,8 @@ class PartitionPredicateImpl private (
     partitionAttrs.zipWithIndex
       .filter { case (attr, _) => refNames.contains(attr.name) }
       .map { case (_, ordinal) =>
-        PartitionFieldReferenceImpl(
-          ordinal, partitionFields(ordinal).identityRef.fieldNames())
+        PartitionFieldReferenceImpl(ordinal,
+          partitionFields(ordinal).identityRef.fieldNames())
       }
       .toArray
   }
@@ -101,15 +101,16 @@ class PartitionPredicateImpl private (
 
 object PartitionPredicateImpl {
 
-  def apply(
-      catalystExpr: CatalystExpression,
-      partitionFields: Seq[PartitionPredicateField]): PartitionPredicateImpl = {
+  def apply(catalystExpr: CatalystExpression,
+      partitionFields: Seq[PartitionPredicateField])
+  : PartitionPredicateImpl = {
     validateAndCreate(catalystExpr, partitionFields)
   }
 
   private def validateAndCreate(
       catalystExpr: CatalystExpression,
-      partitionFields: Seq[PartitionPredicateField]): PartitionPredicateImpl = {
+      partitionFields: Seq[PartitionPredicateField])
+  : PartitionPredicateImpl = {
     if (partitionFields.isEmpty) {
       throw SparkException.internalError(
         s"Cannot evaluate partition predicate ${catalystExpr.sql}: partition fields are empty")
