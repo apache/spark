@@ -1877,9 +1877,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
     }
   }
 
-  // This test is currently marked to run without virtual column family joins because it requires
-  // inferSchema from StateDataSource, which is not supported for this version of joins yet.
-  testWithoutVirtualColumnFamilyJoins(
+  test(
     "SPARK-49829 left-outer join, input being unmatched is between WM for late event and " +
     "WM for eviction") {
 
@@ -2402,9 +2400,7 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
     )
   }
 
-  // This test is currently marked to run without virtual column family joins because it requires
-  // inferSchema from StateDataSource, which is not supported for this version of joins yet.
-  testWithoutVirtualColumnFamilyJoins(
+  test(
     "SPARK-49829 two chained stream-stream left outer joins among three input streams") {
     withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
       val memoryStream1 = MemoryStream[(Long, Int)]
