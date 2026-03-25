@@ -65,6 +65,20 @@ abstract class AutoSnapshotLoader(
   protected def getEligibleSnapshots(versionToLoad: Long): Seq[Long]
 
   /**
+   * Called once when the first snapshot load fails and auto-repair is about to begin.
+   * Returns the eligible snapshots to use for the repair loop. Subclasses can override
+   * this to return an enriched set of snapshots (e.g., by building a fuller lineage
+   * that was initially sparse for optimization).
+   *
+   * The default delegates to [[getEligibleSnapshots]].
+   *
+   * @param versionToLoad The version being loaded
+   * @return Eligible snapshot versions for repair
+   */
+  protected def getEligibleSnapshotsForRepair(versionToLoad: Long): Seq[Long] =
+    getEligibleSnapshots(versionToLoad)
+
+  /**
    * Load the latest snapshot for the specified version from the checkpoint directory.
    * If Auto snapshot repair is enabled, the snapshot version loaded may be lower than
    * the latest snapshot version, if the latest is corrupt.
@@ -114,13 +128,15 @@ abstract class AutoSnapshotLoader(
       // we would only get here if auto snapshot repair is enabled
       assert(autoSnapshotRepairEnabled)
 
-      val remainingEligibleSnapshots = if (eligibleSnapshots.length > 1) {
-        // skip the first snapshot, since we already tried it
-        eligibleSnapshots.tail
-      } else {
-        // no more snapshots to try
-        Seq.empty
-      }
+      // getEligibleSnapshotsForRepair may return a different list than the original
+      // getEligibleSnapshots (e.g., V2 enriches a sparse lineage to discover more
+      // snapshots). We filter by value rather than using .tail because the first
+      // snapshot we already tried may appear at any position in the new list.
+      val remainingEligibleSnapshots =
+        (getEligibleSnapshotsForRepair(versionToLoad) :+ 0L)
+        .distinct
+        .sorted(Ordering[Long].reverse)
+        .filter(_ != firstEligibleSnapshot)
 
       // select remaining snapshots that are within the maxChangeFileReplay limit
       val selectedRemainingSnapshots = remainingEligibleSnapshots.filter(
