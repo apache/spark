@@ -472,12 +472,6 @@ final class ShuffleBlockFetcherIterator(
         } else {
           collectFetchRequests(address, blockInfos, collectedRemoteRequests)
         }
-      } else if (address.executorId == localExecId) {
-        val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
-          blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
-        numBlocksToFetch += mergedBlockInfos.size
-        localBlocks ++= mergedBlockInfos.map(info => (info.blockId, info.mapIndex))
-        localBlockBytes += mergedBlockInfos.map(_.size).sum
       } else if (localAndFallbackExecIds.contains(address.executorId)) {
         val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
           blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
