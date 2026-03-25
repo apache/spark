@@ -1116,7 +1116,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             sdf = sdf.select(SF.covar(F.col(sdf.columns[0]), F.col(sdf.columns[1]), ddof))
             return sdf.head(1)[0][0]
 
-    # TODO: NaN and None when ``arg`` is an empty dict
     # TODO: Support ps.Series ``arg``
     def map(
         self, arg: Union[Dict, Callable[[Any], Any], pd.Series], na_action: Optional[str] = None
@@ -1211,6 +1210,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dtype: object
         """
         if isinstance(arg, (dict, pd.Series)):
+            if (
+                isinstance(arg, dict)
+                and len(arg) == 0
+                and not hasattr(arg, "__missing__")
+                and LooseVersion(pd.__version__) >= "3.0.0"
+            ):
+                # pandas 3 returns an all-NaN float64 Series for ``Series.map({})``.
+                return self._with_new_scol(F.lit(None).cast(DoubleType()))
+
             is_start = True
             # In case dictionary is empty.
             current = F.when(F.lit(False), F.lit(None).cast(self.spark.data_type))
