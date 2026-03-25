@@ -425,6 +425,11 @@
       "Invalid number of dataframes in group <dataframes_in_group>."
     ]
   },
+  "INVALID_OPERATION_UUID_ID": {
+    "message": [
+      "Parameter value <arg_name> must be a valid UUID format: <origin>"
+    ]
+  },
   "INVALID_PANDAS_UDF": {
     "message": [
       "Invalid function: <detail>"
