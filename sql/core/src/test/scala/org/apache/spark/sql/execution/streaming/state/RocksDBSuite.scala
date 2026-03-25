@@ -4166,6 +4166,96 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  testWithChangelogCheckpointingEnabled(
+      "Auto snapshot repair with checkpoint format V2") {
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> false.toString,
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "2"
+    ) {
+      withTempDir { dir =>
+        val remoteDir = dir.getCanonicalPath
+        val versionToUniqueId = mutable.Map[Long, String]()
+
+        // Build up state: 4 versions with snapshots at versions 2 and 4
+        withDB(remoteDir, enableStateStoreCheckpointIds = true,
+            versionToUniqueId = versionToUniqueId) { db =>
+          db.load(0)
+          db.put("a", "0")
+          db.commit()
+          assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 0)
+
+          db.load(1)
+          db.put("b", "1")
+          db.commit() // snapshot is created
+          assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 0)
+          db.doMaintenance() // upload snapshot 2_{uuid}.zip
+
+          db.load(2)
+          db.put("c", "2")
+          db.commit()
+          assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 0)
+
+          db.load(3)
+          db.put("d", "3")
+          db.commit() // snapshot is created
+          assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 0)
+          db.doMaintenance() // upload snapshot 4_{uuid}.zip
+        }
+
+        def corruptFile(file: File): Unit =
+          new PrintWriter(file) { close() }
+
+        // Corrupt the latest V2 snapshot (version 4)
+        val uuid4 = versionToUniqueId(4)
+        corruptFile(new File(remoteDir, s"4_${uuid4}.zip"))
+
+        // Without auto-repair, this should fail
+        withDB(remoteDir, enableStateStoreCheckpointIds = true,
+            versionToUniqueId = versionToUniqueId) { db =>
+          val ex = intercept[java.nio.file.NoSuchFileException] {
+            db.load(4)
+          }
+          assert(ex.getMessage.contains("/metadata"))
+        }
+
+        // With auto-repair enabled, should succeed by falling back to snapshot at version 2
+        withSQLConf(SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_ENABLED.key -> true.toString,
+          SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_NUM_FAILURES_BEFORE_ACTIVATING.key -> "1",
+          SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_MAX_CHANGE_FILE_REPLAY.key -> "5"
+        ) {
+          withDB(remoteDir, enableStateStoreCheckpointIds = true,
+              versionToUniqueId = versionToUniqueId) { db =>
+            db.load(4)
+            assert(toStr(db.get("a")) == "0")
+            assert(toStr(db.get("b")) == "1")
+            assert(toStr(db.get("c")) == "2")
+            assert(toStr(db.get("d")) == "3")
+            db.put("e", "4")
+            db.commit()
+            assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 1)
+            assert(db.metricsOpt.get.loadedFromDfs === 1)
+            db.doMaintenance() // upload new snapshot
+          }
+
+          // Corrupt all V2 snapshot files - should fall back to version 0 + replay
+          val uuid2 = versionToUniqueId(2)
+          val uuid5 = versionToUniqueId(5)
+          corruptFile(new File(remoteDir, s"2_${uuid2}.zip"))
+          corruptFile(new File(remoteDir, s"5_${uuid5}.zip"))
+
+          withDB(remoteDir, enableStateStoreCheckpointIds = true,
+              versionToUniqueId = versionToUniqueId) { db =>
+            db.load(5)
+            assert(toStr(db.get("b")) == "1")
+            db.commit()
+            assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 1)
+            assert(db.metricsOpt.get.loadedFromDfs === 1)
+          }
+        }
+      }
+    }
+  }
+
   testWithChangelogCheckpointingEnabled("SPARK-51922 - Changelog writer v1 with large key" +
     " does not cause UTFDataFormatException") {
     val remoteDir = Utils.createTempDir()
