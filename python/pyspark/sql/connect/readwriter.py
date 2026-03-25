@@ -547,19 +547,20 @@ class DataFrameWriter(OptionUtils):
         self, numBuckets: int, col: Union[str, TupleOrListOfString], *cols: Optional[str]
     ) -> "DataFrameWriter":
         if not isinstance(numBuckets, int):
-            raise PySparkValueError(
-                errorClass="CANNOT_SET_TOGETHER",
+            raise PySparkTypeError(
+                errorClass="NOT_INT",
                 messageParameters={
-                    "arg_list": f"`col` of type {type(col).__name__} and `cols`",
+                    "arg_name": "numBuckets",
+                    "arg_type": type(numBuckets).__name__,
                 },
             )
 
         if isinstance(col, (list, tuple)):
             if cols:
                 raise PySparkValueError(
-                    errorClass="NOT_INT",
+                    errorClass="CANNOT_SET_TOGETHER",
                     messageParameters={
-                        "arg_list": "numBuckets",
+                        "arg_list": f"`col` of type {type(col).__name__} and `cols`",
                     },
                 )
 
