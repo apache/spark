@@ -256,8 +256,38 @@ abstract class ParquetPartitionDiscoverySuite
     check("file://path/a=10/_temporary/c=1.5", None)
     check("file://path/a=10/c=1.5/_temporary", None)
 
-    checkThrows[AssertionError]("file://path/=10", "Empty partition column name")
-    checkThrows[AssertionError]("file://path/a=", "Empty partition column value")
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        parsePartition(new Path("file://path/=10"), true, Set.empty[Path], Map.empty, true,
+          timeZoneId, df, tf, tif)
+      },
+      condition = "EMPTY_PARTITION_COLUMN_NAME",
+      parameters = Map("columnSpec" -> "=10")
+    )
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        parsePartition(new Path("file://path/a="), true, Set.empty[Path], Map.empty, true,
+          timeZoneId, df, tf, tif)
+      },
+      condition = "EMPTY_PARTITION_COLUMN_VALUE",
+      parameters = Map("columnSpec" -> "a=")
+    )
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        parsePartition(new Path("file://path/a=1/=value"), true, Set.empty[Path], Map.empty, true,
+          timeZoneId, df, tf, tif)
+      },
+      condition = "EMPTY_PARTITION_COLUMN_NAME",
+      parameters = Map("columnSpec" -> "=value")
+    )
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        parsePartition(new Path("file://path/a=/b=1"), true, Set.empty[Path], Map.empty, true,
+          timeZoneId, df, tf, tif)
+      },
+      condition = "EMPTY_PARTITION_COLUMN_VALUE",
+      parameters = Map("columnSpec" -> "a=")
+    )
   }
 
   test("parse partition with base paths") {

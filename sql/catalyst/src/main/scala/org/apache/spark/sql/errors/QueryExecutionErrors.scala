@@ -3088,6 +3088,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
+  def emptyPartitionColumnNameError(columnSpec: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "EMPTY_PARTITION_COLUMN_NAME",
+      messageParameters = Map("columnSpec" -> columnSpec)
+    )
+  }
+
+  def emptyPartitionColumnValueError(columnSpec: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "EMPTY_PARTITION_COLUMN_VALUE",
+      messageParameters = Map("columnSpec" -> columnSpec)
+    )
+  }
+
   def conflictingDirectoryStructuresError(
       discoveredBasePaths: Seq[String]): SparkRuntimeException = {
     new SparkRuntimeException(
