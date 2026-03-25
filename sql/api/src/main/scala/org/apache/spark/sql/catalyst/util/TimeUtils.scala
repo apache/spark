@@ -41,33 +41,52 @@ object TimeUtils {
    * Supports formats:
    * - HH:mm:ss.SSSSSS (with microseconds)
    * - HH:mm:ss (without microseconds)
+   * - hh:mm:ss.SSSSSS a (12-hour with AM/PM)
+   * - hh:mm:ss a (12-hour with AM/PM)
    *
    * @param s the time string
    * @return microseconds since midnight, or None if parsing fails
    */
   def stringToTime(s: UTF8String): Option[Long] = {
-    // Unique comment to force recompilation: 12345
     if (s == null) return None
 
-    val str = s.toString
+    val str = s.toString.trim
     if (str.isEmpty) return None
 
-    // Regex check for HH:mm:ss[.SSSSSS]
-    // HH: 00-23
-    // mm: 00-59
-    // ss: 00-59
-    // .SSSSSS: optional, 1 to 6 digits
-    val timeRegex = """^([0-1][0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])(\.[0-9]{1,6})?$""".r
-    if (timeRegex.findFirstIn(str).isEmpty) {
-      return None
+    // Try parsing as 24-hour format first (HH:mm:ss[.SSSSSS])
+    val time24Regex = """^([0-1][0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])(\.[0-9]{1,6})?$""".r
+    if (time24Regex.findFirstIn(str).isDefined) {
+      try {
+        val localTime = LocalTime.parse(str)
+        return Some(localTimeToMicros(localTime))
+      } catch {
+        case _: DateTimeException => // fall through
+      }
     }
 
-    try {
-      val localTime = LocalTime.parse(str)
-      Some(localTimeToMicros(localTime))
-    } catch {
-      case _: DateTimeException => None
+    // Try parsing as 12-hour format with AM/PM (hh:mm:ss[.SSSSSS] a)
+    // Supports both uppercase and lowercase AM/PM
+    val amPmRegex = """^(0[1-9]|1[0-2]):([0-5][0-9]):([0-5][0-9])(\.[0-9]{1,6})?\s+(?i)(AM|PM)$""".r
+    if (amPmRegex.findFirstIn(str).isDefined) {
+      try {
+        // Use a formatter that is case-insensitive for AM/PM
+        val formatter = new java.time.format.DateTimeFormatterBuilder()
+          .appendPattern("hh:mm:ss")
+          .optionalStart()
+          .appendFraction(java.time.temporal.ChronoField.MICRO_OF_SECOND, 0, 6, true)
+          .optionalEnd()
+          .appendPattern(" a")
+          .parseCaseInsensitive()
+          .toFormatter(java.util.Locale.US)
+
+        val localTime = LocalTime.parse(str.toUpperCase(java.util.Locale.US), formatter)
+        return Some(localTimeToMicros(localTime))
+      } catch {
+        case _: DateTimeException => // fall through
+      }
     }
+
+    None
   }
 
   /**
