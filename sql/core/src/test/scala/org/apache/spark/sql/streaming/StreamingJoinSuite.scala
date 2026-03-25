@@ -90,14 +90,12 @@ abstract class StreamingJoinSuite
     testBody: => Any): Unit = {
     if (useVirtualColumnFamilies) {
       super.test(testName + " (with virtual column family joins)", testTags: _*) {
-        super.beforeEach()
         withSQLConf(
           SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3",
           SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName
         ) {
           testBody
         }
-        super.afterEach()
       }
     }
   }
@@ -106,11 +104,9 @@ abstract class StreamingJoinSuite
     testBody: => Any): Unit = {
     if (!useVirtualColumnFamilies) {
       super.test(testName + " (without virtual column family joins)", testTags: _*) {
-        super.beforeEach()
         withSQLConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "2") {
           testBody
         }
-        super.afterEach()
       }
     }
   }
