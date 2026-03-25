@@ -276,15 +276,35 @@ class JacksonGenerator(
       map: MapData, mapType: MapType, fieldWriter: ValueWriter): Unit = {
     val keyArray = map.keyArray()
     val valueArray = map.valueArray()
-    var i = 0
-    while (i < map.numElements()) {
-      gen.writeFieldName(keyArray.get(i, mapType.keyType).toString)
-      if (!valueArray.isNullAt(i)) {
-        fieldWriter.apply(valueArray, i)
-      } else {
-        gen.writeNull()
+    val numElements = map.numElements()
+
+    if (!options.sortKeys) {
+      var i = 0
+      while (i < numElements) {
+        gen.writeFieldName(keyArray.get(i, mapType.keyType).toString)
+        if (!valueArray.isNullAt(i)) {
+          fieldWriter.apply(valueArray, i)
+        } else {
+          gen.writeNull()
+        }
+        i += 1
       }
-      i += 1
+    } else {
+      val keyType = mapType.keyType
+      val indices = Array.tabulate(numElements)(identity)
+      val sortedIndices = indices.sortBy(i => keyArray.get(i, keyType).toString)
+
+      var pos = 0
+      while (pos < numElements) {
+        val i = sortedIndices(pos)
+        gen.writeFieldName(keyArray.get(i, keyType).toString)
+        if (!valueArray.isNullAt(i)) {
+          fieldWriter.apply(valueArray, i)
+        } else {
+          gen.writeNull()
+        }
+        pos += 1
+      }
     }
   }
 

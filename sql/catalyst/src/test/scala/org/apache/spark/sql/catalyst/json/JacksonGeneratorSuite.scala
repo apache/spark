@@ -106,6 +106,18 @@ class JacksonGeneratorSuite extends SparkFunSuite {
     assert(writer.toString === """{"a":1}""")
   }
 
+  test("initial with Map and write out a map data with sortKeys=true") {
+    val dataType = MapType(StringType, IntegerType)
+    // Intentionally construct map data with keys in non-sorted order.
+    val input = ArrayBasedMapData(Array("b", "a"), Array(1, 2))
+    val writer = new CharArrayWriter()
+    val sortOption = new JSONOptions(Map("sortKeys" -> "true"), utcId)
+    val gen = new JacksonGenerator(dataType, writer, sortOption)
+    gen.write(input)
+    gen.flush()
+    assert(writer.toString === """{"a":2,"b":1}""")
+  }
+
   test("initial with Map and write out an array of maps") {
     val dataType = MapType(StringType, IntegerType)
     val input = new GenericArrayData(
