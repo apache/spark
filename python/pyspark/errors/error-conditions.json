@@ -625,87 +625,15 @@
     ],
     "sqlState": "42K09"
   },
-  "NOT_LIST_OF_COLUMN": {
-    "message": [
-      "Argument `<arg_name>` should be a list[Column]."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_LIST_OF_FLOAT_OR_INT": {
-    "message": [
-      "Argument `<arg_name>` should be a list[float, int], got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_LIST_OF_STR": {
-    "message": [
-      "Argument `<arg_name>` should be a list[str], got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_LIST_OR_NONE_OR_STRUCT": {
-    "message": [
-      "Argument `<arg_name>` should be a list, None or StructType, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_LIST_OR_STR_OR_TUPLE": {
-    "message": [
-      "Argument `<arg_name>` should be a list, str or tuple, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_LIST_OR_TUPLE": {
-    "message": [
-      "Argument `<arg_name>` should be a list or tuple, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
   "NOT_NUMERIC_COLUMNS": {
     "message": [
       "Numeric aggregation function can only be applied on numeric columns, got <invalid_columns>."
     ],
     "sqlState": "42K09"
   },
-  "NOT_OBSERVATION_OR_STR": {
-    "message": [
-      "Argument `<arg_name>` should be an Observation or str, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
   "NOT_SAME_TYPE": {
     "message": [
       "Argument `<arg_name1>` and `<arg_name2>` should be the same type, got <arg_type1> and <arg_type2>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_STR": {
-    "message": [
-      "Argument `<arg_name>` should be a str, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_STRUCT": {
-    "message": [
-      "Argument `<arg_name>` should be a struct type, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_STR_OR_LIST_OF_RDD": {
-    "message": [
-      "Argument `<arg_name>` should be a str or list[RDD], got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_STR_OR_STRUCT": {
-    "message": [
-      "Argument `<arg_name>` should be a str or struct type, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_WINDOWSPEC": {
-    "message": [
-      "Argument `<arg_name>` should be a WindowSpec, got <arg_type>."
     ],
     "sqlState": "42K09"
   },

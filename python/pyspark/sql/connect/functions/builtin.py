@@ -3736,24 +3736,30 @@ def window(
 ) -> Column:
     if windowDuration is None or not isinstance(windowDuration, str):
         raise PySparkTypeError(
-            errorClass="NOT_STR",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
                 "arg_name": "windowDuration",
+                "expected_type": "str",
                 "arg_type": type(windowDuration).__name__,
             },
         )
     if slideDuration is not None and not isinstance(slideDuration, str):
         raise PySparkTypeError(
-            errorClass="NOT_STR",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
                 "arg_name": "slideDuration",
+                "expected_type": "str",
                 "arg_type": type(slideDuration).__name__,
             },
         )
     if startTime is not None and not isinstance(startTime, str):
         raise PySparkTypeError(
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "startTime", "arg_type": type(startTime).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "startTime",
+                "expected_type": "str",
+                "arg_type": type(startTime).__name__,
+            },
         )
 
     time_col = _to_col(timeColumn)

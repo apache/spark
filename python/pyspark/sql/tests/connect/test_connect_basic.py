@@ -954,8 +954,12 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_LIST_OF_COLUMN",
-            messageParameters={"arg_name": "exprs"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "list[Column]",
+                "arg_name": "exprs",
+                "arg_type": "tuple",
+            },
         )
 
     def test_with_columns(self):

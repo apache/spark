@@ -67,8 +67,12 @@ class DataStreamReader(OptionUtils):
             self._schema = schema
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR_OR_STRUCT",
-                messageParameters={"arg_name": "schema", "arg_type": type(schema).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "schema",
+                    "expected_type": "str or struct type",
+                    "arg_type": type(schema).__name__,
+                },
             )
         return self
 
@@ -90,9 +94,10 @@ class DataStreamReader(OptionUtils):
     def name(self, source_name: str) -> "DataStreamReader":
         if not isinstance(source_name, str):
             raise PySparkTypeError(
-                errorClass="NOT_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "source_name",
+                    "expected_type": "str",
                     "arg_type": type(source_name).__name__,
                 },
             )
@@ -194,8 +199,12 @@ class DataStreamReader(OptionUtils):
             return self.load(path=path, format="json")
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "path", "arg_type": type(path).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "path",
+                    "expected_type": "str",
+                    "arg_type": type(path).__name__,
+                },
             )
 
     json.__doc__ = PySparkDataStreamReader.json.__doc__
@@ -216,8 +225,12 @@ class DataStreamReader(OptionUtils):
             return self.load(path=path, format="orc")
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "path", "arg_type": type(path).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "path",
+                    "expected_type": "str",
+                    "arg_type": type(path).__name__,
+                },
             )
 
     orc.__doc__ = PySparkDataStreamReader.orc.__doc__
@@ -249,8 +262,12 @@ class DataStreamReader(OptionUtils):
             return self.load(path=path, format="parquet")
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "path", "arg_type": type(path).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "path",
+                    "expected_type": "str",
+                    "arg_type": type(path).__name__,
+                },
             )
 
     parquet.__doc__ = PySparkDataStreamReader.parquet.__doc__
@@ -273,8 +290,12 @@ class DataStreamReader(OptionUtils):
             return self.load(path=path, format="text")
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "path", "arg_type": type(path).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "path",
+                    "expected_type": "str",
+                    "arg_type": type(path).__name__,
+                },
             )
 
     text.__doc__ = PySparkDataStreamReader.text.__doc__
@@ -349,8 +370,12 @@ class DataStreamReader(OptionUtils):
             return self.load(path=path, format="csv")
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "path", "arg_type": type(path).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "path",
+                    "expected_type": "str",
+                    "arg_type": type(path).__name__,
+                },
             )
 
     csv.__doc__ = PySparkDataStreamReader.csv.__doc__
@@ -403,8 +428,12 @@ class DataStreamReader(OptionUtils):
             return self.load(path=path, format="xml")
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "path", "arg_type": type(path).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "path",
+                    "expected_type": "str",
+                    "arg_type": type(path).__name__,
+                },
             )
 
     xml.__doc__ = PySparkDataStreamReader.xml.__doc__

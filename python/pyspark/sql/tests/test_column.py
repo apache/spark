@@ -227,8 +227,12 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "fieldName", "arg_type": "Column"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "str",
+                "arg_name": "fieldName",
+                "arg_type": "Column",
+            },
         )
 
     def test_drop_fields(self):
@@ -315,8 +319,12 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_WINDOWSPEC",
-            messageParameters={"arg_name": "window", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "WindowSpec",
+                "arg_name": "window",
+                "arg_type": "int",
+            },
         )
 
     def test_eqnullsafe_classmethod_usage(self):

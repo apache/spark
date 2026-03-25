@@ -228,8 +228,12 @@ class GroupedData:
 
         if not isinstance(pivot_col, str):
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "pivot_col", "arg_type": type(pivot_col).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "pivot_col",
+                    "expected_type": "str",
+                    "arg_type": type(pivot_col).__name__,
+                },
             )
 
         if values is not None:

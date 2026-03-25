@@ -176,8 +176,12 @@ class DataFrameCreationTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_LIST_OR_NONE_OR_STRUCT",
-            messageParameters={"arg_name": "schema", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "list, None or StructType",
+                "arg_name": "schema",
+                "arg_type": "int",
+            },
         )
 
         with self.assertRaises(PySparkTypeError) as pe:

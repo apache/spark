@@ -79,8 +79,12 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "tableName", "arg_type": "NoneType"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "str",
+                "arg_name": "tableName",
+                "arg_type": "NoneType",
+            },
         )
 
     def test_dataframe_star(self):
@@ -362,8 +366,12 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_LIST_OR_TUPLE",
-            messageParameters={"arg_name": "subset", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "list or tuple",
+                "arg_name": "subset",
+                "arg_type": "str",
+            },
         )
 
         # Should raise proper error when taking non-string values
@@ -372,8 +380,12 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "subset", "arg_type": "NoneType"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "str",
+                "arg_name": "subset",
+                "arg_type": "NoneType",
+            },
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -381,8 +393,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "subset", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "str", "arg_name": "subset", "arg_type": "int"},
         )
 
     def test_drop_duplicates_with_ambiguous_reference(self):
@@ -563,8 +575,12 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_LIST_OF_STR",
-            messageParameters={"arg_name": "cols", "arg_type": "NoneType"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "list[str]",
+                "arg_name": "cols",
+                "arg_type": "NoneType",
+            },
         )
 
     def test_toDF_with_schema_string(self):
@@ -1000,8 +1016,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "colName", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "str", "arg_name": "colName", "arg_type": "int"},
         )
 
     def test_where(self):

@@ -13213,8 +13213,12 @@ def window(
     def check_string_field(field, fieldName):  # type: ignore[no-untyped-def]
         if not field or type(field) is not str:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": fieldName, "arg_type": type(field).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": fieldName,
+                    "expected_type": "str",
+                    "arg_type": type(field).__name__,
+                },
             )
 
     windowDuration = _enum_to_value(windowDuration)
