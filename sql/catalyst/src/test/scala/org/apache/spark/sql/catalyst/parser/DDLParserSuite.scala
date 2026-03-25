@@ -2005,6 +2005,31 @@ class DDLParserSuite extends AnalysisTest {
     )
   }
 
+  test("INSERT INTO REPLACE ON with source query alias") {
+    val table = "testcat.ns1.ns2.tbl"
+    parseCompare(
+      sql =
+        s"""INSERT INTO $table AS t
+           |REPLACE ON (t.a = s.b)
+           |(SELECT * FROM source) AS s""".stripMargin,
+      expected = InsertIntoStatement(
+        table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        partitionSpec = Map.empty,
+        userSpecifiedCols = Seq.empty,
+        query = SubqueryAlias(
+          identifier = AliasIdentifier("s", Seq()),
+          child = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source")))),
+        overwrite = true,
+        ifPartitionNotExists = false,
+        byName = false,
+        replaceCriteriaOpt =
+          Some(InsertReplaceOn(
+            cond =
+              EqualTo(UnresolvedAttribute(Seq("t", "a")), UnresolvedAttribute(Seq("s", "b"))),
+            tableAliasOpt = Some("t"))))
+    )
+  }
+
   test("delete from table: delete all") {
     parseCompare("DELETE FROM testcat.ns1.ns2.tbl",
       DeleteFromTable(

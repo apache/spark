@@ -890,12 +890,10 @@ class AstBuilder extends DataTypeAstBuilder
    *     TABLE tableIdentifier [partitionSpec [IF NOT EXISTS]]? [identifierList]
    *   INSERT [WITH SCHEMA EVOLUTION] INTO
    *     [TABLE] tableIdentifier [partitionSpec] ([BY NAME] | [identifierList])
-   *   INSERT [WITH SCHEMA EVOLUTION] INTO
-   *     [TABLE] tableIdentifier REPLACE whereClause
-   *   INSERT [WITH SCHEMA EVOLUTION] INTO
-   *     [TABLE] tableIdentifier tableAlias [BY NAME] REPLACE USING identifierList
-   *   INSERT [WITH SCHEMA EVOLUTION] INTO
-   *     [TABLE] tableIdentifier tableAlias [BY NAME] REPLACE ON booleanExpression
+   *   INSERT [WITH SCHEMA EVOLUTION] INTO [TABLE] tableIdentifier tableAlias
+   *     [BY NAME] REPLACE (WHERE | ON) booleanExpression
+   *   INSERT [WITH SCHEMA EVOLUTION] INTO [TABLE] tableIdentifier tableAlias
+   *     [BY NAME] REPLACE USING identifierList
    *   INSERT OVERWRITE [LOCAL] DIRECTORY STRING [rowFormat] [createFileFormat]
    *   INSERT OVERWRITE [LOCAL] DIRECTORY [STRING] tableProvider [OPTIONS tablePropertyList]
    * }}}
@@ -953,7 +951,8 @@ class AstBuilder extends DataTypeAstBuilder
         // - REPLACE ON only deletes table rows that match at least one source row.
         // For example, with an empty source query, REPLACE ON never deletes any table rows,
         // while REPLACE WHERE still can.
-        if (ctx.WHERE() != null) {
+        val isInsertReplaceWhere = ctx.WHERE() != null
+        if (isInsertReplaceWhere) {
           val options = Option(ctx.optionsClause())
           withIdentClause(ctx.identifierReference, Seq(query), (ident, otherPlans) => {
             val table = createUnresolvedRelation(ctx.identifierReference, ident, options,
@@ -975,7 +974,7 @@ class AstBuilder extends DataTypeAstBuilder
             }
           })
         } else {
-          val insertParams = visitInsertIntoReplaceBooleanCond(ctx)
+          val insertParams = visitInsertIntoReplaceOn(ctx)
           withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
             val query = {
               val queryAliasOpt =
@@ -1089,9 +1088,8 @@ class AstBuilder extends DataTypeAstBuilder
 
   /**
    * Add an INSERT INTO REPLACE ON operation to the logical plan.
-   * Called only for the ON variant of the unified REPLACE boolean condition rule.
    */
-  override def visitInsertIntoReplaceBooleanCond(
+  def visitInsertIntoReplaceOn(
       ctx: InsertIntoReplaceBooleanCondContext): InsertTableParams = withOrigin(ctx) {
     if (!SQLConf.get.getConf(SQLConf.INSERT_INTO_REPLACE_ON_ENABLED)) {
       throw QueryParsingErrors.insertReplaceOnNotEnabled(ctx)
