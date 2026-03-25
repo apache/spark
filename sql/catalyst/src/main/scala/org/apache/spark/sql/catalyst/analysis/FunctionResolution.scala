@@ -250,6 +250,42 @@ class FunctionResolution(
     None
   }
 
+  private def resolveInternalFunction(
+      name: String, arguments: Seq[Expression]): Expression = {
+    val qualified = FunctionIdentifier(
+      name, Some(CatalogManager.SESSION_NAMESPACE), Some(CatalogManager.SYSTEM_CATALOG_NAME))
+    if (FunctionRegistry.internal.functionExists(qualified)) {
+      FunctionRegistry.internal.lookupFunction(qualified, arguments)
+    } else {
+      FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name), arguments)
+    }
+  }
+
+  def resolveBuiltinOrTempFunction(
+      name: Seq[String],
+      arguments: Seq[Expression],
+      u: UnresolvedFunction): Option[Expression] = {
+    val expression = if (name.length == 1 && u.isInternal) {
+      Option(resolveInternalFunction(name.head, arguments))
+    } else if (name.length == 1) {
+      v1SessionCatalog.resolveBuiltinOrTempFunction(name.head, arguments)
+    } else {
+      None
+    }
+    expression.map { func =>
+      validateFunction(func, arguments.length, u)
+    }
+  }
+
+  def resolveTableValuedFunction(u: UnresolvedTableValuedFunction): LogicalPlan = {
+    resolveTableFunction(u.name, u.functionArgs)
+      .getOrElse {
+        throw new NoSuchFunctionException(
+          db = u.name.dropRight(1).mkString("."),
+          func = u.name.last)
+      }
+  }
+
   /**
    * Check if the arguments of a function are either resolved or a lambda function.
    */

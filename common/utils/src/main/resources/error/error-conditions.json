@@ -547,6 +547,12 @@
     ],
     "sqlState" : "58030"
   },
+  "CANNOT_TRUNCATE_EXTERNAL_TABLE" : {
+    "message" : [
+      "Operation not allowed: TRUNCATE TABLE on external tables: <tableName>."
+    ],
+    "sqlState" : "0A000"
+  },
   "CANNOT_UPDATE_FIELD" : {
     "message" : [
       "Cannot update <table> field <fieldName> type:"
@@ -1985,6 +1991,18 @@
     ],
     "sqlState" : "42604"
   },
+  "EMPTY_PARTITION_COLUMN_NAME" : {
+    "message" : [
+      "Found an empty partition column name in the path segment '<columnSpec>'. Each partition directory must have a non-empty column name before the '=' sign (e.g., 'col=value')."
+    ],
+    "sqlState" : "KD009"
+  },
+  "EMPTY_PARTITION_COLUMN_VALUE" : {
+    "message" : [
+      "Found an empty partition column value in the path segment '<columnSpec>'. Each partition directory must have a non-empty value after the '=' sign (e.g., 'col=value')."
+    ],
+    "sqlState" : "KD009"
+  },
   "EMPTY_SCHEMA_NOT_SUPPORTED_FOR_DATASOURCE" : {
     "message" : [
       "The <format> datasource does not support writing empty or nested empty schemas. Please make sure the data schema has at least one or more column(s)."
@@ -3089,6 +3107,44 @@
       "The expected format is ByteString, but was <unsupported> (<class>)."
     ],
     "sqlState" : "22P03"
+  },
+  "INVALID_CDC_OPTION" : {
+    "message" : [
+      "Invalid Change Data Capture (CDC) option."
+    ],
+    "subClass" : {
+      "CONFLICTING_RANGE_TYPES" : {
+        "message" : [
+          "Cannot specify both version and timestamp ranges for CDC queries. Use either `startingVersion`/`endingVersion` or `startingTimestamp`/`endingTimestamp`."
+        ]
+      },
+      "INVALID_DEDUPLICATION_MODE" : {
+        "message" : [
+          "Invalid `deduplicationMode`: '<mode>'. Expected one of: none, dropCarryovers, netChanges."
+        ]
+      },
+      "INVALID_TIMESTAMP" : {
+        "message" : [
+          "The timestamp '<timestamp>' cannot be cast to TIMESTAMP type for CDC queries."
+        ]
+      },
+      "INVALID_TIMESTAMP_EXPR" : {
+        "message" : [
+          "The timestamp expression for CDC queries must not contain subqueries."
+        ]
+      },
+      "MISSING_STARTING_TIMESTAMP" : {
+        "message" : [
+          "`startingTimestamp` is required when `endingTimestamp` is specified for CDC queries."
+        ]
+      },
+      "MISSING_STARTING_VERSION" : {
+        "message" : [
+          "`startingVersion` is required when `endingVersion` is specified for CDC queries."
+        ]
+      }
+    },
+    "sqlState" : "42K03"
   },
   "INVALID_CLONE_SESSION_REQUEST" : {
     "message" : [
@@ -5419,6 +5475,12 @@
     ],
     "sqlState" : "HY008"
   },
+  "OPTION_VALUE_EXCEEDS_ONE_CHARACTER" : {
+    "message" : [
+      "The value of <paramName> cannot be more than one character, but got <actualValue>."
+    ],
+    "sqlState" : "22023"
+  },
   "ORDER_BY_POS_OUT_OF_RANGE" : {
     "message" : [
       "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
@@ -6503,6 +6565,14 @@
     ],
     "sqlState" : "42601"
   },
+  "STORAGE_PARTITION_JOIN_INCOMPATIBLE_REDUCED_TYPES" : {
+    "message" : [
+      "Storage-partition join partition transforms produced incompatible reduced types,",
+      "left reducers: <leftReducers> returned: <leftReducedDataTypes>,",
+      "right reducers: <rightReducers> returned: <rightReducedDataTypes>."
+    ],
+    "sqlState" : "42K09"
+  },
   "STREAMING_CHECKPOINT_MISSING_METADATA_FILE" : {
     "message" : [
       "Checkpoint location <checkpointLocation> is in an inconsistent state: the metadata file is missing but offset and/or commit logs contain data. Please restore the metadata file or create a new checkpoint directory."
@@ -6916,6 +6986,12 @@
       "Parameter <paramIndex> of function <functionName> requires the <requiredType> type, however <inputSql> has the type <inputType>."
     ],
     "sqlState" : "42K09"
+  },
+  "UNEXPECTED_OPERATOR_IN_CORRELATED_SUBQUERY" : {
+    "message" : [
+      "Unexpected operator <operator> in correlated subquery<positionHint>."
+    ],
+    "sqlState" : "XX000"
   },
   "UNEXPECTED_POSITIONAL_ARGUMENT" : {
     "message" : [
@@ -7371,6 +7447,16 @@
       "CATALOG_OPERATION" : {
         "message" : [
           "Catalog <catalogName> does not support <operation>."
+        ]
+      },
+      "CHANGE_DATA_CAPTURE" : {
+        "message" : [
+          "Catalog <catalogName> does not support Change Data Capture (CDC)."
+        ]
+      },
+      "CHANGE_DATA_CAPTURE_ON_RELATION" : {
+        "message" : [
+          "Relation <relationId> does not support Change Data Capture (CDC)."
         ]
       },
       "CLAUSE_WITH_PIPE_OPERATORS" : {
@@ -8016,6 +8102,12 @@
         ]
       }
     },
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_TABLE_CHANGE" : {
+    "message" : [
+      "Unsupported table change: <message>"
+    ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG" : {
@@ -9098,11 +9190,6 @@
       "LOAD DATA target table <tableIdentWithDB> is not partitioned, but a partition spec was provided."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1266" : {
-    "message" : [
-      "Operation not allowed: TRUNCATE TABLE on external tables: <tableIdentWithDB>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1267" : {
     "message" : [
       "Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported for tables that are not partitioned: <tableIdentWithDB>."
@@ -9293,11 +9380,6 @@
       "Failed to convert value <value> (class of <cls>) with the type of <dataType> to JSON."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2027" : {
-    "message" : [
-      "Unexpected operator <op> in correlated subquery<pos>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2028" : {
     "message" : [
       "This line should be unreachable<err>."
@@ -9361,11 +9443,6 @@
   "_LEGACY_ERROR_TEMP_2041" : {
     "message" : [
       "<methodName> is not implemented."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2045" : {
-    "message" : [
-      "Unsupported table change: <message>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2046" : {
@@ -9663,11 +9740,6 @@
   "_LEGACY_ERROR_TEMP_2144" : {
     "message" : [
       "Unable to find constructor for <tpe>. This could happen if <tpe> is an interface, or a trait without companion object constructor."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2145" : {
-    "message" : [
-      "<paramName> cannot be more than one character."
     ]
   },
   "_LEGACY_ERROR_TEMP_2146" : {

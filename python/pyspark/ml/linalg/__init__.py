@@ -197,9 +197,9 @@ class VectorUDT(UserDefinedType):
     def deserialize(
         self, datum: Tuple[int, Optional[int], Optional[List[int]], List[float]]
     ) -> "Vector":
-        assert (
-            len(datum) == 4
-        ), "VectorUDT.deserialize given row with length %d but requires 4" % len(datum)
+        assert len(datum) == 4, (
+            "VectorUDT.deserialize given row with length %d but requires 4" % len(datum)
+        )
         tpe = datum[0]
         if tpe == 0:
             return SparseVector(cast(int, datum[1]), cast(List[int], datum[2]), datum[3])
@@ -265,9 +265,9 @@ class MatrixUDT(UserDefinedType):
         self,
         datum: Tuple[int, int, int, Optional[List[int]], Optional[List[int]], List[float], bool],
     ) -> "Matrix":
-        assert (
-            len(datum) == 7
-        ), "MatrixUDT.deserialize given row with length %d but requires 7" % len(datum)
+        assert len(datum) == 7, (
+            "MatrixUDT.deserialize given row with length %d but requires 7" % len(datum)
+        )
         tpe = datum[0]
         if tpe == 0:
             return SparseMatrix(*datum[1:])  # type: ignore[arg-type]
@@ -625,11 +625,12 @@ class SparseVector(Vector):
                     )
 
         if self.indices.size > 0:
-            assert (
-                np.max(self.indices) < self.size
-            ), "Index %d is out of the size of vector with size=%d" % (
-                np.max(self.indices),
-                self.size,
+            assert np.max(self.indices) < self.size, (
+                "Index %d is out of the size of vector with size=%d"
+                % (
+                    np.max(self.indices),
+                    self.size,
+                )
             )
             assert np.min(self.indices) >= 0, "Contains negative index %d" % (np.min(self.indices))
 

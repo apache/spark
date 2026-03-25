@@ -443,9 +443,9 @@ class DataFrameReader(OptionUtils):
         if column is not None:
             assert lowerBound is not None, "lowerBound can not be None when ``column`` is specified"
             assert upperBound is not None, "upperBound can not be None when ``column`` is specified"
-            assert (
-                numPartitions is not None
-            ), "numPartitions can not be None when ``column`` is specified"
+            assert numPartitions is not None, (
+                "numPartitions can not be None when ``column`` is specified"
+            )
             self.options(
                 partitionColumn=column,
                 lowerBound=lowerBound,
@@ -557,8 +557,9 @@ class DataFrameWriter(OptionUtils):
         if isinstance(col, (list, tuple)):
             if cols:
                 raise PySparkValueError(
-                    errorClass="NOT_INT",
+                    errorClass="NOT_EXPECTED_TYPE",
                     messageParameters={
+                        "expected_type": "int",
                         "arg_list": "numBuckets",
                     },
                 )

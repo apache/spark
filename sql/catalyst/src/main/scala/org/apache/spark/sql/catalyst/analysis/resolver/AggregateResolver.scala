@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.expressions.{
   AttributeReference,
   Expression,
   ExprId,
-  ExprUtils,
   IntegerLiteral,
   Literal
 }
@@ -83,8 +82,8 @@ class AggregateResolver(
    *
    * If the resulting [[Aggregate]] contains lateral columns references, delegate the resolution of
    * these columns to [[LateralColumnAliasResolver.handleLcaInAggregate]]. Otherwise, validate the
-   * [[Aggregate]] using the [[ExprUtils.assertValidAggregation]], update the `scopes` with the
-   * output of [[Aggregate]] and return the result.
+   * [[Aggregate]] using the [[AggregationValidator]], update the `scopes` with the output of
+   * [[Aggregate]] and return the result.
    *
    * Recursive CTE self-references are disallowed in aggregates per the SQL standard, as aggregates
    * must see a fixed input set before computing aggregated results.
@@ -156,9 +155,7 @@ class AggregateResolver(
           baseAggregate = aggregateWithLcaResolutionResult.baseAggregate
         )
       } else {
-        // TODO: This validation function does a post-traversal. This is discouraged in single-pass
-        //       Analyzer.
-        ExprUtils.assertValidAggregation(finalAggregate)
+        AggregationValidator(finalAggregate)
 
         AggregateResolutionResult(
           operator = finalAggregate,
@@ -228,8 +225,8 @@ class AggregateResolver(
    * going to contain all the aggregate expressions that don't have aggregate expressions in their
    * subtrees. The grouping expressions list will be [col1 AS `col1`].
    * All the [[Alias]]es should be stripped in order to pass logical plan comparison and to prevent
-   * unintentional exceptions from being thrown by [[ExprUtils.assertValidAggregation]], so the
-   * final grouping expressions list will be [col1].
+   * unintentional exceptions from being thrown by [[AggregationValidator]], so the final grouping
+   * expressions list will be [col1].
    */
   private def tryResolveGroupByAll(
       aggregateExpressions: ResolvedAggregateExpressions,

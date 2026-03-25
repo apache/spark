@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression}
 
 /**
  * The [[ExpressionResolutionContext]] is a state that is propagated between the nodes of the
@@ -45,6 +45,8 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  *   [[ExpressionResolutionContext]] has LCA in its subtree.
  * @param hasWindowExpressions A flag that highlights that a specific node corresponding to
  *   [[ExpressionResolutionContext]] has [[WindowExpression]]s in its subtree.
+ * @param hasGeneratorExpressions A flag that highlights that a specific node corresponding to
+ *   [[ExpressionResolutionContext]] has [[Generator]] expressions in its subtree.
  * @param shouldPreserveAlias A flag indicating whether we preserve the [[Alias]] e.g. if it is on
  *   top of a [[Project.projectList]]. If it is `false`, extra [[Alias]]es have to be stripped
  *   away.
@@ -84,6 +86,15 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  * @param resolvingUnresolvedAlias A flag indicating whether we are resolving a tree under an
  *   [[UnresolvedAlias]]. This is needed in order to prevent alias collapsing before the name of
  *   [[UnresolvedAlias]] above is computed.
+ * @param resolvingPivotAggregates A flag indicating whether we are resolving a tree under the
+ *   [[Pivot.aggregates]]. This need for validation of those expressions.
+ * @param hasGroupingAnalyticsExpression A flag indicating whether a specific node corresponding to
+ *   [[ExpressionResolutionContext]] has grouping expressions ([[Grouping]] or [[GroupingID]]) in
+ *   its subtree.
+ * @param extractValueExtractionKey Extraction key for [[UnresolvedExtractValue]] if we are
+ *  currently resolving one, None otherwise.
+ * @param lambdaVariableMap A map of lambda variable names to their corresponding
+ *   [[NamedExpression]]s used to resolve [[UnresolvedLambdaVariable]]s inside lambda functions.
  */
 class ExpressionResolutionContext(
     val parentContext: Option[ExpressionResolutionContext] = None,
@@ -103,7 +114,11 @@ class ExpressionResolutionContext(
     var hasCorrelatedScalarSubqueryExpressions: Boolean = false,
     var resolvingTreeUnderAggregateExpression: Boolean = false,
     var resolvingCreateNamedStruct: Boolean = false,
-    var resolvingUnresolvedAlias: Boolean = false) {
+    var resolvingUnresolvedAlias: Boolean = false,
+    var resolvingPivotAggregates: Boolean = false,
+    var hasGroupingAnalyticsExpression: Boolean = false,
+    var extractValueExtractionKey: Option[Expression] = None,
+    var lambdaVariableMap: Option[IdentifierMap[NamedExpression]] = None) {
 
   /**
    * Propagate generic information that is valid across the whole expression tree from the
@@ -116,6 +131,7 @@ class ExpressionResolutionContext(
     hasAttributeOutsideOfAggregateExpressions |= child.hasAttributeOutsideOfAggregateExpressions
     hasLateralColumnAlias |= child.hasLateralColumnAlias
     hasWindowExpressions |= child.hasWindowExpressions
+    hasGroupingAnalyticsExpression |= child.hasGroupingAnalyticsExpression
     hasCorrelatedScalarSubqueryExpressions |= child.hasCorrelatedScalarSubqueryExpressions
   }
 }
@@ -135,7 +151,9 @@ object ExpressionResolutionContext {
         resolvingWindowFunction = parent.resolvingWindowFunction,
         windowFunctionNestednessLevel = parent.windowFunctionNestednessLevel,
         resolvingWindowSpec = parent.resolvingWindowSpec,
-        resolvingUnresolvedAlias = parent.resolvingUnresolvedAlias
+        resolvingUnresolvedAlias = parent.resolvingUnresolvedAlias,
+        resolvingPivotAggregates = parent.resolvingPivotAggregates,
+        lambdaVariableMap = parent.lambdaVariableMap
       )
     } else {
       new ExpressionResolutionContext(
@@ -147,7 +165,9 @@ object ExpressionResolutionContext {
         windowFunctionNestednessLevel = parent.windowFunctionNestednessLevel,
         resolvingWindowSpec = parent.resolvingWindowSpec,
         resolvingCreateNamedStruct = parent.resolvingCreateNamedStruct,
-        resolvingUnresolvedAlias = parent.resolvingUnresolvedAlias
+        resolvingUnresolvedAlias = parent.resolvingUnresolvedAlias,
+        resolvingPivotAggregates = parent.resolvingPivotAggregates,
+        lambdaVariableMap = parent.lambdaVariableMap
       )
     }
   }

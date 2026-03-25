@@ -50,3 +50,7 @@ SELECT regr_intercept(y, x) FROM testRegression;
 SELECT regr_intercept(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL;
 SELECT k, regr_intercept(y, x) FROM testRegression GROUP BY k;
 SELECT k, regr_intercept(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL GROUP BY k;
+
+-- SPARK-55969: regr_r2 should treat first param as dependent variable
+SELECT regr_r2(k, x) FROM testRegression where k=2;
+SELECT regr_r2(y, k) FROM testRegression where k=2;

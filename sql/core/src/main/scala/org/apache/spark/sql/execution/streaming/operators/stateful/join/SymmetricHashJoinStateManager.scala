@@ -67,11 +67,16 @@ trait SymmetricHashJoinStateManager {
    * required to do so.
    *
    * It is caller's responsibility to consume the whole iterator.
+   *
+   * @param timestampRange Optional optimization hint as (minTimestamp, maxTimestamp), both
+   *   inclusive. Derived classes may use it to reduce scan scope but are free to ignore it.
+   *   The predicate must produce correct output regardless of whether this hint is leveraged.
    */
   def getJoinedRows(
       key: UnsafeRow,
       generateJoinedRow: InternalRow => JoinedRow,
-      predicate: JoinedRow => Boolean): Iterator[JoinedRow]
+      predicate: JoinedRow => Boolean,
+      timestampRange: Option[(Long, Long)] = None): Iterator[JoinedRow]
 
   /**
    * Retrieve all joined rows for the given key and remove the matched rows from state. The joined
@@ -276,7 +281,13 @@ class SymmetricHashJoinStateManagerV4(
   // V4 uses a single store with VCFs (not separate keyToNumValues/keyWithIndexToValue stores).
   // Use the keyToNumValues checkpoint ID for loading the correct committed version.
   private val stateStoreCkptId: Option[String] = keyToNumValuesStateStoreCkptId
-  private val handlerSnapshotOptions: Option[HandlerSnapshotOptions] = None
+  private val handlerSnapshotOptions: Option[HandlerSnapshotOptions] = snapshotOptions.map { opts =>
+    HandlerSnapshotOptions(
+      snapshotVersion = opts.snapshotVersion,
+      endVersion = opts.endVersion,
+      startStateStoreCkptId = opts.startKeyToNumValuesStateStoreCkptId,
+      endStateStoreCkptId = opts.endKeyToNumValuesStateStoreCkptId)
+  }
 
   private var stateStoreProvider: StateStoreProvider = _
 
@@ -343,9 +354,8 @@ class SymmetricHashJoinStateManagerV4(
   override def getJoinedRows(
       key: UnsafeRow,
       generateJoinedRow: InternalRow => JoinedRow,
-      predicate: JoinedRow => Boolean): Iterator[JoinedRow] = {
-    // TODO: [SPARK-55147] We could improve this method to get the scope of timestamp and scan keys
-    //  more efficiently. For now, we just get all values for the key.
+      predicate: JoinedRow => Boolean,
+      timestampRange: Option[(Long, Long)] = None): Iterator[JoinedRow] = {
     def getJoinedRowsFromTsAndValues(
         ts: Long,
         valuesAndMatched: Array[ValueAndMatchPair]): Iterator[JoinedRow] = {
@@ -399,7 +409,8 @@ class SymmetricHashJoinStateManagerV4(
         getJoinedRowsFromTsAndValues(ts, valuesAndMatchedIter.toArray)
 
       case _ =>
-        keyWithTsToValues.getValues(key).flatMap { result =>
+        val (minTs, maxTs) = timestampRange.getOrElse((Long.MinValue, Long.MaxValue))
+        keyWithTsToValues.getValuesInRange(key, minTs, maxTs).flatMap { result =>
           val ts = result.timestamp
           val valuesAndMatched = result.values.toArray
           getJoinedRowsFromTsAndValues(ts, valuesAndMatched)
@@ -626,66 +637,64 @@ class SymmetricHashJoinStateManagerV4(
 
     // NOTE: This assumes we consume the whole iterator to trigger completion.
     def getValues(key: UnsafeRow): Iterator[GetValuesResult] = {
+      getValuesInRange(key, Long.MinValue, Long.MaxValue)
+    }
+
+    /**
+     * Returns entries where minTs <= timestamp <= maxTs (both inclusive), grouped by timestamp.
+     * Skips entries before minTs and stops iterating past maxTs (timestamps are sorted).
+     */
+    def getValuesInRange(
+        key: UnsafeRow, minTs: Long, maxTs: Long): Iterator[GetValuesResult] = {
       val reusableGetValuesResult = new GetValuesResult()
 
       new NextIterator[GetValuesResult] {
         private val iter = stateStore.prefixScanWithMultiValues(key, colFamilyName)
 
         private var currentTs = -1L
+        private var pastUpperBound = false
         private val valueAndMatchPairs = scala.collection.mutable.ArrayBuffer[ValueAndMatchPair]()
+
+        private def flushAccumulated(): GetValuesResult = {
+          if (valueAndMatchPairs.nonEmpty) {
+            val result = reusableGetValuesResult.withNew(
+              currentTs, valueAndMatchPairs.toList)
+            currentTs = -1L
+            valueAndMatchPairs.clear()
+            result
+          } else {
+            finished = true
+            null
+          }
+        }
 
         @tailrec
         override protected def getNext(): GetValuesResult = {
-          if (iter.hasNext) {
+          if (pastUpperBound || !iter.hasNext) {
+            flushAccumulated()
+          } else {
             val unsafeRowPair = iter.next()
-
             val ts = TimestampKeyStateEncoder.extractTimestamp(unsafeRowPair.key)
 
-            if (currentTs == -1L) {
-              // First time
-              currentTs = ts
-            }
-
-            if (currentTs != ts) {
-              assert(valueAndMatchPairs.nonEmpty,
-                "timestamp has changed but no values collected from previous timestamp! " +
-                s"This should not happen. currentTs: $currentTs, new ts: $ts")
-
-              // Return previous batch
-              val result = reusableGetValuesResult.withNew(
-                currentTs, valueAndMatchPairs.toSeq)
-
-              // Reset for new timestamp
-              currentTs = ts
-              valueAndMatchPairs.clear()
-
-              // Add current value
-              val value = valueRowConverter.convertValue(unsafeRowPair.value)
-              valueAndMatchPairs += value
-              result
-            } else {
-              // Same timestamp, accumulate values
-              val value = valueRowConverter.convertValue(unsafeRowPair.value)
-              valueAndMatchPairs += value
-
-              // Continue to next
+            if (ts > maxTs) {
+              pastUpperBound = true
               getNext()
-            }
-          } else {
-            if (currentTs != -1L) {
-              assert(valueAndMatchPairs.nonEmpty)
-
-              // Return last batch
-              val result = reusableGetValuesResult.withNew(
-                currentTs, valueAndMatchPairs.toSeq)
-
-              // Mark as finished
-              currentTs = -1L
-              valueAndMatchPairs.clear()
-              result
+            } else if (ts < minTs) {
+              getNext()
+            } else if (currentTs == -1L || currentTs == ts) {
+              currentTs = ts
+              valueAndMatchPairs += valueRowConverter.convertValue(unsafeRowPair.value)
+              getNext()
             } else {
-              finished = true
-              null
+              // Timestamp changed -- flush previous group before starting new one
+              val prevTs = currentTs
+              val prevValues = valueAndMatchPairs.toList
+
+              currentTs = ts
+              valueAndMatchPairs.clear()
+              valueAndMatchPairs += valueRowConverter.convertValue(unsafeRowPair.value)
+
+              reusableGetValuesResult.withNew(prevTs, prevValues)
             }
           }
         }
@@ -1051,7 +1060,8 @@ abstract class SymmetricHashJoinStateManagerBase(
   def getJoinedRows(
       key: UnsafeRow,
       generateJoinedRow: InternalRow => JoinedRow,
-      predicate: JoinedRow => Boolean): Iterator[JoinedRow] = {
+      predicate: JoinedRow => Boolean,
+      timestampRange: Option[(Long, Long)] = None): Iterator[JoinedRow] = {
     val numValues = keyToNumValues.get(key)
     keyWithIndexToValue.getAll(key, numValues).map { keyIdxToValue =>
       val joinedRow = generateJoinedRow(keyIdxToValue.value)
@@ -1913,6 +1923,13 @@ object SymmetricHashJoinStateManager {
     }
   }
 
+  def allStateStoreNamesV4(joinSides: JoinSide*): Seq[String] = {
+    val allStateStoreTypes: Seq[StateStoreType] = Seq(KeyWithTsToValuesType, TsWithKeyType)
+    for (joinSide <- joinSides; stateStoreType <- allStateStoreTypes) yield {
+      getStateStoreName(joinSide, stateStoreType)
+    }
+  }
+
   def getSchemaForStateStores(
       joinSide: JoinSide,
       inputValueAttributes: Seq[Attribute],
@@ -1964,7 +1981,6 @@ object SymmetricHashJoinStateManager {
       inputValueAttributes: Seq[Attribute],
       joinKeys: Seq[Expression],
       stateFormatVersion: Int): Map[String, StateStoreColFamilySchema] = {
-    // Convert the original schemas for state stores into StateStoreColFamilySchema objects
     val schemas =
       getSchemaForStateStores(joinSide, inputValueAttributes, joinKeys, stateFormatVersion)
 
@@ -2141,9 +2157,13 @@ object SymmetricHashJoinStateManager {
     } else if (storeName == getStateStoreName(LeftSide, KeyWithIndexToValueType) ||
       storeName == getStateStoreName(RightSide, KeyWithIndexToValueType)) {
       KeyWithIndexToValueType
+    } else if (storeName == getStateStoreName(LeftSide, KeyWithTsToValuesType) ||
+      storeName == getStateStoreName(RightSide, KeyWithTsToValuesType)) {
+      KeyWithTsToValuesType
+    } else if (storeName == getStateStoreName(LeftSide, TsWithKeyType) ||
+      storeName == getStateStoreName(RightSide, TsWithKeyType)) {
+      TsWithKeyType
     } else {
-      // TODO: [SPARK-55628] Add support of KeyWithTsToValuesType and TsWithKeyType during
-      //  integration.
       throw new IllegalArgumentException(s"Unsupported join store name: $storeName")
     }
   }
@@ -2158,17 +2178,17 @@ object SymmetricHashJoinStateManager {
       stateFormatVersion: Int): StatePartitionKeyExtractor = {
     assert(stateFormatVersion <= 4, "State format version must be less than or equal to 4")
     val name = if (stateFormatVersion >= 3) colFamilyName else storeName
-    if (getStoreType(name) == KeyWithIndexToValueType) {
-      // For KeyWithIndex, the index is added to the join (i.e. partition) key.
-      // Drop the last field (index) to get the partition key
-      new DropLastNFieldsStatePartitionKeyExtractor(stateKeySchema, numLastColsToDrop = 1)
-    } else if (getStoreType(name) == KeyToNumValuesType) {
-      // State key is the partition key
-      new NoopStatePartitionKeyExtractor(stateKeySchema)
-    } else {
-      // TODO: [SPARK-55628] Add support of KeyWithTsToValuesType and TsWithKeyType during
-      //  integration.
-      throw new IllegalArgumentException(s"Unsupported join store name: $storeName")
+    getStoreType(name) match {
+      case KeyWithIndexToValueType =>
+        // For KeyWithIndex, the index is added to the join (i.e. partition) key.
+        // Drop the last field (index) to get the partition key
+        new DropLastNFieldsStatePartitionKeyExtractor(stateKeySchema, numLastColsToDrop = 1)
+      case KeyToNumValuesType =>
+        new NoopStatePartitionKeyExtractor(stateKeySchema)
+      case KeyWithTsToValuesType | TsWithKeyType =>
+        // For v4 stores, the logical key schema in the schema file is just the join key
+        // (timestamp is managed by the encoder), so the state key IS the partition key.
+        new NoopStatePartitionKeyExtractor(stateKeySchema)
     }
   }
 

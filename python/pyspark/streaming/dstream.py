@@ -814,7 +814,8 @@ class DStream(Generic[T_co]):
             return DStream(dstream.asJavaDStream(), self._ssc, self._sc.serializer)
         else:
             return reduced.window(windowDuration, slideDuration).reduceByKey(
-                func, numPartitions  # type: ignore[arg-type]
+                func,  # type: ignore[arg-type]
+                numPartitions,
             )
 
     def updateStateByKey(

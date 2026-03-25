@@ -1062,6 +1062,9 @@ class Analyzer(
         val timeTravelSpec = TimeTravelSpec.create(timestamp, version, conf.sessionLocalTimeZone)
         resolveRelation(u, timeTravelSpec).getOrElse(r)
 
+      case r @ RelationChanges(u: UnresolvedRelation, changelogInfo) =>
+        relationResolution.resolveChangelog(u, changelogInfo).getOrElse(r)
+
       case u @ UnresolvedTable(identifier, cmd, suggestAlternative) =>
         lookupTableOrView(identifier).map {
           case v: ResolvedPersistentView =>
@@ -1564,7 +1567,7 @@ class Analyzer(
                 // assignments will be added by ResolveRowLevelCommandAssignments later.
                 val assignments = if (m.schemaEvolutionEnabled) {
                   // For schema evolution case, generate assignments for missing target columns.
-                  // These columns will be added by ResolveMergeIntoTableSchemaEvolution later.
+                  // These columns will be added by ResolveSchemaEvolution later.
                   sourceTable.output.map { sourceAttr =>
                     val key = findAttrInTarget(sourceAttr.name).getOrElse(
                       UnresolvedAttribute(sourceAttr.name))
@@ -1600,7 +1603,7 @@ class Analyzer(
                 // assignments will be added by ResolveRowLevelCommandAssignments later.
                 val assignments = if (m.schemaEvolutionEnabled) {
                   // For schema evolution case, generate assignments for missing target columns.
-                  // These columns will be added by ResolveMergeIntoTableSchemaEvolution later.
+                  // These columns will be added by ResolveSchemaEvolution later.
                   sourceTable.output.map { sourceAttr =>
                     val key = findAttrInTarget(sourceAttr.name).getOrElse(
                       UnresolvedAttribute(sourceAttr.name))

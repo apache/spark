@@ -465,10 +465,11 @@ case class KeyedPartitioning(
 
   /**
    * Reduces this partitioning's partition keys by applying the given reducers.
-   * Returns the distinct reduced keys.
+   * Returns the reduced keys and their data types.
    */
-  def reduceKeys(reducers: Seq[Option[Reducer[_, _]]]): Seq[InternalRowComparableWrapper] =
-    KeyedPartitioning.reduceKeys(partitionKeys, expressionDataTypes, reducers).distinct
+  def reduceKeys(
+      reducers: Seq[Option[Reducer[_, _]]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) =
+    KeyedPartitioning.reduceKeys(partitionKeys, expressionDataTypes, reducers)
 
   override def satisfies0(required: Distribution): Boolean = {
     nonGroupedSatisfies(required) || groupedSatisfies(required)
@@ -586,10 +587,14 @@ object KeyedPartitioning {
   def reduceKeys(
       keys: Seq[InternalRowComparableWrapper],
       dataTypes: Seq[DataType],
-      reducers: Seq[Option[Reducer[_, _]]]): Seq[InternalRowComparableWrapper] = {
+      reducers: Seq[Option[Reducer[_, _]]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) = {
+    val reducedDataTypes = dataTypes.zip(reducers).map {
+      case (_, Some(reducer: Reducer[Any, Any])) => reducer.resultType()
+      case (t, _) => t
+    }
     val comparableKeyWrapperFactory =
-      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes)
-    keys.map { key =>
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(reducedDataTypes)
+    val reducedKeys = keys.map { key =>
       val keyValues = key.row.toSeq(dataTypes)
       val reducedKey = keyValues.zip(reducers).map {
         case (v, Some(reducer: Reducer[Any, Any])) => reducer.reduce(v)
@@ -597,6 +602,8 @@ object KeyedPartitioning {
       }.toArray
       comparableKeyWrapperFactory(new GenericInternalRow(reducedKey))
     }
+
+    (reducedDataTypes, reducedKeys)
   }
 }
 
@@ -1015,6 +1022,11 @@ case class KeyedShuffleSpec(
         } else {
           left.isSameFunction(right)
         }
+      case (_: AttributeReference, _: TransformExpression) |
+           (_: TransformExpression, _: AttributeReference) =>
+        SQLConf.get.v2BucketingPushPartValuesEnabled &&
+          !SQLConf.get.v2BucketingPartiallyClusteredDistributionEnabled &&
+          SQLConf.get.v2BucketingAllowCompatibleTransforms
       case _ => false
     }
 
@@ -1035,10 +1047,25 @@ case class KeyedShuffleSpec(
    * @param other other key-grouped shuffle spec
    */
   def reducers(other: KeyedShuffleSpec): Option[Seq[Option[Reducer[_, _]]]] = {
-     val results = partitioning.expressions.zip(other.partitioning.expressions).map {
-       case (e1: TransformExpression, e2: TransformExpression) => e1.reducers(e2)
-       case (_, _) => None
-     }
+    val results = partitioning.expressions.zip(other.partitioning.expressions).map {
+      case (e1: TransformExpression, e2: TransformExpression) => e1.reducers(e2)
+
+      // Identity transform on this side, arbitrary transform on the other side: create a reducer
+      // that applies the other's transform to the raw identity values. The symmetric case
+      // (TransformExpression, AttributeReference) is handled when the other side calls reducers.
+      // Each partition expression is guaranteed to have exactly one leaf child (asserted in
+      // keyPositions), so `a` lives at position 0 in the row we construct.
+      case (a: AttributeReference, t: TransformExpression) =>
+        val reducerExpr = t.transform { case _: AttributeReference => a }
+        val boundExpr = BindReferences.bindReference(reducerExpr, AttributeSeq(Seq(a)))
+        Some(new Reducer[Any, Any] {
+          override def reduce(v: Any): Any = boundExpr.eval(new GenericInternalRow(Array[Any](v)))
+          override def resultType(): DataType = reducerExpr.dataType
+          override def displayName(): String = reducerExpr.toString
+        })
+
+      case (_, _) => None
+    }
 
     // optimize to not return a value, if none of the partition expressions are reducible
     if (results.forall(p => p.isEmpty)) None else Some(results)

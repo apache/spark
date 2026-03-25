@@ -1016,7 +1016,7 @@ case class MergeIntoTable(
 
   // Guard that assignments are either resolved or candidates for evolution before
   // evaluating schema evolution. We need to use resolved assignment values to check
-  // candidates, see MergeIntoTable.isSchemaEvolutionCandidate for details.
+  // candidates; see `isSchemaEvolutionCandidate` in the MergeIntoTable companion object.
   override lazy val schemaEvolutionReady: Boolean = {
     targetTable.resolved && sourceTable.resolved && actionsSchemaEvolutionReady
   }

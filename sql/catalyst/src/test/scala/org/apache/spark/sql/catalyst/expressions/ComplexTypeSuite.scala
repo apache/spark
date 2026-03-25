@@ -177,6 +177,27 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(getStructField(nullStruct, "a").nullable)
   }
 
+  test("GetStructField checkInputDataTypes should fail when child is not StructType") {
+    // Simulate a plan transformation that changes the child's type from StructType to
+    // StringType after the GetStructField was created.
+    val stringAttr = AttributeReference("c2", StringType)()
+    val getField = GetStructField(stringAttr, 0, Some("f1"))
+
+    assert(getField.checkInputDataTypes().isFailure)
+    val result = getField.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+    assert(result.errorSubClass == "UNEXPECTED_INPUT_TYPE")
+  }
+
+  test("GetStructField toPrettySQL should not crash when child is not StructType") {
+    val stringAttr = AttributeReference("c2", StringType)()
+    val getField = GetStructField(stringAttr, 0, Some("f1"))
+
+    // This should not throw ClassCastException
+    val prettySQL = toPrettySQL(getField)
+    assert(prettySQL.contains("c2"))
+    assert(prettySQL.contains("f1"))
+  }
+
   test("GetArrayStructFields") {
     // test 4 types: struct field nullability X array element nullability
     val type1 = ArrayType(StructType(StructField("a", IntegerType) :: Nil))

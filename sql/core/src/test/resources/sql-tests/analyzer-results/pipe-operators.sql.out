@@ -4777,7 +4777,7 @@ Project [x#x, y#x, extend#x, (x + 1)#x, y#x]
 -- !query
 declare or replace extend int = 5
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(5 as int), 5), true
+CreateVariable default(cast(5 as int), sql='5'), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.extend
 
 

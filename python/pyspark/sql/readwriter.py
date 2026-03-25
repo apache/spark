@@ -1160,9 +1160,9 @@ class DataFrameReader(OptionUtils):
         if column is not None:
             assert lowerBound is not None, "lowerBound can not be None when ``column`` is specified"
             assert upperBound is not None, "upperBound can not be None when ``column`` is specified"
-            assert (
-                numPartitions is not None
-            ), "numPartitions can not be None when ``column`` is specified"
+            assert numPartitions is not None, (
+                "numPartitions can not be None when ``column`` is specified"
+            )
             return self._df(
                 self._jreader.jdbc(
                     url, table, column, int(lowerBound), int(upperBound), int(numPartitions), jprop
@@ -1509,8 +1509,9 @@ class DataFrameWriter(OptionUtils):
 
         if not isinstance(numBuckets, int):
             raise PySparkTypeError(
-                errorClass="NOT_INT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
+                    "expected_type": "int",
                     "arg_name": "numBuckets",
                     "arg_type": type(numBuckets).__name__,
                 },
