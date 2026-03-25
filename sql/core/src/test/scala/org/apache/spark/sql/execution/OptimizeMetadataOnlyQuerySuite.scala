@@ -132,10 +132,27 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSparkSession {
     "select partcol1, count(partcol2) from srcpart group by partcol1")
 
   testNotMetadataOnly(
-    "Don't optimize metadata only query for GroupingSet/Union operator",
-    "select partcol1, max(partcol2) from srcpart where partcol1 = 0 group by rollup (partcol1)",
+    "Don't optimize metadata only query for Union operator",
     "select partcol2 from (select partcol2 from srcpart where partcol1 = 0 union all " +
       "select partcol2 from srcpart where partcol1 = 1) t group by partcol2")
+
+  test("Don't optimize metadata only query for GroupingSet operator") {
+    // After SplitEmptyGroupingSet, ROLLUP produces a Union with
+    // a grand total branch whose child may be optimized to a
+    // LocalRelation. Allow at most 1 LocalRelation (grand total).
+    Seq("true", "false").foreach { metadataOnly =>
+      withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> metadataOnly) {
+        val df = sql(
+          "select partcol1, max(partcol2) from srcpart " +
+            "where partcol1 = 0 group by rollup (partcol1)")
+        val localRelations = df.queryExecution.optimizedPlan.collect {
+          case l: LocalRelation => l
+        }
+        assert(localRelations.size <= 1,
+          "ROLLUP should not be fully metadata-only optimized")
+      }
+    }
+  }
 
   test("SPARK-21884 Fix StackOverflowError on MetadataOnlyQuery") {
     withTable("t_1000") {

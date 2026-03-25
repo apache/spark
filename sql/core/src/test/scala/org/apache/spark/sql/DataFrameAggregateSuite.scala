@@ -4804,6 +4804,212 @@ class DataFrameAggregateSuite extends QueryTest
     assert(estimate != null)
     assert(estimate.asInstanceOf[Double] == 2.0)
   }
+
+  test("SPARK-53565: ROLLUP/CUBE on empty input produces grand total row") {
+    withTempView("empty_t") {
+      // Compile-time empty via WHERE FALSE
+      spark.sql(
+        "SELECT CAST(1 AS BIGINT) AS a, CAST(1 AS BIGINT) AS b"
+      ).where("false")
+        .createOrReplaceTempView("empty_t")
+
+      checkAnswer(
+        sql("SELECT a, count(*) FROM empty_t GROUP BY a WITH ROLLUP"),
+        Row(null, 0) :: Nil
+      )
+
+      checkAnswer(
+        sql(
+          """SELECT a, b, count(*)
+            |FROM empty_t
+            |GROUP BY a, b WITH CUBE""".stripMargin),
+        Row(null, null, 0) :: Nil
+      )
+
+      checkAnswer(
+        sql(
+          """SELECT a, count(*)
+            |FROM empty_t
+            |GROUP BY GROUPING SETS ((a), ())""".stripMargin),
+        Row(null, 0) :: Nil
+      )
+
+      // Without empty set: no rows
+      checkAnswer(
+        sql(
+          """SELECT a, count(*)
+            |FROM empty_t
+            |GROUP BY GROUPING SETS ((a))""".stripMargin),
+        Nil
+      )
+
+      // grouping_id and grouping() are correct
+      checkAnswer(
+        sql(
+          """SELECT a, grouping_id(), count(*)
+            |FROM empty_t
+            |GROUP BY a WITH ROLLUP""".stripMargin),
+        Row(null, 1, 0) :: Nil
+      )
+
+      checkAnswer(
+        sql(
+          """SELECT a, grouping(a), count(*)
+            |FROM empty_t
+            |GROUP BY a WITH ROLLUP""".stripMargin),
+        Row(null, 1, 0) :: Nil
+      )
+    }
+  }
+
+  test("SPARK-53565: ROLLUP/CUBE on runtime-empty table produces grand total row") {
+    withTable("empty_real") {
+      sql("CREATE TABLE empty_real (a BIGINT, b BIGINT) USING parquet")
+
+      checkAnswer(
+        sql("SELECT a, count(*) FROM empty_real GROUP BY a WITH ROLLUP"),
+        Row(null, 0) :: Nil
+      )
+
+      checkAnswer(
+        sql(
+          """SELECT a, b, count(*)
+            |FROM empty_real
+            |GROUP BY a, b WITH CUBE""".stripMargin),
+        Row(null, null, 0) :: Nil
+      )
+
+      checkAnswer(
+        sql(
+          """SELECT a, count(*)
+            |FROM empty_real
+            |GROUP BY GROUPING SETS ((a), ())""".stripMargin),
+        Row(null, 0) :: Nil
+      )
+
+      // Without empty set: no rows
+      checkAnswer(
+        sql(
+          """SELECT a, count(*)
+            |FROM empty_real
+            |GROUP BY GROUPING SETS ((a))""".stripMargin),
+        Nil
+      )
+
+      checkAnswer(
+        sql(
+          """SELECT a, grouping_id(), count(*)
+            |FROM empty_real
+            |GROUP BY a WITH ROLLUP""".stripMargin),
+        Row(null, 1, 0) :: Nil
+      )
+
+      checkAnswer(
+        sql(
+          """SELECT a, grouping(a), count(*)
+            |FROM empty_real
+            |GROUP BY a WITH ROLLUP""".stripMargin),
+        Row(null, 1, 0) :: Nil
+      )
+
+      // HAVING filters grand total correctly
+      checkAnswer(
+        sql(
+          """SELECT a, count(*) FROM empty_real
+            |GROUP BY a WITH ROLLUP
+            |HAVING grouping(a) = 1""".stripMargin),
+        Row(null, 0) :: Nil
+      )
+
+      // Multi-column ROLLUP
+      checkAnswer(
+        sql(
+          """SELECT a, b, count(*)
+            |FROM empty_real
+            |GROUP BY a, b WITH ROLLUP""".stripMargin),
+        Row(null, null, 0) :: Nil
+      )
+    }
+  }
+
+  test("SPARK-53565: ROLLUP grand total coexists with non-empty data") {
+    withTable("nonempty_t") {
+      sql("CREATE TABLE nonempty_t (a BIGINT, b BIGINT) USING parquet")
+      sql("INSERT INTO nonempty_t VALUES (1, 10), (1, 20), (2, 30)")
+
+      checkAnswer(
+        sql(
+          """SELECT a, sum(b) FROM nonempty_t
+            |GROUP BY a WITH ROLLUP""".stripMargin),
+        Row(1, 30) :: Row(2, 30) ::
+          Row(null, 60) :: Nil
+      )
+    }
+  }
+
+  test("SPARK-53565: ROLLUP on NOT NULL columns") {
+    withTable("notnull_t") {
+      sql(
+        """CREATE TABLE notnull_t
+          |(a BIGINT NOT NULL, b BIGINT NOT NULL)
+          |USING parquet""".stripMargin)
+
+      // Runtime-empty NOT NULL table
+      checkAnswer(
+        sql(
+          """SELECT a, count(*) FROM notnull_t
+            |GROUP BY a WITH ROLLUP""".stripMargin),
+        Row(null, 0) :: Nil
+      )
+
+      // NOT NULL table with data
+      sql("INSERT INTO notnull_t VALUES (1, 10), (2, 20)")
+      checkAnswer(
+        sql(
+          """SELECT a, sum(b) FROM notnull_t
+            |GROUP BY a WITH ROLLUP""".stripMargin),
+        Row(1, 10) :: Row(2, 20) ::
+          Row(null, 30) :: Nil
+      )
+    }
+  }
+  test("SPARK-53565: multi-column CUBE with non-empty data") {
+    withTable("cube_t") {
+      sql(
+        "CREATE TABLE cube_t (a BIGINT, b BIGINT) USING parquet")
+      sql(
+        "INSERT INTO cube_t VALUES (1, 10), (1, 20), (2, 10)")
+
+      checkAnswer(
+        sql(
+          """SELECT a, b, count(*), sum(b)
+            |FROM cube_t
+            |GROUP BY a, b WITH CUBE""".stripMargin),
+        Row(1, 10, 1, 10) :: Row(1, 20, 1, 20) ::
+          Row(2, 10, 1, 10) ::
+          Row(1, null, 2, 30) ::
+          Row(2, null, 1, 10) ::
+          Row(null, 10, 2, 20) ::
+          Row(null, 20, 1, 20) ::
+          Row(null, null, 3, 40) :: Nil
+      )
+    }
+  }
+
+  test("SPARK-53565: multiple agg functions on empty table") {
+    withTable("multi_agg_t") {
+      sql(
+        "CREATE TABLE multi_agg_t (a BIGINT, b BIGINT) " +
+          "USING parquet")
+      checkAnswer(
+        sql(
+          """SELECT a, count(*), sum(b), max(b)
+            |FROM multi_agg_t
+            |GROUP BY a WITH ROLLUP""".stripMargin),
+        Row(null, 0, null, null) :: Nil
+      )
+    }
+  }
 }
 
 case class B(c: Option[Double])

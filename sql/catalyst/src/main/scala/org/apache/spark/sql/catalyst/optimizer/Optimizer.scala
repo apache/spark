@@ -198,6 +198,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // optimizer rules that are triggered when there is a filter
     // (e.g. InferFiltersFromConstraints). If we run this batch earlier, the query becomes just
     // LocalRelation and does not trigger many rules.
+    Batch("Split Empty Grouping Set", Once,
+      SplitEmptyGroupingSet),
     Batch("LocalRelation early", fixedPoint,
       ConvertToLocalRelation,
       PropagateEmptyRelation,

@@ -191,7 +191,7 @@ select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),()
 -- !query schema
 struct<a:int,b:int,sum(v):bigint,count(1):bigint>
 -- !query output
-
+NULL	NULL	NULL	0
 
 
 -- !query
@@ -199,7 +199,9 @@ select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),()
 -- !query schema
 struct<a:int,b:int,sum(v):bigint,count(1):bigint>
 -- !query output
-
+NULL	NULL	NULL	0
+NULL	NULL	NULL	0
+NULL	NULL	NULL	0
 
 
 -- !query
@@ -216,7 +218,7 @@ select t1.a, t2.b, sum(t1.v), count(*) from gstest_empty t1, gstest_empty t2
 -- !query schema
 struct<a:int,b:int,sum(v):bigint,count(1):bigint>
 -- !query output
-
+NULL	NULL	NULL	0
 
 
 -- !query
@@ -589,7 +591,7 @@ select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),()
 -- !query schema
 struct<a:int,b:int,sum(v):bigint,count(1):bigint>
 -- !query output
-
+NULL	NULL	NULL	0
 
 
 -- !query
@@ -597,7 +599,9 @@ select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),()
 -- !query schema
 struct<a:int,b:int,sum(v):bigint,count(1):bigint>
 -- !query output
-
+NULL	NULL	NULL	0
+NULL	NULL	NULL	0
+NULL	NULL	NULL	0
 
 
 -- !query
