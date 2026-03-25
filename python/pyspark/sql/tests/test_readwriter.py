@@ -293,6 +293,20 @@ class ReadwriterTestsMixin:
         with self.assertRaisesRegex(Exception, "'path' is not specified."):
             writer.save()
 
+    def test_changes_rejects_user_schema(self):
+        with self.assertRaises(AnalysisException) as ctx:
+            self.spark.read.schema("id LONG, data STRING").option("startingVersion", "1").changes(
+                "nonexistent_table"
+            )
+        self.assertIn("changes", str(ctx.exception))
+
+    def test_streaming_changes_rejects_user_schema(self):
+        with self.assertRaises(AnalysisException) as ctx:
+            self.spark.readStream.schema("id LONG, data STRING").option(
+                "startingVersion", "1"
+            ).changes("nonexistent_table")
+        self.assertIn("changes", str(ctx.exception))
+
 
 class ReadwriterV2TestsMixin:
     def test_api(self):
