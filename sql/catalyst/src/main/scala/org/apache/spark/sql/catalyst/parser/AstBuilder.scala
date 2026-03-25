@@ -863,7 +863,7 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitSingleInsertQuery(
       ctx: SingleInsertQueryContext): LogicalPlan = withOrigin(ctx) {
-    withInsertInto(ctx.insertInto(), visitQuery(ctx.query))
+    withInsertInto(ctx.insertInto(), visitQuery(ctx.query), queryAliasCtx = ctx.queryAlias)
   }
 
   /**
@@ -903,7 +903,8 @@ class AstBuilder extends DataTypeAstBuilder
    */
   protected def withInsertInto(
       ctx: InsertIntoContext,
-      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+      query: LogicalPlan,
+      queryAliasCtx: TableAliasContext = null): LogicalPlan = withOrigin(ctx) {
     ctx match {
       // We cannot push withIdentClause() into the write command because:
       //   1. `PlanWithUnresolvedIdentifier` is not a NamedRelation
@@ -976,10 +977,20 @@ class AstBuilder extends DataTypeAstBuilder
         } else {
           val insertParams = visitInsertIntoReplaceBooleanCond(ctx)
           withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
+            val query = {
+              val queryAliasOpt =
+                getTableAliasWithoutColumnAlias(queryAliasCtx, "INSERT REPLACE ON")
+
+              queryAliasOpt.map { queryAlias =>
+                withOrigin(queryAliasCtx) {
+                  SubqueryAlias(queryAlias, child = otherPlans.head)
+                }
+              }.getOrElse(otherPlans.head)
+            }
             createInsertIntoStatementForReplaceOnOrUsing(
               insertParams,
               ident,
-              query = otherPlans.head,
+              query,
               withSchemaEvolution = ctx.EVOLUTION() != null)
           })
         }
@@ -1059,7 +1070,13 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitInsertIntoReplaceUsing(
       ctx: InsertIntoReplaceUsingContext): InsertTableParams = withOrigin(ctx) {
+    if (!SQLConf.get.getConf(SQLConf.INSERT_INTO_REPLACE_USING_ENABLED)) {
+      throw QueryParsingErrors.insertReplaceUsingNotEnabled(ctx)
+    }
     val byName = ctx.NAME() != null
+    if (byName && !SQLConf.get.getConf(SQLConf.INSERT_INTO_REPLACE_USING_BY_NAME_ENABLED)) {
+      throw QueryParsingErrors.insertReplaceUsingByNameNotEnabled(ctx)
+    }
     val replaceUsingCols = visitIdentifierList(ctx.identifierList())
 
     createInsertIntoReplaceOnOrUsingParams(
@@ -1076,7 +1093,13 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitInsertIntoReplaceBooleanCond(
       ctx: InsertIntoReplaceBooleanCondContext): InsertTableParams = withOrigin(ctx) {
+    if (!SQLConf.get.getConf(SQLConf.INSERT_INTO_REPLACE_ON_ENABLED)) {
+      throw QueryParsingErrors.insertReplaceOnNotEnabled(ctx)
+    }
     val byName = ctx.NAME() != null
+    if (byName && !SQLConf.get.getConf(SQLConf.INSERT_INTO_REPLACE_ON_BY_NAME_ENABLED)) {
+      throw QueryParsingErrors.insertReplaceOnByNameNotEnabled(ctx)
+    }
     val replaceOnCond = expression(ctx.replaceCondition)
     val tableAliasOpt =
       getTableAliasWithoutColumnAlias(ctx.tableAlias(), "INSERT REPLACE ON")

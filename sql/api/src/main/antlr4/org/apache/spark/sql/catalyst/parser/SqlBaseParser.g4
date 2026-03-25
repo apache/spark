@@ -720,7 +720,7 @@ resource
     ;
 
 dmlStatementNoWith
-    : insertInto query                                                             #singleInsertQuery
+    : insertInto (query | LEFT_PAREN query RIGHT_PAREN queryAlias=tableAlias)      #singleInsertQuery
     | fromClause multiInsertQueryBody+                                             #multiInsertQuery
     | DELETE FROM identifierReference tableAlias whereClause?                      #deleteFromTable
     | UPDATE identifierReference tableAlias setClause whereClause?                 #updateTable
