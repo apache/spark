@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
+import org.apache.spark.sql.catalyst.expressions.{EqualTo, GreaterThan, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.IdentityColumnSpec
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
@@ -1774,7 +1774,7 @@ class DDLParserSuite extends AnalysisTest {
       OverwriteByExpression.byName(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
-        org.apache.spark.sql.catalyst.expressions.GreaterThan(
+        GreaterThan(
           UnresolvedAttribute("a"),
           Literal(5))))
   }
@@ -1785,7 +1785,7 @@ class DDLParserSuite extends AnalysisTest {
       OverwriteByExpression.byPosition(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
-        org.apache.spark.sql.catalyst.expressions.GreaterThan(
+        GreaterThan(
           UnresolvedAttribute("a"),
           Literal(5))))
   }
@@ -1796,7 +1796,7 @@ class DDLParserSuite extends AnalysisTest {
       OverwriteByExpression.byName(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
-        org.apache.spark.sql.catalyst.expressions.GreaterThan(
+        GreaterThan(
           UnresolvedAttribute("a"),
           Literal(5))))
   }
@@ -1807,7 +1807,7 @@ class DDLParserSuite extends AnalysisTest {
       OverwriteByExpression.byPosition(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
-        org.apache.spark.sql.catalyst.expressions.GreaterThan(
+        GreaterThan(
           UnresolvedAttribute("a"),
           Literal(5))))
   }

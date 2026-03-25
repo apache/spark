@@ -945,7 +945,13 @@ class AstBuilder extends DataTypeAstBuilder
             byName = insertParams.byName,
             withSchemaEvolution = table.EVOLUTION() != null)
         })
-      case ctx: InsertIntoReplaceWhereOrOnContext =>
+      case ctx: InsertIntoReplaceBooleanCondContext =>
+        // Although REPLACE WHERE and REPLACE ON share a unified grammar rule, they have
+        // different SQL semantics:
+        // - REPLACE WHERE deletes table rows that satisfy the given predicate.
+        // - REPLACE ON only deletes table rows that match at least one source row.
+        // For example, with an empty source query, REPLACE ON never deletes any table rows,
+        // while REPLACE WHERE still can.
         if (ctx.WHERE() != null) {
           val options = Option(ctx.optionsClause())
           withIdentClause(ctx.identifierReference, Seq(query), (ident, otherPlans) => {
@@ -968,7 +974,7 @@ class AstBuilder extends DataTypeAstBuilder
             }
           })
         } else {
-          val insertParams = visitInsertIntoReplaceWhereOrOn(ctx)
+          val insertParams = visitInsertIntoReplaceBooleanCond(ctx)
           withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
             createInsertIntoStatementForReplaceOnOrUsing(
               insertParams,
@@ -1066,10 +1072,10 @@ class AstBuilder extends DataTypeAstBuilder
 
   /**
    * Add an INSERT INTO REPLACE ON operation to the logical plan.
-   * Called only for the ON variant of the unified REPLACE WHERE/ON rule.
+   * Called only for the ON variant of the unified REPLACE boolean condition rule.
    */
-  override def visitInsertIntoReplaceWhereOrOn(
-      ctx: InsertIntoReplaceWhereOrOnContext): InsertTableParams = withOrigin(ctx) {
+  override def visitInsertIntoReplaceBooleanCond(
+      ctx: InsertIntoReplaceBooleanCondContext): InsertTableParams = withOrigin(ctx) {
     val byName = ctx.NAME() != null
     val replaceOnCond = expression(ctx.replaceCondition)
     val tableAliasOpt =
