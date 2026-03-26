@@ -4828,6 +4828,7 @@ object SQLConf {
         "that match the new rows according to the specified matching condition. The " +
         "inserted rows are specified by a VALUES expression or the result of a query.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -4837,6 +4838,7 @@ object SQLConf {
         "Allows using the BY NAME clause with INSERT INTO REPLACE ON.")
       .internal()
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -4847,6 +4849,7 @@ object SQLConf {
         "that match the new rows according to the key columns specified in the statement. The " +
         "inserted rows are specified by a VALUES expression or the result of a query.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -4856,6 +4859,7 @@ object SQLConf {
         "Allows using the BY NAME clause with INSERT INTO REPLACE USING.")
       .internal()
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
