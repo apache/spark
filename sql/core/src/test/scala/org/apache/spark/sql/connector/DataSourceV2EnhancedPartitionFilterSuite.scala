@@ -132,7 +132,7 @@ class DataSourceV2EnhancedPartitionFilterSuite
       checkAnswer(df, Seq(Row("a", "x"), Row("b", "y")))
       assertPushedPartitionPredicates(df, 1)
       assertScanReturnsPartitionKeys(df, Set("a", "b"))
-      assertReferencedPartitionColumnOrdinals(df, Array(0), Array("part_col"))
+      assertReferencedPartitionFieldOrdinals(df, Array(0), Array("part_col"))
     }
   }
 
@@ -197,11 +197,11 @@ class DataSourceV2EnhancedPartitionFilterSuite
       checkAnswer(df, Seq(Row("b", "y"), Row("bc", "z")))
       assertPushedPartitionPredicates(df, 1)
       assertScanReturnsPartitionKeys(df, Set("b", "bc"))
-      assertReferencedPartitionColumnOrdinals(df, Array(0), Array("part_col"))
+      assertReferencedPartitionFieldOrdinals(df, Array(0), Array("part_col"))
     }
   }
 
-  test("case 8: Second-pass PartitionPredicate filter works for UDF filter on partition column") {
+  test("case 8: Second-pass PartitionPredicate filter works for UDF filter on partition field") {
     withTable(partFilterTableName) {
       sql(s"CREATE TABLE $partFilterTableName (part_col string, data string) USING $v2Source " +
         "PARTITIONED BY (part_col)")
@@ -216,7 +216,7 @@ class DataSourceV2EnhancedPartitionFilterSuite
       checkAnswer(df, Seq(Row("a", "x"), Row("A", "y")))
       assertPushedPartitionPredicates(df, 1)
       assertScanReturnsPartitionKeys(df, Set("a", "A"))
-      assertReferencedPartitionColumnOrdinals(df, Array(0), Array("part_col"))
+      assertReferencedPartitionFieldOrdinals(df, Array(0), Array("part_col"))
     }
   }
 
@@ -235,7 +235,7 @@ class DataSourceV2EnhancedPartitionFilterSuite
       checkAnswer(df, Seq(Row(Row("LA", 1), "a")))
       assertPushedPartitionPredicates(df, 1)
       assertScanReturnsPartitionKeys(df, Set("LA"))
-      assertReferencedPartitionColumnOrdinals(df, Array(0), Array("s.tz"))
+      assertReferencedPartitionFieldOrdinals(df, Array(0), Array("s.tz"))
     }
   }
 
@@ -274,7 +274,7 @@ class DataSourceV2EnhancedPartitionFilterSuite
     }
   }
 
-  test("referenced partition column ordinals: partition predicate same column twice " +
+  test("referenced partition field ordinals: partition predicate same field twice " +
     "has de-duped ordinals") {
     withTable(partFilterTableName) {
       sql(s"CREATE TABLE $partFilterTableName (part_col string, data string) USING $v2Source " +
@@ -286,11 +286,11 @@ class DataSourceV2EnhancedPartitionFilterSuite
       checkAnswer(df, Seq(Row("a", "x"), Row("b", "y"), Row("bc", "z")))
       assertPushedPartitionPredicates(df, 1)
       assertScanReturnsPartitionKeys(df, Set("a", "b", "bc"))
-      assertReferencedPartitionColumnOrdinals(df, Array(0), Array("part_col"))
+      assertReferencedPartitionFieldOrdinals(df, Array(0), Array("part_col"))
     }
   }
 
-  test("referenced partition column ordinals: one non-first partition column in second-pass") {
+  test("referenced partition field ordinals: one non-first partition field in second-pass") {
     withTable(partFilterTableName) {
       sql(s"CREATE TABLE $partFilterTableName (p0 string, p1 string, p2 string, data string) " +
         s"USING $v2Source PARTITIONED BY (p0, p1, p2)")
@@ -304,11 +304,11 @@ class DataSourceV2EnhancedPartitionFilterSuite
       checkAnswer(df, Seq(
         Row("a", "x", "1", "d1"), Row("a", "x", "2", "d3"), Row("b", "x", "1", "d4")))
       assertPushedPartitionPredicates(df, 1)
-      assertReferencedPartitionColumnOrdinals(df, Array(1), Array("p0", "p1", "p2"))
+      assertReferencedPartitionFieldOrdinals(df, Array(1), Array("p0", "p1", "p2"))
     }
   }
 
-  test("referenced partition column ordinals: two non-first partition columns in second-pass") {
+  test("referenced partition field ordinals: two non-first partition fields in second-pass") {
     withTable(partFilterTableName) {
       sql(s"CREATE TABLE $partFilterTableName (p0 string, p1 string, p2 string, data string) " +
         s"USING $v2Source PARTITIONED BY (p0, p1, p2)")
@@ -324,7 +324,7 @@ class DataSourceV2EnhancedPartitionFilterSuite
       val df = sql(s"SELECT * FROM $partFilterTableName WHERE concat2(p1, p2) = 'x1'")
       checkAnswer(df, Seq(Row("a", "x", "1", "d1"), Row("b", "x", "1", "d4")))
       assertPushedPartitionPredicates(df, 1)
-      assertReferencedPartitionColumnOrdinals(df, Array(1, 2), Array("p0", "p1", "p2"))
+      assertReferencedPartitionFieldOrdinals(df, Array(1, 2), Array("p0", "p1", "p2"))
     }
   }
 
@@ -439,20 +439,20 @@ class DataSourceV2EnhancedPartitionFilterSuite
   }
 
   /**
-   * Asserts that each pushed partition predicate's references() (PartitionColumnReference,
-   * each with ordinal()) match the expected ordinals and partition column names.
+   * Asserts that each pushed partition predicate's references() (PartitionFieldReference,
+   * each with ordinal()) match the expected ordinals and partition field names.
    *
    * @param df the query result
    * @param expectedOrdinals expected 0-based ordinals from Table.partitioning()
-   * @param expectedPartitionColumnNames partition column names by ordinal
-   *        (names(ordinal) is the name for that partition column)
+   * @param expectedPartitionFieldNames partition field names by ordinal
+   *        (names(ordinal) is the name for that partition field)
    */
-  private def assertReferencedPartitionColumnOrdinals(
+  private def assertReferencedPartitionFieldOrdinals(
       df: DataFrame,
       expectedOrdinals: Array[Int],
-      expectedPartitionColumnNames: Array[String]): Unit = {
+      expectedPartitionFieldNames: Array[String]): Unit = {
     val predicates = getPushedPartitionPredicates(df)
-    val names = expectedPartitionColumnNames
+    val names = expectedPartitionFieldNames
   predicates.foreach { p =>
       val refs = p.references()
       val ordinals = refs.map(_.asInstanceOf[PartitionFieldReference].ordinal()).sorted
@@ -463,17 +463,17 @@ class DataSourceV2EnhancedPartitionFilterSuite
 
       refs.foreach { ref =>
         assert(ref.isInstanceOf[PartitionFieldReference],
-          s"Expected PartitionColumnReference, got ${ref.getClass.getName}")
+          s"Expected PartitionFieldReference, got ${ref.getClass.getName}")
         val partRef = ref.asInstanceOf[PartitionFieldReference]
         assert(partRef.fieldNames().nonEmpty,
-          s"PartitionColumnReference.ordinal=${partRef.ordinal()} has empty fieldNames")
+          s"PartitionFieldReference.ordinal=${partRef.ordinal()} has empty fieldNames")
         assert(partRef.ordinal() < names.length,
-          s"PartitionColumnReference.ordinal=${partRef.ordinal()} " +
+          s"PartitionFieldReference.ordinal=${partRef.ordinal()} " +
             s"out of range for names length ${names.length}")
         val expectedName = names(partRef.ordinal())
         val actualName = partRef.fieldNames().mkString(".")
         assert(actualName === expectedName,
-          s"PartitionColumnReference.ordinal=${partRef.ordinal()}: " +
+          s"PartitionFieldReference.ordinal=${partRef.ordinal()}: " +
             s"expected fieldNames '${expectedName}', got '${actualName}'")
       }
     }
@@ -481,7 +481,7 @@ class DataSourceV2EnhancedPartitionFilterSuite
 
   /**
    * Asserts that the scan reads exactly the given set of partition keys (single-partition
-   * column tables use keyString() which is the partition value).
+   * field tables use keyString() which is the partition value).
    */
   private def assertScanReturnsPartitionKeys(
       df: DataFrame,

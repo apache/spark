@@ -175,8 +175,9 @@ object PushDownUtils extends Logging {
   }
 
   /**
-   * If the scan supports iterative filtering, convert partition filters to PartitionPredicates
-   * (see SPARK-55596) and push them down in another pass.
+   * If the scan supports iterative filtering, infer additional partition filters,
+   * convert these and unused partition filters to PartitionPredicates,
+   * and push them down in another pass. (See SPARK-55596)
    */
   private def pushPartitionPredicates(
       scanBuilder: SupportsPushDownV2Filters,
@@ -185,6 +186,7 @@ object PushDownUtils extends Logging {
     val normalizedToOriginal = normalizeNestedPartitionFilters(remainingFilters, partitionFields)
     val normalized = normalizedToOriginal.keys.toSeq
     val partitionSchema = StructType(partitionFields.map(_.structField))
+    // may infer additional partition filters
     val (partFilters, nonPartitionFilters) =
       DataSourceUtils.getPartitionFiltersAndDataFilters(partitionSchema, normalized)
     val (pushable, nonPushable) = partFilters.partition(isPushablePartitionFilter)
@@ -192,7 +194,9 @@ object PushDownUtils extends Logging {
     val rejectedPartitionFilters = scanBuilder.pushPredicates(partitionPredicates.toArray).map {
       p => p.asInstanceOf[PartitionPredicateImpl].expression
     }.toSeq
-    (nonPartitionFilters ++ nonPushable ++ rejectedPartitionFilters).map(normalizedToOriginal)
+    (nonPartitionFilters ++ nonPushable ++ rejectedPartitionFilters)
+      .filter(normalizedToOriginal.contains)
+      .map(normalizedToOriginal)
   }
 
   private def isPushablePartitionFilter(f: Expression) =
