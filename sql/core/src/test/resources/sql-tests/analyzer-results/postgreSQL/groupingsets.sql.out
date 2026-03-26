@@ -350,7 +350,7 @@ Sort [x#x ASC NULLS FIRST, q2#xL ASC NULLS FIRST], true
 -- !query
 DROP VIEW int8_tbl
 -- !query analysis
-DropTempViewCommand int8_tbl
+DropTempViewCommand int8_tbl, false
 
 
 -- !query
@@ -653,7 +653,7 @@ Sort [concat(v, a)#x ASC NULLS FIRST, count(1)#xL ASC NULLS FIRST], true
 -- !query
 DROP VIEW gstest1
 -- !query analysis
-DropTempViewCommand gstest1
+DropTempViewCommand gstest1, false
 
 
 -- !query

@@ -69,6 +69,7 @@ The followings are best practices of naming configs for some common cases:
  * @param isPublic if this configuration is public to the user. If it's `false`, this
  *                 configuration is only used internally and we should not expose it to users.
  * @param version the spark version when the configuration was released.
+ * @param bindingPolicy optional policy for SQL configs: SESSION or PERSISTED.
  * @tparam T the value type
  */
 private[spark] abstract class ConfigEntry[T] (

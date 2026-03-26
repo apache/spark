@@ -273,7 +273,7 @@ SELECT json_tuple('{"a":"1"}', if(c1 < 1, null, 'a'), if(c2 < 1, null, 'a')) FRO
 -- !query
 DROP VIEW IF EXISTS jsonTable
 -- !query analysis
-DropTempViewCommand jsonTable
+DropTempViewCommand jsonTable, true
 
 
 -- !query
@@ -721,7 +721,7 @@ Project [json_object_keys([1, 2, 3]) AS json_object_keys([1, 2, 3])#x]
 -- !query
 DROP VIEW IF EXISTS jsonTable
 -- !query analysis
-DropTempViewCommand jsonTable
+DropTempViewCommand jsonTable, true
 
 
 -- !query

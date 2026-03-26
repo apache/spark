@@ -53,7 +53,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -90,7 +90,8 @@ class Resolver(
     tracker: Option[QueryPlanningTracker] = None)
     extends LogicalPlanResolver
     with ResolverMetricTracker
-    with DelegatesResolutionToExtensions {
+    with DelegatesResolutionToExtensions
+    with QueryErrorsBase {
   private val planLogger = new PlanLogger
   private val subqueryRegistry = new SubqueryRegistry
   private val scopes = new NameScopeStack(
@@ -581,7 +582,11 @@ class Resolver(
 
           relationsWithResolvedMetadata
         case None =>
-          unresolvedRelation.tableNotFound(unresolvedRelation.multipartIdentifier)
+          val multipartId = unresolvedRelation.multipartIdentifier
+          val catalogPath = (catalogManager.currentCatalog.name() +:
+            catalogManager.currentNamespace).toSeq
+          val searchPath = SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
+          unresolvedRelation.tableNotFound(multipartId, searchPath)
       }
 
       resolve(resolvedRelation)

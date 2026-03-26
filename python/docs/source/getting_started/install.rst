@@ -157,6 +157,18 @@ For a short summary about useful conda commands, see their
 `cheat sheet <https://docs.conda.io/projects/conda/en/latest/user-guide/cheatsheet.html>`_.
 
 
+Using venv
+----------
+
+You can use Python's built-in ``venv`` module to create an isolated environment:
+
+.. code-block:: bash
+
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install pyspark
+
+
 Manually Downloading
 --------------------
 

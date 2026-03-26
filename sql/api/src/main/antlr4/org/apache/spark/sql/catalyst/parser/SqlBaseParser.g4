@@ -248,8 +248,8 @@ statement
     | createTableHeader (LEFT_PAREN tableElementList RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS? query)?                                                   #createTable
-    | CREATE TABLE (IF errorCapturingNot EXISTS)? target=tableIdentifier
-        LIKE source=tableIdentifier
+    | CREATE TABLE (IF errorCapturingNot EXISTS)? target=identifierReference
+        LIKE source=identifierReference
         (tableProvider |
         rowFormat |
         createFileFormat |

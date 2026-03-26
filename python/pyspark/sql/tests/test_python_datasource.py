@@ -17,7 +17,6 @@
 import contextlib
 import io
 import os
-import platform
 import tempfile
 import unittest
 import logging
@@ -824,9 +823,6 @@ class BasePythonDataSourceTestsMixin:
         rounded = df.select("d").first().d
         self.assertEqual(rounded, Decimal("1.233999999999999986"))
 
-    @unittest.skipIf(
-        "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
-    )
     def test_data_source_segfault(self):
         import ctypes
 
@@ -919,10 +915,9 @@ class BasePythonDataSourceTestsMixin:
 
                     self.spark.dataSource.register(TestDataSource)
 
-                    with self.assertRaisesRegex(Exception, expected):
-                        self.spark.range(10).write.format("test").mode("append").saveAsTable(
-                            "test_table"
-                        )
+                    with tempfile.TemporaryDirectory(prefix="test_segfault_") as d:
+                        with self.assertRaisesRegex(Exception, expected):
+                            self.spark.range(10).write.format("test").mode("append").save(d)
 
                 with self.subTest(worker="pyspark.sql.worker.commit_data_source_write"):
 
@@ -943,10 +938,9 @@ class BasePythonDataSourceTestsMixin:
 
                     self.spark.dataSource.register(TestDataSource)
 
-                    with self.assertRaisesRegex(Exception, expected):
-                        self.spark.range(10).write.format("test").mode("append").saveAsTable(
-                            "test_table"
-                        )
+                    with tempfile.TemporaryDirectory(prefix="test_segfault_") as d:
+                        with self.assertRaisesRegex(Exception, expected):
+                            self.spark.range(10).write.format("test").mode("append").save(d)
 
     @unittest.skipIf(is_remote_only(), "Requires JVM access")
     def test_data_source_reader_with_logging(self):

@@ -435,7 +435,7 @@ CreateViewCommand `v`, [(c1,None)], VALUES(1), false, false, LocalTempView, UNSU
 -- !query
 DROP VIEW IDENTIFIER('v')
 -- !query analysis
-DropTempViewCommand v
+DropTempViewCommand v, false
 
 
 -- !query
@@ -571,7 +571,7 @@ DropFunctionCommand myDoubleAvg, false, true
 -- !query
 DECLARE var = 'sometable'
 -- !query analysis
-CreateVariable defaultvalueexpression(sometable, 'sometable'), false
+CreateVariable default(sometable, sql=''sometable''), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var
 
 
@@ -1037,10 +1037,12 @@ CREATE TEMPORARY VIEW IDENTIFIER('default.v')(c1) AS VALUES(1)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
-  "sqlState" : "428EK",
+  "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
+  "sqlState" : "42602",
   "messageParameters" : {
-    "actualName" : "`default`.`v`"
+    "objectName" : "`v`",
+    "objectType" : "VIEW",
+    "qualifier" : "`default`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1096,13 +1098,13 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 -- !query
 drop view v1
 -- !query analysis
-DropTempViewCommand v1
+DropTempViewCommand v1, false
 
 
 -- !query
 drop table t1
 -- !query analysis
-DropTempViewCommand t1
+DropTempViewCommand t1, false
 
 
 -- !query
@@ -1115,21 +1117,21 @@ DropTable false, false
 -- !query
 DECLARE agg = 'max'
 -- !query analysis
-CreateVariable defaultvalueexpression(max, 'max'), false
+CreateVariable default(max, sql=''max''), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.agg
 
 
 -- !query
 DECLARE col = 'c1'
 -- !query analysis
-CreateVariable defaultvalueexpression(c1, 'c1'), false
+CreateVariable default(c1, sql=''c1''), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.col
 
 
 -- !query
 DECLARE tab = 'T'
 -- !query analysis
-CreateVariable defaultvalueexpression(T, 'T'), false
+CreateVariable default(T, sql=''T''), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.tab
 
 
@@ -1263,7 +1265,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`s`.`tab`"
+    "relationName" : "`s`.`tab`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1283,7 +1286,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`s`.`tab`"
+    "relationName" : "`s`.`tab`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1303,7 +1307,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`s`.`tab`"
+    "relationName" : "`s`.`tab`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1713,7 +1718,7 @@ DropTable false, false
 -- !query
 DECLARE IDENTIFIER('my_var') = 'value'
 -- !query analysis
-CreateVariable defaultvalueexpression(value, 'value'), false
+CreateVariable default(value, sql=''value''), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.my_var
 
 
@@ -1986,7 +1991,7 @@ Project [test_col#x]
 -- !query
 DROP VIEW test_view
 -- !query analysis
-DropTempViewCommand test_view
+DropTempViewCommand test_view, false
 
 
 -- !query

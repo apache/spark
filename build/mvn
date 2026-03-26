@@ -125,21 +125,22 @@ install_mvn() {
   fi
   if [ $(version $MVN_DETECTED_VERSION) -ne $(version $MVN_VERSION) ]; then
     local MVN_TARBALL="apache-maven-${MVN_VERSION}-bin.tar.gz"
-    local FILE_PATH="maven/maven-3/${MVN_VERSION}/binaries/${MVN_TARBALL}"
-    local APACHE_MIRROR=${APACHE_MIRROR:-'https://www.apache.org/dyn/closer.lua'}
-    local MIRROR_URL_QUERY="?action=download"
+    local FILE_PATH="org/apache/maven/apache-maven/${MVN_VERSION}/${MVN_TARBALL}"
+    local MIRROR_BASE=${DEFAULT_ARTIFACT_REPOSITORY:-https://maven-central.storage-download.googleapis.com/maven2/}
+    local MIRROR_URL_QUERY=""
 
     if [ $(command -v curl) ]; then
-      if ! curl -L --output /dev/null --silent --head --fail "${APACHE_MIRROR}/${FILE_PATH}${MIRROR_URL_QUERY}" ; then
+      if ! curl -L --output /dev/null --silent --head --fail "${MIRROR_BASE%/}/${FILE_PATH}${MIRROR_URL_QUERY}" ; then
         # Fall back to archive.apache.org for older Maven
         echo "Falling back to archive.apache.org to download Maven"
-        APACHE_MIRROR="https://archive.apache.org/dist"
+        FILE_PATH="maven/maven-3/${MVN_VERSION}/binaries/${MVN_TARBALL}"
+        MIRROR_BASE="https://archive.apache.org/dist"
         MIRROR_URL_QUERY=""
       fi
     fi
 
     install_app \
-      "${APACHE_MIRROR}" \
+      "${MIRROR_BASE%/}" \
       "${FILE_PATH}" \
       "${MIRROR_URL_QUERY}" \
       "sha512" \

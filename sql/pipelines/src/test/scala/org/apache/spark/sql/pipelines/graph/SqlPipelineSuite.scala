@@ -611,7 +611,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
       )
     }
 
-    assert(ex.errorClass.contains("TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS"))
+    assert(ex.errorClass.contains("INVALID_TEMP_OBJ_QUALIFIER"))
   }
 
   test("create view syntax for persisted views") {
