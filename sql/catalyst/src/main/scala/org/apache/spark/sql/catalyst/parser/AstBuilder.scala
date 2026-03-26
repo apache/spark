@@ -854,7 +854,8 @@ class AstBuilder extends DataTypeAstBuilder
       withInsertInto(body.insertInto,
         withFromStatementBody(body.fromStatementBody, from).
           optionalMap(body.fromStatementBody.queryOrganization)(
-            withQueryResultClauses(_, _, forPipeOperators = false)))
+            withQueryResultClauses(_, _, forPipeOperators = false)),
+        queryAliasCtx = null)
     }
 
     // If there are multiple INSERTS just UNION them together into one query.
@@ -909,7 +910,7 @@ class AstBuilder extends DataTypeAstBuilder
   protected def withInsertInto(
       ctx: InsertIntoContext,
       query: LogicalPlan,
-      queryAliasCtx: TableAliasContext = null): LogicalPlan = withOrigin(ctx) {
+      queryAliasCtx: TableAliasContext): LogicalPlan = withOrigin(ctx) {
     ctx match {
       // We cannot push withIdentClause() into the write command because:
       //   1. `PlanWithUnresolvedIdentifier` is not a NamedRelation
