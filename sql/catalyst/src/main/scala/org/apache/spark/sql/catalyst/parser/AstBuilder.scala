@@ -1097,7 +1097,7 @@ class AstBuilder extends DataTypeAstBuilder
   /**
    * Add an INSERT INTO REPLACE ON operation to the logical plan.
    */
-  override def visitInsertIntoReplaceOn(
+  def visitInsertIntoReplaceOn(
       ctx: InsertIntoReplaceBooleanCondContext): InsertTableParams = withOrigin(ctx) {
     if (!SQLConf.get.getConf(SQLConf.INSERT_INTO_REPLACE_ON_ENABLED)) {
       throw QueryParsingErrors.insertReplaceOnNotEnabled(ctx)
