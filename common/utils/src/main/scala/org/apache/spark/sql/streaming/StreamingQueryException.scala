@@ -98,9 +98,15 @@ class StreamingQueryException private[sql](
   override def getMessage: String =
     if (queryDebugString.isEmpty) message else s"${message}\n${queryDebugString}"
 
-  override def toString(): String =
-    s"""${classOf[StreamingQueryException].getName}: ${cause.getMessage}
+  override def toString(): String = {
+    val causeMsg = if (cause != null) {
+      if (cause.getMessage != null) cause.getMessage else s"$message (no cause message)"
+    } else {
+      s"$message (no cause)"
+    }
+    s"""${classOf[StreamingQueryException].getName}: $causeMsg
        |$queryDebugString""".stripMargin
+  }
 
   override def getCondition: String = errorClass
 
