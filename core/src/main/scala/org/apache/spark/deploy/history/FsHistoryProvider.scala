@@ -19,7 +19,7 @@ package org.apache.spark.deploy.history
 
 import java.io.{File, FileNotFoundException, IOException}
 import java.lang.{Long => JLong}
-import java.util.{Date, Locale, NoSuchElementException, ServiceLoader}
+import java.util.{Date, NoSuchElementException, ServiceLoader}
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, TimeUnit}
 import java.util.zip.ZipOutputStream
 
@@ -109,8 +109,19 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val logDirs = conf.get(History.HISTORY_LOG_DIR)
     .split(",").map(_.trim).filter(_.nonEmpty).toSeq
 
-  private val scanDisabledSchemes = conf.get(History.SCAN_DISABLED_SCHEMES)
-    .split(",").map(_.trim.toLowerCase(Locale.ROOT)).filter(_.nonEmpty).toSet
+  private val scanDisabledPathPatterns = conf.get(History.SCAN_DISABLED_PATH_PATTERNS)
+    .map(_.r)
+
+  /** Check if scanning is disabled for a directory by matching its path against patterns. */
+  private def isScanDisabled(dir: String): Boolean = {
+    if (scanDisabledPathPatterns.isEmpty) return false
+    val qualifiedPath = {
+      val path = new Path(dir)
+      val dirFs = logDirFs(dir)
+      path.makeQualified(dirFs.getUri, dirFs.getWorkingDirectory).toString
+    }
+    scanDisabledPathPatterns.exists(_.pattern.matcher(qualifiedPath).matches())
+  }
 
   private val historyUiAclsEnable = conf.get(History.HISTORY_SERVER_UI_ACLS_ENABLE)
   private val historyUiAdminAcls = conf.get(History.HISTORY_SERVER_UI_ADMIN_ACLS)
@@ -566,10 +577,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     logDirs.foreach { dir =>
       try {
-        val scheme = logDirFs(dir).getUri.getScheme.toLowerCase(Locale.ROOT)
-        if (scanDisabledSchemes.contains(scheme)) {
+        if (isScanDisabled(dir)) {
           logDebug(log"Skipping scan for directory ${MDC(HISTORY_DIR, dir)}" +
-            log" (scan disabled for its URI scheme)")
+            log" (scan disabled for this directory)")
           skippedDirs += dir
         } else {
           checkForLogsInDir(dir, newLastScanTime, allNotStale)

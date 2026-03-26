@@ -167,6 +167,7 @@ spark.history.fs.numReplayThreads
 spark.history.fs.safemodeCheck.interval
 spark.history.fs.update.batchSize
 spark.history.fs.update.interval
+spark.history.fs.update.scanDisabledPathPatterns
 spark.history.kerberos.enabled
 spark.history.kerberos.keytab
 spark.history.kerberos.principal

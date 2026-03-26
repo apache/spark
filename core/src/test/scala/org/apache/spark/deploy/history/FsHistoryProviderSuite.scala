@@ -2413,11 +2413,11 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
-  test("scan disabled for file scheme skips scanning but on-demand loading still works") {
+  test("SPARK-56234: Skips scanning but on-demand loading still works") {
     withTempDir { dir =>
       val conf = createTestConf(true)
       conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
-      conf.set(SCAN_DISABLED_SCHEMES, "file")
+      conf.set(SCAN_DISABLED_PATH_PATTERNS, Seq("file:.*"))
       conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, true)
       val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
       val provider = new FsHistoryProvider(conf)
@@ -2438,6 +2438,12 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       assert(provider.getAppUI("app1", None).isDefined)
       assert(provider.getListing().length === 1)
 
+      // Metadata should be accurate (not dummy) since mergeApplicationListing runs
+      // for scan-disabled directories
+      val appInfo = provider.getListing().next()
+      assert(appInfo.name === "app1")
+      assert(appInfo.attempts.head.appSparkVersion !== "unknown")
+
       // Subsequent scan should NOT remove the on-demand loaded app (stale protection)
       provider.checkForLogs()
       assert(provider.getListing().length === 1)
@@ -2446,12 +2452,12 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
-  test("scan disabled schemes do not affect directories with non-matching schemes") {
+  test("SPARK-56234: Scan disabled schemes do not affect directories with non-matching schemes") {
     withTempDir { dir =>
       val conf = createTestConf(true)
       conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
       // Disable scanning for s3a/gs -- should not affect local file:// directories
-      conf.set(SCAN_DISABLED_SCHEMES, "s3a,gs")
+      conf.set(SCAN_DISABLED_PATH_PATTERNS, Seq("s3a://.*", "gs://.*"))
       val provider = new FsHistoryProvider(conf)
       val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
 
@@ -2470,11 +2476,11 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
-  test("scan disabled with empty config does not disable any scheme") {
+  test("SPARK-56234: Scan disabled with empty config does not disable any scheme") {
     withTempDir { dir =>
       val conf = createTestConf(true)
       conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
-      conf.set(SCAN_DISABLED_SCHEMES, "")
+      conf.set(SCAN_DISABLED_PATH_PATTERNS, Seq.empty[String])
       val provider = new FsHistoryProvider(conf)
       val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
 
@@ -2489,6 +2495,83 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       assert(provider.getListing().length === 1)
 
       provider.stop()
+    }
+  }
+
+  test("SPARK-56234: On-demand loading populates accurate metadata via mergeApplicationListing") {
+    withTempDir { dir =>
+      val conf = createTestConf(true)
+      conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+      conf.set(SCAN_DISABLED_PATH_PATTERNS, Seq("file:.*"))
+      conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, true)
+      val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+      val provider = new FsHistoryProvider(conf)
+
+      val writer = new RollingEventLogFilesWriter("app1", None, dir.toURI, conf, hadoopConf)
+      writer.start()
+      writeEventsToRollingWriter(writer, Seq(
+        SparkListenerApplicationStart("app1", Some("app1"), 1000, "testuser", None),
+        SparkListenerJobStart(1, 0, Seq.empty),
+        SparkListenerApplicationEnd(5000)), rollFile = false)
+      writer.stop()
+
+      // On-demand load without prior scan
+      assert(provider.getAppUI("app1", None).isDefined)
+
+      // Listing should have accurate metadata from mergeApplicationListing,
+      // not dummy values (sparkVersion="unknown", sparkUser="spark", etc.)
+      val appInfo = provider.getListing().next()
+      assert(appInfo.name === "app1")
+      assert(appInfo.attempts.head.appSparkVersion !== "unknown")
+      assert(appInfo.attempts.head.sparkUser === "testuser")
+      assert(appInfo.attempts.head.completed)
+      assert(appInfo.attempts.head.duration > 0)
+
+      provider.stop()
+    }
+  }
+
+  test("SPARK-56234: Scan disabled by path pattern skips matching directories") {
+    val dir2 = Utils.createTempDir(namePrefix = "logDir2")
+    try {
+      val conf = createTestConf(true)
+      conf.set(HISTORY_LOG_DIR, s"${testDir.getAbsolutePath},${dir2.getAbsolutePath}")
+      conf.set(SCAN_DISABLED_PATH_PATTERNS, Seq(s".*${dir2.getName}"))
+      conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, true)
+      val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+      val provider = new FsHistoryProvider(conf)
+
+      // Write app in active dir (scan enabled)
+      val writer1 = new RollingEventLogFilesWriter(
+        "app1", None, testDir.toURI, conf, hadoopConf)
+      writer1.start()
+      writeEventsToRollingWriter(writer1, Seq(
+        SparkListenerApplicationStart("app1", Some("app1"), 0, "user", None),
+        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+      writer1.stop()
+
+      // Write app in archive dir (scan disabled)
+      val writer2 = new RollingEventLogFilesWriter(
+        "app2", None, dir2.toURI, conf, hadoopConf)
+      writer2.start()
+      writeEventsToRollingWriter(writer2, Seq(
+        SparkListenerApplicationStart("app2", Some("app2"), 0, "user", None),
+        SparkListenerJobStart(2, 0, Seq.empty)), rollFile = false)
+      writer2.stop()
+
+      // Only app1 should be discovered by scan
+      provider.checkForLogs()
+      val listing = provider.getListing().toSeq
+      assert(listing.size === 1)
+      assert(listing.head.id === "app1")
+
+      // app2 should be loadable on demand
+      assert(provider.getAppUI("app2", None).isDefined)
+      assert(provider.getListing().toSeq.size === 2)
+
+      provider.stop()
+    } finally {
+      Utils.deleteRecursively(dir2)
     }
   }
 
