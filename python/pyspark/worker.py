@@ -51,7 +51,6 @@ from pyspark.sql.conversion import (
     LocalDataToArrowConversion,
     ArrowTableToRowsConversion,
     ArrowBatchTransformer,
-    coerce_arrow_array,
 )
 from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import (
@@ -2909,13 +2908,13 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             # Call UDF and verify result type (iterator of pa.Array)
             verified_iter = verify_result(pa.Array)(udf_func(args_iter))
 
-            # Process results: coerce type and assemble into RecordBatch
+            # Process results: enforce schema and assemble into RecordBatch
+            target_schema = pa.schema([pa.field("_0", arrow_return_type)])
+
             def process_results():
                 for result in verified_iter:
-                    result = coerce_arrow_array(
-                        result, arrow_return_type, safecheck=True, arrow_cast=True
-                    )
-                    yield pa.RecordBatch.from_arrays([result], ["_0"])
+                    batch = pa.RecordBatch.from_arrays([result], ["_0"])
+                    yield ArrowBatchTransformer.enforce_schema(batch, target_schema, safecheck=True)
 
             # Apply row limit check (fail-fast)
             limited = verify_output_row_limit(
