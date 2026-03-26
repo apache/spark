@@ -204,4 +204,10 @@ private[sql] object CatalogManager {
     (nameParts.length == 2 && nameParts.head.equalsIgnoreCase(SESSION_NAMESPACE)) ||
       isFullyQualifiedSystemSessionViewName(nameParts)
   }
+
+  /** True if a SQL path entry denotes `system.session` (case-insensitive). */
+  def isSystemSessionPathEntry(parts: Seq[String]): Boolean =
+    parts.length == 2 &&
+      parts.head.equalsIgnoreCase(SYSTEM_CATALOG_NAME) &&
+      parts(1).equalsIgnoreCase(SESSION_NAMESPACE)
 }

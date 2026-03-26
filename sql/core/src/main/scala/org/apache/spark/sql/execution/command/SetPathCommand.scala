@@ -54,8 +54,9 @@ case class SetPathCommand(elements: Seq[PathElement]) extends LeafRunnableComman
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     if (!sparkSession.sessionState.conf.pathEnabled) {
-      // Feature disabled: no-op (or could throw; plan says reject or no-op)
-      return Seq.empty
+      throw new AnalysisException(
+        errorClass = "UNSUPPORTED_FEATURE.SET_PATH_WHEN_DISABLED",
+        messageParameters = Map("config" -> SQLConf.PATH_ENABLED.key))
     }
     val conf = sparkSession.sessionState.conf
     val catalogManager = sparkSession.sessionState.catalogManager

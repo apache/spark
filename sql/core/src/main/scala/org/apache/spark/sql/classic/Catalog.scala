@@ -374,16 +374,12 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
         val catalogPath =
           (Seq(currentCatalog()) ++
             sparkSession.sessionState.catalogManager.currentNamespace).toSeq
-        val raw = sparkSession.sessionState.conf.effectivePathEntries
-          .getOrElse(Seq(catalogPath))
-        val pathEntries = org.apache.spark.sql.internal.SQLConf.expandSessionPathMarkers(
-          raw,
-          sparkSession.sessionState.catalogManager.currentCatalog.name,
-          sparkSession.sessionState.catalogManager.currentNamespace.toSeq)
-        val searchPath = sparkSession.sessionState.conf.resolutionSearchPath(pathEntries)
+        val searchPath = sparkSession.sessionState.conf
+          .sqlResolutionPathEntries(catalogPath.head, catalogPath.tail.toSeq)
+          .map(_.quoted)
         throw QueryCompilationErrors.unresolvedRoutineError(
           ident,
-          searchPath.map(_.quoted),
+          searchPath,
           plan.origin)
     }
   }

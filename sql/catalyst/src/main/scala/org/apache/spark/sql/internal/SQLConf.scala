@@ -45,6 +45,7 @@ import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.{
   SESSION_CATALOG_NAME,
   SYSTEM_CATALOG_NAME
@@ -3524,6 +3525,9 @@ object SQLConf {
         "configuration puts a limit on this: when the depth of a view exceeds this value during " +
         "analysis, we terminate the resolution to avoid potential errors.")
       .version("2.2.0")
+      // Not persisted on views (see CapturesConfig); use the active session limit during analysis
+      // via Analyzer.retainResolutionConfigsForAnalysis.
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .intConf
       .checkValue(depth => depth > 0, "The maximum depth of a view reference in a nested view " +
         "must be positive.")
@@ -8324,6 +8328,69 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def sessionPath: Option[String] = getConf(SQLConf.SESSION_PATH)
 
   /**
+   * Stored session path entries with virtual markers expanded, using `expandCatalog` /
+   * `expandNamespace` for [[expandSessionPathMarkers]]. When no path is stored, the default is a
+   * single entry `pathDefaultCatalog` (+ `pathDefaultNamespace`), which may differ from the
+   * expansion catalog when resolving inside a view (defaults follow view context; markers follow
+   * the live session).
+   */
+  def expandedPathEntriesForResolution(
+      pathDefaultCatalog: String,
+      pathDefaultNamespace: Seq[String],
+      expandCatalog: String,
+      expandNamespace: Seq[String]): Seq[Seq[String]] = {
+    val defaultEntry =
+      if (pathDefaultNamespace.isEmpty) Seq(pathDefaultCatalog)
+      else pathDefaultCatalog +: pathDefaultNamespace
+    val raw = effectivePathEntries.getOrElse(Seq(defaultEntry))
+    SQLConf.expandSessionPathMarkers(raw, expandCatalog, expandNamespace)
+  }
+
+  /**
+   * Ordered catalog/schema path entries used to resolve **unqualified** SQL object names
+   * (relations, routines, and whether `SYSTEM.SESSION` applies for session variables). DDL may use
+   * different rules; runtime resolution should share this list. Some entries have no objects in a
+   * given category (e.g. `system.builtin` has no tables); resolution skips non-applicable scopes.
+   *
+   * When PATH is off or unset, applies [[resolutionSearchPath]] on the expanded path (legacy).
+   * When PATH is explicitly set, uses only the expanded stored path so entries can omit session or
+   * builtin unless listed (e.g. via `SYSTEM_PATH`).
+   */
+  def sqlResolutionPathEntries(
+      pathDefaultCatalog: String,
+      pathDefaultNamespace: Seq[String],
+      expandCatalog: String,
+      expandNamespace: Seq[String]): Seq[Seq[String]] = {
+    val expanded = expandedPathEntriesForResolution(
+      pathDefaultCatalog,
+      pathDefaultNamespace,
+      expandCatalog,
+      expandNamespace)
+    if (!pathEnabled || effectivePathEntries.isEmpty) {
+      resolutionSearchPath(expanded)
+    } else {
+      expanded
+    }
+  }
+
+  /** Session-catalog overload: default path and marker expansion use the same catalog/namespace. */
+  def sqlResolutionPathEntries(
+      currentCatalog: String,
+      currentNamespace: Seq[String]): Seq[Seq[String]] =
+    sqlResolutionPathEntries(
+      currentCatalog,
+      currentNamespace,
+      currentCatalog,
+      currentNamespace)
+
+  /** True if [[sqlResolutionPathEntries]] includes `system.session` (case-insensitive). */
+  def sessionScopeUnqualifiedAllowed(
+      currentCatalog: String,
+      currentNamespace: Seq[String]): Boolean =
+    sqlResolutionPathEntries(currentCatalog, currentNamespace)
+      .exists(CatalogManager.isSystemSessionPathEntry)
+
+  /**
    * Returns the session path as path entries when PATH is enabled and set; None otherwise.
    * Callers should use effectivePathEntries().getOrElse(Seq(currentCatalogPath)).
    */
@@ -8332,24 +8399,15 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     else None
 
   /**
-   * Returns the current path as a comma-separated string of qualified schema names
-   * (catalog.schema). Used by CURRENT_PATH(). When PATH is disabled, returns default path.
+   * String form of [[sqlResolutionPathEntries]] for the session catalog (e.g. CURRENT_PATH()).
    */
-  def currentPathString(currentCatalog: String, currentNamespace: Seq[String]): String = {
-    val defaultEntry =
-      if (currentNamespace.isEmpty) Seq(currentCatalog) else currentCatalog +: currentNamespace
-    val raw = effectivePathEntries.getOrElse(Seq(defaultEntry))
-    val pathEntries =
-      SQLConf.expandSessionPathMarkers(raw, currentCatalog, currentNamespace)
-    val fullPath = resolutionSearchPath(pathEntries)
-    SQLConf.formatSessionPath(fullPath)
-  }
+  def currentPathString(currentCatalog: String, currentNamespace: Seq[String]): String =
+    SQLConf.formatSessionPath(sqlResolutionPathEntries(currentCatalog, currentNamespace))
 
   /**
-   * Returns the resolution search path for error messages and resolution order.
-   * This is the single source of truth for the search path used for functions, tables, and views.
-   * Uses [[sessionFunctionResolutionOrder]]: "first" (session first), "second" (session second),
-   * "last" (session last). When pathEntries is empty, returns only system namespaces.
+   * Inserts `system.session` / `system.builtin` and applies [[sessionFunctionResolutionOrder]]
+   * around expanded persistent path entries. Used only when building [[sqlResolutionPathEntries]]
+   * with PATH off or unset.
    *
    * @param pathEntries Ordered list of persistent path entries (each entry is catalog + namespace,
    *                    e.g. Seq("system", "builtin") or Seq("spark_catalog", "default")).

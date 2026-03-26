@@ -254,7 +254,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
   // Resolves `UnresolvedAttribute` to its value.
   protected def resolveVariables(e: Expression): Expression = {
-    val variableResolution = new VariableResolution(catalogManager.tempVariableManager)
+    val variableResolution =
+      new VariableResolution(catalogManager.tempVariableManager, catalogManager)
 
     def resolve(nameParts: Seq[String]): Option[Expression] = {
       variableResolution.resolveMultipartName(

@@ -54,6 +54,9 @@ trait CapturesConfig {
     SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key
   )
 
+  /** Stored separately as [[CatalogTable.VIEW_RESOLUTION_PATH]] (frozen, no virtual markers). */
+  private val viewStoredPathDenyList = Set(SQLConf.SESSION_PATH.key)
+
   /**
    * Convert the provided SQL configs to `properties`. Here we only capture the SQL configs that are
    * modifiable and should be captured, i.e. not in the denyList and in the allowList. We also
@@ -94,7 +97,8 @@ trait CapturesConfig {
   private def shouldCaptureConfig(key: String): Boolean = {
     configAllowList.contains(key) || (
       !configPrefixDenyList.exists(prefix => key.startsWith(prefix)) &&
-        !singlePassResolverDenyList.contains(key)
+        !singlePassResolverDenyList.contains(key) &&
+        !viewStoredPathDenyList.contains(key)
       )
   }
 }

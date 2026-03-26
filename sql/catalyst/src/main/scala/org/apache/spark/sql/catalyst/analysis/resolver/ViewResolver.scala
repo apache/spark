@@ -101,18 +101,14 @@ class ViewResolver(
     checkMaterializedView(unresolvedView)
 
     val (resolvedChild, usedViewResolutionContext) = withViewResolutionContext(unresolvedView) {
-      SQLConf.withExistingConf(
-        View.effectiveSQLConf(unresolvedView.desc.viewSQLConfigs, unresolvedView.isTempView)
-      ) {
-        checkResolverGuard(unresolvedView)
+      checkResolverGuard(unresolvedView)
 
-        cteRegistry.pushScope(isRoot = true, isOpaque = true)
+      cteRegistry.pushScope(isRoot = true, isOpaque = true)
 
-        try {
-          resolver.lookupMetadataAndResolve(unresolvedView.child)
-        } finally {
-          cteRegistry.popScope()
-        }
+      try {
+        resolver.lookupMetadataAndResolve(unresolvedView.child)
+      } finally {
+        cteRegistry.popScope()
       }
     }
 
@@ -134,29 +130,37 @@ class ViewResolver(
    */
   private def withViewResolutionContext(unresolvedView: View)(
       body: => LogicalPlan): (LogicalPlan, ViewResolutionContext) = {
-    AnalysisContext.withAnalysisContext(unresolvedView.desc) {
-      val prevContext = if (viewResolutionContextStack.isEmpty()) {
-        ViewResolutionContext(
-          nestedViewDepth = 0,
-          maxNestedViewDepth = conf.maxNestedViewDepth
+    SQLConf.withExistingConf(
+      View.effectiveSQLConf(
+        unresolvedView.desc.viewSQLConfigs,
+        unresolvedView.isTempView,
+        createSparkVersion = unresolvedView.desc.createVersion,
+        storedResolutionPath = unresolvedView.desc.viewStoredResolutionPath)
+    ) {
+      AnalysisContext.withAnalysisContext(unresolvedView.desc, catalogManager) {
+        val prevContext = if (viewResolutionContextStack.isEmpty()) {
+          ViewResolutionContext(
+            nestedViewDepth = 0,
+            maxNestedViewDepth = conf.maxNestedViewDepth
+          )
+        } else {
+          viewResolutionContextStack.peek()
+        }
+
+        val viewResolutionContext = prevContext.copy(
+          nestedViewDepth = prevContext.nestedViewDepth + 1,
+          referredTempVariableNames = unresolvedView.desc.viewReferredTempVariableNames,
+          collation = unresolvedView.desc.collation,
+          catalogAndNamespace = Some(unresolvedView.desc.viewCatalogAndNamespace)
         )
-      } else {
-        viewResolutionContextStack.peek()
-      }
+        viewResolutionContext.validate(unresolvedView)
 
-      val viewResolutionContext = prevContext.copy(
-        nestedViewDepth = prevContext.nestedViewDepth + 1,
-        referredTempVariableNames = unresolvedView.desc.viewReferredTempVariableNames,
-        collation = unresolvedView.desc.collation,
-        catalogAndNamespace = Some(unresolvedView.desc.viewCatalogAndNamespace)
-      )
-      viewResolutionContext.validate(unresolvedView)
-
-      viewResolutionContextStack.push(viewResolutionContext)
-      try {
-        (body, viewResolutionContext)
-      } finally {
-        viewResolutionContextStack.pop()
+        viewResolutionContextStack.push(viewResolutionContext)
+        try {
+          (body, viewResolutionContext)
+        } finally {
+          viewResolutionContextStack.pop()
+        }
       }
     }
   }

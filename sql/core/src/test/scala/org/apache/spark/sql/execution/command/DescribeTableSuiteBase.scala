@@ -347,6 +347,7 @@ case class DescribeTableJson(
     view_original_text: Option[String] = None,
     view_schema_mode: Option[String] = None,
     view_catalog_and_namespace: Option[String] = None,
+    sql_path: Option[String] = None,
     view_query_output_columns: Option[List[String]] = None,
     view_creation_spark_configuration: Option[Map[String, String]] = None
 )

@@ -85,8 +85,9 @@ class FunctionResolution(
   /**
    * Produces the ordered list of candidate names for resolution. Expansion happens in two cases:
    *
-   * 1. Single-part names: expanded via the search path, where each search path entry is
-   *    fully qualified so appending the name produces fully qualified candidates.
+   * 1. Single-part names: expanded via [[SQLConf.sqlResolutionPathEntries]] (same list as
+   *    relation resolution), where each path entry is fully qualified so appending the name
+   *    produces fully qualified candidates.
    * 2. `builtin.name` or `session.name`: prepending `system` creates a fully qualified
    *    system catalog candidate. The original 2-part name is also kept as a persistent
    *    catalog candidate (qualified downstream). Order is controlled by
@@ -94,19 +95,18 @@ class FunctionResolution(
    *
    * All other multi-part names are returned as-is for downstream resolution.
    */
-  private def resolvedPathEntries: Seq[Seq[String]] = {
-    val raw = conf.effectivePathEntries.getOrElse(Seq(currentCatalogPath))
-    org.apache.spark.sql.internal.SQLConf.expandSessionPathMarkers(
-      raw,
+  private def sqlResolutionPathEntriesForAnalysis: Seq[Seq[String]] = {
+    val pathDefault = currentCatalogPath
+    conf.sqlResolutionPathEntries(
+      pathDefault.head,
+      pathDefault.tail.toSeq,
       catalogManager.currentCatalog.name,
       catalogManager.currentNamespace.toSeq)
   }
 
   private def resolutionCandidates(nameParts: Seq[String]): Seq[Seq[String]] = {
     if (nameParts.size == 1) {
-      val pathEntries = resolvedPathEntries
-      val searchPath = conf.resolutionSearchPath(pathEntries)
-      searchPath.map(_ ++ nameParts)
+      sqlResolutionPathEntriesForAnalysis.map(_ ++ nameParts)
     } else if (nameParts.size == 2 &&
         FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
       val systemCandidate = CatalogManager.SYSTEM_CATALOG_NAME +: nameParts
@@ -185,10 +185,10 @@ class FunctionResolution(
           case None =>
         }
       }
-      val pathEntries = resolvedPathEntries
-      val searchPath = conf.resolutionSearchPath(pathEntries)
       throw QueryCompilationErrors.unresolvedRoutineError(
-        unresolvedFunc.nameParts, searchPath.map(toSQLId), unresolvedFunc.origin)
+        unresolvedFunc.nameParts,
+        sqlResolutionPathEntriesForAnalysis.map(toSQLId),
+        unresolvedFunc.origin)
     }
   }
 

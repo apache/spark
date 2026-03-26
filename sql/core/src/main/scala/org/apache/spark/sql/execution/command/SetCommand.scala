@@ -108,8 +108,8 @@ case class SetCommand(kv: Option[(String, Option[String])])
         }
         if (varName.nonEmpty && varName.length <= 3) {
           val variableResolution = new VariableResolution(
-            sparkSession.sessionState.analyzer.catalogManager.tempVariableManager
-          )
+            sparkSession.sessionState.analyzer.catalogManager.tempVariableManager,
+            sparkSession.sessionState.analyzer.catalogManager)
           val variable = variableResolution.lookupVariable(
             nameParts = varName
           )

@@ -139,17 +139,22 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
  *                              even if a temp view `t` has been created.
  * @param outerPlan The query plan from the outer query that can be used to resolve star
  *                  expressions in a subquery.
+ * @param resolutionPathEntries When resolving a view body, the ordered path for unqualified
+ *                              relation names (see [[AnalysisContext.withAnalysisContext]]).
+ *                              [[None]] outside views: compute from session
+ *                              [[SQLConf.sqlResolutionPathEntries]].
  */
 case class AnalysisContext(
     isDefault: Boolean = false,
     catalogAndNamespace: Seq[String] = Nil,
+    resolutionPathEntries: Option[Seq[Seq[String]]] = None,
     nestedViewDepth: Int = 0,
     maxNestedViewDepth: Int = -1,
     relationCache: mutable.Map[(Seq[String], Option[TimeTravelSpec]), LogicalPlan] =
       mutable.Map.empty,
     referredTempViewNames: Seq[Seq[String]] = Seq.empty,
     // 1. If we are resolving a view, this field will be restored from the view metadata,
-    //    by calling `AnalysisContext.withAnalysisContext(viewDesc)`.
+    //    by calling `AnalysisContext.withAnalysisContext(viewDesc, catalogManager)`.
     // 2. If we are not resolving a view, this field will be updated everytime the analyzer
     //    lookup a temporary function. And export to the view metadata.
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
@@ -195,7 +200,34 @@ object AnalysisContext {
 
   private def set(context: AnalysisContext): Unit = value.set(context)
 
-  def withAnalysisContext[A](viewDesc: CatalogTable)(f: => A): A = {
+  /**
+   * Snapshot of [[SQLConf.sqlResolutionPathEntries]] for a view body. Call under the view's
+   * effective SQLConf (e.g. inside [[SQLConf.withExistingConf]]([[View.effectiveSQLConf]])).
+   */
+  def snapshotViewResolutionPath(
+      viewDesc: CatalogTable,
+      catalogManager: CatalogManager): Seq[Seq[String]] = {
+    viewDesc.viewStoredResolutionPath match {
+      case Some(pathStr) if pathStr.trim.nonEmpty =>
+        SQLConf.parseSessionPath(pathStr)
+      case _ =>
+        val conf = SQLConf.get
+        val p = viewDesc.viewCatalogAndNamespace
+        if (p.nonEmpty) {
+          conf.sqlResolutionPathEntries(
+            p.head,
+            p.tail.toSeq,
+            catalogManager.currentCatalog.name,
+            catalogManager.currentNamespace.toSeq)
+        } else {
+          conf.sqlResolutionPathEntries(
+            catalogManager.currentCatalog.name,
+            catalogManager.currentNamespace.toSeq)
+        }
+    }
+  }
+
+  def withAnalysisContext[A](viewDesc: CatalogTable, catalogManager: CatalogManager)(f: => A): A = {
     val originContext = value.get()
     val maxNestedViewDepth = if (originContext.maxNestedViewDepth == -1) {
       // Here we start to resolve views, get `maxNestedViewDepth` from configs.
@@ -203,9 +235,11 @@ object AnalysisContext {
     } else {
       originContext.maxNestedViewDepth
     }
+    val pathSnap = snapshotViewResolutionPath(viewDesc, catalogManager)
     val context = AnalysisContext(
       isDefault = false,
       catalogAndNamespace = viewDesc.viewCatalogAndNamespace,
+      resolutionPathEntries = Some(pathSnap),
       nestedViewDepth = originContext.nestedViewDepth + 1,
       maxNestedViewDepth = maxNestedViewDepth,
       relationCache = originContext.relationCache,
@@ -989,13 +1023,18 @@ class Analyzer(
     // This is done by keeping the catalog and namespace in `AnalysisContext`, and analyzer will
     // look at `AnalysisContext.catalogAndNamespace` when resolving relations with single-part name.
     // If `AnalysisContext.catalogAndNamespace` is non-empty, analyzer will expand single-part names
-    // with it, instead of current catalog and namespace.
+    // with it, instead of current catalog and namespace. Unqualified relation PATH is snapshotted
+    // in `AnalysisContext.resolutionPathEntries` while resolving each view body.
     private def resolveViews(
         plan: LogicalPlan,
         options: CaseInsensitiveStringMap): LogicalPlan = plan match {
       case view: View if !view.child.resolved =>
-        ViewResolution
-          .resolve(view, options, resolveChild = executeSameContext, checkAnalysis = checkAnalysis)
+        ViewResolution.resolve(
+          view,
+          options,
+          catalogManager,
+          resolveChild = executeSameContext,
+          checkAnalysis = checkAnalysis)
       // V2TableReference is a placeholder for DSv2 tables that needs to be resolved to
       // DataSourceV2Relation on each view access. Only dataframe temp view may contain it
       // as it stores resolved plans directly.
@@ -2073,15 +2112,19 @@ class Analyzer(
                   throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), f)
 
                 case FunctionType.NotFound =>
-                  val catalogPath =
-                    catalogManager.currentCatalog.name +: catalogManager.currentNamespace
-                  val raw = resolutionConf.effectivePathEntries
-                    .getOrElse(Seq(catalogPath.toSeq))
-                  val pathEntries = org.apache.spark.sql.internal.SQLConf.expandSessionPathMarkers(
-                    raw,
-                    catalogManager.currentCatalog.name,
-                    catalogManager.currentNamespace.toSeq)
-                  val searchPath = resolutionConf.resolutionSearchPath(pathEntries)
+                  val ctx = AnalysisContext.get.catalogAndNamespace
+                  val pathDefault =
+                    if (ctx.nonEmpty) ctx
+                    else {
+                      (catalogManager.currentCatalog.name +:
+                        catalogManager.currentNamespace).toSeq
+                    }
+                  val searchPath = resolutionConf
+                    .sqlResolutionPathEntries(
+                      pathDefault.head,
+                      pathDefault.tail.toSeq,
+                      catalogManager.currentCatalog.name,
+                      catalogManager.currentNamespace.toSeq)
                     .map(_.quoted)
                   throw QueryCompilationErrors.unresolvedRoutineError(
                     nameParts,

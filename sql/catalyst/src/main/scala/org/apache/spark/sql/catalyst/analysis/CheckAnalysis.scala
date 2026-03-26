@@ -82,11 +82,13 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
   }
 
   /**
-   * `SQLConf.resolutionSearchPath` entries formatted with [[toSQLId]] for TABLE_OR_VIEW_NOT_FOUND.
-   * Same ordering as relation resolution and routine resolution search paths.
+   * [[SQLConf.sqlResolutionPathEntries]] formatted with [[toSQLId]] for TABLE_OR_VIEW_NOT_FOUND.
+   * Same ordering as relation and routine resolution search paths.
    */
   private def fullSearchPathForError(catalogPath: Seq[String]): Seq[String] = {
-    SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
+    val catalog = catalogPath.head
+    val ns = catalogPath.tail.toSeq
+    SQLConf.get.sqlResolutionPathEntries(catalog, ns).map(toSQLId)
   }
 
   /** Current catalog name and namespace as a path, used when computing search path for errors. */
@@ -105,7 +107,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
   /**
    * Search path for TABLE_OR_VIEW_NOT_FOUND on unresolved relations in SELECT/DML/INSERT/time
    * travel. Three-part `system.session.name` resolves only to session temp views, so only that
-   * scope is listed. Other names use [[fullSearchPathForError]] (resolutionSearchPath order).
+   * scope is listed. Other names use [[fullSearchPathForError]] (sqlResolutionPathEntries order).
    */
   private def searchPathForUnresolvedRelation(multipartIdentifier: Seq[String]): Seq[String] = {
     if (CatalogManager.isFullyQualifiedSystemSessionViewName(multipartIdentifier)) {
@@ -398,14 +400,16 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           searchPathForUnresolvedRelation(u.multipartIdentifier))
 
       case u: UnresolvedFunctionName =>
-        val catalogPath = currentCatalog.name +: catalogManager.currentNamespace
-        val raw = confForRoutineResolution.effectivePathEntries
-          .getOrElse(Seq(catalogPath.toSeq))
-        val pathEntries = org.apache.spark.sql.internal.SQLConf.expandSessionPathMarkers(
-          raw,
-          currentCatalog.name,
-          catalogManager.currentNamespace.toSeq)
-        val searchPath = confForRoutineResolution.resolutionSearchPath(pathEntries)
+        val ctx = AnalysisContext.get.catalogAndNamespace
+        val pathDefault =
+          if (ctx.nonEmpty) ctx
+          else (currentCatalog.name +: catalogManager.currentNamespace).toSeq
+        val searchPath = confForRoutineResolution
+          .sqlResolutionPathEntries(
+            pathDefault.head,
+            pathDefault.tail.toSeq,
+            currentCatalog.name,
+            catalogManager.currentNamespace.toSeq)
           .map(_.quoted)
         throw QueryCompilationErrors.unresolvedRoutineError(
           u.multipartIdentifier,

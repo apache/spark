@@ -96,6 +96,7 @@ class Resolver(
   private val subqueryRegistry = new SubqueryRegistry
   private val scopes = new NameScopeStack(
     tempVariableManager = catalogManager.tempVariableManager,
+    catalogManager = catalogManager,
     subqueryRegistry = subqueryRegistry,
     planLogger = planLogger
   )
@@ -585,7 +586,9 @@ class Resolver(
           val multipartId = unresolvedRelation.multipartIdentifier
           val catalogPath = (catalogManager.currentCatalog.name() +:
             catalogManager.currentNamespace).toSeq
-          val searchPath = SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
+          val searchPath = SQLConf.get
+            .sqlResolutionPathEntries(catalogPath.head, catalogPath.tail.toSeq)
+            .map(toSQLId)
           unresolvedRelation.tableNotFound(multipartId, searchPath)
       }
 

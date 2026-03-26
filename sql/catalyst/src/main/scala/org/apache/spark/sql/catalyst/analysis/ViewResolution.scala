@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, View}
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -26,30 +27,34 @@ object ViewResolution {
   def resolve(
       view: View,
       options: CaseInsensitiveStringMap,
+      catalogManager: CatalogManager,
       resolveChild: LogicalPlan => LogicalPlan,
       checkAnalysis: LogicalPlan => Unit): View = {
     // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
     // `viewText` should be defined, or else we throw an error on the generation of the View
     // operator.
 
-    // Resolve all the UnresolvedRelations and Views in the child.
-    val newChild = AnalysisContext.withAnalysisContext(view.desc) {
-      val nestedViewDepth = AnalysisContext.get.nestedViewDepth
-      val maxNestedViewDepth = AnalysisContext.get.maxNestedViewDepth
-      if (nestedViewDepth > maxNestedViewDepth) {
-        throw QueryCompilationErrors.viewDepthExceedsMaxResolutionDepthError(
-          view.desc.identifier,
-          maxNestedViewDepth,
-          view
-        )
-      }
-      SQLConf.withExistingConf(
-        View.effectiveSQLConf(
-          configs = view.desc.viewSQLConfigs,
-          isTempView = view.isTempView,
-          createSparkVersion = view.desc.createVersion
-        )
-      ) {
+    // Resolve all the UnresolvedRelations and Views in the child. Apply the view's effective
+    // SQLConf before snapshotting PATH and entering AnalysisContext (see
+    // [[AnalysisContext.withAnalysisContext]]).
+    val newChild = SQLConf.withExistingConf(
+      View.effectiveSQLConf(
+        configs = view.desc.viewSQLConfigs,
+        isTempView = view.isTempView,
+        createSparkVersion = view.desc.createVersion,
+        storedResolutionPath = view.desc.viewStoredResolutionPath
+      )
+    ) {
+      AnalysisContext.withAnalysisContext(view.desc, catalogManager) {
+        val nestedViewDepth = AnalysisContext.get.nestedViewDepth
+        val maxNestedViewDepth = AnalysisContext.get.maxNestedViewDepth
+        if (nestedViewDepth > maxNestedViewDepth) {
+          throw QueryCompilationErrors.viewDepthExceedsMaxResolutionDepthError(
+            view.desc.identifier,
+            maxNestedViewDepth,
+            view
+          )
+        }
         resolveChild(view.child)
       }
     }

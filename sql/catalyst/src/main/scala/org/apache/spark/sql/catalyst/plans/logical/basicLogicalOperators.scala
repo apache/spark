@@ -920,7 +920,8 @@ object View {
   def effectiveSQLConf(
       configs: Map[String, String],
       isTempView: Boolean,
-      createSparkVersion: String = ""): SQLConf = {
+      createSparkVersion: String = "",
+      storedResolutionPath: Option[String] = None): SQLConf = {
     val activeConf = SQLConf.get
     // For temporary view, we always use captured sql configs
     if (activeConf.useCurrentSQLConfigsForView && !isTempView) return activeConf
@@ -934,6 +935,11 @@ object View {
       existingConf = activeConf,
       createSparkVersion = createSparkVersion
     )
+
+    // After session retention: apply PATH frozen at view creation (not persisted as sqlConfig).
+    storedResolutionPath.filter(_.trim.nonEmpty).foreach { pathStr =>
+      sqlConf.setConfString(SQLConf.SESSION_PATH.key, pathStr)
+    }
 
     sqlConf
   }

@@ -44,6 +44,7 @@ import org.apache.spark.sql.catalyst.expressions.{
 }
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.Metadata
 
@@ -974,13 +975,14 @@ class NameScope(
  */
 class NameScopeStack(
     tempVariableManager: TempVariableManager,
+    catalogManager: CatalogManager,
     subqueryRegistry: SubqueryRegistry,
     planLogger: PlanLogger = new PlanLogger)
     extends SQLConfHelper {
   private val stack = new ArrayDeque[NameScope]
   stack.push(new NameScope(planLogger = planLogger))
 
-  private val variableResolution = new VariableResolution(tempVariableManager)
+  private val variableResolution = new VariableResolution(tempVariableManager, catalogManager)
 
   /**
    * Get the current scope, which is a default choice for name resolution.
