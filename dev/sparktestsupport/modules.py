@@ -492,6 +492,7 @@ pyspark_core = Module(
         "pyspark.tests.test_conf",
         "pyspark.tests.test_context",
         "pyspark.tests.test_daemon",
+        "pyspark.tests.test_import_spark",
         "pyspark.tests.test_join",
         "pyspark.tests.test_memory_profiler",
         "pyspark.tests.test_pin_thread",
