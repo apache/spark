@@ -54,7 +54,6 @@ import datetime
 import inspect
 import os
 import unittest
-from collections import OrderedDict
 from decimal import Decimal
 from typing import Callable, List, Optional
 
@@ -146,7 +145,7 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
         """Build an ordered dict of named source PyArrow arrays for testing."""
         import pyarrow as pa
 
-        sources = OrderedDict()
+        sources = {}
 
         # =====================================================================
         # Integer types
