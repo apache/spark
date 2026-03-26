@@ -495,12 +495,7 @@ def inheritable_thread_target(f: Union[Callable, "SparkSession"]) -> Callable:
         if isinstance(f, SparkSession):
 
             def outer(ff: Callable) -> Callable:
-                @functools.wraps(ff)
-                def wrapped(*args: Any, **kwargs: Any) -> Any:
-                    # Set local properties in child thread.
-                    return ff(*args, **kwargs)
-
-                return wrapped
+                return ff
 
             return outer
         else:
