@@ -35,7 +35,7 @@ import org.apache.spark.tags.SlowSQLTest
  * RocksDB with virtual column families. The innermost withSQLConf wins,
  * so wrapping the test body overrides the V3 setting from the parent trait.
  */
-trait TestWithV4StateFormat { self: StreamingJoinSuite =>
+trait TestWithV4StateFormat extends StreamingJoinSuite {
   override protected def testMode: Mode = Mode.WithVCF
 
   override def testWithVirtualColumnFamilyJoins(
