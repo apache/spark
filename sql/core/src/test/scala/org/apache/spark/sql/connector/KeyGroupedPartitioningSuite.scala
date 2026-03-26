@@ -3528,4 +3528,44 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       }
     }
   }
+
+  test("SPARK-56182: Reduce identity to other transforms") {
+    val items_partitions = Array(bucket(4, "id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      s"(0, 'aa', 39.0, cast('2020-01-01' as timestamp)), " +
+      s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 'bb', 41.0, cast('2021-01-03' as timestamp)), " +
+      s"(3, 'bb', 42.0, cast('2021-01-04' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      s"(3, 42.0, cast('2020-01-01' as timestamp)), " +
+      s"(0, 44.0, cast('2020-01-15' as timestamp)), " +
+      s"(1, 46.5, cast('2021-02-08' as timestamp))")
+
+    withSQLConf(
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      Seq(
+        s"testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.item_id = i.id",
+        s"testcat.ns.$purchases p JOIN testcat.ns.$items i ON i.id = p.item_id"
+      ).foreach { joinString =>
+        val df = sql(
+          s"""
+             |${selectWithMergeJoinHint("i", "p")} id, item_id
+             |FROM $joinString
+             |ORDER BY id, item_id
+             |""".stripMargin)
+
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+        val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+        assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 4))
+
+        checkAnswer(df, Seq(Row(0, 0), Row(1, 1), Row(3, 3)))
+      }
+    }
+  }
 }

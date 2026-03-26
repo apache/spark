@@ -78,7 +78,7 @@ Project [i1#x]
 -- !query
 DROP VIEW view1
 -- !query analysis
-DropTempViewCommand view1
+DropTempViewCommand view1, false
 
 
 -- !query
@@ -171,4 +171,4 @@ Project [i1#x]
 -- !query
 DROP VIEW global_temp.view1
 -- !query analysis
-DropTempViewCommand global_temp.view1
+DropTempViewCommand global_temp.view1, false

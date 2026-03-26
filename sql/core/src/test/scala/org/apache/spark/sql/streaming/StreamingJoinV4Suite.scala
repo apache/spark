@@ -55,13 +55,18 @@ trait TestWithV4StateFormat extends AlsoTestWithVirtualColumnFamilyJoins {
   // Use lazy val because the parent constructor registers tests before
   // subclass vals are initialized.
   private lazy val testsToSkip = Seq(
+    // V4's timestamp-based indexing does not support window structs
+    // in join keys.
+    "stream stream inner join on windows - with watermark",
     // V4 uses 1 store with VCFs instead of V3's 4*partitions layout,
     // so metric assertions about number of state store instances differ.
     "SPARK-35896: metrics in StateOperatorProgress are output correctly",
     // V4 uses different column families and encoder specs than V3;
     // overridden in StreamingInnerJoinV4Suite with V4-specific assertions.
     "SPARK-51779 Verify StateSchemaV3 writes correct key and value " +
-      "schemas for join operator"
+      "schemas for join operator",
+    // V4's key encoding is not yet supported by StateDataSource reader.
+    "SPARK-49829"
   )
 
   override def runTest(testName: String, args: Args): Status = {

@@ -133,7 +133,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`hello`"
+    "relationName" : "`hello`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -166,7 +167,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`not_exist`"
+    "relationName" : "`not_exist`",
+    "searchPath" : "[`system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -186,7 +188,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`not_exist`"
+    "relationName" : "`not_exist`",
+    "searchPath" : "[`system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -206,7 +209,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`not_exist`"
+    "relationName" : "`not_exist`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -226,7 +230,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`not_exist`"
+    "relationName" : "`not_exist`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -298,7 +303,7 @@ CreateViewCommand `v`, [(c1,Some(hello))], SELECT 1, false, false, LocalTempView
 -- !query
 DROP VIEW v
 -- !query analysis
-DropTempViewCommand v
+DropTempViewCommand v, false
 
 
 -- !query
@@ -326,7 +331,7 @@ CreateViewCommand `v`, [(c1,Some(hello))], SELECT 1, false, false, LocalTempView
 -- !query
 DROP VIEW v
 -- !query analysis
-DropTempViewCommand v
+DropTempViewCommand v, false
 
 
 -- !query
