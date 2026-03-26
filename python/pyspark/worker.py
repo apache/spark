@@ -597,7 +597,7 @@ def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_retu
                 extra = f" Unexpected: {', '.join(extra)}." if extra else ""
 
                 raise PySparkRuntimeError(
-                    errorClass="RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF",
+                    errorClass="RESULT_COLUMN_NAMES_MISMATCH",
                     messageParameters={
                         "missing": missing,
                         "extra": extra,
@@ -606,7 +606,7 @@ def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_retu
             # otherwise the number of columns of result have to match the return type
             elif len(result_columns) != len(return_type):
                 raise PySparkRuntimeError(
-                    errorClass="RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF",
+                    errorClass="RESULT_COLUMN_SCHEMA_MISMATCH",
                     messageParameters={
                         "expected": str(len(return_type)),
                         "actual": str(len(result.columns)),
@@ -691,7 +691,7 @@ def verify_arrow_result(result, assign_cols_by_name, expected_cols_and_types):
                 extra = f" Unexpected: {', '.join(extra)}." if extra else ""
 
                 raise PySparkRuntimeError(
-                    errorClass="RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDF",
+                    errorClass="RESULT_COLUMN_NAMES_MISMATCH",
                     messageParameters={
                         "missing": missing,
                         "extra": extra,
@@ -998,7 +998,7 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type, runner_conf):
                 or (len(result.columns) == 0 and result.empty)
             ):
                 raise PySparkRuntimeError(
-                    errorClass="RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF",
+                    errorClass="RESULT_COLUMN_SCHEMA_MISMATCH",
                     messageParameters={
                         "expected": str(len(return_type)),
                         "actual": str(len(result.columns)),
@@ -2918,29 +2918,26 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                     yield pa.RecordBatch.from_arrays([result], ["_0"])
 
             # Apply row limit check (fail-fast)
-            # TODO(SPARK-55579): Create Arrow-specific error class (e.g., ARROW_UDF_OUTPUT_EXCEEDS_INPUT_ROWS)
             limited = verify_output_row_limit(
                 process_results(),
                 lambda: num_input_rows,
-                error_class="PANDAS_UDF_OUTPUT_EXCEEDS_INPUT_ROWS",
+                error_class="OUTPUT_EXCEEDS_INPUT_ROWS",
             )
 
             # Apply row count match check (final)
-            # TODO(SPARK-55579): Create Arrow-specific error class (e.g., RESULT_LENGTH_MISMATCH_FOR_SCALAR_ITER_ARROW_UDF)
             matched = verify_output_row_count(
                 limited,
                 lambda: num_input_rows,
-                error_class="RESULT_LENGTH_MISMATCH_FOR_SCALAR_ITER_PANDAS_UDF",
+                error_class="RESULT_ROWS_MISMATCH",
             )
 
             # Yield batches
             yield from matched
 
             # Verify iterator consumed
-            # TODO(SPARK-55579): Create Arrow-specific error class (e.g., STOP_ITERATION_OCCURRED_FROM_SCALAR_ITER_ARROW_UDF)
             verify_iterator_exhausted(
                 args_iter,
-                error_class="STOP_ITERATION_OCCURRED_FROM_SCALAR_ITER_PANDAS_UDF",
+                error_class="INPUT_NOT_FULLY_CONSUMED",
             )
 
         # profiling is not supported for UDF
@@ -2984,7 +2981,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 # input length.
                 if is_scalar_iter and num_output_rows > num_input_rows:
                     raise PySparkRuntimeError(
-                        errorClass="PANDAS_UDF_OUTPUT_EXCEEDS_INPUT_ROWS", messageParameters={}
+                        errorClass="OUTPUT_EXCEEDS_INPUT_ROWS", messageParameters={}
                     )
                 yield (result_batch, result_type)
 
@@ -2995,13 +2992,13 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                     pass
                 else:
                     raise PySparkRuntimeError(
-                        errorClass="STOP_ITERATION_OCCURRED_FROM_SCALAR_ITER_PANDAS_UDF",
+                        errorClass="INPUT_NOT_FULLY_CONSUMED",
                         messageParameters={},
                     )
 
                 if num_output_rows != num_input_rows:
                     raise PySparkRuntimeError(
-                        errorClass="RESULT_LENGTH_MISMATCH_FOR_SCALAR_ITER_PANDAS_UDF",
+                        errorClass="RESULT_ROWS_MISMATCH",
                         messageParameters={
                             "output_length": str(num_output_rows),
                             "input_length": str(num_input_rows),
