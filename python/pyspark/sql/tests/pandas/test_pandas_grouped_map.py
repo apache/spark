@@ -346,14 +346,14 @@ class ApplyInPandasTestsMixin:
                 # sometimes we see ValueErrors
                 with self.subTest(convert="string to double"):
                     expected = (
-                        r"ValueError: Exception thrown when converting pandas.Series \(object\) "
-                        r"with name 'mean' to Arrow Array \(double\)."
+                        r"ValueError: Failed to convert the value of the column 'mean' "
+                        r"with type 'object' to Arrow type 'double'."
                     )
                     if safely:
                         expected = expected + (
-                            " It can be caused by overflows or other "
-                            "unsafe conversions warned by Arrow. Arrow safe type check "
-                            "can be disabled by using SQL config "
+                            " It can be caused by overflows or other unsafe "
+                            "conversions warned by Arrow. Arrow safe type "
+                            "check can be disabled by using SQL config "
                             "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                         )
                     with self.assertRaisesRegex(PythonException, expected + "\n"):
@@ -366,8 +366,9 @@ class ApplyInPandasTestsMixin:
                 with self.subTest(convert="double to string"):
                     with self.assertRaisesRegex(
                         PythonException,
-                        r"TypeError: Exception thrown when converting pandas.Series \(float64\) "
-                        r"with name 'mean' to Arrow Array \(string\).\n",
+                        r"TypeError: Cannot convert the output value of the column 'mean' "
+                        r"with type 'float64' to the specified return type of the column: "
+                        r"'string'. Please check if the data types match and try again.\n",
                     ):
                         self._test_apply_in_pandas(
                             lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(),)]),
@@ -395,7 +396,7 @@ class ApplyInPandasTestsMixin:
             {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
         ):
             with self.assertRaisesRegex(
-                PythonException, "Exception thrown when converting pandas.Series"
+                PythonException, "Failed to convert the value of the column"
             ):
                 (
                     self.data.groupby("id")
