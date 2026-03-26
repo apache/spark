@@ -227,6 +227,33 @@ object AnalysisContext {
     }
   }
 
+  /**
+   * Snapshot of SQL PATH for analyzing a persistent or temporary [[SQLFunction]] body when
+   * [[SQLConf.PATH_ENABLED]] is true (see [[withAnalysisContext]](function, catalogManager)).
+   */
+  def snapshotFunctionResolutionPath(
+      function: SQLFunction,
+      catalogManager: CatalogManager): Seq[Seq[String]] = {
+    function.functionStoredResolutionPath match {
+      case Some(pathStr) if pathStr.trim.nonEmpty =>
+        SQLConf.parseSessionPath(pathStr)
+      case _ =>
+        val conf = SQLConf.get
+        val p = SQLFunction.catalogAndNamespaceFromProps(function.properties)
+        if (p.nonEmpty) {
+          conf.sqlResolutionPathEntries(
+            p.head,
+            p.tail.toSeq,
+            catalogManager.currentCatalog.name,
+            catalogManager.currentNamespace.toSeq)
+        } else {
+          conf.sqlResolutionPathEntries(
+            catalogManager.currentCatalog.name,
+            catalogManager.currentNamespace.toSeq)
+        }
+    }
+  }
+
   def withAnalysisContext[A](viewDesc: CatalogTable, catalogManager: CatalogManager)(f: => A): A = {
     val originContext = value.get()
     val maxNestedViewDepth = if (originContext.maxNestedViewDepth == -1) {
@@ -251,11 +278,26 @@ object AnalysisContext {
     try f finally { set(originContext) }
   }
 
-  def withAnalysisContext[A](function: SQLFunction)(f: => A): A = {
+  def withAnalysisContext[A](function: SQLFunction, catalogManager: CatalogManager)(f: => A): A = {
     val originContext = value.get()
-    val context = originContext.copy(collation = function.collation)
-    set(context)
-    try f finally { set(originContext) }
+    if (SQLConf.get.pathEnabled) {
+      val catNs = SQLFunction.catalogAndNamespaceFromProps(function.properties)
+      val pathSnap = snapshotFunctionResolutionPath(function, catalogManager)
+      val context = originContext.copy(
+        isDefault = false,
+        catalogAndNamespace = catNs,
+        resolutionPathEntries = Some(pathSnap),
+        referredTempViewNames = function.functionReferredTempViewNames,
+        referredTempFunctionNames = mutable.Set(function.functionReferredTempFunctionNames: _*),
+        referredTempVariableNames = function.functionReferredTempVariableNames,
+        collation = function.collation.orElse(originContext.collation))
+      set(context)
+      try f finally { set(originContext) }
+    } else {
+      val context = originContext.copy(collation = function.collation)
+      set(context)
+      try f finally { set(originContext) }
+    }
   }
 
   def withNewAnalysisContext[A](f: => A): A = {
@@ -2542,7 +2584,7 @@ class Analyzer(
           Analyzer.retainResolutionConfigsForAnalysis(newConf = newConf, existingConf = conf)
         }
         SQLConf.withExistingConf(newConf) {
-          AnalysisContext.withAnalysisContext(f.function) {
+          AnalysisContext.withAnalysisContext(f.function, catalogManager) {
             executeSameContext(plan)
           }
         }
@@ -2843,7 +2885,7 @@ class Analyzer(
         val resolved = SQLConf.withExistingConf(newConf) {
           val plan = v1SessionCatalog.makeSQLTableFunctionPlan(name, function, inputs, output)
           SQLFunctionContext.withSQLFunction {
-            AnalysisContext.withAnalysisContext(function) {
+            AnalysisContext.withAnalysisContext(function, catalogManager) {
               executeSameContext(plan)
             }
           }

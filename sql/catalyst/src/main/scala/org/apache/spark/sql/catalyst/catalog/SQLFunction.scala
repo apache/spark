@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.catalog
 import scala.collection.mutable
 
 import org.json4s.JsonAST.{JArray, JString}
-import org.json4s.jackson.JsonMethods.{compact, render}
+import org.json4s.jackson.JsonMethods.{compact, parse, render}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
@@ -179,9 +179,35 @@ case class SQLFunction(
     props.put(CREATE_TIME, createTimeMs.toString)
     props.toMap
   }
+
+  /**
+   * Catalog + namespace captured at function creation (same keys as
+   * [[catalogAndNamespaceToProps]]).
+   */
+  def functionCatalogAndNamespace: Seq[String] =
+    SQLFunction.catalogAndNamespaceFromProps(properties)
+
+  /** Frozen PATH string persisted when the function was created with SQL PATH enabled. */
+  def functionStoredResolutionPath: Option[String] =
+    properties.get(SQLFunction.FUNCTION_RESOLUTION_PATH)
+
+  def functionReferredTempViewNames: Seq[Seq[String]] =
+    SQLFunction.referredTempViewNamesFromProps(properties)
+
+  def functionReferredTempFunctionNames: Seq[String] =
+    SQLFunction.referredTempFunctionNamesFromProps(properties)
+
+  def functionReferredTempVariableNames: Seq[Seq[String]] =
+    SQLFunction.referredTempVariableNamesFromProps(properties)
 }
 
 object SQLFunction {
+
+  /**
+   * Persisted frozen PATH for SQL function bodies when created with [[SQLConf.PATH_ENABLED]].
+   * Same comma-separated format as session path / [[CatalogTable.VIEW_RESOLUTION_PATH]].
+   */
+  val FUNCTION_RESOLUTION_PATH: String = "function.resolutionPath"
 
   private val SQL_FUNCTION_PREFIX = "sqlFunction."
 
@@ -297,6 +323,61 @@ object SQLFunction {
       }
     }
     props.toMap
+  }
+
+  /** Inverse of [[catalogAndNamespaceToProps]]. */
+  def catalogAndNamespaceFromProps(properties: Map[String, String]): Seq[String] = {
+    if (properties.contains(FUNCTION_CATALOG_AND_NAMESPACE)) {
+      val numParts = properties(FUNCTION_CATALOG_AND_NAMESPACE).toInt
+      (0 until numParts).map { index =>
+        properties.getOrElse(
+          s"$FUNCTION_CATALOG_AND_NAMESPACE_PART_PREFIX$index",
+          throw SparkException.internalError(
+            s"Corrupted SQL function catalog/namespace: expected part index $index of $numParts"))
+      }
+    } else {
+      Nil
+    }
+  }
+
+  def referredTempViewNamesFromProps(properties: Map[String, String]): Seq[Seq[String]] = {
+    try {
+      properties.get(FUNCTION_REFERRED_TEMP_VIEW_NAMES).map { json =>
+        parse(json).asInstanceOf[JArray].arr.map { namePartsJson =>
+          namePartsJson.asInstanceOf[JArray].arr.map(_.asInstanceOf[JString].s)
+        }
+      }.getOrElse(Seq.empty)
+    } catch {
+      case e: Exception =>
+        throw SparkException.internalError(
+          "Corrupted SQL function referred temporary view names in catalog", cause = e)
+    }
+  }
+
+  def referredTempFunctionNamesFromProps(properties: Map[String, String]): Seq[String] = {
+    try {
+      properties.get(FUNCTION_REFERRED_TEMP_FUNCTION_NAMES).map { json =>
+        parse(json).asInstanceOf[JArray].arr.map(_.asInstanceOf[JString].s)
+      }.getOrElse(Seq.empty)
+    } catch {
+      case e: Exception =>
+        throw SparkException.internalError(
+          "Corrupted SQL function referred temporary function names in catalog", cause = e)
+    }
+  }
+
+  def referredTempVariableNamesFromProps(properties: Map[String, String]): Seq[Seq[String]] = {
+    try {
+      properties.get(FUNCTION_REFERRED_TEMP_VARIABLE_NAMES).map { json =>
+        parse(json).asInstanceOf[JArray].arr.map { namePartsJson =>
+          namePartsJson.asInstanceOf[JArray].arr.map(_.asInstanceOf[JString].s)
+        }
+      }.getOrElse(Seq.empty)
+    } catch {
+      case e: Exception =>
+        throw SparkException.internalError(
+          "Corrupted SQL function referred temporary variable names in catalog", cause = e)
+    }
   }
 
   /**

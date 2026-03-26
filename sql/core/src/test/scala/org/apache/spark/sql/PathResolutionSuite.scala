@@ -576,4 +576,25 @@ class PathResolutionSuite extends QueryTest with SharedSparkSession {
       sql("DROP VIEW IF EXISTS spark_catalog.default.path_desc_path_off_pv")
     }
   }
+
+  test("PATH enabled: SQL function body uses frozen path for relation resolution") {
+    withPathEnabled {
+      sql("CREATE SCHEMA IF NOT EXISTS sql_udf_path_a")
+      sql("CREATE TABLE sql_udf_path_a.fn_tbl (c INT) USING parquet")
+      sql("INSERT INTO sql_udf_path_a.fn_tbl VALUES (7)")
+      sql("USE spark_catalog.default")
+      sql("SET PATH = spark_catalog.sql_udf_path_a, system.builtin")
+      sql("CREATE FUNCTION sql_fn_path_frozen() RETURNS INT RETURN (SELECT c FROM fn_tbl)")
+      try {
+        sql("SET PATH = spark_catalog.default, system.builtin")
+        checkAnswer(sql("SELECT sql_fn_path_frozen()"), Row(7))
+      } finally {
+        sql("DROP FUNCTION IF EXISTS sql_fn_path_frozen")
+        sql("DROP TABLE IF EXISTS sql_udf_path_a.fn_tbl")
+        sql("DROP SCHEMA IF EXISTS sql_udf_path_a")
+        sql("SET PATH = DEFAULT_PATH")
+        sql("USE spark_catalog.default")
+      }
+    }
+  }
 }

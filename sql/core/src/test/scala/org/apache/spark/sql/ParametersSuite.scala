@@ -2000,7 +2000,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
 
   test("SET PATH with named parameter in IDENTIFIER (PATH feature enabled)") {
     withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
-      spark.sql("SET PATH = spark_catalog.IDENTIFIER(:ns)", Map("ns" -> "default"))
+      // current_path() resolves via system.builtin; include it when PATH is not DEFAULT_PATH.
+      spark.sql("SET PATH = spark_catalog.IDENTIFIER(:ns), system.builtin", Map("ns" -> "default"))
       val pathStr = spark.sql("SELECT current_path()").collect().head.getString(0)
       assert(pathStr.contains("spark_catalog.default"),
         s"SET PATH + IDENTIFIER(:ns); got: $pathStr")
@@ -2009,7 +2010,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
 
   test("SET PATH with positional parameter in IDENTIFIER (PATH feature enabled)") {
     withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
-      spark.sql("SET PATH = spark_catalog.IDENTIFIER(?)", Array("default"))
+      spark.sql("SET PATH = spark_catalog.IDENTIFIER(?), system.builtin", Array("default"))
       val pathStr = spark.sql("SELECT current_path()").collect().head.getString(0)
       assert(pathStr.contains("spark_catalog.default"),
         s"SET PATH + IDENTIFIER(?); got: $pathStr")
