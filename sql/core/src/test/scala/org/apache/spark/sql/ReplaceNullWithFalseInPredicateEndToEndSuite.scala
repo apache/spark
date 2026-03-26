@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions.{CaseWhen, If, Literal}
-import org.apache.spark.sql.execution.LocalTableScanExec
+import org.apache.spark.sql.execution.{EmptyRelationExec, LocalTableScanExec}
 import org.apache.spark.sql.functions.{lit, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -29,8 +29,9 @@ class ReplaceNullWithFalseInPredicateEndToEndSuite extends QueryTest with Shared
 
   private def checkPlanIsEmptyLocalScan(df: DataFrame): Unit =
     df.queryExecution.executedPlan match {
+      case _: EmptyRelationExec =>
       case s: LocalTableScanExec => assert(s.rows.isEmpty)
-      case p => fail(s"$p is not LocalTableScanExec")
+      case p => fail(s"$p is not EmptyRelationExec or empty LocalTableScanExec")
     }
 
   test("SPARK-25860: Replace Literal(null, _) with FalseLiteral whenever possible") {

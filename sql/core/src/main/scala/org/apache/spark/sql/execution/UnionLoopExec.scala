@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, ExpressionWithRandomSeed, InterpretedMutableProjection, Literal}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation.hasUnevaluableExpr
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, LocalRelation, LogicalPlan, OneRowRelation, Project, Union, UnionLoopRef}
+import org.apache.spark.sql.catalyst.plans.logical.{EmptyRelation, LocalLimit, LocalRelation, LogicalPlan, OneRowRelation, Project, Union, UnionLoopRef}
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.LogicalRDD.rewriteStatsAndConstraints
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -116,6 +116,11 @@ case class UnionLoopExec(
     df.queryExecution.optimizedPlan match {
       case l: LocalRelation =>
         (df, l.data.length.toLong)
+      case er: EmptyRelation =>
+        // Avoid the default path (repartition + count + possibly collect), which adds overhead and
+        // registers an extra SQL execution via Dataset.collect().
+        val empty = LocalRelation(er.output, Nil)
+        (Dataset.ofRows(session, empty), 0L)
       case Project(projectList, _: OneRowRelation) =>
         if (localRelationLimit != 0 && !projectList.exists(hasUnevaluableExpr)) {
           val projection = new InterpretedMutableProjection(projectList, Nil)
@@ -212,6 +217,9 @@ case class UnionLoopExec(
             case l: LocalRelation =>
               prevPlan = l
               l.copy(output = r.output)
+            case er: EmptyRelation =>
+              prevPlan = er
+              LocalRelation(r.output, Nil)
             // This case will be turned into a LocalRelation whenever the flag
             // SQLConf.CTE_RECURSION_ANCHOR_ROWS_LIMIT_TO_CONVERT_TO_LOCAL_RELATION is set to be
             // anything larger than 0. However, we still handle this case in a special way to
