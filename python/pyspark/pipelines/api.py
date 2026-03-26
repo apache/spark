@@ -49,8 +49,12 @@ def append_flow(
     """
     if name is not None and type(name) is not str:
         raise PySparkTypeError(
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "name", "arg_type": type(name).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "name",
+                "expected_type": "str",
+                "arg_type": type(name).__name__,
+            },
         )
 
     source_code_location = get_caller_source_code_location(stacklevel=1)
@@ -80,8 +84,12 @@ def _validate_stored_dataset_args(
 ) -> None:
     if name is not None and type(name) is not str:
         raise PySparkTypeError(
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "name", "arg_type": type(name).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "name",
+                "expected_type": "str",
+                "arg_type": type(name).__name__,
+            },
         )
     if table_properties is not None and not isinstance(table_properties, dict):
         raise PySparkTypeError(
@@ -346,8 +354,12 @@ def temporary_view(
     """
     if name is not None and type(name) is not str:
         raise PySparkTypeError(
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "name", "arg_type": type(name).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "name",
+                "expected_type": "str",
+                "arg_type": type(name).__name__,
+            },
         )
 
     source_code_location = get_caller_source_code_location(stacklevel=1)
@@ -430,8 +442,12 @@ def create_streaming_table(
     """
     if type(name) is not str:
         raise PySparkTypeError(
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "name", "arg_type": type(name).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "name",
+                "expected_type": "str",
+                "arg_type": type(name).__name__,
+            },
         )
     if table_properties is not None and not isinstance(table_properties, dict):
         raise PySparkTypeError(
@@ -476,13 +492,21 @@ def create_sink(
     """
     if type(name) is not str:
         raise PySparkTypeError(
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "name", "arg_type": type(name).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "name",
+                "expected_type": "str",
+                "arg_type": type(name).__name__,
+            },
         )
     if type(format) is not str:
         raise PySparkTypeError(
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "format", "arg_type": type(format).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "format",
+                "expected_type": "str",
+                "arg_type": type(format).__name__,
+            },
         )
     if options is not None and not isinstance(options, dict):
         raise PySparkTypeError(

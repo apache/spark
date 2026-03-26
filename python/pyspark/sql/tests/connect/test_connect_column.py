@@ -916,8 +916,12 @@ class SparkConnectColumnTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "fieldName", "arg_type": "Column"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "str",
+                "arg_name": "fieldName",
+                "arg_type": "Column",
+            },
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -934,8 +938,8 @@ class SparkConnectColumnTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "fieldName", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "str", "arg_name": "fieldName", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkValueError) as pe:

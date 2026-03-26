@@ -82,7 +82,7 @@ class CatalogTestsMixin:
                     schema = StructType([StructField("a", IntegerType(), True)])
                     description = "this a table created via Catalog.createTable()"
 
-                    with self.assertRaisesRegex(PySparkTypeError, "should be a struct type"):
+                    with self.assertRaisesRegex(PySparkTypeError, "should be struct type"):
                         # Test deprecated API and negative error case.
                         spark.catalog.createExternalTable(
                             "invalid_table_creation", schema=IntegerType(), description=description

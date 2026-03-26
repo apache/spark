@@ -119,8 +119,12 @@ class DataFrameStatTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_LIST_OR_STR_OR_TUPLE",
-            messageParameters={"arg_name": "subset", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "list, str or tuple",
+                "arg_name": "subset",
+                "arg_type": "int",
+            },
         )
 
     def test_fillna(self):
@@ -212,8 +216,12 @@ class DataFrameStatTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_LIST_OR_TUPLE",
-            messageParameters={"arg_name": "subset", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "list or tuple",
+                "arg_name": "subset",
+                "arg_type": "int",
+            },
         )
 
     def test_replace(self):

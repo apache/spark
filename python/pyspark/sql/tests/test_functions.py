@@ -281,8 +281,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "col1", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "str", "arg_name": "col1", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -290,8 +290,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "col2", "arg_type": "bool"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "str", "arg_name": "col2", "arg_type": "bool"},
         )
 
     def test_crosstab(self):
@@ -3603,8 +3603,12 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "windowDuration", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "str",
+                "arg_name": "windowDuration",
+                "arg_type": "int",
+            },
         )
 
     def test_session_window(self):

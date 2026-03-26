@@ -893,8 +893,12 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_WINDOWSPEC",
-            messageParameters={"arg_name": "window", "arg_type": "Column"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "WindowSpec",
+                "arg_name": "window",
+                "arg_type": "Column",
+            },
         )
 
         # invalid window function
@@ -2393,8 +2397,12 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "slideDuration", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "str",
+                "arg_name": "slideDuration",
+                "arg_type": "int",
+            },
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -2402,8 +2410,8 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "startTime", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "str", "arg_name": "startTime", "arg_type": "int"},
         )
 
         # test session_window

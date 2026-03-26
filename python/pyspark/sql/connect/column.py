@@ -479,8 +479,12 @@ class Column(ParentColumn):
 
         if not isinstance(window, WindowSpec):
             raise PySparkTypeError(
-                errorClass="NOT_WINDOWSPEC",
-                messageParameters={"arg_name": "window", "arg_type": type(window).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "window",
+                    "expected_type": "WindowSpec",
+                    "arg_type": type(window).__name__,
+                },
             )
 
         return Column(WindowExpression(windowFunction=self._expr, windowSpec=window))
@@ -541,8 +545,12 @@ class Column(ParentColumn):
     def withField(self, fieldName: str, col: ParentColumn) -> ParentColumn:
         if not isinstance(fieldName, str):
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "fieldName", "arg_type": type(fieldName).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "fieldName",
+                    "expected_type": "str",
+                    "arg_type": type(fieldName).__name__,
+                },
             )
 
         if not isinstance(col, Column):
@@ -562,9 +570,10 @@ class Column(ParentColumn):
         for fieldName in fieldNames:
             if not isinstance(fieldName, str):
                 raise PySparkTypeError(
-                    errorClass="NOT_STR",
+                    errorClass="NOT_EXPECTED_TYPE",
                     messageParameters={
                         "arg_name": "fieldName",
+                        "expected_type": "str",
                         "arg_type": type(fieldName).__name__,
                     },
                 )

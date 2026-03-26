@@ -79,9 +79,10 @@ class DataFrameReader(OptionUtils):
             self._schema = schema
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR_OR_STRUCT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "schema",
+                    "expected_type": "str or struct type",
                     "arg_type": type(schema).__name__,
                 },
             )
@@ -569,17 +570,19 @@ class DataFrameWriter(OptionUtils):
         for c in cols:
             if not isinstance(c, str):
                 raise PySparkTypeError(
-                    errorClass="NOT_LIST_OF_STR",
+                    errorClass="NOT_EXPECTED_TYPE",
                     messageParameters={
                         "arg_name": "cols",
+                        "expected_type": "list[str]",
                         "arg_type": type(c).__name__,
                     },
                 )
         if not isinstance(col, str):
             raise PySparkTypeError(
-                errorClass="NOT_LIST_OF_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "col",
+                    "expected_type": "list[str]",
                     "arg_type": type(col).__name__,
                 },
             )
@@ -613,17 +616,19 @@ class DataFrameWriter(OptionUtils):
         for c in cols:
             if not isinstance(c, str):
                 raise PySparkTypeError(
-                    errorClass="NOT_LIST_OF_STR",
+                    errorClass="NOT_EXPECTED_TYPE",
                     messageParameters={
                         "arg_name": "cols",
+                        "expected_type": "list[str]",
                         "arg_type": type(c).__name__,
                     },
                 )
         if not isinstance(col, str):
             raise PySparkTypeError(
-                errorClass="NOT_LIST_OF_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "col",
+                    "expected_type": "list[str]",
                     "arg_type": type(col).__name__,
                 },
             )
