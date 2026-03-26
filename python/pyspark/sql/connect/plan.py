@@ -408,6 +408,31 @@ class Read(LogicalPlan):
         return f"{' ' * indent}<Read table_name={self.table_name}>\n"
 
 
+class RelationChanges(LogicalPlan):
+    def __init__(
+        self,
+        table_name: str,
+        options: Optional[Dict[str, str]] = None,
+        is_streaming: Optional[bool] = None,
+    ) -> None:
+        super().__init__(None)
+        self.table_name = table_name
+        self.options = options or {}
+        self._is_streaming = is_streaming
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.relation_changes.unparsed_identifier = self.table_name
+        if self._is_streaming is not None:
+            plan.relation_changes.is_streaming = self._is_streaming
+        for k, v in self.options.items():
+            plan.relation_changes.options[k] = v
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        return f"{' ' * indent}<RelationChanges table_name={self.table_name}>\n"
+
+
 class LocalRelation(LogicalPlan):
     """Creates a LocalRelation plan object based on a PyArrow Table."""
 

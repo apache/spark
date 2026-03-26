@@ -517,7 +517,9 @@ case class EnsureRequirements(
         val (rightReducedDataTypes, rightReducedKeys) = rightReducers.fold(
           (rightPartitioning.expressionDataTypes, rightPartitioning.partitionKeys)
         )(rightPartitioning.reduceKeys)
-        if (leftReducedDataTypes != rightReducedDataTypes) {
+        val reducedDataTypes = if (leftReducedDataTypes == rightReducedDataTypes) {
+          leftReducedDataTypes
+        } else {
           throw QueryExecutionErrors.storagePartitionJoinIncompatibleReducedTypesError(
             leftReducers = leftReducers,
             leftReducedDataTypes = leftReducedDataTypes,
@@ -525,9 +527,14 @@ case class EnsureRequirements(
             rightReducedDataTypes = rightReducedDataTypes)
         }
 
+        val reducedKeyRowOrdering = RowOrdering.createNaturalAscendingOrdering(reducedDataTypes)
+        val reducedKeyOrdering =
+          reducedKeyRowOrdering.on((t: InternalRowComparableWrapper) => t.row)
+
         // merge values on both sides
-        var mergedPartitionKeys = mergeAndDedupPartitions(leftReducedKeys, rightReducedKeys,
-          joinType, leftPartitioning.keyOrdering).map((_, 1))
+        var mergedPartitionKeys =
+          mergeAndDedupPartitions(leftReducedKeys, rightReducedKeys, joinType, reducedKeyOrdering)
+            .map((_, 1))
 
         logInfo(log"After merging, there are " +
           log"${MDC(LogKeys.NUM_PARTITIONS, mergedPartitionKeys.size)} partitions")

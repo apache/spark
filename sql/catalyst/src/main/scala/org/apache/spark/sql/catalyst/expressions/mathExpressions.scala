@@ -436,6 +436,7 @@ case class Acosh(child: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => {
       val sm = "java.lang.StrictMath"
+      val t = ctx.freshName("t")
       s"""
          |if ($c < 1.0) {
          |  ${ev.value} = java.lang.Double.NaN;
@@ -446,8 +447,8 @@ case class Acosh(child: Expression)
          |} else if ($c > 2.0) {
          |  ${ev.value} = $sm.log(2.0 * $c - 1.0 / ($c + java.lang.Math.sqrt($c * $c - 1.0)));
          |} else {
-         |  double t = $c - 1.0;
-         |  ${ev.value} = $sm.log1p(t + java.lang.Math.sqrt(2.0 * t + t * t));
+         |  double $t = $c - 1.0;
+         |  ${ev.value} = $sm.log1p($t + java.lang.Math.sqrt(2.0 * $t + $t * $t));
          |}
          |""".stripMargin
     })
@@ -896,22 +897,25 @@ case class Asinh(child: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => {
       val sm = "java.lang.StrictMath"
+      val ax = ctx.freshName("ax")
+      val w = ctx.freshName("w")
+      val t = ctx.freshName("t")
       s"""
-         |double ax = java.lang.Math.abs($c);
-         |double w;
-         |if (java.lang.Double.isInfinite(ax) || java.lang.Double.isNaN(ax)) {
-         |  w = ax;
-         |} else if (ax < ${1.0 / (1 << 28)}) {
-         |  w = ax;
-         |} else if (ax > ${1 << 28}.0) {
-         |  w = $sm.log(ax) + $sm.log(2.0);
-         |} else if (ax > 2.0) {
-         |  w = $sm.log(2.0 * ax + 1.0 / (java.lang.Math.sqrt($c * $c + 1.0) + ax));
+         |double $ax = java.lang.Math.abs($c);
+         |double $w;
+         |if (java.lang.Double.isInfinite($ax) || java.lang.Double.isNaN($ax)) {
+         |  $w = $ax;
+         |} else if ($ax < ${1.0 / (1 << 28)}) {
+         |  $w = $ax;
+         |} else if ($ax > ${1 << 28}.0) {
+         |  $w = $sm.log($ax) + $sm.log(2.0);
+         |} else if ($ax > 2.0) {
+         |  $w = $sm.log(2.0 * $ax + 1.0 / (java.lang.Math.sqrt($c * $c + 1.0) + $ax));
          |} else {
-         |  double t = $c * $c;
-         |  w = $sm.log1p(ax + t / (1.0 + java.lang.Math.sqrt(1.0 + t)));
+         |  double $t = $c * $c;
+         |  $w = $sm.log1p($ax + $t / (1.0 + java.lang.Math.sqrt(1.0 + $t)));
          |}
-         |${ev.value} = java.lang.Math.copySign(w, $c);
+         |${ev.value} = java.lang.Math.copySign($w, $c);
          |""".stripMargin
     })
   }

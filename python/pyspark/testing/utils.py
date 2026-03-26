@@ -593,13 +593,21 @@ def assertSchemaEqual(
     """
     if not isinstance(actual, StructType):
         raise PySparkTypeError(
-            errorClass="NOT_STRUCT",
-            messageParameters={"arg_name": "actual", "arg_type": type(actual).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "actual",
+                "expected_type": "struct type",
+                "arg_type": type(actual).__name__,
+            },
         )
     if not isinstance(expected, StructType):
         raise PySparkTypeError(
-            errorClass="NOT_STRUCT",
-            messageParameters={"arg_name": "expected", "arg_type": type(expected).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "expected",
+                "expected_type": "struct type",
+                "arg_type": type(expected).__name__,
+            },
         )
 
     def compare_schemas_ignore_nullable(s1: StructType, s2: StructType):

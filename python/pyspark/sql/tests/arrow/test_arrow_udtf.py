@@ -211,7 +211,9 @@ class ArrowUDTFTestsMixin:
 
         with self.assertRaisesRegex(
             PythonException,
-            "Target schema's field names are not matching the record batch's field names",
+            r"(?s)Result column 'x' does not exist in the output\. "
+            r"Expected schema: x: int32\ny: string, "
+            r"got: wrong_col: int32\nanother_wrong_col: double\.",
         ):
             result_df = MismatchedSchemaUDTF()
             result_df.collect()
@@ -373,8 +375,8 @@ class ArrowUDTFTestsMixin:
         # Should fail with Arrow cast exception since string cannot be cast to int
         with self.assertRaisesRegex(
             PythonException,
-            "PySparkTypeError: Result type of column 'id' does not match the expected type. "
-            "Expected: int32, got: string.",
+            "Result type of column 'id' does not match "
+            "the expected type. Expected: int32, got: string.",
         ):
             result_df = StringToIntUDTF()
             result_df.collect()

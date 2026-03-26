@@ -593,10 +593,10 @@ SetCommand (spark.sql.legacy.setopsPrecedence.enabled,Some(false))
 -- !query
 DROP VIEW IF EXISTS tab1
 -- !query analysis
-DropTempViewCommand tab1
+DropTempViewCommand tab1, true
 
 
 -- !query
 DROP VIEW IF EXISTS tab2
 -- !query analysis
-DropTempViewCommand tab2
+DropTempViewCommand tab2, true

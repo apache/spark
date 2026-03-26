@@ -1051,9 +1051,25 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Acosh(Math.sqrt(Double.MaxValue)), 355.58450362725193)
     checkEvaluation(Asinh(Double.MinValue), -710.4758600739439)
     checkEvaluation(Asinh(-Math.sqrt(Double.MaxValue)), -355.58450362725193)
+    // Large negative values below the overflow threshold
+    checkEvaluation(Asinh(-1E100), -230.95165647996453)
+    checkEvaluation(Asinh(-1E50), -115.82240183026224)
     checkNaN(Acosh(Double.MinValue))
     checkNaN(Acosh(-Math.sqrt(Double.MaxValue) + 1))
     checkNaN(Acosh(-Math.sqrt(Double.MaxValue) + 2))
+  }
+
+  test("SPARK-56089: multiple Asinh/Acosh in same codegen scope should not collide") {
+    // When multiple Asinh/Acosh expressions are codegen'd in the same scope with
+    // non-nullable children, nullSafeCodeGen emits code without an if-block wrapper.
+    // Without ctx.freshName(), hardcoded variable names (ax, w, t) cause
+    // "Redefinition of local variable" compilation errors.
+    checkEvaluation(
+      Add(Asinh(Literal(1.0)), Asinh(Literal(2.0))),
+      0.881373587019543 + 1.4436354751788103)
+    checkEvaluation(
+      Add(Acosh(Literal(1.5)), Acosh(Literal(2.0))),
+      0.9624236501192069 + 1.3169578969248166)
   }
 
   test("SPARK-56089: asinh/acosh fdlibm algorithm coverage") {

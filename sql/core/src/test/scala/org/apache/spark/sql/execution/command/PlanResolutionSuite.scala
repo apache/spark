@@ -768,7 +768,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     parseResolveCompare(s"DROP VIEW $tempViewName",
       DropTempViewCommand(tempViewIdent))
     parseResolveCompare(s"DROP VIEW IF EXISTS $tempViewName",
-      DropTempViewCommand(tempViewIdent))
+      DropTempViewCommand(tempViewIdent, ifExists = true))
   }
 
   test("drop view in v2 catalog") {

@@ -2189,8 +2189,9 @@ class DataFrame:
         else:
             argtypes = [type(arg).__name__ for arg in [withReplacement, fraction, seed]]
             raise PySparkTypeError(
-                errorClass="NOT_BOOL_OR_FLOAT_OR_INT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
+                    "expected_type": "bool, float or int",
                     "arg_name": "withReplacement (optional), "
                     + "fraction (required) and seed (optional)",
                     "arg_type": ", ".join(argtypes),
@@ -3216,8 +3217,9 @@ class DataFrame:
                 return _to_col(c)
             else:
                 raise PySparkTypeError(
-                    errorClass="NOT_COLUMN_OR_INT_OR_STR",
+                    errorClass="NOT_EXPECTED_TYPE",
                     messageParameters={
+                        "expected_type": "Column, int or str",
                         "arg_name": "col",
                         "arg_type": type(c).__name__,
                     },
@@ -3232,8 +3234,12 @@ class DataFrame:
             _cols = [c if asc else c.desc() for asc, c in zip(ascending, _cols)]
         else:
             raise PySparkTypeError(
-                errorClass="NOT_COLUMN_OR_INT_OR_STR",
-                messageParameters={"arg_name": "ascending", "arg_type": type(ascending).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "Column, int or str",
+                    "arg_name": "ascending",
+                    "arg_type": type(ascending).__name__,
+                },
             )
         return _cols
 
