@@ -184,11 +184,31 @@ case class GroupPartitionsExec(
     copy(child = newChild)
 
   override def outputOrdering: Seq[SortOrder] = {
-    // when multiple partitions are grouped together, ordering inside partitions is not preserved
     if (groupedPartitions.forall(_._2.size <= 1)) {
+      // No coalescing: each output partition is exactly one input partition. The child's
+      // within-partition ordering is fully preserved (including any key-derived ordering that
+      // `DataSourceV2ScanExecBase` already prepended).
       child.outputOrdering
     } else {
-      super.outputOrdering
+      // Coalescing: multiple input partitions are merged into one output partition. The child's
+      // within-partition ordering is lost due to concatenation, so we rederive ordering purely from
+      // the key expressions. A join may embed multiple `KeyedPartitioning`s (one per join side)
+      // within a single expression tree; they share the same partitionKeys but carry different
+      // expressions. Collect them all and expose each position's equivalent expressions via
+      // `sameOrderExpressions` so the planner can use any of them for ordering checks.
+      outputPartitioning match {
+        case p: Partitioning with Expression if reducers.isEmpty =>
+          // Without reducers all merged partitions share the same original key value, so the key
+          // expressions remain constant within the output partition.
+          val keyedPartitionings = p.collect { case k: KeyedPartitioning => k }
+          keyedPartitionings.map(_.expressions).transpose.map { exprs =>
+            SortOrder(exprs.head, Ascending, sameOrderExpressions = exprs.tail)
+          }
+        case _ =>
+          // With reducers, merged partitions share only the reduced key, not the original key
+          // expressions, which can take different values within the output partition.
+          super.outputOrdering
+      }
     }
   }
 
