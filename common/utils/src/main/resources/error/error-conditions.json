@@ -1445,7 +1445,7 @@
     ],
     "sqlState" : "0A000"
   },
-  "DATASOURCE_BATCH_WRITE_BUILD_NOT_SUPPORTED" : {
+  "DATASOURCE_BATCH_WRITE_BUILDER_NOT_SUPPORTED" : {
     "message" : [
       "<class> does not support batch write."
     ],
@@ -1459,7 +1459,7 @@
   },
   "DATASOURCE_COLUMNAR_READER_NOT_SUPPORTED" : {
     "message" : [
-      "Cannot create columnar reader."
+      "<class>: Cannot create columnar reader."
     ],
     "sqlState" : "0A000"
   },
@@ -5609,9 +5609,9 @@
     ],
     "sqlState" : "428FT"
   },
-  "PARTITIONS_TRUNCATE_NOT_SUPPORTED" : {
+  "TRUNCATE_PARTITIONS_NOT_SUPPORTED" : {
     "message" : [
-      "Partitions truncate is not supported."
+      "Truncate partitions is not supported."
     ],
     "sqlState" : "0A000"
   },
@@ -5639,9 +5639,9 @@
     ],
     "sqlState" : "42S23"
   },
-  "PARTITION_TRUNCATE_NOT_SUPPORTED" : {
+  "TRUNCATE_PARTITION_NOT_SUPPORTED" : {
     "message" : [
-      "Partition truncate is not supported."
+      "Truncate partition is not supported."
     ],
     "sqlState" : "0A000"
   },
@@ -7076,7 +7076,7 @@
     "message" : [
       "Unexpected V2 expression: <expr>."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "XX000"
   },
   "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE" : {
     "message" : [
