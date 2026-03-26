@@ -325,13 +325,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
     }
 
     val session = df.sparkSession
-    // TODO(SPARK-56175): File source V2 does not support
-    // insertInto for catalog tables yet.
-    val canUseV2 = lookupV2Provider() match {
-      case Some(_: FileDataSourceV2) => false
-      case Some(_) => true
-      case None => false
-    }
+    val canUseV2 = lookupV2Provider().isDefined
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
       case NonSessionCatalogAndIdentifier(catalog, ident) =>
@@ -452,7 +446,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
 
     val session = df.sparkSession
     // TODO(SPARK-56230): File source V2 does not support
-    // saveAsTable yet. Always use V1 for file sources.
+    // saveAsTable (Overwrite creates ReplaceTableAsSelect
+    // which requires StagingTableCatalog).
     val v2ProviderOpt = lookupV2Provider().flatMap {
       case _: FileDataSourceV2 => None
       case other => Some(other)
