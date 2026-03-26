@@ -148,15 +148,15 @@ public class SpatialReferenceSystemMapperSuite {
     }
   }
 
-  /**
-   * Validates expected registry scale: geographic SRID count and CRS string-id counts by authority
-   * prefix (empty authority for {@code SRID:0}, plus OGC, EPSG, ESRI).
-   */
+    /**
+     * Validates expected registry scale: geographic SRID count and CRS string-id counts by
+     * authority prefix (empty authority for {@code SRID:0}, plus OGC, EPSG, ESRI).
+     */
     @Test
     public void testSpatialReferenceSystemContents() {
       SpatialReferenceSystemCache cache = SpatialReferenceSystemCache.getInstance();
       Map<Integer, SpatialReferenceSystemInformation> sridToSrs = cache.getSridToSrs();
-  
+
       int emptyAuthoritySrid0 = 0;
       int ogc = 0;
       int epsg = 0;
