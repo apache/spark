@@ -337,6 +337,14 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   /**
+   * Returns the default number of rows to fetch per round trip when reading from the JDBC source.
+   * A value of 0 means the JDBC driver's default fetch size will be used.
+   * Dialects can override this to provide a sensible default, e.g. to avoid loading all rows
+   * into memory at once.
+   */
+  def defaultFetchSize: Int = 0
+
+  /**
    * Override connection specific properties to run before a select is made.  This is in place to
    * allow dialects that need special treatment to optimize behavior.
    * @param connection The connection object

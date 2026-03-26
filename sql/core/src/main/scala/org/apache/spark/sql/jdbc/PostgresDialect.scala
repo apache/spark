@@ -191,6 +191,11 @@ private case class PostgresDialect()
     }
   }
 
+  // The default fetch size for PostgreSQL to avoid loading all rows into memory at once,
+  // which can cause executor OOM. PostgreSQL JDBC driver fetches all rows by default when
+  // fetchSize is 0.
+  override val defaultFetchSize: Int = 1000
+
   override def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
     super.beforeFetch(connection, properties)
 
@@ -200,7 +205,9 @@ private case class PostgresDialect()
     //
     // See: https://jdbc.postgresql.org/documentation/head/query.html#query-with-cursor
     //
-    if (properties.getOrElse(JDBCOptions.JDBC_BATCH_FETCH_SIZE, "0").toInt > 0) {
+    val userFetchSize = properties.get(JDBCOptions.JDBC_BATCH_FETCH_SIZE).map(_.toInt)
+    val effectiveFetchSize = userFetchSize.getOrElse(defaultFetchSize)
+    if (effectiveFetchSize > 0) {
       connection.setAutoCommit(false)
     }
   }
