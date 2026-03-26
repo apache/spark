@@ -13312,6 +13312,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             nonlocal should_return_series
             nonlocal series_name
             nonlocal should_return_scalar
+            if inplace and LooseVersion(pd.__version__) >= "3.0.0":
+                # pandas 3 can reject inplace eval on a read-only batch frame,
+                # so evaluate against a writable copy.
+                pdf = pdf.copy()
             result_inner = pdf.eval(expr, inplace=inplace)
             if inplace:
                 result_inner = pdf
