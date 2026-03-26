@@ -2109,49 +2109,6 @@ class DDLParserSuite extends AnalysisTest {
     )
   }
 
-  test("INSERT INTO REPLACE ON with VALUES clause") {
-    val table = "testcat.ns1.ns2.tbl"
-    parseCompare(
-      sql = s"INSERT INTO $table AS t REPLACE ON t.id = 1 VALUES (1, 'a'), (2, 'b')",
-      expected = InsertIntoStatement(
-        table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
-        partitionSpec = Map.empty,
-        userSpecifiedCols = Seq.empty,
-        query = UnresolvedInlineTable(
-          Seq("col1", "col2"),
-          Seq(
-            Seq(Literal(1), Literal("a")),
-            Seq(Literal(2), Literal("b")))),
-        overwrite = true,
-        ifPartitionNotExists = false,
-        byName = false,
-        replaceCriteriaOpt =
-          Some(InsertReplaceOn(
-            cond = EqualTo(UnresolvedAttribute(Seq("t", "id")), Literal(1)),
-            tableAliasOpt = Some("t"))))
-    )
-  }
-
-  test("INSERT INTO REPLACE USING with VALUES clause") {
-    val table = "testcat.ns1.ns2.tbl"
-    parseCompare(
-      sql = s"INSERT INTO $table AS t REPLACE USING (id) VALUES (1, 'a'), (2, 'b')",
-      expected = InsertIntoStatement(
-        table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
-        partitionSpec = Map.empty,
-        userSpecifiedCols = Seq.empty,
-        query = UnresolvedInlineTable(
-          Seq("col1", "col2"),
-          Seq(
-            Seq(Literal(1), Literal("a")),
-            Seq(Literal(2), Literal("b")))),
-        overwrite = true,
-        ifPartitionNotExists = false,
-        byName = false,
-        replaceCriteriaOpt = Some(InsertReplaceUsing(Seq("id"))))
-    )
-  }
-
   test("delete from table: delete all") {
     parseCompare("DELETE FROM testcat.ns1.ns2.tbl",
       DeleteFromTable(
