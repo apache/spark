@@ -134,7 +134,7 @@ def send_batch_func(
         write_int(NON_EMPTY_PYARROW_RECORD_BATCHES, outfile)
         write_int(SpecialLengths.START_ARROW_STREAM, outfile)
         serializer = ArrowStreamSerializer()
-        serializer.dump_stream(batches, outfile)
+        serializer.dump_stream(iter(batches), outfile)
     else:
         write_int(EMPTY_PYARROW_RECORD_BATCHES, outfile)
 
