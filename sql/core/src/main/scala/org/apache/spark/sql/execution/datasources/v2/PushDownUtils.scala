@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.{IdentityTransform, SortOrder}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
-import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{PartitionPredicateField, PartitionPredicateImpl, SupportsPushDownCatalystFilters}
 import org.apache.spark.sql.sources
@@ -115,7 +115,7 @@ object PushDownUtils extends Logging {
           if (!partitionFields.exists(_.nonEmpty) || !r.supportsIterativePushdown) {
             remainingFilters
           } else {
-            secondPassPushDown(r, partitionFields.get, remainingFilters)
+            pushPartitionPredicates(r, partitionFields.get, remainingFilters)
           }
 
         val orderedPostScanFilters = prioritizeFilters(postScanFilters,
@@ -175,78 +175,30 @@ object PushDownUtils extends Logging {
   }
 
   /**
-   * If the scan supports iterative filtering, convert partition filters to
-   * PartitionPredicates (see SPARK-55596) and push them down in another pass.
-   */
-  private def secondPassPushDown(
-      scanBuilder: SupportsPushDownV2Filters,
-      partitionFields: Seq[PartitionPredicateField],
-      remainingFilters: Seq[Expression]): Seq[Expression] = {
-    val (partFilters, nonPartFilters) = classifyFilters(remainingFilters, partitionFields)
-    val (pushable, nonPushable) = partFilters.partition(isPushablePartitionFilter)
-    val rejected = pushPartitionPredicates(scanBuilder, pushable, partitionFields)
-    nonPartFilters ++ nonPushable ++ rejected
-  }
-
-  /**
-   * Splits filters into two buckets:
-   * 1. partition filters (referring only to partition fields)
-   * 2. non-partition filters (referring to non-partition fields or a mix).
-   */
-  private def classifyFilters(filters: Seq[Expression],
-      partitionFields: Seq[PartitionPredicateField]) = {
-    val fieldPaths: Set[Seq[String]] = partitionFields.map(_.identityRef.fieldNames().toSeq).toSet
-    filters.partition { expr =>
-      val paths = collectColumnPaths(expr)
-      paths.nonEmpty && paths.forall(p => fieldPaths.exists(pathsMatch(p, _, SQLConf.get.resolver)))
-    }
-  }
-
-  /**
-   * Returns true if the given filter expression is safe to push as a partition predicate
-   * when using iterative pushdown: it must be deterministic, contain
-   * no subquery, and no PythonUDF.
-   */
-  private def isPushablePartitionFilter(f: Expression): Boolean =
-    f.deterministic && !SubqueryExpression.hasSubquery(f) && !f.exists(_.isInstanceOf[PythonUDF])
-
-  /**
-   * Normalizes pushable partition filters, wraps them as
-   * [[PartitionPredicateImpl]], pushes to the scan builder,
-   * and returns rejected filters in original form.
+   * If the scan supports iterative filtering, convert partition filters to PartitionPredicates
+   * (see SPARK-55596) and push them down in another pass.
    */
   private def pushPartitionPredicates(
       scanBuilder: SupportsPushDownV2Filters,
-      pushable: Seq[Expression],
-      partitionFields: Seq[PartitionPredicateField]) = {
-    val normalizedToOriginal = normalizePartitionFilters(pushable, partitionFields)
-    val predicates = normalizedToOriginal.keys.toSeq.map(PartitionPredicateImpl(_, partitionFields))
-    scanBuilder.pushPredicates(predicates.toArray).map { p =>
-      val e = p.asInstanceOf[PartitionPredicateImpl].expression
-      normalizedToOriginal.getOrElse(e, e)
+      partitionFields: Seq[PartitionPredicateField],
+      remainingFilters: Seq[Expression]): Seq[Expression] = {
+    val normalizedToOriginal = normalizeNestedPartitionFilters(remainingFilters, partitionFields)
+    val normalized = normalizedToOriginal.keys.toSeq
+    val partitionSchema = StructType(partitionFields.map(_.structField))
+    val (partFilters, nonPartitionFilters) =
+      DataSourceUtils.getPartitionFiltersAndDataFilters(partitionSchema, normalized)
+    val (pushable, nonPushable) = partFilters.partition(isPushablePartitionFilter)
+    val partitionPredicates = pushable.map(PartitionPredicateImpl(_, partitionFields))
+    val rejectedPartitionFilters = scanBuilder.pushPredicates(partitionPredicates.toArray).map {
+      p => p.asInstanceOf[PartitionPredicateImpl].expression
     }.toSeq
+    (nonPartitionFilters ++ nonPushable ++ rejectedPartitionFilters).map(normalizedToOriginal)
   }
 
-  /**
-   * Extracts every leaf column path from `expr`.
-   *
-   * A `GetStructField` chain is flattened to its full path
-   * (e.g. `GetStructField(attr("s"), "tz")` yields
-   * `Seq("s","tz")`).
-   * A bare [[AttributeReference]] yields `Seq(name)`.
-   */
-  private def collectColumnPaths(expr: Expression)
-  : Set[Seq[String]] = expr match {
-    case g: GetStructField =>
-      flattenStructFieldChain(g) match {
-        case Some((root, suffix)) =>
-          Set(root.name +: suffix)
-        case None =>
-          g.children.flatMap(collectColumnPaths).toSet
-      }
-    case ar: AttributeReference => Set(Seq(ar.name))
-    case _ => expr.children.flatMap(collectColumnPaths).toSet
-  }
+  private def isPushablePartitionFilter(f: Expression) =
+    f.deterministic &&
+      !SubqueryExpression.hasSubquery(f) &&
+      !f.exists(_.isInstanceOf[PythonUDF])
 
   /**
    * Normalizes filter expressions so that nested struct accesses on
@@ -260,7 +212,7 @@ object PushDownUtils extends Logging {
    *
    * Returns a map from normalized expression to original.
    */
-  private def normalizePartitionFilters(
+  private def normalizeNestedPartitionFilters(
       filters: Seq[Expression],
       partitionFields: Seq[PartitionPredicateField])
   : Map[Expression, Expression] = {
