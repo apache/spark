@@ -70,7 +70,15 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val nameParts = ident.toQualifiedNameParts(catalog)
       cacheManager.recacheTableOrView(session, nameParts, includeTimeTravel = false)
     case _ =>
-      cacheManager.recacheByPlan(session, r)
+      r.table match {
+        case ft: FileTable =>
+          ft.fileIndex.refresh()
+          val path = new Path(ft.fileIndex.rootPaths.head.toUri)
+          val fs = path.getFileSystem(hadoopConf)
+          cacheManager.recacheByPath(session, path, fs)
+        case _ =>
+          cacheManager.recacheByPlan(session, r)
+      }
   }
 
   private def recacheTable(r: ResolvedTable, includeTimeTravel: Boolean)(): Unit = {

@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.{FileAlreadyExistsException, Path}
 import org.apache.hadoop.mapreduce.TaskAttemptContext
@@ -102,6 +103,14 @@ abstract class FileFormatDataWriter(
     enrichWriteError(Option(currentWriter).map(_.path()).getOrElse(description.path)) {
       write(record)
     }
+  }
+
+  /**
+   * Override writeAll to ensure V2 DataWriter.writeAll path also wraps
+   * errors with TASK_WRITE_FAILED, matching V1 behavior.
+   */
+  override def writeAll(records: java.util.Iterator[InternalRow]): Unit = {
+    writeWithIterator(records.asScala)
   }
 
   /** Write an iterator of records. */

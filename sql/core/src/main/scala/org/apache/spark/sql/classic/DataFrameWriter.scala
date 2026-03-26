@@ -194,10 +194,17 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           if (curmode == SaveMode.Append) {
             AppendData.byName(relation, df.logicalPlan, finalOptions)
           } else {
-            // Truncate the table. TableCapabilityCheck will throw a nice exception if this
-            // isn't supported
-            OverwriteByExpression.byName(
-              relation, df.logicalPlan, Literal(true), finalOptions)
+            val dynamicOverwrite =
+              df.sparkSession.sessionState.conf.partitionOverwriteMode ==
+                PartitionOverwriteMode.DYNAMIC &&
+              partitioningColumns.exists(_.nonEmpty)
+            if (dynamicOverwrite) {
+              OverwritePartitionsDynamic.byName(
+                relation, df.logicalPlan, finalOptions)
+            } else {
+              OverwriteByExpression.byName(
+                relation, df.logicalPlan, Literal(true), finalOptions)
+            }
           }
 
         case createMode =>
@@ -318,7 +325,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
     }
 
     val session = df.sparkSession
-    val canUseV2 = lookupV2Provider().isDefined
+    // TODO(SPARK-56175): File source V2 does not support
+    // insertInto for catalog tables yet.
+    val canUseV2 = lookupV2Provider() match {
+      case Some(_: FileDataSourceV2) => false
+      case Some(_) => true
+      case None => false
+    }
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
       case NonSessionCatalogAndIdentifier(catalog, ident) =>
@@ -438,9 +451,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
     val session = df.sparkSession
-    val v2ProviderOpt = lookupV2Provider()
-    val canUseV2 = v2ProviderOpt.isDefined || (hasCustomSessionCatalog &&
-        !df.sparkSession.sessionState.catalogManager.catalog(CatalogManager.SESSION_CATALOG_NAME)
+    // TODO(SPARK-56230): File source V2 does not support
+    // saveAsTable yet. Always use V1 for file sources.
+    val v2ProviderOpt = lookupV2Provider().flatMap {
+      case _: FileDataSourceV2 => None
+      case other => Some(other)
+    }
+    val canUseV2 = v2ProviderOpt.isDefined ||
+      (hasCustomSessionCatalog &&
+        !df.sparkSession.sessionState.catalogManager
+          .catalog(CatalogManager.SESSION_CATALOG_NAME)
           .isInstanceOf[CatalogExtension])
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
@@ -595,8 +615,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
 
   private def lookupV2Provider(): Option[TableProvider] = {
     DataSource.lookupDataSourceV2(source, df.sparkSession.sessionState.conf) match {
-      // TODO(SPARK-28396): File source v2 write path is currently broken.
-      case Some(_: FileDataSourceV2) => None
+      // File source V2 supports non-partitioned Append and
+      // Overwrite via DataFrame API (df.write.save(path)).
+      // Fall back to V1 for:
+      // - ErrorIfExists/Ignore (TODO: SPARK-56174)
+      // - Partitioned writes (TODO: SPARK-56174)
+      case Some(_: FileDataSourceV2)
+          if (curmode != SaveMode.Append
+            && curmode != SaveMode.Overwrite)
+            || partitioningColumns.exists(_.nonEmpty) =>
+        None
       case other => other
     }
   }
