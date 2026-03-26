@@ -1,0 +1,376 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+"""
+Tests for PyArrow Array.to_pandas() with default arguments using golden file comparison.
+
+This test monitors the behavior of PyArrow's to_pandas() conversion to ensure
+PySpark's assumptions about PyArrow behavior remain valid across versions.
+
+The test covers conversion of all major Arrow types to pandas/numpy with default
+arguments (no types_mapper, no self_destruct, etc.), tracking:
+- Which numpy/pandas dtype each Arrow type maps to
+- How null values are handled (NaN, None, NaT, etc.)
+- Whether values are preserved correctly after conversion
+
+## Golden File Cell Format
+
+Each cell uses the value@type format:
+- numpy ndarray: "python_list_repr@ndarray[dtype]"
+- pandas Series: "python_list_repr@Series[dtype]"
+- pandas Categorical: "python_list_repr@Categorical[dtype]"
+- Error: "ERR@ExceptionClassName"
+
+Values are formatted via tolist() for stable, Python-native representation.
+
+## Regenerating Golden Files
+
+Set SPARK_GENERATE_GOLDEN_FILES=1 before running:
+
+    SPARK_GENERATE_GOLDEN_FILES=1 python -m pytest \\
+        python/pyspark/tests/upstream/pyarrow/test_pyarrow_arrow_to_pandas_default.py
+
+## PyArrow Version Compatibility
+
+The golden files capture behavior for a specific PyArrow version.
+Regenerate when upgrading PyArrow, as to_pandas() behavior may change.
+"""
+
+import datetime
+import inspect
+import os
+import unittest
+from collections import OrderedDict
+from decimal import Decimal
+
+from pyspark.testing.utils import (
+    have_pyarrow,
+    have_pandas,
+    have_numpy,
+    pyarrow_requirement_message,
+    pandas_requirement_message,
+    numpy_requirement_message,
+)
+from pyspark.testing.goldenutils import GoldenFileTestMixin
+
+
+@unittest.skipIf(
+    not have_pyarrow or not have_pandas or not have_numpy,
+    pyarrow_requirement_message or pandas_requirement_message or numpy_requirement_message,
+)
+class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
+    """
+    Tests pa.Array.to_pandas() with default arguments via golden file comparison.
+
+    Covers all major Arrow types: integers, floats, bool, string, binary,
+    decimal, date, timestamp, duration, time, null, and nested types.
+    Each type is tested both without and with null values.
+    """
+
+    @staticmethod
+    def _repr_result(result, max_len=0):
+        """
+        Format to_pandas() result for golden file comparison.
+
+        Uses tolist() for stable Python-native value representation that does
+        not depend on numpy's string formatting, which can vary across versions.
+
+        Returns
+        -------
+        str
+            "python_list_repr@result_class[dtype]"
+            e.g. "[0, 1, -1, 127, -128]@ndarray[int8]"
+        """
+        import numpy as np
+        import pandas as pd
+
+        if isinstance(result, np.ndarray):
+            v_str = str(result.tolist())
+            type_str = f"ndarray[{str(result.dtype)}]"
+        elif isinstance(result, pd.Series):
+            v_str = str(result.tolist())
+            type_str = f"Series[{str(result.dtype)}]"
+        elif isinstance(result, pd.Categorical):
+            v_str = str(result.tolist())
+            type_str = f"Categorical[{str(result.dtype)}]"
+        else:
+            v_str = str(result)
+            type_str = type(result).__name__
+
+        v_str = v_str.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+        if max_len > 0:
+            v_str = v_str[:max_len]
+        return f"{v_str}@{type_str}"
+
+    def _build_source_arrays(self):
+        """Build an ordered dict of named source PyArrow arrays for testing."""
+        import pyarrow as pa
+
+        sources = OrderedDict()
+
+        # =====================================================================
+        # Integer types
+        # =====================================================================
+        for bits, pa_type in [
+            (8, pa.int8()),
+            (16, pa.int16()),
+            (32, pa.int32()),
+            (64, pa.int64()),
+        ]:
+            max_val = 2 ** (bits - 1) - 1
+            min_val = -(2 ** (bits - 1))
+            sources[f"int{bits}:standard"] = pa.array(
+                [0, 1, -1, max_val, min_val], pa_type
+            )
+            sources[f"int{bits}:nullable"] = pa.array([0, 1, None], pa_type)
+
+        for bits, pa_type in [
+            (8, pa.uint8()),
+            (16, pa.uint16()),
+            (32, pa.uint32()),
+            (64, pa.uint64()),
+        ]:
+            max_val = 2**bits - 1
+            sources[f"uint{bits}:standard"] = pa.array([0, 1, max_val], pa_type)
+            sources[f"uint{bits}:nullable"] = pa.array([0, 1, None], pa_type)
+
+        # =====================================================================
+        # Float types
+        # =====================================================================
+        sources["float32:standard"] = pa.array([0.0, 1.5, -1.5], pa.float32())
+        sources["float32:nullable"] = pa.array([0.0, 1.5, None], pa.float32())
+        sources["float64:standard"] = pa.array([0.0, 1.5, -1.5], pa.float64())
+        sources["float64:nullable"] = pa.array([0.0, 1.5, None], pa.float64())
+        sources["float64:special"] = pa.array(
+            [float("nan"), float("inf"), float("-inf")], pa.float64()
+        )
+
+        # =====================================================================
+        # Boolean
+        # =====================================================================
+        sources["bool:standard"] = pa.array([True, False, True], pa.bool_())
+        sources["bool:nullable"] = pa.array([True, False, None], pa.bool_())
+
+        # =====================================================================
+        # String types
+        # =====================================================================
+        sources["string:standard"] = pa.array(
+            ["hello", "world", ""], pa.string()
+        )
+        sources["string:nullable"] = pa.array(
+            ["hello", None, "world"], pa.string()
+        )
+        sources["large_string:standard"] = pa.array(
+            ["hello", "world"], pa.large_string()
+        )
+        sources["large_string:nullable"] = pa.array(
+            ["hello", None], pa.large_string()
+        )
+
+        # =====================================================================
+        # Binary types
+        # =====================================================================
+        sources["binary:standard"] = pa.array(
+            [b"hello", b"world"], pa.binary()
+        )
+        sources["binary:nullable"] = pa.array([b"hello", None], pa.binary())
+        sources["large_binary:standard"] = pa.array(
+            [b"hello", b"world"], pa.large_binary()
+        )
+        sources["large_binary:nullable"] = pa.array(
+            [b"hello", None], pa.large_binary()
+        )
+
+        # =====================================================================
+        # Decimal
+        # =====================================================================
+        sources["decimal128:standard"] = pa.array(
+            [Decimal("1.23"), Decimal("4.56"), Decimal("-7.89")],
+            pa.decimal128(5, 2),
+        )
+        sources["decimal128:nullable"] = pa.array(
+            [Decimal("1.23"), None, Decimal("4.56")], pa.decimal128(5, 2)
+        )
+
+        # =====================================================================
+        # Date types
+        # =====================================================================
+        d1 = datetime.date(2024, 1, 1)
+        d2 = datetime.date(2024, 6, 15)
+        sources["date32:standard"] = pa.array([d1, d2], pa.date32())
+        sources["date32:nullable"] = pa.array([d1, None], pa.date32())
+        sources["date64:standard"] = pa.array([d1, d2], pa.date64())
+        sources["date64:nullable"] = pa.array([d1, None], pa.date64())
+
+        # =====================================================================
+        # Timestamp types
+        # =====================================================================
+        dt1 = datetime.datetime(2024, 1, 1, 12, 0, 0)
+        dt2 = datetime.datetime(2024, 6, 15, 18, 30, 0)
+        for unit in ["s", "ms", "us", "ns"]:
+            sources[f"timestamp[{unit}]:standard"] = pa.array(
+                [dt1, dt2], pa.timestamp(unit)
+            )
+            sources[f"timestamp[{unit}]:nullable"] = pa.array(
+                [dt1, None], pa.timestamp(unit)
+            )
+        # Timestamp with timezone
+        sources["timestamp[us,tz=UTC]:standard"] = pa.array(
+            [dt1, dt2], pa.timestamp("us", tz="UTC")
+        )
+        sources["timestamp[us,tz=UTC]:nullable"] = pa.array(
+            [dt1, None], pa.timestamp("us", tz="UTC")
+        )
+
+        # =====================================================================
+        # Duration types
+        # =====================================================================
+        td1 = datetime.timedelta(days=1)
+        td2 = datetime.timedelta(hours=2, minutes=30)
+        for unit in ["s", "ms", "us", "ns"]:
+            sources[f"duration[{unit}]:standard"] = pa.array(
+                [td1, td2], pa.duration(unit)
+            )
+            sources[f"duration[{unit}]:nullable"] = pa.array(
+                [td1, None], pa.duration(unit)
+            )
+
+        # =====================================================================
+        # Time types
+        # =====================================================================
+        t1 = datetime.time(12, 30, 0)
+        t2 = datetime.time(18, 45, 30)
+        sources["time32[s]:standard"] = pa.array([t1, t2], pa.time32("s"))
+        sources["time32[s]:nullable"] = pa.array([t1, None], pa.time32("s"))
+        sources["time32[ms]:standard"] = pa.array([t1, t2], pa.time32("ms"))
+        sources["time32[ms]:nullable"] = pa.array([t1, None], pa.time32("ms"))
+        sources["time64[us]:standard"] = pa.array([t1, t2], pa.time64("us"))
+        sources["time64[us]:nullable"] = pa.array([t1, None], pa.time64("us"))
+        sources["time64[ns]:standard"] = pa.array([t1, t2], pa.time64("ns"))
+        sources["time64[ns]:nullable"] = pa.array([t1, None], pa.time64("ns"))
+
+        # =====================================================================
+        # Null type
+        # =====================================================================
+        sources["null:standard"] = pa.array([None, None, None], pa.null())
+
+        # =====================================================================
+        # Nested types
+        # =====================================================================
+        sources["list<int64>:standard"] = pa.array(
+            [[1, 2], [3, 4, 5]], pa.list_(pa.int64())
+        )
+        sources["list<int64>:nullable"] = pa.array(
+            [[1, 2], None, [3]], pa.list_(pa.int64())
+        )
+        sources["list<string>:standard"] = pa.array(
+            [["a", "b"], ["c"]], pa.list_(pa.string())
+        )
+        sources["large_list<int64>:standard"] = pa.array(
+            [[1, 2], [3, 4]], pa.large_list(pa.int64())
+        )
+        sources["fixed_size_list<int64>[3]:standard"] = pa.array(
+            [[1, 2, 3], [4, 5, 6]], pa.list_(pa.int64(), 3)
+        )
+        sources["struct:standard"] = pa.array(
+            [{"x": 1, "y": "a"}, {"x": 2, "y": "b"}],
+            pa.struct([("x", pa.int64()), ("y", pa.string())]),
+        )
+        sources["struct:nullable"] = pa.array(
+            [{"x": 1, "y": "a"}, None],
+            pa.struct([("x", pa.int64()), ("y", pa.string())]),
+        )
+        sources["map<string,int64>:standard"] = pa.array(
+            [[("a", 1), ("b", 2)], [("c", 3)]],
+            pa.map_(pa.string(), pa.int64()),
+        )
+
+        # =====================================================================
+        # Dictionary type
+        # =====================================================================
+        sources["dictionary<int32,string>:standard"] = (
+            pa.DictionaryArray.from_arrays(
+                pa.array([0, 1, 0, 1], pa.int32()),
+                pa.array(["a", "b"], pa.string()),
+            )
+        )
+        sources["dictionary<int32,string>:nullable"] = (
+            pa.DictionaryArray.from_arrays(
+                pa.array([0, 1, None, 0], pa.int32()),
+                pa.array(["a", "b"], pa.string()),
+            )
+        )
+
+        return sources
+
+    def test_to_pandas_default(self):
+        """Test pa.Array.to_pandas() with default arguments against golden file."""
+        sources = self._build_source_arrays()
+
+        generating = self.is_generating_golden()
+        test_dir = os.path.dirname(inspect.getfile(type(self)))
+        golden_csv = os.path.join(
+            test_dir, "golden_pyarrow_arrow_to_pandas_default.csv"
+        )
+        golden_md = os.path.join(
+            test_dir, "golden_pyarrow_arrow_to_pandas_default.md"
+        )
+
+        golden = None
+        if not generating:
+            golden = self.load_golden_csv(golden_csv)
+
+        errors = []
+        results = OrderedDict()
+
+        for name, arr in sources.items():
+            try:
+                result = arr.to_pandas()
+                cell = self._repr_result(result, max_len=0)
+            except Exception as e:
+                cell = f"ERR@{type(e).__name__}"
+            results[name] = cell
+
+            if not generating and golden is not None:
+                expected = golden.loc[name, "to_pandas()"]
+                if expected != cell:
+                    errors.append(
+                        f"{name}: expected '{expected}', got '{cell}'"
+                    )
+
+        if generating:
+            import pandas as pd
+
+            index = pd.Index(list(sources.keys()), name="source")
+            df = pd.DataFrame(
+                {"to_pandas()": [results[k] for k in sources]},
+                index=index,
+            )
+            self.save_golden(df, golden_csv, golden_md)
+        else:
+            self.assertEqual(
+                len(errors),
+                0,
+                f"\n{len(errors)} golden file mismatches:\n"
+                + "\n".join(errors),
+            )
+
+
+if __name__ == "__main__":
+    from pyspark.testing import main
+
+    main()
