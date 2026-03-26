@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.{EqualTo, GreaterThan, Hex, Literal}
+import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, GreaterThan, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.IdentityColumnSpec
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
@@ -2065,6 +2065,91 @@ class DDLParserSuite extends AnalysisTest {
         GreaterThan(
           UnresolvedAttribute("a"),
           Literal(5))))
+  }
+
+  test("INSERT INTO REPLACE ON with compound condition") {
+    val table = "testcat.ns1.ns2.tbl"
+    parseCompare(
+      sql = s"INSERT INTO $table AS t REPLACE ON t.a = s.a AND t.b = s.b " +
+        "(SELECT * FROM source) AS s",
+      expected = InsertIntoStatement(
+        table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        partitionSpec = Map.empty,
+        userSpecifiedCols = Seq.empty,
+        query = SubqueryAlias(
+          "s",
+          Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source")))),
+        overwrite = true,
+        ifPartitionNotExists = false,
+        byName = false,
+        replaceCriteriaOpt =
+          Some(InsertReplaceOn(
+            cond = And(
+              EqualTo(
+                UnresolvedAttribute(Seq("t", "a")), UnresolvedAttribute(Seq("s", "a"))),
+              EqualTo(
+                UnresolvedAttribute(Seq("t", "b")), UnresolvedAttribute(Seq("s", "b")))),
+            tableAliasOpt = Some("t"))))
+    )
+  }
+
+  test("INSERT INTO REPLACE USING with single column") {
+    val table = "testcat.ns1.ns2.tbl"
+    parseCompare(
+      sql = s"INSERT INTO $table AS t REPLACE USING (id) SELECT * FROM source",
+      expected = InsertIntoStatement(
+        table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        partitionSpec = Map.empty,
+        userSpecifiedCols = Seq.empty,
+        query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        overwrite = true,
+        ifPartitionNotExists = false,
+        byName = false,
+        replaceCriteriaOpt = Some(InsertReplaceUsing(Seq("id"))))
+    )
+  }
+
+  test("INSERT INTO REPLACE ON with VALUES clause") {
+    val table = "testcat.ns1.ns2.tbl"
+    parseCompare(
+      sql = s"INSERT INTO $table AS t REPLACE ON t.id = 1 VALUES (1, 'a'), (2, 'b')",
+      expected = InsertIntoStatement(
+        table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        partitionSpec = Map.empty,
+        userSpecifiedCols = Seq.empty,
+        query = UnresolvedInlineTable(
+          Seq("col1", "col2"),
+          Seq(
+            Seq(Literal(1), Literal("a")),
+            Seq(Literal(2), Literal("b")))),
+        overwrite = true,
+        ifPartitionNotExists = false,
+        byName = false,
+        replaceCriteriaOpt =
+          Some(InsertReplaceOn(
+            cond = EqualTo(UnresolvedAttribute(Seq("t", "id")), Literal(1)),
+            tableAliasOpt = Some("t"))))
+    )
+  }
+
+  test("INSERT INTO REPLACE USING with VALUES clause") {
+    val table = "testcat.ns1.ns2.tbl"
+    parseCompare(
+      sql = s"INSERT INTO $table AS t REPLACE USING (id) VALUES (1, 'a'), (2, 'b')",
+      expected = InsertIntoStatement(
+        table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        partitionSpec = Map.empty,
+        userSpecifiedCols = Seq.empty,
+        query = UnresolvedInlineTable(
+          Seq("col1", "col2"),
+          Seq(
+            Seq(Literal(1), Literal("a")),
+            Seq(Literal(2), Literal("b")))),
+        overwrite = true,
+        ifPartitionNotExists = false,
+        byName = false,
+        replaceCriteriaOpt = Some(InsertReplaceUsing(Seq("id"))))
+    )
   }
 
   test("delete from table: delete all") {
