@@ -342,6 +342,11 @@
       "<arg_name> index out of range, got '<index>'."
     ]
   },
+  "INPUT_NOT_FULLY_CONSUMED": {
+    "message": [
+      "The input iterator must be fully consumed."
+    ]
+  },
   "INVALID_ARROW_UDTF_RETURN_TYPE": {
     "message": [
       "The return type of the arrow-optimized Python UDTF should be of type 'pandas.DataFrame', but the '<func>' method returned a value of type <return_type> with value: <value>."
@@ -807,6 +812,11 @@
       "<feature> is only supported with Spark Connect; however, the current Spark session does not use Spark Connect."
     ]
   },
+  "OUTPUT_EXCEEDS_INPUT_ROWS": {
+    "message": [
+      "The number of output rows must not exceed the number of input rows."
+    ]
+  },
   "PACKAGE_NOT_INSTALLED": {
     "message": [
       "<package_name> >= <minimum_version> must be installed; however, it was not found."
@@ -817,11 +827,6 @@
       "Pandas API on Spark does not properly work on ANSI mode.",
       "Please set a Spark config 'spark.sql.ansi.enabled' to `false`.",
       "Alternatively set a pandas-on-spark option 'compute.fail_on_ansi_mode' to `False` to force it to work, although it can cause unexpected behavior."
-    ]
-  },
-  "PANDAS_UDF_OUTPUT_EXCEEDS_INPUT_ROWS" : {
-    "message": [
-      "The Pandas SCALAR_ITER UDF outputs more rows than input rows."
     ]
   },
   "PIPE_FUNCTION_EXITED": {
@@ -875,24 +880,19 @@
       "OPERATION_NOT_FOUND on the server but responses were already received from it."
     ]
   },
-  "RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDF": {
+  "RESULT_COLUMN_NAMES_MISMATCH": {
     "message": [
-      "Column names of the returned pyarrow.Table do not match specified schema.<missing><extra>"
+      "Column names of the returned data do not match specified schema.<missing><extra>"
     ]
   },
-  "RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF": {
+  "RESULT_COLUMN_SCHEMA_MISMATCH": {
     "message": [
-      "Column names of the returned pandas.DataFrame do not match specified schema.<missing><extra>"
+      "Number of columns of the returned data doesn't match specified schema. Expected: <expected> Actual: <actual>"
     ]
   },
-  "RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF": {
+  "RESULT_ROWS_MISMATCH": {
     "message": [
-      "Number of columns of the returned pandas.DataFrame doesn't match specified schema. Expected: <expected> Actual: <actual>"
-    ]
-  },
-  "RESULT_LENGTH_MISMATCH_FOR_SCALAR_ITER_PANDAS_UDF": {
-    "message": [
-      "The length of output in Scalar iterator pandas UDF should be the same with the input's; however, the length of output was <output_length> and the length of input was <input_length>."
+      "The number of output rows (<output_length>) must match the number of input rows (<input_length>)."
     ]
   },
   "RESULT_TYPE_MISMATCH_FOR_ARROW_UDF": {
@@ -958,11 +958,6 @@
   "STOP_ITERATION_OCCURRED": {
     "message": [
       "Caught StopIteration thrown from user's code; failing the task: <exc>"
-    ]
-  },
-  "STOP_ITERATION_OCCURRED_FROM_SCALAR_ITER_PANDAS_UDF": {
-    "message": [
-      "pandas iterator UDF should exhaust the input iterator."
     ]
   },
   "STREAMING_CONNECT_SERIALIZATION_ERROR": {

@@ -678,7 +678,7 @@ class ScalarPandasUDFTestsMixin:
                 yield pd.Series(1)
 
         with self.assertRaisesRegex(
-            Exception, "The length of output in Scalar iterator.*" "the length of output was 1"
+            Exception, "The number of output rows.*must match the number of input rows"
         ):
             df.select(iter_udf_wong_output_size(col("id"))).collect()
 
@@ -691,7 +691,7 @@ class ScalarPandasUDFTestsMixin:
 
         with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 3}):
             df1 = self.spark.range(10).repartition(1)
-            with self.assertRaisesRegex(Exception, "pandas iterator UDF should exhaust"):
+            with self.assertRaisesRegex(Exception, "The input iterator must be fully consumed"):
                 df1.select(iter_udf_not_reading_all_input(col("id"))).collect()
 
     def test_vectorized_udf_chained(self):

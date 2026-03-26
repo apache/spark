@@ -313,8 +313,8 @@ class GroupedApplyInPandasTestsMixin:
     def check_apply_in_pandas_returning_wrong_column_names(self):
         with self.assertRaisesRegex(
             PythonException,
-            "Column names of the returned pandas.DataFrame do not match specified schema. "
-            "Missing: mean. Unexpected: median, std.\n",
+            "Column names of the returned data do not match specified schema. "
+            "Missing: mean. Unexpected: median, std.",
         ):
             self._test_apply_in_pandas(
                 lambda key, pdf: pd.DataFrame(
@@ -329,8 +329,8 @@ class GroupedApplyInPandasTestsMixin:
     def check_apply_in_pandas_returning_no_column_names_and_wrong_amount(self):
         with self.assertRaisesRegex(
             PythonException,
-            "Number of columns of the returned pandas.DataFrame doesn't match "
-            "specified schema. Expected: 2 Actual: 3\n",
+            "Number of columns of the returned data doesn't match "
+            "specified schema. Expected: 2 Actual: 3",
         ):
             self._test_apply_in_pandas(
                 lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(), pdf.v.std())])
@@ -644,8 +644,8 @@ class GroupedApplyInPandasTestsMixin:
         with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
             with self.assertRaisesRegex(
                 PythonException,
-                "Column names of the returned pandas.DataFrame do not match "
-                "specified schema. Missing: id. Unexpected: iid.\n",
+                "Column names of the returned data do not match "
+                "specified schema. Missing: id. Unexpected: iid.",
             ):
                 grouped_df.apply(column_name_typo).collect()
             with self.assertRaisesRegex(Exception, "[D|d]ecimal.*got.*date"):
