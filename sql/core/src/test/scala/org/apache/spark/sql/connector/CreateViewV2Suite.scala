@@ -21,7 +21,9 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.ViewAlreadyExistsException
+import org.apache.spark.sql.catalyst.catalog.CatalogTable.{VIEW_SCHEMA_MODE, VIEW_SQL_CONFIG_PREFIX}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, InMemoryViewCatalog}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class CreateViewV2Suite extends QueryTest with SharedSparkSession with BeforeAndAfter {
@@ -165,6 +167,65 @@ class CreateViewV2Suite extends QueryTest with SharedSparkSession with BeforeAnd
     } finally {
       spark.sessionState.catalogManager.reset()
       spark.sessionState.conf.unsetConf(s"spark.sql.catalog.$tableOnlyCat")
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // viewSchemaMode stored in properties
+  // --------------------------------------------------------------------------
+
+  test("create view without schema mode: no view.schemaMode property stored") {
+    withView(s"$catalogName.ns.v") {
+      sql(s"CREATE VIEW $catalogName.ns.v AS SELECT 1 AS id")
+
+      val view = viewCatalog.loadView(Identifier.of(ns, "v"))
+      assert(!view.properties().containsKey(VIEW_SCHEMA_MODE))
+    }
+  }
+
+  test("create view WITH SCHEMA BINDING: stores view.schemaMode = BINDING") {
+    withView(s"$catalogName.ns.v") {
+      sql(s"CREATE VIEW $catalogName.ns.v WITH SCHEMA BINDING AS SELECT 1 AS id")
+
+      val view = viewCatalog.loadView(Identifier.of(ns, "v"))
+      assert(view.properties().get(VIEW_SCHEMA_MODE) == "BINDING")
+    }
+  }
+
+  test("create view WITH SCHEMA EVOLUTION: stores view.schemaMode = EVOLUTION") {
+    withView(s"$catalogName.ns.v") {
+      sql(s"CREATE VIEW $catalogName.ns.v WITH SCHEMA EVOLUTION AS SELECT 1 AS id")
+
+      val view = viewCatalog.loadView(Identifier.of(ns, "v"))
+      assert(view.properties().get(VIEW_SCHEMA_MODE) == "EVOLUTION")
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // SQL configs captured at creation time
+  // --------------------------------------------------------------------------
+
+  test("SQL configs at creation time are stored in view properties") {
+    withView(s"$catalogName.ns.v") {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+        sql(s"CREATE VIEW $catalogName.ns.v AS SELECT 1 AS id")
+      }
+
+      val view = viewCatalog.loadView(Identifier.of(ns, "v"))
+      val tzKey = VIEW_SQL_CONFIG_PREFIX + SQLConf.SESSION_LOCAL_TIMEZONE.key
+      assert(view.properties().get(tzKey) == "America/Los_Angeles")
+    }
+  }
+
+  test("ANSI mode is always captured in view properties") {
+    withView(s"$catalogName.ns.v") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        sql(s"CREATE VIEW $catalogName.ns.v AS SELECT 1 AS id")
+      }
+
+      val view = viewCatalog.loadView(Identifier.of(ns, "v"))
+      val ansiKey = VIEW_SQL_CONFIG_PREFIX + SQLConf.ANSI_ENABLED.key
+      assert(view.properties().get(ansiKey) == "true")
     }
   }
 

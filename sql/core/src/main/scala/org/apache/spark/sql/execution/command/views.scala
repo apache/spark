@@ -419,7 +419,7 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
    * Convert the viewSchemaMode to `properties`.
    * If the mode UNSUPPORTED do not store anything for backward compatibility.
    */
-  private def viewSchemaModeToProps(viewSchemaMode: ViewSchemaMode): Map[String, String] = {
+  def viewSchemaModeToProps(viewSchemaMode: ViewSchemaMode): Map[String, String] = {
     if (viewSchemaMode == SchemaUnsupported) {
       Map.empty
     } else {
