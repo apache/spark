@@ -2912,27 +2912,20 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             prefers_large_types=runner_conf.use_large_var_types,
         )
 
-        def func(split_index: int, batches: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
-            """Apply grouped aggregate Arrow UDFs."""
+        def func(split_index: int, batches: Iterator[Any]) -> Iterator[pa.RecordBatch]:
             for group_batches in batches:
-                # Concatenate all batches in this group into one
                 batch_list = list(group_batches)
                 if not batch_list:
                     continue
                 concatenated = pa.concat_batches(batch_list)
-
-                # Call each UDF with appropriate columns
-                result_arrays = [
-                    pa.array(
-                        [
-                            udf_func(
-                                *[concatenated.column(o) for o in args_offsets],
-                                **{k: concatenated.column(v) for k, v in kwargs_offsets.items()},
-                            )
-                        ]
+                results = [
+                    udf_func(
+                        *[concatenated.column(o) for o in args_offsets],
+                        **{k: concatenated.column(v) for k, v in kwargs_offsets.items()},
                     )
                     for udf_func, args_offsets, kwargs_offsets, _ in udfs
                 ]
+                result_arrays = [pa.array([r]) for r in results]
                 batch = pa.RecordBatch.from_arrays(result_arrays, col_names)
                 yield ArrowBatchTransformer.enforce_schema(batch, return_schema)
 
@@ -2951,23 +2944,17 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             prefers_large_types=runner_conf.use_large_var_types,
         )
 
-        def func(split_index: int, batches: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
-            """Apply grouped aggregate Arrow iterator UDF."""
+        def extract_args(batch):
+            args = tuple(batch.column(o) for o in args_offsets)
+            return args[0] if len(args) == 1 else args
+
+        def func(split_index: int, batches: Iterator[Any]) -> Iterator[pa.RecordBatch]:
             for group_batches in batches:
-                # Convert RecordBatch iterator to column iterator
-                if len(args_offsets) == 1:
-                    batch_iter = (batch.column(args_offsets[0]) for batch in group_batches)
-                else:
-                    batch_iter = (
-                        tuple(batch.column(o) for o in args_offsets) for batch in group_batches
-                    )
-
+                batch_iter = map(extract_args, group_batches)
                 result = udf_func(batch_iter)
-
-                # Drain any remaining batches to maintain stream position
+                # Drain remaining batches to maintain stream position
                 for _ in batch_iter:
                     pass
-
                 batch = pa.RecordBatch.from_arrays([pa.array([result])], ["_0"])
                 yield ArrowBatchTransformer.enforce_schema(batch, return_schema)
 
