@@ -18,7 +18,7 @@ from enum import Enum
 import json
 import os
 import socket
-from typing import Any, Dict, List, Union, Optional, Tuple, Iterator
+from typing import IO, Any, Dict, List, Union, Optional, Tuple, Iterator, cast
 
 from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
@@ -537,11 +537,11 @@ class StatefulProcessorApiClient:
             pd.DataFrame(state, columns=column_names), schema
         )
         batch = pa.RecordBatch.from_pandas(pandas_df)
-        self.serializer.dump_stream(iter([batch]), self.sockfile)
+        self.serializer.dump_stream(iter([batch]), cast(IO[bytes], self.sockfile))
         self.sockfile.flush()
 
     def _read_arrow_state(self) -> Any:
-        return self.serializer.load_stream(self.sockfile)
+        return self.serializer.load_stream(cast(IO[bytes], self.sockfile))
 
     def _send_list_state(self, schema: StructType, state: List[Tuple]) -> None:
         for value in state:
