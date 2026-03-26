@@ -19,7 +19,7 @@ import os
 import shutil
 import tempfile
 
-from pyspark.errors import AnalysisException
+from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
 from pyspark.sql import Row
 from pyspark.sql.functions import col, lit
 from pyspark.sql.readwriter import DataFrameWriterV2
@@ -162,6 +162,12 @@ class ReadwriterTestsMixin:
                 .saveAsTable("pyspark_bucket")
             )
             self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
+
+            with self.assertRaises(PySparkTypeError):
+                df.write.bucketBy("x", "y")
+
+            with self.assertRaises(PySparkValueError):
+                df.write.bucketBy(2, ["x", "y"], "z")
 
     def test_cluster_by(self):
         data = [
