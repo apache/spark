@@ -36,7 +36,7 @@ import org.apache.spark.tags.SlowSQLTest
  * so wrapping the test body overrides the V3 setting from the parent trait.
  */
 trait TestWithV4StateFormat { self: StreamingJoinSuite =>
-  override protected def useVirtualColumnFamilies = true
+  override protected def testMode: Mode = Mode.WithVCF
 
   override def testWithVirtualColumnFamilyJoins(
       testName: String, testTags: Tag*)(testBody: => Any): Unit = {

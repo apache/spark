@@ -49,46 +49,52 @@ import org.apache.spark.util.Utils
 abstract class StreamingJoinSuite
   extends StreamTest with StateStoreMetricsTest with BeforeAndAfter {
 
-  /** Whether this suite runs tests with virtual column families (VCF). */
-  protected def useVirtualColumnFamilies: Boolean
+  sealed trait Mode
+  object Mode {
+    case object WithVCF extends Mode
+    case object WithoutVCF extends Mode
+  }
 
-  /** Dispatches each test to VCF or non-VCF mode based on [[useVirtualColumnFamilies]]. */
+  protected def testMode: Mode
+
+  /** Dispatches each test to VCF or non-VCF mode based on [[testMode]]. */
   override protected def test(testName: String, testTags: Tag*)(testBody: => Any)(
     implicit pos: Position): Unit = {
-    if (useVirtualColumnFamilies) {
-      // Test with VCF with changelog checkpointing enabled and disabled.
-      // Since VCF requires RocksDB, we only test with RocksDB here.
-      Seq("false", "true").foreach { enabled =>
-        testWithVirtualColumnFamilyJoins(
-          testName + s" (with changelog checkpointing = $enabled)", testTags: _*) {
-          withSQLConf(
-            "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" -> enabled
-          ) {
-            testBody
+    testMode match {
+      case Mode.WithVCF =>
+        // Test with VCF with changelog checkpointing enabled and disabled.
+        // Since VCF requires RocksDB, we only test with RocksDB here.
+        Seq("false", "true").foreach { enabled =>
+          testWithVirtualColumnFamilyJoins(
+            testName + s" (with changelog checkpointing = $enabled)", testTags: _*) {
+            withSQLConf(
+              "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" -> enabled
+            ) {
+              testBody
+            }
           }
         }
-      }
-    } else {
-      // Test with both RocksDB and HDFS state store providers without VCF.
-      val providers = Seq(
-        classOf[RocksDBStateStoreProvider].getName,
-        classOf[HDFSBackedStateStoreProvider].getName
-      )
-      providers.foreach { provider =>
-        testWithoutVirtualColumnFamilyJoins(testName + s" (with $provider)", testTags: _*) {
-          withSQLConf(
-            SQLConf.STATE_STORE_PROVIDER_CLASS.key -> provider
-          ) {
-            testBody
+      case Mode.WithoutVCF =>
+        // Test with both RocksDB and HDFS state store providers without VCF.
+        val providers = Seq(
+          classOf[RocksDBStateStoreProvider].getName,
+          classOf[HDFSBackedStateStoreProvider].getName
+        )
+        providers.foreach { provider =>
+          testWithoutVirtualColumnFamilyJoins(testName + s" (with $provider)", testTags: _*) {
+            withSQLConf(
+              SQLConf.STATE_STORE_PROVIDER_CLASS.key -> provider
+            ) {
+              testBody
+            }
           }
         }
-      }
     }
   }
 
   def testWithVirtualColumnFamilyJoins(testName: String, testTags: Tag*)(
     testBody: => Any): Unit = {
-    if (useVirtualColumnFamilies) {
+    if (testMode == Mode.WithVCF) {
       super.test(testName + " (with virtual column family joins)", testTags: _*) {
         withSQLConf(
           SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3",
@@ -102,7 +108,7 @@ abstract class StreamingJoinSuite
 
   def testWithoutVirtualColumnFamilyJoins(testName: String, testTags: Tag*)(
     testBody: => Any): Unit = {
-    if (!useVirtualColumnFamilies) {
+    if (testMode == Mode.WithoutVCF) {
       super.test(testName + " (without virtual column family joins)", testTags: _*) {
         withSQLConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "2") {
           testBody
@@ -2545,40 +2551,40 @@ abstract class StreamingLeftSemiJoinSuite extends StreamingLeftSemiJoinBase {
 
 @SlowSQLTest
 class StreamingInnerJoinWithVCFSuite extends StreamingInnerJoinSuite {
-  override protected def useVirtualColumnFamilies = true
+  override protected def testMode = Mode.WithVCF
 }
 
 @SlowSQLTest
 class StreamingInnerJoinWithoutVCFSuite extends StreamingInnerJoinSuite {
-  override protected def useVirtualColumnFamilies = false
+  override protected def testMode = Mode.WithoutVCF
 }
 
 @SlowSQLTest
 class StreamingOuterJoinWithVCFSuite extends StreamingOuterJoinSuite {
-  override protected def useVirtualColumnFamilies = true
+  override protected def testMode = Mode.WithVCF
 }
 
 @SlowSQLTest
 class StreamingOuterJoinWithoutVCFSuite extends StreamingOuterJoinSuite {
-  override protected def useVirtualColumnFamilies = false
+  override protected def testMode = Mode.WithoutVCF
 }
 
 @SlowSQLTest
 class StreamingFullOuterJoinWithVCFSuite extends StreamingFullOuterJoinSuite {
-  override protected def useVirtualColumnFamilies = true
+  override protected def testMode = Mode.WithVCF
 }
 
 @SlowSQLTest
 class StreamingFullOuterJoinWithoutVCFSuite extends StreamingFullOuterJoinSuite {
-  override protected def useVirtualColumnFamilies = false
+  override protected def testMode = Mode.WithoutVCF
 }
 
 @SlowSQLTest
 class StreamingLeftSemiJoinWithVCFSuite extends StreamingLeftSemiJoinSuite {
-  override protected def useVirtualColumnFamilies = true
+  override protected def testMode = Mode.WithVCF
 }
 
 @SlowSQLTest
 class StreamingLeftSemiJoinWithoutVCFSuite extends StreamingLeftSemiJoinSuite {
-  override protected def useVirtualColumnFamilies = false
+  override protected def testMode = Mode.WithoutVCF
 }
