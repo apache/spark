@@ -654,6 +654,10 @@ spark.sql.inMemoryColumnarStorage.hugeVectorReserveRatio
 spark.sql.inMemoryColumnarStorage.hugeVectorThreshold
 spark.sql.inMemoryColumnarStorage.partitionPruning
 spark.sql.inMemoryTableScanStatistics.enable
+spark.sql.insertIntoReplaceOn.enabled
+spark.sql.insertIntoReplaceOnByName.enabled
+spark.sql.insertIntoReplaceUsing.enabled
+spark.sql.insertIntoReplaceUsingByName.enabled
 spark.sql.join.preferSortMergeJoin
 spark.sql.json.enableExactStringParsing
 spark.sql.json.enablePartialResults
