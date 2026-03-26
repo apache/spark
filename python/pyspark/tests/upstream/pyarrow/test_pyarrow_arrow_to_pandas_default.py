@@ -135,6 +135,7 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
                 [0, 1, -1, max_val, min_val], pa_type
             )
             sources[f"int{bits}:nullable"] = pa.array([0, 1, None], pa_type)
+            sources[f"int{bits}:empty"] = pa.array([], pa_type)
 
         for bits, pa_type in [
             (8, pa.uint8()),
@@ -145,23 +146,27 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
             max_val = 2**bits - 1
             sources[f"uint{bits}:standard"] = pa.array([0, 1, max_val], pa_type)
             sources[f"uint{bits}:nullable"] = pa.array([0, 1, None], pa_type)
+            sources[f"uint{bits}:empty"] = pa.array([], pa_type)
 
         # =====================================================================
         # Float types
         # =====================================================================
         sources["float32:standard"] = pa.array([0.0, 1.5, -1.5], pa.float32())
         sources["float32:nullable"] = pa.array([0.0, 1.5, None], pa.float32())
+        sources["float32:empty"] = pa.array([], pa.float32())
         sources["float64:standard"] = pa.array([0.0, 1.5, -1.5], pa.float64())
         sources["float64:nullable"] = pa.array([0.0, 1.5, None], pa.float64())
         sources["float64:special"] = pa.array(
             [float("nan"), float("inf"), float("-inf")], pa.float64()
         )
+        sources["float64:empty"] = pa.array([], pa.float64())
 
         # =====================================================================
         # Boolean
         # =====================================================================
         sources["bool:standard"] = pa.array([True, False, True], pa.bool_())
         sources["bool:nullable"] = pa.array([True, False, None], pa.bool_())
+        sources["bool:empty"] = pa.array([], pa.bool_())
 
         # =====================================================================
         # String types
@@ -172,12 +177,14 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
         sources["string:nullable"] = pa.array(
             ["hello", None, "world"], pa.string()
         )
+        sources["string:empty"] = pa.array([], pa.string())
         sources["large_string:standard"] = pa.array(
             ["hello", "world"], pa.large_string()
         )
         sources["large_string:nullable"] = pa.array(
             ["hello", None], pa.large_string()
         )
+        sources["large_string:empty"] = pa.array([], pa.large_string())
 
         # =====================================================================
         # Binary types
@@ -186,12 +193,14 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
             [b"hello", b"world"], pa.binary()
         )
         sources["binary:nullable"] = pa.array([b"hello", None], pa.binary())
+        sources["binary:empty"] = pa.array([], pa.binary())
         sources["large_binary:standard"] = pa.array(
             [b"hello", b"world"], pa.large_binary()
         )
         sources["large_binary:nullable"] = pa.array(
             [b"hello", None], pa.large_binary()
         )
+        sources["large_binary:empty"] = pa.array([], pa.large_binary())
 
         # =====================================================================
         # Decimal
@@ -203,6 +212,7 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
         sources["decimal128:nullable"] = pa.array(
             [Decimal("1.23"), None, Decimal("4.56")], pa.decimal128(5, 2)
         )
+        sources["decimal128:empty"] = pa.array([], pa.decimal128(5, 2))
 
         # =====================================================================
         # Date types
@@ -211,8 +221,10 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
         d2 = datetime.date(2024, 6, 15)
         sources["date32:standard"] = pa.array([d1, d2], pa.date32())
         sources["date32:nullable"] = pa.array([d1, None], pa.date32())
+        sources["date32:empty"] = pa.array([], pa.date32())
         sources["date64:standard"] = pa.array([d1, d2], pa.date64())
         sources["date64:nullable"] = pa.array([d1, None], pa.date64())
+        sources["date64:empty"] = pa.array([], pa.date64())
 
         # =====================================================================
         # Timestamp types
@@ -226,12 +238,18 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
             sources[f"timestamp[{unit}]:nullable"] = pa.array(
                 [dt1, None], pa.timestamp(unit)
             )
+            sources[f"timestamp[{unit}]:empty"] = pa.array(
+                [], pa.timestamp(unit)
+            )
         # Timestamp with timezone
         sources["timestamp[us,tz=UTC]:standard"] = pa.array(
             [dt1, dt2], pa.timestamp("us", tz="UTC")
         )
         sources["timestamp[us,tz=UTC]:nullable"] = pa.array(
             [dt1, None], pa.timestamp("us", tz="UTC")
+        )
+        sources["timestamp[us,tz=UTC]:empty"] = pa.array(
+            [], pa.timestamp("us", tz="UTC")
         )
 
         # =====================================================================
@@ -246,6 +264,9 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
             sources[f"duration[{unit}]:nullable"] = pa.array(
                 [td1, None], pa.duration(unit)
             )
+            sources[f"duration[{unit}]:empty"] = pa.array(
+                [], pa.duration(unit)
+            )
 
         # =====================================================================
         # Time types
@@ -254,17 +275,22 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
         t2 = datetime.time(18, 45, 30)
         sources["time32[s]:standard"] = pa.array([t1, t2], pa.time32("s"))
         sources["time32[s]:nullable"] = pa.array([t1, None], pa.time32("s"))
+        sources["time32[s]:empty"] = pa.array([], pa.time32("s"))
         sources["time32[ms]:standard"] = pa.array([t1, t2], pa.time32("ms"))
         sources["time32[ms]:nullable"] = pa.array([t1, None], pa.time32("ms"))
+        sources["time32[ms]:empty"] = pa.array([], pa.time32("ms"))
         sources["time64[us]:standard"] = pa.array([t1, t2], pa.time64("us"))
         sources["time64[us]:nullable"] = pa.array([t1, None], pa.time64("us"))
+        sources["time64[us]:empty"] = pa.array([], pa.time64("us"))
         sources["time64[ns]:standard"] = pa.array([t1, t2], pa.time64("ns"))
         sources["time64[ns]:nullable"] = pa.array([t1, None], pa.time64("ns"))
+        sources["time64[ns]:empty"] = pa.array([], pa.time64("ns"))
 
         # =====================================================================
         # Null type
         # =====================================================================
         sources["null:standard"] = pa.array([None, None, None], pa.null())
+        sources["null:empty"] = pa.array([], pa.null())
 
         # =====================================================================
         # Nested types
@@ -275,14 +301,21 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
         sources["list<int64>:nullable"] = pa.array(
             [[1, 2], None, [3]], pa.list_(pa.int64())
         )
+        sources["list<int64>:empty"] = pa.array([], pa.list_(pa.int64()))
         sources["list<string>:standard"] = pa.array(
             [["a", "b"], ["c"]], pa.list_(pa.string())
         )
         sources["large_list<int64>:standard"] = pa.array(
             [[1, 2], [3, 4]], pa.large_list(pa.int64())
         )
+        sources["large_list<int64>:empty"] = pa.array(
+            [], pa.large_list(pa.int64())
+        )
         sources["fixed_size_list<int64>[3]:standard"] = pa.array(
             [[1, 2, 3], [4, 5, 6]], pa.list_(pa.int64(), 3)
+        )
+        sources["fixed_size_list<int64>[3]:empty"] = pa.array(
+            [], pa.list_(pa.int64(), 3)
         )
         sources["struct:standard"] = pa.array(
             [{"x": 1, "y": "a"}, {"x": 2, "y": "b"}],
@@ -292,9 +325,15 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
             [{"x": 1, "y": "a"}, None],
             pa.struct([("x", pa.int64()), ("y", pa.string())]),
         )
+        sources["struct:empty"] = pa.array(
+            [], pa.struct([("x", pa.int64()), ("y", pa.string())])
+        )
         sources["map<string,int64>:standard"] = pa.array(
             [[("a", 1), ("b", 2)], [("c", 3)]],
             pa.map_(pa.string(), pa.int64()),
+        )
+        sources["map<string,int64>:empty"] = pa.array(
+            [], pa.map_(pa.string(), pa.int64())
         )
         # list of list (nested list)
         sources["list<list<int64>>:standard"] = pa.array(
@@ -355,6 +394,12 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
             pa.DictionaryArray.from_arrays(
                 pa.array([0, 1, None, 0], pa.int32()),
                 pa.array(["a", "b"], pa.string()),
+            )
+        )
+        sources["dictionary<int32,string>:empty"] = (
+            pa.DictionaryArray.from_arrays(
+                pa.array([], pa.int32()),
+                pa.array([], pa.string()),
             )
         )
 
