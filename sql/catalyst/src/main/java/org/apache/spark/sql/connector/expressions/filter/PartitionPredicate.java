@@ -46,8 +46,8 @@ public abstract class PartitionPredicate extends Predicate {
    * {@inheritDoc}
    * <p>
    * For PartitionPredicate, returns {@link PartitionFieldReference} instances that identify
-   * the partition columns (from {@link Table#partitioning()}) referenced by this predicate.
-   * Each reference's {@link PartitionFieldReference#fieldNames()} gives the partition column
+   * the partition fields (from {@link Table#partitioning()}) referenced by this predicate.
+   * Each reference's {@link PartitionFieldReference#fieldNames()} gives the partition field
    * name; {@link PartitionFieldReference#ordinal()} gives the 0-based position in
    * {@link Table#partitioning()}.
    * <p>
@@ -70,7 +70,7 @@ public abstract class PartitionPredicate extends Predicate {
    * partitioned data) to Spark for post-scan filter, while predicates that reference only
    * initially-added partition transforms may be fully pushed.
    *
-   * @return array of partition column references
+   * @return array of partition field references
    */
   @Override
   public abstract NamedReference[] references();

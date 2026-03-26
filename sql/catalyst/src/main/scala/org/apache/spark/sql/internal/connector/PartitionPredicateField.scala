@@ -21,7 +21,7 @@ import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.types.StructField
 
 /**
- * Metadata for one identity partition field.
+ * Metadata for one partition field.
  *
  * @param structField the Catalyst field describing the partition column (name, type,
  *                    nullability). For nested columns the name is the dotted path

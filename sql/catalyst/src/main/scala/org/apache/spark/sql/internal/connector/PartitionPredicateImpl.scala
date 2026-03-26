@@ -45,7 +45,7 @@ class PartitionPredicateImpl private (
     val boundExpr = catalystExpr.transform {
       case a: AttributeReference =>
         val index = partitionAttrs.indexWhere(_.name == a.name)
-        require(index >= 0, s"Column ${a.name} not found in partition schema")
+        require(index >= 0, s"Field ${a.name} not found in partition schema")
         BoundReference(index, partitionAttrs(index).dataType, nullable = a.nullable)
     }
     val predicate = CatalystPredicate.createInterpreted(boundExpr)
