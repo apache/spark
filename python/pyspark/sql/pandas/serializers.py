@@ -929,7 +929,7 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         return "GroupPandasUDFSerializer"
 
 
-class CogroupArrowUDFSerializer(ArrowStreamCoGroupSerializer):
+class CogroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
     """
     Serializes pyarrow.RecordBatch data with Arrow streaming format.
 
@@ -942,28 +942,11 @@ class CogroupArrowUDFSerializer(ArrowStreamCoGroupSerializer):
         If True, then DataFrames will get columns by name
     """
 
-    def __init__(self, *, assign_cols_by_name):
-        super().__init__()
-        self._assign_cols_by_name = assign_cols_by_name
-
-    def dump_stream(self, iterator, stream):
-        import pyarrow as pa
-
-        batch_iter = ((batch, arrow_type) for batches, arrow_type in iterator for batch in batches)
-
-        if self._assign_cols_by_name:
-            batch_iter = (
-                (
-                    pa.RecordBatch.from_arrays(
-                        [batch.column(field.name) for field in arrow_type],
-                        names=[field.name for field in arrow_type],
-                    ),
-                    arrow_type,
-                )
-                for batch, arrow_type in batch_iter
-            )
-
-        super().dump_stream(batch_iter, stream)
+    def load_stream(self, stream):
+        """
+        Deserialize Cogrouped ArrowRecordBatches and yield as two `pyarrow.RecordBatch`es.
+        """
+        yield from ArrowStreamCoGroupSerializer.load_stream(self, stream)
 
 
 class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
