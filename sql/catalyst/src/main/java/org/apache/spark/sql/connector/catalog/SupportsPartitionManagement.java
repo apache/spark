@@ -172,6 +172,6 @@ public interface SupportsPartitionManagement extends Table {
      */
     default boolean truncatePartition(InternalRow ident)
         throws NoSuchPartitionException, SparkUnsupportedOperationException {
-      throw new SparkUnsupportedOperationException("PARTITION_TRUNCATE_NOT_SUPPORTED");
+      throw new SparkUnsupportedOperationException("TRUNCATE_PARTITION_NOT_SUPPORTED");
     }
 }

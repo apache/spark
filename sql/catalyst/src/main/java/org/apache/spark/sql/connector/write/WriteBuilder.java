@@ -62,7 +62,7 @@ public interface WriteBuilder {
   @Deprecated(since = "3.2.0")
   default BatchWrite buildForBatch() {
     throw new SparkUnsupportedOperationException(
-      "DATASOURCE_BATCH_WRITE_BUILD_NOT_SUPPORTED", Map.of("class", getClass().getName()));
+      "DATASOURCE_BATCH_WRITE_BUILDER_NOT_SUPPORTED", Map.of("class", getClass().getName()));
   }
 
   /**
