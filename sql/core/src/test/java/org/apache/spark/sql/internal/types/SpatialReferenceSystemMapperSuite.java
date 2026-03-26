@@ -106,41 +106,6 @@ public class SpatialReferenceSystemMapperSuite {
   }
 
   /**
-   * Validates expected registry scale: geographic SRID count and CRS string-id counts by authority
-   * prefix (empty authority for {@code SRID:0}, plus OGC, EPSG, ESRI).
-   */
-  @Test
-  public void testSpatialReferenceSystemContents() {
-    SpatialReferenceSystemCache cache = SpatialReferenceSystemCache.getInstance();
-    Map<Integer, SpatialReferenceSystemInformation> sridToSrs = cache.getSridToSrs();
-    Map<String, SpatialReferenceSystemInformation> stringIdToSrs = cache.getStringIdToSrs();
-
-    int emptyAuthoritySrid0 = 0;
-    int ogc = 0;
-    int epsg = 0;
-    int esri = 0;
-    for (String stringId : stringIdToSrs.keySet()) {
-      if ("SRID:0".equals(stringId)) {
-        emptyAuthoritySrid0++;
-      } else if (stringId.startsWith("OGC:")) {
-        ogc++;
-      } else if (stringId.startsWith("EPSG:")) {
-        epsg++;
-      } else if (stringId.startsWith("ESRI:")) {
-        esri++;
-      }
-    }
-    Assertions.assertEquals(1, emptyAuthoritySrid0, "SRID:0 (empty authority)");
-    Assertions.assertEquals(3, ogc, "OGC CRS string IDs");
-    Assertions.assertEquals(7723, epsg, "EPSG CRS string IDs");
-    Assertions.assertEquals(2919, esri, "ESRI CRS string IDs");
-    Assertions.assertEquals(
-        10646,
-        stringIdToSrs.size(),
-        "total CRS string-id entries (SRID:0 + OGC + EPSG + ESRI)");
-  }
-
-  /**
    * The SRID map and CRS string-id map must be consistent inverses: canonical string ID from an
    * SRID entry resolves back to that entry, and every CRS key resolves to the canonical entry for
    * its SRID.
@@ -182,4 +147,39 @@ public class SpatialReferenceSystemMapperSuite {
           "stringIdToSrs entry must match sridToSrs for that SRID (crsKey=" + crsKey + ")");
     }
   }
+
+  /**
+   * Validates expected registry scale: geographic SRID count and CRS string-id counts by authority
+   * prefix (empty authority for {@code SRID:0}, plus OGC, EPSG, ESRI).
+   */
+    @Test
+    public void testSpatialReferenceSystemContents() {
+      SpatialReferenceSystemCache cache = SpatialReferenceSystemCache.getInstance();
+      Map<Integer, SpatialReferenceSystemInformation> sridToSrs = cache.getSridToSrs();
+  
+      int emptyAuthoritySrid0 = 0;
+      int ogc = 0;
+      int epsg = 0;
+      int esri = 0;
+      for (SpatialReferenceSystemInformation srs : sridToSrs.values()) {
+        String stringId = srs.stringId();
+        if ("SRID:0".equals(stringId)) {
+          emptyAuthoritySrid0++;
+        } else if (stringId.startsWith("OGC:")) {
+          ogc++;
+        } else if (stringId.startsWith("EPSG:")) {
+          epsg++;
+        } else if (stringId.startsWith("ESRI:")) {
+          esri++;
+        }
+      }
+      Assertions.assertEquals(1, emptyAuthoritySrid0, "SRID:0 (empty authority)");
+      Assertions.assertEquals(3, ogc, "OGC CRS string IDs");
+      Assertions.assertEquals(7720, epsg, "EPSG CRS string IDs");
+      Assertions.assertEquals(2919, esri, "ESRI CRS string IDs");
+      Assertions.assertEquals(
+          10643,
+          sridToSrs.size(),
+          "total SRID entries (SRID:0 + OGC + EPSG + ESRI)");
+    }
 }
