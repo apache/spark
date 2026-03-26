@@ -78,7 +78,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
   private def getDataSourceOptions(
       properties: Map[String, String],
       storage: CatalogStorageFormat): CaseInsensitiveStringMap = {
-    val propertiesWithPath = properties ++
+    val propertiesWithPath = storage.properties ++ properties ++
       storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
     new CaseInsensitiveStringMap(propertiesWithPath.asJava)
   }
@@ -94,32 +94,50 @@ class V2SessionCatalog(catalog: SessionCatalog)
       // table here. To avoid breaking it we do not resolve the table provider and still return
       // `V1Table` if the custom session catalog is present.
       if (table.provider.isDefined && !hasCustomSessionCatalog) {
-        val qualifiedTableName = QualifiedTableName(
-          table.identifier.catalog.get, table.database, table.identifier.table)
-        // Check if the table is in the v1 table cache to skip the v2 table lookup.
-        if (catalog.getCachedTable(qualifiedTableName) != null) {
-          return V1Table(table)
-        }
         DataSourceV2Utils.getTableProvider(table.provider.get, conf) match {
           case Some(provider) =>
-            // Get the table properties during creation and append the path option
-            // to the properties.
-            val dsOptions = getDataSourceOptions(table.properties, table.storage)
-            // If the source accepts external table metadata, we can pass the schema and
-            // partitioning information stored in Hive to `getTable` to avoid expensive
-            // schema/partitioning inference.
-            if (provider.supportsExternalMetadata()) {
-              provider.getTable(
-                table.schema,
-                getV2Partitioning(table),
-                dsOptions.asCaseSensitiveMap())
-            } else {
-              provider.getTable(
-                provider.inferSchema(dsOptions),
-                provider.inferPartitioning(dsOptions),
-                dsOptions.asCaseSensitiveMap())
+            val dsOptions = getDataSourceOptions(
+              table.properties, table.storage)
+            val v2Table =
+              if (provider.supportsExternalMetadata()) {
+                provider.getTable(
+                  table.schema,
+                  getV2Partitioning(table),
+                  dsOptions.asCaseSensitiveMap())
+              } else {
+                provider.getTable(
+                  provider.inferSchema(dsOptions),
+                  provider.inferPartitioning(dsOptions),
+                  dsOptions.asCaseSensitiveMap())
+              }
+            v2Table match {
+              case ft: FileTable =>
+                ft.catalogTable = Some(table)
+                if (table.partitionColumnNames.nonEmpty) {
+                  try {
+                    val parts = catalog
+                      .listPartitions(table.identifier)
+                    if (parts.nonEmpty) {
+                      ft.useCatalogFileIndex = true
+                    }
+                  } catch {
+                    case _: Exception =>
+                  }
+                }
+              case _ =>
             }
+            v2Table
           case _ =>
+            // No V2 provider available. Use V1 table cache
+            // for performance if the table is already cached.
+            val qualifiedTableName = QualifiedTableName(
+              table.identifier.catalog.get,
+              table.database,
+              table.identifier.table)
+            if (catalog.getCachedTable(
+                qualifiedTableName) != null) {
+              return V1Table(table)
+            }
             V1Table(table)
         }
       } else {
@@ -216,6 +234,17 @@ class V2SessionCatalog(catalog: SessionCatalog)
             partitions
           }
           val table = tableProvider.getTable(schema, partitions, dsOptions)
+          table match {
+            case ft: FileTable =>
+              schema.foreach { field =>
+                if (!ft.supportsDataType(field.dataType)) {
+                  throw QueryCompilationErrors
+                    .dataTypeUnsupportedByDataSourceError(
+                      ft.formatName, field)
+                }
+              }
+            case _ =>
+          }
           // Check if the schema of the created table matches the given schema.
           val tableSchema = table.columns().asSchema
           if (!DataType.equalsIgnoreNullability(table.columns().asSchema, schema)) {

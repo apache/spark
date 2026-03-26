@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2, FileTable}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructField, StructType}
@@ -247,7 +247,34 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         constructV1TableCmd(None, c.tableSpec, ident, StructType(fields), c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
-        c
+        // File sources: validate data types and create via
+        // V1 command. Non-file V2 providers keep V2 plan.
+        DataSourceV2Utils.getTableProvider(
+            provider, conf) match {
+          case Some(f: FileDataSourceV2) =>
+            val ft = f.getTable(
+              c.tableSchema, c.partitioning.toArray,
+              new org.apache.spark.sql.util
+                .CaseInsensitiveStringMap(
+                  java.util.Collections.emptyMap()))
+            ft match {
+              case ft: FileTable =>
+                c.tableSchema.foreach { field =>
+                  if (!ft.supportsDataType(
+                      field.dataType)) {
+                    throw QueryCompilationErrors
+                      .dataTypeUnsupportedByDataSourceError(
+                        ft.formatName, field)
+                  }
+                }
+              case _ =>
+            }
+            constructV1TableCmd(None, c.tableSpec, ident,
+              StructType(c.columns.map(_.toV1Column)),
+              c.partitioning,
+              c.ignoreIfExists, storageFormat, provider)
+          case _ => c
+        }
       }
 
     case c @ CreateTableAsSelect(
@@ -267,7 +294,17 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         constructV1TableCmd(Some(c.query), c.tableSpec, ident, new StructType, c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
-        c
+        // File sources: create via V1 command.
+        // Non-file V2 providers keep V2 plan.
+        DataSourceV2Utils.getTableProvider(
+            provider, conf) match {
+          case Some(_: FileDataSourceV2) =>
+            constructV1TableCmd(Some(c.query),
+              c.tableSpec, ident, new StructType,
+              c.partitioning, c.ignoreIfExists,
+              storageFormat, provider)
+          case _ => c
+        }
       }
 
     case RefreshTable(ResolvedV1TableOrViewIdentifier(ident)) =>
@@ -281,7 +318,16 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         throw QueryCompilationErrors.unsupportedTableOperationError(
           ident, "REPLACE TABLE")
       } else {
-        c
+        // File sources don't support REPLACE TABLE in
+        // the session catalog (requires StagingTableCatalog).
+        DataSourceV2Utils.getTableProvider(
+            provider, conf) match {
+          case Some(_: FileDataSourceV2) =>
+            throw QueryCompilationErrors
+              .unsupportedTableOperationError(
+                ident, "REPLACE TABLE")
+          case _ => c
+        }
       }
 
     case c @ ReplaceTableAsSelect(ResolvedV1Identifier(ident), _, _, _, _, _, _) =>
@@ -290,7 +336,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         throw QueryCompilationErrors.unsupportedTableOperationError(
           ident, "REPLACE TABLE AS SELECT")
       } else {
-        c
+        DataSourceV2Utils.getTableProvider(
+            provider, conf) match {
+          case Some(_: FileDataSourceV2) =>
+            throw QueryCompilationErrors
+              .unsupportedTableOperationError(
+                ident, "REPLACE TABLE AS SELECT")
+          case _ => c
+        }
       }
 
     // For CREATE TABLE LIKE, use the v1 command if both the target and source are in the session
@@ -377,8 +430,34 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case AnalyzeTables(ResolvedV1Database(db), noScan) =>
       AnalyzeTablesCommand(Some(db), noScan)
 
+    // V2 FileTable backed by session catalog: route through V1 commands.
+    // FileTable from V2SessionCatalog.loadTable doesn't match V1 extractors
+    // (ResolvedV1TableIdentifier, etc.), so we intercept here and delegate
+    // to V1 commands using the catalogTable metadata.
+    case AnalyzeTable(
+        ResolvedTable(catalog, _, ft: FileTable, _),
+        partitionSpec, noScan)
+        if supportsV1Command(catalog)
+          && ft.catalogTable.isDefined =>
+      val tableIdent = ft.catalogTable.get.identifier
+      if (partitionSpec.isEmpty) {
+        AnalyzeTableCommand(tableIdent, noScan)
+      } else {
+        AnalyzePartitionCommand(
+          tableIdent, partitionSpec, noScan)
+      }
+
     case AnalyzeColumn(ResolvedV1TableOrViewIdentifier(ident), columnNames, allColumns) =>
       AnalyzeColumnCommand(ident, columnNames, allColumns)
+
+    case AnalyzeColumn(
+        ResolvedTable(catalog, _, ft: FileTable, _),
+        columnNames, allColumns)
+        if supportsV1Command(catalog)
+          && ft.catalogTable.isDefined =>
+      AnalyzeColumnCommand(
+        ft.catalogTable.get.identifier,
+        columnNames, allColumns)
 
     // V2 catalog doesn't support REPAIR TABLE yet, we must use v1 command here.
     case RepairTable(
@@ -418,10 +497,23 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case TruncateTable(ResolvedV1TableIdentifier(ident)) =>
       TruncateTableCommand(ident, None)
 
+    case TruncateTable(ResolvedTable(catalog, _, ft: FileTable, _))
+        if supportsV1Command(catalog)
+          && ft.catalogTable.isDefined =>
+      TruncateTableCommand(ft.catalogTable.get.identifier, None)
+
     case TruncatePartition(ResolvedV1TableIdentifier(ident), partitionSpec) =>
       TruncateTableCommand(
         ident,
         Seq(partitionSpec).asUnresolvedPartitionSpecs.map(_.spec).headOption)
+
+    case TruncatePartition(
+        ResolvedTable(catalog, _, ft: FileTable, _), partitionSpec)
+        if supportsV1Command(catalog)
+          && ft.catalogTable.isDefined =>
+      TruncateTableCommand(
+        ft.catalogTable.get.identifier,
+        Some(partSpecToMap(partitionSpec, ft.partitionSchema())))
 
     case ShowPartitions(
         ResolvedV1TableOrViewIdentifier(ident),
@@ -430,6 +522,15 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         ident,
         output,
         pattern.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
+
+    case ShowPartitions(
+        ResolvedTable(catalog, _, ft: FileTable, _), pattern, output)
+        if supportsV1Command(catalog)
+          && ft.catalogTable.isDefined =>
+      ShowPartitionsCommand(
+        ft.catalogTable.get.identifier,
+        output,
+        pattern.map(partSpecToMap(_, ft.partitionSchema())))
 
     case ShowColumns(ResolvedViewIdentifier(ident), ns, output) =>
       val resolver = conf.resolver
@@ -464,10 +565,34 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         enableDropPartitions = false,
         "ALTER TABLE RECOVER PARTITIONS")
 
+    case RecoverPartitions(ResolvedTable(catalog, _, ft: FileTable, _))
+        if supportsV1Command(catalog)
+          && ft.catalogTable.isDefined =>
+      RepairTableCommand(
+        ft.catalogTable.get.identifier,
+        enableAddPartitions = true,
+        enableDropPartitions = false,
+        "ALTER TABLE RECOVER PARTITIONS")
+
     case AddPartitions(ResolvedV1TableIdentifier(ident), partSpecsAndLocs, ifNotExists) =>
       AlterTableAddPartitionCommand(
         ident,
         partSpecsAndLocs.asUnresolvedPartitionSpecs.map(spec => (spec.spec, spec.location)),
+        ifNotExists)
+
+    case AddPartitions(
+        ResolvedTable(catalog, _, ft: FileTable, _),
+        partSpecsAndLocs, ifNotExists)
+        if supportsV1Command(catalog)
+          && ft.catalogTable.isDefined =>
+      AlterTableAddPartitionCommand(
+        ft.catalogTable.get.identifier,
+        partSpecsAndLocs.map { spec =>
+          (partSpecToMap(spec, ft.partitionSchema()), spec match {
+            case r: ResolvedPartitionSpec => r.location
+            case u: UnresolvedPartitionSpec => u.location
+          })
+        },
         ifNotExists)
 
     case RenamePartitions(
@@ -476,11 +601,33 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         UnresolvedPartitionSpec(to, _)) =>
       AlterTableRenamePartitionCommand(ident, from, to)
 
+    case RenamePartitions(
+        ResolvedTable(catalog, _, ft: FileTable, _), from, to)
+        if supportsV1Command(catalog)
+          && ft.catalogTable.isDefined =>
+      val partSchema = ft.partitionSchema()
+      AlterTableRenamePartitionCommand(
+        ft.catalogTable.get.identifier,
+        partSpecToMap(from, partSchema),
+        partSpecToMap(to, partSchema))
+
     case DropPartitions(
         ResolvedV1TableIdentifier(ident), specs, ifExists, purge) =>
       AlterTableDropPartitionCommand(
         ident,
         specs.asUnresolvedPartitionSpecs.map(_.spec),
+        ifExists,
+        purge,
+        retainData = false)
+
+    case DropPartitions(
+        ResolvedTable(catalog, _, ft: FileTable, _),
+        specs, ifExists, purge)
+        if supportsV1Command(catalog)
+          && ft.catalogTable.isDefined =>
+      AlterTableDropPartitionCommand(
+        ft.catalogTable.get.identifier,
+        specs.map(partSpecToMap(_, ft.partitionSchema())),
         ifExists,
         purge,
         retainData = false)
@@ -506,6 +653,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         Some(partitionSpec),
         location) =>
       AlterTableSetLocationCommand(ident, Some(partitionSpec), location)
+
+    case SetTableLocation(
+        ResolvedTable(catalog, _, ft: FileTable, _),
+        partitionSpec, location)
+        if supportsV1Command(catalog)
+          && ft.catalogTable.isDefined =>
+      AlterTableSetLocationCommand(
+        ft.catalogTable.get.identifier, partitionSpec, location)
 
     case AlterViewAs(ResolvedViewIdentifier(ident), originalText, query) =>
       AlterViewAsCommand(ident, originalText, query)
@@ -927,5 +1082,20 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     isSessionCatalog(catalog) && (
       SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) == "builtin" ||
         catalog.isInstanceOf[CatalogExtension])
+  }
+
+  /**
+   * Converts a [[PartitionSpec]] (either [[ResolvedPartitionSpec]] or [[UnresolvedPartitionSpec]])
+   * to a V1 partition spec map (Map[String, String]).
+   */
+  private def partSpecToMap(
+      spec: PartitionSpec,
+      partSchema: StructType): Map[String, String] = spec match {
+    case r: ResolvedPartitionSpec =>
+      r.names.zipWithIndex.map { case (name, i) =>
+        val v = r.ident.get(i, partSchema(name).dataType)
+        name -> (if (v == null) null else v.toString)
+      }.toMap
+    case u: UnresolvedPartitionSpec => u.spec
   }
 }
