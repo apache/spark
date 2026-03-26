@@ -208,6 +208,20 @@ Security options for the Spark History Server are covered more detail in the
     <td>1.4.0</td>
   </tr>
   <tr>
+    <td>spark.history.fs.update.disabledSchemes</td>
+    <td>(none)</td>
+    <td>
+      Comma-separated list of URI schemes for which periodic log directory scanning is disabled
+      (e.g., <code>s3a,gs</code>). Directories with these schemes rely on on-demand loading
+      (<a href="https://issues.apache.org/jira/browse/SPARK-52914">SPARK-52914</a>, rolling event
+      logs only) instead of scanning. Applications in these directories will not appear in the
+      listing until accessed by appId. Log compaction and the cleaner may not fully function for
+      these directories; use external lifecycle management (e.g., S3 Lifecycle Policies, GCS Object
+      Lifecycle Management) instead.
+    </td>
+    <td>4.2.0</td>
+  </tr>
+  <tr>
     <td>spark.history.retainedApplications</td>
     <td>50</td>
     <td>

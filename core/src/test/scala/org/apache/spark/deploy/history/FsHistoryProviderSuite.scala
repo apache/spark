@@ -2413,6 +2413,85 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
+  test("scan disabled for file scheme skips scanning but on-demand loading still works") {
+    withTempDir { dir =>
+      val conf = createTestConf(true)
+      conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+      conf.set(SCAN_DISABLED_SCHEMES, "file")
+      conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, true)
+      val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+      val provider = new FsHistoryProvider(conf)
+
+      // Write a rolling event log
+      val writer = new RollingEventLogFilesWriter("app1", None, dir.toURI, conf, hadoopConf)
+      writer.start()
+      writeEventsToRollingWriter(writer, Seq(
+        SparkListenerApplicationStart("app1", Some("app1"), 0, "user", None),
+        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+      writer.stop()
+
+      // Scan should skip this directory -- listing remains empty
+      provider.checkForLogs()
+      assert(provider.getListing().length === 0)
+
+      // On-demand loading should still work
+      assert(provider.getAppUI("app1", None).isDefined)
+      assert(provider.getListing().length === 1)
+
+      // Subsequent scan should NOT remove the on-demand loaded app (stale protection)
+      provider.checkForLogs()
+      assert(provider.getListing().length === 1)
+
+      provider.stop()
+    }
+  }
+
+  test("scan disabled schemes do not affect directories with non-matching schemes") {
+    withTempDir { dir =>
+      val conf = createTestConf(true)
+      conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+      // Disable scanning for s3a/gs -- should not affect local file:// directories
+      conf.set(SCAN_DISABLED_SCHEMES, "s3a,gs")
+      val provider = new FsHistoryProvider(conf)
+      val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+
+      val writer = new RollingEventLogFilesWriter("app1", None, dir.toURI, conf, hadoopConf)
+      writer.start()
+      writeEventsToRollingWriter(writer, Seq(
+        SparkListenerApplicationStart("app1", Some("app1"), 0, "user", None),
+        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+      writer.stop()
+
+      // file:// scheme is not disabled, so scanning should work normally
+      provider.checkForLogs()
+      assert(provider.getListing().length === 1)
+
+      provider.stop()
+    }
+  }
+
+  test("scan disabled with empty config does not disable any scheme") {
+    withTempDir { dir =>
+      val conf = createTestConf(true)
+      conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+      conf.set(SCAN_DISABLED_SCHEMES, "")
+      val provider = new FsHistoryProvider(conf)
+      val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+
+      val writer = new RollingEventLogFilesWriter("app1", None, dir.toURI, conf, hadoopConf)
+      writer.start()
+      writeEventsToRollingWriter(writer, Seq(
+        SparkListenerApplicationStart("app1", Some("app1"), 0, "user", None),
+        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+      writer.stop()
+
+      provider.checkForLogs()
+      assert(provider.getListing().length === 1)
+
+      provider.stop()
+    }
+  }
+
   private class SafeModeTestProvider(conf: SparkConf, clock: Clock)
     extends FsHistoryProvider(conf, clock) {
 

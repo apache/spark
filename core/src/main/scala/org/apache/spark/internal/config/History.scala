@@ -43,6 +43,16 @@ private[spark] object History {
     .stringConf
     .createOptional
 
+  val SCAN_DISABLED_SCHEMES = ConfigBuilder("spark.history.fs.update.disabledSchemes")
+    .doc("Comma-separated list of URI schemes for which periodic log directory scanning is " +
+      "disabled. Directories with these schemes rely on on-demand loading " +
+      "instead of scanning. Applications in these directories will not appear in the " +
+      "listing until accessed by appId. Log compaction and cleaner may not fully function " +
+      "for these directories; use external lifecycle management (e.g., S3 Lifecycle Policies).")
+    .version("4.2.0")
+    .stringConf
+    .createWithDefault("")
+
   val SAFEMODE_CHECK_INTERVAL_S = ConfigBuilder("spark.history.fs.safemodeCheck.interval")
     .version("1.6.0")
     .doc("Interval between HDFS safemode checks for the event log directory")
