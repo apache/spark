@@ -18,7 +18,14 @@ from typing import Dict
 from typing import Optional, Union, List, overload, Tuple, cast, Callable
 from typing import TYPE_CHECKING
 
-from pyspark.sql.connect.plan import Read, DataSource, LogicalPlan, WriteOperation, WriteOperationV2
+from pyspark.sql.connect.plan import (
+    Read,
+    RelationChanges,
+    DataSource,
+    LogicalPlan,
+    WriteOperation,
+    WriteOperationV2,
+)
 from pyspark.sql.types import StructType
 from pyspark.sql.utils import to_str
 from pyspark.sql.readwriter import (
@@ -26,7 +33,12 @@ from pyspark.sql.readwriter import (
     DataFrameReader as PySparkDataFrameReader,
     DataFrameWriterV2 as PySparkDataFrameWriterV2,
 )
-from pyspark.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError
+from pyspark.errors import (
+    AnalysisException,
+    PySparkAttributeError,
+    PySparkTypeError,
+    PySparkValueError,
+)
 from pyspark.sql.connect.functions import builtin as F
 
 if TYPE_CHECKING:
@@ -139,6 +151,17 @@ class DataFrameReader(OptionUtils):
         return self._df(Read(tableName, self._options))
 
     table.__doc__ = PySparkDataFrameReader.table.__doc__
+
+    def changes(self, tableName: str) -> "DataFrame":
+        if self._schema:
+            raise AnalysisException(
+                "User specified schema not supported with `changes`.",
+                errorClass="_LEGACY_ERROR_TEMP_1189",
+                messageParameters={"operation": "changes"},
+            )
+        return self._df(RelationChanges(tableName, self._options))
+
+    changes.__doc__ = PySparkDataFrameReader.changes.__doc__
 
     def json(
         self,
