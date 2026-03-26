@@ -2321,6 +2321,16 @@
     ],
     "sqlState" : "54001"
   },
+  "FAILED_UPDATE_VIEW_SCHEMA" : {
+    "message" : [
+      "The schema of view <viewName> is out of sync with its query output. Queries on this view will fail until the schema is updated.",
+      "Because the view is created <schemaMode>, an automatic sync was attempted but the catalog failed to apply the update.",
+      "Stored view schema: <existingSchema>",
+      "Query output schema: <newSchema>",
+      "To resolve this, ALTER the view schema manually or ask an administrator to do so. Alternatively, consider running ALTER VIEW <viewName> WITH SCHEMA COMPENSATION, which casts the query output to match the stored view schema at query time and does not require updating the catalog."
+    ],
+    "sqlState" : "58030"
+  },
   "FEATURE_NOT_ENABLED" : {
     "message" : [
       "The feature <featureName> is not enabled. Consider setting the config <configKey> to <configValue> to enable this capability."
