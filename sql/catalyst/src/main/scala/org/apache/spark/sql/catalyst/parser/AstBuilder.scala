@@ -919,37 +919,23 @@ class AstBuilder extends DataTypeAstBuilder
       case table: InsertIntoTableContext =>
         val insertParams = visitInsertIntoTable(table)
         withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
-          InsertIntoStatement(
-            table = createUnresolvedRelation(
-              ctx = insertParams.relationCtx,
-              ident = ident,
-              optionsClause = insertParams.options,
-              writePrivileges = Set(TableWritePrivilege.INSERT),
-              isStreaming = false),
-            partitionSpec = insertParams.partitionSpec,
-            userSpecifiedCols = insertParams.userSpecifiedCols,
+          createInsertIntoStatement(
+            insertParams = insertParams,
+            ident = ident,
             query = otherPlans.head,
             overwrite = false,
-            ifPartitionNotExists = insertParams.ifPartitionNotExists,
-            byName = insertParams.byName,
+            writePrivileges = Set(TableWritePrivilege.INSERT),
             withSchemaEvolution = table.EVOLUTION() != null)
         })
       case table: InsertOverwriteTableContext =>
         val insertParams = visitInsertOverwriteTable(table)
         withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
-          InsertIntoStatement(
-            table = createUnresolvedRelation(
-              ctx = insertParams.relationCtx,
-              ident = ident,
-              optionsClause = insertParams.options,
-              writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE),
-              isStreaming = false),
-            partitionSpec = insertParams.partitionSpec,
-            userSpecifiedCols = insertParams.userSpecifiedCols,
+          createInsertIntoStatement(
+            insertParams = insertParams,
+            ident = ident,
             query = otherPlans.head,
             overwrite = true,
-            ifPartitionNotExists = insertParams.ifPartitionNotExists,
-            byName = insertParams.byName,
+            writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE),
             withSchemaEvolution = table.EVOLUTION() != null)
         })
       case ctx: InsertIntoReplaceBooleanCondContext =>
@@ -994,20 +980,24 @@ class AstBuilder extends DataTypeAstBuilder
                 }
               }.getOrElse(otherPlans.head)
             }
-            createInsertIntoStatementForReplaceOnOrUsing(
-              insertParams,
-              ident,
-              query,
+            createInsertIntoStatement(
+              insertParams = insertParams,
+              ident = ident,
+              query = query,
+              overwrite = true,
+              writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE),
               withSchemaEvolution = ctx.EVOLUTION() != null)
           })
         }
       case ctx: InsertIntoReplaceUsingContext =>
         val insertParams = visitInsertIntoReplaceUsing(ctx)
         withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
-          createInsertIntoStatementForReplaceOnOrUsing(
-            insertParams,
-            ident,
+          createInsertIntoStatement(
+            insertParams = insertParams,
+            ident = ident,
             query = otherPlans.head,
+            overwrite = true,
+            writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE),
             withSchemaEvolution = ctx.EVOLUTION() != null)
         })
       case dir: InsertOverwriteDirContext =>
@@ -1134,25 +1124,26 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Creates an [[InsertIntoStatement]] for INSERT REPLACE USING/ON operations.
+   * Creates an [[InsertIntoStatement]] from [[InsertTableParams]].
    */
-  private def createInsertIntoStatementForReplaceOnOrUsing(
+  private def createInsertIntoStatement(
       insertParams: InsertTableParams,
       ident: Seq[String],
       query: LogicalPlan,
+      overwrite: Boolean,
+      writePrivileges: Set[TableWritePrivilege],
       withSchemaEvolution: Boolean): InsertIntoStatement = {
     InsertIntoStatement(
       table = createUnresolvedRelation(
         ctx = insertParams.relationCtx,
         ident = ident,
         optionsClause = insertParams.options,
-        writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE),
-        isStreaming = false
-      ),
+        writePrivileges = writePrivileges,
+        isStreaming = false),
       partitionSpec = insertParams.partitionSpec,
-      userSpecifiedCols = Seq.empty,
+      userSpecifiedCols = insertParams.userSpecifiedCols,
       query = query,
-      overwrite = true,
+      overwrite = overwrite,
       ifPartitionNotExists = insertParams.ifPartitionNotExists,
       byName = insertParams.byName,
       replaceCriteriaOpt = insertParams.replaceCriteriaOpt,
