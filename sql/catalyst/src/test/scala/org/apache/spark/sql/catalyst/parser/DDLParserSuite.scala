@@ -2030,6 +2030,43 @@ class DDLParserSuite extends AnalysisTest {
     )
   }
 
+  test("INSERT INTO REPLACE USING with source query alias") {
+    // Source query alias is silently ignored for REPLACE USING since the alias
+    // cannot be referenced elsewhere in the statement.
+    val table = "testcat.ns1.ns2.tbl"
+    parseCompare(
+      sql =
+        s"""INSERT INTO $table AS t
+           |REPLACE USING (col1, col2)
+           |(SELECT * FROM source) AS s""".stripMargin,
+      expected = InsertIntoStatement(
+        table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        partitionSpec = Map.empty,
+        userSpecifiedCols = Seq.empty,
+        query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        overwrite = true,
+        ifPartitionNotExists = false,
+        byName = false,
+        replaceCriteriaOpt = Some(InsertReplaceUsing(Seq("col1", "col2"))))
+    )
+  }
+
+  test("INSERT INTO REPLACE WHERE with source query alias") {
+    // Source query alias is silently ignored for REPLACE WHERE since the WHERE
+    // condition refers to the target table, not a source-target join.
+    parseCompare(
+      sql =
+        """INSERT INTO testcat.ns1.ns2.tbl
+          |REPLACE WHERE a > 5
+          |(SELECT * FROM source) AS s""".stripMargin,
+      expected = OverwriteByExpression.byPosition(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        GreaterThan(
+          UnresolvedAttribute("a"),
+          Literal(5))))
+  }
+
   test("delete from table: delete all") {
     parseCompare("DELETE FROM testcat.ns1.ns2.tbl",
       DeleteFromTable(
