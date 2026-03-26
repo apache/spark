@@ -436,11 +436,11 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
         """Test pa.Array.to_pandas() with default arguments against golden file."""
         sources = self._build_source_arrays()
         row_names = list(sources.keys())
-        col_names = ["value", "to_pandas()"]
+        col_names = ["pyarrow array", "pandas series"]
 
         def compute_cell(row_name, col_name):
             arr = sources[row_name]
-            if col_name == "value":
+            if col_name == "pyarrow array":
                 return self.repr_value(arr, max_len=0)
             else:
                 try:

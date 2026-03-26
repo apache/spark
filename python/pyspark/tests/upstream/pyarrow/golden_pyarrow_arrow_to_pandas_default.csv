@@ -1,4 +1,4 @@
-case	value	to_pandas()
+case	pyarrow array	pandas series
 int8:standard	[0, 1, -1, 127, -128]@int8	[0, 1, -1, 127, -128]@Series[int8]
 int8:nullable	[0, 1, None]@int8	[0.0, 1.0, nan]@Series[float64]
 int8:empty	[]@int8	[]@Series[int8]
