@@ -26,7 +26,7 @@ import time
 import inspect
 import itertools
 import json
-from typing import Any, Callable, Iterable, Iterator, Optional, Tuple, TYPE_CHECKING, Union
+from typing import Any, Callable, Iterable, Iterator, IO, Optional, Tuple, TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import GroupedBatch
@@ -220,6 +220,165 @@ class EvalConf(Conf):
         if offsets is None:
             return None
         return [int(x) for x in offsets.split(",") if x]
+
+
+@dataclasses.dataclass
+class TaskContextInfo:
+    @dataclasses.dataclass
+    class ResourceInfo:
+        name: str
+        addresses: list[str]
+
+    conn_info: Optional[Union[str, int]]
+    secret: Optional[str]
+    stage_id: int
+    partition_id: int
+    attempt_number: int
+    task_attempt_id: int
+    cpus: int
+    resources: dict[str, ResourceInfo]
+    local_properties: dict[str, str]
+
+    @classmethod
+    def from_stream(cls, stream: IO) -> "TaskContextInfo":
+        task_context_json = json.loads(utf8_deserializer.loads(stream))
+        return cls(
+            conn_info=task_context_json["connInfo"],
+            secret=task_context_json["secret"],
+            stage_id=task_context_json["stageId"],
+            partition_id=task_context_json["partitionId"],
+            attempt_number=task_context_json["attemptNumber"],
+            task_attempt_id=task_context_json["taskAttemptId"],
+            cpus=task_context_json["cpus"],
+            resources={
+                k: cls.ResourceInfo(name=v["name"], addresses=v["addresses"])
+                for k, v in task_context_json["resources"].items()
+            },
+            local_properties=task_context_json["localProperties"],
+        )
+
+
+@dataclasses.dataclass
+class BroadcastInfo:
+    conn_info: Optional[Union[str, int]]
+    secret: Optional[str]
+    variables: list[tuple[int, Optional[str]]]
+
+    def from_stream(cls, stream: IO) -> "BroadcastInfo":
+        needs_broadcast_decryption_server = read_bool(stream)
+        num_broadcast_variables = read_int(stream)
+        if needs_broadcast_decryption_server:
+            conn_info = read_int(stream)
+            if conn_info == -1:
+                conn_info = utf8_deserializer.loads(stream)
+                secret = None
+            else:
+                secret = utf8_deserializer.loads(stream)
+
+        variables = []
+        for _ in range(num_broadcast_variables):
+            bid = read_long(stream)
+            path = None
+            if bid >= 0:
+                if not needs_broadcast_decryption_server:
+                    path = utf8_deserializer.loads(stream)
+            else:
+                bid = -bid - 1
+            variables.append((bid, path))
+        return cls(conn_info=conn_info, secret=secret, variables=variables)
+
+
+@dataclasses.dataclass
+class UDFInfo:
+    udfs: list[bytes]
+    args: list[int]
+    kwargs: dict[str, int]
+    result_id: int
+
+    @classmethod
+    def from_stream(cls, stream: IO) -> "UDFInfo":
+        num_args = read_int(stream)
+        udfs = []
+        args = []
+        kwargs = {}
+
+        for _ in range(num_args):
+            offset = read_int(stream)
+            if read_bool(stream):
+                name = utf8_deserializer.loads(stream)
+                kwargs[name] = offset
+            else:
+                args.append(offset)
+
+        for i in range(read_int(stream)):
+            length = read_int(stream)
+            if length == SpecialLengths.END_OF_DATA_SECTION:
+                raise EOFError
+            elif length == SpecialLengths.NULL:
+                udfs.append(None)
+            else:
+                data = stream.read(length)
+                if len(data) < length:
+                    raise EOFError
+                udfs.append(data)
+
+        result_id = read_long(stream)
+
+        return cls(udfs=udfs, args=args, kwargs=kwargs, result_id=result_id)
+
+
+@dataclasses.dataclass
+class UDFInitInfo:
+    split_index: int
+    python_version: str
+    spark_files_dir: str
+    task_context: TaskContextInfo
+    python_includes: list[str]
+    broadcast: BroadcastInfo
+    eval_type: int
+    runner_conf: dict[str, str]
+    eval_conf: dict[str, str]
+    udf: list[UDFInfo]
+
+    @classmethod
+    def from_stream(cls, stream: IO) -> "UDFInitInfo":
+        split_index = read_int(stream)
+        if split_index == -1:
+            sys.exit(-1)
+        python_version = utf8_deserializer.loads(stream)
+        spark_files_dir = utf8_deserializer.loads(stream)
+        python_includes = []
+        for _ in range(read_int(stream)):
+            python_includes.append(utf8_deserializer.loads(stream))
+        task_context = TaskContextInfo.from_stream(stream)
+        broadcast = BroadcastInfo.from_stream(stream)
+        eval_type = read_int(stream)
+        runner_conf = {}
+        for _ in range(read_int(stream)):
+            k = utf8_deserializer.loads(stream)
+            v = utf8_deserializer.loads(stream)
+            runner_conf[k] = v
+        eval_conf = {}
+        for _ in range(read_int(stream)):
+            k = utf8_deserializer.loads(stream)
+            v = utf8_deserializer.loads(stream)
+            eval_conf[k] = v
+        udf = []
+        for _ in range(read_int(stream)):
+            udf.append(UDFInfo.from_stream(stream))
+
+        return cls(
+            split_index=split_index,
+            python_version=python_version,
+            spark_files_dir=spark_files_dir,
+            task_context=task_context,
+            python_includes=python_includes,
+            broadcast=broadcast,
+            eval_type=eval_type,
+            runner_conf=runner_conf,
+            eval_conf=eval_conf,
+            udf=udf,
+        )
 
 
 def report_times(outfile, boot, init, finish, processing_time_ms):
