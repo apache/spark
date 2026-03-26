@@ -350,29 +350,6 @@ def _build_non_grouped_scenarios():
     return scenarios
 
 
-_NON_GROUPED_SCENARIOS = _build_non_grouped_scenarios()
-
-
-class _NonGroupedBenchMixin:
-    """Provides ``_write_scenario`` for non-grouped Arrow eval types.
-
-    Subclasses set ``_eval_type``, ``_scenarios``, and ``_udfs``.
-    UDF entries with ``ret_type=None`` inherit ``col0_type`` from the scenario.
-    """
-
-    def _write_scenario(self, scenario, udf_name, buf):
-        batch, num_batches, col0_type = self._scenarios[scenario]
-        udf_func, ret_type, arg_offsets = self._udfs[udf_name]
-        if ret_type is None:
-            ret_type = col0_type
-        _write_worker_input(
-            self._eval_type,
-            lambda b: _build_udf_payload(udf_func, ret_type, arg_offsets, b),
-            lambda b: _write_arrow_ipc_batches((batch for _ in range(num_batches)), b),
-            buf,
-        )
-
-
 # -- SQL_ARROW_BATCHED_UDF --------------------------------------------------
 # Arrow-optimized Python UDF: receives individual Python values per row,
 # returns a single Python value.  The wire protocol includes an extra
@@ -430,24 +407,23 @@ def _build_arrow_batched_scenarios():
     return scenarios
 
 
-_ARROW_BATCHED_SCENARIOS = _build_arrow_batched_scenarios()
-
-
-# UDFs for SQL_ARROW_BATCHED_UDF operate on individual Python values.
-# arg_offsets=[0] means the UDF receives column 0 value per row.
-_ARROW_BATCHED_UDFS = {
-    "identity_udf": (lambda x: x, None, [0]),
-    "stringify_udf": (lambda x: str(x), StringType(), [0]),
-    "nullcheck_udf": (lambda x: x is not None, BooleanType(), [0]),
-}
-
-
 class _ArrowBatchedBenchMixin:
     """Provides ``_write_scenario`` for SQL_ARROW_BATCHED_UDF.
 
-    Like ``_NonGroupedBenchMixin`` but writes the extra ``input_type``
-    (StructType JSON) that the wire protocol requires.
+    Writes the extra ``input_type`` (StructType JSON) that the wire protocol
+    requires before the UDF payload.
     """
+
+    _scenarios = _build_arrow_batched_scenarios()
+    # UDFs for SQL_ARROW_BATCHED_UDF operate on individual Python values.
+    # arg_offsets=[0] means the UDF receives column 0 value per row.
+    _udfs = {
+        "identity_udf": (lambda x: x, None, [0]),
+        "stringify_udf": (lambda x: str(x), StringType(), [0]),
+        "nullcheck_udf": (lambda x: x is not None, BooleanType(), [0]),
+    }
+    params = [list(_scenarios), list(_udfs)]
+    param_names = ["scenario", "udf"]
 
     def _write_scenario(self, scenario, udf_name, buf):
         batch, num_batches, input_struct, col0_type = self._scenarios[scenario]
@@ -469,17 +445,11 @@ class _ArrowBatchedBenchMixin:
 
 
 class ArrowBatchedUDFTimeBench(_ArrowBatchedBenchMixin, _TimeBenchBase):
-    _scenarios = _ARROW_BATCHED_SCENARIOS
-    _udfs = _ARROW_BATCHED_UDFS
-    params = [list(_ARROW_BATCHED_SCENARIOS), list(_ARROW_BATCHED_UDFS)]
-    param_names = ["scenario", "udf"]
+    pass
 
 
 class ArrowBatchedUDFPeakmemBench(_ArrowBatchedBenchMixin, _PeakmemBenchBase):
-    _scenarios = _ARROW_BATCHED_SCENARIOS
-    _udfs = _ARROW_BATCHED_UDFS
-    params = [list(_ARROW_BATCHED_SCENARIOS), list(_ARROW_BATCHED_UDFS)]
-    param_names = ["scenario", "udf"]
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -577,12 +547,6 @@ def _grouped_agg_arrow_mean_multi(col0, col1):
     return (pc.mean(col0).as_py() or 0) + (pc.mean(col1).as_py() or 0)
 
 
-_GROUPED_AGG_ARROW_UDFS = {
-    "sum_udf": _grouped_agg_arrow_sum,
-    "mean_multi_udf": _grouped_agg_arrow_mean_multi,
-}
-
-
 # -- SQL_GROUPED_AGG_ARROW_ITER_UDF ------------------------------------------
 # UDF receives Iterator[pa.Array] (or Iterator[Tuple[pa.Array, ...]]) per group,
 # returns scalar.
@@ -606,12 +570,6 @@ def _grouped_agg_arrow_iter_mean_multi(batch_iter):
     for col0, col1 in batch_iter:
         total += (pc.mean(col0).as_py() or 0) + (pc.mean(col1).as_py() or 0)
     return total
-
-
-_GROUPED_AGG_ARROW_ITER_UDFS = {
-    "sum_udf": _grouped_agg_arrow_iter_sum,
-    "mean_multi_udf": _grouped_agg_arrow_iter_mean_multi,
-}
 
 
 def _make_agg_arrow_groups(
@@ -658,11 +616,16 @@ def _build_grouped_agg_arrow_scenarios():
     return scenarios
 
 
-_GROUPED_AGG_ARROW_SCENARIOS = _build_grouped_agg_arrow_scenarios()
-
-
 class _GroupedAggArrowBenchMixin:
     """Provides _write_scenario for SQL_GROUPED_AGG_ARROW_UDF."""
+
+    _scenarios = _build_grouped_agg_arrow_scenarios()
+    _udfs = {
+        "sum_udf": _grouped_agg_arrow_sum,
+        "mean_multi_udf": _grouped_agg_arrow_mean_multi,
+    }
+    params = [list(_scenarios), list(_udfs)]
+    param_names = ["scenario", "udf"]
 
     def _write_scenario(self, scenario, udf_name, buf):
         groups, n_cols = self._scenarios[scenario]
@@ -688,21 +651,22 @@ class _GroupedAggArrowBenchMixin:
 
 
 class GroupedAggArrowUDFTimeBench(_GroupedAggArrowBenchMixin, _TimeBenchBase):
-    _scenarios = _GROUPED_AGG_ARROW_SCENARIOS
-    _udfs = _GROUPED_AGG_ARROW_UDFS
-    params = [list(_GROUPED_AGG_ARROW_SCENARIOS), list(_GROUPED_AGG_ARROW_UDFS)]
-    param_names = ["scenario", "udf"]
+    pass
 
 
 class GroupedAggArrowUDFPeakmemBench(_GroupedAggArrowBenchMixin, _PeakmemBenchBase):
-    _scenarios = _GROUPED_AGG_ARROW_SCENARIOS
-    _udfs = _GROUPED_AGG_ARROW_UDFS
-    params = [list(_GROUPED_AGG_ARROW_SCENARIOS), list(_GROUPED_AGG_ARROW_UDFS)]
-    param_names = ["scenario", "udf"]
+    pass
 
 
-class _GroupedAggArrowIterBenchMixin:
+class _GroupedAggArrowIterBenchMixin(_GroupedAggArrowBenchMixin):
     """Provides _write_scenario for SQL_GROUPED_AGG_ARROW_ITER_UDF."""
+
+    _udfs = {
+        "sum_udf": _grouped_agg_arrow_iter_sum,
+        "mean_multi_udf": _grouped_agg_arrow_iter_mean_multi,
+    }
+    params = [_GroupedAggArrowBenchMixin.params[0], list(_udfs)]
+    param_names = ["scenario", "udf"]
 
     def _write_scenario(self, scenario, udf_name, buf):
         groups, n_cols = self._scenarios[scenario]
@@ -728,17 +692,11 @@ class _GroupedAggArrowIterBenchMixin:
 
 
 class GroupedAggArrowIterUDFTimeBench(_GroupedAggArrowIterBenchMixin, _TimeBenchBase):
-    _scenarios = _GROUPED_AGG_ARROW_SCENARIOS
-    _udfs = _GROUPED_AGG_ARROW_ITER_UDFS
-    params = [list(_GROUPED_AGG_ARROW_SCENARIOS), list(_GROUPED_AGG_ARROW_ITER_UDFS)]
-    param_names = ["scenario", "udf"]
+    pass
 
 
 class GroupedAggArrowIterUDFPeakmemBench(_GroupedAggArrowIterBenchMixin, _PeakmemBenchBase):
-    _scenarios = _GROUPED_AGG_ARROW_SCENARIOS
-    _udfs = _GROUPED_AGG_ARROW_ITER_UDFS
-    params = [list(_GROUPED_AGG_ARROW_SCENARIOS), list(_GROUPED_AGG_ARROW_ITER_UDFS)]
-    param_names = ["scenario", "udf"]
+    pass
 
 
 # -- SQL_GROUPED_MAP_ARROW_UDF ------------------------------------------------
@@ -761,13 +719,6 @@ def _grouped_map_arrow_filter(table):
     import pyarrow.compute as pc
 
     return table.filter(pc.is_valid(table.column(0)))
-
-
-_GROUPED_MAP_ARROW_UDFS = {
-    "identity_udf": _grouped_map_arrow_identity,
-    "sort_udf": _grouped_map_arrow_sort,
-    "filter_udf": _grouped_map_arrow_filter,
-}
 
 
 def _build_grouped_map_arrow_scenarios():
@@ -794,11 +745,17 @@ def _build_grouped_map_arrow_scenarios():
     return scenarios
 
 
-_GROUPED_MAP_ARROW_SCENARIOS = _build_grouped_map_arrow_scenarios()
-
-
 class _GroupedMapArrowBenchMixin:
     """Provides _write_scenario for SQL_GROUPED_MAP_ARROW_UDF."""
+
+    _scenarios = _build_grouped_map_arrow_scenarios()
+    _udfs = {
+        "identity_udf": _grouped_map_arrow_identity,
+        "sort_udf": _grouped_map_arrow_sort,
+        "filter_udf": _grouped_map_arrow_filter,
+    }
+    params = [list(_scenarios), list(_udfs)]
+    param_names = ["scenario", "udf"]
 
     def _write_scenario(self, scenario, udf_name, buf):
         groups, return_type, arg_offsets = self._scenarios[scenario]
@@ -826,17 +783,11 @@ class _GroupedMapArrowBenchMixin:
 
 
 class GroupedMapArrowUDFTimeBench(_GroupedMapArrowBenchMixin, _TimeBenchBase):
-    _scenarios = _GROUPED_MAP_ARROW_SCENARIOS
-    _udfs = _GROUPED_MAP_ARROW_UDFS
-    params = [list(_GROUPED_MAP_ARROW_SCENARIOS), list(_GROUPED_MAP_ARROW_UDFS)]
-    param_names = ["scenario", "udf"]
+    pass
 
 
 class GroupedMapArrowUDFPeakmemBench(_GroupedMapArrowBenchMixin, _PeakmemBenchBase):
-    _scenarios = _GROUPED_MAP_ARROW_SCENARIOS
-    _udfs = _GROUPED_MAP_ARROW_UDFS
-    params = [list(_GROUPED_MAP_ARROW_SCENARIOS), list(_GROUPED_MAP_ARROW_UDFS)]
-    param_names = ["scenario", "udf"]
+    pass
 
 
 # -- SQL_GROUPED_MAP_ARROW_ITER_UDF ------------------------------------------
@@ -864,15 +815,16 @@ def _grouped_map_arrow_iter_filter(batches):
         yield batch.filter(pc.is_valid(batch.column(0)))
 
 
-_GROUPED_MAP_ARROW_ITER_UDFS = {
-    "identity_udf": _grouped_map_arrow_iter_identity,
-    "sort_udf": _grouped_map_arrow_iter_sort,
-    "filter_udf": _grouped_map_arrow_iter_filter,
-}
-
-
-class _GroupedMapArrowIterBenchMixin:
+class _GroupedMapArrowIterBenchMixin(_GroupedMapArrowBenchMixin):
     """Provides _write_scenario for SQL_GROUPED_MAP_ARROW_ITER_UDF."""
+
+    _udfs = {
+        "identity_udf": _grouped_map_arrow_iter_identity,
+        "sort_udf": _grouped_map_arrow_iter_sort,
+        "filter_udf": _grouped_map_arrow_iter_filter,
+    }
+    params = [_GroupedMapArrowBenchMixin.params[0], list(_udfs)]
+    param_names = ["scenario", "udf"]
 
     def _write_scenario(self, scenario, udf_name, buf):
         groups, return_type, arg_offsets = self._scenarios[scenario]
@@ -899,17 +851,11 @@ class _GroupedMapArrowIterBenchMixin:
 
 
 class GroupedMapArrowIterUDFTimeBench(_GroupedMapArrowIterBenchMixin, _TimeBenchBase):
-    _scenarios = _GROUPED_MAP_ARROW_SCENARIOS
-    _udfs = _GROUPED_MAP_ARROW_ITER_UDFS
-    params = [list(_GROUPED_MAP_ARROW_SCENARIOS), list(_GROUPED_MAP_ARROW_ITER_UDFS)]
-    param_names = ["scenario", "udf"]
+    pass
 
 
 class GroupedMapArrowIterUDFPeakmemBench(_GroupedMapArrowIterBenchMixin, _PeakmemBenchBase):
-    _scenarios = _GROUPED_MAP_ARROW_SCENARIOS
-    _udfs = _GROUPED_MAP_ARROW_ITER_UDFS
-    params = [list(_GROUPED_MAP_ARROW_SCENARIOS), list(_GROUPED_MAP_ARROW_ITER_UDFS)]
-    param_names = ["scenario", "udf"]
+    pass
 
 
 # -- SQL_GROUPED_MAP_PANDAS_UDF ------------------------------------------------
@@ -939,24 +885,24 @@ def _build_grouped_map_pandas_scenarios():
     return scenarios
 
 
-_GROUPED_MAP_PANDAS_SCENARIOS = _build_grouped_map_pandas_scenarios()
-
-# Each UDF entry: (func, ret_type, n_args).
-# ret_type=None means "use the input schema" (excluding key columns for n_args=2).
-# n_args=1 -> func(pdf), n_args=2 -> func(key, pdf).
-_GROUPED_MAP_PANDAS_UDFS = {
-    "identity_udf": (lambda df: df, None, 1),
-    "sort_udf": (lambda df: df.sort_values(df.columns[0]), None, 1),
-    "key_identity_udf": (lambda key, df: df, None, 2),
-}
-
-
 class _GroupedMapPandasBenchMixin:
     """Provides ``_write_scenario`` for SQL_GROUPED_MAP_PANDAS_UDF.
 
     Each scenario stores ``(batch, num_groups, schema, max_rpb)``.
     Groups are written as separate Arrow IPC streams.
     """
+
+    _scenarios = _build_grouped_map_pandas_scenarios()
+    # Each UDF entry: (func, ret_type, n_args).
+    # ret_type=None means "use the input schema" (excluding key columns for n_args=2).
+    # n_args=1 -> func(pdf), n_args=2 -> func(key, pdf).
+    _udfs = {
+        "identity_udf": (lambda df: df, None, 1),
+        "sort_udf": (lambda df: df.sort_values(df.columns[0]), None, 1),
+        "key_identity_udf": (lambda key, df: df, None, 2),
+    }
+    params = [list(_scenarios), list(_udfs)]
+    param_names = ["scenario", "udf"]
 
     def _write_scenario(self, scenario, udf_name, buf):
         batch, num_groups, schema, max_rpb = self._scenarios[scenario]
@@ -981,17 +927,11 @@ class _GroupedMapPandasBenchMixin:
 
 
 class GroupedMapPandasUDFTimeBench(_GroupedMapPandasBenchMixin, _TimeBenchBase):
-    _scenarios = _GROUPED_MAP_PANDAS_SCENARIOS
-    _udfs = _GROUPED_MAP_PANDAS_UDFS
-    params = [list(_GROUPED_MAP_PANDAS_SCENARIOS), list(_GROUPED_MAP_PANDAS_UDFS)]
-    param_names = ["scenario", "udf"]
+    pass
 
 
 class GroupedMapPandasUDFPeakmemBench(_GroupedMapPandasBenchMixin, _PeakmemBenchBase):
-    _scenarios = _GROUPED_MAP_PANDAS_SCENARIOS
-    _udfs = _GROUPED_MAP_PANDAS_UDFS
-    params = [list(_GROUPED_MAP_PANDAS_SCENARIOS), list(_GROUPED_MAP_PANDAS_UDFS)]
-    param_names = ["scenario", "udf"]
+    pass
 
 
 # -- SQL_MAP_ARROW_ITER_UDF ------------------------------------------------
@@ -1017,13 +957,6 @@ def _filter_batch_iter(it):
     for batch in it:
         mask = pc.is_valid(batch.column(0))
         yield batch.filter(mask)
-
-
-_MAP_ARROW_ITER_UDFS = {
-    "identity_udf": (_identity_batch_iter, None, [0]),
-    "sort_udf": (_sort_batch_iter, None, [0]),
-    "filter_udf": (_filter_batch_iter, None, [0]),
-}
 
 
 def _build_map_arrow_iter_scenarios():
@@ -1073,9 +1006,6 @@ def _build_map_arrow_iter_scenarios():
     return scenarios
 
 
-_MAP_ARROW_ITER_SCENARIOS = _build_map_arrow_iter_scenarios()
-
-
 def _wrap_batch_in_struct(batch: pa.RecordBatch) -> pa.RecordBatch:
     """Wrap all columns into a single struct column, mimicking JVM-side encoding."""
     struct_array = pa.StructArray.from_arrays(batch.columns, names=batch.schema.names)
@@ -1085,9 +1015,18 @@ def _wrap_batch_in_struct(batch: pa.RecordBatch) -> pa.RecordBatch:
 class _MapArrowIterBenchMixin:
     """Provides ``_write_scenario`` for SQL_MAP_ARROW_ITER_UDF.
 
-    Like ``_NonGroupedBenchMixin`` but wraps input batches in a struct column
-    to match the JVM-side wire format (``flatten_struct`` undoes this).
+    Wraps input batches in a struct column to match the JVM-side wire format
+    (``flatten_struct`` undoes this).
     """
+
+    _scenarios = _build_map_arrow_iter_scenarios()
+    _udfs = {
+        "identity_udf": (_identity_batch_iter, None, [0]),
+        "sort_udf": (_sort_batch_iter, None, [0]),
+        "filter_udf": (_filter_batch_iter, None, [0]),
+    }
+    params = [list(_scenarios), list(_udfs)]
+    param_names = ["scenario", "udf"]
 
     def _write_scenario(self, scenario, udf_name, buf):
         batch, num_batches, col0_type = self._scenarios[scenario]
@@ -1104,17 +1043,11 @@ class _MapArrowIterBenchMixin:
 
 
 class MapArrowIterUDFTimeBench(_MapArrowIterBenchMixin, _TimeBenchBase):
-    _scenarios = _MAP_ARROW_ITER_SCENARIOS
-    _udfs = _MAP_ARROW_ITER_UDFS
-    params = [list(_MAP_ARROW_ITER_SCENARIOS), list(_MAP_ARROW_ITER_UDFS)]
-    param_names = ["scenario", "udf"]
+    pass
 
 
 class MapArrowIterUDFPeakmemBench(_MapArrowIterBenchMixin, _PeakmemBenchBase):
-    _scenarios = _MAP_ARROW_ITER_SCENARIOS
-    _udfs = _MAP_ARROW_ITER_UDFS
-    params = [list(_MAP_ARROW_ITER_SCENARIOS), list(_MAP_ARROW_ITER_UDFS)]
-    param_names = ["scenario", "udf"]
+    pass
 
 
 # -- SQL_SCALAR_ARROW_UDF ---------------------------------------------------
@@ -1134,28 +1067,39 @@ def _nullcheck_arrow(c):
     return pc.is_valid(c)
 
 
-# ret_type=None means "use col0_type from the scenario"
-_SCALAR_ARROW_UDFS = {
-    "identity_udf": (lambda c: c, None, [0]),
-    "sort_udf": (_sort_arrow, None, [0]),
-    "nullcheck_udf": (_nullcheck_arrow, BooleanType(), [0]),
-}
+class _ScalarArrowBenchMixin:
+    """Mixin for SQL_SCALAR_ARROW_UDF benchmarks."""
 
-
-class ScalarArrowUDFTimeBench(_NonGroupedBenchMixin, _TimeBenchBase):
     _eval_type = PythonEvalType.SQL_SCALAR_ARROW_UDF
-    _scenarios = _NON_GROUPED_SCENARIOS
-    _udfs = _SCALAR_ARROW_UDFS
-    params = [list(_NON_GROUPED_SCENARIOS), list(_SCALAR_ARROW_UDFS)]
+    _scenarios = _build_non_grouped_scenarios()
+    # ret_type=None means "use col0_type from the scenario"
+    _udfs = {
+        "identity_udf": (lambda c: c, None, [0]),
+        "sort_udf": (_sort_arrow, None, [0]),
+        "nullcheck_udf": (_nullcheck_arrow, BooleanType(), [0]),
+    }
+    params = [list(_scenarios), list(_udfs)]
     param_names = ["scenario", "udf"]
 
+    def _write_scenario(self, scenario, udf_name, buf):
+        batch, num_batches, col0_type = self._scenarios[scenario]
+        udf_func, ret_type, arg_offsets = self._udfs[udf_name]
+        if ret_type is None:
+            ret_type = col0_type
+        _write_worker_input(
+            self._eval_type,
+            lambda b: _build_udf_payload(udf_func, ret_type, arg_offsets, b),
+            lambda b: _write_arrow_ipc_batches((batch for _ in range(num_batches)), b),
+            buf,
+        )
 
-class ScalarArrowUDFPeakmemBench(_NonGroupedBenchMixin, _PeakmemBenchBase):
-    _eval_type = PythonEvalType.SQL_SCALAR_ARROW_UDF
-    _scenarios = _NON_GROUPED_SCENARIOS
-    _udfs = _SCALAR_ARROW_UDFS
-    params = [list(_NON_GROUPED_SCENARIOS), list(_SCALAR_ARROW_UDFS)]
-    param_names = ["scenario", "udf"]
+
+class ScalarArrowUDFTimeBench(_ScalarArrowBenchMixin, _TimeBenchBase):
+    pass
+
+
+class ScalarArrowUDFPeakmemBench(_ScalarArrowBenchMixin, _PeakmemBenchBase):
+    pass
 
 
 # -- SQL_SCALAR_ARROW_ITER_UDF ----------------------------------------------
@@ -1180,24 +1124,22 @@ def _nullcheck_iter(it):
         yield pc.is_valid(c)
 
 
-_SCALAR_ARROW_ITER_UDFS = {
-    "identity_udf": (_identity_iter, None, [0]),
-    "sort_udf": (_sort_iter, None, [0]),
-    "nullcheck_udf": (_nullcheck_iter, BooleanType(), [0]),
-}
+class _ScalarArrowIterBenchMixin(_ScalarArrowBenchMixin):
+    """Mixin for SQL_SCALAR_ARROW_ITER_UDF benchmarks."""
 
-
-class ScalarArrowIterUDFTimeBench(_NonGroupedBenchMixin, _TimeBenchBase):
     _eval_type = PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
-    _scenarios = _NON_GROUPED_SCENARIOS
-    _udfs = _SCALAR_ARROW_ITER_UDFS
-    params = [list(_NON_GROUPED_SCENARIOS), list(_SCALAR_ARROW_ITER_UDFS)]
+    _udfs = {
+        "identity_udf": (_identity_iter, None, [0]),
+        "sort_udf": (_sort_iter, None, [0]),
+        "nullcheck_udf": (_nullcheck_iter, BooleanType(), [0]),
+    }
+    params = [list(_ScalarArrowBenchMixin._scenarios), list(_udfs)]
     param_names = ["scenario", "udf"]
 
 
-class ScalarArrowIterUDFPeakmemBench(_NonGroupedBenchMixin, _PeakmemBenchBase):
-    _eval_type = PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
-    _scenarios = _NON_GROUPED_SCENARIOS
-    _udfs = _SCALAR_ARROW_ITER_UDFS
-    params = [list(_NON_GROUPED_SCENARIOS), list(_SCALAR_ARROW_ITER_UDFS)]
-    param_names = ["scenario", "udf"]
+class ScalarArrowIterUDFTimeBench(_ScalarArrowIterBenchMixin, _TimeBenchBase):
+    pass
+
+
+class ScalarArrowIterUDFPeakmemBench(_ScalarArrowIterBenchMixin, _PeakmemBenchBase):
+    pass
