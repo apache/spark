@@ -436,22 +436,25 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
         """Test pa.Array.to_pandas() with default arguments against golden file."""
         sources = self._build_source_arrays()
         row_names = list(sources.keys())
-        col_names = ["to_pandas()"]
+        col_names = ["input", "to_pandas()"]
 
         def compute_cell(row_name, col_name):
             arr = sources[row_name]
-            try:
-                result = arr.to_pandas()
-                return self.repr_value(result, max_len=0)
-            except Exception as e:
-                return f"ERR@{type(e).__name__}"
+            if col_name == "input":
+                return self.repr_value(arr, max_len=0)
+            else:
+                try:
+                    result = arr.to_pandas()
+                    return self.repr_value(result, max_len=0)
+                except Exception as e:
+                    return f"ERR@{type(e).__name__}"
 
         self.compare_or_generate_golden_matrix(
             row_names=row_names,
             col_names=col_names,
             compute_cell=compute_cell,
             golden_file_prefix="golden_pyarrow_arrow_to_pandas_default",
-            index_name="source",
+            index_name="case",
         )
 
 
