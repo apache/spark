@@ -520,8 +520,10 @@ class InMemoryColumnarQuerySuite extends QueryTest
 
   test("SPARK-25727 - otherCopyArgs in InMemoryRelation does not include outputOrdering") {
     val data = Seq(100).toDF("count").cache()
-    val json = data.queryExecution.optimizedPlan.toJSON
-    assert(json.contains("outputOrdering"))
+    // withCachedData contains DataSourceV2Relation(InMemoryCacheTable(InMemoryRelation));
+    // extract the InMemoryRelation to verify its outputOrdering field is serialized correctly.
+    val mem = CachedRelation.unapply(data.queryExecution.withCachedData).get
+    assert(mem.toJSON.contains("outputOrdering"))
   }
 
   test("SPARK-22673: InMemoryRelation should utilize existing stats of the plan to be cached") {

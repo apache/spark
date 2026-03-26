@@ -49,6 +49,14 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 private[sql] class InMemoryCacheTable(val relation: InMemoryRelation)
     extends Table with SupportsRead {
 
+  // Two InMemoryCacheTable instances wrapping the same CachedRDDBuilder are equal.
+  // All InMemoryRelation copies from the same CachedData share the same cacheBuilder by reference.
+  override def equals(other: Any): Boolean = other match {
+    case t: InMemoryCacheTable => relation.cacheBuilder eq t.relation.cacheBuilder
+    case _ => false
+  }
+  override def hashCode(): Int = System.identityHashCode(relation.cacheBuilder)
+
   override def name(): String = relation.cacheBuilder.cachedName
 
   override def schema(): StructType = DataTypeUtils.fromAttributes(relation.output)
