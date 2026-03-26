@@ -5609,12 +5609,6 @@
     ],
     "sqlState" : "428FT"
   },
-  "TRUNCATE_PARTITIONS_NOT_SUPPORTED" : {
-    "message" : [
-      "Truncate partitions is not supported."
-    ],
-    "sqlState" : "0A000"
-  },
   "PARTITION_BY_NOT_ALLOWED_WITH_INSERT_INTO" : {
     "message" : [
       "partitionBy() cannot be used with insertInto(). Partition columns for table <tableName> are determined by the table definition."
@@ -5638,12 +5632,6 @@
       "The expression <expression> must be inside 'partitionedBy'."
     ],
     "sqlState" : "42S23"
-  },
-  "TRUNCATE_PARTITION_NOT_SUPPORTED" : {
-    "message" : [
-      "Truncate partition is not supported."
-    ],
-    "sqlState" : "0A000"
   },
   "PATH_ALREADY_EXISTS" : {
     "message" : [
@@ -6947,6 +6935,18 @@
       "Transpose requires non-index columns to share a least common type, but <dt1> and <dt2> do not."
     ],
     "sqlState" : "42K09"
+  },
+  "TRUNCATE_PARTITIONS_NOT_SUPPORTED" : {
+    "message" : [
+      "Truncate partitions is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
+  "TRUNCATE_PARTITION_NOT_SUPPORTED" : {
+    "message" : [
+      "Truncate partition is not supported."
+    ],
+    "sqlState" : "0A000"
   },
   "TUPLE_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
