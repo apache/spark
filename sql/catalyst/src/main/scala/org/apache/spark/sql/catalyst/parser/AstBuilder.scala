@@ -898,10 +898,10 @@ class AstBuilder extends DataTypeAstBuilder
    *     TABLE tableIdentifier [partitionSpec [IF NOT EXISTS]]? [identifierList]
    *   INSERT [WITH SCHEMA EVOLUTION] INTO
    *     [TABLE] tableIdentifier [partitionSpec] ([BY NAME] | [identifierList])
-   *   INSERT [WITH SCHEMA EVOLUTION] INTO [TABLE] tableIdentifier tableAlias
-   *     [BY NAME] REPLACE (WHERE | ON) booleanExpression
-   *   INSERT [WITH SCHEMA EVOLUTION] INTO [TABLE] tableIdentifier tableAlias
-   *     [BY NAME] REPLACE USING identifierList
+   *   INSERT [WITH SCHEMA EVOLUTION] INTO [TABLE] tableIdentifier tableAlias [BY NAME]
+   *     REPLACE (WHERE | ON) booleanExpression
+   *   INSERT [WITH SCHEMA EVOLUTION] INTO [TABLE] tableIdentifier tableAlias [BY NAME]
+   *     REPLACE USING identifierList
    *   INSERT OVERWRITE [LOCAL] DIRECTORY STRING [rowFormat] [createFileFormat]
    *   INSERT OVERWRITE [LOCAL] DIRECTORY [STRING] tableProvider [OPTIONS tablePropertyList]
    * }}}
