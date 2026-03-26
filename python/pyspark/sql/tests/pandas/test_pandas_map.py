@@ -263,8 +263,8 @@ class MapInPandasTestsMixin:
                             yield pdf.assign(id="test_string")
 
                     expected = (
-                        r"ValueError: Exception thrown when converting pandas.Series "
-                        r"\(object\) with name 'id' to Arrow Array \(double\)."
+                        r"ValueError: Failed to convert the value of the column 'id' "
+                        r"with type 'object' to Arrow type 'double'."
                     )
                     if safely:
                         expected = expected + (
@@ -293,8 +293,8 @@ class MapInPandasTestsMixin:
                     )
                     if safely:
                         expected = (
-                            r"ValueError: Exception thrown when converting pandas.Series "
-                            r"\(float64\) with name 'id' to Arrow Array \(int32\)."
+                            r"ValueError: Failed to convert the value of the column 'id' "
+                            r"with type 'float64' to Arrow type 'int32'."
                             " It can be caused by overflows or other "
                             "unsafe conversions warned by Arrow. Arrow safe type check "
                             "can be disabled by using SQL config "
