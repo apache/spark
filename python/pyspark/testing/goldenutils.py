@@ -15,8 +15,7 @@
 # limitations under the License.
 #
 
-from typing import Any, Callable, List, Optional
-import inspect
+from typing import Any, Optional
 import os
 import time
 
@@ -346,89 +345,37 @@ class GoldenFileTestMixin:
 
         if have_pandas and isinstance(value, pd.DataFrame):
             return cls.repr_pandas_value(value, max_len)
+        if have_pandas and isinstance(value, pd.Series):
+            return cls.repr_pandas_series_value(value, max_len)
         if have_numpy and isinstance(value, np.ndarray):
             return cls.repr_numpy_value(value, max_len)
 
         return cls.repr_python_value(value, max_len)
 
-    def compare_or_generate_golden_matrix(
-        self,
-        row_names: List[str],
-        col_names: List[str],
-        compute_cell: Callable[[str, str], str],
-        golden_file_prefix: str,
-        index_name: str = "source \\ target",
-        overrides: Optional[dict[tuple[str, str], str]] = None,
-    ) -> None:
+    @classmethod
+    def repr_pandas_series_value(cls, value: Any, max_len: int = 32) -> str:
         """
-        Run a matrix of computations and compare against (or generate) a golden file.
+        Format a pandas Series for golden file.
 
-        1. If SPARK_GENERATE_GOLDEN_FILES=1, compute every cell, build a
-           DataFrame, and save it as the new golden CSV / Markdown file.
-        2. Otherwise, load the existing golden file and assert that every cell
-           matches the freshly computed value.
+        Uses tolist() for stable Python-native representation that does not
+        depend on numpy's string formatting, which can vary across versions.
 
         Parameters
         ----------
-        row_names : list[str]
-            Ordered row labels (becomes the DataFrame index).
-        col_names : list[str]
-            Ordered column labels.
-        compute_cell : (row_name, col_name) -> str
-            Function that computes the string result for one cell.
-        golden_file_prefix : str
-            Prefix for the golden CSV/MD files (without extension).
-            Files are placed in the same directory as the concrete test file.
-        index_name : str, default "source \\ target"
-            Name for the index column in the golden file.
-        overrides : dict[(row, col) -> str], optional
-            Version-specific expected values that take precedence over the golden
-            file.  Use this to document known behavioral differences across
-            library versions (e.g. PyArrow 18 vs 22) directly in the test code,
-            so that the same golden file works for multiple versions.
+        value : pd.Series
+            The pandas Series to represent.
+        max_len : int, default 32
+            Maximum length for the value string portion.  0 means no limit.
+
+        Returns
+        -------
+        str
+            "python_list_repr@Series[dtype]"
         """
-        generating = self.is_generating_golden()
-
-        test_dir = os.path.dirname(inspect.getfile(type(self)))
-        golden_csv = os.path.join(test_dir, f"{golden_file_prefix}.csv")
-        golden_md = os.path.join(test_dir, f"{golden_file_prefix}.md")
-
-        golden = None
-        if not generating:
-            golden = self.load_golden_csv(golden_csv)
-
-        errors = []
-        results = {}
-
-        for row_name in row_names:
-            for col_name in col_names:
-                result = compute_cell(row_name, col_name)
-                results[(row_name, col_name)] = result
-
-                if not generating:
-                    if overrides and (row_name, col_name) in overrides:
-                        expected = overrides[(row_name, col_name)]
-                    else:
-                        expected = golden.loc[row_name, col_name]
-                    if expected != result:
-                        errors.append(
-                            f"{row_name} -> {col_name}: expected '{expected}', got '{result}'"
-                        )
-
-        if generating:
-            import pandas as pd
-
-            index = pd.Index(row_names, name=index_name)
-            df = pd.DataFrame(index=index)
-            for col_name in col_names:
-                df[col_name] = [results[(row, col_name)] for row in row_names]
-            self.save_golden(df, golden_csv, golden_md)
-        else:
-            self.assertEqual(
-                len(errors),
-                0,
-                f"\n{len(errors)} golden file mismatches:\n" + "\n".join(errors),
-            )
+        v_str = str(value.tolist()).replace("\n", " ")
+        if max_len > 0:
+            v_str = v_str[:max_len]
+        return f"{v_str}@Series[{str(value.dtype)}]"
 
     @staticmethod
     def clean_result(result: str) -> str:

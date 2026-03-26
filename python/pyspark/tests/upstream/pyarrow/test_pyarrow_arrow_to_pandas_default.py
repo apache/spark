@@ -51,9 +51,12 @@ Regenerate when upgrading PyArrow, as to_pandas() behavior may change.
 """
 
 import datetime
+import inspect
+import os
 import unittest
 from collections import OrderedDict
 from decimal import Decimal
+from typing import Callable, List, Optional
 
 from pyspark.testing.utils import (
     have_pyarrow,
@@ -79,40 +82,65 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
     Each type is tested both without and with null values.
     """
 
-    @staticmethod
-    def _repr_result(result, max_len=0):
+    def compare_or_generate_golden_matrix(
+        self,
+        row_names: List[str],
+        col_names: List[str],
+        compute_cell: Callable[[str, str], str],
+        golden_file_prefix: str,
+        index_name: str = "source \\ target",
+        overrides: Optional[dict[tuple[str, str], str]] = None,
+    ) -> None:
         """
-        Format to_pandas() result for golden file comparison.
+        Run a matrix of computations and compare against (or generate) a golden file.
 
-        Uses tolist() for stable Python-native value representation that does
-        not depend on numpy's string formatting, which can vary across versions.
-
-        Returns
-        -------
-        str
-            "python_list_repr@result_class[dtype]"
-            e.g. "[0, 1, -1, 127, -128]@ndarray[int8]"
+        1. If SPARK_GENERATE_GOLDEN_FILES=1, compute every cell, build a
+           DataFrame, and save it as the new golden CSV / Markdown file.
+        2. Otherwise, load the existing golden file and assert that every cell
+           matches the freshly computed value.
         """
-        import numpy as np
-        import pandas as pd
+        generating = self.is_generating_golden()
 
-        if isinstance(result, np.ndarray):
-            v_str = str(result.tolist())
-            type_str = f"ndarray[{str(result.dtype)}]"
-        elif isinstance(result, pd.Series):
-            v_str = str(result.tolist())
-            type_str = f"Series[{str(result.dtype)}]"
-        elif isinstance(result, pd.Categorical):
-            v_str = str(result.tolist())
-            type_str = f"Categorical[{str(result.dtype)}]"
+        test_dir = os.path.dirname(inspect.getfile(type(self)))
+        golden_csv = os.path.join(test_dir, f"{golden_file_prefix}.csv")
+        golden_md = os.path.join(test_dir, f"{golden_file_prefix}.md")
+
+        golden = None
+        if not generating:
+            golden = self.load_golden_csv(golden_csv)
+
+        errors = []
+        results = {}
+
+        for row_name in row_names:
+            for col_name in col_names:
+                result = compute_cell(row_name, col_name)
+                results[(row_name, col_name)] = result
+
+                if not generating:
+                    if overrides and (row_name, col_name) in overrides:
+                        expected = overrides[(row_name, col_name)]
+                    else:
+                        expected = golden.loc[row_name, col_name]
+                    if expected != result:
+                        errors.append(
+                            f"{row_name} -> {col_name}: expected '{expected}', got '{result}'"
+                        )
+
+        if generating:
+            import pandas as pd
+
+            index = pd.Index(row_names, name=index_name)
+            df = pd.DataFrame(index=index)
+            for col_name in col_names:
+                df[col_name] = [results[(row, col_name)] for row in row_names]
+            self.save_golden(df, golden_csv, golden_md)
         else:
-            v_str = str(result)
-            type_str = type(result).__name__
-
-        v_str = v_str.replace("\n", " ").replace("\r", " ").replace("\t", " ")
-        if max_len > 0:
-            v_str = v_str[:max_len]
-        return f"{v_str}@{type_str}"
+            self.assertEqual(
+                len(errors),
+                0,
+                f"\n{len(errors)} golden file mismatches:\n" + "\n".join(errors),
+            )
 
     def _build_source_arrays(self):
         """Build an ordered dict of named source PyArrow arrays for testing."""
@@ -415,7 +443,7 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
             arr = sources[row_name]
             try:
                 result = arr.to_pandas()
-                return self._repr_result(result, max_len=0)
+                return self.repr_value(result, max_len=0)
             except Exception as e:
                 return f"ERR@{type(e).__name__}"
 
