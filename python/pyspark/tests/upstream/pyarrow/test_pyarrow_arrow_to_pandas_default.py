@@ -51,8 +51,6 @@ Regenerate when upgrading PyArrow, as to_pandas() behavior may change.
 """
 
 import datetime
-import inspect
-import os
 import unittest
 from collections import OrderedDict
 from decimal import Decimal
@@ -320,54 +318,24 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
     def test_to_pandas_default(self):
         """Test pa.Array.to_pandas() with default arguments against golden file."""
         sources = self._build_source_arrays()
+        row_names = list(sources.keys())
+        col_names = ["to_pandas()"]
 
-        generating = self.is_generating_golden()
-        test_dir = os.path.dirname(inspect.getfile(type(self)))
-        golden_csv = os.path.join(
-            test_dir, "golden_pyarrow_arrow_to_pandas_default.csv"
-        )
-        golden_md = os.path.join(
-            test_dir, "golden_pyarrow_arrow_to_pandas_default.md"
-        )
-
-        golden = None
-        if not generating:
-            golden = self.load_golden_csv(golden_csv)
-
-        errors = []
-        results = OrderedDict()
-
-        for name, arr in sources.items():
+        def compute_cell(row_name, col_name):
+            arr = sources[row_name]
             try:
                 result = arr.to_pandas()
-                cell = self._repr_result(result, max_len=0)
+                return self._repr_result(result, max_len=0)
             except Exception as e:
-                cell = f"ERR@{type(e).__name__}"
-            results[name] = cell
+                return f"ERR@{type(e).__name__}"
 
-            if not generating and golden is not None:
-                expected = golden.loc[name, "to_pandas()"]
-                if expected != cell:
-                    errors.append(
-                        f"{name}: expected '{expected}', got '{cell}'"
-                    )
-
-        if generating:
-            import pandas as pd
-
-            index = pd.Index(list(sources.keys()), name="source")
-            df = pd.DataFrame(
-                {"to_pandas()": [results[k] for k in sources]},
-                index=index,
-            )
-            self.save_golden(df, golden_csv, golden_md)
-        else:
-            self.assertEqual(
-                len(errors),
-                0,
-                f"\n{len(errors)} golden file mismatches:\n"
-                + "\n".join(errors),
-            )
+        self.compare_or_generate_golden_matrix(
+            row_names=row_names,
+            col_names=col_names,
+            compute_cell=compute_cell,
+            golden_file_prefix="golden_pyarrow_arrow_to_pandas_default",
+            index_name="source",
+        )
 
 
 if __name__ == "__main__":
