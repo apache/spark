@@ -296,6 +296,51 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
             [[("a", 1), ("b", 2)], [("c", 3)]],
             pa.map_(pa.string(), pa.int64()),
         )
+        # list of list (nested list)
+        sources["list<list<int64>>:standard"] = pa.array(
+            [[[1, 2], [3]], [[4, 5, 6]]],
+            pa.list_(pa.list_(pa.int64())),
+        )
+        # list of struct
+        sources["list<struct>:standard"] = pa.array(
+            [[{"x": 1}, {"x": 2}], [{"x": 3}]],
+            pa.list_(pa.struct([("x", pa.int64())])),
+        )
+        # list of map
+        sources["list<map<string,int64>>:standard"] = pa.array(
+            [[[("a", 1)], [("b", 2)]], [[("c", 3)]]],
+            pa.list_(pa.map_(pa.string(), pa.int64())),
+        )
+        # struct of struct
+        sources["struct<struct>:standard"] = pa.array(
+            [{"outer": {"inner": 1}}, {"outer": {"inner": 2}}],
+            pa.struct([("outer", pa.struct([("inner", pa.int64())]))]),
+        )
+        # struct of list
+        sources["struct<list<int64>>:standard"] = pa.array(
+            [{"items": [1, 2, 3]}, {"items": [4, 5]}],
+            pa.struct([("items", pa.list_(pa.int64()))]),
+        )
+        # struct of map
+        sources["struct<map<string,int64>>:standard"] = pa.array(
+            [{"mapping": [("a", 1)]}, {"mapping": [("b", 2)]}],
+            pa.struct([("mapping", pa.map_(pa.string(), pa.int64()))]),
+        )
+        # map with list values
+        sources["map<string,list<int64>>:standard"] = pa.array(
+            [[("a", [1, 2]), ("b", [3])], [("c", [4, 5, 6])]],
+            pa.map_(pa.string(), pa.list_(pa.int64())),
+        )
+        # map with struct values
+        sources["map<string,struct>:standard"] = pa.array(
+            [[("a", {"v": 1}), ("b", {"v": 2})], [("c", {"v": 3})]],
+            pa.map_(pa.string(), pa.struct([("v", pa.int64())])),
+        )
+        # map of map (map with map values)
+        sources["map<string,map<string,int64>>:standard"] = pa.array(
+            [[("a", [("x", 1)]), ("b", [("y", 2)])], [("c", [("z", 3)])]],
+            pa.map_(pa.string(), pa.map_(pa.string(), pa.int64())),
+        )
 
         # =====================================================================
         # Dictionary type
