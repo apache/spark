@@ -533,7 +533,12 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case CreateView(ResolvedIdentifier(catalog, _), _, _, _, _, _, _, _, _, _)
         if !catalog.isInstanceOf[ViewCatalog] =>
       throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
-    // CreateView targeting a ViewCatalog falls through to DataSourceV2Strategy.
+
+    case CreateView(ResolvedIdentifier(catalog: ViewCatalog, ident),
+        userSpecifiedColumns, comment, _, properties, originalText, query,
+        allowExisting, replace, viewSchemaMode) =>
+      CreateV2View(catalog, ident, userSpecifiedColumns, comment, properties,
+        originalText, query, allowExisting, replace, viewSchemaMode)
 
     case ShowViews(ns: ResolvedNamespace, pattern, output) =>
       ns match {

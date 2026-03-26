@@ -265,22 +265,23 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       DropViewExec(catalog, ident, ifExists) :: Nil
 
     // CREATE [OR REPLACE] VIEW targeting a V2 catalog that implements ViewCatalog.
-    case CreateView(ResolvedIdentifier(catalog: ViewCatalog, ident),
-        userSpecifiedColumns, comment, _, properties, originalText, query,
-        allowExisting, replace, viewSchemaMode) =>
-      if (originalText.isEmpty) {
+    // CreateV2View is produced by ResolveSessionCatalog and extends AnalysisOnlyCommand, so
+    // its query has been analyzed but not optimized, keeping temp-view View nodes intact.
+    case c: CreateV2View =>
+      if (c.originalText.isEmpty) {
         throw QueryCompilationErrors.createPersistedViewFromDatasetAPINotAllowedError()
       }
-      val aliasedPlan = ViewHelper.aliasPlan(session, query, userSpecifiedColumns)
+      val aliasedPlan = ViewHelper.aliasPlan(session, c.query, c.userSpecifiedColumns)
       val viewSchema = CharVarcharUtils.getRawSchema(
         aliasedPlan.schema, session.sessionState.conf)
-      val queryColumnNames = query.output.map(_.name).toArray
-      val columnAliases = userSpecifiedColumns.map(_._1).toArray
-      val columnComments = userSpecifiedColumns.map(_._2.orNull).toArray
+      val queryColumnNames = c.query.output.map(_.name).toArray
+      val columnAliases = c.userSpecifiedColumns.map(_._1).toArray
+      val columnComments = c.userSpecifiedColumns.map(_._2.orNull).toArray
       val manager = session.sessionState.catalogManager
       CreateViewExec(
-        catalog, ident, viewSchema, queryColumnNames, columnAliases, columnComments,
-        comment, properties, originalText.get, query, allowExisting, replace, viewSchemaMode,
+        c.catalog, c.ident, viewSchema, queryColumnNames, columnAliases, columnComments,
+        c.comment, c.properties, c.originalText.get, c.query, c.referredTempFunctions,
+        c.allowExisting, c.replace, c.viewSchemaMode,
         manager.currentCatalog.name, manager.currentNamespace) :: Nil
 
     case RefreshTable(r: ResolvedTable) =>

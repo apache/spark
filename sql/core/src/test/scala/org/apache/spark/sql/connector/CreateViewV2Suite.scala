@@ -174,12 +174,26 @@ class CreateViewV2Suite extends QueryTest with SharedSparkSession with BeforeAnd
   // viewSchemaMode stored in properties
   // --------------------------------------------------------------------------
 
-  test("create view without schema mode: no view.schemaMode property stored") {
+  test("create view without explicit schema mode uses session default schema mode") {
+    // With the default session config (viewSchemaBindingEnabled=true, viewSchemaCompensation=true)
+    // the parser applies SchemaCompensation when no WITH SCHEMA clause is given.
+    // SchemaCompensation is not SchemaUnsupported, so it IS stored in view properties.
     withView(s"$catalogName.ns.v") {
       sql(s"CREATE VIEW $catalogName.ns.v AS SELECT 1 AS id")
 
       val view = viewCatalog.loadView(Identifier.of(ns, "v"))
-      assert(!view.properties().containsKey(VIEW_SCHEMA_MODE))
+      assert(view.properties().containsKey(VIEW_SCHEMA_MODE))
+    }
+  }
+
+  test("create view with schema binding disabled: no view.schemaMode property stored") {
+    withSQLConf("spark.sql.legacy.viewSchemaBindingMode" -> "false") {
+      withView(s"$catalogName.ns.v") {
+        sql(s"CREATE VIEW $catalogName.ns.v AS SELECT 1 AS id")
+
+        val view = viewCatalog.loadView(Identifier.of(ns, "v"))
+        assert(!view.properties().containsKey(VIEW_SCHEMA_MODE))
+      }
     }
   }
 
@@ -233,12 +247,7 @@ class CreateViewV2Suite extends QueryTest with SharedSparkSession with BeforeAnd
   // Temp-view reference rejected
   // --------------------------------------------------------------------------
 
-  // TODO (SPARK-33903 follow-up): permanent V2 views that reference temp views should be
-  // rejected, but the optimizer currently inlines the temp view body before
-  // CreateViewExec.run() has a chance to validate. The fix requires preventing optimizer
-  // rules from traversing into CreateView.query when targeting a ViewCatalog (similar to
-  // the AnalysisOnlyCommand mechanism used in the V1 path).
-  ignore("create permanent view referencing a temp view is rejected") {
+  test("create permanent view referencing a temp view is rejected") {
     withTempView("tmp") {
       sql("CREATE TEMPORARY VIEW tmp AS SELECT 1 AS x")
       val e = intercept[Exception] {
