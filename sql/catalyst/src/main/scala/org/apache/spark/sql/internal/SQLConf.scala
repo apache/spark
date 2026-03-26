@@ -4827,7 +4827,7 @@ object SQLConf {
         "The command atomically inserts new rows into a table after deleting all existing rows " +
         "that match the new rows according to the specified matching condition. The " +
         "inserted rows are specified by a VALUES expression or the result of a query.")
-      .version("4.1.0")
+      .version("4.2.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -4836,7 +4836,7 @@ object SQLConf {
       .doc("Enable the SQL Syntax INSERT INTO ... BY NAME REPLACE ON (...). " +
         "Allows using the BY NAME clause with INSERT INTO REPLACE ON.")
       .internal()
-      .version("4.1.0")
+      .version("4.2.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -4846,7 +4846,7 @@ object SQLConf {
         "The command atomically inserts new rows into a table after deleting all existing rows " +
         "that match the new rows according to the key columns specified in the statement. The " +
         "inserted rows are specified by a VALUES expression or the result of a query.")
-      .version("4.1.0")
+      .version("4.2.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -4855,7 +4855,7 @@ object SQLConf {
       .doc("Enable the SQL Syntax INSERT INTO ... BY NAME REPLACE USING (...). " +
         "Allows using the BY NAME clause with INSERT INTO REPLACE USING.")
       .internal()
-      .version("4.1.0")
+      .version("4.2.0")
       .booleanConf
       .createWithDefault(true)
 
