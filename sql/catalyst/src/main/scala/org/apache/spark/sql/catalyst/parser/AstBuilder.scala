@@ -758,7 +758,7 @@ class AstBuilder extends DataTypeAstBuilder
       (namedQuery.alias, namedQuery, rowLevelLimit)
     }
     // Check for duplicate names.
-    val duplicates = ctes.groupBy(_._1).filter(_._2.size > 1).keys
+    val duplicates = ctes.groupBy(_._1.toLowerCase(Locale.ROOT)).filter(_._2.size > 1).keys
     if (duplicates.nonEmpty) {
       throw QueryParsingErrors.duplicateCteDefinitionNamesError(
         duplicates.map(toSQLId).mkString(", "), ctx)
