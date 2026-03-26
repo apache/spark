@@ -201,7 +201,7 @@ case class InsertIntoStatement(
   require(replaceCriteriaOpt.isEmpty || partitionSpec.isEmpty,
     "partitionSpec is not compatible with REPLACE USING/ON")
   require(replaceCriteriaOpt.isEmpty || overwrite,
-    "overwrite is not compatible with REPLACE USING/ON")
+    "REPLACE USING/ON requires overwrite to be true")
 
   override def child: LogicalPlan = query
   override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoStatement =

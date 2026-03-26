@@ -4836,7 +4836,7 @@ object SQLConf {
       .doc("Enable the SQL Syntax INSERT INTO ... BY NAME REPLACE ON (...). " +
         "Allows using the BY NAME clause with INSERT INTO REPLACE ON.")
       .internal()
-      .version("4.2.0")
+      .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -4855,7 +4855,7 @@ object SQLConf {
       .doc("Enable the SQL Syntax INSERT INTO ... BY NAME REPLACE USING (...). " +
         "Allows using the BY NAME clause with INSERT INTO REPLACE USING.")
       .internal()
-      .version("4.2.0")
+      .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
 
