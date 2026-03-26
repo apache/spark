@@ -949,8 +949,12 @@ class AstBuilder extends DataTypeAstBuilder
         if (isInsertReplaceWhere) {
           val options = Option(ctx.optionsClause())
           withIdentClause(ctx.identifierReference, Seq(query), (ident, otherPlans) => {
-            val table = createUnresolvedRelation(ctx.identifierReference, ident, options,
-              Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false)
+            val table = createUnresolvedRelation(
+              ctx = ctx.identifierReference,
+              ident = ident,
+              optionsClause = options,
+              writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE),
+              isStreaming = false)
             val deleteExpr = expression(ctx.replaceCondition)
             val isByName = ctx.NAME() != null
             if (isByName) {
