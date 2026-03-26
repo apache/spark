@@ -122,20 +122,27 @@ abstract class FileTable(
   override lazy val schema: StructType = {
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     // Check column name duplication for non-catalog tables.
-    // Skip for catalog tables where the analyzer handles
-    // ambiguity at query time.
-    if (catalogTable.isEmpty) {
+    // Skip for catalog tables (analyzer handles ambiguity)
+    // and formats that allow duplicates (e.g., CSV).
+    if (catalogTable.isEmpty && !allowDuplicatedColumnNames) {
       SchemaUtils.checkSchemaColumnNameDuplication(
         dataSchema, caseSensitive)
-    }
-    dataSchema.foreach { field =>
-      if (!supportsDataType(field.dataType)) {
-        throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(formatName, field)
-      }
     }
     val partitionSchema = fileIndex.partitionSchema
     val partitionNameSet: Set[String] =
       partitionSchema.fields.map(PartitioningUtils.getColName(_, caseSensitive)).toSet
+    // Validate data types for non-partition columns only. Partition columns
+    // are written as directory names, not as data values, so format-specific
+    // type restrictions don't apply.
+    val userPartNames = userSpecifiedPartitioning.toSet
+    dataSchema.foreach { field =>
+      val colName = PartitioningUtils.getColName(field, caseSensitive)
+      if (!partitionNameSet.contains(colName) &&
+          !userPartNames.contains(field.name) &&
+          !supportsDataType(field.dataType)) {
+        throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(formatName, field)
+      }
+    }
 
     // When data and partition schemas have overlapping columns,
     // tableSchema = dataSchema - overlapSchema + partitionSchema
@@ -226,6 +233,12 @@ abstract class FileTable(
   def supportsDataType(dataType: DataType): Boolean = true
 
   /**
+   * Whether this format allows duplicated column names. CSV allows this
+   * because column access is by position. Override in subclasses as needed.
+   */
+  def allowDuplicatedColumnNames: Boolean = false
+
+  /**
    * The string that represents the format that this data source provider uses. This is
    * overridden by children to provide a nice alias for the data source. For example:
    *
@@ -309,14 +322,35 @@ abstract class FileTable(
           if (fromIndex.nonEmpty) {
             fromIndex
           } else if (userSpecifiedPartitioning.nonEmpty) {
-            val full = merged.schema()
+            // Look up partition columns from the write schema first,
+            // then fall back to the table's full schema (data + partition).
+            // Use case-insensitive lookup since partitionBy("p") may
+            // differ in case from the DataFrame column name ("P").
+            val writeSchema = merged.schema()
             StructType(userSpecifiedPartitioning.map { c =>
-              full.find(_.name == c).getOrElse(
-                throw new IllegalArgumentException(
-                  s"Partition column '$c' not found"))
+              writeSchema.find(_.name.equalsIgnoreCase(c))
+                .orElse(schema.find(_.name.equalsIgnoreCase(c)))
+                .map(_.copy(name = c))
+                .getOrElse(
+                  throw new IllegalArgumentException(
+                    s"Partition column '$c' not found"))
             })
           } else {
-            fromIndex
+            // Fall back to catalog table partition columns when
+            // fileIndex has no partitions (empty table).
+            catalogTable
+              .filter(_.partitionColumnNames.nonEmpty)
+              .map { ct =>
+                val writeSchema = merged.schema()
+                StructType(ct.partitionColumnNames.map { c =>
+                  writeSchema.find(_.name.equalsIgnoreCase(c))
+                    .orElse(schema.find(_.name.equalsIgnoreCase(c)))
+                    .getOrElse(
+                      throw new IllegalArgumentException(
+                        s"Partition column '$c' not found"))
+                })
+              }
+              .getOrElse(fromIndex)
           }
         val customLocs = getCustomPartitionLocations(
           partSchema)

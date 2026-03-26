@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.csv.CSVDataSource
 import org.apache.spark.sql.execution.datasources.v2.FileTable
 import org.apache.spark.sql.types.{AtomicType, DataType, GeographyType,
-  GeometryType, StructType, UserDefinedType}
+  GeometryType, StructType, UserDefinedType, VariantType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class CSVTable(
@@ -53,7 +53,7 @@ case class CSVTable(
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     createFileWriteBuilder(info) {
       (mergedInfo, partSchema, customLocs, dynamicOverwrite, truncate) =>
-      CSVWrite(paths, formatName, supportsDataType, mergedInfo, partSchema, customLocs,
+      CSVWrite(paths, formatName, supportsWriteDataType, mergedInfo, partSchema, customLocs,
         dynamicOverwrite, truncate)
     }
   }
@@ -67,6 +67,14 @@ case class CSVTable(
 
     case _ => false
   }
+
+  // Write rejects VariantType; read allows it.
+  private def supportsWriteDataType(dataType: DataType): Boolean = dataType match {
+    case _: VariantType => false
+    case dt => supportsDataType(dt)
+  }
+
+  override def allowDuplicatedColumnNames: Boolean = true
 
   override def formatName: String = "CSV"
 }

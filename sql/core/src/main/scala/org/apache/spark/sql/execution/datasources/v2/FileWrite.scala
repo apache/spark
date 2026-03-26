@@ -30,7 +30,10 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.connector.write.{BatchWrite, LogicalWriteInfo, Write}
+import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
+import org.apache.spark.sql.connector.expressions.{Expressions, SortDirection}
+import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
+import org.apache.spark.sql.connector.write.{BatchWrite, LogicalWriteInfo, RequiresDistributionAndOrdering, Write}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, DataSource, OutputWriterFactory, WriteJobDescription}
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -39,7 +42,8 @@ import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.SerializableConfiguration
 
-trait FileWrite extends Write {
+trait FileWrite extends Write
+    with RequiresDistributionAndOrdering {
   def paths: Seq[String]
   def formatName: String
   def supportsDataType: DataType => Boolean
@@ -55,6 +59,21 @@ trait FileWrite extends Write {
   val options = info.options()
 
   override def description(): String = formatName
+
+  override def requiredDistribution(): Distribution =
+    Distributions.unspecified()
+
+  override def requiredOrdering(): Array[V2SortOrder] = {
+    if (partitionSchema.isEmpty) {
+      Array.empty
+    } else {
+      partitionSchema.fieldNames.map { col =>
+        Expressions.sort(
+          Expressions.column(col),
+          SortDirection.ASCENDING)
+      }
+    }
+  }
 
   override def toBatch: BatchWrite = {
     val sparkSession = SparkSession.active
@@ -89,7 +108,7 @@ trait FileWrite extends Write {
       jobId = java.util.UUID.randomUUID().toString,
       outputPath = paths.head,
       dynamicPartitionOverwrite = dynamicPartitionOverwrite)
-    lazy val description =
+    val description =
       createWriteJobDescription(sparkSession, hadoopConf, job, paths.head, options.asScala.toMap)
 
     committer.setupJob(job)
@@ -125,8 +144,10 @@ trait FileWrite extends Write {
     }
     DataSource.validateSchema(formatName, schema, sqlConf)
 
+    val partColNames = partitionSchema.fieldNames.toSet
     schema.foreach { field =>
-      if (!supportsDataType(field.dataType)) {
+      if (!partColNames.contains(field.name) &&
+          !supportsDataType(field.dataType)) {
         throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(formatName, field)
       }
     }
@@ -150,18 +171,25 @@ trait FileWrite extends Write {
     val allColumns = toAttributes(schema)
     val partitionColumnNames = partitionSchema.fields.map(_.name).toSet
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+    // Build partition columns using names from partitionSchema (e.g., "p" from
+    // partitionBy("p")), not from allColumns (e.g., "P" from the DataFrame).
+    // This ensures directory names match the partitionBy argument case.
     val partitionColumns = if (partitionColumnNames.nonEmpty) {
-      allColumns.filter { col =>
-        if (caseSensitive) {
-          partitionColumnNames.contains(col.name)
+      allColumns.flatMap { col =>
+        val partName = if (caseSensitive) {
+          partitionColumnNames.find(_ == col.name)
         } else {
-          partitionColumnNames.exists(_.equalsIgnoreCase(col.name))
+          partitionColumnNames.find(_.equalsIgnoreCase(col.name))
         }
+        partName.map(n => col.withName(n))
       }
     } else {
       Seq.empty
     }
-    val dataColumns = allColumns.filterNot(partitionColumns.contains)
+    val dataColumns = allColumns.filterNot { col =>
+      if (caseSensitive) partitionColumnNames.contains(col.name)
+      else partitionColumnNames.exists(_.equalsIgnoreCase(col.name))
+    }
     // Note: prepareWrite has side effect. It sets "job".
     val dataSchema = StructType(dataColumns.map(col => schema(col.name)))
     val outputWriterFactory =

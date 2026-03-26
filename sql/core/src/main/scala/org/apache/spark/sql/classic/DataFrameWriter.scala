@@ -21,6 +21,9 @@ import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql
 import org.apache.spark.sql.SaveMode
@@ -168,8 +171,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
 
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       val catalogManager = df.sparkSession.sessionState.catalogManager
+      val fileV2CreateMode = (curmode == SaveMode.ErrorIfExists ||
+        curmode == SaveMode.Ignore) &&
+        provider.isInstanceOf[FileDataSourceV2]
       curmode match {
-        case SaveMode.Append | SaveMode.Overwrite =>
+        case _ if curmode == SaveMode.Append || curmode == SaveMode.Overwrite ||
+            fileV2CreateMode =>
           val (table, catalog, ident) = provider match {
             case supportsExtract: SupportsCatalogOptions =>
               val ident = supportsExtract.extractIdentifier(dsOptions)
@@ -178,7 +185,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
 
               (catalog.loadTable(ident), Some(catalog), Some(ident))
             case _: TableProvider =>
-              val t = getTable
+              val t = try {
+                getTable
+              } catch {
+                case _: SparkUnsupportedOperationException if fileV2CreateMode =>
+                  return saveToV1SourceCommand(path)
+              }
               if (t.supports(BATCH_WRITE)) {
                 (t, None, None)
               } else {
@@ -189,9 +201,27 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
               }
           }
 
+          if (fileV2CreateMode) {
+            val outputPath = Option(dsOptions.get("path")).map(new Path(_))
+            outputPath.foreach { p =>
+              val hadoopConf = df.sparkSession.sessionState
+                .newHadoopConfWithOptions(extraOptions.toMap)
+              val fs = p.getFileSystem(hadoopConf)
+              val qualifiedPath = fs.makeQualified(p)
+              if (fs.exists(qualifiedPath)) {
+                if (curmode == SaveMode.ErrorIfExists) {
+                  throw QueryCompilationErrors.outputPathAlreadyExistsError(qualifiedPath)
+                } else {
+                  return LocalRelation(
+                    DataSourceV2Relation.create(table, catalog, ident, dsOptions).output)
+                }
+              }
+            }
+          }
+
           val relation = DataSourceV2Relation.create(table, catalog, ident, dsOptions)
           checkPartitioningMatchesV2Table(table)
-          if (curmode == SaveMode.Append) {
+          if (curmode == SaveMode.Append || fileV2CreateMode) {
             AppendData.byName(relation, df.logicalPlan, finalOptions)
           } else {
             val dynamicOverwrite =
@@ -233,14 +263,19 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
                 finalOptions,
                 ignoreIfExists = createMode == SaveMode.Ignore)
             case _: TableProvider =>
-              if (getTable.supports(BATCH_WRITE)) {
-                throw QueryCompilationErrors.writeWithSaveModeUnsupportedBySourceError(
-                  source, createMode.name())
-              } else {
-                // Streaming also uses the data source V2 API. So it may be that the data source
-                // implements v2, but has no v2 implementation for batch writes. In that case, we
-                // fallback to saving as though it's a V1 source.
-                saveToV1SourceCommand(path)
+              try {
+                if (getTable.supports(BATCH_WRITE)) {
+                  throw QueryCompilationErrors.writeWithSaveModeUnsupportedBySourceError(
+                    source, createMode.name())
+                } else {
+                  // Streaming also uses the data source V2 API. So it may be that the data source
+                  // implements v2, but has no v2 implementation for batch writes. In that case, we
+                  // fallback to saving as though it's a V1 source.
+                  saveToV1SourceCommand(path)
+                }
+              } catch {
+                case _: SparkUnsupportedOperationException =>
+                  saveToV1SourceCommand(path)
               }
           }
       }
@@ -610,16 +645,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
 
   private def lookupV2Provider(): Option[TableProvider] = {
     DataSource.lookupDataSourceV2(source, df.sparkSession.sessionState.conf) match {
-      // File source V2 supports non-partitioned Append and
-      // Overwrite via DataFrame API (df.write.save(path)).
-      // Fall back to V1 for:
-      // - ErrorIfExists/Ignore (TODO: SPARK-56174)
-      // - Partitioned writes (TODO: SPARK-56174)
-      case Some(_: FileDataSourceV2)
-          if (curmode != SaveMode.Append
-            && curmode != SaveMode.Overwrite)
-            || partitioningColumns.exists(_.nonEmpty) =>
-        None
       case other => other
     }
   }
