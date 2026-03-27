@@ -2147,6 +2147,36 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     testString()
   }
 
+  test("reverse function - binary") {
+    val df = Seq(
+      Array[Byte](0xCA.toByte, 0xFE.toByte),
+      Array[Byte](),
+      Array[Byte](0x01.toByte),
+      null
+    ).toDF("b")
+
+    def testBinary(): Unit = {
+      checkAnswer(
+        df.select(reverse($"b")),
+        Seq(
+          Row(Array[Byte](0xFE.toByte, 0xCA.toByte)),
+          Row(Array[Byte]()),
+          Row(Array[Byte](0x01.toByte)),
+          Row(null)))
+      checkAnswer(
+        df.selectExpr("reverse(b)"),
+        Seq(
+          Row(Array[Byte](0xFE.toByte, 0xCA.toByte)),
+          Row(Array[Byte]()),
+          Row(Array[Byte](0x01.toByte)),
+          Row(null)))
+    }
+
+    testBinary()
+    df.cache()
+    testBinary()
+  }
+
   test("reverse function - array for primitive type not containing null") {
     val idfNotContainsNull = Seq(
       Seq(1, 9, 8, 7),
@@ -2240,7 +2270,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "paramIndex" -> "first",
         "inputSql" -> "\"struct(1, a)\"",
         "inputType" -> "\"STRUCT<col1: INT NOT NULL, col2: STRING NOT NULL>\"",
-        "requiredType" -> "(\"STRING\" or \"ARRAY\")"
+        "requiredType" -> "(\"STRING\" or \"BINARY\" or \"ARRAY\")"
       ),
       queryContext = Array(ExpectedContext("", "", 7, 29, "reverse(struct(1, 'a'))"))
     )
@@ -2255,7 +2285,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "paramIndex" -> "first",
         "inputSql" -> "\"map(1, a)\"",
         "inputType" -> "\"MAP<INT, STRING>\"",
-        "requiredType" -> "(\"STRING\" or \"ARRAY\")"
+        "requiredType" -> "(\"STRING\" or \"BINARY\" or \"ARRAY\")"
       ),
       queryContext = Array(ExpectedContext("", "", 7, 26, "reverse(map(1, 'a'))"))
     )
