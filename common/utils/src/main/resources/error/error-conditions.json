@@ -1842,6 +1842,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "DESCRIBE_PARTITION_NOT_SUPPORTED_FOR_V2_TABLE" : {
+    "message" : [
+      "DESCRIBE TABLE ... PARTITION is not supported for table <tableName> because it does not implement partition management."
+    ],
+    "sqlState" : "0A000"
+  },
   "DESCRIBE_JSON_NOT_EXTENDED" : {
     "message" : [
       "DESCRIBE TABLE ... AS JSON only supported when [EXTENDED|FORMATTED] is specified.",
