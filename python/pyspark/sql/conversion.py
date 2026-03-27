@@ -1668,21 +1668,76 @@ class ArrowArrayToPandasConversion:
     @staticmethod
     def _contains_conversion_type(data_type: DataType) -> bool:
         """
-        Check if data type tree contains types that require post-processing conversion.
+        Check if data type tree contains types not yet supported by convert_numpy.
 
-        Returns True if the type contains UserDefinedType, VariantType, GeographyType,
-        GeometryType, MapType, or StructType at any nesting level.
-        MapType and StructType require conversion because PyArrow's to_pandas() produces
-        maps as lists of tuples (not dicts) and structs as dicts (not Rows).
+        Returns True if the type contains MapType or StructType at any nesting level.
+        When True, convert_numpy is bypassed in favor of the legacy conversion path.
         """
         if isinstance(
             data_type,
-            (UserDefinedType, VariantType, GeographyType, GeometryType, MapType, StructType),
+            (MapType, StructType),
         ):
             return True
         elif isinstance(data_type, ArrayType):
             return ArrowArrayToPandasConversion._contains_conversion_type(data_type.elementType)
         return False
+
+    @staticmethod
+    def _create_element_converter(
+        element_type: DataType,
+    ) -> Optional[Callable]:
+        """
+        Create a converter function for elements inside arrays that need post-processing.
+
+        Returns None if no conversion is needed (i.e., to_pandas() output is already correct).
+        """
+        if isinstance(element_type, UserDefinedType):
+            udt: UserDefinedType = element_type
+
+            def convert_udt(v: Any) -> Any:
+                if v is None:
+                    return None
+                return v if hasattr(v, "__UDT__") else udt.deserialize(v)
+
+            return convert_udt
+        elif isinstance(element_type, VariantType):
+
+            def convert_variant(v: Any) -> Any:
+                if v is None:
+                    return None
+                return VariantVal(v["value"], v["metadata"])
+
+            return convert_variant
+        elif isinstance(element_type, GeographyType):
+
+            def convert_geography(v: Any) -> Any:
+                if v is None:
+                    return None
+                return Geography.fromWKB(v["wkb"], v["srid"])
+
+            return convert_geography
+        elif isinstance(element_type, GeometryType):
+
+            def convert_geometry(v: Any) -> Any:
+                if v is None:
+                    return None
+                return Geometry.fromWKB(v["wkb"], v["srid"])
+
+            return convert_geometry
+        elif isinstance(element_type, ArrayType):
+            inner_conv = ArrowArrayToPandasConversion._create_element_converter(
+                element_type.elementType
+            )
+            if inner_conv is None:
+                return None
+
+            def convert_array(v: Any) -> Any:
+                if v is None:
+                    return None
+                return [inner_conv(e) for e in v]
+
+            return convert_array
+        return None
 
     @classmethod
     def _prefer_convert_numpy(
@@ -1813,30 +1868,19 @@ class ArrowArrayToPandasConversion:
         ):
             series = arr.to_pandas()
         elif isinstance(spark_type, UserDefinedType):
-            udt: UserDefinedType = spark_type
             series = arr.to_pandas()
-            series = series.apply(
-                lambda v: (
-                    v if hasattr(v, "__UDT__") else udt.deserialize(v) if v is not None else None
-                )
-            )
-        elif isinstance(spark_type, VariantType):
+            series = series.apply(cls._create_element_converter(spark_type))
+        elif isinstance(spark_type, (VariantType, GeographyType, GeometryType)):
             series = arr.to_pandas()
-            series = series.map(
-                lambda v: VariantVal(v["value"], v["metadata"]) if v is not None else None
-            )
-        elif isinstance(spark_type, GeographyType):
-            series = arr.to_pandas()
-            series = series.map(
-                lambda v: Geography.fromWKB(v["wkb"], v["srid"]) if v is not None else None
-            )
-        elif isinstance(spark_type, GeometryType):
-            series = arr.to_pandas()
-            series = series.map(
-                lambda v: Geometry.fromWKB(v["wkb"], v["srid"]) if v is not None else None
-            )
+            series = series.map(cls._create_element_converter(spark_type))
         elif isinstance(spark_type, ArrayType):
-            if ndarray_as_list:
+            element_conv = cls._create_element_converter(spark_type.elementType)
+            if element_conv is not None:
+                series = arr.to_pandas(integer_object_nulls=True) if ndarray_as_list else arr.to_pandas()
+                series = series.map(
+                    lambda x: [element_conv(e) for e in x] if x is not None else None
+                )
+            elif ndarray_as_list:
                 series = arr.to_pandas(integer_object_nulls=True)
                 series = series.map(lambda x: cls._ndarray_to_list(x) if x is not None else None)
             else:
