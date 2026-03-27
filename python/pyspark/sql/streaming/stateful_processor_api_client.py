@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Union, Optional, Tuple, Iterator
 from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import (
+    AtomicType,
     StructType,
     Row,
 )
@@ -59,12 +60,31 @@ if has_numpy:
             return v.to_pydatetime()
         return v
 
-    def _normalize_tuple(data: Tuple) -> Tuple:
-        return tuple(_normalize_value(v) for v in data)
-else:
+    def _normalize_value_simple(v: Any) -> Any:
+        """Fast path for flat schemas: check for numpy scalars and pandas dtypes only."""
+        if isinstance(v, np.generic):
+            return v.tolist()
+        if hasattr(v, "to_pytimedelta"):
+            return v.to_pytimedelta()
+        if hasattr(v, "to_pydatetime"):
+            return v.to_pydatetime()
+        return v
 
     def _normalize_tuple(data: Tuple) -> Tuple:
+        return tuple(_normalize_value(v) for v in data)
+
+    def _normalize_tuple_simple(data: Tuple) -> Tuple:
+        return tuple(_normalize_value_simple(v) for v in data)
+else:
+    def _normalize_tuple(data: Tuple) -> Tuple:
         return data  # toInternal handles tuples natively
+
+    _normalize_tuple_simple = _normalize_tuple
+
+
+def _is_simple_schema(schema: StructType) -> bool:
+    """True if every field is an atomic type (no nested structs, arrays, or maps)."""
+    return all(isinstance(f.dataType, AtomicType) for f in schema.fields)
 
 
 class StatefulProcessorHandleState(Enum):
@@ -532,9 +552,10 @@ class StatefulProcessorApiClient:
 
         to_internal = schema.toInternal
         dumps = self.pickleSer.dumps
+        normalize = _normalize_tuple_simple if _is_simple_schema(schema) else _normalize_tuple
 
         def _fast_serialize(data: Tuple) -> bytes:
-            return dumps(to_internal(_normalize_tuple(data)))
+            return dumps(to_internal(normalize(data)))
 
         self._serializer_cache[schema_id] = _fast_serialize
         return _fast_serialize
