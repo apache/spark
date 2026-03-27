@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.connector.catalog.ColumnDefaultValue
@@ -208,29 +208,17 @@ case class InsertIntoStatement(
     copy(query = newChild)
 }
 
-sealed abstract class InsertReplaceCriteria extends Expression with Unevaluable {
-  override def nullable: Boolean = false
-  override def dataType: DataType = throw new UnresolvedException("dataType")
-}
+sealed abstract class InsertReplaceCriteria
 
 /**
  * Rows are matched by comparing equality on the specified columns,
  * which must exist in both the table and the query.
  */
-case class InsertReplaceUsing(cols: Seq[String]) extends InsertReplaceCriteria {
-  override def children: Seq[Expression] = Nil
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): InsertReplaceUsing = copy()
-}
+case class InsertReplaceUsing(cols: Seq[String]) extends InsertReplaceCriteria
 
 /**
  * Rows are matched based on the specified boolean expression.
  */
 case class InsertReplaceOn(
     cond: Expression,
-    tableAliasOpt: Option[String]) extends InsertReplaceCriteria {
-  override def children: Seq[Expression] = Seq(cond)
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): InsertReplaceOn =
-    copy(cond = newChildren.head)
-}
+    tableAliasOpt: Option[String]) extends InsertReplaceCriteria
