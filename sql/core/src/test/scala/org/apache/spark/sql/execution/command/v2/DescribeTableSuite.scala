@@ -31,14 +31,60 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
   with CommandSuiteBase {
   import testImplicits._
 
-  test("Describing a partition is not supported") {
+  test("DESCRIBE TABLE PARTITION validates that the partition exists") {
     withNamespaceAndTable("ns", "table") { tbl =>
-      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
-        "PARTITIONED BY (id)")
-      val e = intercept[AnalysisException] {
-        sql(s"DESCRIBE TABLE $tbl PARTITION (id = 1)")
-      }
-      assert(e.message === "DESCRIBE does not support partition for v2 tables.")
+      sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      sql(s"ALTER TABLE $tbl ADD PARTITION (id = 1)")
+      // Non-extended describe with a valid partition spec shows schema + partition section,
+      // same output as DESCRIBE TABLE (partition spec is used only for validation).
+      checkAnswer(
+        sql(s"DESCRIBE TABLE $tbl PARTITION (id = 1)"),
+        Seq(
+          Row("id", "bigint", null),
+          Row("data", "string", null),
+          Row("# Partition Information", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("id", "bigint", null)))
+    }
+  }
+
+  test("DESCRIBE TABLE EXTENDED PARTITION shows detailed partition information") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      sql(s"ALTER TABLE $tbl ADD PARTITION (id = 1)")
+      val result = sql(s"DESCRIBE TABLE EXTENDED $tbl PARTITION (id = 1)").collect()
+      val colNames = result.map(_.getString(0))
+      // Must include the detailed partition section header
+      assert(colNames.contains("# Detailed Partition Information"))
+      // Must include the partition values row
+      assert(result.exists(r =>
+        r.getString(0) == "Partition Values" && r.getString(1) == "[id=1]"))
+    }
+  }
+
+  test("DESCRIBE TABLE PARTITION on a non-existent partition raises an error") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"DESCRIBE TABLE $tbl PARTITION (id = 999)").collect()
+        },
+        condition = "PARTITIONS_NOT_FOUND",
+        parameters = Map(
+          "partitionList" -> "PARTITION (`id` = 999)",
+          "tableName" -> s"`$catalog`.`ns`.`table`"))
+    }
+  }
+
+  test("DESCRIBE TABLE PARTITION on a table without partition management raises an error") {
+    withNamespaceAndTable("ns", "table", nonPartitionCatalog) { tbl =>
+      sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"DESCRIBE TABLE $tbl PARTITION (id = 1)")
+        },
+        condition = "DESCRIBE_PARTITION_NOT_SUPPORTED_FOR_V2_TABLE",
+        parameters = Map("tableName" -> tbl))
     }
   }
 
