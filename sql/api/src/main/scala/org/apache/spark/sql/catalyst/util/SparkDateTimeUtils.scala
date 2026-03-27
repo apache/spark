@@ -466,7 +466,8 @@ trait SparkDateTimeUtils {
   /**
    * Trims and parses a given UTF8 timestamp string to the corresponding timestamp segments, time
    * zone id and whether it is just time without a date. value. The return type is [[Option]] in
-   * order to distinguish between 0L and null. The following formats are allowed:
+   * order to distinguish between 0L and null. Leading and trailing whitespace and ISO control
+   * characters are trimmed before parsing. The following formats are allowed:
    *
    * `[+-]yyyy*` `[+-]yyyy*-[m]m` `[+-]yyyy*-[m]m-[d]d` `[+-]yyyy*-[m]m-[d]d `
    * `[+-]yyyy*-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
@@ -509,7 +510,8 @@ trait SparkDateTimeUtils {
     var currentSegmentValue = 0
     var currentSegmentDigits = 0
     val bytes = s.getBytes
-    var j = getTrimmedStart(bytes)
+    val trimmedStart = getTrimmedStart(bytes)
+    var j = trimmedStart
     val strEndTrimmed = getTrimmedEnd(j, bytes)
 
     if (j == strEndTrimmed) {
@@ -527,7 +529,7 @@ trait SparkDateTimeUtils {
       val b = bytes(j)
       val parsedValue = b - '0'.toByte
       if (parsedValue < 0 || parsedValue > 9) {
-        if (j == 0 && b == 'T') {
+        if (j == trimmedStart && b == 'T') {
           justTime = true
           i += 3
         } else if (i < 2) {
