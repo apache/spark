@@ -333,8 +333,17 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       cachedData: CachedData,
       column: Seq[Attribute]): Unit = {
     val relation = cachedData.cachedRepresentation
+    // Wrap in DataSourceV2Relation so the DSv2 planning path is used consistently
+    // (DataSourceV2Strategy handles InMemoryTableScanExec via InMemoryCacheScan).
+    val dsv2Relation = DataSourceV2Relation(
+      table = new InMemoryCacheTable(relation),
+      output = relation.output.map(_.asInstanceOf[AttributeReference]),
+      catalog = None,
+      identifier = None,
+      options = CaseInsensitiveStringMap.empty()
+    )
     val (rowCount, newColStats) =
-      CommandUtils.computeColumnStats(sparkSession, relation, column)
+      CommandUtils.computeColumnStats(sparkSession, dsv2Relation, column)
     relation.updateStats(rowCount, newColStats)
   }
 
