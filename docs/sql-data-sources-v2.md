@@ -41,7 +41,7 @@ Compared to the earlier Data Source V1 API, DSV2 offers:
 | Feature | Description |
 |---------|-------------|
 | **Java API** | The connector interfaces are pure Java (`org.apache.spark.sql.connector`), removing the Scala dependency that DSV1 required. A [Python Data Source API](api/python/reference/pyspark.sql/api/pyspark.sql.datasource.DataSource.html) (`pyspark.sql.datasource`) is also available as a wrapper for lightweight connectors written entirely in Python. |
-| **Catalog integration** | Connectors can expose namespaces, tables, views, and functions natively through Spark SQL DDL. |
+| **Catalog integration** | Connectors can expose namespaces, tables, views, and functions natively through Spark SQL. |
 | **Operator pushdown** | Connectors can accept pushed-down filters, required columns, aggregates, limits, offsets, and more. |
 | **Report partitioning and ordering** | Connectors can report the physical layout of data so that Spark can avoid unnecessary shuffles and sorts. |
 | **Requested distribution and ordering** | Write connectors can request that Spark repartition and sort incoming data before writing, enabling optimized data layouts such as clustering or Z-ordering. |
@@ -56,7 +56,7 @@ There are two ways to plug a data source into Spark:
 | Entry Point | Use Case |
 |-------------|----------|
 | [`TableProvider`](#tableprovider) | The simpler entry point, for sources that identify a table by **options** (e.g. a file path or Kafka topic) rather than through a catalog. Can implement `SupportsCatalogOptions` to also participate in DDL via the session catalog. |
-| [`CatalogPlugin`](#catalogplugin) | Typically used by external data sources that manage their own **catalog** of namespaces, tables, and optionally views and functions (e.g. Iceberg, Delta Lake). Registered via `spark.sql.catalog.<name>=com.example.MyCatalog` and enables SQL DDL such as `CREATE TABLE`, `ALTER TABLE`, and `DROP TABLE`. |
+| [`CatalogPlugin`](#catalogplugin) | Typically used by external data sources that manage their own **catalog** of namespaces, tables, and optionally views and functions (e.g. Iceberg, Delta Lake). Registered via `spark.sql.catalog.<name>=com.example.MyCatalog`. |
 
 
 ### TableProvider
@@ -105,7 +105,7 @@ used to add custom behavior while delegating to the default implementation.
 ## Catalog Interfaces
 
 The interfaces below are mix-ins that a `CatalogPlugin` implements to expose specific
-categories of metadata operations through Spark SQL DDL.
+categories of metadata operations through Spark SQL.
 
 ### TableCatalog
 
