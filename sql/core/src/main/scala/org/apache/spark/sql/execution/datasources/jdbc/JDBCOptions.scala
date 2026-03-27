@@ -160,8 +160,6 @@ class JDBCOptions(
      """.stripMargin
   )
 
-  val fetchSize = parameters.getOrElse(JDBC_BATCH_FETCH_SIZE, "0").toInt
-
   // ------------------------------------------------------------
   // Optional parameters only for writing
   // ------------------------------------------------------------
