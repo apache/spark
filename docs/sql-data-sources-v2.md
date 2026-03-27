@@ -24,7 +24,7 @@ license: |
 
 ## Overview
 
-Data Source V2 (DSv2) is Spark's extensible API for integrating external data systems.
+Data Source V2 (DSV2) is Spark's extensible API for integrating external data systems.
 It is a set of Java interfaces in the `org.apache.spark.sql.connector` package that allow
 connectors to plug into Spark's query planning and execution. Connectors opt in to features
 and optimizations &mdash; such as filter pushdown, columnar reads, or catalog support &mdash;
@@ -36,11 +36,11 @@ capabilities incrementally. Notable users include:
 - [Delta Lake](https://docs.delta.io/latest/delta-spark.html)
 - [Lance](https://lance.org/integrations/spark/)
 
-Compared to the earlier Data Source V1 API, DSv2 offers:
+Compared to the earlier Data Source V1 API, DSV2 offers:
 
 | Feature | Description |
 |---------|-------------|
-| **Java API** | The connector interfaces are pure Java (`org.apache.spark.sql.connector`), removing the Scala dependency that DSv1 required. A [Python Data Source API](api/python/reference/pyspark.sql/api/pyspark.sql.datasource.DataSource.html) (`pyspark.sql.datasource`) is also available as a wrapper for lightweight connectors written entirely in Python. |
+| **Java API** | The connector interfaces are pure Java (`org.apache.spark.sql.connector`), removing the Scala dependency that DSV1 required. A [Python Data Source API](api/python/reference/pyspark.sql/api/pyspark.sql.datasource.DataSource.html) (`pyspark.sql.datasource`) is also available as a wrapper for lightweight connectors written entirely in Python. |
 | **Catalog integration** | Connectors can expose namespaces, tables, views, and functions natively through Spark SQL DDL. |
 | **Operator pushdown** | Connectors can accept pushed-down filters, required columns, aggregates, limits, offsets, and more. |
 | **Report partitioning and ordering** | Connectors can report the physical layout of data so that Spark can avoid unnecessary shuffles and sorts. |
@@ -361,7 +361,7 @@ shuffle and sort nodes as needed to satisfy these requirements.
 
 ## Row-Level DML
 
-DSv2 provides interfaces for connectors to support `DELETE`, `UPDATE`, and `MERGE INTO`
+DSV2 provides interfaces for connectors to support `DELETE`, `UPDATE`, and `MERGE INTO`
 statements.
 
 ### Filter-Based Delete
@@ -408,7 +408,7 @@ Data sources fall into two categories:
 ## Expressions
 
 The `org.apache.spark.sql.connector.expressions` package provides a neutral expression
-representation used across the DSv2 API:
+representation used across the DSV2 API:
 
 - **Transforms** (`IdentityTransform`, `BucketTransform`, `YearsTransform`, etc.)
   describe table partitioning schemes.
@@ -436,8 +436,8 @@ A `Table` that declares `STREAMING_WRITE` supports streaming writes through
 
 - [API documentation (Javadoc)](api/java/org/apache/spark/sql/connector/package-summary.html)
   for the full interface reference.
-- [Data Sources](sql-data-sources.html) for the user-facing guide to built-in data sources (DSv1).
+- [Data Sources](sql-data-sources.html) for the user-facing guide to built-in data sources (DSV1).
 - [Python Data Source API](api/python/reference/pyspark.sql/api/pyspark.sql.datasource.DataSource.html)
   for writing lightweight connectors entirely in Python.
-- [Storage Partition Join](sql-performance-tuning.html#storage-partition-join) for how DSv2
+- [Storage Partition Join](sql-performance-tuning.html#storage-partition-join) for how DSV2
   partitioning reporting enables join optimizations.
