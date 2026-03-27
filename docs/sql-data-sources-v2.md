@@ -45,7 +45,7 @@ Compared to the earlier Data Source V1 API, DSv2 offers:
 | **Operator pushdown** | Connectors can accept pushed-down filters, required columns, aggregates, limits, offsets, and more. |
 | **Report partitioning and ordering** | Connectors can report the physical layout of data so that Spark can avoid unnecessary shuffles and sorts. |
 | **Requested distribution and ordering** | Write connectors can request that Spark repartition and sort incoming data before writing, enabling optimized data layouts such as clustering or Z-ordering. |
-| **Columnar reads** | Any connector can return data as `ColumnarBatch` instances for vectorized processing. |
+| **Columnar reads** | Connectors can return data in columnar batches for vectorized processing. |
 | **Row-level DML** | Connectors can natively support `DELETE`, `UPDATE`, and `MERGE INTO` operations through dedicated interfaces. |
 | **Streaming support** | A unified `Table` abstraction supports batch, micro-batch, and continuous processing through the same interfaces. |
 
@@ -55,15 +55,14 @@ There are two ways to plug a data source into Spark:
 
 | Entry Point | Use Case |
 |-------------|----------|
-| [`TableProvider`](#tableprovider) | For sources that identify a table by **options** (e.g. a file path or Kafka topic) rather than through a catalog. Can implement `SupportsCatalogOptions` to also participate in DDL via the session catalog. |
+| [`TableProvider`](#tableprovider) | The simpler entry point, for sources that identify a table by **options** (e.g. a file path or Kafka topic) rather than through a catalog. Can implement `SupportsCatalogOptions` to also participate in DDL via the session catalog. |
 | [`CatalogPlugin`](#catalogplugin) | Typically used by external data sources that manage their own **catalog** of namespaces, tables, and optionally views and functions (e.g. Iceberg, Delta Lake). Registered via `spark.sql.catalog.<name>=com.example.MyCatalog` and enables SQL DDL such as `CREATE TABLE`, `ALTER TABLE`, and `DROP TABLE`. |
 
 
 ### TableProvider
 
-[`TableProvider`](api/java/org/apache/spark/sql/connector/catalog/TableProvider.html) is the
-simpler of the two entry points. It returns a [`Table`](#table) given a set of options.
-Implementations must have a public no-arg constructor.
+[`TableProvider`](api/java/org/apache/spark/sql/connector/catalog/TableProvider.html) returns a
+[`Table`](#table) given a set of options. Implementations must have a public no-arg constructor.
 
 The key methods are:
 
@@ -95,6 +94,7 @@ A catalog adds capabilities by mixing in additional
 | `TableCatalog` | List, load, create, alter, and drop tables |
 | `StagingTableCatalog` | Atomic create-table-as-select / replace-table-as-select |
 | `SupportsNamespaces` | Create, alter, drop, and list namespaces |
+| `ViewCatalog` | List, load, create, alter, and drop views *(work in progress &mdash; not yet integrated into query resolution)* |
 | `FunctionCatalog` | List and load functions |
 | `ProcedureCatalog` | Load and list stored procedures |
 
@@ -138,6 +138,24 @@ adds namespace (database/schema) management:
 | `createNamespace(namespace, metadata)` | Create a namespace |
 | `alterNamespace(namespace, changes...)` | Alter namespace properties |
 | `dropNamespace(namespace, cascade)` | Drop a namespace |
+
+### ViewCatalog
+
+> **Note:** `ViewCatalog` is a work in progress. The interface is defined but is not yet
+> integrated into Spark's query resolution or planning.
+
+[`ViewCatalog`](api/java/org/apache/spark/sql/connector/catalog/ViewCatalog.html) extends
+`CatalogPlugin` and provides methods for view lifecycle management:
+
+| Method | Description |
+|--------|-------------|
+| `listViews(namespace)` | List views in a namespace |
+| `loadView(ident)` | Load a view by identifier |
+| `createView(viewInfo)` | Create a new view |
+| `replaceView(viewInfo, orCreate)` | Replace (or create) a view |
+| `alterView(ident, changes...)` | Alter a view's properties or schema |
+| `dropView(ident)` | Drop a view |
+| `renameView(oldIdent, newIdent)` | Rename a view |
 
 ### FunctionCatalog
 
@@ -419,5 +437,7 @@ A `Table` that declares `STREAMING_WRITE` supports streaming writes through
 - [API documentation (Javadoc)](api/java/org/apache/spark/sql/connector/package-summary.html)
   for the full interface reference.
 - [Data Sources](sql-data-sources.html) for the user-facing guide to built-in data sources (DSv1).
+- [Python Data Source API](api/python/reference/pyspark.sql/api/pyspark.sql.datasource.DataSource.html)
+  for writing lightweight connectors entirely in Python.
 - [Storage Partition Join](sql-performance-tuning.html#storage-partition-join) for how DSv2
   partitioning reporting enables join optimizations.
