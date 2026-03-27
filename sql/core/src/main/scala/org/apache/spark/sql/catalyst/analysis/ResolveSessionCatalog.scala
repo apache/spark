@@ -200,7 +200,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         partitionSpec,
         isExtended,
         output) =>
-      DescribeTableCommand(resolvedChild, ident, partitionSpec, isExtended, output)
+      val rawSpec = partitionSpec match {
+        case Some(UnresolvedPartitionSpec(spec, _)) => spec
+        case _ => Map.empty[String, String]
+      }
+      DescribeTableCommand(resolvedChild, ident, rawSpec, isExtended, output)
 
     case DescribeColumn(
         ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended, output) =>

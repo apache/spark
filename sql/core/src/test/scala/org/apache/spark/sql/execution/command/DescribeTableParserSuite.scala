@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedTableOrView}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute,
+  UnresolvedPartitionSpec, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.plans.logical.{DescribeColumn, DescribeRelation}
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -28,16 +29,24 @@ class DescribeTableParserSuite extends SharedSparkSession with AnalysisTest {
   test("SPARK-17328: Fix NPE with EXPLAIN DESCRIBE TABLE") {
     comparePlans(parsePlan("describe t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), None, isExtended = false))
     comparePlans(parsePlan("describe table t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), None, isExtended = false))
     comparePlans(parsePlan("describe table extended t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = true))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), None, isExtended = true))
     comparePlans(parsePlan("describe table formatted t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = true))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), None, isExtended = true))
+  }
+
+  test("describe table with partition spec") {
+    comparePlans(parsePlan("DESCRIBE TABLE t PARTITION (ds='2024-01-01')"),
+      DescribeRelation(
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
+        Some(UnresolvedPartitionSpec(Map("ds" -> "2024-01-01"))),
+        isExtended = false))
   }
 
   test("describe table column") {
