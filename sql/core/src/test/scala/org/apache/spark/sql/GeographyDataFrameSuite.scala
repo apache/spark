@@ -129,6 +129,19 @@ class GeographyDataFrameSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("createDataFrame and round-trip with Geography SRIDs") {
+    val geog4267 = Geography.fromWKB(point1, 4267)
+    val geog4269 = Geography.fromWKB(point2, 4269)
+    val schema4267 = StructType(Seq(StructField("g", GeographyType(4267), nullable = false)))
+    val schema4269 = StructType(Seq(StructField("g", GeographyType(4269), nullable = false)))
+    checkAnswer(
+      spark.createDataFrame(sparkContext.parallelize(Seq(Row(geog4267))), schema4267),
+      Seq(Row(geog4267)))
+    checkAnswer(
+      spark.createDataFrame(sparkContext.parallelize(Seq(Row(geog4269))), schema4269),
+      Seq(Row(geog4269)))
+  }
+
   test("createDataFrame APIs with Geography.fromWKB") {
     // 1. Test createDataFrame with RDD of Geography objects
     val geography1 = Geography.fromWKB(point1, 4326)

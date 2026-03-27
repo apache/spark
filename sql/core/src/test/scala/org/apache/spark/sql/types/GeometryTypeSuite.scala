@@ -30,7 +30,7 @@ class GeometryTypeSuite extends SparkFunSuite {
   // These tests verify the basic behavior of the GeometryType logical type.
 
   test("GEOMETRY type with specified invalid SRID") {
-    val srids: Seq[Int] = Seq(-4612, -4326, -2, -1, 1, 2)
+    val srids: Seq[Int] = Seq(-4612, -4326, -2, -1, 1, 2, 999, 99999)
     srids.foreach { srid =>
       checkError(
         exception = intercept[SparkIllegalArgumentException] {
