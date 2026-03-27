@@ -529,4 +529,4 @@ Sort [ltrl2#x ASC NULLS FIRST], true
 -- !query
 DROP VIEW IF EXISTS testData
 -- !query analysis
-DropTempViewCommand testData
+DropTempViewCommand testData, true

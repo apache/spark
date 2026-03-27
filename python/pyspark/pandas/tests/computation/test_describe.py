@@ -19,6 +19,7 @@
 import numpy as np
 import pandas as pd
 
+from pyspark.loose_version import LooseVersion
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -194,25 +195,29 @@ class FrameDescribeMixin:
             }
         )
         pdf = psdf._to_pandas()
-        # For timestamp type, we should convert NaT to None in pandas result
-        # since pandas API on Spark doesn't support the NaT for object type.
-        pdf_result = pdf[pdf.a != pdf.a].describe()
-        self.assert_eq(
-            psdf[psdf.a != psdf.a].describe(),
-            pdf_result.where(pdf_result.notnull(), None).astype(str),
-        )
+        if LooseVersion(pd.__version__) < "3.0.0":
+            # For timestamp type, we should convert NaT to None in pandas result
+            # since pandas API on Spark doesn't support the NaT for object type.
+            pdf_result = pdf[pdf.a != pdf.a].describe()
+            pdf_result = pdf_result.where(pdf_result.notnull(), None).astype(str)
+        else:
+            # In pandas 3.0.0+, empty timestamp stats become missing values after astype(str),
+            # and pandas API on Spark handles timestamp type as string type accordingly.
+            pdf_result = pdf[pdf.a != pdf.a].describe().astype(str)
+        self.assert_eq(psdf[psdf.a != psdf.a].describe(), pdf_result)
 
         # Explicit empty DataFrame numeric & timestamp
         psdf = ps.DataFrame(
             {"a": [1, 2, 3], "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)]}
         )
         pdf = psdf._to_pandas()
-        pdf_result = pdf[pdf.a != pdf.a].describe()
-        pdf_result.b = pdf_result.b.where(pdf_result.b.notnull(), None).astype(str)
-        self.assert_eq(
-            psdf[psdf.a != psdf.a].describe(),
-            pdf_result,
-        )
+        if LooseVersion(pd.__version__) < "3.0.0":
+            pdf_result = pdf[pdf.a != pdf.a].describe()
+            pdf_result.b = pdf_result.b.where(pdf_result.b.notnull(), None).astype(str)
+        else:
+            pdf_result = pdf[pdf.a != pdf.a].describe()
+            pdf_result.b = pdf_result.b.astype(str)
+        self.assert_eq(psdf[psdf.a != psdf.a].describe(), pdf_result)
 
         # Explicit empty DataFrame numeric & string
         psdf = ps.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
@@ -227,11 +232,13 @@ class FrameDescribeMixin:
             {"a": ["a", "b", "c"], "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)]}
         )
         pdf = psdf._to_pandas()
-        pdf_result = pdf[pdf.a != pdf.a].describe()
-        self.assert_eq(
-            psdf[psdf.a != psdf.a].describe(),
-            pdf_result.where(pdf_result.notnull(), None).astype(str),
-        )
+        if LooseVersion(pd.__version__) < "3.0.0":
+            pdf_result = pdf[pdf.a != pdf.a].describe()
+            pdf_result = pdf_result.where(pdf_result.notnull(), None).astype(str)
+        else:
+            pdf_result = pdf[pdf.a != pdf.a].describe()
+            pdf_result.b = pdf_result.b.astype(str)
+        self.assert_eq(psdf[psdf.a != psdf.a].describe(), pdf_result)
 
 
 class FrameDescribeTests(

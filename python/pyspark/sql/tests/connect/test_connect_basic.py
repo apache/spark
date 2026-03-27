@@ -248,8 +248,9 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "Column, int, list, str or tuple",
                 "arg_name": "item",
                 "arg_type": "float",
             },
@@ -260,8 +261,9 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "Column, int, list, str or tuple",
                 "arg_name": "item",
                 "arg_type": "NoneType",
             },
@@ -272,8 +274,9 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "Column, int, list, str or tuple",
                 "arg_name": "item",
                 "arg_type": "DataFrame",
             },
@@ -951,8 +954,12 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_LIST_OF_COLUMN",
-            messageParameters={"arg_name": "exprs"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "list[Column]",
+                "arg_name": "exprs",
+                "arg_type": "tuple",
+            },
         )
 
     def test_with_columns(self):
@@ -1270,8 +1277,9 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_DICT",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "dict",
                 "arg_name": "metadata",
                 "arg_type": "list",
             },

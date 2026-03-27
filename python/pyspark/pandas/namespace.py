@@ -437,7 +437,7 @@ def read_csv(
                 )
             if len(missing) > 0:
                 raise ValueError(
-                    "Usecols do not match columns, columns expected but not " "found: %s" % missing
+                    "Usecols do not match columns, columns expected but not found: %s" % missing
                 )
 
             if len(column_labels) > 0:
@@ -2284,7 +2284,9 @@ def get_dummies(
                         (
                             str(label[len(columns) :])
                             if len(label) > len(columns) + 1
-                            else label[len(columns)] if len(label) == len(columns) + 1 else ""
+                            else label[len(columns)]
+                            if len(label) == len(columns) + 1
+                            else ""
                         )
                         for label in column_labels
                     ]
@@ -2654,6 +2656,10 @@ def concat(
             num_series += 1
             series_names.add(obj.name)
             if not ignore_index and not should_return_series:
+                new_objs.append(obj.to_frame())
+            elif LooseVersion(pd.__version__) >= "3.0.0" and not should_return_series:
+                # pandas 3 preserves a named Series as its own column during
+                # row-wise concat with ignore_index=True instead of renaming it to 0.
                 new_objs.append(obj.to_frame())
             else:
                 new_objs.append(obj.to_frame(DEFAULT_SERIES_NAME))

@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-__all__ = ["SparkJobInfo", "SparkStageInfo", "StatusTracker"]
+__all__ = ["SparkJobInfo", "SparkStageInfo", "SparkExecutorInfo", "StatusTracker"]
 
 from typing import List, NamedTuple, Optional
 
@@ -45,6 +45,21 @@ class SparkStageInfo(NamedTuple):
     numActiveTasks: int
     numCompletedTasks: int
     numFailedTasks: int
+
+
+class SparkExecutorInfo(NamedTuple):
+    """
+    Exposes information about Spark Executors.
+    """
+
+    host: str
+    port: int
+    cacheSize: int
+    numRunningTasks: int
+    usedOnHeapStorageMemory: int
+    usedOffHeapStorageMemory: int
+    totalOnHeapStorageMemory: int
+    totalOffHeapStorageMemory: int
 
 
 class StatusTracker:
@@ -110,3 +125,25 @@ class StatusTracker:
             attrs = [getattr(stage, f)() for f in SparkStageInfo._fields[1:]]
             return SparkStageInfo(stageId, *attrs)
         return None
+
+    def getExecutorInfos(self) -> List[SparkExecutorInfo]:
+        """
+        Returns a list of :class:`SparkExecutorInfo`,
+        contains information of all known executors, including host, port, cacheSize,
+        numRunningTasks and memory metrics.
+        Note this includes information for both the driver and executors.
+        """
+        executor_infos = self._jtracker.getExecutorInfos()
+        return [
+            SparkExecutorInfo(
+                exec_info.host(),
+                exec_info.port(),
+                exec_info.cacheSize(),
+                exec_info.numRunningTasks(),
+                exec_info.usedOnHeapStorageMemory(),
+                exec_info.usedOffHeapStorageMemory(),
+                exec_info.totalOnHeapStorageMemory(),
+                exec_info.totalOffHeapStorageMemory(),
+            )
+            for exec_info in executor_infos
+        ]

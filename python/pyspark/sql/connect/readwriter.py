@@ -18,7 +18,14 @@ from typing import Dict
 from typing import Optional, Union, List, overload, Tuple, cast, Callable
 from typing import TYPE_CHECKING
 
-from pyspark.sql.connect.plan import Read, DataSource, LogicalPlan, WriteOperation, WriteOperationV2
+from pyspark.sql.connect.plan import (
+    Read,
+    RelationChanges,
+    DataSource,
+    LogicalPlan,
+    WriteOperation,
+    WriteOperationV2,
+)
 from pyspark.sql.types import StructType
 from pyspark.sql.utils import to_str
 from pyspark.sql.readwriter import (
@@ -26,7 +33,12 @@ from pyspark.sql.readwriter import (
     DataFrameReader as PySparkDataFrameReader,
     DataFrameWriterV2 as PySparkDataFrameWriterV2,
 )
-from pyspark.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError
+from pyspark.errors import (
+    AnalysisException,
+    PySparkAttributeError,
+    PySparkTypeError,
+    PySparkValueError,
+)
 from pyspark.sql.connect.functions import builtin as F
 
 if TYPE_CHECKING:
@@ -79,9 +91,10 @@ class DataFrameReader(OptionUtils):
             self._schema = schema
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR_OR_STRUCT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "schema",
+                    "expected_type": "str or struct type",
                     "arg_type": type(schema).__name__,
                 },
             )
@@ -138,6 +151,17 @@ class DataFrameReader(OptionUtils):
         return self._df(Read(tableName, self._options))
 
     table.__doc__ = PySparkDataFrameReader.table.__doc__
+
+    def changes(self, tableName: str) -> "DataFrame":
+        if self._schema:
+            raise AnalysisException(
+                "User specified schema not supported with `changes`.",
+                errorClass="_LEGACY_ERROR_TEMP_1189",
+                messageParameters={"operation": "changes"},
+            )
+        return self._df(RelationChanges(tableName, self._options))
+
+    changes.__doc__ = PySparkDataFrameReader.changes.__doc__
 
     def json(
         self,
@@ -443,9 +467,9 @@ class DataFrameReader(OptionUtils):
         if column is not None:
             assert lowerBound is not None, "lowerBound can not be None when ``column`` is specified"
             assert upperBound is not None, "upperBound can not be None when ``column`` is specified"
-            assert (
-                numPartitions is not None
-            ), "numPartitions can not be None when ``column`` is specified"
+            assert numPartitions is not None, (
+                "numPartitions can not be None when ``column`` is specified"
+            )
             self.options(
                 partitionColumn=column,
                 lowerBound=lowerBound,
@@ -547,19 +571,21 @@ class DataFrameWriter(OptionUtils):
         self, numBuckets: int, col: Union[str, TupleOrListOfString], *cols: Optional[str]
     ) -> "DataFrameWriter":
         if not isinstance(numBuckets, int):
-            raise PySparkValueError(
-                errorClass="CANNOT_SET_TOGETHER",
+            raise PySparkTypeError(
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
-                    "arg_list": f"`col` of type {type(col).__name__} and `cols`",
+                    "expected_type": "int",
+                    "arg_name": "numBuckets",
+                    "arg_type": type(numBuckets).__name__,
                 },
             )
 
         if isinstance(col, (list, tuple)):
             if cols:
                 raise PySparkValueError(
-                    errorClass="NOT_INT",
+                    errorClass="CANNOT_SET_TOGETHER",
                     messageParameters={
-                        "arg_list": "numBuckets",
+                        "arg_list": f"`col` of type {type(col).__name__} and `cols`",
                     },
                 )
 
@@ -568,17 +594,19 @@ class DataFrameWriter(OptionUtils):
         for c in cols:
             if not isinstance(c, str):
                 raise PySparkTypeError(
-                    errorClass="NOT_LIST_OF_STR",
+                    errorClass="NOT_EXPECTED_TYPE",
                     messageParameters={
                         "arg_name": "cols",
+                        "expected_type": "list[str]",
                         "arg_type": type(c).__name__,
                     },
                 )
         if not isinstance(col, str):
             raise PySparkTypeError(
-                errorClass="NOT_LIST_OF_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "col",
+                    "expected_type": "list[str]",
                     "arg_type": type(col).__name__,
                 },
             )
@@ -612,17 +640,19 @@ class DataFrameWriter(OptionUtils):
         for c in cols:
             if not isinstance(c, str):
                 raise PySparkTypeError(
-                    errorClass="NOT_LIST_OF_STR",
+                    errorClass="NOT_EXPECTED_TYPE",
                     messageParameters={
                         "arg_name": "cols",
+                        "expected_type": "list[str]",
                         "arg_type": type(c).__name__,
                     },
                 )
         if not isinstance(col, str):
             raise PySparkTypeError(
-                errorClass="NOT_LIST_OF_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "col",
+                    "expected_type": "list[str]",
                     "arg_type": type(col).__name__,
                 },
             )

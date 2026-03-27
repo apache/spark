@@ -766,6 +766,24 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
+  gridTest("Read external file with UNKNOWN type annotation")(
+    Seq(true, false)
+  ) { respectUnknown =>
+    withSQLConf(
+      SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.key ->
+        respectUnknown.toString
+    ) {
+      withAllParquetReaders {
+        // Parquet file column void_col has physical type INT32 and logical type UNKNOWN and was
+        // not written by Spark, so this goes through Parquet --> Spark type conversion.
+        val df = readResourceParquetFile("test-data/void_in_parquet.parquet")
+        val inferredType = df.schema("void_col").dataType
+        val expected = if (respectUnknown) NullType else IntegerType
+        assert(inferredType == expected)
+      }
+    }
+  }
+
   test("vectorized reader: missing all struct fields") {
     for {
       offheapEnabled <- Seq(true, false)

@@ -630,9 +630,9 @@ class SeriesStatMixin:
             index=[0, 1, 2],
         )
         psdf = ps.from_pandas(pdf)
-        with self.assertRaisesRegex(TypeError, "unsupported dtype: object"):
+        with self.assertRaisesRegex(TypeError, "unsupported dtype: (object|str)"):
             psdf["s1"].cov(psdf["s2"])
-        with self.assertRaisesRegex(TypeError, "unsupported dtype: object"):
+        with self.assertRaisesRegex(TypeError, "unsupported dtype: (object|str)"):
             psdf["s2"].cov(psdf["s1"])
         with self.assertRaisesRegex(TypeError, "ddof must be integer"):
             psdf["s2"].cov(psdf["s2"], ddof="ddof")
@@ -654,6 +654,29 @@ class SeriesStatMixin:
             index=[0, 1, 2, 3],
         )
         self._test_cov(pdf)
+
+        # Extension Dtypes
+        pdf = pd.DataFrame(
+            {
+                "s1": pd.Series([0.90010907, None, 0.13484424, 0.62036035], dtype="Float64"),
+                "s2": pd.Series([0.12528585, 0.81131178, 0.26962463, 0.51111198], dtype="Float64"),
+            },
+            index=[0, 1, 2, 3],
+        )
+        self._test_cov(pdf)
+
+        pdf = pd.DataFrame(
+            {
+                "s1": pd.Series(["a", "b", "c"], dtype="string"),
+                "s2": pd.Series([0.12528585, 0.26962463, 0.51111198], dtype="Float64"),
+            },
+            index=[0, 1, 2],
+        )
+        psdf = ps.from_pandas(pdf)
+        with self.assertRaisesRegex(TypeError, "unsupported dtype: (object|str)"):
+            psdf["s1"].cov(psdf["s2"])
+        with self.assertRaisesRegex(TypeError, "unsupported dtype: (object|str)"):
+            psdf["s2"].cov(psdf["s1"])
 
     def _test_cov(self, pdf):
         psdf = ps.from_pandas(pdf)

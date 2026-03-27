@@ -1378,8 +1378,12 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STRUCT",
-            messageParameters={"arg_name": "actual", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "struct type",
+                "arg_name": "actual",
+                "arg_type": "str",
+            },
         )
 
     def test_spark_sql(self):

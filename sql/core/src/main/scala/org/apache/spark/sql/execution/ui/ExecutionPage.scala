@@ -100,6 +100,12 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             <label for="plan-viz-format-select">
               <a id="plan-viz-download-btn" class="downloadbutton">Download</a>
             </label>
+            <button id="copy-plan-btn" class="btn btn-sm btn-outline-secondary ms-2"
+                    type="button" title="Copy physical plan to clipboard">
+              &#x1f4cb; Copy Plan</button>
+            <button id="copy-link-btn" class="btn btn-sm btn-outline-secondary ms-1"
+                    type="button" title="Copy shareable link to this execution">
+              &#x1f517; Copy Link</button>
           </div>
         </div>
 
@@ -193,17 +199,87 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     "%s/jobs/job/?id=%s".format(UIUtils.prependBaseUri(request, parent.basePath), jobId)
 
   private def physicalPlanDescription(physicalPlanDescription: String): Seq[Node] = {
+    val (initialPlan, finalPlan) = extractInitialAndFinalPlans(physicalPlanDescription)
+    val hasDiff = initialPlan.nonEmpty && finalPlan.nonEmpty
+
+    // scalastyle:off line.size.limit
     <div>
-      <span data-action="clickPhysicalPlanDetails">
+      <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#physical-plan-details"
+            aria-expanded="false" aria-controls="physical-plan-details"
+            data-collapse-name="collapse-plan-details">
         <h4>
-          <span id="physical-plan-details-arrow" class="arrow-closed"></span>
+          <span class="collapse-table-arrow arrow-closed"></span>
           <a>Plan Details</a>
         </h4>
       </span>
+      <div class="collapsible-table collapse" id="physical-plan-details">
+        {if (hasDiff) {
+          <div>
+            <ul class="nav nav-pills nav-pills-sm mb-2" role="tablist">
+              <li class="nav-item" role="presentation">
+                <button class="nav-link active btn-sm" data-bs-toggle="pill"
+                        data-bs-target="#plan-unified-tab" type="button" role="tab">Unified</button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link btn-sm" data-bs-toggle="pill"
+                        data-bs-target="#plan-split-tab" type="button" role="tab">Split</button>
+              </li>
+            </ul>
+            <div class="tab-content">
+              <div class="tab-pane fade show active" id="plan-unified-tab" role="tabpanel">
+                <pre>{physicalPlanDescription}</pre>
+              </div>
+              <div class="tab-pane fade" id="plan-split-tab" role="tabpanel">
+                <div class="row">
+                  <div class="col-6">
+                    <h6 class="fw-bold text-muted">Initial Plan</h6>
+                    <pre class="border rounded p-2" style="font-size: 0.8rem; max-height: 600px; overflow: auto;">{initialPlan}</pre>
+                  </div>
+                  <div class="col-6">
+                    <h6 class="fw-bold text-muted">Final Plan</h6>
+                    <pre class="border rounded p-2" style="font-size: 0.8rem; max-height: 600px; overflow: auto;">{finalPlan}</pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        } else {
+          <pre>{physicalPlanDescription}</pre>
+        }}
+      </div>
     </div>
-    <div id="physical-plan-details" style="display: none;">
-      <pre>{physicalPlanDescription}</pre>
-    </div>
+    // scalastyle:on line.size.limit
+  }
+
+  /**
+   * Extract Initial Plan and Final Plan tree sections from the physicalPlanDescription.
+   * Returns (initialPlan, finalPlan). If the plan doesn't contain AQE sections, returns
+   * empty strings.
+   */
+  private def extractInitialAndFinalPlans(
+      description: String): (String, String) = {
+    val lines = description.split("\n")
+    var initialLines = Seq.empty[String]
+    var finalLines = Seq.empty[String]
+    var section = "" // "", "final", "initial"
+
+    for (line <- lines) {
+      val trimmed = line.trim
+      if (trimmed.contains("== Final Plan ==")) {
+        section = "final"
+      } else if (trimmed.contains("== Initial Plan ==")) {
+        section = "initial"
+      } else if (section.nonEmpty && trimmed.startsWith("(") && trimmed.contains(")") &&
+          !trimmed.startsWith("(+") && !trimmed.startsWith("(-")) {
+        section = ""
+      } else if (section == "final") {
+        finalLines :+= line
+      } else if (section == "initial") {
+        initialLines :+= line
+      }
+    }
+    (initialLines.mkString("\n").trim, finalLines.mkString("\n").trim)
   }
 
   private def jobsTable(
