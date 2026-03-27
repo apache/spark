@@ -147,11 +147,18 @@ class MockProtocolWriter:
         write_udf: Callable[[io.BufferedIOBase], None],
         write_data: Callable[[io.BufferedIOBase], None],
         buf: io.BufferedIOBase,
+        runner_conf: dict[str, str] | None = None,
     ) -> None:
         """Write the full worker binary stream: preamble + command + data + end."""
         cls.write_preamble(buf)
         write_int(eval_type, buf)
-        write_int(0, buf)  # RunnerConf  (0 key-value pairs)
+        if runner_conf:
+            write_int(len(runner_conf), buf)
+            for k, v in runner_conf.items():
+                cls.write_utf8(k, buf)
+                cls.write_utf8(v, buf)
+        else:
+            write_int(0, buf)  # RunnerConf  (0 key-value pairs)
         write_int(0, buf)  # EvalConf    (0 key-value pairs)
         write_udf(buf)
         write_data(buf)
@@ -969,4 +976,88 @@ class ScalarArrowIterUDFTimeBench(_ScalarArrowIterBenchMixin, _TimeBenchBase):
 
 
 class ScalarArrowIterUDFPeakmemBench(_ScalarArrowIterBenchMixin, _PeakmemBenchBase):
+    pass
+
+
+# -- SQL_WINDOW_AGG_ARROW_UDF ------------------------------------------------
+# UDF receives ``pa.Array`` columns for the entire window partition, returns scalar.
+
+
+class _WindowAggArrowBenchMixin:
+    """Provides _write_scenario for SQL_WINDOW_AGG_ARROW_UDF."""
+
+    def _window_agg_arrow_sum(col):
+        """Sum a single Arrow column."""
+        import pyarrow.compute as pc
+
+        return pc.sum(col).as_py()
+
+    def _window_agg_arrow_mean_multi(col0, col1):
+        """Mean of two Arrow columns combined."""
+        import pyarrow.compute as pc
+
+        return (pc.mean(col0).as_py() or 0) + (pc.mean(col1).as_py() or 0)
+
+    def _build_scenarios():
+        """Build scenarios for SQL_WINDOW_AGG_ARROW_UDF.
+
+        Returns a dict mapping scenario name to ``(groups, schema)``.
+        """
+        scenarios = {}
+
+        for name, (num_groups, rows_per_group, n_cols) in {
+            "few_groups_sm": (50, 5_000, 5),
+            "few_groups_lg": (50, 50_000, 5),
+            "many_groups_sm": (2_000, 500, 5),
+            "many_groups_lg": (500, 10_000, 5),
+            "wide_cols": (200, 5_000, 20),
+        }.items():
+            groups, schema = MockDataFactory.make_batch_groups(
+                num_groups=num_groups,
+                num_rows=rows_per_group,
+                num_cols=n_cols,
+                spark_type_pool=MockDataFactory.NUMERIC_TYPES,
+                batch_size=rows_per_group,
+            )
+            scenarios[name] = (groups, schema)
+
+        return scenarios
+
+    _scenarios = _build_scenarios()
+    _udfs = {
+        "sum_udf": _window_agg_arrow_sum,
+        "mean_multi_udf": _window_agg_arrow_mean_multi,
+    }
+    params = [list(_scenarios), list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        groups, _schema = self._scenarios[scenario]
+        udf_func = self._udfs[udf_name]
+
+        # sum_udf uses 1 arg, mean_multi_udf uses 2 args
+        if "multi" in udf_name:
+            arg_offsets = [0, 1]
+        else:
+            arg_offsets = [0]
+
+        return_type = DoubleType()
+
+        def write_udf(b):
+            MockProtocolWriter.write_udf_payload(udf_func, return_type, arg_offsets, b)
+
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
+            write_udf,
+            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, num_dfs=1, buf=b),
+            buf,
+            runner_conf={"window_bound_types": "unbounded"},
+        )
+
+
+class WindowAggArrowUDFTimeBench(_WindowAggArrowBenchMixin, _TimeBenchBase):
+    pass
+
+
+class WindowAggArrowUDFPeakmemBench(_WindowAggArrowBenchMixin, _PeakmemBenchBase):
     pass
