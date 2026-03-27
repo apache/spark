@@ -21,29 +21,30 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.ResolvePartitionSpec
-import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogTypes, ClusterBySpec}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.analysis.ResolvedPartitionSpec
+import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, ClusterBySpec}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, SupportsPartitionManagement, SupportsRead, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, IdentityTransform}
 import org.apache.spark.sql.connector.read.SupportsReportStatistics
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.util.{CaseInsensitiveStringMap, PartitioningUtils}
+import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
 case class DescribeTableExec(
     output: Seq[Attribute],
     table: Table,
     isExtended: Boolean,
-    partitionSpec: CatalogTypes.TablePartitionSpec = Map.empty) extends LeafV2CommandExec {
+    partitionSpec: Option[ResolvedPartitionSpec] = None) extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     addSchema(rows)
     addPartitioning(rows)
     addClustering(rows)
 
-    if (partitionSpec.nonEmpty) {
+    if (partitionSpec.isDefined) {
       addPartitionDetails(rows)
     } else if (isExtended) {
       addMetadataColumns(rows)
@@ -57,24 +58,24 @@ case class DescribeTableExec(
   private def addPartitionDetails(rows: ArrayBuffer[InternalRow]): Unit = {
     // Guaranteed by DataSourceV2Strategy to be SupportsPartitionManagement
     val partTable = table.asInstanceOf[SupportsPartitionManagement]
-    val partSchema = partTable.partitionSchema()
-
-    // Normalize column names and cast string values to typed InternalRow
-    val normalizedSpec = PartitioningUtils.normalizePartitionSpec(
-      partitionSpec, partSchema, table.name(), conf.resolver)
-    val fields = partSchema.filter(f => normalizedSpec.contains(f.name))
-    val partIdent = ResolvePartitionSpec.convertToPartIdent(normalizedSpec, fields)
+    val spec = partitionSpec.get  // guaranteed nonEmpty by caller
 
     // Validates the partition exists - throws NoSuchPartitionException if not found
-    val metadata = partTable.loadPartitionMetadata(partIdent)
+    val metadata = partTable.loadPartitionMetadata(spec.ident)
 
     if (isExtended) {
+      val partSchema = partTable.partitionSchema()
+      val timeZoneId = conf.sessionLocalTimeZone
+      // Render partition values by casting the typed InternalRow back to strings
+      val partValueStr = spec.names.zipWithIndex.map { case (name, i) =>
+        val dataType = partSchema(partSchema.fieldIndex(name)).dataType
+        val value = spec.ident.get(i, dataType)
+        val strVal = Cast(Literal(value, dataType), StringType, Some(timeZoneId)).eval()
+        s"$name=${if (strVal == null) "null" else strVal.toString}"
+      }.mkString("[", ", ", "]")
       rows += emptyRow()
       rows += toCatalystRow("# Detailed Partition Information", "", "")
-      rows += toCatalystRow(
-        "Partition Values",
-        normalizedSpec.map { case (k, v) => s"$k=$v" }.mkString("[", ", ", "]"),
-        "")
+      rows += toCatalystRow("Partition Values", partValueStr, "")
       metadata.asScala.toSeq.sortBy(_._1).foreach { case (k, v) =>
         rows += toCatalystRow(k, v, "")
       }
