@@ -312,6 +312,13 @@ trait Row extends Serializable {
   def getInstant(i: Int): java.time.Instant = getAs[java.time.Instant](i)
 
   /**
+   * Returns the value at position i of time type as java.time.LocalTime.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getLocalTime(i: Int): java.time.LocalTime = getAs[java.time.LocalTime](i)
+
+  /**
    * Returns the value at position i of array type as a Scala Seq.
    *
    * @throws ClassCastException when data type does not match.

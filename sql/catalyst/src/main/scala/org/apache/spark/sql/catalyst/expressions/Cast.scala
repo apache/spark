@@ -700,15 +700,46 @@ case class Cast(
   // TimeConverter
   private[this] def castToTime(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => TimeCast.castStringToTime(s))
+      buildCast[UTF8String](_, s => {
+        if (ansiEnabled) {
+          TimeCast.castStringToTimeAnsi(s, getContextOrNull())
+        } else {
+          TimeCast.castStringToTime(s)
+        }
+      })
     case x: IntegralType =>
-      buildCast[Any](_, i => TimeCast.castLongToTime(PhysicalIntegralType.integral(x).toLong(i)))
+      buildCast[Any](_, i => {
+        if (ansiEnabled) {
+          TimeCast.castLongToTimeAnsi(
+            PhysicalIntegralType.integral(x).toLong(i), getContextOrNull())
+        } else {
+          TimeCast.castLongToTime(PhysicalIntegralType.integral(x).toLong(i))
+        }
+      })
     case FloatType =>
-      buildCast[Float](_, f => TimeCast.castDoubleToTime(f.toDouble))
+      buildCast[Float](_, f => {
+        if (ansiEnabled) {
+          TimeCast.castDoubleToTimeAnsi(f.toDouble, getContextOrNull())
+        } else {
+          TimeCast.castDoubleToTime(f.toDouble)
+        }
+      })
     case DoubleType =>
-      buildCast[Double](_, d => TimeCast.castDoubleToTime(d))
+      buildCast[Double](_, d => {
+        if (ansiEnabled) {
+          TimeCast.castDoubleToTimeAnsi(d, getContextOrNull())
+        } else {
+          TimeCast.castDoubleToTime(d)
+        }
+      })
     case DecimalType.Fixed(p, s) =>
-      buildCast[Decimal](_, d => TimeCast.castDecimalToTime(d, p, s))
+      buildCast[Decimal](_, d => {
+        if (ansiEnabled) {
+          TimeCast.castDecimalToTimeAnsi(d, p, s, getContextOrNull())
+        } else {
+          TimeCast.castDecimalToTime(d, p, s)
+        }
+      })
     case TimestampType =>
       buildCast[Long](_, ts => TimeCast.castTimestampToTime(ts, zoneId))
     case TimestampNTZType =>

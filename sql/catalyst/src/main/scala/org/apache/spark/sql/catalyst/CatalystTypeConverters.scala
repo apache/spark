@@ -369,7 +369,7 @@ object CatalystTypeConverters {
       DateTimeUtils.microsToLocalDateTime(row.getLong(column))
   }
 
-  private object LocalTimeConverter extends CatalystTypeConverter[Any, String, Any] {
+  private object LocalTimeConverter extends CatalystTypeConverter[Any, LocalTime, Any] {
     override def toCatalystImpl(scalaValue: Any): Long = scalaValue match {
       case l: LocalTime => TimeUtils.localTimeToMicros(l)
       case s: String => TimeUtils.stringToTime(UTF8String.fromString(s)).getOrElse(
@@ -379,12 +379,12 @@ object CatalystTypeConverters {
           + s"cannot be converted to the ${TimeType.sql} type")
     }
 
-    override def toScala(catalystValue: Any): String =
+    override def toScala(catalystValue: Any): LocalTime =
       if (catalystValue == null) null
-      else TimeUtils.timeToString(catalystValue.asInstanceOf[Long]).toString
+      else TimeUtils.microsToLocalTime(catalystValue.asInstanceOf[Long])
 
-    override def toScalaImpl(row: InternalRow, column: Int): String =
-      TimeUtils.timeToString(row.getLong(column)).toString
+    override def toScalaImpl(row: InternalRow, column: Int): LocalTime =
+      TimeUtils.microsToLocalTime(row.getLong(column))
   }
 
   private class DecimalConverter(dataType: DecimalType)
