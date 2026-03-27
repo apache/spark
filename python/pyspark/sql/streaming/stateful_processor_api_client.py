@@ -135,7 +135,7 @@ class StatefulProcessorApiClient:
         self.expiry_timer_iterator_cursors: Dict[str, Tuple[Any, int, bool]] = {}
 
         # Cache of schema-id -> fast-serialize callable, so we avoid
-        # rebuilding field_names / Row / closure on every _serialize_to_bytes call.
+        # repeated attribute lookups on every _serialize_to_bytes call.
         self._serializer_cache: Dict[int, Any] = {}
 
         # statefulProcessorApiClient is initialized per batch per partition,
