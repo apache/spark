@@ -63,8 +63,8 @@ case class SortExec(
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
   // WARNING: This is a shared mutable var on the SortExec instance. Do not access it from
-  // multiple threads concurrently — Spark operators are not thread-safe and one task's sorter
-  // could overwrite another's, causing a race condition.
+  // multiple threads concurrently — Spark operators do not guarantee thread-safety and one
+  // task's sorter could overwrite another's, causing a race condition.
   private[sql] var rowSorter: UnsafeExternalRowSorter = _
 
   /**
