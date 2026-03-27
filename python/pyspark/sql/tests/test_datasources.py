@@ -186,8 +186,10 @@ class DataSourcesTestsMixin:
 
     def test_xml_with_dataframe_input(self):
         xml_df = self.spark.createDataFrame(
-            [("<person><name>Alice</name><age>25</age></person>",),
-             ("<person><name>Bob</name><age>30</age></person>",)],
+            [
+                ("<person><name>Alice</name><age>25</age></person>",),
+                ("<person><name>Bob</name><age>30</age></person>",),
+            ],
             schema="value STRING",
         )
         result = self.spark.read.xml(xml_df, rowTag="person")
