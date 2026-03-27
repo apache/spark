@@ -260,10 +260,12 @@ class DataFrameCreationTestsMixin:
             )
 
     def test_empty_dataframe_with_struct_type(self):
-        schema = StructType([
-            StructField("name", StringType(), True),
-            StructField("age", IntegerType(), True),
-        ])
+        schema = StructType(
+            [
+                StructField("name", StringType(), True),
+                StructField("age", IntegerType(), True),
+            ]
+        )
         df = self.spark.emptyDataFrame(schema)
         self.assertEqual(df.schema, schema)
         self.assertEqual(df.count(), 0)
