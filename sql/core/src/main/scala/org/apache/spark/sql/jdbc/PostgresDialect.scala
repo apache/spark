@@ -196,8 +196,8 @@ private case class PostgresDialect()
   // fetchSize is 0.
   override val defaultFetchSize: Int = 1000
 
-  override def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
-    super.beforeFetch(connection, properties)
+  override def beforeFetch(connection: Connection, options: JDBCOptions): Unit = {
+    super.beforeFetch(connection, options)
 
     // According to the postgres jdbc documentation we need to be in autocommit=false if we actually
     // want to have fetchsize be non 0 (all the rows).  This allows us to not have to cache all the
@@ -205,9 +205,7 @@ private case class PostgresDialect()
     //
     // See: https://jdbc.postgresql.org/documentation/head/query.html#query-with-cursor
     //
-    val userFetchSize = properties.get(JDBCOptions.JDBC_BATCH_FETCH_SIZE).map(_.toInt)
-    val effectiveFetchSize = userFetchSize.getOrElse(defaultFetchSize)
-    if (effectiveFetchSize > 0) {
+    if (effectiveFetchSize(options) > 0) {
       connection.setAutoCommit(false)
     }
   }

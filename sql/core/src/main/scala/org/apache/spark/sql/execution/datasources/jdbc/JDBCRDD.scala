@@ -343,9 +343,7 @@ class JDBCRDD(
     logInfo(log"Generated JDBC query to fetch data: ${MDC(SQL_TEXT, sqlText)}")
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
-    val effectiveFetchSize =
-      if (options.fetchSize > 0) options.fetchSize else dialect.defaultFetchSize
-    stmt.setFetchSize(effectiveFetchSize)
+    stmt.setFetchSize(dialect.effectiveFetchSize(options))
     stmt.setQueryTimeout(options.queryTimeout)
 
     rs = SQLMetrics.withTimingNs(queryExecutionTimeMetric) {

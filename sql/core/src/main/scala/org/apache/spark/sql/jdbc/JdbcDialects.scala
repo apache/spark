@@ -345,6 +345,18 @@ abstract class JdbcDialect extends Serializable with Logging {
   def defaultFetchSize: Int = 0
 
   /**
+   * Returns the effective fetch size considering the user-specified option and the dialect default.
+   * If the user explicitly sets a fetchSize (including 0), that value is used.
+   * Otherwise, the dialect's [[defaultFetchSize]] is used as fallback.
+   */
+  def effectiveFetchSize(options: JDBCOptions): Int = {
+    options.parameters.get(JDBCOptions.JDBC_BATCH_FETCH_SIZE) match {
+      case Some(v) => v.toInt
+      case None => defaultFetchSize
+    }
+  }
+
+  /**
    * Override connection specific properties to run before a select is made.  This is in place to
    * allow dialects that need special treatment to optimize behavior.
    * @param connection The connection object
