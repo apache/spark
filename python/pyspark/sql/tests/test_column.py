@@ -58,8 +58,12 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "col", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "col",
+                "arg_type": "int",
+            },
         )
 
         class A:
@@ -73,8 +77,12 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "col", "arg_type": "NoneType"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "col",
+                "arg_type": "NoneType",
+            },
         )
         self.assertRaises(TypeError, lambda: to_json(1))
 
@@ -210,8 +218,8 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN",
-            messageParameters={"arg_name": "col", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "Column", "arg_name": "col", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -219,8 +227,12 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "fieldName", "arg_type": "Column"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "str",
+                "arg_name": "fieldName",
+                "arg_type": "Column",
+            },
         )
 
     def test_drop_fields(self):
@@ -293,8 +305,12 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_DATATYPE_OR_STR",
-            messageParameters={"arg_name": "dataType", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "DataType or str",
+                "arg_name": "dataType",
+                "arg_type": "int",
+            },
         )
 
     def test_over_negative(self):
@@ -303,8 +319,12 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_WINDOWSPEC",
-            messageParameters={"arg_name": "window", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "WindowSpec",
+                "arg_name": "window",
+                "arg_type": "int",
+            },
         )
 
     def test_eqnullsafe_classmethod_usage(self):

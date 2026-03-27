@@ -1991,6 +1991,18 @@
     ],
     "sqlState" : "42604"
   },
+  "EMPTY_PARTITION_COLUMN_NAME" : {
+    "message" : [
+      "Found an empty partition column name in the path segment '<columnSpec>'. Each partition directory must have a non-empty column name before the '=' sign (e.g., 'col=value')."
+    ],
+    "sqlState" : "KD009"
+  },
+  "EMPTY_PARTITION_COLUMN_VALUE" : {
+    "message" : [
+      "Found an empty partition column value in the path segment '<columnSpec>'. Each partition directory must have a non-empty value after the '=' sign (e.g., 'col=value')."
+    ],
+    "sqlState" : "KD009"
+  },
   "EMPTY_SCHEMA_NOT_SUPPORTED_FOR_DATASOURCE" : {
     "message" : [
       "The <format> datasource does not support writing empty or nested empty schemas. Please make sure the data schema has at least one or more column(s)."
@@ -2308,6 +2320,16 @@
       "To mitigate this error divide the statement into multiple, less complex chunks."
     ],
     "sqlState" : "54001"
+  },
+  "FAILED_UPDATE_VIEW_SCHEMA" : {
+    "message" : [
+      "The schema of view <viewName> is out of sync with its query output. Queries on this view will fail until the schema is updated.",
+      "Because the view is created <schemaMode>, an automatic sync was attempted but the catalog failed to apply the update.",
+      "Stored view schema: <existingSchema>",
+      "Query output schema: <newSchema>",
+      "To resolve this, ALTER the view schema manually or ask an administrator to do so. Alternatively, consider running ALTER VIEW <viewName> WITH SCHEMA COMPENSATION, which casts the query output to match the stored view schema at query time and does not require updating the catalog."
+    ],
+    "sqlState" : "58030"
   },
   "FEATURE_NOT_ENABLED" : {
     "message" : [
@@ -5463,6 +5485,12 @@
     ],
     "sqlState" : "HY008"
   },
+  "OPTION_VALUE_EXCEEDS_ONE_CHARACTER" : {
+    "message" : [
+      "The value of <paramName> cannot be more than one character, but got <actualValue>."
+    ],
+    "sqlState" : "22023"
+  },
   "ORDER_BY_POS_OUT_OF_RANGE" : {
     "message" : [
       "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
@@ -5960,9 +5988,9 @@
           "operationId: <operationId> with status <currentStatus> is not within statuses <validStatuses> for event <eventStatus>"
         ]
       },
-      "STATE_CONSISTENCY_EXECUTION_STATE_TRANSITION_INVALID_SESSION_NOT_STARTED" : {
+      "STATE_CONSISTENCY_EXECUTION_STATE_TRANSITION_INVALID_SESSION_STATUS_MISMATCH" : {
         "message" : [
-          "sessionId: <sessionId> with status <sessionStatus> is not Started for event <eventStatus>"
+          "sessionId: <sessionId> with status <sessionStatus> is not within valid statuses <validStatuses> for event <eventStatus>"
         ]
       },
       "STATE_CONSISTENCY_NO_BATCHES_AVAILABLE" : {
@@ -6229,6 +6257,14 @@
       }
     },
     "sqlState" : "55019"
+  },
+  "STATE_STORE_BASE_CHECKPOINT_ID_MISMATCH" : {
+    "message" : [
+      "State store checkpoint validation failed for batch <batchVersion>.",
+      "The base checkpoint ID reported by partition <partitionId> of operator <operatorId> does not match the expected checkpoint ID.",
+      "Expected: <expectedBaseId>. Actual: <actualBaseId>."
+    ],
+    "sqlState" : "XXKST"
   },
   "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS" : {
     "message" : [
@@ -6752,6 +6788,7 @@
   "TABLE_OR_VIEW_NOT_FOUND" : {
     "message" : [
       "The table or view <relationName> cannot be found. Verify the spelling and correctness of the schema and catalog.",
+      "Search path: <searchPath>.",
       "If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.",
       "To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS."
     ],
@@ -6968,6 +7005,12 @@
       "Parameter <paramIndex> of function <functionName> requires the <requiredType> type, however <inputSql> has the type <inputType>."
     ],
     "sqlState" : "42K09"
+  },
+  "UNEXPECTED_OPERATOR_IN_CORRELATED_SUBQUERY" : {
+    "message" : [
+      "Unexpected operator <operator> in correlated subquery<positionHint>."
+    ],
+    "sqlState" : "XX000"
   },
   "UNEXPECTED_POSITIONAL_ARGUMENT" : {
     "message" : [
@@ -7418,6 +7461,11 @@
       "ANALYZE_VIEW" : {
         "message" : [
           "The ANALYZE TABLE command does not support views."
+        ]
+      },
+      "CATALOG_INTERFACE_METHOD" : {
+        "message" : [
+          "Catalog API <methodName> is not supported by <catalogClass>."
         ]
       },
       "CATALOG_OPERATION" : {
@@ -8078,6 +8126,12 @@
         ]
       }
     },
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_TABLE_CHANGE" : {
+    "message" : [
+      "Unsupported table change: <message>"
+    ],
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG" : {
@@ -9350,11 +9404,6 @@
       "Failed to convert value <value> (class of <cls>) with the type of <dataType> to JSON."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2027" : {
-    "message" : [
-      "Unexpected operator <op> in correlated subquery<pos>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2028" : {
     "message" : [
       "This line should be unreachable<err>."
@@ -9418,11 +9467,6 @@
   "_LEGACY_ERROR_TEMP_2041" : {
     "message" : [
       "<methodName> is not implemented."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2045" : {
-    "message" : [
-      "Unsupported table change: <message>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2046" : {
@@ -9720,11 +9764,6 @@
   "_LEGACY_ERROR_TEMP_2144" : {
     "message" : [
       "Unable to find constructor for <tpe>. This could happen if <tpe> is an interface, or a trait without companion object constructor."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2145" : {
-    "message" : [
-      "<paramName> cannot be more than one character."
     ]
   },
   "_LEGACY_ERROR_TEMP_2146" : {

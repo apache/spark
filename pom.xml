@@ -216,7 +216,7 @@
     <bouncycastle.version>1.83</bouncycastle.version>
     <tink.version>1.20.0</tink.version>
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.2.10.Final</netty.version>
+    <netty.version>4.2.12.Final</netty.version>
     <netty-tcnative.version>2.0.75.Final</netty-tcnative.version>
     <icu4j.version>78.2</icu4j.version>
     <junit.version>6.0.3</junit.version>
@@ -238,6 +238,7 @@
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
     <kubernetes-client.version>7.6.1</kubernetes-client.version>
+    <vertx.version>4.5.26</vertx.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -342,7 +343,7 @@
     <postgresql.version>42.7.10</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
     <mssql.jdbc.version>13.2.1.jre11</mssql.jdbc.version>
-    <ojdbc17.version>23.6.0.24.10</ojdbc17.version>
+    <ojdbc17.version>23.26.1.0.0</ojdbc17.version>
     <databricks.jdbc.version>2.7.1</databricks.jdbc.version>
     <snowflake.jdbc.version>4.0.2</snowflake.jdbc.version>
     <terajdbc.version>20.00.00.39</terajdbc.version>

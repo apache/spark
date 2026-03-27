@@ -548,8 +548,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def unexpectedOperatorInCorrelatedSubquery(
       op: LogicalPlan, pos: String = ""): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2027",
-      messageParameters = Map("op" -> op.toString(), "pos" -> pos))
+      errorClass = "UNEXPECTED_OPERATOR_IN_CORRELATED_SUBQUERY",
+      messageParameters = Map("operator" -> op.toString(), "positionHint" -> pos))
   }
 
   def resolveCannotHandleNestedSchema(plan: LogicalPlan): SparkRuntimeException = {
@@ -719,7 +719,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def unsupportedTableChangeError(e: IllegalArgumentException): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2045",
+      errorClass = "UNSUPPORTED_TABLE_CHANGE",
       messageParameters = Map("message" -> e.getMessage),
       cause = e)
   }
@@ -1348,11 +1348,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map.empty)
   }
 
-  def paramExceedOneCharError(paramName: String): SparkRuntimeException = {
+  def paramExceedOneCharError(paramName: String, actualValue: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2145",
+      errorClass = "OPTION_VALUE_EXCEEDS_ONE_CHARACTER",
       messageParameters = Map(
-        "paramName" -> paramName))
+        "paramName" -> paramName,
+        "actualValue" -> actualValue))
   }
 
   def paramIsNotIntegerError(paramName: String, value: String): SparkRuntimeException = {
@@ -3085,6 +3086,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "outputMode" -> outputMode,
         "statefulOperator" -> statefulOperator)
+    )
+  }
+
+  def emptyPartitionColumnNameError(columnSpec: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "EMPTY_PARTITION_COLUMN_NAME",
+      messageParameters = Map("columnSpec" -> columnSpec)
+    )
+  }
+
+  def emptyPartitionColumnValueError(columnSpec: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "EMPTY_PARTITION_COLUMN_VALUE",
+      messageParameters = Map("columnSpec" -> columnSpec)
     )
   }
 

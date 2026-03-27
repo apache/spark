@@ -274,6 +274,12 @@ Data source options of JSON can be set via:
     <td>write</td>
   </tr>
   <tr>
+    <td><code>sortKeys</code></td>
+    <td><code>false</code></td>
+    <td>Whether to sort the JSON object keys alphabetically when generating JSON output.</td>
+    <td>write</td>
+  </tr>
+  <tr>
     <td><code>useUnsafeRow</code></td>
     <td>(value of <code>spark.sql.json.useUnsafeRow</code> configuration)</td>
     <td>Whether to use UnsafeRow to represent struct result in the JSON parser.</td>

@@ -69,6 +69,13 @@ class AstBuilder extends DataTypeAstBuilder
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import ParserUtils._
 
+  // Note: Do NOT add withOrigin(ctx) to this method. Builders often create full command plans
+  // (e.g., ReplaceTable, CreateFunction), not just identifier plans. Wrapping the body with
+  // withOrigin(ctx) would set CurrentOrigin to the identifier reference for ALL code in the
+  // builder, including error-throwing validation. Since ParseException.getQueryContext() reads
+  // from CurrentOrigin, this would cause error contexts to point to the identifier instead of
+  // the full statement. If a specific call site needs the identifier Origin on the plan it
+  // creates, add withOrigin(ctx) inside that call site's builder lambda instead.
   protected def withIdentClause(
       ctx: IdentifierReferenceContext,
       builder: Seq[String] => LogicalPlan): LogicalPlan = {
@@ -751,7 +758,7 @@ class AstBuilder extends DataTypeAstBuilder
       (namedQuery.alias, namedQuery, rowLevelLimit)
     }
     // Check for duplicate names.
-    val duplicates = ctes.groupBy(_._1).filter(_._2.size > 1).keys
+    val duplicates = ctes.groupBy(_._1.toLowerCase(Locale.ROOT)).filter(_._2.size > 1).keys
     if (duplicates.nonEmpty) {
       throw QueryParsingErrors.duplicateCteDefinitionNamesError(
         duplicates.map(toSQLId).mkString(", "), ctx)
@@ -6299,6 +6306,13 @@ class AstBuilder extends DataTypeAstBuilder
     ShowPartitions(
       createUnresolvedTable(ctx.identifierReference, "SHOW PARTITIONS"),
       partitionKeys)
+  }
+
+  /**
+   * Create a [[ShowCachedTables]] command.
+   */
+  override def visitShowCachedTables(ctx: ShowCachedTablesContext): LogicalPlan = withOrigin(ctx) {
+    ShowCachedTables
   }
 
   /**
