@@ -321,8 +321,9 @@ private class HistoryServerDiskManager(
 
       val newSize = sizeOf(tmpPath)
       makeRoom(newSize)
-      tmpPath.renameTo(dst)
-      ShutdownHookManager.removeShutdownDeleteDir(tmpPath)
+      if (tmpPath.renameTo(dst)) {
+        ShutdownHookManager.removeShutdownDeleteDir(tmpPath)
+      }
 
       updateUsage(newSize, committed = true)
       if (committedUsage.get() > maxUsage) {
