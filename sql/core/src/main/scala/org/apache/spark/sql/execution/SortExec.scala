@@ -62,9 +62,7 @@ case class SortExec(
     "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
-  // Each task has its own instance of UnsafeExternalRowSorter. It is created in the
-  // createSorter method and stored in a ThreadLocal variable.
-  private[sql] var rowSorter: ThreadLocal[UnsafeExternalRowSorter] = _
+  private[sql] var rowSorter: UnsafeExternalRowSorter = _
 
   /**
    * This method gets invoked only once for each SortExec instance to initialize an
@@ -73,8 +71,6 @@ case class SortExec(
    * should make it public.
    */
   def createSorter(): UnsafeExternalRowSorter = {
-    rowSorter = new ThreadLocal[UnsafeExternalRowSorter]()
-
     val ordering = RowOrdering.create(sortOrder, output)
 
     // The comparator for comparing prefix
@@ -99,14 +95,13 @@ case class SortExec(
     }
 
     val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
-    val newRowSorter = UnsafeExternalRowSorter.create(
+    rowSorter = UnsafeExternalRowSorter.create(
       schema, ordering, prefixComparator, prefixComputer, pageSize, canUseRadixSort)
 
     if (testSpillFrequency > 0) {
-      newRowSorter.setTestSpillFrequency(testSpillFrequency)
+      rowSorter.setTestSpillFrequency(testSpillFrequency)
     }
-    rowSorter.set(newRowSorter)
-    rowSorter.get()
+    rowSorter
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -199,11 +194,11 @@ case class SortExec(
    * In SortExec, we overwrites cleanupResources to close UnsafeExternalRowSorter.
    */
   override protected[sql] def cleanupResources(): Unit = {
-    if (rowSorter != null && rowSorter.get() != null) {
+    if (rowSorter != null) {
       // There's possible for rowSorter is null here, for example, in the scenario of empty
       // iterator in the current task, the downstream physical node(like SortMergeJoinExec) will
       // trigger cleanupResources before rowSorter initialized in createSorter.
-      rowSorter.get().cleanupResources()
+      rowSorter.cleanupResources()
     }
     super.cleanupResources()
   }
