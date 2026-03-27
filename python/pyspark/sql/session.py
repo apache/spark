@@ -1707,7 +1707,7 @@ class SparkSession(SparkConversionMixin):
     def emptyDataFrame(self, schema: Union[StructType, str]) -> "ParentDataFrame":
         """Creates an empty :class:`DataFrame` with the specified schema.
 
-        .. versionadded:: 4.1.0
+        .. versionadded:: 4.2.0
 
         Parameters
         ----------
