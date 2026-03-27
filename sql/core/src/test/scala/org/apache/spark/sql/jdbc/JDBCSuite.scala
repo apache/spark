@@ -532,30 +532,40 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Dialect defaultFetchSize is applied when user does not specify fetchsize") {
+    @volatile var capturedFetchSize: Int = -1
+
     val testDialect = new JdbcDialect {
       override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
       override val defaultFetchSize: Int = 100
+      override def effectiveFetchSize(options: JDBCOptions): Int = {
+        val result = super.effectiveFetchSize(options)
+        capturedFetchSize = result
+        result
+      }
     }
 
     JdbcDialects.registerDialect(testDialect)
     try {
-      // Read without specifying fetchsize - dialect's defaultFetchSize should be used
       val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties())
       assert(df.collect().length === 3)
-
-      // Verify the dialect resolves the correct effective fetchSize
-      val options = new JDBCOptions(Map(
-        "url" -> urlWithUserAndPass, "dbtable" -> "TEST.PEOPLE"))
-      assert(testDialect.effectiveFetchSize(options) === 100)
+      assert(capturedFetchSize === 100,
+        s"Expected effectiveFetchSize to return 100 (dialect default), got $capturedFetchSize")
     } finally {
       JdbcDialects.unregisterDialect(testDialect)
     }
   }
 
   test("User-specified fetchsize takes precedence over dialect defaultFetchSize") {
+    @volatile var capturedFetchSize: Int = -1
+
     val testDialect = new JdbcDialect {
       override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
       override val defaultFetchSize: Int = 100
+      override def effectiveFetchSize(options: JDBCOptions): Int = {
+        val result = super.effectiveFetchSize(options)
+        capturedFetchSize = result
+        result
+      }
     }
 
     JdbcDialects.registerDialect(testDialect)
@@ -564,12 +574,8 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       properties.setProperty(JDBCOptions.JDBC_BATCH_FETCH_SIZE, "42")
       val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties)
       assert(df.collect().length === 3)
-
-      // Verify the dialect resolves user-specified value over default
-      val options = new JDBCOptions(Map(
-        "url" -> urlWithUserAndPass, "dbtable" -> "TEST.PEOPLE",
-        JDBCOptions.JDBC_BATCH_FETCH_SIZE -> "42"))
-      assert(testDialect.effectiveFetchSize(options) === 42)
+      assert(capturedFetchSize === 42,
+        s"Expected effectiveFetchSize to return 42 (user-specified), got $capturedFetchSize")
     } finally {
       JdbcDialects.unregisterDialect(testDialect)
     }
