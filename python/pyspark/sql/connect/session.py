@@ -796,6 +796,11 @@ class SparkSession:
 
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
 
+    def emptyDataFrame(self, schema: Union[StructType, str]) -> "ParentDataFrame":
+        return self.createDataFrame([], schema)
+
+    emptyDataFrame.__doc__ = PySparkSession.emptyDataFrame.__doc__
+
     def sql(
         self,
         sqlQuery: str,
