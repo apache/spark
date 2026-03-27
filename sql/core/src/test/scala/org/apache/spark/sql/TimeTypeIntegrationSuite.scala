@@ -45,6 +45,61 @@ class TimeTypeIntegrationSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("Parquet: Microsecond precision") {
+    val data = Seq("12:34:56.123456", "00:00:00.000001", "23:59:59.999999")
+    val df = data.toDF("s").selectExpr("CAST(s AS TIME) as t")
+    withTempPath { path =>
+      df.write.parquet(path.getCanonicalPath)
+      val read = spark.read.parquet(path.getCanonicalPath)
+      checkAnswer(read, df)
+    }
+  }
+
+  test("Parquet: Schema inference") {
+    val data = Seq(LocalTime.of(10, 30))
+    val df = data.map(Tuple1(_)).toDF("t")
+    withTempPath { path =>
+      df.write.parquet(path.getCanonicalPath)
+      val schema = spark.read.parquet(path.getCanonicalPath).schema
+      assert(schema("t").dataType == TimeType)
+    }
+  }
+
+  test("Parquet: Filter pushdown") {
+    val data = (0 to 23).map(h => LocalTime.of(h, 0, 0))
+    val df = data.map(Tuple1(_)).toDF("t")
+    withTempPath { path =>
+      df.write.parquet(path.getCanonicalPath)
+      val read = spark.read.parquet(path.getCanonicalPath)
+      val filtered = read.filter("t > TIME '12:00:00'")
+      assert(filtered.count() == 11)
+    }
+  }
+
+  test("Parquet: Vectorized vs. Non-Vectorized reader") {
+    val data = (0 to 23).map(h => LocalTime.of(h, 0, 0))
+    val df = data.map(Tuple1(_)).toDF("t")
+    withTempPath { path =>
+      df.write.parquet(path.getCanonicalPath)
+
+      val vectorized = spark.read.option("spark.sql.parquet.enableVectorizedReader", "true")
+        .parquet(path.getCanonicalPath)
+      val nonVectorized = spark.read.option("spark.sql.parquet.enableVectorizedReader", "false")
+        .parquet(path.getCanonicalPath)
+
+      checkAnswer(vectorized, nonVectorized)
+    }
+  }
+
+  test("Parquet: ANSI mode validation") {
+    withSQLConf("spark.sql.ansi.enabled" -> "true") {
+      val df = Seq("invalid-time").toDF("t")
+      intercept[org.apache.spark.SparkException] {
+        df.selectExpr("CAST(t AS TIME)").collect()
+      }
+    }
+  }
+
   test("Integration: JSON save and load") {
     val data = Seq(LocalTime.of(10, 30), LocalTime.of(14, 0))
     val df = data.map(Tuple1(_)).toDF("t")
