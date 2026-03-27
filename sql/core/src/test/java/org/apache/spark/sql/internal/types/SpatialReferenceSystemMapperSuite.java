@@ -67,6 +67,8 @@ public class SpatialReferenceSystemMapperSuite {
     Assertions.assertEquals("OGC:CRS83", GeographicSpatialReferenceSystemMapper.getStringId(4269));
     // GEOGRAPHY: PROJ-sourced registry entries (no override).
     Assertions.assertEquals("EPSG:4612", GeographicSpatialReferenceSystemMapper.getStringId(4612));
+    Assertions.assertEquals(
+        "ESRI:37001", GeographicSpatialReferenceSystemMapper.getStringId(37001));
   }
 
   @Test
