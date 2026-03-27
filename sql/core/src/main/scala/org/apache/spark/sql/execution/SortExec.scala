@@ -62,6 +62,9 @@ case class SortExec(
     "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
+  // WARNING: This is a shared mutable var on the SortExec instance. Do not access it from
+  // multiple threads concurrently — Spark operators are not thread-safe and one task's sorter
+  // could overwrite another's, causing a race condition.
   private[sql] var rowSorter: UnsafeExternalRowSorter = _
 
   /**
@@ -191,13 +194,13 @@ case class SortExec(
   }
 
   /**
-   * In SortExec, we overwrites cleanupResources to close UnsafeExternalRowSorter.
+   * In SortExec, we overwrite cleanupResources to close UnsafeExternalRowSorter.
+   * There's possible for rowSorter to be null here, for example, in the scenario of empty iterator
+   * in the current task, the downstream physical node (like SortMergeJoinExec) will trigger
+   * cleanupResources before rowSorter is initialized in createSorter.
    */
   override protected[sql] def cleanupResources(): Unit = {
     if (rowSorter != null) {
-      // There's possible for rowSorter is null here, for example, in the scenario of empty
-      // iterator in the current task, the downstream physical node(like SortMergeJoinExec) will
-      // trigger cleanupResources before rowSorter initialized in createSorter.
       rowSorter.cleanupResources()
     }
     super.cleanupResources()
