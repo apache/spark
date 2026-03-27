@@ -1148,7 +1148,7 @@ private[spark] class TaskSetManager(
 
   /** Called by TaskScheduler when an executor is lost so we can re-enqueue our tasks */
   override def executorLost(execId: String, host: String, reason: ExecutorLossReason): Unit = {
-    val taskIdsOnExec = executorIdToTaskIds.getOrElse(execId, TaskSetManager.emptyLongSet)
+    val taskIdsOnExec = executorIdToTaskIds.getOrElse(execId, TaskSetManager.EMPTY_LONG_SET)
     // Re-enqueue any tasks with potential shuffle data loss that ran on the failed executor
     // if this is a shuffle map stage, and we are not using an external shuffle server which
     // could serve the shuffle outputs or the executor lost is caused by decommission (which
@@ -1467,7 +1467,7 @@ private[spark] object TaskSetManager {
 
   // Shared empty set used as default value for executorIdToTaskIds lookups
   // to avoid allocating a new empty set on each executorLost call.
-  private val emptyLongSet = new OpenHashSet[Long](0)
+  private val EMPTY_LONG_SET = new OpenHashSet[Long](0)
 }
 
 /**
