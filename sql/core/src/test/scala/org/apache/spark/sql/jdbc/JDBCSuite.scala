@@ -531,6 +531,50 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("Dialect defaultFetchSize is applied when user does not specify fetchsize") {
+    val testDialect = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+      override val defaultFetchSize: Int = 100
+    }
+
+    JdbcDialects.registerDialect(testDialect)
+    try {
+      // Read without specifying fetchsize - dialect's defaultFetchSize should be used
+      val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties())
+      assert(df.collect().length === 3)
+
+      // Verify the dialect resolves the correct effective fetchSize
+      val options = new JDBCOptions(Map(
+        "url" -> urlWithUserAndPass, "dbtable" -> "TEST.PEOPLE"))
+      assert(testDialect.effectiveFetchSize(options) === 100)
+    } finally {
+      JdbcDialects.unregisterDialect(testDialect)
+    }
+  }
+
+  test("User-specified fetchsize takes precedence over dialect defaultFetchSize") {
+    val testDialect = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+      override val defaultFetchSize: Int = 100
+    }
+
+    JdbcDialects.registerDialect(testDialect)
+    try {
+      val properties = new Properties()
+      properties.setProperty(JDBCOptions.JDBC_BATCH_FETCH_SIZE, "42")
+      val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties)
+      assert(df.collect().length === 3)
+
+      // Verify the dialect resolves user-specified value over default
+      val options = new JDBCOptions(Map(
+        "url" -> urlWithUserAndPass, "dbtable" -> "TEST.PEOPLE",
+        JDBCOptions.JDBC_BATCH_FETCH_SIZE -> "42"))
+      assert(testDialect.effectiveFetchSize(options) === 42)
+    } finally {
+      JdbcDialects.unregisterDialect(testDialect)
+    }
+  }
+
   test("Partitioning via JDBCPartitioningInfo API") {
     val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3, new Properties())
     checkNumPartitions(df, expectedNumPartitions = 3)
