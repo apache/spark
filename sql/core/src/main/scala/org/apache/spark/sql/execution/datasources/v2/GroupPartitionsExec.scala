@@ -191,22 +191,21 @@ case class GroupPartitionsExec(
       child.outputOrdering
     } else {
       // Coalescing: multiple input partitions are merged into one output partition. The child's
-      // within-partition ordering is lost due to concatenation, so we re-derive ordering purely
-      // from the key expressions. For example, if two input partitions both belong to the same
-      // output group (same partition key value) and hold [1, 3] and [2, 5] respectively (each
-      // sorted ascending), concatenating them yields [1, 3, 2, 5] which is no longer sorted.
-      // A join may embed multiple `KeyedPartitioning`s (one per join side) within a single
-      // expression tree; they share the same partitionKeys but carry different expressions.
-      // Collect them all and expose each position's equivalent expressions via
-      // `sameOrderExpressions` so the planner can use any of them for ordering checks.
+      // within-partition ordering is lost due to concatenation -- for example, if two input
+      // partitions both belong to the same output group (same partition key value) and hold
+      // [1, 3] and [2, 5] respectively (each sorted ascending), concatenating them yields
+      // [1, 3, 2, 5] which is no longer sorted. Only sort orders over partition key expressions
+      // (which are constant across all merged partitions) remain valid.
       outputPartitioning match {
         case p: Partitioning with Expression if reducers.isEmpty =>
           // Without reducers all merged partitions share the same original key value, so the key
-          // expressions remain constant within the output partition.
+          // expressions remain constant within the output partition. The child's outputOrdering
+          // should already be in sync with the partitioning (either reported by the source or
+          // derived from it in DataSourceV2ScanExecBase), so we only need to keep the sort orders
+          // whose expression is a partition key expression -- all others are lost by concatenation.
           val keyedPartitionings = p.collect { case k: KeyedPartitioning => k }
-          keyedPartitionings.map(_.expressions).transpose.map { exprs =>
-            SortOrder(exprs.head, Ascending, sameOrderExpressions = exprs.tail)
-          }
+          val keyExprs = ExpressionSet(keyedPartitionings.flatMap(_.expressions))
+          child.outputOrdering.filter(order => keyExprs.contains(order.child))
         case _ =>
           // With reducers, merged partitions share only the reduced key, not the original key
           // expressions, which can take different values within the output partition.

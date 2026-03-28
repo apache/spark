@@ -313,9 +313,8 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
           Seq(
             // with no partitioning and no order, we expect shuffling AND sorting
             (None, None, (true, true), (true, true)),
-            // partitioned by i and no order,
-            // we expect NO shuffling AND sorting for groupBy BUT sorting for window function
-            (Some("i"), None, (false, false), (false, true)),
+            // partitioned by i and no order, we expect NO shuffling BUT sorting
+            (Some("i"), None, (false, true), (false, true)),
             // partitioned by i and in-partition sorted by i,
             // we expect NO shuffling AND sorting for groupBy but sorting for window function
             (Some("i"), Some("i"), (false, false), (false, true)),

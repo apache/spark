@@ -28,6 +28,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
 
   private val exprA = AttributeReference("a", IntegerType)()
   private val exprB = AttributeReference("b", IntegerType)()
+  private val exprC = AttributeReference("c", IntegerType)()
 
   private def row(a: Int): InternalRow = InternalRow.fromSeq(Seq(a))
   private def row(a: Int, b: Int): InternalRow = InternalRow.fromSeq(Seq(a, b))
@@ -45,10 +46,12 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     assert(gpe.outputOrdering === childOrdering)
   }
 
-  test("SPARK-56241: coalescing without reducers returns key-derived ordering") {
+  test("SPARK-56241: coalescing without reducers keeps key-expression orders from child") {
     // Key 1 appears on partitions 0 and 2, causing coalescing.
     val partitionKeys = Seq(row(1), row(2), row(1))
-    val child = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprA), partitionKeys))
+    val child = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), partitionKeys),
+      outputOrdering = Seq(SortOrder(exprA, Ascending)))
     val gpe = GroupPartitionsExec(child)
 
     assert(!gpe.groupedPartitions.forall(_._2.size <= 1), "expected coalescing")
@@ -59,11 +62,12 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     assert(ordering.head.sameOrderExpressions.isEmpty)
   }
 
-  test("SPARK-56241: coalescing without reducers returns one SortOrder per key expression") {
+  test("SPARK-56241: coalescing without reducers keeps one SortOrder per key expression") {
     // Multi-key partition: key (1,10) appears on partitions 0 and 2, causing coalescing.
     val partitionKeys = Seq(row(1, 10), row(2, 20), row(1, 10))
     val child = DummySparkPlan(
-      outputPartitioning = KeyedPartitioning(Seq(exprA, exprB), partitionKeys))
+      outputPartitioning = KeyedPartitioning(Seq(exprA, exprB), partitionKeys),
+      outputOrdering = Seq(SortOrder(exprA, Ascending), SortOrder(exprB, Ascending)))
     val gpe = GroupPartitionsExec(child)
 
     assert(!gpe.groupedPartitions.forall(_._2.size <= 1), "expected coalescing")
@@ -75,13 +79,16 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     assert(ordering(1).sameOrderExpressions.isEmpty)
   }
 
-  test("SPARK-56241: coalescing join case exposes sameOrderExpressions across join sides") {
+  test("SPARK-56241: coalescing join case preserves sameOrderExpressions from child") {
     // PartitioningCollection wraps two KeyedPartitionings (one per join side), sharing the same
-    // partition keys. Key 1 coalesces partitions 0 and 2.
+    // partition keys. Key 1 coalesces partitions 0 and 2. The child (e.g. SortMergeJoinExec)
+    // already carries sameOrderExpressions linking both sides' key expressions.
     val partitionKeys = Seq(row(1), row(2), row(1))
     val leftKP = KeyedPartitioning(Seq(exprA), partitionKeys)
     val rightKP = KeyedPartitioning(Seq(exprB), partitionKeys)
-    val child = DummySparkPlan(outputPartitioning = PartitioningCollection(Seq(leftKP, rightKP)))
+    val child = DummySparkPlan(
+      outputPartitioning = PartitioningCollection(Seq(leftKP, rightKP)),
+      outputOrdering = Seq(SortOrder(exprA, Ascending, sameOrderExpressions = Seq(exprB))))
     val gpe = GroupPartitionsExec(child)
 
     assert(!gpe.groupedPartitions.forall(_._2.size <= 1), "expected coalescing")
@@ -89,6 +96,22 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     assert(ordering.length === 1)
     assert(ordering.head.child === exprA)
     assert(ordering.head.sameOrderExpressions === Seq(exprB))
+  }
+
+  test("SPARK-56241: coalescing drops non-key sort orders from child") {
+    // exprA is the partition key; exprC is a non-key sort order the child also reports
+    // (e.g. a secondary sort within each partition). After coalescing, exprC ordering is lost
+    // by concatenation, so only the exprA order should survive.
+    val partitionKeys = Seq(row(1), row(2), row(1))
+    val child = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), partitionKeys),
+      outputOrdering = Seq(SortOrder(exprA, Ascending), SortOrder(exprC, Ascending)))
+    val gpe = GroupPartitionsExec(child)
+
+    assert(!gpe.groupedPartitions.forall(_._2.size <= 1), "expected coalescing")
+    val ordering = gpe.outputOrdering
+    assert(ordering.length === 1)
+    assert(ordering.head.child === exprA)
   }
 
   test("SPARK-56241: coalescing with reducers returns empty ordering") {
