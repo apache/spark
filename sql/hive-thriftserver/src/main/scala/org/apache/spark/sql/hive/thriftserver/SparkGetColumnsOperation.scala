@@ -182,6 +182,7 @@ private[hive] class SparkGetColumnsOperation(
     case BinaryType => java.sql.Types.BINARY
     case DateType => java.sql.Types.DATE
     case TimestampType | TimestampNTZType => java.sql.Types.TIMESTAMP
+    case TimeType => java.sql.Types.TIME
     case _: ArrayType => java.sql.Types.ARRAY
     case _: MapType => java.sql.Types.JAVA_OBJECT
     case _: StructType => java.sql.Types.STRUCT
