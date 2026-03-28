@@ -160,4 +160,58 @@ class SqlResourceWithActualMetricsSuite
     assert(resultOpt.isEmpty)
     assert(error.get === s"unknown query execution id: ${Long.MaxValue}")
   }
+
+  test("SPARK-56140: sqlTable server-side pagination endpoint") {
+    // Run a query to generate SQL executions
+    spark.sql("SELECT 1 + 1").collect()
+    spark.sql("SELECT 2 + 2").collect()
+
+    eventually(timeout(10.seconds), interval(1.second)) {
+      val baseUrl = spark.sparkContext.ui.get.webUrl +
+        s"/api/v1/applications/${spark.sparkContext.applicationId}/sql/sqlTable"
+
+      // Test basic pagination
+      val url = new URI(s"$baseUrl?start=0&length=5&draw=1").toURL
+      val (code, resultOpt, _) = getContentAndCode(url)
+      assert(code === HttpServletResponse.SC_OK)
+      val json = JsonMethods.parse(resultOpt.get)
+      val draw = (json \ "draw").extract[Int]
+      val recordsTotal = (json \ "recordsTotal").extract[Long]
+      val recordsFiltered = (json \ "recordsFiltered").extract[Long]
+      val aaData = (json \ "aaData").children
+      assert(draw === 1, "draw should be echoed back")
+      assert(recordsTotal > 0, "should have some executions")
+      assert(recordsFiltered === recordsTotal, "no filter applied")
+      assert(aaData.size <= 5, "should respect page length")
+
+      // Verify row data fields
+      val firstRow = aaData.head
+      assert((firstRow \ "id").extract[Long] >= 0)
+      assert((firstRow \ "status").extract[String].nonEmpty)
+      assert((firstRow \ "description").extract[String] != null)
+      assert((firstRow \ "duration").extract[Long] >= 0)
+
+      // Test search filter
+      val searchUrl = new URI(
+        s"$baseUrl?start=0&length=100&draw=2&search%5Bvalue%5D=nonexistent_xyz").toURL
+      val (searchCode, searchResultOpt, _) = getContentAndCode(searchUrl)
+      assert(searchCode === HttpServletResponse.SC_OK)
+      val searchJson = JsonMethods.parse(searchResultOpt.get)
+      val searchFiltered = (searchJson \ "recordsFiltered").extract[Long]
+      val searchData = (searchJson \ "aaData").children
+      assert(searchFiltered === 0, "search for nonexistent should return 0")
+      assert(searchData.isEmpty)
+
+      // Test status filter
+      val statusUrl = new URI(
+        s"$baseUrl?start=0&length=100&draw=3&status=COMPLETED").toURL
+      val (statusCode, statusResultOpt, _) = getContentAndCode(statusUrl)
+      assert(statusCode === HttpServletResponse.SC_OK)
+      val statusJson = JsonMethods.parse(statusResultOpt.get)
+      val statusData = (statusJson \ "aaData").children
+      statusData.foreach { row =>
+        assert((row \ "status").extract[String] === "COMPLETED")
+      }
+    }
+  }
 }
