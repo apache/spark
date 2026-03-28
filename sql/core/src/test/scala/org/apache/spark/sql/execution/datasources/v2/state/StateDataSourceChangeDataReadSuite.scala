@@ -73,7 +73,7 @@ class RocksDBWithChangelogCheckpointStateDataSourceChangeDataReaderSuite extends
         //   partition_id)
         // In V4 inner join, the matched flag on the other side is not updated as an
         // optimization (since the matched flag is only needed for outer/semi joins).
-        // Therefore, only "append" records appear — no "update" records.
+        // Therefore, only "append" records appear -- no "update" records.
         checkAnswer(keyWithTsToValuesDf, Seq(
           Row(0L, "append", Row(2, evtTime(2)), Row(2, ts(2), false), 4),
           Row(0L, "append", Row(4, evtTime(4)), Row(4, ts(4), false), 2),
