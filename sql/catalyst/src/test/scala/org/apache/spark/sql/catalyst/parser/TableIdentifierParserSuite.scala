@@ -178,6 +178,7 @@ class TableIdentifierParserSuite extends SQLKeywordUtils {
     "procedure",
     "protection",
     "purge",
+    "qualify",
     "query",
     "range",
     "read",
