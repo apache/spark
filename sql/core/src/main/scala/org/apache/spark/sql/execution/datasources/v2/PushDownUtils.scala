@@ -22,6 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, GetStructField, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.{IdentityTransform, SortOrder}
@@ -142,7 +143,9 @@ object PushDownUtils extends Logging {
         StructField(a.name, a.dataType, a.nullable)})
       val fields = transforms.flatMap {
         case t: IdentityTransform =>
-          resolveIdentityPartitionField(t, rootStruct).map(PartitionPredicateField(_, t.ref))
+          resolveIdentityPartitionField(t, rootStruct).map { sf =>
+            PartitionPredicateField(t.ref.fieldNames().toSeq, DataTypeUtils.toAttribute(sf))
+          }
         case _ => None
       }
       if (fields.length == transforms.length) {
@@ -205,14 +208,13 @@ object PushDownUtils extends Logging {
       !f.exists(_.isInstanceOf[PythonUDF])
 
   /**
-   * Normalizes filter expressions so that nested struct accesses on
-   * partition fields are replaced with flat [[AttributeReference]]s
-   * whose names match the partition schema.
+   * Replaces all partition column references with canonical [[AttributeReference]]s that
+   * share [[ExprId]]s with the [[PartitionPredicateField]]s.
    *
-   * For example, given a table partitioned by `s.tz` (identity
-   * transform on a nested field), the analyzer produces
-   * `GetStructField(attr("s"), "tz")`. This method replaces that
-   * chain with `attr("s.tz")`.
+   * Nested struct accesses on partition fields are replaced with flat [[AttributeReference]]s
+   * whose names match the partition schema. For example, given a table partitioned by `s.tz`
+   * (identity transform on a nested field), the analyzer produces
+   * `GetStructField(attr("s"), "tz")`. This method replaces that chain with `attr("s.tz")`.
    *
    * Returns a map from normalized expression to original.
    */
@@ -220,34 +222,32 @@ object PushDownUtils extends Logging {
       filters: Seq[Expression],
       partitionFields: Seq[PartitionPredicateField])
   : Map[Expression, Expression] = {
-    val attrs = toAttributes(StructType(partitionFields.map(_.structField)))
-    val pathToAttr = partitionFields.map(_.identityRef).zip(attrs).map {
-      case (r, a) => r.fieldNames().toSeq -> a
-    }.toMap
-    filters.map { f =>
-      doNormalizePartitionFilters(f, pathToAttr, SQLConf.get.resolver) -> f
-    }.toMap
+    val pathToAttr = partitionFields.map(f => f.fieldNames -> f.attrRef).toMap
+    filters.map(f => doNormalizePartitionFilters(f, pathToAttr) -> f).toMap
   }
 
   private def doNormalizePartitionFilters(
       expr: Expression,
-      pathToAttr: Map[Seq[String], AttributeReference],
-      resolver: (String, String) => Boolean): Expression = {
+      pathToAttr: Map[Seq[String], AttributeReference]): Expression = {
     expr.mapChildren(
-      doNormalizePartitionFilters(_, pathToAttr, resolver)
+      doNormalizePartitionFilters(_, pathToAttr)
     ) match {
-      case g: GetStructField =>
-        flattenStructFieldChain(g) match {
-          case Some((root, suffix)) =>
-            val fullPath = root.name +: suffix
-            pathToAttr.collectFirst {
-              case (path, attr) if pathsMatch(fullPath, path, resolver) =>
-                attr.withNullability(g.nullable)
-            }.getOrElse(g) // Not a partition field
-          case None => g // Single-level struct access, not nested
-        }
-      case other => other
+      case g: GetStructField => flattenStructFieldChain(g) match {
+        case Some((root, suffix)) => resolvePartitionAttr(root.name +: suffix, g, pathToAttr)
+        case None => g // Not a partition field
+      }
+      case a: AttributeReference => resolvePartitionAttr(Seq(a.name), a, pathToAttr)
+      case other => other // Not a partition field
     }
+  }
+
+  private def resolvePartitionAttr(
+      fieldPath: Seq[String],
+      expr: Expression,
+      pathToAttr: Map[Seq[String], AttributeReference]): Expression = {
+    pathToAttr.collectFirst {
+      case (path, attr) if pathsMatch(fieldPath, path) => attr.withNullability(expr.nullable)
+    }.getOrElse(expr)
   }
 
   /**
@@ -269,11 +269,10 @@ object PushDownUtils extends Logging {
     flatten(expr).filter(_._2.nonEmpty)
   }
 
-  private def pathsMatch(
-      left: Seq[String],
-      right: Seq[String],
-      resolver: (String, String) => Boolean) =
+  private def pathsMatch(left: Seq[String], right: Seq[String]): Boolean = {
+    val resolver = SQLConf.get.resolver
     left.length == right.length && left.zip(right).forall { case (a, b) => resolver(a, b) }
+  }
 
   /**
    * Normally translated filters (postScanFilters) are simple filters that can be

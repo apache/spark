@@ -22,7 +22,7 @@ import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerIn
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GreaterThan, Literal}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.connector.expressions.{FieldReference, PartitionFieldReference}
+import org.apache.spark.sql.connector.expressions.PartitionFieldReference
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -54,10 +54,9 @@ class PartitionPredicateImplSuite extends SparkFunSuite {
 
   private def checkPartitionPredicateImplAfterSerialization(
       serializer: SerializerInstance): Unit = {
-    val field = StructField("p", IntegerType, nullable = true)
-    val ref = DataTypeUtils.toAttribute(field)
+    val ref = DataTypeUtils.toAttribute(StructField("p", IntegerType, nullable = true))
     val expr = GreaterThan(ref, Literal(5))
-    val fields = Seq(PartitionPredicateField(field, FieldReference(Seq("p"))))
+    val fields = Seq(PartitionPredicateField(Seq("p"), ref))
     val predicate = PartitionPredicateImpl(expr, fields)
 
     val deserialized = serializer.deserialize[PartitionPredicateImpl](
@@ -76,10 +75,9 @@ class PartitionPredicateImplSuite extends SparkFunSuite {
 
   private def checkNestedPartitionPathReferencesAfterSerialization(
       serializer: SerializerInstance): Unit = {
-    val field = StructField("ts.timezone", StringType, nullable = false)
-    val ref = DataTypeUtils.toAttribute(field)
+    val ref = DataTypeUtils.toAttribute(StructField("ts.timezone", StringType, nullable = false))
     val expr = GreaterThan(ref, Literal("x"))
-    val fields = Seq(PartitionPredicateField(field, FieldReference(Seq("ts", "timezone"))))
+    val fields = Seq(PartitionPredicateField(Seq("ts", "timezone"), ref))
     val predicate = PartitionPredicateImpl(expr, fields)
 
     val deserialized = serializer.deserialize[PartitionPredicateImpl](

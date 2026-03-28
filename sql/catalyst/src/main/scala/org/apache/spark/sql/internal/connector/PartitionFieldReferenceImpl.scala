@@ -25,5 +25,7 @@ import org.apache.spark.sql.connector.expressions.PartitionFieldReference
  */
 private[connector] case class PartitionFieldReferenceImpl(
     ordinal: Int,
-    fieldNames: Array[String])
-  extends PartitionFieldReference
+    fieldNameParts: Seq[String])
+  extends PartitionFieldReference {
+  override def fieldNames(): Array[String] = fieldNameParts.toArray
+}

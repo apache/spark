@@ -17,16 +17,22 @@
 
 package org.apache.spark.sql.internal.connector
 
-import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.types.StructField
 
 /**
  * Metadata for one partition field.
  *
- * @param structField the Catalyst field describing the partition column (name, type,
- *                    nullability). For nested columns the name is the dotted path
- *                    (e.g. `"s.tz"`).
- * @param identityRef the [[NamedReference]] from the transform target column
- *                    (e.g. `FieldReference(Seq("s", "tz"))`).
+ * @param fieldNames  the multi-part field name from the table's partitioning
+ *                    (e.g. `Seq("s", "tz")`).
+ * @param attrRef  the [[AttributeReference]] for the partition field.
+ *                 Created from the resolved partition field so it carries the
+ *                 flattened dotted name (e.g. `"s.tz"`) for nested fields.
  */
-case class PartitionPredicateField(structField: StructField, identityRef: NamedReference)
+case class PartitionPredicateField(
+    fieldNames: Seq[String],
+    attrRef: AttributeReference) {
+
+  lazy val structField: StructField =
+    StructField(attrRef.name, attrRef.dataType, attrRef.nullable)
+}
