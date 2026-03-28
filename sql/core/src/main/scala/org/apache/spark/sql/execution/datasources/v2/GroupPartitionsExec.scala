@@ -191,10 +191,13 @@ case class GroupPartitionsExec(
       child.outputOrdering
     } else {
       // Coalescing: multiple input partitions are merged into one output partition. The child's
-      // within-partition ordering is lost due to concatenation, so we rederive ordering purely from
-      // the key expressions. A join may embed multiple `KeyedPartitioning`s (one per join side)
-      // within a single expression tree; they share the same partitionKeys but carry different
-      // expressions. Collect them all and expose each position's equivalent expressions via
+      // within-partition ordering is lost due to concatenation, so we re-derive ordering purely
+      // from the key expressions. For example, if two input partitions both belong to the same
+      // output group (same partition key value) and hold [1, 3] and [2, 5] respectively (each
+      // sorted ascending), concatenating them yields [1, 3, 2, 5] which is no longer sorted.
+      // A join may embed multiple `KeyedPartitioning`s (one per join side) within a single
+      // expression tree; they share the same partitionKeys but carry different expressions.
+      // Collect them all and expose each position's equivalent expressions via
       // `sameOrderExpressions` so the planner can use any of them for ordering checks.
       outputPartitioning match {
         case p: Partitioning with Expression if reducers.isEmpty =>

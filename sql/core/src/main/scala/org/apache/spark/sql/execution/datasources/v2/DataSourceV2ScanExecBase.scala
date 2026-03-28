@@ -111,14 +111,10 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
    * within the partition.
    */
   override def outputOrdering: Seq[SortOrder] = {
-    val reportedOrdering = ordering.getOrElse(Seq.empty)
-    if (reportedOrdering.nonEmpty) {
-      reportedOrdering
-    } else {
-      outputPartitioning match {
-        case k: KeyedPartitioning => k.expressions.map(SortOrder(_, Ascending))
-        case _ => Seq.empty
-      }
+    (ordering, outputPartitioning) match {
+      case (Some(o), _) => o
+      case (_, k: KeyedPartitioning) => k.expressions.map(SortOrder(_, Ascending))
+      case _ => Seq.empty
     }
   }
 
