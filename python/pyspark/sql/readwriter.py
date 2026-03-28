@@ -154,9 +154,10 @@ class DataFrameReader(OptionUtils):
             self._jreader = self._jreader.schema(schema)
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR_OR_STRUCT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "schema",
+                    "expected_type": "str or struct type",
                     "arg_type": type(schema).__name__,
                 },
             )
@@ -487,9 +488,10 @@ class DataFrameReader(OptionUtils):
             return self._df(self._jreader.json(jrdd))
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR_OR_LIST_OF_RDD",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "path",
+                    "expected_type": "str or list[RDD]",
                     "arg_type": type(path).__name__,
                 },
             )
@@ -529,6 +531,32 @@ class DataFrameReader(OptionUtils):
         >>> _ = spark.sql("DROP TABLE tblA")
         """
         return self._df(self._jreader.table(tableName))
+
+    def changes(self, tableName: str) -> "DataFrame":
+        """Returns the row-level changes (Change Data Capture) from the specified table
+        as a :class:`DataFrame`. Currently this API is only supported for Data Source V2
+        tables whose catalog implements ``TableCatalog.loadChangelog()``.
+
+        Use :meth:`option` to specify the version/timestamp range and processing options.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        tableName : str
+            string, name of the table.
+
+        Returns
+        -------
+        :class:`DataFrame`
+
+        Examples
+        --------
+        >>> spark.read.option("startingVersion", "10").option(
+        ...     "endingVersion", "20"
+        ... ).changes("my_table")  # doctest: +SKIP
+        """
+        return self._df(self._jreader.changes(tableName))
 
     def parquet(self, *paths: str, **options: "OptionalPrimitiveType") -> "DataFrame":
         """
@@ -863,9 +891,10 @@ class DataFrameReader(OptionUtils):
             return self._df(self._jreader.csv(jdataset))
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR_OR_LIST_OF_RDD",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "path",
+                    "expected_type": "str or list[RDD]",
                     "arg_type": type(path).__name__,
                 },
             )
@@ -990,9 +1019,10 @@ class DataFrameReader(OptionUtils):
             return self._df(self._jreader.xml(jdataset))
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR_OR_LIST_OF_RDD",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "path",
+                    "expected_type": "str or list[RDD]",
                     "arg_type": type(path).__name__,
                 },
             )
@@ -1061,8 +1091,7 @@ class DataFrameReader(OptionUtils):
     @overload
     def jdbc(
         self, url: str, table: str, *, properties: Optional[Dict[str, str]] = None
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def jdbc(
@@ -1075,8 +1104,7 @@ class DataFrameReader(OptionUtils):
         numPartitions: int,
         *,
         properties: Optional[Dict[str, str]] = None,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def jdbc(
@@ -1086,8 +1114,7 @@ class DataFrameReader(OptionUtils):
         *,
         predicates: List[str],
         properties: Optional[Dict[str, str]] = None,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     def jdbc(
         self,
@@ -1163,9 +1190,9 @@ class DataFrameReader(OptionUtils):
         if column is not None:
             assert lowerBound is not None, "lowerBound can not be None when ``column`` is specified"
             assert upperBound is not None, "upperBound can not be None when ``column`` is specified"
-            assert (
-                numPartitions is not None
-            ), "numPartitions can not be None when ``column`` is specified"
+            assert numPartitions is not None, (
+                "numPartitions can not be None when ``column`` is specified"
+            )
             return self._df(
                 self._jreader.jdbc(
                     url, table, column, int(lowerBound), int(upperBound), int(numPartitions), jprop
@@ -1395,12 +1422,10 @@ class DataFrameWriter(OptionUtils):
         return self
 
     @overload
-    def partitionBy(self, *cols: str) -> "DataFrameWriter":
-        ...
+    def partitionBy(self, *cols: str) -> "DataFrameWriter": ...
 
     @overload
-    def partitionBy(self, *cols: List[str]) -> "DataFrameWriter":
-        ...
+    def partitionBy(self, *cols: List[str]) -> "DataFrameWriter": ...
 
     def partitionBy(self, *cols: Union[str, List[str]]) -> "DataFrameWriter":
         """Partitions the output by the given columns on the file system.
@@ -1457,12 +1482,10 @@ class DataFrameWriter(OptionUtils):
         return self
 
     @overload
-    def bucketBy(self, numBuckets: int, col: str, *cols: str) -> "DataFrameWriter":
-        ...
+    def bucketBy(self, numBuckets: int, col: str, *cols: str) -> "DataFrameWriter": ...
 
     @overload
-    def bucketBy(self, numBuckets: int, col: TupleOrListOfString) -> "DataFrameWriter":
-        ...
+    def bucketBy(self, numBuckets: int, col: TupleOrListOfString) -> "DataFrameWriter": ...
 
     def bucketBy(
         self, numBuckets: int, col: Union[str, TupleOrListOfString], *cols: Optional[str]
@@ -1516,8 +1539,9 @@ class DataFrameWriter(OptionUtils):
 
         if not isinstance(numBuckets, int):
             raise PySparkTypeError(
-                errorClass="NOT_INT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
+                    "expected_type": "int",
                     "arg_name": "numBuckets",
                     "arg_type": type(numBuckets).__name__,
                 },
@@ -1537,17 +1561,19 @@ class DataFrameWriter(OptionUtils):
         for c in cols:
             if not isinstance(c, str):
                 raise PySparkTypeError(
-                    errorClass="NOT_LIST_OF_STR",
+                    errorClass="NOT_EXPECTED_TYPE",
                     messageParameters={
                         "arg_name": "cols",
+                        "expected_type": "list[str]",
                         "arg_type": type(c).__name__,
                     },
                 )
         if not isinstance(col, str):
             raise PySparkTypeError(
-                errorClass="NOT_LIST_OF_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "col",
+                    "expected_type": "list[str]",
                     "arg_type": type(col).__name__,
                 },
             )
@@ -1558,12 +1584,10 @@ class DataFrameWriter(OptionUtils):
         return self
 
     @overload
-    def sortBy(self, col: str, *cols: str) -> "DataFrameWriter":
-        ...
+    def sortBy(self, col: str, *cols: str) -> "DataFrameWriter": ...
 
     @overload
-    def sortBy(self, col: TupleOrListOfString) -> "DataFrameWriter":
-        ...
+    def sortBy(self, col: TupleOrListOfString) -> "DataFrameWriter": ...
 
     def sortBy(
         self, col: Union[str, TupleOrListOfString], *cols: Optional[str]
@@ -1621,17 +1645,19 @@ class DataFrameWriter(OptionUtils):
         for c in cols:
             if not isinstance(c, str):
                 raise PySparkTypeError(
-                    errorClass="NOT_LIST_OF_STR",
+                    errorClass="NOT_EXPECTED_TYPE",
                     messageParameters={
                         "arg_name": "cols",
+                        "expected_type": "list[str]",
                         "arg_type": type(c).__name__,
                     },
                 )
         if not isinstance(col, str):
             raise PySparkTypeError(
-                errorClass="NOT_LIST_OF_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "col",
+                    "expected_type": "list[str]",
                     "arg_type": type(col).__name__,
                 },
             )
@@ -1642,12 +1668,10 @@ class DataFrameWriter(OptionUtils):
         return self
 
     @overload
-    def clusterBy(self, *cols: str) -> "DataFrameWriter":
-        ...
+    def clusterBy(self, *cols: str) -> "DataFrameWriter": ...
 
     @overload
-    def clusterBy(self, *cols: List[str]) -> "DataFrameWriter":
-        ...
+    def clusterBy(self, *cols: List[str]) -> "DataFrameWriter": ...
 
     def clusterBy(self, *cols: Union[str, List[str]]) -> "DataFrameWriter":
         """Clusters the data by the given columns to optimize query performance.
@@ -2531,7 +2555,7 @@ def _test() -> None:
         spark = SparkSession(sc)
 
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.readwriter,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,

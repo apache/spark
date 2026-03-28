@@ -18,6 +18,7 @@
 """
 A wrapper for GroupedData to behave like pandas GroupBy.
 """
+
 from abc import ABCMeta, abstractmethod
 import inspect
 from collections import defaultdict, namedtuple
@@ -753,12 +754,15 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         if not 0 <= q <= 1:
             raise ValueError("'q' must be between 0 and 1. Got '%s' instead" % q)
         if any(isinstance(_agg_col.spark.data_type, BooleanType) for _agg_col in self._agg_columns):
-            warnings.warn(
-                f"Allowing bool dtype in {self.__class__.__name__}.quantile is deprecated "
-                "and will raise in a future version, matching the Series/DataFrame behavior. "
-                "Cast to uint8 dtype before calling quantile instead.",
-                FutureWarning,
-            )
+            if LooseVersion(pd.__version__) < "3.0.0":
+                warnings.warn(
+                    f"Allowing bool dtype in {self.__class__.__name__}.quantile is deprecated "
+                    "and will raise in a future version, matching the Series/DataFrame behavior. "
+                    "Cast to uint8 dtype before calling quantile instead.",
+                    FutureWarning,
+                )
+            else:
+                raise TypeError("Cannot use quantile with bool dtype")
 
         return self._reduce_for_stat_function(
             lambda col: F.percentile_approx(col.cast(DoubleType()), q, accuracy),
@@ -1988,8 +1992,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             if include_groups:
                 raise ValueError("include_groups=True is no longer allowed.")
 
-        spec = inspect.getfullargspec(func)
-        return_sig = spec.annotations.get("return", None)
+        try:
+            spec = inspect.getfullargspec(func)
+            return_sig = spec.annotations.get("return", None)
+        except TypeError:
+            return_sig = None
         should_infer_schema = return_sig is None
         should_retain_index = should_infer_schema
 
@@ -2455,23 +2462,42 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         for s, name in zip(self._groupkeys, groupkey_names):
             sdf = sdf.withColumn(name, s.spark.column)
         index = self._psdf._internal.index_spark_column_names[0]
+        index_spark_type = self._psdf._internal.index_fields[0].spark_type
 
         stat_exprs = []
         for psser, scol in zip(self._agg_columns, self._agg_columns_scols):
             name = psser._internal.data_spark_column_names[0]
 
-            if skipna:
+            if LooseVersion(pd.__version__) < "3.0.0" or skipna:
                 order_column = scol.desc_nulls_last()
-            else:
-                order_column = scol.desc_nulls_first()
 
-            window = Window.partitionBy(*groupkey_names).orderBy(
-                order_column, NATURAL_ORDER_COLUMN_NAME
-            )
-            sdf = sdf.withColumn(
-                name, F.when(F.row_number().over(window) == 1, scol_for(sdf, index)).otherwise(None)
-            )
-            stat_exprs.append(F.max(scol_for(sdf, name)).alias(name))
+                window = Window.partitionBy(*groupkey_names).orderBy(
+                    order_column, NATURAL_ORDER_COLUMN_NAME
+                )
+
+                has_na_name = "__has_na_{}__".format(name)
+                sdf = sdf.withColumn(has_na_name, scol.isNull()).withColumn(
+                    name,
+                    F.when(F.row_number().over(window) == 1, scol_for(sdf, index)).otherwise(None),
+                )
+                if skipna:
+                    stat_exprs.append(F.max(scol_for(sdf, name)).alias(name))
+                else:
+                    stat_exprs.append(
+                        F.when(F.max(scol_for(sdf, has_na_name)), None)
+                        .otherwise(F.max(scol_for(sdf, name)))
+                        .alias(name)
+                    )
+            else:
+                # pandas 3 skipna=False: raise on any NA, otherwise return all-missing labels
+                stat_exprs.append(
+                    F.last(
+                        F.when(
+                            scol.isNull(),
+                            F.raise_error("idxmax with skipna=False encountered an NA value."),
+                        ).otherwise(F.lit(None).cast(index_spark_type))
+                    ).alias(name)
+                )
 
         sdf = sdf.groupby(*groupkey_names).agg(*stat_exprs)
 
@@ -2537,23 +2563,41 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         for s, name in zip(self._groupkeys, groupkey_names):
             sdf = sdf.withColumn(name, s.spark.column)
         index = self._psdf._internal.index_spark_column_names[0]
+        index_spark_type = self._psdf._internal.index_fields[0].spark_type
 
         stat_exprs = []
         for psser, scol in zip(self._agg_columns, self._agg_columns_scols):
             name = psser._internal.data_spark_column_names[0]
 
-            if skipna:
+            if LooseVersion(pd.__version__) < "3.0.0" or skipna:
                 order_column = scol.asc_nulls_last()
-            else:
-                order_column = scol.asc_nulls_first()
 
-            window = Window.partitionBy(*groupkey_names).orderBy(
-                order_column, NATURAL_ORDER_COLUMN_NAME
-            )
-            sdf = sdf.withColumn(
-                name, F.when(F.row_number().over(window) == 1, scol_for(sdf, index)).otherwise(None)
-            )
-            stat_exprs.append(F.max(scol_for(sdf, name)).alias(name))
+                window = Window.partitionBy(*groupkey_names).orderBy(
+                    order_column, NATURAL_ORDER_COLUMN_NAME
+                )
+                has_na_name = "__has_na_{}__".format(name)
+                sdf = sdf.withColumn(has_na_name, scol.isNull()).withColumn(
+                    name,
+                    F.when(F.row_number().over(window) == 1, scol_for(sdf, index)).otherwise(None),
+                )
+                if skipna:
+                    stat_exprs.append(F.max(scol_for(sdf, name)).alias(name))
+                else:
+                    stat_exprs.append(
+                        F.when(F.max(scol_for(sdf, has_na_name)), None)
+                        .otherwise(F.max(scol_for(sdf, name)))
+                        .alias(name)
+                    )
+            else:
+                # pandas 3 skipna=False: raise on any NA, otherwise return all-missing labels
+                stat_exprs.append(
+                    F.last(
+                        F.when(
+                            scol.isNull(),
+                            F.raise_error("idxmin with skipna=False encountered an NA value."),
+                        ).otherwise(F.lit(None).cast(index_spark_type))
+                    ).alias(name)
+                )
 
         sdf = sdf.groupby(*groupkey_names).agg(*stat_exprs)
 
@@ -4245,7 +4289,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
                 F.col(f"{auxiliary_col_name}.{CORRELATION_CORR_OUTPUT_COLUMN}"),
             )
 
-        sdf = sdf.orderBy(groupkey_names + [index_1_col_name])  # type: ignore[arg-type]
+        sdf = sdf.orderBy(groupkey_names + [index_1_col_name])
 
         sdf = sdf.select(
             *[F.col(col) for col in groupkey_names + numeric_col_names],
@@ -4728,7 +4772,7 @@ def _test() -> None:
         .appName("pyspark.pandas.groupby tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.groupby,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

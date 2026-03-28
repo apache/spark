@@ -108,24 +108,6 @@
         <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
         <plugins>
             <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>build-helper-maven-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>add-scala-test-sources</id>
-                        <phase>generate-test-sources</phase>
-                        <goals>
-                            <goal>add-test-source</goal>
-                        </goals>
-                        <configuration>
-                            <sources>
-                                <source>src/test/gen-java</source>
-                            </sources>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
                 <!--
@@ -160,6 +142,20 @@
             </activation>
             <build>
                 <plugins>
+                    <plugin>
+                        <groupId>eu.maveniverse.maven.plugins</groupId>
+                        <artifactId>nisse-plugin3</artifactId>
+                        <version>0.7.0</version>
+                        <executions>
+                            <execution>
+                                <id>set-os-detector-properties</id>
+                                <goals>
+                                    <goal>inject-properties</goal>
+                                </goals>
+                                <phase>validate</phase>
+                            </execution>
+                        </executions>
+                    </plugin>
                     <!-- Add protobuf-maven-plugin and provide ScalaPB as a code generation plugin -->
                     <plugin>
                         <groupId>org.xolstice.maven.plugins</groupId>

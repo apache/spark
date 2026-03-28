@@ -210,8 +210,9 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
 
     if not isinstance(numBuckets, (int, Column)):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_INT",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "Column or int",
                 "arg_name": "numBuckets",
                 "arg_type": type(numBuckets).__name__,
             },
@@ -238,7 +239,7 @@ def _test() -> None:
         .getOrCreate()
     )
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.functions.partitioning,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

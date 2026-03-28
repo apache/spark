@@ -24,9 +24,6 @@ import atexit
 
 import pyspark
 from pyspark.sql.connect.proto.base_pb2 import FetchErrorDetailsResponse
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
 
 import concurrent.futures
 import logging
@@ -1002,7 +999,7 @@ class SparkConnectClient(object):
         logger.debug("Fetching the resources")
         cmd = pb2.Command()
         cmd.get_resources_command.SetInParent()
-        (_, properties, _) = self.execute_command(cmd)
+        _, properties, _ = self.execute_command(cmd)
         resources = properties["get_resources_command_result"]
         return resources
 
@@ -1562,7 +1559,7 @@ class SparkConnectClient(object):
                     else:
                         if observed_metrics.name == "__python_accumulator__":
                             for metric in observed_metrics.metrics:
-                                (aid, update) = pickleSer.loads(LiteralExpression._to_value(metric))
+                                aid, update = pickleSer.loads(LiteralExpression._to_value(metric))
                                 if aid == SpecialAccumulatorIds.SQL_UDF_PROFIER:
                                     self._profiler_collector._update(update)
                         elif observed_metrics.name in observations:
@@ -2259,7 +2256,7 @@ class SparkConnectClient(object):
         logger.debug("Creating the ResourceProfile")
         cmd = pb2.Command()
         cmd.create_resource_profile_command.profile.CopyFrom(profile)
-        (_, properties, _) = self.execute_command(cmd)
+        _, properties, _ = self.execute_command(cmd)
         profile_id = properties["create_resource_profile_command_result"]
         return profile_id
 
@@ -2272,7 +2269,7 @@ class SparkConnectClient(object):
                     [pb2.ObjectRef(id=cache_id) for cache_id in cache_ids]
                 )
                 command.ml_command.delete.evict_only = evict_only
-                (_, properties, _) = self.execute_command(command)
+                _, properties, _ = self.execute_command(command)
 
                 assert properties is not None
 
@@ -2307,7 +2304,7 @@ class SparkConnectClient(object):
     def _get_ml_cache_info(self) -> List[str]:
         command = pb2.Command()
         command.ml_command.get_cache_info.SetInParent()
-        (_, properties, _) = self.execute_command(command)
+        _, properties, _ = self.execute_command(command)
 
         assert properties is not None
 
@@ -2322,7 +2319,7 @@ class SparkConnectClient(object):
         command.ml_command.get_model_size.CopyFrom(
             pb2.MlCommand.GetModelSize(model_ref=pb2.ObjectRef(id=model_ref_id))
         )
-        (_, properties, _) = self.execute_command(command)
+        _, properties, _ = self.execute_command(command)
 
         assert properties is not None
 

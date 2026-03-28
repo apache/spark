@@ -3142,10 +3142,10 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 DROP VIEW IF EXISTS v1
 -- !query analysis
-DropTempViewCommand v1
+DropTempViewCommand v1, true
 
 
 -- !query
 DROP VIEW IF EXISTS v2
 -- !query analysis
-DropTempViewCommand v2
+DropTempViewCommand v2, true

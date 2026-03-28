@@ -21,8 +21,9 @@ import java.util.Locale
 
 import scala.collection.mutable.{HashMap, HashSet}
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
@@ -806,7 +807,19 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
           SchemaUtils.checkColumnNameDuplication(fieldNames.toImmutableArraySeq,
             session.sessionState.conf.resolver)
           val updatedViewMeta = metaData.copy(schema = newSchema)
-          session.sessionState.catalog.alterTable(updatedViewMeta)
+          try {
+            session.sessionState.catalog.alterTable(updatedViewMeta)
+          } catch {
+            case NonFatal(e) =>
+              throw new SparkException(
+                errorClass = "FAILED_UPDATE_VIEW_SCHEMA",
+                messageParameters = Map(
+                  "viewName" -> metaData.qualifiedName,
+                  "schemaMode" -> s"WITH SCHEMA ${viewSchemaMode.toString}",
+                  "newSchema" -> newSchema.treeString,
+                  "existingSchema" -> metaData.schema.treeString),
+                cause = e)
+          }
         }
       case _ => // OK
     }

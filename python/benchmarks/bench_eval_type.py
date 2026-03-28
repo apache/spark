@@ -24,325 +24,1068 @@ by constructing the complete binary protocol that ``worker.py``'s
 """
 
 import io
+import os
 import json
 import struct
 import sys
-from typing import Any, Callable, Optional
+import tempfile
+from typing import Any, Callable, Iterator
 
 import numpy as np
 import pyarrow as pa
 
+np.random.seed(42)
+
 from pyspark.cloudpickle import dumps as cloudpickle_dumps
 from pyspark.serializers import write_int, write_long
 from pyspark.sql.types import (
+    BinaryType,
+    BooleanType,
     DoubleType,
     IntegerType,
     StringType,
     StructField,
     StructType,
+    TimestampNTZType,
 )
 from pyspark.util import PythonEvalType
 from pyspark.worker import main as worker_main
 
 
 # ---------------------------------------------------------------------------
-# Wire-format helpers
+# Mock helpers: protocol writer, data factory, UDF factory
 # ---------------------------------------------------------------------------
 
 
-def _write_utf8(s: str, buf: io.BytesIO) -> None:
-    """Write a length-prefixed UTF-8 string (matches ``UTF8Deserializer.loads``)."""
-    encoded = s.encode("utf-8")
-    write_int(len(encoded), buf)
-    buf.write(encoded)
+class MockProtocolWriter:
+    """Constructs the binary wire protocol that ``worker.py``'s ``main()`` expects."""
 
+    @classmethod
+    def write_bool(cls, val: bool, buf: io.BytesIO) -> None:
+        buf.write(struct.pack("!?", val))
 
-def _write_bool(val: bool, buf: io.BytesIO) -> None:
-    buf.write(struct.pack("!?", val))
-
-
-# ---------------------------------------------------------------------------
-# Worker protocol builder
-# ---------------------------------------------------------------------------
-
-
-def _build_preamble(buf: io.BytesIO) -> None:
-    """Write everything ``main()`` reads before ``eval_type``."""
-    write_int(0, buf)  # split_index
-    _write_utf8(f"{sys.version_info[0]}.{sys.version_info[1]}", buf)  # python version
-    _write_utf8(
-        json.dumps(
-            {
-                "isBarrier": False,
-                "stageId": 0,
-                "partitionId": 0,
-                "attemptNumber": 0,
-                "taskAttemptId": 0,
-                "cpus": 1,
-                "resources": {},
-                "localProperties": {},
-            }
-        ),
-        buf,
-    )
-    _write_utf8("/tmp", buf)  # spark_files_dir
-    write_int(0, buf)  # num_python_includes
-    _write_bool(False, buf)  # needs_broadcast_decryption_server
-    write_int(0, buf)  # num_broadcast_variables
-
-
-def _build_udf_payload(
-    udf_func: Callable[..., Any],
-    return_type: StructType,
-    arg_offsets: list[int],
-    buf: io.BytesIO,
-) -> None:
-    """Write the ``read_single_udf`` portion of the protocol."""
-    write_int(1, buf)  # num_udfs
-    write_int(len(arg_offsets), buf)  # num_arg
-    for offset in arg_offsets:
-        write_int(offset, buf)
-        _write_bool(False, buf)  # is_kwarg
-    write_int(1, buf)  # num_chained
-    command = cloudpickle_dumps((udf_func, return_type))
-    write_int(len(command), buf)
-    buf.write(command)
-    write_long(0, buf)  # result_id
-
-
-def _build_grouped_arrow_data(
-    arrow_batch: pa.RecordBatch,
-    num_groups: int,
-    buf: io.BytesIO,
-    max_records_per_batch: Optional[int] = None,
-) -> None:
-    """Write grouped-map Arrow data: ``(write_int(1) + IPC) * N + write_int(0)``.
-
-    When *max_records_per_batch* is set and the batch exceeds that limit, each
-    group is split into multiple smaller Arrow batches inside the same IPC stream,
-    mirroring what the JVM does under ``spark.sql.execution.arrow.maxRecordsPerBatch``.
-    """
-    for _ in range(num_groups):
-        write_int(1, buf)
-        writer = pa.RecordBatchStreamWriter(buf, arrow_batch.schema)
-        if max_records_per_batch and arrow_batch.num_rows > max_records_per_batch:
-            for offset in range(0, arrow_batch.num_rows, max_records_per_batch):
-                writer.write_batch(arrow_batch.slice(offset, max_records_per_batch))
-        else:
-            writer.write_batch(arrow_batch)
+    @classmethod
+    def write_data_payload(
+        cls, batch_iter: Iterator[pa.RecordBatch], buf: io.BufferedIOBase
+    ) -> None:
+        """Write a plain Arrow IPC stream from an iterator of Arrow batches."""
+        first_batch = next(batch_iter)
+        writer = pa.RecordBatchStreamWriter(buf, first_batch.schema)
+        writer.write_batch(first_batch)
+        for batch in batch_iter:
+            writer.write_batch(batch)
         writer.close()
-    write_int(0, buf)
+
+    @classmethod
+    def write_grouped_data_payload(
+        cls,
+        groups: list[tuple[pa.RecordBatch, ...]],
+        num_dfs: int,
+        buf: io.BufferedIOBase,
+    ) -> None:
+        """Write grouped Arrow data in the wire protocol expected by _load_group_dataframes."""
+        for group in groups:
+            write_int(num_dfs, buf)
+            for df_batch in group:
+                cls.write_data_payload(iter([df_batch]), buf)
+        write_int(0, buf)  # end of groups
+
+    @classmethod
+    def write_preamble(cls, buf: io.BytesIO) -> None:
+        """Write everything ``main()`` reads before ``eval_type``."""
+        write_int(0, buf)  # split_index
+        cls.write_utf8(f"{sys.version_info[0]}.{sys.version_info[1]}", buf)  # python version
+        cls.write_utf8(
+            json.dumps(
+                {
+                    "isBarrier": False,
+                    "stageId": 0,
+                    "partitionId": 0,
+                    "attemptNumber": 0,
+                    "taskAttemptId": 0,
+                    "cpus": 1,
+                    "resources": {},
+                    "localProperties": {},
+                }
+            ),
+            buf,
+        )
+        cls.write_utf8("/tmp", buf)  # spark_files_dir
+        write_int(0, buf)  # num_python_includes
+        cls.write_bool(False, buf)  # needs_broadcast_decryption_server
+        write_int(0, buf)  # num_broadcast_variables
+
+    @classmethod
+    def write_udf_payload(
+        cls,
+        udf_func: Callable[..., Any],
+        return_type: StructType,
+        arg_offsets: list[int],
+        buf: io.BytesIO,
+    ) -> None:
+        """Write the ``read_single_udf`` portion of the protocol."""
+        write_int(1, buf)  # num_udfs
+        write_int(len(arg_offsets), buf)  # num_arg
+        for offset in arg_offsets:
+            write_int(offset, buf)
+            cls.write_bool(False, buf)  # is_kwarg
+        write_int(1, buf)  # num_chained
+        command = cloudpickle_dumps((udf_func, return_type))
+        write_int(len(command), buf)
+        buf.write(command)
+        write_long(0, buf)  # result_id
+
+    @classmethod
+    def write_utf8(cls, s: str, buf: io.BytesIO) -> None:
+        """Write a length-prefixed UTF-8 string (matches ``UTF8Deserializer.loads``)."""
+        encoded = s.encode("utf-8")
+        write_int(len(encoded), buf)
+        buf.write(encoded)
+
+    @classmethod
+    def write_worker_input(
+        cls,
+        eval_type: int,
+        write_udf: Callable[[io.BufferedIOBase], None],
+        write_data: Callable[[io.BufferedIOBase], None],
+        buf: io.BufferedIOBase,
+    ) -> None:
+        """Write the full worker binary stream: preamble + command + data + end."""
+        cls.write_preamble(buf)
+        write_int(eval_type, buf)
+        write_int(0, buf)  # RunnerConf  (0 key-value pairs)
+        write_int(0, buf)  # EvalConf    (0 key-value pairs)
+        write_udf(buf)
+        write_data(buf)
+        write_int(-4, buf)  # SpecialLengths.END_OF_STREAM
 
 
-def _build_worker_input(
-    eval_type: int,
-    udf_func: Callable[..., Any],
-    return_type: StructType,
-    arg_offsets: list[int],
-    arrow_batch: pa.RecordBatch,
-    num_groups: int,
-    max_records_per_batch: Optional[int] = None,
-) -> bytes:
-    """Assemble the full binary stream consumed by ``worker_main(infile, outfile)``.
+class MockDataFactory:
+    """Creates mock Arrow batches and group structures for benchmarks."""
 
-    Parameters
-    ----------
-    max_records_per_batch : int, optional
-        When set, each group's Arrow data is split into sub-batches of this
-        size, mirroring the JVM-side behaviour of
-        ``spark.sql.execution.arrow.maxRecordsPerBatch``.
+    MAX_RECORDS_PER_BATCH = 10_000
+
+    TYPE_REGISTRY: dict[str, tuple[Callable, Any]] = {
+        "int": (lambda r: pa.array(np.random.randint(0, 1000, r, dtype=np.int32)), IntegerType()),
+        "double": (lambda r: pa.array(np.random.rand(r)), DoubleType()),
+        "string": (lambda r: pa.array([f"s{j}" for j in range(r)]), StringType()),
+        "binary": (lambda r: pa.array([f"b{j}".encode() for j in range(r)]), BinaryType()),
+        "boolean": (lambda r: pa.array(np.random.choice([True, False], r)), BooleanType()),
+    }
+
+    MIXED_TYPES = [
+        TYPE_REGISTRY["int"],
+        TYPE_REGISTRY["string"],
+        TYPE_REGISTRY["binary"],
+        TYPE_REGISTRY["boolean"],
+    ]
+    NUMERIC_TYPES = [TYPE_REGISTRY["int"], TYPE_REGISTRY["double"]]
+
+    @classmethod
+    def make_struct_type(
+        cls,
+        *,
+        num_fields: int,
+        base_types: list[tuple[Callable, Any]],
+    ) -> tuple[Callable, StructType]:
+        """Compose flat ``base_types`` into a single struct type pool entry.
+
+        Returns ``(factory_fn, StructType)`` suitable for inclusion in a
+        ``spark_type_pool`` list.  The factory produces a ``pa.StructArray`` whose
+        sub-fields cycle through ``base_types``.
+        """
+        fields = [
+            StructField(f"col_{i}", base_types[i % len(base_types)][1]) for i in range(num_fields)
+        ]
+
+        def factory(r):
+            arrays = [base_types[i % len(base_types)][0](r) for i in range(num_fields)]
+            names = [f.name for f in fields]
+            return pa.StructArray.from_arrays(arrays, names=names)
+
+        return (factory, StructType(fields))
+
+    @classmethod
+    def make_batches(
+        cls,
+        *,
+        num_rows: int,
+        num_cols: int,
+        batch_size: int = MAX_RECORDS_PER_BATCH,
+        spark_type_pool: list[tuple[Callable, Any]],
+    ) -> tuple[list[pa.RecordBatch], StructType]:
+        """Create RecordBatches with columns cycling through ``spark_type_pool``.
+
+        Splits ``num_rows`` into batches of at most ``batch_size`` rows.
+        Each pool entry is ``(factory_fn, SparkType)``; if an entry produces
+        a ``pa.StructArray``, it becomes a struct column naturally.
+        """
+        batches = []
+        for offset in range(0, num_rows, batch_size):
+            rows = min(batch_size, num_rows - offset)
+            arrays = [spark_type_pool[i % len(spark_type_pool)][0](rows) for i in range(num_cols)]
+            names = [f"col_{i}" for i in range(num_cols)]
+            batches.append(pa.RecordBatch.from_arrays(arrays, names=names))
+        schema = StructType(
+            [
+                StructField(f"col_{i}", spark_type_pool[i % len(spark_type_pool)][1])
+                for i in range(num_cols)
+            ]
+        )
+        return batches, schema
+
+    @classmethod
+    def make_batch_groups(
+        cls,
+        *,
+        num_groups: int,
+        num_rows: int,
+        num_cols: int,
+        batch_size: int = MAX_RECORDS_PER_BATCH,
+        spark_type_pool: list[tuple[Callable, Any]],
+    ) -> tuple[list[tuple[pa.RecordBatch, ...]], StructType]:
+        """Create groups of batches.
+
+        Each group has ``num_rows`` total rows, split into batches of ``batch_size``.
+        """
+        groups = []
+        for _ in range(num_groups):
+            batches, _ = cls.make_batches(
+                num_rows=num_rows,
+                num_cols=num_cols,
+                batch_size=batch_size,
+                spark_type_pool=spark_type_pool,
+            )
+            groups.append(tuple(batches))
+
+        schema = StructType(
+            [
+                StructField(f"col_{i}", spark_type_pool[i % len(spark_type_pool)][1])
+                for i in range(num_cols)
+            ]
+        )
+        return groups, schema
+
+
+class MockUDFFactory:
+    """Constructs UDF command payloads for the worker protocol."""
+
+    @classmethod
+    def make_grouped_arg_offsets(cls, num_key_cols: int, num_value_cols: int) -> list[int]:
+        """Build arg_offsets: ``[total_len, num_keys, key_idx..., value_idx...]``."""
+        key_idxs = list(range(num_key_cols))
+        value_idxs = list(range(num_key_cols, num_key_cols + num_value_cols))
+        offsets = [num_key_cols] + key_idxs + value_idxs
+        return [len(offsets)] + offsets
+
+
+# ---------------------------------------------------------------------------
+# General benchmark base classes
+# ---------------------------------------------------------------------------
+
+
+class _TimeBenchBase:
+    """Base for ``time_*`` benchmarks (any eval type).
+
+    Setup materializes full input bytes in memory so that disk I/O does not
+    affect latency measurements.
+
+    Subclasses provide ``params``, ``param_names``, and ``_write_scenario``.
     """
-    buf = io.BytesIO()
 
-    _build_preamble(buf)
-    write_int(eval_type, buf)
+    def setup(self, *args):
+        buf = io.BytesIO()
+        self._write_scenario(*args, buf)
+        self._input = buf.getvalue()
 
-    write_int(0, buf)  # RunnerConf  (0 key-value pairs)
-    write_int(0, buf)  # EvalConf    (0 key-value pairs)
-
-    _build_udf_payload(udf_func, return_type, arg_offsets, buf)
-    _build_grouped_arrow_data(arrow_batch, num_groups, buf, max_records_per_batch)
-    write_int(-4, buf)  # SpecialLengths.END_OF_STREAM
-
-    return buf.getvalue()
+    def time_worker(self, *args):
+        worker_main(io.BytesIO(self._input), io.BytesIO())
 
 
-# ---------------------------------------------------------------------------
-# Data helpers
-# ---------------------------------------------------------------------------
+class _PeakmemBenchBase:
+    """Base for ``peakmem_*`` benchmarks (any eval type).
 
+    Benchmark streams input to a temp file and replays from disk so that
+    setup memory does not inflate peak-memory measurements.
 
-def _build_grouped_arg_offsets(n_cols: int, n_keys: int = 0) -> list[int]:
-    """``[len, num_keys, key_col_0, …, val_col_0, …]``"""
-    keys = list(range(n_keys))
-    vals = list(range(n_keys, n_cols))
-    offsets = [n_keys] + keys + vals
-    return [len(offsets)] + offsets
-
-
-def _make_grouped_batch(rows_per_group: int, n_cols: int) -> tuple[pa.RecordBatch, StructType]:
-    """``group_key (int64)`` + ``(n_cols - 1)`` float32 value columns."""
-    arrays = [pa.array(np.zeros(rows_per_group, dtype=np.int64))] + [
-        pa.array(np.random.rand(rows_per_group).astype(np.float32)) for _ in range(n_cols - 1)
-    ]
-    fields = [StructField("group_key", IntegerType())] + [
-        StructField(f"some_field_{i}", DoubleType()) for i in range(n_cols - 1)
-    ]
-    return (
-        pa.RecordBatch.from_arrays(arrays, names=[f.name for f in fields]),
-        StructType(fields),
-    )
-
-
-def _make_mixed_batch(rows_per_group: int) -> tuple[pa.RecordBatch, StructType]:
-    """``id``, ``str_col``, ``float_col``, ``double_col``, ``long_col``."""
-    arrays = [
-        pa.array(np.zeros(rows_per_group, dtype=np.int64)),
-        pa.array([f"s{j}" for j in range(rows_per_group)]),
-        pa.array(np.random.rand(rows_per_group).astype(np.float32)),
-        pa.array(np.random.rand(rows_per_group)),
-        pa.array(np.zeros(rows_per_group, dtype=np.int64)),
-    ]
-    fields = [
-        StructField("id", IntegerType()),
-        StructField("str_col", StringType()),
-        StructField("float_col", DoubleType()),
-        StructField("double_col", DoubleType()),
-        StructField("long_col", IntegerType()),
-    ]
-    return (
-        pa.RecordBatch.from_arrays(arrays, names=[f.name for f in fields]),
-        StructType(fields),
-    )
-
-
-# ---------------------------------------------------------------------------
-# SQL_GROUPED_MAP_PANDAS_UDF
-# ---------------------------------------------------------------------------
-
-
-class GroupedMapPandasUDFBench:
-    """Full worker round-trip for ``SQL_GROUPED_MAP_PANDAS_UDF``.
-
-    Large groups (100k rows) are split into Arrow sub-batches of at most
-    ``_MAX_RECORDS_PER_BATCH`` rows, mirroring the JVM-side splitting
-    behaviour (``spark.sql.execution.arrow.maxRecordsPerBatch`` default 10 000).
-    Small groups (1k rows) are unaffected.
+    Subclasses provide ``params``, ``param_names``, and ``_write_scenario``.
     """
 
-    _MAX_RECORDS_PER_BATCH = 10_000  # matches spark.sql.execution.arrow.maxRecordsPerBatch default
+    def setup(self, *args):
+        self._args = args
 
-    def setup(self):
-        eval_type = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+    def peakmem_worker(self, *args):
+        fd, path = tempfile.mkstemp(prefix="spark-bench-replay-", suffix=".bin")
+        try:
+            with os.fdopen(fd, "w+b") as infile:
+                self._write_scenario(*self._args, infile)
+                infile.flush()
+                infile.seek(0)
+                worker_main(infile, io.BytesIO())
+        finally:
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
 
-        # ---- varying group size (float data, identity UDF) ----
-        for name, (rows_per_group, n_cols, num_groups) in {
-            "small_few": (1_000, 5, 1_500),
-            "small_many": (1_000, 50, 200),
-            "large_few": (100_000, 5, 350),
-            "large_many": (100_000, 50, 40),
+
+# -- SQL_ARROW_BATCHED_UDF --------------------------------------------------
+# UDF receives individual Python values per row, returns a single Python value.
+
+
+class _ArrowBatchedBenchMixin:
+    """Provides ``_write_scenario`` for SQL_ARROW_BATCHED_UDF.
+
+    Writes the extra ``input_type`` (StructType JSON) that the wire protocol
+    requires before the UDF payload.
+    """
+
+    def _build_scenarios():
+        """Build scenarios for SQL_ARROW_BATCHED_UDF.
+
+        Returns a dict mapping scenario name to ``(batches, schema)``.
+        """
+        scenarios = {}
+
+        # Row-by-row processing is ~100x slower than columnar Arrow UDFs,
+        # so batch counts are much smaller to keep benchmarks under 60s.
+        for name, (num_rows, num_cols, batch_size) in {
+            "sm_batch_few_col": (20_000, 5, 1_000),
+            "sm_batch_many_col": (5_000, 50, 1_000),
+            "lg_batch_few_col": (50_000, 5, 10_000),
+            "lg_batch_many_col": (20_000, 50, 10_000),
         }.items():
-            batch, schema = _make_grouped_batch(rows_per_group, n_cols)
-            setattr(
-                self,
-                f"_{name}_input",
-                _build_worker_input(
-                    eval_type,
-                    lambda df: df,
-                    schema,
-                    _build_grouped_arg_offsets(n_cols),
-                    batch,
-                    num_groups=num_groups,
-                    max_records_per_batch=self._MAX_RECORDS_PER_BATCH,
-                ),
+            batches, schema = MockDataFactory.make_batches(
+                num_rows=num_rows,
+                num_cols=num_cols,
+                spark_type_pool=MockDataFactory.MIXED_TYPES,
+                batch_size=batch_size,
             )
+            scenarios[name] = (batches, schema)
 
-        # ---- mixed types, 1-arg UDF ----
-        mixed_batch, mixed_schema = _make_mixed_batch(3)
-        n_mixed = len(mixed_schema.fields)
+        _NUM_ROWS, _NUM_COLS, _BATCH_SIZE = 50_000, 10, 5_000
 
-        def double_col_add_mean(pdf):
-            return pdf.assign(double_col=pdf["double_col"] + pdf["double_col"].mean())
-
-        self._mixed_input = _build_worker_input(
-            eval_type,
-            double_col_add_mean,
-            mixed_schema,
-            _build_grouped_arg_offsets(n_mixed),
-            mixed_batch,
-            num_groups=1_300,
-        )
-
-        # ---- mixed types, 2-arg UDF with key ----
-        two_arg_schema = StructType(
-            [StructField("group_key", IntegerType()), StructField("double_col_mean", DoubleType())]
-        )
-
-        def double_col_key_add_mean(key, pdf):
-            import pandas as pd
-
-            return pd.DataFrame(
-                [{"group_key": key[0], "double_col_mean": pdf["double_col"].mean()}]
+        for scenario_name, spark_types in [
+            (
+                "pure_ints",
+                [
+                    (
+                        lambda r: pa.array(np.random.randint(0, 1000, r, dtype=np.int64)),
+                        IntegerType(),
+                    )
+                ],
+            ),
+            ("pure_floats", [(lambda r: pa.array(np.random.rand(r)), DoubleType())]),
+            ("pure_strings", [(lambda r: pa.array([f"s{j}" for j in range(r)]), StringType())]),
+        ]:
+            batches, schema = MockDataFactory.make_batches(
+                num_rows=_NUM_ROWS,
+                num_cols=_NUM_COLS,
+                spark_type_pool=spark_types,
+                batch_size=_BATCH_SIZE,
             )
+            scenarios[scenario_name] = (batches, schema)
 
-        self._two_args_input = _build_worker_input(
-            eval_type,
-            double_col_key_add_mean,
-            two_arg_schema,
-            _build_grouped_arg_offsets(n_mixed, n_keys=1),
-            mixed_batch,
-            num_groups=1_600,
+        # mixed types
+        batches, schema = MockDataFactory.make_batches(
+            num_rows=_NUM_ROWS,
+            num_cols=_NUM_COLS,
+            spark_type_pool=MockDataFactory.MIXED_TYPES,
+            batch_size=_BATCH_SIZE,
+        )
+        scenarios["mixed_types"] = (batches, schema)
+
+        return scenarios
+
+    _scenarios = _build_scenarios()
+    # UDFs for SQL_ARROW_BATCHED_UDF operate on individual Python values.
+    # arg_offsets=[0] means the UDF receives column 0 value per row.
+    _udfs = {
+        "identity_udf": (lambda x: x, None, [0]),
+        "stringify_udf": (lambda x: str(x), StringType(), [0]),
+        "nullcheck_udf": (lambda x: x is not None, BooleanType(), [0]),
+    }
+    params = [list(_scenarios), list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        batches, schema = self._scenarios[scenario]
+        udf_func, ret_type, arg_offsets = self._udfs[udf_name]
+        if ret_type is None:
+            ret_type = schema.fields[0].dataType
+
+        def write_udf(b):
+            MockProtocolWriter.write_utf8(schema.json(), b)
+            MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b)
+
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_ARROW_BATCHED_UDF,
+            write_udf,
+            lambda b: MockProtocolWriter.write_data_payload(iter(batches), b),
+            buf,
         )
 
-    # -- benchmarks ---------------------------------------------------------
 
-    def _run(self, input_bytes):
-        worker_main(io.BytesIO(input_bytes), io.BytesIO())
+class ArrowBatchedUDFTimeBench(_ArrowBatchedBenchMixin, _TimeBenchBase):
+    pass
 
-    def time_small_groups_few_cols(self):
-        """1k rows/group, 5 cols, 1500 groups."""
-        self._run(self._small_few_input)
 
-    def peakmem_small_groups_few_cols(self):
-        """1k rows/group, 5 cols, 1500 groups."""
-        self._run(self._small_few_input)
+class ArrowBatchedUDFPeakmemBench(_ArrowBatchedBenchMixin, _PeakmemBenchBase):
+    pass
 
-    def time_small_groups_many_cols(self):
-        """1k rows/group, 50 cols, 200 groups."""
-        self._run(self._small_many_input)
 
-    def peakmem_small_groups_many_cols(self):
-        """1k rows/group, 50 cols, 200 groups."""
-        self._run(self._small_many_input)
+# -- SQL_GROUPED_AGG_ARROW_UDF ------------------------------------------------
+# UDF receives ``pa.Array`` columns per group, returns scalar.
 
-    def time_large_groups_few_cols(self):
-        """100k rows/group, 5 cols, 350 groups, split at 10k rows/batch."""
-        self._run(self._large_few_input)
 
-    def peakmem_large_groups_few_cols(self):
-        """100k rows/group, 5 cols, 350 groups, split at 10k rows/batch."""
-        self._run(self._large_few_input)
+class _GroupedAggArrowBenchMixin:
+    """Provides _write_scenario for SQL_GROUPED_AGG_ARROW_UDF."""
 
-    def time_large_groups_many_cols(self):
-        """100k rows/group, 50 cols, 40 groups, split at 10k rows/batch."""
-        self._run(self._large_many_input)
+    def _grouped_agg_arrow_sum(col):
+        """Sum a single Arrow column."""
+        import pyarrow.compute as pc
 
-    def peakmem_large_groups_many_cols(self):
-        """100k rows/group, 50 cols, 40 groups, split at 10k rows/batch."""
-        self._run(self._large_many_input)
+        return pc.sum(col).as_py()
 
-    def time_mixed_types(self):
-        """Mixed column types, 1-arg UDF, 3 rows/group, 1300 groups."""
-        self._run(self._mixed_input)
+    def _grouped_agg_arrow_mean_multi(col0, col1):
+        """Mean of two Arrow columns combined."""
+        import pyarrow.compute as pc
 
-    def peakmem_mixed_types(self):
-        """Mixed column types, 1-arg UDF, 3 rows/group, 1300 groups."""
-        self._run(self._mixed_input)
+        return (pc.mean(col0).as_py() or 0) + (pc.mean(col1).as_py() or 0)
 
-    def time_mixed_types_two_args(self):
-        """Mixed column types, 2-arg UDF with key, 3 rows/group, 1600 groups."""
-        self._run(self._two_args_input)
+    def _build_scenarios():
+        """Build scenarios for SQL_GROUPED_AGG_ARROW_UDF / AGG_ARROW_ITER_UDF.
 
-    def peakmem_mixed_types_two_args(self):
-        """Mixed column types, 2-arg UDF with key, 3 rows/group, 1600 groups."""
-        self._run(self._two_args_input)
+        Returns a dict mapping scenario name to ``(groups, schema)``.
+        """
+        scenarios = {}
+
+        for name, (num_groups, rows_per_group, n_cols) in {
+            "few_groups_sm": (50, 5_000, 5),
+            "few_groups_lg": (50, 50_000, 5),
+            "many_groups_sm": (2_000, 500, 5),
+            "many_groups_lg": (500, 10_000, 5),
+            "wide_cols": (200, 5_000, 20),
+        }.items():
+            groups, schema = MockDataFactory.make_batch_groups(
+                num_groups=num_groups,
+                num_rows=rows_per_group,
+                num_cols=n_cols,
+                spark_type_pool=MockDataFactory.NUMERIC_TYPES,
+                batch_size=rows_per_group,
+            )
+            scenarios[name] = (groups, schema)
+
+        return scenarios
+
+    _scenarios = _build_scenarios()
+    _udfs = {
+        "sum_udf": _grouped_agg_arrow_sum,
+        "mean_multi_udf": _grouped_agg_arrow_mean_multi,
+    }
+    params = [list(_scenarios), list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        groups, _schema = self._scenarios[scenario]
+        udf_func = self._udfs[udf_name]
+
+        # sum_udf uses 1 arg, mean_multi_udf uses 2 args
+        if "multi" in udf_name:
+            arg_offsets = [0, 1]
+        else:
+            arg_offsets = [0]
+
+        return_type = DoubleType()
+
+        def write_udf(b):
+            MockProtocolWriter.write_udf_payload(udf_func, return_type, arg_offsets, b)
+
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+            write_udf,
+            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, num_dfs=1, buf=b),
+            buf,
+        )
+
+
+class GroupedAggArrowUDFTimeBench(_GroupedAggArrowBenchMixin, _TimeBenchBase):
+    pass
+
+
+class GroupedAggArrowUDFPeakmemBench(_GroupedAggArrowBenchMixin, _PeakmemBenchBase):
+    pass
+
+
+class _GroupedAggArrowIterBenchMixin(_GroupedAggArrowBenchMixin):
+    """Provides _write_scenario for SQL_GROUPED_AGG_ARROW_ITER_UDF."""
+
+    def _grouped_agg_arrow_iter_sum(batch_iter):
+        """Sum across batches via iterator."""
+        import pyarrow.compute as pc
+
+        total = 0
+        for col in batch_iter:
+            total += pc.sum(col).as_py() or 0
+        return total
+
+    def _grouped_agg_arrow_iter_mean_multi(batch_iter):
+        """Mean across batches of tuples via iterator."""
+        import pyarrow.compute as pc
+
+        total = 0.0
+        for col0, col1 in batch_iter:
+            total += (pc.mean(col0).as_py() or 0) + (pc.mean(col1).as_py() or 0)
+        return total
+
+    _udfs = {
+        "sum_udf": _grouped_agg_arrow_iter_sum,
+        "mean_multi_udf": _grouped_agg_arrow_iter_mean_multi,
+    }
+    params = [_GroupedAggArrowBenchMixin.params[0], list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        groups, _schema = self._scenarios[scenario]
+        udf_func = self._udfs[udf_name]
+
+        # sum_udf uses 1 arg, mean_multi_udf uses 2 args
+        if "multi" in udf_name:
+            arg_offsets = [0, 1]
+        else:
+            arg_offsets = [0]
+
+        return_type = DoubleType()
+
+        def write_udf(b):
+            MockProtocolWriter.write_udf_payload(udf_func, return_type, arg_offsets, b)
+
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
+            write_udf,
+            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, num_dfs=1, buf=b),
+            buf,
+        )
+
+
+class GroupedAggArrowIterUDFTimeBench(_GroupedAggArrowIterBenchMixin, _TimeBenchBase):
+    pass
+
+
+class GroupedAggArrowIterUDFPeakmemBench(_GroupedAggArrowIterBenchMixin, _PeakmemBenchBase):
+    pass
+
+
+# -- SQL_GROUPED_MAP_ARROW_UDF ------------------------------------------------
+# UDF receives ``pa.Table``, returns ``pa.Table``.
+
+
+class _GroupedMapArrowBenchMixin:
+    """Provides _write_scenario for SQL_GROUPED_MAP_ARROW_UDF."""
+
+    def _grouped_map_arrow_identity(table):
+        """Identity grouped map UDF: takes a pa.Table, returns it as-is."""
+        return table
+
+    def _grouped_map_arrow_sort(table):
+        """Sort by first column."""
+        return table.sort_by([(table.column_names[0], "ascending")])
+
+    def _grouped_map_arrow_filter(table):
+        """Filter rows where first column is valid."""
+        import pyarrow.compute as pc
+
+        return table.filter(pc.is_valid(table.column(0)))
+
+    def _build_scenarios():
+        """Build scenarios for SQL_GROUPED_MAP_ARROW_UDF.
+
+        Returns a dict mapping scenario name to ``(groups, schema)``.
+        ``schema`` is the value-only return type (excluding key columns).
+        ``arg_offsets`` are derived at write time from data and schema.
+        """
+        scenarios = {}
+
+        for name, (num_groups, rows_per_group, num_key_cols, num_value_cols) in {
+            "few_groups_sm": (50, 5_000, 1, 4),
+            "few_groups_lg": (50, 50_000, 1, 4),
+            "many_groups_sm": (2_000, 500, 1, 4),
+            "many_groups_lg": (500, 10_000, 1, 4),
+            "wide_values": (200, 5_000, 1, 20),
+            "multi_key": (200, 5_000, 3, 5),
+        }.items():
+            n_fields = num_key_cols + num_value_cols
+            struct_type = MockDataFactory.make_struct_type(
+                num_fields=n_fields,
+                base_types=MockDataFactory.MIXED_TYPES,
+            )
+            groups, schema = MockDataFactory.make_batch_groups(
+                num_groups=num_groups,
+                num_rows=rows_per_group,
+                num_cols=1,
+                spark_type_pool=[struct_type],
+                batch_size=rows_per_group,
+            )
+            inner_fields = schema.fields[0].dataType.fields
+            return_type = StructType(inner_fields[num_key_cols:])
+            scenarios[name] = (groups, return_type)
+
+        return scenarios
+
+    _scenarios = _build_scenarios()
+    _udfs = {
+        "identity_udf": _grouped_map_arrow_identity,
+        "sort_udf": _grouped_map_arrow_sort,
+        "filter_udf": _grouped_map_arrow_filter,
+    }
+    params = [list(_scenarios), list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        groups, schema = self._scenarios[scenario]
+        udf_func = self._udfs[udf_name]
+        n_total = groups[0][0].column(0).type.num_fields
+        n_values = len(schema.fields)
+        num_key_cols = n_total - n_values
+        arg_offsets = MockUDFFactory.make_grouped_arg_offsets(num_key_cols, n_values)
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+            lambda b: MockProtocolWriter.write_udf_payload(udf_func, schema, arg_offsets, b),
+            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, num_dfs=1, buf=b),
+            buf,
+        )
+
+
+class GroupedMapArrowUDFTimeBench(_GroupedMapArrowBenchMixin, _TimeBenchBase):
+    pass
+
+
+class GroupedMapArrowUDFPeakmemBench(_GroupedMapArrowBenchMixin, _PeakmemBenchBase):
+    pass
+
+
+# -- SQL_GROUPED_MAP_ARROW_ITER_UDF ------------------------------------------
+# UDF receives ``Iterator[pa.RecordBatch]`` per group, returns ``Iterator[pa.RecordBatch]``.
+
+
+class _GroupedMapArrowIterBenchMixin(_GroupedMapArrowBenchMixin):
+    """Provides _write_scenario for SQL_GROUPED_MAP_ARROW_ITER_UDF."""
+
+    def _grouped_map_arrow_iter_identity(batches):
+        """Identity grouped map iter UDF: yields each batch as-is."""
+        yield from batches
+
+    def _grouped_map_arrow_iter_sort(batches):
+        """Sort each batch by first column."""
+        for batch in batches:
+            yield batch.sort_by([(batch.column_names[0], "ascending")])
+
+    def _grouped_map_arrow_iter_filter(batches):
+        """Filter rows where first column is valid."""
+        import pyarrow.compute as pc
+
+        for batch in batches:
+            yield batch.filter(pc.is_valid(batch.column(0)))
+
+    _udfs = {
+        "identity_udf": _grouped_map_arrow_iter_identity,
+        "sort_udf": _grouped_map_arrow_iter_sort,
+        "filter_udf": _grouped_map_arrow_iter_filter,
+    }
+    params = [_GroupedMapArrowBenchMixin.params[0], list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        groups, schema = self._scenarios[scenario]
+        udf_func = self._udfs[udf_name]
+        n_total = groups[0][0].column(0).type.num_fields
+        n_values = len(schema.fields)
+        num_key_cols = n_total - n_values
+        arg_offsets = MockUDFFactory.make_grouped_arg_offsets(num_key_cols, n_values)
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
+            lambda b: MockProtocolWriter.write_udf_payload(udf_func, schema, arg_offsets, b),
+            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, num_dfs=1, buf=b),
+            buf,
+        )
+
+
+class GroupedMapArrowIterUDFTimeBench(_GroupedMapArrowIterBenchMixin, _TimeBenchBase):
+    pass
+
+
+class GroupedMapArrowIterUDFPeakmemBench(_GroupedMapArrowIterBenchMixin, _PeakmemBenchBase):
+    pass
+
+
+# -- SQL_GROUPED_MAP_PANDAS_UDF ------------------------------------------------
+# UDF receives ``pandas.DataFrame`` per group, returns ``pandas.DataFrame``.
+
+
+class _GroupedMapPandasBenchMixin:
+    """Provides ``_write_scenario`` for SQL_GROUPED_MAP_PANDAS_UDF.
+
+    Each scenario stores ``(groups, schema)``.
+    Groups are written as separate Arrow IPC streams.
+    """
+
+    def _build_scenarios():
+        scenarios = {}
+
+        for name, (rows, n_cols, num_groups) in {
+            "sm_grp_few_col": (1_000, 5, 200),
+            "sm_grp_many_col": (1_000, 50, 30),
+            "lg_grp_few_col": (100_000, 5, 30),
+            "lg_grp_many_col": (100_000, 50, 5),
+        }.items():
+            groups, schema = MockDataFactory.make_batch_groups(
+                num_groups=num_groups,
+                num_rows=rows,
+                num_cols=n_cols,
+                spark_type_pool=MockDataFactory.NUMERIC_TYPES,
+            )
+            scenarios[name] = (groups, schema)
+
+        # mixed column types, small groups
+        batches, schema = MockDataFactory.make_batches(
+            num_rows=3,
+            num_cols=5,
+            spark_type_pool=MockDataFactory.MIXED_TYPES,
+            batch_size=3,
+        )
+        scenarios["mixed_types"] = ([(b,) for b in batches] * 200, schema)
+
+        return scenarios
+
+    _scenarios = _build_scenarios()
+    # Each UDF entry: (func, ret_type, n_args).
+    # ret_type=None means "use the input schema" (excluding key columns for n_args=2).
+    # n_args=1 -> func(pdf), n_args=2 -> func(key, pdf).
+    _udfs = {
+        "identity_udf": (lambda df: df, None, 1),
+        "sort_udf": (lambda df: df.sort_values(df.columns[0]), None, 1),
+        "key_identity_udf": (lambda key, df: df, None, 2),
+    }
+    params = [list(_scenarios), list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        groups, schema = self._scenarios[scenario]
+        udf_func, ret_type, n_args = self._udfs[udf_name]
+        if ret_type is None:
+            # 2-arg UDFs receive (key, pdf) where pdf excludes key columns,
+            # so the return schema must also exclude them.
+            ret_type = StructType(schema.fields[n_args - 1 :]) if n_args > 1 else schema
+        n_cols = len(schema.fields)
+        arg_offsets = MockUDFFactory.make_grouped_arg_offsets(n_args - 1, n_cols - (n_args - 1))
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+            lambda b: MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b),
+            lambda b: MockProtocolWriter.write_grouped_data_payload(
+                groups,
+                num_dfs=1,
+                buf=b,
+            ),
+            buf,
+        )
+
+
+class GroupedMapPandasUDFTimeBench(_GroupedMapPandasBenchMixin, _TimeBenchBase):
+    pass
+
+
+class GroupedMapPandasUDFPeakmemBench(_GroupedMapPandasBenchMixin, _PeakmemBenchBase):
+    pass
+
+
+# -- SQL_MAP_ARROW_ITER_UDF ------------------------------------------------
+# UDF receives ``Iterator[pa.RecordBatch]``, returns ``Iterator[pa.RecordBatch]``.
+
+
+class _MapArrowIterBenchMixin:
+    """Provides ``_write_scenario`` for SQL_MAP_ARROW_ITER_UDF.
+
+    Wraps input batches in a struct column to match the JVM-side wire format
+    (``flatten_struct`` undoes this).
+    """
+
+    def _identity_batch_iter(it):
+        yield from it
+
+    def _sort_batch_iter(it):
+        import pyarrow.compute as pc
+
+        for batch in it:
+            indices = pc.sort_indices(batch.column(0))
+            yield batch.take(indices)
+
+    def _filter_batch_iter(it):
+        import pyarrow.compute as pc
+
+        for batch in it:
+            mask = pc.is_valid(batch.column(0))
+            yield batch.filter(mask)
+
+    def _build_map_arrow_iter_scenarios():
+        """Build scenarios for SQL_MAP_ARROW_ITER_UDF.
+
+        Returns a dict mapping scenario name to ``(batches, schema)``.
+        Same data shapes as non-grouped scenarios but with reduced batch counts
+        to account for the struct wrap/unwrap overhead per batch.
+        """
+        scenarios = {}
+
+        for name, (num_rows, num_cols, batch_size) in {
+            "sm_batch_few_col": (500_000, 5, 1_000),
+            "sm_batch_many_col": (50_000, 50, 1_000),
+            "lg_batch_few_col": (5_000_000, 5, 10_000),
+            "lg_batch_many_col": (500_000, 50, 10_000),
+        }.items():
+            struct_type = MockDataFactory.make_struct_type(
+                num_fields=num_cols,
+                base_types=MockDataFactory.MIXED_TYPES,
+            )
+            batches, schema = MockDataFactory.make_batches(
+                num_rows=num_rows,
+                num_cols=1,
+                spark_type_pool=[struct_type],
+                batch_size=batch_size,
+            )
+            scenarios[name] = (batches, schema)
+
+        _NUM_ROWS, _NUM_COLS, _BATCH_SIZE = 1_000_000, 10, 5_000
+
+        for scenario_name, spark_types in [
+            (
+                "pure_ints",
+                [
+                    (
+                        lambda r: pa.array(np.random.randint(0, 1000, r, dtype=np.int64)),
+                        IntegerType(),
+                    )
+                ],
+            ),
+            ("pure_floats", [(lambda r: pa.array(np.random.rand(r)), DoubleType())]),
+            ("pure_strings", [(lambda r: pa.array([f"s{j}" for j in range(r)]), StringType())]),
+            (
+                "pure_ts",
+                [
+                    (
+                        lambda r: pa.array(
+                            np.arange(0, r, dtype="datetime64[us]"),
+                            type=pa.timestamp("us", tz=None),
+                        ),
+                        TimestampNTZType(),
+                    )
+                ],
+            ),
+        ]:
+            struct_type = MockDataFactory.make_struct_type(
+                num_fields=_NUM_COLS,
+                base_types=spark_types,
+            )
+            batches, schema = MockDataFactory.make_batches(
+                num_rows=_NUM_ROWS,
+                num_cols=1,
+                spark_type_pool=[struct_type],
+                batch_size=_BATCH_SIZE,
+            )
+            scenarios[scenario_name] = (batches, schema)
+
+        struct_type = MockDataFactory.make_struct_type(
+            num_fields=_NUM_COLS,
+            base_types=MockDataFactory.MIXED_TYPES,
+        )
+        batches, schema = MockDataFactory.make_batches(
+            num_rows=_NUM_ROWS,
+            num_cols=1,
+            spark_type_pool=[struct_type],
+            batch_size=_BATCH_SIZE,
+        )
+        scenarios["mixed_types"] = (batches, schema)
+
+        return scenarios
+
+    _scenarios = _build_map_arrow_iter_scenarios()
+    _udfs = {
+        "identity_udf": (_identity_batch_iter, None, [0]),
+        "sort_udf": (_sort_batch_iter, None, [0]),
+        "filter_udf": (_filter_batch_iter, None, [0]),
+    }
+    params = [list(_scenarios), list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        batches, schema = self._scenarios[scenario]
+        udf_func, ret_type, arg_offsets = self._udfs[udf_name]
+        if ret_type is None:
+            ret_type = schema.fields[0].dataType.fields[0].dataType
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
+            lambda b: MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b),
+            lambda b: MockProtocolWriter.write_data_payload(iter(batches), b),
+            buf,
+        )
+
+
+class MapArrowIterUDFTimeBench(_MapArrowIterBenchMixin, _TimeBenchBase):
+    pass
+
+
+class MapArrowIterUDFPeakmemBench(_MapArrowIterBenchMixin, _PeakmemBenchBase):
+    pass
+
+
+# -- SQL_SCALAR_ARROW_UDF ---------------------------------------------------
+# UDF receives ``pa.Array`` columns, returns ``pa.Array``.
+
+
+class _ScalarArrowBenchMixin:
+    """Mixin for SQL_SCALAR_ARROW_UDF benchmarks."""
+
+    def _sort_arrow(c):
+        import pyarrow.compute as pc
+
+        return pc.take(c, pc.sort_indices(c))
+
+    def _nullcheck_arrow(c):
+        import pyarrow.compute as pc
+
+        return pc.is_valid(c)
+
+    def _build_scenarios():
+        """Build data-shape scenarios for non-grouped Arrow eval types.
+
+        Returns a dict mapping scenario name to ``(batches, schema)``.
+        """
+        scenarios = {}
+
+        for name, (num_rows, num_cols, batch_size) in {
+            "sm_batch_few_col": (1_500_000, 5, 1_000),
+            "sm_batch_many_col": (200_000, 50, 1_000),
+            "lg_batch_few_col": (35_000_000, 5, 10_000),
+            "lg_batch_many_col": (4_000_000, 50, 10_000),
+        }.items():
+            batches, schema = MockDataFactory.make_batches(
+                num_rows=num_rows,
+                num_cols=num_cols,
+                spark_type_pool=MockDataFactory.MIXED_TYPES,
+                batch_size=batch_size,
+            )
+            scenarios[name] = (batches, schema)
+
+        _NUM_ROWS, _NUM_COLS, _BATCH_SIZE = 5_000_000, 10, 5_000
+
+        for scenario_name, spark_types in [
+            (
+                "pure_ints",
+                [
+                    (
+                        lambda r: pa.array(np.random.randint(0, 1000, r, dtype=np.int64)),
+                        IntegerType(),
+                    )
+                ],
+            ),
+            ("pure_floats", [(lambda r: pa.array(np.random.rand(r)), DoubleType())]),
+            ("pure_strings", [(lambda r: pa.array([f"s{j}" for j in range(r)]), StringType())]),
+            (
+                "pure_ts",
+                [
+                    (
+                        lambda r: pa.array(
+                            np.arange(0, r, dtype="datetime64[us]"),
+                            type=pa.timestamp("us", tz=None),
+                        ),
+                        TimestampNTZType(),
+                    )
+                ],
+            ),
+        ]:
+            batches, schema = MockDataFactory.make_batches(
+                num_rows=_NUM_ROWS,
+                num_cols=_NUM_COLS,
+                spark_type_pool=spark_types,
+                batch_size=_BATCH_SIZE,
+            )
+            scenarios[scenario_name] = (batches, schema)
+
+        batches, schema = MockDataFactory.make_batches(
+            num_rows=_NUM_ROWS,
+            num_cols=_NUM_COLS,
+            spark_type_pool=MockDataFactory.MIXED_TYPES,
+            batch_size=_BATCH_SIZE,
+        )
+        scenarios["mixed_types"] = (batches, schema)
+
+        return scenarios
+
+    _eval_type = PythonEvalType.SQL_SCALAR_ARROW_UDF
+    _scenarios = _build_scenarios()
+    # ret_type=None means "use schema.fields[0].dataType from the scenario"
+    _udfs = {
+        "identity_udf": (lambda c: c, None, [0]),
+        "sort_udf": (_sort_arrow, None, [0]),
+        "nullcheck_udf": (_nullcheck_arrow, BooleanType(), [0]),
+    }
+    params = [list(_scenarios), list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        batches, schema = self._scenarios[scenario]
+        udf_func, ret_type, arg_offsets = self._udfs[udf_name]
+        if ret_type is None:
+            ret_type = schema.fields[0].dataType
+        MockProtocolWriter.write_worker_input(
+            self._eval_type,
+            lambda b: MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b),
+            lambda b: MockProtocolWriter.write_data_payload(iter(batches), b),
+            buf,
+        )
+
+
+class ScalarArrowUDFTimeBench(_ScalarArrowBenchMixin, _TimeBenchBase):
+    pass
+
+
+class ScalarArrowUDFPeakmemBench(_ScalarArrowBenchMixin, _PeakmemBenchBase):
+    pass
+
+
+# -- SQL_SCALAR_ARROW_ITER_UDF ----------------------------------------------
+# UDF receives ``Iterator[pa.Array]``, returns ``Iterator[pa.Array]``.
+
+
+class _ScalarArrowIterBenchMixin(_ScalarArrowBenchMixin):
+    """Mixin for SQL_SCALAR_ARROW_ITER_UDF benchmarks."""
+
+    def _identity_iter(it):
+        return (c for c in it)
+
+    def _sort_iter(it):
+        import pyarrow.compute as pc
+
+        for c in it:
+            yield pc.take(c, pc.sort_indices(c))
+
+    def _nullcheck_iter(it):
+        import pyarrow.compute as pc
+
+        for c in it:
+            yield pc.is_valid(c)
+
+    _eval_type = PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
+    _udfs = {
+        "identity_udf": (_identity_iter, None, [0]),
+        "sort_udf": (_sort_iter, None, [0]),
+        "nullcheck_udf": (_nullcheck_iter, BooleanType(), [0]),
+    }
+    params = [list(_ScalarArrowBenchMixin._scenarios), list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+
+class ScalarArrowIterUDFTimeBench(_ScalarArrowIterBenchMixin, _TimeBenchBase):
+    pass
+
+
+class ScalarArrowIterUDFPeakmemBench(_ScalarArrowIterBenchMixin, _PeakmemBenchBase):
+    pass

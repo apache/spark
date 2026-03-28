@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, Mustache, uiRoot */
+/* global $, uiRoot */
 
 import {
   ConvertDurationString, createRESTEndPointForExecutorsPage, createTemplateURI, errorMessageCell,
@@ -28,7 +28,6 @@ export {setTaskThreadDumpEnabled};
 
 function setTooltip(selector, text) {
   $(selector).attr("data-bs-toggle", "tooltip")
-    .attr("data-bs-placement", "top")
     .attr("title", text);
 }
 
@@ -43,14 +42,14 @@ function setTaskThreadDumpEnabled(enabled){
 
 $(document).ajaxStop(function () {
   if (shouldBlockUI) {
-    $.unblockUI();
+    $("#loading-overlay").addClass("d-none");
     shouldBlockUI = false;
   }
 });
 
 $(document).ajaxStart(function () {
   if (shouldBlockUI) {
-    $.blockUI({message: '<h3>Loading Stage Page...</h3>'});
+    $("#loading-overlay").removeClass("d-none");
   }
 });
 
@@ -379,7 +378,7 @@ $(document).ready(function () {
   getStandAloneAppId(function (appId) {
     // rendering the UI page
     $.get(createTemplateURI(appId, "stagespage"), function(template) {
-      tasksSummary.append(Mustache.render($(template).filter("#stages-summary-template").html()));
+      tasksSummary.append($(template).filter("#stages-summary-template").html());
 
       $("#additionalMetrics").click(function(){
         $("#arrowtoggle1").toggleClass("arrow-open arrow-closed");

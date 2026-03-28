@@ -200,6 +200,26 @@ public interface TableCatalog extends CatalogPlugin {
   }
 
   /**
+   * Load a {@link Changelog} for the given table, representing the row-level changes within the
+   * range specified by {@code changelogInfo}.
+   * <p>
+   * The default implementation throws an analysis exception indicating that the catalog does
+   * not support CDC. Catalogs that support CDC must override this method.
+   *
+   * @param ident a table identifier
+   * @param changelogInfo the CDC query parameters (range, deduplication mode, etc.)
+   * @return a Changelog instance for the requested table and range
+   * @throws NoSuchTableException If the table doesn't exist
+   *
+   * @since 4.2.0
+   */
+  default Changelog loadChangelog(Identifier ident, ChangelogInfo changelogInfo)
+      throws NoSuchTableException {
+    throw new UnsupportedOperationException(
+        name() + " does not support Change Data Capture (CDC)");
+  }
+
+  /**
    * Invalidate cached table metadata for an {@link Identifier identifier}.
    * <p>
    * If the table is already loaded or cached, drop cached data. If the table does not exist or is
@@ -273,6 +293,41 @@ public interface TableCatalog extends CatalogPlugin {
   default Table createTable(Identifier ident, TableInfo tableInfo)
       throws TableAlreadyExistsException, NoSuchNamespaceException {
     return createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties());
+  }
+
+  /**
+   * Create a table in the catalog by copying metadata from an existing source table.
+   * <p>
+   * This method is called for {@code CREATE TABLE ... LIKE ...} statements targeting this catalog.
+   * The {@code userSpecifiedOverrides} parameter contains strictly user-specified overrides:
+   * TBLPROPERTIES, LOCATION, and the USING provider (only if explicitly specified).
+   * It does NOT contain schema, partitioning, properties, constraints, or owner from the source
+   * table. Connectors must read all source metadata directly from {@code sourceTable}, including
+   * columns ({@link Table#columns()}), partitioning ({@link Table#partitioning()}),
+   * constraints ({@link Table#constraints()}), and format-specific properties
+   * ({@link Table#properties()}). Connectors are also responsible for setting the owner of the
+   * new table (e.g. via {@code org.apache.spark.sql.catalyst.CurrentUserContext#getCurrentUser}).
+   * <p>
+   * The default implementation throws {@link UnsupportedOperationException}. Connectors that
+   * support {@code CREATE TABLE ... LIKE ...} must override this method.
+   *
+   * @param ident a table identifier for the new table
+   * @param sourceTable the resolved source table; connectors read schema, partitioning,
+   *                    constraints, properties, and any format-specific metadata from this object
+   * @param userSpecifiedOverrides strictly user-specified overrides: TBLPROPERTIES, LOCATION,
+   *                               and USING provider (if explicitly given); source schema,
+   *                               partitioning, provider, constraints, and owner are NOT included
+   * @return metadata for the new table
+   *
+   * @throws TableAlreadyExistsException If a table or view already exists for the identifier
+   * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
+   * @throws UnsupportedOperationException If the catalog does not support CREATE TABLE LIKE
+   * @since 4.2.0
+   */
+  default Table createTableLike(
+      Identifier ident, Table sourceTable, TableInfo userSpecifiedOverrides)
+      throws TableAlreadyExistsException, NoSuchNamespaceException {
+    throw new UnsupportedOperationException(name() + " does not support CREATE TABLE LIKE");
   }
 
   /**

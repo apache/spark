@@ -1615,7 +1615,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`outermost`"
+    "relationName" : "`outermost`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1837,7 +1838,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`test`"
+    "relationName" : "`test`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1888,13 +1890,13 @@ DropTable false, false
 -- !query
 DROP VIEW nums
 -- !query analysis
-DropTempViewCommand nums
+DropTempViewCommand nums, false
 
 
 -- !query
 DROP VIEW vsubdepartment
 -- !query analysis
-DropTempViewCommand vsubdepartment
+DropTempViewCommand vsubdepartment, false
 
 
 -- !query

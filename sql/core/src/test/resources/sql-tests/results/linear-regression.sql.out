@@ -274,3 +274,19 @@ SELECT k, regr_intercept(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS 
 struct<k:int,regr_intercept(y, x):double>
 -- !query output
 2	1.1547344110854496
+
+
+-- !query
+SELECT regr_r2(k, x) FROM testRegression where k=2
+-- !query schema
+struct<regr_r2(k, x):double>
+-- !query output
+1.0
+
+
+-- !query
+SELECT regr_r2(y, k) FROM testRegression where k=2
+-- !query schema
+struct<regr_r2(y, k):double>
+-- !query output
+NULL

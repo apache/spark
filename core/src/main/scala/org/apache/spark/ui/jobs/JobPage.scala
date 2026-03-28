@@ -87,7 +87,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
          |  'start': new Date(${submissionTime}),
          |  'end': new Date(${completionTime}),
          |  'content': '<div class="job-timeline-content" data-bs-toggle="tooltip"' +
-         |   'data-bs-placement="top" data-bs-html="true"' +
+         |   'data-bs-html="true"' +
          |   'data-bs-title="${jsEscapedNameForTooltip} (Stage ${stageId}.${attemptId})<br>' +
          |   'Status: ${status.toUpperCase(Locale.ROOT)}<br>' +
          |   'Submitted: ${UIUtils.formatDate(submissionTime)}' +
@@ -116,7 +116,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
            |  'group': 'executors',
            |  'start': new Date(${e.addTime.getTime()}),
            |  'content': '<div class="executor-event-content"' +
-           |    'data-bs-toggle="tooltip" data-bs-placement="top"' +
+           |    'data-bs-toggle="tooltip"' +
            |    'data-bs-title="Executor ${e.id}<br>' +
            |    'Added at ${UIUtils.formatDate(e.addTime)}"' +
            |    'data-bs-html="true">Executor ${e.id} added</div>'
@@ -132,7 +132,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
              |  'group': 'executors',
              |  'start': new Date(${removeTime.getTime()}),
              |  'content': '<div class="executor-event-content"' +
-             |    'data-bs-toggle="tooltip" data-bs-placement="top"' +
+             |    'data-bs-toggle="tooltip"' +
              |    'data-bs-title="Executor ${e.id}<br>' +
              |    'Removed at ${UIUtils.formatDate(removeTime)}' +
              |    '${

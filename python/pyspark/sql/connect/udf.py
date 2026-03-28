@@ -17,9 +17,6 @@
 """
 User-defined function related classes and functions
 """
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
 
 import warnings
 import sys
@@ -145,14 +142,19 @@ class UserDefinedFunction:
     ):
         if not callable(func):
             raise PySparkTypeError(
-                errorClass="NOT_CALLABLE",
-                messageParameters={"arg_name": "func", "arg_type": type(func).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "callable",
+                    "arg_name": "func",
+                    "arg_type": type(func).__name__,
+                },
             )
 
         if not isinstance(returnType, (DataType, str)):
             raise PySparkTypeError(
-                errorClass="NOT_DATATYPE_OR_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
+                    "expected_type": "DataType or str",
                     "arg_name": "returnType",
                     "arg_type": type(returnType).__name__,
                 },
@@ -160,8 +162,12 @@ class UserDefinedFunction:
 
         if not isinstance(evalType, int):
             raise PySparkTypeError(
-                errorClass="NOT_INT",
-                messageParameters={"arg_name": "evalType", "arg_type": type(evalType).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "int",
+                    "arg_name": "evalType",
+                    "arg_type": type(evalType).__name__,
+                },
             )
 
         self.func = func

@@ -239,6 +239,9 @@ api = Module(
     source_file_regexes=[
         "sql/api/",
     ],
+    sbt_test_goals=[
+        "sql-api/test",
+    ],
 )
 
 catalyst = Module(
@@ -250,9 +253,9 @@ catalyst = Module(
     sbt_test_goals=[
         "catalyst/test",
     ],
-    environ=None
-    if "GITHUB_ACTIONS" not in os.environ
-    else {"ENABLE_DOCKER_INTEGRATION_TESTS": "1"},
+    environ=(
+        None if "GITHUB_ACTIONS" not in os.environ else {"ENABLE_DOCKER_INTEGRATION_TESTS": "1"}
+    ),
 )
 
 sql = Module(
@@ -265,9 +268,9 @@ sql = Module(
     sbt_test_goals=[
         "sql/test",
     ],
-    environ=None
-    if "GITHUB_ACTIONS" not in os.environ
-    else {"ENABLE_DOCKER_INTEGRATION_TESTS": "1"},
+    environ=(
+        None if "GITHUB_ACTIONS" not in os.environ else {"ENABLE_DOCKER_INTEGRATION_TESTS": "1"}
+    ),
 )
 
 hive = Module(
@@ -489,6 +492,7 @@ pyspark_core = Module(
         "pyspark.tests.test_conf",
         "pyspark.tests.test_context",
         "pyspark.tests.test_daemon",
+        "pyspark.tests.test_import_spark",
         "pyspark.tests.test_join",
         "pyspark.tests.test_memory_profiler",
         "pyspark.tests.test_pin_thread",
@@ -507,6 +511,7 @@ pyspark_core = Module(
         # unittests for upstream projects
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_cast",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_type_inference",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_default",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_ignore_timezone",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_coercion",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_inference",
@@ -697,9 +702,6 @@ pyspark_structured_streaming = Module(
         "pyspark.sql.tests.pandas.streaming.test_transform_with_state_state_variable_checkpoint_v2",
         "pyspark.sql.tests.pandas.streaming.test_tws_tester",
     ],
-    excluded_python_implementations=[
-        "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
-    ],
 )
 
 pyspark_mllib = Module(
@@ -729,9 +731,6 @@ pyspark_mllib = Module(
         "pyspark.mllib.tests.test_stat",
         "pyspark.mllib.tests.test_streaming_algorithms",
         "pyspark.mllib.tests.test_util",
-    ],
-    excluded_python_implementations=[
-        "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
     ],
 )
 
@@ -795,9 +794,6 @@ pyspark_ml = Module(
         "pyspark.ml.tests.test_classification",
         "pyspark.ml.tests.test_regression",
         "pyspark.ml.tests.test_clustering",
-    ],
-    excluded_python_implementations=[
-        "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
     ],
 )
 
@@ -975,10 +971,6 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.frame.test_asfreq",
         "pyspark.pandas.tests.frame.test_asof",
     ],
-    excluded_python_implementations=[
-        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
-        # they aren't available there
-    ],
 )
 
 pyspark_pandas_slow = Module(
@@ -1109,10 +1101,6 @@ pyspark_pandas_slow = Module(
         "pyspark.pandas.tests.diff_frames_ops.test_groupby_rolling_adv",
         "pyspark.pandas.tests.diff_frames_ops.test_groupby_rolling_count",
     ],
-    excluded_python_implementations=[
-        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
-        # they aren't available there
-    ],
 )
 
 pyspark_connect = Module(
@@ -1216,10 +1204,6 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_grouped_agg",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_window",
     ],
-    excluded_python_implementations=[
-        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
-        # they aren't available there
-    ],
 )
 
 pyspark_structured_streaming_connect = Module(
@@ -1240,9 +1224,6 @@ pyspark_structured_streaming_connect = Module(
         "pyspark.sql.tests.connect.pandas.streaming.test_parity_pandas_transform_with_state_state_variable",
         "pyspark.sql.tests.connect.pandas.streaming.test_parity_transform_with_state",
         "pyspark.sql.tests.connect.pandas.streaming.test_parity_transform_with_state_state_variable",
-    ],
-    excluded_python_implementations=[
-        "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
     ],
 )
 
@@ -1280,10 +1261,6 @@ pyspark_ml_connect = Module(
         "pyspark.ml.tests.connect.test_parity_tuning",
         "pyspark.ml.tests.connect.test_parity_ovr",
         "pyspark.ml.tests.connect.test_parity_stat",
-    ],
-    excluded_python_implementations=[
-        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
-        # they aren't available there
     ],
 )
 
@@ -1424,10 +1401,6 @@ pyspark_pandas_connect = Module(
         "pyspark.pandas.tests.connect.frame.test_parity_asfreq",
         "pyspark.pandas.tests.connect.frame.test_parity_asof",
     ],
-    excluded_python_implementations=[
-        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
-        # they aren't available there
-    ],
 )
 
 pyspark_pandas_slow_connect = Module(
@@ -1556,10 +1529,6 @@ pyspark_pandas_slow_connect = Module(
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_shift",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_transform",
     ],
-    excluded_python_implementations=[
-        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
-        # they aren't available there
-    ],
 )
 
 
@@ -1685,9 +1654,9 @@ docker_integration_tests = Module(
     build_profile_flags=["-Pdocker-integration-tests"],
     source_file_regexes=["connector/docker-integration-tests"],
     sbt_test_goals=["docker-integration-tests/test"],
-    environ=None
-    if "GITHUB_ACTIONS" not in os.environ
-    else {"ENABLE_DOCKER_INTEGRATION_TESTS": "1"},
+    environ=(
+        None if "GITHUB_ACTIONS" not in os.environ else {"ENABLE_DOCKER_INTEGRATION_TESTS": "1"}
+    ),
     test_tags=["org.apache.spark.tags.DockerTest"],
 )
 

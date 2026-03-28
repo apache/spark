@@ -29,6 +29,45 @@ function setAppBasePath(path) {
 }
 /* eslint-enable no-unused-vars */
 
+// Theme toggle (dark/light mode)
+function updateThemeButton(btn, theme) {
+  btn.textContent = "\u25D1";
+  btn.setAttribute("title", theme === "dark" ? "Switch to light mode" : "Switch to dark mode");
+  // Swap logo for dark/light mode
+  document.querySelectorAll("img.spark-logo").forEach(function(img) {
+    var src = img.getAttribute("src") || "";
+    if (theme === "dark") {
+      img.setAttribute("src", src.replace("spark-logo.svg", "spark-logo-rev.svg"));
+    } else {
+      img.setAttribute("src", src.replace("spark-logo-rev.svg", "spark-logo.svg"));
+    }
+  });
+}
+
+function initThemeToggle() {
+  var saved = localStorage.getItem("spark-theme");
+  var theme = saved ||
+    (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  document.documentElement.setAttribute("data-bs-theme", theme);
+
+  var btn = document.getElementById("theme-toggle");
+  if (btn) {
+    updateThemeButton(btn, theme);
+    btn.addEventListener("click", function() {
+      var current = document.documentElement.getAttribute("data-bs-theme");
+      var next = current === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-bs-theme", next);
+      localStorage.setItem("spark-theme", next);
+      updateThemeButton(btn, next);
+    });
+  }
+}
+
+// Initialize theme toggle
+$(function() {
+  initThemeToggle();
+});
+
 // Persist BS5 collapse state in localStorage
 $(function() {
   $(document).on("shown.bs.collapse hidden.bs.collapse", ".collapsible-table", function(e) {
@@ -106,4 +145,17 @@ $(function() {
   $(document).on("click", "[data-action=clickPhysicalPlanDetails]", function() {
     clickPhysicalPlanDetails();
   });
+});
+
+// Footer uptime counter
+$(function() {
+  var el = document.getElementById("footer-uptime");
+  if (!el) return;
+  function update() {
+    var ms = Date.now() - Number(el.dataset.startTime);
+    var m = Math.floor(ms / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
+    el.textContent = "Uptime: " + (d > 0 ? d + "d " : "") + (h % 24) + "h " + (m % 60) + "m";
+  }
+  update();
+  setInterval(update, 60000);
 });

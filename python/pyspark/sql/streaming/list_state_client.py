@@ -57,9 +57,7 @@ class ListStateClient:
             return False
         else:
             # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(
-                f"Error checking value state exists: " f"{response_message[1]}"
-            )
+            raise PySparkRuntimeError(f"Error checking value state exists: {response_message[1]}")
 
     def get(self, state_name: str, iterator_id: str) -> Tuple[Tuple, bool]:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
@@ -125,7 +123,7 @@ class ListStateClient:
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(f"Error updating value state: " f"{response_message[1]}")
+            raise PySparkRuntimeError(f"Error updating value state: {response_message[1]}")
 
     def append_list(self, state_name: str, values: List[Tuple]) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
@@ -148,7 +146,7 @@ class ListStateClient:
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(f"Error updating value state: " f"{response_message[1]}")
+            raise PySparkRuntimeError(f"Error updating value state: {response_message[1]}")
 
     def put(self, state_name: str, values: List[Tuple]) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
@@ -170,7 +168,7 @@ class ListStateClient:
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(f"Error updating value state: " f"{response_message[1]}")
+            raise PySparkRuntimeError(f"Error updating value state: {response_message[1]}")
 
     def clear(self, state_name: str) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
@@ -185,7 +183,7 @@ class ListStateClient:
         status = response_message[0]
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(f"Error clearing value state: " f"{response_message[1]}")
+            raise PySparkRuntimeError(f"Error clearing value state: {response_message[1]}")
 
 
 class ListStateIterator:

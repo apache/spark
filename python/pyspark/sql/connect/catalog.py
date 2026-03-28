@@ -15,11 +15,8 @@
 # limitations under the License.
 #
 from pyspark.errors import PySparkTypeError
-from pyspark.sql.connect.utils import check_dependencies
 
-check_dependencies(__name__)
-
-from typing import Any, Callable, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
 import warnings
 import pyarrow as pa
@@ -28,8 +25,10 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.sql.types import StructType
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.catalog import (
+    CachedTable,
     Catalog as PySparkCatalog,
     CatalogMetadata,
+    CatalogTablePartition,
     Database,
     Table,
     Function,
@@ -254,9 +253,10 @@ class Catalog:
     ) -> "DataFrame":
         if schema is not None and not isinstance(schema, StructType):
             raise PySparkTypeError(
-                errorClass="NOT_STRUCT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "schema",
+                    "expected_type": "struct type",
                     "arg_type": type(schema).__name__,
                 },
             )
@@ -322,6 +322,90 @@ class Catalog:
 
     refreshByPath.__doc__ = PySparkCatalog.refreshByPath.__doc__
 
+    def listCachedTables(self) -> List[CachedTable]:
+        table = self._execute_and_fetch(plan.ListCachedTables())
+        return [
+            CachedTable(table[0][i].as_py(), table[1][i].as_py()) for i in range(table.num_rows)
+        ]
+
+    listCachedTables.__doc__ = PySparkCatalog.listCachedTables.__doc__
+
+    def dropTable(self, tableName: str, ifExists: bool = False, purge: bool = False) -> None:
+        self._execute_and_fetch(
+            plan.DropTable(table_name=tableName, if_exists=ifExists, purge=purge)
+        )
+
+    dropTable.__doc__ = PySparkCatalog.dropTable.__doc__
+
+    def dropView(self, viewName: str, ifExists: bool = False) -> None:
+        self._execute_and_fetch(plan.DropView(view_name=viewName, if_exists=ifExists))
+
+    dropView.__doc__ = PySparkCatalog.dropView.__doc__
+
+    def createDatabase(
+        self, dbName: str, ifNotExists: bool = False, properties: Optional[Dict[str, str]] = None
+    ) -> None:
+        self._execute_and_fetch(
+            plan.CreateDatabase(db_name=dbName, if_not_exists=ifNotExists, properties=properties)
+        )
+
+    createDatabase.__doc__ = PySparkCatalog.createDatabase.__doc__
+
+    def dropDatabase(self, dbName: str, ifExists: bool = False, cascade: bool = False) -> None:
+        self._execute_and_fetch(
+            plan.DropDatabase(db_name=dbName, if_exists=ifExists, cascade=cascade)
+        )
+
+    dropDatabase.__doc__ = PySparkCatalog.dropDatabase.__doc__
+
+    def listPartitions(self, tableName: str) -> List[CatalogTablePartition]:
+        table = self._execute_and_fetch(plan.ListPartitions(table_name=tableName))
+        return [CatalogTablePartition(table[0][i].as_py()) for i in range(table.num_rows)]
+
+    listPartitions.__doc__ = PySparkCatalog.listPartitions.__doc__
+
+    def listViews(self, dbName: Optional[str] = None, pattern: Optional[str] = None) -> List[Table]:
+        if pattern is not None and dbName is None:
+            dbName = self.currentDatabase()
+        table = self._execute_and_fetch(plan.ListViews(db_name=dbName, pattern=pattern))
+        return [
+            Table(
+                name=table[0][i].as_py(),
+                catalog=table[1][i].as_py(),
+                namespace=table[2][i].as_py(),
+                description=table[3][i].as_py(),
+                tableType=table[4][i].as_py(),
+                isTemporary=table[5][i].as_py(),
+            )
+            for i in range(table.num_rows)
+        ]
+
+    listViews.__doc__ = PySparkCatalog.listViews.__doc__
+
+    def getTableProperties(self, tableName: str) -> Dict[str, str]:
+        t = self._execute_and_fetch(plan.GetTableProperties(table_name=tableName))
+        return {t[0][i].as_py(): t[1][i].as_py() for i in range(t.num_rows)}
+
+    getTableProperties.__doc__ = PySparkCatalog.getTableProperties.__doc__
+
+    def getCreateTableString(self, tableName: str, asSerde: bool = False) -> str:
+        t = self._execute_and_fetch(
+            plan.GetCreateTableString(table_name=tableName, as_serde=asSerde)
+        )
+        return t[0][0].as_py() if t.num_rows > 0 else ""
+
+    getCreateTableString.__doc__ = PySparkCatalog.getCreateTableString.__doc__
+
+    def truncateTable(self, tableName: str) -> None:
+        self._execute_and_fetch(plan.TruncateTable(table_name=tableName))
+
+    truncateTable.__doc__ = PySparkCatalog.truncateTable.__doc__
+
+    def analyzeTable(self, tableName: str, noScan: bool = False) -> None:
+        self._execute_and_fetch(plan.AnalyzeTable(table_name=tableName, no_scan=noScan))
+
+    analyzeTable.__doc__ = PySparkCatalog.analyzeTable.__doc__
+
     def registerFunction(
         self, name: str, f: Callable[..., Any], returnType: Optional["DataTypeOrString"] = None
     ) -> "UserDefinedFunctionLike":
@@ -348,7 +432,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.connect.catalog,
         globs=globs,
         optionflags=doctest.ELLIPSIS

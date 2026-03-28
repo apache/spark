@@ -414,7 +414,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       Seq(ExecutorCacheTaskLocation(blockManagerId.host, blockManagerId.executorId))
     } else {
       ssc.sparkContext.env.blockManager.master.getMemoryStatus.filter { case (blockManagerId, _) =>
-        blockManagerId.executorId != SparkContext.DRIVER_IDENTIFIER // Ignore the driver location
+        !SparkContext.isDriver(blockManagerId.executorId) // Ignore the driver location
       }.map { case (blockManagerId, _) =>
         ExecutorCacheTaskLocation(blockManagerId.host, blockManagerId.executorId)
       }.toSeq

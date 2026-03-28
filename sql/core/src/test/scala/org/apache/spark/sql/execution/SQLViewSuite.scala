@@ -464,11 +464,21 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("error handling: fail if the temp view name contains the database prefix") {
     // Fully qualified table name like "database.table" is not allowed for temporary view
-    val e = intercept[ParseException] {
-      sql("CREATE OR REPLACE TEMPORARY VIEW default.myabcdview AS SELECT * FROM jt")
-    }
-    assert(e.message.contains(
-      "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names"))
+    val sqlText = "CREATE OR REPLACE TEMPORARY VIEW default.myabcdview AS SELECT * FROM jt"
+    checkError(
+      exception = intercept[ParseException] {
+        sql(sqlText)
+      },
+      condition = "INVALID_TEMP_OBJ_QUALIFIER",
+      sqlState = "42602",
+      parameters = Map(
+        "objectType" -> "VIEW",
+        "objectName" -> "`myabcdview`",
+        "qualifier" -> "`default`"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = sqlText.length - 1))
   }
 
   test("error handling: disallow IF NOT EXISTS for CREATE TEMPORARY VIEW") {
@@ -627,11 +637,18 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
       sql("DROP VIEW testView")
 
-      val e = intercept[ParseException] {
-        sql("CREATE OR REPLACE VIEW IF NOT EXISTS testView AS SELECT id FROM jt")
-      }
-      assert(e.message.contains(
-        "CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed"))
+      val sqlText = "CREATE OR REPLACE VIEW IF NOT EXISTS testView AS SELECT id FROM jt"
+      checkError(
+        exception = intercept[ParseException] {
+          sql(sqlText)
+        },
+        condition = "CREATE_VIEW_WITH_IF_NOT_EXISTS_AND_REPLACE",
+        sqlState = "42601",
+        parameters = Map("viewName" -> "testView"),
+        context = ExpectedContext(
+          fragment = sqlText,
+          start = 0,
+          stop = sqlText.length - 1))
     }
   }
 

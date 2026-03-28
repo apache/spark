@@ -403,8 +403,7 @@ case class DataSource(
             caseInsensitiveOptions - "path",
             fileCatalog.allFiles())
         }.getOrElse {
-          throw QueryCompilationErrors.dataSchemaNotSpecifiedError(
-            format.toString, fileCatalog.allFiles().mkString(","))
+          throw QueryCompilationErrors.dataSchemaNotSpecifiedError(format.toString)
         }
 
         HadoopFsRelation(

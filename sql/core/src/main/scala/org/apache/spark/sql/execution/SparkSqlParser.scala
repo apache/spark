@@ -45,7 +45,7 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.util.Utils.getUriBuilder
 
 /**
@@ -221,6 +221,37 @@ class SparkSqlAstBuilder extends AstBuilder {
         val qualifier = functionIdentifier.init.mkString(".")
         throw QueryParsingErrors.invalidTempObjQualifierError(
           "FUNCTION", funcName, qualifier, ctx)
+    }
+  }
+
+  /**
+   * Normalizes a multi-part identifier for CREATE/DROP TEMPORARY VIEW.
+   * Allows: 1-part (v), 2-part session.v, 3-part system.session.v.
+   * Returns the single view name. Throws INVALID_TEMP_OBJ_QUALIFIER for invalid qualifiers.
+   */
+  private def normalizeTempViewIdentifier(
+      viewIdentifier: Seq[String],
+      ctx: ParserRuleContext): String = {
+    viewIdentifier.length match {
+      case 1 => viewIdentifier.head
+      case 2 =>
+        if (viewIdentifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
+          viewIdentifier.last
+        } else {
+          throw QueryParsingErrors.invalidTempObjQualifierError(
+            "VIEW", viewIdentifier.last, viewIdentifier.head, ctx)
+        }
+      case 3 =>
+        if (viewIdentifier(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+            viewIdentifier(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
+          viewIdentifier.last
+        } else {
+          throw QueryParsingErrors.invalidTempObjQualifierError(
+            "VIEW", viewIdentifier.last, viewIdentifier.init.mkString("."), ctx)
+        }
+      case _ =>
+        throw QueryParsingErrors.invalidTempObjQualifierError(
+          "VIEW", viewIdentifier.last, viewIdentifier.init.mkString("."), ctx)
     }
   }
 
@@ -529,7 +560,8 @@ class SparkSqlAstBuilder extends AstBuilder {
       }
 
       withIdentClause(identCtx, ident => {
-        val table = tableIdentifier(ident, "CREATE TEMPORARY VIEW", ctx)
+        val viewName = normalizeTempViewIdentifier(ident, ctx)
+        val table = TableIdentifier(viewName)
         val optionsList: Map[String, String] =
           options.options.map { case (key, value) =>
             val newValue: String =
@@ -554,8 +586,15 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitCreateTempViewUsing(
       ctx: CreateTempViewUsingContext): LogicalPlan = withOrigin(ctx) {
+    val ti = visitTableIdentifier(ctx.tableIdentifier())
+    val tableIdent = if (ctx.GLOBAL != null) {
+      ti
+    } else {
+      val parts = ti.database.toSeq :+ ti.table
+      TableIdentifier(normalizeTempViewIdentifier(parts, ctx))
+    }
     CreateTempViewUsing(
-      tableIdent = visitTableIdentifier(ctx.tableIdentifier()),
+      tableIdent = tableIdent,
       userSpecifiedSchema = Option(ctx.colTypeList()).map(createSchema),
       replace = ctx.REPLACE != null,
       global = ctx.GLOBAL != null,
@@ -685,7 +724,8 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
 
     if (ctx.EXISTS != null && ctx.REPLACE != null) {
-      throw QueryParsingErrors.createViewWithBothIfNotExistsAndReplaceError(ctx)
+      throw QueryParsingErrors.createViewWithBothIfNotExistsAndReplaceError(
+        ctx.identifierReference().getText, ctx)
     }
 
     val properties = ctx.propertyList.asScala.headOption.map(visitPropertyKeyValues)
@@ -744,12 +784,8 @@ class SparkSqlAstBuilder extends AstBuilder {
       }
 
       withIdentClause(ctx.identifierReference(), Seq(qPlan), (ident, otherPlans) => {
-        if (ident.length > 1) {
-          // Temporary view names should NOT contain database prefix like "database.table"
-          throw QueryParsingErrors
-            .notAllowedToAddDBPrefixForTempViewError(ident, ctx)
-        }
-        val tableIdentifier = TableIdentifier(ident.head)
+        val viewName = normalizeTempViewIdentifier(ident, ctx)
+        val tableIdentifier = TableIdentifier(viewName)
 
         CreateViewCommand(
           tableIdentifier,
@@ -778,7 +814,8 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
 
     if (ctx.EXISTS != null && ctx.REPLACE != null) {
-      throw QueryParsingErrors.createViewWithBothIfNotExistsAndReplaceError(ctx)
+      throw QueryParsingErrors.createViewWithBothIfNotExistsAndReplaceError(
+        ctx.identifierReference().getText, ctx)
     }
 
     if (ctx.METRICS(0) == null) {
@@ -894,21 +931,42 @@ class SparkSqlAstBuilder extends AstBuilder {
         throw QueryParsingErrors.createFuncWithBothIfNotExistsAndReplaceError(ctx)
       }
 
-      // Reject invalid options
+      // Reject invalid options and validate parameter data types eagerly so that errors
+      // are reported with correct line numbers relative to the full SQL statement.
       for {
         parameters <- Option(ctx.parameters)
         colDefinition <- parameters.colDefinition().asScala
-        option <- colDefinition.colDefinitionOption().asScala
       } {
-        if (option.generationExpression() != null) {
-          throw QueryParsingErrors.createFuncWithGeneratedColumnsError(ctx.parameters)
-        }
-        if (option.columnConstraintDefinition() != null) {
-          throw QueryParsingErrors.createFuncWithConstraintError(ctx.parameters)
+        // Trigger data type validation now (while the original parse tree positions are
+        // available) so that any type errors (e.g. STRUCT without <>) report the correct
+        // line/position. The result is unused; this call is purely for its side effect of
+        // throwing a parse exception with accurate location information.
+        typedVisit[DataType](colDefinition.dataType())
+        for (option <- colDefinition.colDefinitionOption().asScala) {
+          if (option.generationExpression() != null) {
+            throw QueryParsingErrors.createFuncWithGeneratedColumnsError(ctx.parameters)
+          }
+          if (option.columnConstraintDefinition() != null) {
+            throw QueryParsingErrors.createFuncWithConstraintError(ctx.parameters)
+          }
         }
       }
 
       val inputParamText = Option(ctx.parameters).map(source)
+      // Validate return type eagerly for the same reason as parameter data types above:
+      // trigger type errors now so they report correct positions.
+      // Skip validation when the return type is TABLE (for table-valued functions):
+      // "RETURNS TABLE" or "RETURNS TABLE(...)" is not a real data type to validate.
+      Option(ctx.dataType).foreach { dt =>
+        if (!source(dt).equalsIgnoreCase("table")) {
+          typedVisit[DataType](dt)
+        }
+      }
+      Option(ctx.returnParams).foreach { params =>
+        params.colType().asScala.foreach { colType =>
+          typedVisit[DataType](colType.dataType())
+        }
+      }
       val returnTypeText: String =
         if (ctx.RETURNS != null &&
           (Option(ctx.dataType).nonEmpty || Option(ctx.returnParams).nonEmpty)) {
@@ -1090,35 +1148,15 @@ class SparkSqlAstBuilder extends AstBuilder {
       location: Option[String],
       maybeSerdeInfo: Option[SerdeInfo],
       ctx: ParserRuleContext): CatalogStorageFormat = {
-    if (maybeSerdeInfo.isEmpty) {
-      CatalogStorageFormat.empty.copy(locationUri = location.map(CatalogUtils.stringToURI))
-    } else {
-      val serdeInfo = maybeSerdeInfo.get
-      if (serdeInfo.storedAs.isEmpty) {
-        CatalogStorageFormat.empty.copy(
-          locationUri = location.map(CatalogUtils.stringToURI),
-          inputFormat = serdeInfo.formatClasses.map(_.input),
-          outputFormat = serdeInfo.formatClasses.map(_.output),
-          serde = serdeInfo.serde,
-          properties = serdeInfo.serdeProperties)
-      } else {
-        HiveSerDe.sourceToSerDe(serdeInfo.storedAs.get) match {
-          case Some(hiveSerde) =>
-            CatalogStorageFormat.empty.copy(
-              locationUri = location.map(CatalogUtils.stringToURI),
-              inputFormat = hiveSerde.inputFormat,
-              outputFormat = hiveSerde.outputFormat,
-              serde = serdeInfo.serde.orElse(hiveSerde.serde),
-              properties = serdeInfo.serdeProperties)
-          case _ =>
-            operationNotAllowed(s"STORED AS with file format '${serdeInfo.storedAs.get}'", ctx)
-        }
-      }
-    }
+    HiveSerDe.buildStorageFormat(
+      location,
+      maybeSerdeInfo,
+      si => QueryParsingErrors.operationNotAllowedError(
+        s"STORED AS with file format '${si.storedAs.get}'", ctx))
   }
 
   /**
-   * Create a [[CreateTableLikeCommand]] command.
+   * Create a [[CreateTableLike]] logical plan.
    *
    * For example:
    * {{{
@@ -1135,8 +1173,6 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitCreateTableLike(ctx: CreateTableLikeContext): LogicalPlan = withOrigin(ctx) {
-    val targetTable = visitTableIdentifier(ctx.target)
-    val sourceTable = visitTableIdentifier(ctx.source)
     checkDuplicateClauses(ctx.tableProvider, "PROVIDER", ctx)
     checkDuplicateClauses(ctx.createFileFormat, "STORED AS/BY", ctx)
     checkDuplicateClauses(ctx.rowFormat, "ROW FORMAT", ctx)
@@ -1162,11 +1198,16 @@ class SparkSqlAstBuilder extends AstBuilder {
       case _ =>
     }
 
-    val storage = toStorageFormat(location, serdeInfo, ctx)
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val cleanedProperties = cleanTableProperties(ctx, properties)
-    CreateTableLikeCommand(
-      targetTable, sourceTable, storage, provider, cleanedProperties, ctx.EXISTS != null)
+    CreateTableLike(
+      name = withIdentClause(ctx.target, UnresolvedIdentifier(_)),
+      source = createUnresolvedTableOrView(ctx.source, "CREATE TABLE LIKE", allowTempView = true),
+      location = location,
+      provider = provider,
+      serdeInfo = serdeInfo,
+      properties = cleanedProperties,
+      ifNotExists = ctx.EXISTS != null)
   }
 
   /**

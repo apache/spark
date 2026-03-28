@@ -549,16 +549,16 @@ Project [id#xL, sum_rows#xL]
 -- !query
 DROP VIEW v_window
 -- !query analysis
-DropTempViewCommand v_window
+DropTempViewCommand v_window, false
 
 
 -- !query
 DROP VIEW tenk2
 -- !query analysis
-DropTempViewCommand tenk2
+DropTempViewCommand tenk2, false
 
 
 -- !query
 DROP VIEW int4_tbl
 -- !query analysis
-DropTempViewCommand int4_tbl
+DropTempViewCommand int4_tbl, false

@@ -36,8 +36,7 @@ case class SchemaOfAvro(
 
   @transient private lazy val avroOptions = AvroOptions(options)
 
-  @transient private lazy val actualSchema =
-    new Schema.Parser().setValidateDefaults(false).parse(jsonFormatSchema)
+  @transient private lazy val actualSchema = AvroUtils.parseAvroSchema(jsonFormatSchema)
 
   @transient private lazy val expectedSchema = avroOptions.schema.getOrElse(actualSchema)
 

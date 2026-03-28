@@ -21,6 +21,7 @@ import java.io.DataOutputStream
 import java.util
 
 import org.apache.spark.api.python._
+import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
@@ -146,38 +147,27 @@ class ArrowPythonWithNamedArgumentRunner(
 object ArrowPythonRunner {
   /** Return Map with conf settings to be used in ArrowPythonRunner */
   def getPythonRunnerConfMap(conf: SQLConf): Map[String, String] = {
-    val timeZoneConf = Seq(SQLConf.SESSION_LOCAL_TIMEZONE.key -> conf.sessionLocalTimeZone)
-    val pandasColsByName = Seq(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME.key ->
-      conf.pandasGroupedMapAssignColumnsByName.toString)
-    val arrowSafeTypeCheck = Seq(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION.key ->
-      conf.arrowSafeTypeConversion.toString)
-    val arrowAyncParallelism = conf.pythonUDFArrowConcurrencyLevel.map(v =>
-      Seq(SQLConf.PYTHON_UDF_ARROW_CONCURRENCY_LEVEL.key -> v.toString)
-    ).getOrElse(Seq.empty)
-    val useLargeVarTypes = Seq(SQLConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES.key ->
-      conf.arrowUseLargeVarTypes.toString)
-    val legacyPandasConversion = Seq(
-      SQLConf.PYTHON_TABLE_UDF_LEGACY_PANDAS_CONVERSION_ENABLED.key ->
-      conf.legacyPandasConversion.toString)
-    val legacyPandasConversionUDF = Seq(
-      SQLConf.PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED.key ->
-      conf.legacyPandasConversionUDF.toString)
-    val intToDecimalCoercion = Seq(
-      SQLConf.PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED.key ->
-      conf.getConf(SQLConf.PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED, false).toString)
-    val binaryAsBytes = Seq(
-      SQLConf.PYSPARK_BINARY_AS_BYTES.key ->
-      conf.pysparkBinaryAsBytes.toString)
-    val udfProfiler = conf.pythonUDFProfiler.map(p =>
-      Seq(SQLConf.PYTHON_UDF_PROFILER.key -> p)
-    ).getOrElse(Seq.empty)
-    val dataSourceProfiler = conf.pythonDataSourceProfiler.map(p =>
-      Seq(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p)
-    ).getOrElse(Seq.empty)
-    Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++
-      arrowAyncParallelism ++ useLargeVarTypes ++
-      intToDecimalCoercion ++ binaryAsBytes ++
-      legacyPandasConversion ++ legacyPandasConversionUDF ++
-      udfProfiler ++ dataSourceProfiler: _*)
+    val confMap = collection.mutable.Map.empty[String, String]
+    Seq(
+      SQLConf.SESSION_LOCAL_TIMEZONE,
+      SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME,
+      SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION,
+      SQLConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES,
+      SQLConf.PYTHON_TABLE_UDF_LEGACY_PANDAS_CONVERSION_ENABLED,
+      SQLConf.PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED,
+      SQLConf.PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED,
+      SQLConf.PYTHON_UDF_PANDAS_PREFER_INT_EXTENSION_DTYPE,
+      SQLConf.PYSPARK_BINARY_AS_BYTES,
+      // Optional
+      SQLConf.PYTHON_UDF_ARROW_CONCURRENCY_LEVEL,
+      SQLConf.PYTHON_UDF_PROFILER,
+      SQLConf.PYTHON_DATA_SOURCE_PROFILER
+    ).foreach {
+      case c: OptionalConfigEntry[_] =>
+        conf.getConf(c).foreach(v => confMap.update(c.key, v.toString))
+      case c: ConfigEntry[_] =>
+        confMap.update(c.key, conf.getConf(c).toString)
+    }
+    confMap.toMap
   }
 }

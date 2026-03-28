@@ -38,10 +38,15 @@ private[v1] class SqlResource extends BaseAppResource {
       @DefaultValue("true") @QueryParam("details") details: Boolean,
       @DefaultValue("true") @QueryParam("planDescription") planDescription: Boolean,
       @DefaultValue("0") @QueryParam("offset") offset: Int,
-      @DefaultValue("20") @QueryParam("length") length: Int): Seq[ExecutionData] = {
+      @DefaultValue("-1") @QueryParam("length") length: Int): Seq[ExecutionData] = {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
-      sqlStore.executionsList(offset, length).map { exec =>
+      val execs = if (length <= 0) {
+        sqlStore.executionsList()
+      } else {
+        sqlStore.executionsList(offset, length)
+      }
+      execs.map { exec =>
         val graph = sqlStore.planGraph(exec.executionId)
         prepareExecutionData(exec, graph, details, planDescription)
       }
@@ -104,7 +109,10 @@ private[v1] class SqlResource extends BaseAppResource {
       completed,
       failed,
       nodes,
-      edges)
+      edges,
+      if (exec.queryId != null) exec.queryId.toString else null,
+      exec.errorMessage.orNull,
+      exec.rootExecutionId)
   }
 
   private def printableMetrics(allNodes: collection.Seq[SparkPlanGraphNode],

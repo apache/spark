@@ -43,7 +43,6 @@ from pyspark.sql import Row
 from pyspark.sql.types import StructType, StructField, VariantVal
 from pyspark.sql.functions import col, when
 
-
 __all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
 
 
@@ -452,12 +451,14 @@ class PySparkErrorTestUtils:
                     f"Expected message parameter key '{key}' was not found "
                     "in actual message parameters.",
                 )
-                self.assertRegex(
-                    actual[key],
-                    value,
-                    f"Expected message parameter value '{value}' does not match actual message "
-                    f"parameter value '{actual[key]}'.",
-                ),
+                (
+                    self.assertRegex(
+                        actual[key],
+                        value,
+                        f"Expected message parameter value '{value}' does not match actual message "
+                        f"parameter value '{actual[key]}'.",
+                    ),
+                )
         else:
             self.assertEqual(
                 expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
@@ -473,9 +474,9 @@ class PySparkErrorTestUtils:
                     expected, actual, f"Expected QueryContext was '{expected}', got '{actual}'"
                 )
                 if actual == QueryContextType.DataFrame:
-                    assert (
-                        fragment is not None
-                    ), "`fragment` is required when QueryContextType is DataFrame."
+                    assert fragment is not None, (
+                        "`fragment` is required when QueryContextType is DataFrame."
+                    )
                     expected = fragment
                     actual = actual_context.fragment()
                     self.assertEqual(
@@ -592,13 +593,21 @@ def assertSchemaEqual(
     """
     if not isinstance(actual, StructType):
         raise PySparkTypeError(
-            errorClass="NOT_STRUCT",
-            messageParameters={"arg_name": "actual", "arg_type": type(actual).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "actual",
+                "expected_type": "struct type",
+                "arg_type": type(actual).__name__,
+            },
         )
     if not isinstance(expected, StructType):
         raise PySparkTypeError(
-            errorClass="NOT_STRUCT",
-            messageParameters={"arg_name": "expected", "arg_type": type(expected).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "expected",
+                "expected_type": "struct type",
+                "arg_type": type(expected).__name__,
+            },
         )
 
     def compare_schemas_ignore_nullable(s1: StructType, s2: StructType):
@@ -1162,7 +1171,7 @@ def _test() -> None:
     globs = pyspark.testing.utils.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("testing.utils tests").getOrCreate()
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.testing.utils,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

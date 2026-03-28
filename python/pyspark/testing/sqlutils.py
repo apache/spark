@@ -30,7 +30,6 @@ from pyspark.testing.utils import (
 )
 from pyspark.find_spark_home import _find_spark_home
 
-
 SPARK_HOME = _find_spark_home()
 
 
@@ -128,6 +127,20 @@ class SQLTestUtils:
         finally:
             for t in tables:
                 self.spark.sql("DROP TABLE IF EXISTS %s" % t)
+
+    @contextmanager
+    def view(self, *views):
+        """
+        A convenient context manager for persistent (catalog) views. On exit, runs
+        ``DROP VIEW IF EXISTS`` for each name. For temporary views, use :meth:`temp_view`.
+        """
+        assert hasattr(self, "spark"), "it should have 'spark' attribute, having a spark session."
+
+        try:
+            yield
+        finally:
+            for v in views:
+                self.spark.sql("DROP VIEW IF EXISTS %s" % v)
 
     @contextmanager
     def temp_view(self, *views):

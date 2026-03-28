@@ -19,10 +19,12 @@ package org.apache.spark.sql.catalyst.parser
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedStreamingRelation, UnresolvedRelation, UnresolvedStar, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedStreamingRelation, RelationChanges, UnresolvedRelation, UnresolvedStar, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.plans.logical.{Project, SubqueryAlias}
 import org.apache.spark.sql.catalyst.streaming.{Unassigned, UserProvided}
+import org.apache.spark.sql.connector.catalog.{ChangelogInfo, ChangelogRange}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class StreamRelationParserSuite extends AnalysisTest {
@@ -582,6 +584,82 @@ class StreamRelationParserSuite extends AnalysisTest {
     interceptParseException(parsePlan)(
       "SELECT * FROM STREAM t IDENTIFIED BY src1 IDENTIFIED BY src2"
     )(None)
+  }
+
+  // ===================================
+  // Streaming CHANGES clause tests
+  // ===================================
+
+  test("STREAM t CHANGES - bare (unbounded)") {
+    val plan = parsePlan("SELECT * FROM STREAM t CHANGES")
+    val relationChanges = plan.collect { case rc: RelationChanges => rc }
+    assert(relationChanges.size == 1)
+    assert(relationChanges.head.changelogInfo.range().isInstanceOf[ChangelogRange.UnboundedRange])
+    assert(relationChanges.head.changelogInfo.deduplicationMode() ==
+      ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+    assert(!relationChanges.head.changelogInfo.computeUpdates())
+  }
+
+  test("STREAM t CHANGES FROM VERSION") {
+    val plan = parsePlan("SELECT * FROM STREAM t CHANGES FROM VERSION 1")
+    val relationChanges = plan.collect { case rc: RelationChanges => rc }
+    assert(relationChanges.size == 1)
+    val range = relationChanges.head.changelogInfo.range()
+      .asInstanceOf[ChangelogRange.VersionRange]
+    assert(range.startingVersion() == "1")
+    assert(!range.endingVersion().isPresent)
+    assert(range.startingBoundInclusive())
+  }
+
+  test("STREAM t CHANGES FROM VERSION EXCLUSIVE") {
+    val plan = parsePlan("SELECT * FROM STREAM t CHANGES FROM VERSION 5 EXCLUSIVE")
+    val relationChanges = plan.collect { case rc: RelationChanges => rc }
+    assert(relationChanges.size == 1)
+    val range = relationChanges.head.changelogInfo.range()
+      .asInstanceOf[ChangelogRange.VersionRange]
+    assert(range.startingVersion() == "5")
+    assert(!range.startingBoundInclusive())
+  }
+
+  test("STREAM t CHANGES FROM TIMESTAMP") {
+    val plan = parsePlan("SELECT * FROM STREAM t CHANGES FROM TIMESTAMP '2026-01-01'")
+    val relationChanges = plan.collect { case rc: RelationChanges => rc }
+    assert(relationChanges.size == 1)
+    assert(relationChanges.head.changelogInfo.range()
+      .isInstanceOf[ChangelogRange.TimestampRange])
+  }
+
+  test("STREAM t CHANGES with IDENTIFIED BY and alias") {
+    val plan = parsePlan(
+      "SELECT * FROM STREAM t CHANGES FROM VERSION 1 IDENTIFIED BY my_source AS src")
+    val namedStreamingRelations = plan.collect {
+      case n: NamedStreamingRelation => n
+    }
+    assert(namedStreamingRelations.size == 1)
+    assert(namedStreamingRelations.head.sourceIdentifyingName == UserProvided("my_source"))
+    val relationChanges = plan.collect { case rc: RelationChanges => rc }
+    assert(relationChanges.size == 1)
+  }
+
+  test("STREAM t CHANGES with WITH options") {
+    val plan = parsePlan(
+      "SELECT * FROM STREAM t CHANGES FROM VERSION 1 " +
+        "WITH (deduplicationMode = 'none', computeUpdates = 'true')")
+    val relationChanges = plan.collect { case rc: RelationChanges => rc }
+    assert(relationChanges.size == 1)
+    assert(relationChanges.head.changelogInfo.deduplicationMode() ==
+      ChangelogInfo.DeduplicationMode.NONE)
+    assert(relationChanges.head.changelogInfo.computeUpdates())
+  }
+
+  test("STREAM t CHANGES - error: subquery in timestamp") {
+    checkError(
+      intercept[AnalysisException] {
+        parsePlan(
+          "SELECT * FROM STREAM t CHANGES " +
+            "FROM TIMESTAMP (SELECT MAX(ts) FROM other_table)")
+      },
+      condition = "INVALID_CDC_OPTION.INVALID_TIMESTAMP_EXPR")
   }
 
   test("Parse Exception: IDENTIFIED BY on non-streaming table") {
