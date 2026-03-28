@@ -50,6 +50,8 @@
       url: sql-data-sources-binaryFile.html
     - text: Troubleshooting
       url: sql-data-sources-troubleshooting.html
+- text: Data Source V2
+  url: sql-data-sources-v2.html
 - text: Performance Tuning
   url: sql-performance-tuning.html
   subitems:
