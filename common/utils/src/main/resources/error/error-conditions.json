@@ -2200,7 +2200,8 @@
           "Remove a comment on the namespace: <namespace>."
         ]
       },
-      "RENAME_TABLE" : {
+
+      "REORGANIZE_TABLE" : {
         "message" : [
           "Rename the table <oldName> to <newName>."
         ]
@@ -5714,6 +5715,12 @@
     ],
     "sqlState" : "38000"
   },
+  "QUALIFY_WITHOUT_WINDOW_EXPRESSION" : {
+    "message" : [
+      "The QUALIFY clause requires at least one window function to be present in the SELECT list or the QUALIFY clause. Found: <condition>."
+    ],
+    "sqlState" : "42000"
+  },
   "RECURSION_LEVEL_LIMIT_EXCEEDED" : {
     "message" : [
       "Recursion level limit <levelLimit> reached but query has not exhausted, try increasing it like 'WITH RECURSIVE t(col) MAX RECURSION LEVEL 200'."
@@ -7482,6 +7489,11 @@
       "DROP_NAMESPACE" : {
         "message" : [
           "Drop the namespace <namespace>."
+        ]
+      },
+      "QUALIFY_WITH_AGGREGATE_EXPRESSION" : {
+        "message" : [
+          "The QUALIFY clause cannot contain aggregate functions. Found: <aggExpr>."
         ]
       },
       "GEOSPATIAL_DISABLED" : {
