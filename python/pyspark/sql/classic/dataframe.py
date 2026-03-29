@@ -1331,7 +1331,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         if how is not None and how not in ["any", "all"]:
             raise PySparkValueError(
                 errorClass="VALUE_NOT_ANY_OR_ALL",
-                messageParameters={"arg_name": "how", "arg_type": how},
+                messageParameters={"arg_name": "how", "arg_value": how},
             )
 
         if subset is None:
