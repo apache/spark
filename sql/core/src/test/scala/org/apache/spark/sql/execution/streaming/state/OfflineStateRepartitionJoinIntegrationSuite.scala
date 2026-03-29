@@ -18,10 +18,12 @@ package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.spark.sql.execution.datasources.v2.state.{StateSourceOptions, StreamStreamJoinTestUtils}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.tags.SlowSQLTest
 
 /**
  * Integration test suite for stream-stream join operator repartitioning.
  */
+@SlowSQLTest
 class OfflineStateRepartitionJoinCkptV1IntegrationSuite
   extends OfflineStateRepartitionIntegrationSuiteBase {
 
@@ -77,6 +79,7 @@ class OfflineStateRepartitionJoinCkptV1IntegrationSuite
   }
 }
 
+@SlowSQLTest
 class OfflineStateRepartitionJoinCkptV2IntegrationSuite
   extends OfflineStateRepartitionJoinCkptV1IntegrationSuite {
   override def beforeAll(): Unit = {
