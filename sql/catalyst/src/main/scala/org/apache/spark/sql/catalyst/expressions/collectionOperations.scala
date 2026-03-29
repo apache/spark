@@ -472,6 +472,250 @@ object ArraysZip {
 }
 
 /**
+ * Zips multiple nested arrays at their innermost level, producing a nested array of structs.
+ *
+ * Unlike [[ArraysZip]] which zips at the top level, this expression handles nested arrays
+ * (e.g., `array<array<T>>`) and zips at the innermost array level while preserving the
+ * outer array structure.
+ *
+ * This enables rebuilding nested struct arrays without higher-order functions, which is
+ * useful for nested column pruning through generators.
+ *
+ * Example (depth 2):
+ * {{{
+ *   NestedArraysZip([[[1,2],[3]], [[a,b],[c]]], ["x", "y"])
+ *   produces [[(1,a),(2,b)], [(3,c)]]   // type: array<array<struct<x:int, y:string>>>
+ * }}}
+ *
+ * Null handling:
+ * - If any top-level input is null, output is null
+ * - If an inner array at some position is null in any input, that output position is null
+ * - Uses max-length semantics at each level (shorter arrays padded with nulls)
+ *
+ * @param children The arrays to zip (all must have the same nesting depth)
+ * @param names The field names for the output struct
+ * @param depth The nesting depth at which to zip (1 = same as ArraysZip, 2 = one level nested)
+ */
+/**
+ * Zips multiple arrays at a specified nesting depth, creating struct elements at the innermost
+ * level. Created by PruneNestedFieldsThroughGenerateForScan during optimization, then executed
+ * at runtime in the scan Project to reconstruct pruned nested arrays from individual field arrays.
+ *
+ * For depth=1: Standard arrays_zip semantics (array<T1>, array<T2>) -> array<struct<T1, T2>>
+ * For depth>1: Recursively zips inner arrays at each position of outer arrays.
+ *
+ * Note: Uses CodegenFallback intentionally. Custom doGenCode implementations cause type
+ * resolution errors ("cannot be converted to numeric type"). This disables whole-stage
+ * codegen for the scan Project that contains this expression, which may affect runtime
+ * throughput on large explode pipelines. However, the scan IO savings from nested field
+ * pruning (reading fewer columns/sub-fields from Parquet) typically outweigh the codegen
+ * overhead. This expression only appears in depth>=2 nested array pruning
+ * (array<array<struct>>); depth-1 cases use the standard ArraysZip which supports codegen.
+ *
+ * @param children The array expressions to zip
+ * @param names The field names for the resulting struct
+ * @param depth The nesting depth at which to perform the zip (must be >= 1)
+ */
+case class NestedArraysZip(children: Seq[Expression], names: Seq[Expression], depth: Int)
+    extends Expression with ExpectsInputTypes with CodegenFallback {
+
+  require(depth >= 1, s"NestedArraysZip depth must be >= 1, got $depth")
+
+  if (children.size != names.size) {
+    throw new IllegalArgumentException(
+      "The numbers of zipped arrays and field names should be the same")
+  }
+
+  override lazy val resolved: Boolean =
+    childrenResolved && checkInputDataTypes().isSuccess && names.forall(_.resolved)
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    // Each child must be an array nested to the specified depth
+    Seq.fill(children.length)(ArrayType)
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.isEmpty) {
+      return TypeCheckResult.TypeCheckSuccess
+    }
+
+    // All children must have at least the specified nesting depth.
+    // We use >= (not ==) because recursive buildPrunedArrayFromSchema may produce children
+    // with extra array nesting (e.g., array<array<array<struct>>> for depth=2 when
+    // the innermost struct itself contains array fields). NestedArraysZip.eval correctly
+    // handles this by zipping at the specified depth, leaving deeper nesting intact.
+    val depths = children.map(c => computeArrayDepth(c.dataType))
+    val depthErrors = children.zipWithIndex.flatMap { case (child, idx) =>
+      val actualDepth = depths(idx)
+      if (actualDepth < depth) {
+        Some(s"Argument ${idx + 1} has array depth $actualDepth but required at least $depth")
+      } else {
+        None
+      }
+    }
+
+    if (depthErrors.nonEmpty) {
+      TypeCheckResult.TypeCheckFailure(depthErrors.mkString("; "))
+    } else if (depths.distinct.size > 1) {
+      // All children must have the same depth to produce consistent struct element types
+      TypeCheckResult.TypeCheckFailure(
+        s"All arguments must have the same array depth, but got: ${depths.mkString(", ")}")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  private def computeArrayDepth(dt: DataType): Int = dt match {
+    case ArrayType(elementType, _) => 1 + computeArrayDepth(elementType)
+    case _ => 0
+  }
+
+  /** Extract the innermost element type at the specified depth */
+  private def elementTypeAtDepth(dt: DataType, d: Int): DataType = {
+    if (d <= 0) dt
+    else dt match {
+      case ArrayType(elementType, _) => elementTypeAtDepth(elementType, d - 1)
+      case other => other
+    }
+  }
+
+  /** Get the containsNull flag at a given depth */
+  private def containsNullAtDepth(dt: DataType, d: Int): Boolean = {
+    if (d <= 1) dt match {
+      case ArrayType(_, containsNull) => containsNull
+      case _ => true
+    }
+    else dt match {
+      case ArrayType(elementType, _) => containsNullAtDepth(elementType, d - 1)
+      case _ => true
+    }
+  }
+
+  @transient private lazy val innermostElementTypes: Seq[DataType] =
+    children.map(c => elementTypeAtDepth(c.dataType, depth))
+
+  @transient override lazy val dataType: DataType = {
+    val structFields = innermostElementTypes.zip(names).map {
+      case (elementType, Literal(name, StringType)) =>
+        StructField(name.toString, elementType, nullable = true)
+      case (elementType, _) =>
+        StructField("_", elementType, nullable = true)
+    }
+    val innerStruct = StructType(structFields)
+
+    // Wrap in array types for each level of depth
+    (1 until depth).foldLeft(ArrayType(innerStruct, containsNull = false): DataType) {
+      (acc, _) => ArrayType(acc, containsNull = true)
+    }
+  }
+
+  override def nullable: Boolean = children.exists(_.nullable)
+
+  override def eval(input: InternalRow): Any = {
+    val inputArrays = children.map(_.eval(input).asInstanceOf[ArrayData])
+    if (inputArrays.contains(null)) {
+      null
+    } else {
+      zipAtDepth(inputArrays, depth)
+    }
+  }
+
+  /**
+   * Recursively zips arrays at the specified depth.
+   * At depth 1, performs standard arrays_zip semantics.
+   * At depth > 1, iterates outer arrays and recursively zips inner arrays.
+   */
+  private def zipAtDepth(arrays: Seq[ArrayData], d: Int): ArrayData = {
+    if (d == 1) {
+      // Base case: standard arrays_zip semantics
+      zipArrays(arrays)
+    } else {
+      // Recursive case: zip at each position of the outer arrays
+      if (arrays.isEmpty) {
+        new GenericArrayData(Array.empty[Any])
+      } else {
+        val maxLen = arrays.map(_.numElements()).max
+        val result = new Array[Any](maxLen)
+
+        for (i <- 0 until maxLen) {
+          // Collect inner arrays at position i from each input
+          val innerArrays = arrays.zipWithIndex.map { case (arr, idx) =>
+            if (i < arr.numElements() && !arr.isNullAt(i)) {
+              // Get the inner array, handling nested array types
+              arr.getArray(i)
+            } else {
+              null
+            }
+          }
+
+          // If any inner array is null, the result at this position is null
+          if (innerArrays.contains(null)) {
+            result(i) = null
+          } else {
+            result(i) = zipAtDepth(innerArrays.map(_.asInstanceOf[ArrayData]), d - 1)
+          }
+        }
+
+        new GenericArrayData(result)
+      }
+    }
+  }
+
+  /** Standard arrays_zip at the innermost level */
+  private def zipArrays(arrays: Seq[ArrayData]): ArrayData = {
+    if (arrays.isEmpty) {
+      new GenericArrayData(Array.empty[Any])
+    } else {
+      val maxLen = arrays.map(_.numElements()).max
+      val result = new Array[InternalRow](maxLen)
+
+      for (i <- 0 until maxLen) {
+        val row = arrays.zipWithIndex.map { case (arr, idx) =>
+          if (i < arr.numElements() && !arr.isNullAt(i)) {
+            arr.get(i, innermostElementTypes(idx))
+          } else {
+            null
+          }
+        }
+        result(i) = InternalRow.apply(row: _*)
+      }
+
+      new GenericArrayData(result)
+    }
+  }
+
+  override def prettyName: String = "nested_arrays_zip"
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): NestedArraysZip =
+    copy(children = newChildren)
+}
+
+object NestedArraysZip {
+  /** Create with auto-detected depth from the first child's type. */
+  def apply(children: Seq[Expression], names: Seq[Expression]): NestedArraysZip = {
+    // Compute depth from first child's type
+    val depth = children.headOption.map { child =>
+      def computeDepth(dt: DataType): Int = dt match {
+        case ArrayType(elementType, _) => 1 + computeDepth(elementType)
+        case _ => 0
+      }
+      computeDepth(child.dataType)
+    }.getOrElse(1)
+
+    new NestedArraysZip(children, names, depth)
+  }
+
+  /** Create with explicitly specified depth. */
+  def withDepth(
+      children: Seq[Expression],
+      names: Seq[Expression],
+      depth: Int): NestedArraysZip = {
+    new NestedArraysZip(children, names, depth)
+  }
+}
+
+/**
  * Returns an unordered array containing the values of the map.
  */
 @ExpressionDescription(
