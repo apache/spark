@@ -177,16 +177,30 @@ class ParquetToSparkSchemaConverter(
       val convertedField = convertField(field, fieldReadType)
       val fieldName = fieldFromReadSchema.map(_.name).getOrElse(field.getType.getName)
 
+      val enumTypeMetadata = field match {
+        case p: PrimitiveColumnIO
+          if Option(p.getType.getLogicalTypeAnnotation)
+            .exists(_.isInstanceOf[EnumLogicalTypeAnnotation]) =>
+          new MetadataBuilder()
+            .putString(ParquetSchemaConverter.PARQUET_LOGICAL_TYPE_KEY,
+              ParquetSchemaConverter.PARQUET_ENUM_TYPE)
+            .build()
+        case _ => Metadata.empty
+      }
+
       field.getType.getRepetition match {
         case OPTIONAL | REQUIRED =>
           val nullable = field.getType.getRepetition == OPTIONAL
-          (StructField(fieldName, convertedField.sparkType, nullable = nullable),
+          (StructField(fieldName, convertedField.sparkType, nullable = nullable,
+              metadata = enumTypeMetadata),
               convertedField)
 
         case REPEATED =>
           // A repeated field that is neither contained by a `LIST`- or `MAP`-annotated group nor
           // annotated by `LIST` or `MAP` should be interpreted as a required list of required
           // elements where the element type is the type of the field.
+          // ENUM metadata is not propagated for REPEATED fields because the write path
+          // cannot round-trip it back to the element's logical type within ArrayType.
           val arrayType = ArrayType(convertedField.sparkType, containsNull = false)
           (StructField(fieldName, arrayType, nullable = false),
               ParquetColumn(arrayType, None, convertedField.repetitionLevel - 1,
@@ -674,8 +688,15 @@ class SparkToParquetSchemaConverter(
         Types.primitive(DOUBLE, repetition).named(field.name)
 
       case _: StringType =>
-        Types.primitive(BINARY, repetition)
-          .as(LogicalTypeAnnotation.stringType()).named(field.name)
+        val logicalType =
+          if (field.metadata.contains(ParquetSchemaConverter.PARQUET_LOGICAL_TYPE_KEY) &&
+              field.metadata.getString(ParquetSchemaConverter.PARQUET_LOGICAL_TYPE_KEY) ==
+                ParquetSchemaConverter.PARQUET_ENUM_TYPE) {
+            LogicalTypeAnnotation.enumType()
+          } else {
+            LogicalTypeAnnotation.stringType()
+          }
+        Types.primitive(BINARY, repetition).as(logicalType).named(field.name)
 
       case geom: GeometryType =>
         Types.primitive(BINARY, repetition)
@@ -921,6 +942,11 @@ class SparkToParquetSchemaConverter(
 
 private[sql] object ParquetSchemaConverter {
   val SPARK_PARQUET_SCHEMA_NAME = "spark_schema"
+
+  // Internal metadata to preserve Parquet logical type annotations (e.g., ENUM)
+  // through read-write roundtrips. See SPARK-56154.
+  val PARQUET_LOGICAL_TYPE_KEY = "__PARQUET_LOGICAL_TYPE"
+  val PARQUET_ENUM_TYPE = "ENUM"
 
   val EMPTY_MESSAGE: MessageType =
     Types.buildMessage().named(ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)

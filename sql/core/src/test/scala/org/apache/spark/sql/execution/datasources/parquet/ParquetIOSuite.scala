@@ -1887,6 +1887,183 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       }
     }
   }
+
+  test("ENUM logical annotation roundtrip preservation") {
+    val enumSchema = MessageTypeParser.parseMessageType(
+      """message test {
+        |  optional binary suit (ENUM);
+        |}""".stripMargin)
+
+    withTempDir { dir =>
+      val inputPath = new Path(dir.getAbsolutePath, "input")
+      val writer = createParquetWriter(enumSchema, inputPath)
+      try {
+        val factory = new SimpleGroupFactory(enumSchema)
+        writer.write(factory.newGroup().append("suit", "HEARTS"))
+        writer.write(factory.newGroup().append("suit", "SPADES"))
+      } finally {
+        writer.close()
+      }
+
+      val df = spark.read.parquet(inputPath.toString)
+      assert(df.schema("suit").metadata.contains(
+        ParquetSchemaConverter.PARQUET_LOGICAL_TYPE_KEY))
+      assert(df.schema("suit").metadata.getString(
+        ParquetSchemaConverter.PARQUET_LOGICAL_TYPE_KEY) ==
+        ParquetSchemaConverter.PARQUET_ENUM_TYPE)
+
+      val outputPath = new Path(dir.getAbsolutePath, "output")
+      df.write.parquet(outputPath.toString)
+
+      val hadoopConf = spark.sessionState.newHadoopConf()
+      // scalastyle:off FileSystemGet
+      val outputFiles = FileSystem.get(hadoopConf).listStatus(outputPath)
+        .filter(_.getPath.getName.endsWith(".parquet"))
+      // scalastyle:on FileSystemGet
+      assert(outputFiles.nonEmpty, "Expected at least one Parquet file in output")
+
+      val reader = ParquetFileReader.open(
+        org.apache.parquet.hadoop.util.HadoopInputFile.fromPath(
+          outputFiles.head.getPath, hadoopConf))
+      try {
+        val outputSchema = reader.getFooter.getFileMetaData.getSchema
+        val suitField = outputSchema.getFields.get(0)
+        val annotation = suitField.asPrimitiveType().getLogicalTypeAnnotation
+        assert(annotation.toString == "ENUM",
+          s"Expected ENUM annotation but got: $annotation")
+      } finally {
+        reader.close()
+      }
+    }
+  }
+
+  test("plain StringType column writes as STRING not ENUM") {
+    withTempDir { dir =>
+      val df = Seq("hello", "world").toDF("name")
+      assert(!df.schema("name").metadata.contains(
+        ParquetSchemaConverter.PARQUET_LOGICAL_TYPE_KEY))
+
+      val outputPath = new Path(dir.getAbsolutePath, "output")
+      df.write.parquet(outputPath.toString)
+
+      val hadoopConf = spark.sessionState.newHadoopConf()
+      // scalastyle:off FileSystemGet
+      val outputFiles = FileSystem.get(hadoopConf).listStatus(outputPath)
+        .filter(_.getPath.getName.endsWith(".parquet"))
+      // scalastyle:on FileSystemGet
+      assert(outputFiles.nonEmpty)
+
+      val reader = ParquetFileReader.open(
+        org.apache.parquet.hadoop.util.HadoopInputFile.fromPath(
+          outputFiles.head.getPath, hadoopConf))
+      try {
+        val outputSchema = reader.getFooter.getFileMetaData.getSchema
+        val nameField = outputSchema.getFields.get(0)
+        val annotation = nameField.asPrimitiveType().getLogicalTypeAnnotation
+        assert(annotation.toString == "STRING",
+          s"Expected STRING annotation but got: $annotation")
+      } finally {
+        reader.close()
+      }
+    }
+  }
+
+  test("REQUIRED ENUM field roundtrip preservation") {
+    val enumSchema = MessageTypeParser.parseMessageType(
+      """message test {
+        |  required binary color (ENUM);
+        |}""".stripMargin)
+
+    withTempDir { dir =>
+      val inputPath = new Path(dir.getAbsolutePath, "input")
+      val writer = createParquetWriter(enumSchema, inputPath)
+      try {
+        val factory = new SimpleGroupFactory(enumSchema)
+        writer.write(factory.newGroup().append("color", "RED"))
+        writer.write(factory.newGroup().append("color", "BLUE"))
+      } finally {
+        writer.close()
+      }
+
+      val df = spark.read.parquet(inputPath.toString)
+      assert(df.schema("color").metadata.getString(
+        ParquetSchemaConverter.PARQUET_LOGICAL_TYPE_KEY) ==
+        ParquetSchemaConverter.PARQUET_ENUM_TYPE)
+
+      val outputPath = new Path(dir.getAbsolutePath, "output")
+      df.write.parquet(outputPath.toString)
+
+      val hadoopConf = spark.sessionState.newHadoopConf()
+      // scalastyle:off FileSystemGet
+      val outputFiles = FileSystem.get(hadoopConf).listStatus(outputPath)
+        .filter(_.getPath.getName.endsWith(".parquet"))
+      // scalastyle:on FileSystemGet
+
+      val reader = ParquetFileReader.open(
+        org.apache.parquet.hadoop.util.HadoopInputFile.fromPath(
+          outputFiles.head.getPath, hadoopConf))
+      try {
+        val outputSchema = reader.getFooter.getFileMetaData.getSchema
+        val colorField = outputSchema.getFields.get(0)
+        assert(colorField.asPrimitiveType().getLogicalTypeAnnotation.toString == "ENUM",
+          "REQUIRED ENUM annotation should be preserved")
+      } finally {
+        reader.close()
+      }
+    }
+  }
+
+  test("mixed ENUM and STRING columns in same schema") {
+    val mixedSchema = MessageTypeParser.parseMessageType(
+      """message test {
+        |  optional binary suit (ENUM);
+        |  optional binary name (STRING);
+        |}""".stripMargin)
+
+    withTempDir { dir =>
+      val inputPath = new Path(dir.getAbsolutePath, "input")
+      val writer = createParquetWriter(mixedSchema, inputPath)
+      try {
+        val factory = new SimpleGroupFactory(mixedSchema)
+        writer.write(factory.newGroup().append("suit", "HEARTS").append("name", "Alice"))
+        writer.write(factory.newGroup().append("suit", "SPADES").append("name", "Bob"))
+      } finally {
+        writer.close()
+      }
+
+      val df = spark.read.parquet(inputPath.toString)
+      assert(df.schema("suit").metadata.contains(
+        ParquetSchemaConverter.PARQUET_LOGICAL_TYPE_KEY))
+      assert(!df.schema("name").metadata.contains(
+        ParquetSchemaConverter.PARQUET_LOGICAL_TYPE_KEY))
+
+      val outputPath = new Path(dir.getAbsolutePath, "output")
+      df.write.parquet(outputPath.toString)
+
+      val hadoopConf = spark.sessionState.newHadoopConf()
+      // scalastyle:off FileSystemGet
+      val outputFiles = FileSystem.get(hadoopConf).listStatus(outputPath)
+        .filter(_.getPath.getName.endsWith(".parquet"))
+      // scalastyle:on FileSystemGet
+
+      val reader = ParquetFileReader.open(
+        org.apache.parquet.hadoop.util.HadoopInputFile.fromPath(
+          outputFiles.head.getPath, hadoopConf))
+      try {
+        val outputSchema = reader.getFooter.getFileMetaData.getSchema
+        val suitAnnotation = outputSchema.getFields.get(0)
+          .asPrimitiveType().getLogicalTypeAnnotation
+        val nameAnnotation = outputSchema.getFields.get(1)
+          .asPrimitiveType().getLogicalTypeAnnotation
+        assert(suitAnnotation.toString == "ENUM",
+          s"ENUM column should stay ENUM but got: $suitAnnotation")
+        assert(nameAnnotation.toString == "STRING",
+          s"STRING column should stay STRING but got: $nameAnnotation")
+      } finally {
+        reader.close()
+      }
+    }
+  }
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
