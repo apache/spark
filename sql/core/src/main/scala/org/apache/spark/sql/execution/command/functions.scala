@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.util
+
+import scala.util.Try
+
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
+import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource, SQLFunction, UserDefinedFunction}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.StringUtils
@@ -117,10 +121,58 @@ case class DescribeFunctionCommand(
       Row(s"Function: $name") :: Row(s"Usage: ${info.getUsage}") :: Nil
     }
 
+    val sqlPathRows =
+      if (isExtended &&
+        sparkSession.sessionState.conf.pathEnabled &&
+        SQLFunction.isSQLFunction(info.getClassName)) {
+        DescribeFunctionCommand
+          .storedResolutionPathString(sparkSession, identifier, info)
+          .map(s => Seq(Row(s"SQL Path: $s")))
+          .getOrElse(Nil)
+      } else {
+        Nil
+      }
+
     if (isExtended) {
-      result :+ Row(s"Extended Usage:${info.getExtended}")
+      (result ++ sqlPathRows) :+ Row(s"Extended Usage:${info.getExtended}")
     } else {
       result
+    }
+  }
+}
+
+object DescribeFunctionCommand {
+
+  /**
+   * Frozen PATH persisted for SQL functions ([[SQLFunction.FUNCTION_RESOLUTION_PATH]]), if any.
+   * Persistent functions: load [[CatalogFunction]] metadata. Temporary SQL UDFs: parse
+   * [[ExpressionInfo]] usage JSON (same blob as [[SQLFunction.toExpressionInfo]]).
+   */
+  private[command] def storedResolutionPathString(
+      sparkSession: SparkSession,
+      identifier: FunctionIdentifier,
+      info: ExpressionInfo): Option[String] = {
+    Try(sparkSession.sessionState.catalog.getFunctionMetadata(identifier))
+      .toOption
+      .filter(_.isUserDefinedFunction)
+      .flatMap { meta =>
+        val udf = UserDefinedFunction.fromCatalogFunction(
+          meta,
+          sparkSession.sessionState.sqlParser)
+        udf.asInstanceOf[SQLFunction].functionStoredResolutionPath
+      }
+      .orElse(extractResolutionPathFromSqlUdfUsage(info.getUsage))
+  }
+
+  private def extractResolutionPathFromSqlUdfUsage(usage: String): Option[String] = {
+    if (usage == null || usage.isEmpty) {
+      return None
+    }
+    try {
+      val map = UserDefinedFunction.mapper.readValue(usage, classOf[util.HashMap[String, String]])
+      Option(map.get(SQLFunction.FUNCTION_RESOLUTION_PATH)).filter(_.nonEmpty)
+    } catch {
+      case _: Exception => None
     }
   }
 }

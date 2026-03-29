@@ -42,7 +42,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * `system.current_schema`; `system.session` omitted). Resolution inside the view uses that
  * snapshot. With PATH enabled, `DESCRIBE EXTENDED` / `DESCRIBE FORMATTED` lists it as **SQL Path**
  * (alongside **View Catalog and Namespace**); `DESCRIBE ... AS JSON` exposes the same value as
- * `sql_path`.
+ * `sql_path`. For SQL UDFs, `DESCRIBE FUNCTION EXTENDED` adds a **SQL Path** line when PATH is on.
  */
 class PathResolutionSuite extends QueryTest with SharedSparkSession {
 
@@ -594,6 +594,42 @@ class PathResolutionSuite extends QueryTest with SharedSparkSession {
         sql("DROP SCHEMA IF EXISTS sql_udf_path_a")
         sql("SET PATH = DEFAULT_PATH")
         sql("USE spark_catalog.default")
+      }
+    }
+  }
+
+  test("PATH enabled: DESCRIBE FUNCTION EXTENDED shows SQL Path for SQL UDF") {
+    withPathEnabled {
+      sql("USE spark_catalog.default")
+      sql("SET PATH = DEFAULT_PATH")
+      sql("CREATE FUNCTION path_desc_sql_fn() RETURNS INT RETURN 1")
+      try {
+        val lines = sql("DESCRIBE FUNCTION EXTENDED path_desc_sql_fn")
+          .collect()
+          .map(_.getString(0))
+          .toSeq
+        val pathLine = lines.find(_.startsWith("SQL Path:"))
+        assert(pathLine.isDefined, s"Expected SQL Path in DESCRIBE FUNCTION EXTENDED, got: $lines")
+        assert(
+          pathLine.get.contains("spark_catalog") &&
+            pathLine.get.toLowerCase(Locale.ROOT).contains("default"),
+          s"Unexpected SQL Path line: ${pathLine.get}")
+      } finally {
+        sql("DROP FUNCTION IF EXISTS path_desc_sql_fn")
+        sql("SET PATH = DEFAULT_PATH")
+      }
+    }
+  }
+
+  test("PATH disabled: DESCRIBE FUNCTION EXTENDED omits SQL Path") {
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "false") {
+      sql("CREATE FUNCTION path_desc_sql_fn_off() RETURNS INT RETURN 1")
+      try {
+        val lines =
+          sql("DESCRIBE FUNCTION EXTENDED path_desc_sql_fn_off").collect().map(_.getString(0)).toSeq
+        assert(!lines.exists(_.startsWith("SQL Path:")))
+      } finally {
+        sql("DROP FUNCTION IF EXISTS path_desc_sql_fn_off")
       }
     }
   }
