@@ -439,12 +439,11 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
       assert(ex.getCondition.startsWith("FAILED_READ_FILE"))
       checkError(
         exception = ex.getCause.asInstanceOf[SparkArithmeticException],
-        condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+        condition = "NUMERIC_VALUE_OUT_OF_RANGE.DEFAULT",
         parameters = Map(
           "value" -> "0",
           "precision" -> "4",
-          "scale" -> "2",
-          "config" -> "\"spark.sql.ansi.enabled\"")
+          "scale" -> "2")
       )
     }
   }
