@@ -1,0 +1,139 @@
+[ {
+  "activeTasks" : 0,
+  "addTime" : "2019-07-02T21:02:25.595GMT",
+  "attributes" : { },
+  "blacklistedInStages" : [ ],
+  "completedTasks" : 0,
+  "diskUsed" : 0,
+  "excludedInStages" : [ ],
+  "executorLogs" : { },
+  "failedTasks" : 0,
+  "hostPort" : "10.28.9.112:37319",
+  "id" : "driver",
+  "isActive" : true,
+  "isBlacklisted" : false,
+  "isExcluded" : false,
+  "maxMemory" : 384093388,
+  "maxTasks" : 0,
+  "memoryMetrics" : {
+    "totalOffHeapStorageMemory" : 0,
+    "totalOnHeapStorageMemory" : 384093388,
+    "usedOffHeapStorageMemory" : 0,
+    "usedOnHeapStorageMemory" : 0
+  },
+  "memoryUsed" : 0,
+  "rddBlocks" : 0,
+  "resourceProfileId" : 0,
+  "resources" : { },
+  "totalCores" : 0,
+  "totalDuration" : 18794,
+  "totalGCTime" : 0,
+  "totalInputBytes" : 0,
+  "totalShuffleRead" : 0,
+  "totalShuffleWrite" : 0,
+  "totalTasks" : 0
+}, {
+  "activeTasks" : 0,
+  "addTime" : "2019-07-02T21:02:29.256GMT",
+  "attributes" : {
+    "CLUSTER_ID" : "",
+    "CONTAINER_ID" : "container_1555004656427_0144_01_000003",
+    "HTTP_SCHEME" : "http://",
+    "LOG_FILES" : "stderr,stdout",
+    "NM_HOST" : "tomg-test",
+    "NM_HTTP_ADDRESS" : "tomg-test:8042",
+    "NM_HTTP_PORT" : "8042",
+    "NM_PORT" : "43125",
+    "USER" : "tgraves"
+  },
+  "blacklistedInStages" : [ ],
+  "completedTasks" : 0,
+  "diskUsed" : 0,
+  "excludedInStages" : [ ],
+  "executorLogs" : {
+    "stderr" : "http://tomg-test:8042/node/containerlogs/container_1555004656427_0144_01_000003/tgraves/stderr?start=-4096",
+    "stdout" : "http://tomg-test:8042/node/containerlogs/container_1555004656427_0144_01_000003/tgraves/stdout?start=-4096"
+  },
+  "failedTasks" : 0,
+  "hostPort" : "tomg-test:46005",
+  "id" : "2",
+  "isActive" : true,
+  "isBlacklisted" : false,
+  "isExcluded" : false,
+  "maxMemory" : 384093388,
+  "maxTasks" : 1,
+  "memoryMetrics" : {
+    "totalOffHeapStorageMemory" : 0,
+    "totalOnHeapStorageMemory" : 384093388,
+    "usedOffHeapStorageMemory" : 0,
+    "usedOnHeapStorageMemory" : 0
+  },
+  "memoryUsed" : 0,
+  "rddBlocks" : 0,
+  "resourceProfileId" : 0,
+  "resources" : {
+    "gpu" : {
+      "addresses" : [ "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12" ],
+      "name" : "gpu"
+    }
+  },
+  "totalCores" : 1,
+  "totalDuration" : 0,
+  "totalGCTime" : 0,
+  "totalInputBytes" : 0,
+  "totalShuffleRead" : 0,
+  "totalShuffleWrite" : 0,
+  "totalTasks" : 0
+}, {
+  "activeTasks" : 0,
+  "addTime" : "2019-07-02T21:02:28.551GMT",
+  "attributes" : {
+    "CLUSTER_ID" : "",
+    "CONTAINER_ID" : "container_1555004656427_0144_01_000002",
+    "HTTP_SCHEME" : "http://",
+    "LOG_FILES" : "stderr,stdout",
+    "NM_HOST" : "tomg-test",
+    "NM_HTTP_ADDRESS" : "tomg-test:8042",
+    "NM_HTTP_PORT" : "8042",
+    "NM_PORT" : "43125",
+    "USER" : "tgraves"
+  },
+  "blacklistedInStages" : [ ],
+  "completedTasks" : 0,
+  "diskUsed" : 0,
+  "excludedInStages" : [ ],
+  "executorLogs" : {
+    "stderr" : "http://tomg-test:8042/node/containerlogs/container_1555004656427_0144_01_000002/tgraves/stderr?start=-4096",
+    "stdout" : "http://tomg-test:8042/node/containerlogs/container_1555004656427_0144_01_000002/tgraves/stdout?start=-4096"
+  },
+  "failedTasks" : 0,
+  "hostPort" : "tomg-test:44873",
+  "id" : "1",
+  "isActive" : true,
+  "isBlacklisted" : false,
+  "isExcluded" : false,
+  "maxMemory" : 384093388,
+  "maxTasks" : 1,
+  "memoryMetrics" : {
+    "totalOffHeapStorageMemory" : 0,
+    "totalOnHeapStorageMemory" : 384093388,
+    "usedOffHeapStorageMemory" : 0,
+    "usedOnHeapStorageMemory" : 0
+  },
+  "memoryUsed" : 0,
+  "rddBlocks" : 0,
+  "resourceProfileId" : 0,
+  "resources" : {
+    "gpu" : {
+      "addresses" : [ "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12" ],
+      "name" : "gpu"
+    }
+  },
+  "totalCores" : 1,
+  "totalDuration" : 0,
+  "totalGCTime" : 0,
+  "totalInputBytes" : 0,
+  "totalShuffleRead" : 0,
+  "totalShuffleWrite" : 0,
+  "totalTasks" : 0
+} ]

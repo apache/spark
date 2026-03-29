@@ -19,12 +19,12 @@ package org.apache.spark.deploy.worker
 
 import java.io.{File, FileOutputStream, InputStream, IOException}
 
-import scala.collection.JavaConverters._
 import scala.collection.Map
+import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SecurityManager
+import org.apache.spark.{SecurityManager, SSLOptions}
 import org.apache.spark.deploy.Command
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.launcher.WorkerCommandBuilder
 import org.apache.spark.util.Utils
 
@@ -61,7 +61,7 @@ object CommandUtils extends Logging {
     // SPARK-698: do not call the run.cmd script, as process.destroy()
     // fails to kill a process tree on Windows
     val cmd = new WorkerCommandBuilder(sparkHome, memory, command).buildCommand()
-    cmd.asScala ++ Seq(command.mainClass) ++ command.arguments
+    (cmd.asScala ++ Seq(command.mainClass) ++ command.arguments).toSeq
   }
 
   /**
@@ -81,15 +81,18 @@ object CommandUtils extends Logging {
 
     var newEnvironment = if (libraryPathEntries.nonEmpty && libraryPathName.nonEmpty) {
       val libraryPaths = libraryPathEntries ++ cmdLibraryPath ++ env.get(libraryPathName)
-      command.environment + ((libraryPathName, libraryPaths.mkString(File.pathSeparator)))
+      command.environment ++ Map(libraryPathName -> libraryPaths.mkString(File.pathSeparator))
     } else {
       command.environment
     }
 
     // set auth secret to env variable if needed
-    if (securityMgr.isAuthenticationEnabled) {
-      newEnvironment += (SecurityManager.ENV_AUTH_SECRET -> securityMgr.getSecretKey)
+    if (securityMgr.isAuthenticationEnabled()) {
+      newEnvironment = newEnvironment ++
+        Map(SecurityManager.ENV_AUTH_SECRET -> securityMgr.getSecretKey())
     }
+    // set SSL env variables if needed
+    newEnvironment ++= securityMgr.getEnvironmentForSslRpcPasswords
 
     Command(
       command.mainClass,
@@ -97,22 +100,28 @@ object CommandUtils extends Logging {
       newEnvironment,
       command.classPathEntries ++ classPath,
       Seq.empty, // library path already captured in environment variable
-      // filter out auth secret from java options
-      command.javaOpts.filterNot(_.startsWith("-D" + SecurityManager.SPARK_AUTH_SECRET_CONF)))
+      // filter out secrets from java options
+      command.javaOpts.filterNot(opts =>
+        opts.startsWith("-D" + SecurityManager.SPARK_AUTH_SECRET_CONF) ||
+        SSLOptions.SPARK_RPC_SSL_PASSWORD_FIELDS.exists(
+          field => opts.startsWith("-D" + field)
+        )
+      ))
   }
 
   /** Spawn a thread that will redirect a given stream to a file */
-  def redirectStream(in: InputStream, file: File) {
+  def redirectStream(in: InputStream, file: File): Unit = {
     val out = new FileOutputStream(file, true)
     // TODO: It would be nice to add a shutdown hook here that explains why the output is
     //       terminating. Otherwise if the worker dies the executor logs will silently stop.
     new Thread("redirect output to " + file) {
-      override def run() {
+      override def run(): Unit = {
         try {
           Utils.copyStream(in, out, true)
         } catch {
           case e: IOException =>
-            logInfo("Redirection to " + file + " closed: " + e.getMessage)
+            logInfo(log"Redirection to ${MDC(LogKeys.FILE_NAME, file)} closed: " +
+              log"${MDC(LogKeys.ERROR, e.getMessage)}")
         }
       }
     }.start()

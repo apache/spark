@@ -25,7 +25,6 @@ import org.apache.hadoop.mapred.{JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 
 import org.apache.spark.{HashPartitioner, Partitioner}
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext.rddToFileName
@@ -352,7 +351,6 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
   }
 
   /**
-   * :: Experimental ::
    * Return a [[MapWithStateDStream]] by applying a function to every key-value element of
    * `this` stream, while maintaining some state data for each unique key. The mapping function
    * and other specification (e.g. partitioners, timeouts, initial state data, etc.) of this
@@ -376,7 +374,6 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
    * @tparam StateType    Class type of the state data
    * @tparam MappedType   Class type of the mapped data
    */
-  @Experimental
   def mapWithState[StateType: ClassTag, MappedType: ClassTag](
       spec: StateSpec[K, V, StateType, MappedType]
     ): MapWithStateDStream[K, V, StateType, MappedType] = {
@@ -551,7 +548,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
    * 'this' DStream without changing the key.
    */
   def flatMapValues[U: ClassTag](
-      flatMapValuesFunc: V => TraversableOnce[U]
+      flatMapValuesFunc: V => IterableOnce[U]
     ): DStream[(K, U)] = ssc.withScope {
     new FlatMapValuedDStream[K, V, U](self, sparkContext.clean(flatMapValuesFunc))
   }

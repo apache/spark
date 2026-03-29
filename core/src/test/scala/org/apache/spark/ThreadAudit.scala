@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.Logging
 
@@ -26,7 +26,7 @@ import org.apache.spark.internal.Logging
  */
 trait ThreadAudit extends Logging {
 
-  val threadWhiteList = Set(
+  val threadExcludeList = Set(
     /**
      * Netty related internal threads.
      * These are excluded because their lifecycle is handled by the netty itself
@@ -55,21 +55,47 @@ trait ThreadAudit extends Logging {
      * creates event loops. One is wrapped inside
      * [[org.apache.spark.network.server.TransportServer]]
      * the other one is inside [[org.apache.spark.network.client.TransportClient]].
-     * The thread pools behind shut down asynchronously triggered by [[SparkContext#stop]].
-     * Manually checked and all of them stopped properly.
+     * Calling [[SparkContext#stop]] will shut down the thread pool of this event group
+     * asynchronously. In each case proper stopping is checked manually.
      */
     "rpc-client.*",
     "rpc-server.*",
 
     /**
+     * During [[org.apache.spark.network.TransportContext]] construction a separate event loop could
+     * be created for handling ChunkFetchRequest.
+     * Calling [[org.apache.spark.network.TransportContext#close]] will shut down the thread pool
+     * of this event group asynchronously. In each case proper stopping is checked manually.
+     */
+    "shuffle-chunk-fetch-handler.*",
+
+    /**
      * During [[SparkContext]] creation BlockManager creates event loops. One is wrapped inside
      * [[org.apache.spark.network.server.TransportServer]]
      * the other one is inside [[org.apache.spark.network.client.TransportClient]].
-     * The thread pools behind shut down asynchronously triggered by [[SparkContext#stop]].
-     * Manually checked and all of them stopped properly.
+     * Calling [[SparkContext#stop]] will shut down the thread pool of this event group
+     * asynchronously. In each case proper stopping is checked manually.
      */
     "shuffle-client.*",
-    "shuffle-server.*"
+    "shuffle-server.*",
+
+    /**
+     * Global cleaner thread that manage statistics data references of Hadoop filesystems.
+     * This is excluded because their lifecycle is handled by Hadoop and spark has no explicit
+     * effect on it.
+     */
+    "org.apache.hadoop.fs.FileSystem\\$Statistics\\$StatisticsDataReferenceCleaner",
+
+    /**
+     * A global thread pool for broadcast exchange executions.
+     */
+    "broadcast-exchange.*",
+
+    /**
+     * A thread started by JRE to support safe parallel execution of waitFor() and exitStatus()
+     * methods to forked subprocesses.
+     */
+    "process reaper"
   )
   private var threadNamesSnapshot: Set[String] = Set.empty
 
@@ -81,11 +107,13 @@ trait ThreadAudit extends Logging {
     val shortSuiteName = this.getClass.getName.replaceAll("org.apache.spark", "o.a.s")
 
     if (threadNamesSnapshot.nonEmpty) {
-      val remainingThreadNames = runningThreadNames().diff(threadNamesSnapshot)
-        .filterNot { s => threadWhiteList.exists(s.matches(_)) }
-      if (remainingThreadNames.nonEmpty) {
+      val remainingThreads = runningThreads()
+        .filterNot { t => threadNamesSnapshot.contains(t.getName) }
+        .filterNot { t => threadExcludeList.exists(t.getName.matches(_)) }
+      if (remainingThreads.nonEmpty) {
         logWarning(s"\n\n===== POSSIBLE THREAD LEAK IN SUITE $shortSuiteName, " +
-          s"thread names: ${remainingThreadNames.mkString(", ")} =====\n")
+          s"threads: ${remainingThreads.map{ t => s"${t.getName} (daemon=${t.isDaemon})" }
+          .mkString(", ")} =====\n")
       }
     } else {
       logWarning("\n\n===== THREAD AUDIT POST ACTION CALLED " +
@@ -94,6 +122,10 @@ trait ThreadAudit extends Logging {
   }
 
   private def runningThreadNames(): Set[String] = {
-    Thread.getAllStackTraces.keySet().asScala.map(_.getName).toSet
+    runningThreads().map(_.getName)
+  }
+
+  private def runningThreads(): Set[Thread] = {
+    Thread.getAllStackTraces.keySet().asScala.toSet
   }
 }

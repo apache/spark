@@ -17,7 +17,10 @@
 
 package org.apache.spark.mllib.clustering
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.ml.impl.Utils.indexUpperTriangular
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.{axpy, dot, scal}
 import org.apache.spark.mllib.util.MLUtils
@@ -25,15 +28,132 @@ import org.apache.spark.mllib.util.MLUtils
 private[spark] abstract class DistanceMeasure extends Serializable {
 
   /**
+   * Statistics used in triangle inequality to obtain useful bounds to find closest centers.
+   * @param distance distance between two centers
+   */
+  def computeStatistics(distance: Double): Double
+
+  /**
+   * Statistics used in triangle inequality to obtain useful bounds to find closest centers.
+   *
+   * @return The packed upper triangular part of a symmetric matrix containing statistics,
+   *         matrix(i,j) represents:
+   *         1, if i != j: a bound r = matrix(i,j) to help avoiding unnecessary distance
+   *         computation. Given point x, let i be current closest center, and d be current best
+   *         distance, if d < f(r), then we no longer need to compute the distance to center j;
+   *         2, if i == j: a bound r = matrix(i,i) = min_k{matrix(i,k)|k!=i}. If distance
+   *         between point x and center i is less than f(r), then center i is the closest center
+   *         to point x.
+   */
+  def computeStatistics(centers: Array[VectorWithNorm]): Array[Double] = {
+    val k = centers.length
+    if (k == 1) return Array(Double.NaN)
+
+    val packedValues = Array.ofDim[Double](k * (k + 1) / 2)
+    val diagValues = Array.fill(k)(Double.PositiveInfinity)
+    var i = 0
+    while (i < k) {
+      var j = i + 1
+      while (j < k) {
+        val d = distance(centers(i), centers(j))
+        val s = computeStatistics(d)
+        val index = indexUpperTriangular(k, i, j)
+        packedValues(index) = s
+        if (s < diagValues(i)) diagValues(i) = s
+        if (s < diagValues(j)) diagValues(j) = s
+        j += 1
+      }
+      i += 1
+    }
+
+    i = 0
+    while (i < k) {
+      val index = indexUpperTriangular(k, i, i)
+      packedValues(index) = diagValues(i)
+      i += 1
+    }
+    packedValues
+  }
+
+  /**
+   * Compute distance between centers in a distributed way.
+   */
+  def computeStatisticsDistributedly(
+      sc: SparkContext,
+      bcCenters: Broadcast[Array[VectorWithNorm]]): Array[Double] = {
+    val k = bcCenters.value.length
+    if (k == 1) return Array(Double.NaN)
+
+    val packedValues = Array.ofDim[Double](k * (k + 1) / 2)
+    val diagValues = Array.fill(k)(Double.PositiveInfinity)
+
+    val numParts = math.min(k, 1024)
+    sc.range(0, numParts, 1, numParts)
+      .mapPartitionsWithIndex { case (pid, _) =>
+        val centers = bcCenters.value
+        Iterator.range(0, k).flatMap { i =>
+          Iterator.range(i + 1, k).flatMap { j =>
+            val hash = (i, j).hashCode.abs
+            if (hash % numParts == pid) {
+              val d = distance(centers(i), centers(j))
+              val s = computeStatistics(d)
+              Iterator.single((i, j, s))
+            } else Iterator.empty
+          }
+        }
+      }.collect().foreach { case (i, j, s) =>
+        val index = indexUpperTriangular(k, i, j)
+        packedValues(index) = s
+        if (s < diagValues(i)) diagValues(i) = s
+        if (s < diagValues(j)) diagValues(j) = s
+      }
+
+    var i = 0
+    while (i < k) {
+      val index = indexUpperTriangular(k, i, i)
+      packedValues(index) = diagValues(i)
+      i += 1
+    }
+    packedValues
+  }
+
+  /**
+   * @param centers the clustering centers
+   * @param statistics optional statistics to accelerate the computation, which should not
+   *                   change the result.
+   * @param point given point
    * @return the index of the closest center to the given point, as well as the cost.
    */
   def findClosest(
-      centers: TraversableOnce[VectorWithNorm],
+      centers: Array[VectorWithNorm],
+      statistics: Option[Array[Double]],
+      point: VectorWithNorm): (Int, Double) = {
+    if (statistics.nonEmpty) {
+      findClosest(centers, statistics.get, point)
+    } else {
+      findClosest(centers, point)
+    }
+  }
+
+  /**
+   * @return the index of the closest center to the given point, as well as the cost.
+   */
+  def findClosest(
+      centers: Array[VectorWithNorm],
+      statistics: Array[Double],
+      point: VectorWithNorm): (Int, Double)
+
+  /**
+   * @return the index of the closest center to the given point, as well as the cost.
+   */
+  def findClosest(
+      centers: Array[VectorWithNorm],
       point: VectorWithNorm): (Int, Double) = {
     var bestDistance = Double.PositiveInfinity
     var bestIndex = 0
     var i = 0
-    centers.foreach { center =>
+    while (i < centers.length) {
+      val center = centers(i)
       val currentDistance = distance(center, point)
       if (currentDistance < bestDistance) {
         bestDistance = currentDistance
@@ -48,7 +168,7 @@ private[spark] abstract class DistanceMeasure extends Serializable {
    * @return the K-means cost of a given point against the given cluster centers.
    */
   def pointCost(
-      centers: TraversableOnce[VectorWithNorm],
+      centers: Array[VectorWithNorm],
       point: VectorWithNorm): Double = {
     findClosest(centers, point)._2
   }
@@ -76,7 +196,7 @@ private[spark] abstract class DistanceMeasure extends Serializable {
   def clusterCost(
       centroid: VectorWithNorm,
       pointsSum: VectorWithNorm,
-      numberOfPoints: Long,
+      weightSum: Double,
       pointsSquaredNorm: Double): Double
 
   /**
@@ -85,18 +205,18 @@ private[spark] abstract class DistanceMeasure extends Serializable {
    * @param sum the `sum` for a cluster to be updated
    */
   def updateClusterSum(point: VectorWithNorm, sum: Vector): Unit = {
-    axpy(1.0, point.vector, sum)
+    axpy(point.weight, point.vector, sum)
   }
 
   /**
-   * Returns a centroid for a cluster given its `sum` vector and its `count` of points.
+   * Returns a centroid for a cluster given its `sum` vector and the weightSum of points.
    *
    * @param sum   the `sum` for a cluster
-   * @param count the number of points in the cluster
+   * @param weightSum the weightSum of points in the cluster
    * @return the centroid of the cluster
    */
-  def centroid(sum: Vector, count: Long): VectorWithNorm = {
-    scal(1.0 / count, sum)
+  def centroid(sum: Vector, weightSum: Double): VectorWithNorm = {
+    scal(1.0 / weightSum, sum)
     new VectorWithNorm(sum)
   }
 
@@ -151,25 +271,87 @@ object DistanceMeasure {
       case _ => false
     }
   }
+
+  private[clustering] def shouldComputeStatistics(k: Int): Boolean = k < 1000
+
+  private[clustering] def shouldComputeStatisticsLocally(k: Int, numFeatures: Int): Boolean =
+    k.toLong * k * numFeatures < 1000000
 }
 
 private[spark] class EuclideanDistanceMeasure extends DistanceMeasure {
+
+  /**
+   * Statistics used in triangle inequality to obtain useful bounds to find closest centers.
+   * @see <a href="https://www.aaai.org/Papers/ICML/2003/ICML03-022.pdf">Charles Elkan,
+   *      Using the Triangle Inequality to Accelerate k-Means</a>
+   *
+   * @return One element used in statistics matrix to make matrix(i,j) represents:
+   *         1, if i != j: a bound r = matrix(i,j) to help avoiding unnecessary distance
+   *         computation. Given point x, let i be current closest center, and d be current best
+   *         squared distance, if d < r, then we no longer need to compute the distance to center
+   *         j. matrix(i,j) equals to squared of half of Euclidean distance between centers i
+   *         and j;
+   *         2, if i == j: a bound r = matrix(i,i) = min_k{matrix(i,k)|k!=i}. If squared
+   *         distance between point x and center i is less than r, then center i is the closest
+   *         center to point x.
+   */
+  override def computeStatistics(distance: Double): Double = {
+    0.25 * distance * distance
+  }
+
+  /**
+   * @return the index of the closest center to the given point, as well as the cost.
+   */
+  override def findClosest(
+      centers: Array[VectorWithNorm],
+      statistics: Array[Double],
+      point: VectorWithNorm): (Int, Double) = {
+    var bestDistance = EuclideanDistanceMeasure.fastSquaredDistance(centers(0), point)
+    if (bestDistance < statistics(0)) return (0, bestDistance)
+
+    val k = centers.length
+    var bestIndex = 0
+    var i = 1
+    while (i < k) {
+      val center = centers(i)
+      // Since `\|a - b\| \geq |\|a\| - \|b\||`, we can use this lower bound to avoid unnecessary
+      // distance computation.
+      val normDiff = center.norm - point.norm
+      val lowerBound = normDiff * normDiff
+      if (lowerBound < bestDistance) {
+        val index1 = indexUpperTriangular(k, i, bestIndex)
+        if (statistics(index1) < bestDistance) {
+          val d = EuclideanDistanceMeasure.fastSquaredDistance(center, point)
+          val index2 = indexUpperTriangular(k, i, i)
+          if (d < statistics(index2)) return (i, d)
+          if (d < bestDistance) {
+            bestDistance = d
+            bestIndex = i
+          }
+        }
+      }
+      i += 1
+    }
+    (bestIndex, bestDistance)
+  }
+
   /**
    * @return the index of the closest center to the given point, as well as the squared distance.
    */
   override def findClosest(
-      centers: TraversableOnce[VectorWithNorm],
+      centers: Array[VectorWithNorm],
       point: VectorWithNorm): (Int, Double) = {
     var bestDistance = Double.PositiveInfinity
     var bestIndex = 0
     var i = 0
-    centers.foreach { center =>
+    while (i < centers.length) {
+      val center = centers(i)
       // Since `\|a - b\| \geq |\|a\| - \|b\||`, we can use this lower bound to avoid unnecessary
       // distance computation.
       var lowerBoundOfSqDist = center.norm - point.norm
       lowerBoundOfSqDist = lowerBoundOfSqDist * lowerBoundOfSqDist
       if (lowerBoundOfSqDist < bestDistance) {
-        val distance: Double = EuclideanDistanceMeasure.fastSquaredDistance(center, point)
+        val distance = EuclideanDistanceMeasure.fastSquaredDistance(center, point)
         if (distance < bestDistance) {
           bestDistance = distance
           bestIndex = i
@@ -205,9 +387,9 @@ private[spark] class EuclideanDistanceMeasure extends DistanceMeasure {
   override def clusterCost(
       centroid: VectorWithNorm,
       pointsSum: VectorWithNorm,
-      numberOfPoints: Long,
+      weightSum: Double,
       pointsSquaredNorm: Double): Double = {
-    math.max(pointsSquaredNorm - numberOfPoints * centroid.norm * centroid.norm, 0.0)
+    math.max(pointsSquaredNorm - weightSum * centroid.norm * centroid.norm, 0.0)
   }
 
   /**
@@ -234,6 +416,58 @@ private[spark] object EuclideanDistanceMeasure {
 }
 
 private[spark] class CosineDistanceMeasure extends DistanceMeasure {
+
+  /**
+   * Statistics used in triangle inequality to obtain useful bounds to find closest centers.
+   *
+   * @return One element used in statistics matrix to make matrix(i,j) represents:
+   *         1, if i != j: a bound r = matrix(i,j) to help avoiding unnecessary distance
+   *         computation. Given point x, let i be current closest center, and d be current best
+   *         squared distance, if d < r, then we no longer need to compute the distance to center
+   *         j. For Cosine distance, it is similar to Euclidean distance. However, radian/angle
+   *         is used instead of Cosine distance to compute matrix(i,j): for centers i and j,
+   *         compute the radian/angle between them, halving it, and converting it back to Cosine
+   *         distance at the end;
+   *         2, if i == j: a bound r = matrix(i,i) = min_k{matrix(i,k)|k!=i}. If Cosine
+   *         distance between point x and center i is less than r, then center i is the closest
+   *         center to point x.
+   */
+  override def computeStatistics(distance: Double): Double = {
+    // d = 1 - cos(x)
+    // r = 1 - cos(x/2) = 1 - sqrt((cos(x) + 1) / 2) = 1 - sqrt(1 - d/2)
+    1 - math.sqrt(1 - distance / 2)
+  }
+
+  /**
+   * @return the index of the closest center to the given point, as well as the cost.
+   */
+  def findClosest(
+      centers: Array[VectorWithNorm],
+      statistics: Array[Double],
+      point: VectorWithNorm): (Int, Double) = {
+    var bestDistance = distance(centers(0), point)
+    if (bestDistance < statistics(0)) return (0, bestDistance)
+
+    val k = centers.length
+    var bestIndex = 0
+    var i = 1
+    while (i < k) {
+      val index1 = indexUpperTriangular(k, i, bestIndex)
+      if (statistics(index1) < bestDistance) {
+        val center = centers(i)
+        val d = distance(center, point)
+        val index2 = indexUpperTriangular(k, i, i)
+        if (d < statistics(index2)) return (i, d)
+        if (d < bestDistance) {
+          bestDistance = d
+          bestIndex = i
+        }
+      }
+      i += 1
+    }
+    (bestIndex, bestDistance)
+  }
+
   /**
    * @param v1: first vector
    * @param v2: second vector
@@ -251,18 +485,18 @@ private[spark] class CosineDistanceMeasure extends DistanceMeasure {
    */
   override def updateClusterSum(point: VectorWithNorm, sum: Vector): Unit = {
     assert(point.norm > 0, "Cosine distance is not defined for zero-length vectors.")
-    axpy(1.0 / point.norm, point.vector, sum)
+    axpy(point.weight / point.norm, point.vector, sum)
   }
 
   /**
    * Returns a centroid for a cluster given its `sum` vector and its `count` of points.
    *
    * @param sum   the `sum` for a cluster
-   * @param count the number of points in the cluster
+   * @param weightSum the sum of weight in the cluster
    * @return the centroid of the cluster
    */
-  override def centroid(sum: Vector, count: Long): VectorWithNorm = {
-    scal(1.0 / count, sum)
+  override def centroid(sum: Vector, weightSum: Double): VectorWithNorm = {
+    scal(1.0 / weightSum, sum)
     val norm = Vectors.norm(sum, 2)
     scal(1.0 / norm, sum)
     new VectorWithNorm(sum, 1)
@@ -274,10 +508,10 @@ private[spark] class CosineDistanceMeasure extends DistanceMeasure {
   override def clusterCost(
       centroid: VectorWithNorm,
       pointsSum: VectorWithNorm,
-      numberOfPoints: Long,
+      weightSum: Double,
       pointsSquaredNorm: Double): Double = {
     val costVector = pointsSum.vector.copy
-    math.max(numberOfPoints - dot(centroid.vector, costVector) / centroid.norm, 0.0)
+    math.max(weightSum - dot(centroid.vector, costVector) / centroid.norm, 0.0)
   }
 
   /**

@@ -18,9 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
-import java.util.TimeZone
+import java.time.LocalTime
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparators._
@@ -35,15 +37,7 @@ class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val l1 = Literal.create(20132983L, LongType)
     val l2 = Literal.create(-20132983L, LongType)
     val millis = 1524954911000L
-    // Explicitly choose a time zone, since Date objects can create different values depending on
-    // local time zone of the machine on which the test is running
-    val oldDefaultTZ = TimeZone.getDefault
-    val d1 = try {
-      TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
-      Literal.create(new java.sql.Date(millis), DateType)
-    } finally {
-      TimeZone.setDefault(oldDefaultTZ)
-    }
+    val d1 = Literal.create(new java.sql.Date(millis), DateType)
     val t1 = Literal.create(new Timestamp(millis), TimestampType)
     val f1 = Literal.create(0.7788229f, FloatType)
     val f2 = Literal.create(-0.7788229f, FloatType)
@@ -59,6 +53,9 @@ class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val dec3 = Literal(Decimal(20132983L, 21, 2))
     val list1 = Literal.create(Seq(1, 2), ArrayType(IntegerType))
     val nullVal = Literal.create(null, IntegerType)
+    val tm1LocalTime = LocalTime.of(21, 15, 1, 123456)
+    val tm1Nano = SparkDateTimeUtils.localTimeToNanos(tm1LocalTime)
+    val tm1 = Literal.create(tm1LocalTime, TimeType(6))
 
     checkEvaluation(SortPrefix(SortOrder(b1, Ascending)), 0L)
     checkEvaluation(SortPrefix(SortOrder(b2, Ascending)), 1L)
@@ -91,5 +88,17 @@ class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       DoublePrefixComparator.computePrefix(201329.83d))
     checkEvaluation(SortPrefix(SortOrder(list1, Ascending)), 0L)
     checkEvaluation(SortPrefix(SortOrder(nullVal, Ascending)), null)
+    checkEvaluation(SortPrefix(SortOrder(tm1, Ascending)), tm1Nano)
+  }
+
+  test("Cannot sort map type") {
+    val m = Literal.create(Map(), MapType(StringType, StringType, valueContainsNull = false))
+    val sortOrderExpression = SortOrder(m, Ascending)
+    assert(sortOrderExpression.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "INVALID_ORDERING_TYPE",
+        messageParameters = Map(
+          "functionName" -> "`sortorder`",
+          "dataType" -> "\"MAP<STRING, STRING>\"")))
   }
 }

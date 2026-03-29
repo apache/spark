@@ -23,6 +23,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, ThreadSafeRpcEndpoint}
 
 
@@ -54,9 +55,7 @@ private[netty] case class RemoteProcessConnectionError(cause: Throwable, remoteA
 /**
  * An inbox that stores messages for an [[RpcEndpoint]] and posts messages to it thread-safely.
  */
-private[netty] class Inbox(
-    val endpointRef: NettyRpcEndpointRef,
-    val endpoint: RpcEndpoint)
+private[netty] class Inbox(val endpointName: String, val endpoint: RpcEndpoint)
   extends Logging {
 
   inbox =>  // Give this an alias so we can use it more clearly in closures.
@@ -106,7 +105,7 @@ private[netty] class Inbox(
                 throw new SparkException(s"Unsupported message $message from ${_sender}")
               })
             } catch {
-              case NonFatal(e) =>
+              case e: Throwable =>
                 context.sendFailure(e)
                 // Throw the exception -- this exception will be caught by the safelyCall function.
                 // The endpoint's onError function will be called.
@@ -195,13 +194,25 @@ private[netty] class Inbox(
    * Exposed for testing.
    */
   protected def onDrop(message: InboxMessage): Unit = {
-    logWarning(s"Drop $message because $endpointRef is stopped")
+    logWarning(log"Drop ${MDC(MESSAGE, message)} " +
+      log"because endpoint ${MDC(END_POINT, endpointName)} is stopped")
   }
 
   /**
    * Calls action closure, and calls the endpoint's onError function in the case of exceptions.
    */
   private def safelyCall(endpoint: RpcEndpoint)(action: => Unit): Unit = {
+    def dealWithFatalError(fatal: Throwable): Unit = {
+      inbox.synchronized {
+        assert(numActiveThreads > 0, "The number of active threads should be positive.")
+        // Should reduce the number of active threads before throw the error.
+        numActiveThreads -= 1
+      }
+      logError(log"An error happened while processing message in the inbox for" +
+        log" ${MDC(END_POINT, endpointName)}", fatal)
+      throw fatal
+    }
+
     try action catch {
       case NonFatal(e) =>
         try endpoint.onError(e) catch {
@@ -211,8 +222,18 @@ private[netty] class Inbox(
             } else {
               logError("Ignoring error", ee)
             }
+          case fatal: Throwable =>
+            dealWithFatalError(fatal)
         }
+      case fatal: Throwable =>
+        dealWithFatalError(fatal)
     }
   }
 
+  // exposed only for testing
+  def getNumActiveThreads: Int = {
+    inbox.synchronized {
+      inbox.numActiveThreads
+    }
+  }
 }

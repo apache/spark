@@ -25,7 +25,10 @@ test_that("Check masked functions", {
   namesOfMasked <- c("describe", "cov", "filter", "lag", "na.omit", "predict", "sd", "var",
                      "colnames", "colnames<-", "intersect", "rank", "rbind", "sample", "subset",
                      "summary", "transform", "drop", "window", "as.data.frame", "union", "not")
-  if (as.numeric(R.version$major) >= 3 && as.numeric(R.version$minor) >= 3) {
+  version <- packageVersion("base")
+  is33Above <- as.numeric(version$major) >= 3 && as.numeric(version$minor) >= 3
+  is40Above <- as.numeric(version$major) >= 4
+  if (is33Above || is40Above) {
     namesOfMasked <- c("endsWith", "startsWith", namesOfMasked)
   }
   masked <- conflicts(detail = TRUE)$`package:SparkR`
@@ -84,6 +87,7 @@ test_that("rdd GC across sparkR.stop", {
   countRDD(rdd3)
   countRDD(rdd4)
   sparkR.session.stop()
+  expect_true(TRUE)
 })
 
 test_that("job group functions can be called", {
@@ -91,8 +95,25 @@ test_that("job group functions can be called", {
   setJobGroup("groupId", "job description", TRUE)
   cancelJobGroup("groupId")
   clearJobGroup()
+  setInterruptOnCancel(TRUE)
 
   sparkR.session.stop()
+  expect_true(TRUE)
+})
+
+test_that("job tag functions can be called", {
+  sc <- sparkR.sparkContext(master = sparkRTestMaster)
+  addJobTag("B")
+  clearJobTags()
+  expect_true(identical(getJobTags(), list()))
+  addJobTag("A")
+  expect_true(identical(getJobTags(), list("A")))
+  removeJobTag("A")
+  expect_true(identical(getJobTags(), list()))
+  cancelJobsWithTag("A")
+
+  sparkR.session.stop()
+  expect_true(TRUE)
 })
 
 test_that("job description and local properties can be set and got", {
@@ -131,9 +152,10 @@ test_that("utility function can be called", {
   sparkR.sparkContext(master = sparkRTestMaster)
   setLogLevel("ERROR")
   sparkR.session.stop()
+  expect_true(TRUE)
 })
 
-test_that("getClientModeSparkSubmitOpts() returns spark-submit args from whitelist", {
+test_that("getClientModeSparkSubmitOpts() returns spark-submit args from allowList", {
   e <- new.env()
   e[["spark.driver.memory"]] <- "512m"
   ops <- getClientModeSparkSubmitOpts("sparkrmain", e)
@@ -234,4 +256,5 @@ test_that("SPARK-25234: parallelize should not have integer overflow", {
   # 47000 * 47000 exceeds integer range
   parallelize(sc, 1:47000, 47000)
   sparkR.session.stop()
+  expect_true(TRUE)
 })

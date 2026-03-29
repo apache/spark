@@ -34,4 +34,6 @@ case class PodFailed(pod: Pod) extends FinalPodState
 
 case class PodDeleted(pod: Pod) extends FinalPodState
 
+case class PodTerminating(pod: Pod) extends FinalPodState
+
 case class PodUnknown(pod: Pod) extends ExecutorPodState

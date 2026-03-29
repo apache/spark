@@ -4,9 +4,11 @@ SELECT CAST('1.23' AS long);
 SELECT CAST('-4.56' AS int);
 SELECT CAST('-4.56' AS long);
 
--- cast string which are not numbers to integral should return null
+-- cast string which are not numbers to numeric types
 SELECT CAST('abc' AS int);
 SELECT CAST('abc' AS long);
+SELECT CAST('abc' AS float);
+SELECT CAST('abc' AS double);
 
 -- cast string representing a very large number to integral should return null
 SELECT CAST('1234567890123' AS int);
@@ -15,14 +17,18 @@ SELECT CAST('12345678901234567890123' AS long);
 -- cast empty string to integral should return null
 SELECT CAST('' AS int);
 SELECT CAST('' AS long);
+SELECT CAST('' AS float);
+SELECT CAST('' AS double);
 
 -- cast null to integral should return null
 SELECT CAST(NULL AS int);
 SELECT CAST(NULL AS long);
 
--- cast invalid decimal string to integral should return null
+-- cast invalid decimal string to numeric types
 SELECT CAST('123.a' AS int);
 SELECT CAST('123.a' AS long);
+SELECT CAST('123.a' AS float);
+SELECT CAST('123.a' AS double);
 
 -- '-2147483648' is the smallest int value
 SELECT CAST('-2147483648' AS int);
@@ -40,6 +46,184 @@ SELECT CAST('-9223372036854775809' AS long);
 SELECT CAST('9223372036854775807' AS long);
 SELECT CAST('9223372036854775808' AS long);
 
+-- cast string to its binary representation
+SELECT HEX(CAST('abc' AS binary));
+
+-- cast integral values to their corresponding binary representation
+SELECT HEX(CAST(CAST(123 AS byte) AS binary));
+SELECT HEX(CAST(CAST(-123 AS byte) AS binary));
+SELECT HEX(CAST(123S AS binary));
+SELECT HEX(CAST(-123S AS binary));
+SELECT HEX(CAST(123 AS binary));
+SELECT HEX(CAST(-123 AS binary));
+SELECT HEX(CAST(123L AS binary));
+SELECT HEX(CAST(-123L AS binary));
+
 DESC FUNCTION boolean;
 DESC FUNCTION EXTENDED boolean;
 -- TODO: migrate all cast tests here.
+
+-- cast string to interval and interval to string
+SELECT CAST('interval 3 month 1 hour' AS interval);
+SELECT CAST("interval '3-1' year to month" AS interval year to month);
+SELECT CAST("interval '3 00:00:01' day to second" AS interval day to second);
+SELECT CAST(interval 3 month 1 hour AS string);
+SELECT CAST(interval 3 year 1 month AS string);
+SELECT CAST(interval 3 day 1 second AS string);
+
+-- trim string before cast to numeric
+select cast(' 1' as tinyint);
+select cast(' 1\t' as tinyint);
+select cast(' 1' as smallint);
+select cast(' 1' as INT);
+select cast(' 1' as bigint);
+select cast(' 1' as float);
+select cast(' 1 ' as DOUBLE);
+select cast('1.0 ' as DEC);
+select cast('1中文' as tinyint);
+select cast('1中文' as smallint);
+select cast('1中文' as INT);
+select cast('中文1' as bigint);
+select cast('1中文' as bigint);
+
+-- trim string before cast to boolean
+select cast('\t\t true \n\r ' as boolean);
+select cast('\t\n false \t\r' as boolean);
+select cast('\t\n xyz \t\r' as boolean);
+
+select cast('23.45' as decimal(4, 2));
+select cast('123.45' as decimal(4, 2));
+select cast('xyz' as decimal(4, 2));
+
+select cast('2022-01-01' as date);
+select cast('a' as date);
+select cast('2022-01-01 00:00:00' as timestamp);
+select cast('a' as timestamp);
+select cast('2022-01-01 00:00:00' as timestamp_ntz);
+select cast('a' as timestamp_ntz);
+
+select cast(cast('inf' as double) as timestamp);
+select cast(cast('inf' as float) as timestamp);
+
+-- cast ANSI intervals to integrals
+select cast(interval '1' year as tinyint);
+select cast(interval '-10-2' year to month as smallint);
+select cast(interval '1000' month as int);
+select cast(interval -'10.123456' second as tinyint);
+select cast(interval '23:59:59' hour to second as smallint);
+select cast(interval -'1 02:03:04.123' day to second as int);
+select cast(interval '10' day as bigint);
+
+select cast(interval '-1000' month as tinyint);
+select cast(interval '1000000' second as smallint);
+
+-- cast integrals to ANSI intervals
+select cast(1Y as interval year);
+select cast(-122S as interval year to month);
+select cast(ym as interval year to month) from values(-122S) as t(ym);
+select cast(1000 as interval month);
+select cast(-10L as interval second);
+select cast(100Y as interval hour to second);
+select cast(dt as interval hour to second) from values(100Y) as t(dt);
+select cast(-1000S as interval day to second);
+select cast(10 as interval day);
+
+select cast(2147483647 as interval year);
+select cast(-9223372036854775808L as interval day);
+
+-- cast ANSI intervals to decimals
+select cast(interval '-1' year as decimal(10, 0));
+select cast(interval '1.000001' second as decimal(10, 6));
+select cast(interval '08:11:10.001' hour to second as decimal(10, 4));
+select cast(interval '1 01:02:03.1' day to second as decimal(8, 1));
+select cast(interval '10.123' second as decimal(4, 2));
+select cast(interval '10.005' second as decimal(4, 2));
+select cast(interval '10.123' second as decimal(5, 2));
+select cast(interval '10.123' second as decimal(1, 0));
+
+-- cast decimals to ANSI intervals
+select cast(10.123456BD as interval day to second);
+select cast(80.654321BD as interval hour to minute);
+select cast(-10.123456BD as interval year to month);
+select cast(10.654321BD as interval month);
+
+-- cast TIME to integral types
+SELECT CAST(TIME '00:01:52' AS tinyint);
+SELECT CAST(TIME '00:01:52' AS smallint);
+SELECT CAST(TIME '00:01:52' AS int);
+SELECT CAST(TIME '00:01:52' AS bigint);
+
+-- cast TIME to integral types with potential overflow
+SELECT CAST(TIME '23:59:59' AS tinyint);
+SELECT CAST(TIME '23:59:59' AS smallint);
+SELECT CAST(TIME '23:59:59' AS int);
+SELECT CAST(TIME '23:59:59' AS bigint);
+
+-- cast TIME with fractional seconds (should floor)
+SELECT CAST(TIME '00:00:17.5' AS tinyint);
+SELECT CAST(TIME '00:00:17.5' AS int);
+SELECT CAST(TIME '00:00:17.9' AS int);
+
+-- cast TIME edge cases
+SELECT CAST(TIME '00:00:00' AS tinyint);
+SELECT CAST(TIME '00:00:00' AS int);
+
+-- cast double colon syntax tests
+SELECT '1.23' :: int;
+SELECT 'abc' :: int;
+SELECT '12345678901234567890123' :: long;
+SELECT '' :: int;
+SELECT NULL :: int;
+SELECT '123.a' :: int;
+SELECT '-2147483648' :: int;
+SELECT HEX('abc' :: binary);
+SELECT HEX((123 :: byte) :: binary);
+SELECT 'interval 3 month 1 hour' :: interval;
+SELECT interval 3 day 1 second :: string;
+select ' 1 ' :: DOUBLE;
+select '1.0 ' :: DEC;
+select '\t\t true \n\r ' :: boolean;
+select '2022-01-01 00:00:00' :: timestamp;
+select interval '-10-2' year to month :: smallint;
+select -10L :: interval second;
+select interval '08:11:10.001' hour to second :: decimal(10, 4);
+select 10.123456BD :: interval day to second;
+
+-- cast TIME using double colon syntax
+SELECT TIME '00:01:52' :: tinyint;
+SELECT TIME '00:01:52' :: int;
+SELECT TIME '23:59:59' :: tinyint;
+SELECT TIME '23:59:59' :: int;
+
+SELECT '1.23' :: int :: long;
+SELECT '2147483648' :: long :: int;
+SELECT CAST('2147483648' :: long AS int);
+SELECT map(1, '123', 2, '456')[1] :: int;
+
+-- cast double colon syntax negative tests
+SELECT '2147483648' :: BINT;
+SELECT '2147483648' :: SELECT;
+SELECT FALSE IS NOT NULL :: string;
+
+-- SPARK-52619: cast TIME to DECIMAL with sufficient precision and scale.
+SELECT CAST(time '00:00:00' AS decimal(1, 0));
+SELECT CAST(time '12:00:00' AS decimal(7, 2));
+SELECT CAST(time '01:30:45' AS decimal(8, 3));
+SELECT CAST(time '23:59:59' AS decimal(9, 4));
+SELECT CAST(time '01:02:03' AS decimal(15, 9));
+SELECT CAST(time '10:20:30' AS decimal(20, 10));
+SELECT CAST(time '23:59:59.001' AS decimal(8, 3));
+SELECT CAST(time '23:59:59.999999' AS decimal(11, 6));
+SELECT CAST(time '23:59:59.999999999' AS decimal(14, 9));
+SELECT CAST(time '23:59:59.999999999' AS decimal(20, 10));
+
+-- SPARK-52619: cast TIME to DECIMAL with insufficient precision.
+SELECT CAST(time '00:01:00' AS decimal(1, 0));
+SELECT CAST(time '01:00:00' AS decimal(3, 0));
+SELECT CAST(time '10:00:00' AS decimal(5, 2));
+
+-- SPARK-52619: cast TIME to DECIMAL with insufficient scale.
+SELECT CAST(time '23:59:59.9' AS decimal(6, 0));
+SELECT CAST(time '23:59:59.999' AS decimal(8, 2));
+SELECT CAST(time '23:59:59.999999' AS decimal(11, 5));
+SELECT CAST(time '23:59:59.999999999' AS decimal(14, 8));

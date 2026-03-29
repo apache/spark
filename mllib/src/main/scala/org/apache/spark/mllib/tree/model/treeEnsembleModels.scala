@@ -19,15 +19,15 @@ package org.apache.spark.mllib.tree.model
 
 import scala.collection.mutable
 
-import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo
@@ -37,6 +37,7 @@ import org.apache.spark.mllib.tree.loss.Loss
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -66,14 +67,10 @@ class RandomForestModel @Since("1.2.0") (
     TreeEnsembleModel.SaveLoadV1_0.save(sc, path, this,
       RandomForestModel.SaveLoadV1_0.thisClassName)
   }
-
-  override protected def formatVersion: String = RandomForestModel.formatVersion
 }
 
 @Since("1.3.0")
 object RandomForestModel extends Loader[RandomForestModel] {
-
-  private[mllib] def formatVersion: String = TreeEnsembleModel.SaveLoadV1_0.thisFormatVersion
 
   /**
    *
@@ -167,11 +164,9 @@ class GradientBoostedTreesModel @Since("1.2.0") (
       (a, b) => treesIndices.map(idx => a(idx) + b(idx)))
     .map(_ / dataCount)
 
-    broadcastTrees.destroy(blocking = false)
+    broadcastTrees.destroy()
     evaluation.toArray
   }
-
-  override protected def formatVersion: String = GradientBoostedTreesModel.formatVersion
 }
 
 /**
@@ -180,7 +175,6 @@ class GradientBoostedTreesModel @Since("1.2.0") (
 object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
 
   /**
-   * :: DeveloperApi ::
    * Compute the initial predictions and errors for a dataset for the first
    * iteration of gradient boosting.
    * @param data: training data.
@@ -191,7 +185,6 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
    *         corresponding to every sample.
    */
   @Since("1.4.0")
-  @DeveloperApi
   def computeInitialPredictionAndError(
       data: RDD[LabeledPoint],
       initTreeWeight: Double,
@@ -205,7 +198,6 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
   }
 
   /**
-   * :: DeveloperApi ::
    * Update a zipped predictionError RDD
    * (as obtained with computeInitialPredictionAndError)
    * @param data: training data.
@@ -217,7 +209,6 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
    *         corresponding to each sample.
    */
   @Since("1.4.0")
-  @DeveloperApi
   def updatePredictionError(
     data: RDD[LabeledPoint],
     predictionAndError: RDD[(Double, Double)],
@@ -234,8 +225,6 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
     }
     newPredError
   }
-
-  private[mllib] def formatVersion: String = TreeEnsembleModel.SaveLoadV1_0.thisFormatVersion
 
   /**
    * @param sc  Spark context used for loading model files.
@@ -292,7 +281,7 @@ private[tree] sealed class TreeEnsembleModel(
    */
   private def predictBySumming(features: Vector): Double = {
     val treePredictions = trees.map(_.predict(features))
-    blas.ddot(numTrees, treePredictions, 1, treeWeights, 1)
+    BLAS.nativeBLAS.ddot(numTrees, treePredictions, 1, treeWeights, 1)
   }
 
   /**
@@ -300,7 +289,7 @@ private[tree] sealed class TreeEnsembleModel(
    */
   private def predictByVoting(features: Vector): Double = {
     val votes = mutable.Map.empty[Int, Double]
-    trees.view.zip(treeWeights).foreach { case (tree, weight) =>
+    trees.iterator.zip(treeWeights.iterator).foreach { case (tree, weight) =>
       val prediction = tree.predict(features).toInt
       votes(prediction) = votes.getOrElse(prediction, 0.0) + weight
     }
@@ -413,20 +402,24 @@ private[tree] object TreeEnsembleModel extends Logging {
       // TODO: Fix this issue for real.
       val memThreshold = 768
       if (sc.isLocal) {
-        val driverMemory = sc.getConf.getOption("spark.driver.memory")
+        val driverMemory = sc.getReadOnlyConf.getOption("spark.driver.memory")
           .orElse(Option(System.getenv("SPARK_DRIVER_MEMORY")))
           .map(Utils.memoryStringToMb)
           .getOrElse(Utils.DEFAULT_DRIVER_MEM_MB)
         if (driverMemory <= memThreshold) {
-          logWarning(s"$className.save() was called, but it may fail because of too little" +
-            s" driver memory (${driverMemory}m)." +
-            s"  If failure occurs, try setting driver-memory ${memThreshold}m (or larger).")
+          logWarning(log"${MDC(LogKeys.CLASS_NAME, className)}.save() was called, " +
+            log"but it may fail because of too little driver memory " +
+            log"(${MDC(LogKeys.DRIVER_MEMORY_SIZE, driverMemory)}m). If failure occurs, " +
+            log"try setting driver-memory ${MDC(LogKeys.MEMORY_THRESHOLD_SIZE, memThreshold)}m " +
+            log"(or larger).")
         }
       } else {
         if (sc.executorMemory <= memThreshold) {
-          logWarning(s"$className.save() was called, but it may fail because of too little" +
-            s" executor memory (${sc.executorMemory}m)." +
-            s"  If failure occurs try setting executor-memory ${memThreshold}m (or larger).")
+          logWarning(log"${MDC(LogKeys.CLASS_NAME, className)}.save() was called, " +
+            log"but it may fail because of too little executor memory " +
+            log"(${MDC(LogKeys.EXECUTOR_MEMORY_SIZE, sc.executorMemory)}m). If failure occurs, " +
+            log"try setting executor-memory ${MDC(LogKeys.MEMORY_THRESHOLD_SIZE, memThreshold)}m " +
+            log"(or larger).")
         }
       }
 
@@ -437,12 +430,13 @@ private[tree] object TreeEnsembleModel extends Logging {
       val metadata = compact(render(
         ("class" -> className) ~ ("version" -> thisFormatVersion) ~
           ("metadata" -> Extraction.decompose(ensembleMetadata))))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(Loader.metadataPath(path))
 
       // Create Parquet data.
-      val dataRDD = sc.parallelize(model.trees.zipWithIndex).flatMap { case (tree, treeId) =>
-        tree.topNode.subtreeIterator.toSeq.map(node => NodeData(treeId, node))
-      }
+      val dataRDD = sc.parallelize(model.trees.zipWithIndex.toImmutableArraySeq)
+        .flatMap { case (tree, treeId) =>
+          tree.topNode.subtreeIterator.toSeq.map(node => NodeData(treeId, node))
+        }
       spark.createDataFrame(dataRDD).write.parquet(Loader.dataPath(path))
     }
 
@@ -450,7 +444,7 @@ private[tree] object TreeEnsembleModel extends Logging {
      * Read metadata from the loaded JSON metadata.
      */
     def readMetadata(metadata: JValue): Metadata = {
-      implicit val formats = DefaultFormats
+      implicit val formats: Formats = DefaultFormats
       (metadata \ "metadata").extract[Metadata]
     }
 

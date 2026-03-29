@@ -19,17 +19,18 @@ package org.apache.spark.streaming
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable
+import scala.collection.parallel.immutable.ParVector
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ReceiverInputDStream}
 import org.apache.spark.streaming.scheduler.Job
 import org.apache.spark.util.Utils
 
 final private[streaming] class DStreamGraph extends Serializable with Logging {
 
-  private val inputStreams = new ArrayBuffer[InputDStream[_]]()
-  private val outputStreams = new ArrayBuffer[DStream[_]]()
+  private var inputStreams = mutable.ArraySeq.empty[InputDStream[_]]
+  private var outputStreams = mutable.ArraySeq.empty[DStream[_]]
 
   @volatile private var inputStreamNameAndID: Seq[(String, Int)] = Nil
 
@@ -41,7 +42,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
   var batchDuration: Duration = null
   @volatile private var numReceivers: Int = 0
 
-  def start(time: Time) {
+  def start(time: Time): Unit = {
     this.synchronized {
       require(zeroTime == null, "DStream graph computation already started")
       zeroTime = time
@@ -50,28 +51,32 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
       outputStreams.foreach(_.remember(rememberDuration))
       outputStreams.foreach(_.validateAtStart())
       numReceivers = inputStreams.count(_.isInstanceOf[ReceiverInputDStream[_]])
-      inputStreamNameAndID = inputStreams.map(is => (is.name, is.id))
-      inputStreams.par.foreach(_.start())
+      inputStreamNameAndID = inputStreams.map(is => (is.name, is.id)).toSeq
+      // scalastyle:off parvector
+      new ParVector(inputStreams.toVector).foreach(_.start())
+      // scalastyle:on parvector
     }
   }
 
-  def restart(time: Time) {
+  def restart(time: Time): Unit = {
     this.synchronized { startTime = time }
   }
 
-  def stop() {
+  def stop(): Unit = {
     this.synchronized {
-      inputStreams.par.foreach(_.stop())
+      // scalastyle:off parvector
+      new ParVector(inputStreams.toVector).foreach(_.stop())
+      // scalastyle:on parvector
     }
   }
 
-  def setContext(ssc: StreamingContext) {
+  def setContext(ssc: StreamingContext): Unit = {
     this.synchronized {
       outputStreams.foreach(_.setContext(ssc))
     }
   }
 
-  def setBatchDuration(duration: Duration) {
+  def setBatchDuration(duration: Duration): Unit = {
     this.synchronized {
       require(batchDuration == null,
         s"Batch duration already set as $batchDuration. Cannot set it again.")
@@ -79,7 +84,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     }
   }
 
-  def remember(duration: Duration) {
+  def remember(duration: Duration): Unit = {
     this.synchronized {
       require(rememberDuration == null,
         s"Remember duration already set as $rememberDuration. Cannot set it again.")
@@ -87,17 +92,17 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     }
   }
 
-  def addInputStream(inputStream: InputDStream[_]) {
+  def addInputStream(inputStream: InputDStream[_]): Unit = {
     this.synchronized {
       inputStream.setGraph(this)
-      inputStreams += inputStream
+      inputStreams = inputStreams :+ inputStream
     }
   }
 
-  def addOutputStream(outputStream: DStream[_]) {
+  def addOutputStream(outputStream: DStream[_]): Unit = {
     this.synchronized {
       outputStream.setGraph(this)
-      outputStreams += outputStream
+      outputStreams = outputStreams :+ outputStream
     }
   }
 
@@ -122,13 +127,13 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
         val jobOption = outputStream.generateJob(time)
         jobOption.foreach(_.setCallSite(outputStream.creationSite))
         jobOption
-      }
+      }.toSeq
     }
     logDebug("Generated " + jobs.length + " jobs for time " + time)
     jobs
   }
 
-  def clearMetadata(time: Time) {
+  def clearMetadata(time: Time): Unit = {
     logDebug("Clearing metadata for time " + time)
     this.synchronized {
       outputStreams.foreach(_.clearMetadata(time))
@@ -136,23 +141,23 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     logDebug("Cleared old metadata for time " + time)
   }
 
-  def updateCheckpointData(time: Time) {
-    logInfo("Updating checkpoint data for time " + time)
+  def updateCheckpointData(time: Time): Unit = {
+    logInfo(log"Updating checkpoint data for time ${MDC(LogKeys.TIME, time)}")
     this.synchronized {
       outputStreams.foreach(_.updateCheckpointData(time))
     }
-    logInfo("Updated checkpoint data for time " + time)
+    logInfo(log"Updated checkpoint data for time ${MDC(LogKeys.TIME, time)}")
   }
 
-  def clearCheckpointData(time: Time) {
-    logInfo("Clearing checkpoint data for time " + time)
+  def clearCheckpointData(time: Time): Unit = {
+    logInfo(log"Clearing checkpoint data for time ${MDC(LogKeys.TIME, time)}")
     this.synchronized {
       outputStreams.foreach(_.clearCheckpointData(time))
     }
-    logInfo("Cleared checkpoint data for time " + time)
+    logInfo(log"Cleared checkpoint data for time ${MDC(LogKeys.TIME, time)}")
   }
 
-  def restoreCheckpointData() {
+  def restoreCheckpointData(): Unit = {
     logInfo("Restoring checkpoint data")
     this.synchronized {
       outputStreams.foreach(_.restoreCheckpointData())
@@ -160,7 +165,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     logInfo("Restored checkpoint data")
   }
 
-  def validate() {
+  def validate(): Unit = {
     this.synchronized {
       require(batchDuration != null, "Batch duration has not been set")
       // assert(batchDuration >= Milliseconds(100), "Batch duration of " + batchDuration +

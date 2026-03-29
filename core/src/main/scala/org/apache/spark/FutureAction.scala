@@ -17,7 +17,6 @@
 
 package org.apache.spark
 
-import java.util.Collections
 import java.util.concurrent.TimeUnit
 
 import scala.concurrent._
@@ -40,9 +39,14 @@ trait FutureAction[T] extends Future[T] {
   // documentation (with reference to the word "action").
 
   /**
+   * Cancels the execution of this action with an optional reason.
+   */
+  def cancel(reason: Option[String]): Unit
+
+  /**
    * Cancels the execution of this action.
    */
-  def cancel(): Unit
+  def cancel(): Unit = cancel(None)
 
   /**
    * Blocks until this action completes.
@@ -89,18 +93,6 @@ trait FutureAction[T] extends Future[T] {
    */
   override def value: Option[Try[T]]
 
-  // These two methods must be implemented in Scala 2.12. They're implemented as a no-op here
-  // and then filled in with a real implementation in the two subclasses below. The no-op exists
-  // here so that those implementations can declare "override", necessary in 2.12, while working
-  // in 2.11, where the method doesn't exist in the superclass.
-  // After 2.11 support goes away, remove these two:
-
-  def transform[S](f: (Try[T]) => Try[S])(implicit executor: ExecutionContext): Future[S] =
-    throw new UnsupportedOperationException()
-
-  def transformWith[S](f: (Try[T]) => Future[S])(implicit executor: ExecutionContext): Future[S] =
-    throw new UnsupportedOperationException()
-
   /**
    * Blocks and returns the result of this job.
    */
@@ -118,43 +110,6 @@ trait FutureAction[T] extends Future[T] {
 }
 
 /**
- * Scala 2.12 defines the two new transform/transformWith methods mentioned above. Impementing
- * these for 2.12 in the Spark class here requires delegating to these same methods in an
- * underlying Future object. But that only exists in 2.12. But these methods are only called
- * in 2.12. So define helper shims to access these methods on a Future by reflection.
- */
-private[spark] object FutureAction {
-
-  private val transformTryMethod =
-    try {
-      classOf[Future[_]].getMethod("transform", classOf[(_) => _], classOf[ExecutionContext])
-    } catch {
-      case _: NoSuchMethodException => null // Would fail later in 2.11, but not called in 2.11
-    }
-
-  private val transformWithTryMethod =
-    try {
-      classOf[Future[_]].getMethod("transformWith", classOf[(_) => _], classOf[ExecutionContext])
-    } catch {
-      case _: NoSuchMethodException => null // Would fail later in 2.11, but not called in 2.11
-    }
-
-  private[spark] def transform[T, S](
-      future: Future[T],
-      f: (Try[T]) => Try[S],
-      executor: ExecutionContext): Future[S] =
-    transformTryMethod.invoke(future, f, executor).asInstanceOf[Future[S]]
-
-  private[spark] def transformWith[T, S](
-      future: Future[T],
-      f: (Try[T]) => Future[S],
-      executor: ExecutionContext): Future[S] =
-    transformWithTryMethod.invoke(future, f, executor).asInstanceOf[Future[S]]
-
-}
-
-
-/**
  * A [[FutureAction]] holding the result of an action that triggers a single job. Examples include
  * count, collect, reduce.
  */
@@ -164,9 +119,9 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
 
   @volatile private var _cancelled: Boolean = false
 
-  override def cancel() {
+  override def cancel(reason: Option[String]): Unit = {
     _cancelled = true
-    jobWaiter.cancel()
+    jobWaiter.cancel(reason)
   }
 
   override def ready(atMost: Duration)(implicit permit: CanAwait): SimpleFutureAction.this.type = {
@@ -181,7 +136,7 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
     value.get.get
   }
 
-  override def onComplete[U](func: (Try[T]) => U)(implicit executor: ExecutionContext) {
+  override def onComplete[U](func: (Try[T]) => U)(implicit executor: ExecutionContext): Unit = {
     jobWaiter.completionFuture onComplete {_ => func(value.get)}
   }
 
@@ -195,16 +150,10 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
   def jobIds: Seq[Int] = Seq(jobWaiter.jobId)
 
   override def transform[S](f: (Try[T]) => Try[S])(implicit e: ExecutionContext): Future[S] =
-    FutureAction.transform(
-      jobWaiter.completionFuture,
-      (u: Try[Unit]) => f(u.map(_ => resultFunc)),
-      e)
+    jobWaiter.completionFuture.transform((u: Try[Unit]) => f(u.map(_ => resultFunc)))
 
   override def transformWith[S](f: (Try[T]) => Future[S])(implicit e: ExecutionContext): Future[S] =
-    FutureAction.transformWith(
-      jobWaiter.completionFuture,
-      (u: Try[Unit]) => f(u.map(_ => resultFunc)),
-      e)
+    jobWaiter.completionFuture.transformWith((u: Try[Unit]) => f(u.map(_ => resultFunc)))
 }
 
 
@@ -242,12 +191,12 @@ class ComplexFutureAction[T](run : JobSubmitter => Future[T])
   @volatile private var subActions: List[FutureAction[_]] = Nil
 
   // A promise used to signal the future.
-  private val p = Promise[T]().tryCompleteWith(run(jobSubmitter))
+  private val p = Promise[T]().completeWith(run(jobSubmitter))
 
-  override def cancel(): Unit = synchronized {
+  override def cancel(reason: Option[String]): Unit = synchronized {
     _cancelled = true
     p.tryFailure(new SparkException("Action has been cancelled"))
-    subActions.foreach(_.cancel())
+    subActions.foreach(_.cancel(reason))
   }
 
   private def jobSubmitter = new JobSubmitter {
@@ -299,18 +248,16 @@ class ComplexFutureAction[T](run : JobSubmitter => Future[T])
   def jobIds: Seq[Int] = subActions.flatMap(_.jobIds)
 
   override def transform[S](f: (Try[T]) => Try[S])(implicit e: ExecutionContext): Future[S] =
-    FutureAction.transform(p.future, f, e)
+    p.future.transform(f)
 
   override def transformWith[S](f: (Try[T]) => Future[S])(implicit e: ExecutionContext): Future[S] =
-    FutureAction.transformWith(p.future, f, e)
+    p.future.transformWith(f)
 }
 
 
 private[spark]
 class JavaFutureActionWrapper[S, T](futureAction: FutureAction[S], converter: S => T)
   extends JavaFutureAction[T] {
-
-  import scala.collection.JavaConverters._
 
   override def isCancelled: Boolean = futureAction.isCancelled
 
@@ -321,7 +268,7 @@ class JavaFutureActionWrapper[S, T](futureAction: FutureAction[S], converter: S 
   }
 
   override def jobIds(): java.util.List[java.lang.Integer] = {
-    Collections.unmodifiableList(futureAction.jobIds.map(Integer.valueOf).asJava)
+    java.util.List.of(futureAction.jobIds.map(Integer.valueOf): _*)
   }
 
   private def getImpl(timeout: Duration): T = {

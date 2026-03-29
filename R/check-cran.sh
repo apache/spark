@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -64,6 +64,10 @@ then
 fi
 
 echo "Running CRAN check with $CRAN_CHECK_OPTIONS options"
+
+# Remove this environment variable to allow to check suggested packages once
+# Jenkins installs arrow. See SPARK-29339.
+export _R_CHECK_FORCE_SUGGESTS_=FALSE
 
 if [ -n "$NO_TESTS" ] && [ -n "$NO_MANUAL" ]
 then

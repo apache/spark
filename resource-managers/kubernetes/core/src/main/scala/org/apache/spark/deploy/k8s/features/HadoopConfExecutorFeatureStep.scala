@@ -14,35 +14,50 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.deploy.k8s.features
 
-import io.fabric8.kubernetes.api.model.HasMetadata
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, PodBuilder, VolumeBuilder}
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.features.hadooputils.HadoopBootstrapUtil
-import org.apache.spark.internal.Logging
 
 /**
- * This step is responsible for bootstraping the container with ConfigMaps
- * containing Hadoop config files mounted as volumes and an ENV variable
- * pointed to the mounted file directory.
+ * Mounts the Hadoop configuration on the executor pod.
  */
-private[spark] class HadoopConfExecutorFeatureStep(
-    kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
-  extends KubernetesFeatureConfigStep with Logging {
+private[spark] class HadoopConfExecutorFeatureStep(conf: KubernetesConf)
+  extends KubernetesFeatureConfigStep {
 
-  override def configurePod(pod: SparkPod): SparkPod = {
-    val sparkConf = kubernetesConf.sparkConf
-    val hadoopConfDirCMapName = sparkConf.getOption(HADOOP_CONFIG_MAP_NAME)
-    require(hadoopConfDirCMapName.isDefined,
-      "Ensure that the env `HADOOP_CONF_DIR` is defined either in the client or " +
-        " using pre-existing ConfigMaps")
-    logInfo("HADOOP_CONF_DIR defined")
-    HadoopBootstrapUtil.bootstrapHadoopConfDir(None, None, hadoopConfDirCMapName, pod)
+  private val hadoopConfigMapName = conf.getOption(HADOOP_CONFIG_MAP_NAME)
+
+  override def configurePod(original: SparkPod): SparkPod = {
+    original.transform { case pod if hadoopConfigMapName.isDefined =>
+      val confVolume = new VolumeBuilder()
+        .withName(HADOOP_CONF_VOLUME)
+        .withNewConfigMap()
+          .withName(hadoopConfigMapName.get)
+          .endConfigMap()
+        .build()
+
+      val podWithConf = new PodBuilder(pod.pod)
+        .editSpec()
+          .addNewVolumeLike(confVolume)
+            .endVolume()
+          .endSpec()
+          .build()
+
+      val containerWithMount = new ContainerBuilder(pod.container)
+        .addNewVolumeMount()
+          .withName(HADOOP_CONF_VOLUME)
+          .withMountPath(HADOOP_CONF_DIR_PATH)
+          .endVolumeMount()
+        .addNewEnv()
+          .withName(ENV_HADOOP_CONF_DIR)
+          .withValue(HADOOP_CONF_DIR_PATH)
+          .endEnv()
+        .build()
+
+      SparkPod(podWithConf, containerWithMount)
+    }
   }
-
-  override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
-
-  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty
 }

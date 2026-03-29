@@ -22,6 +22,7 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.util.ArrayImplicits._
 
 class ChiSqSelectorSuite extends MLTest with DefaultReadWriteTest {
 
@@ -99,9 +100,12 @@ class ChiSqSelectorSuite extends MLTest with DefaultReadWriteTest {
      */
 
     dataset = spark.createDataFrame(Seq(
-      (0.0, Vectors.sparse(6, Array((0, 6.0), (1, 7.0), (3, 7.0), (4, 6.0))), Vectors.dense(6.0)),
-      (1.0, Vectors.sparse(6, Array((1, 9.0), (2, 6.0), (4, 5.0), (5, 9.0))), Vectors.dense(0.0)),
-      (1.0, Vectors.sparse(6, Array((1, 9.0), (2, 3.0), (4, 5.0), (5, 5.0))), Vectors.dense(0.0)),
+      (0.0, Vectors.sparse(6, Array((0, 6.0), (1, 7.0), (3, 7.0), (4, 6.0)).toImmutableArraySeq),
+        Vectors.dense(6.0)),
+      (1.0, Vectors.sparse(6, Array((1, 9.0), (2, 6.0), (4, 5.0), (5, 9.0)).toImmutableArraySeq),
+        Vectors.dense(0.0)),
+      (1.0, Vectors.sparse(6, Array((1, 9.0), (2, 3.0), (4, 5.0), (5, 5.0)).toImmutableArraySeq),
+        Vectors.dense(0.0)),
       (1.0, Vectors.dense(Array(0.0, 9.0, 8.0, 5.0, 6.0, 4.0)), Vectors.dense(0.0)),
       (2.0, Vectors.dense(Array(8.0, 9.0, 6.0, 5.0, 4.0, 4.0)), Vectors.dense(8.0)),
       (2.0, Vectors.dense(Array(8.0, 9.0, 6.0, 4.0, 0.0, 0.0)), Vectors.dense(8.0))
@@ -110,8 +114,7 @@ class ChiSqSelectorSuite extends MLTest with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new ChiSqSelector)
-    val model = new ChiSqSelectorModel("myModel",
-      new org.apache.spark.mllib.feature.ChiSqSelectorModel(Array(1, 3, 4)))
+    val model = new ChiSqSelectorModel("myModel", Array(1, 3, 4))
     ParamsSuite.checkParams(model)
   }
 
@@ -125,25 +128,29 @@ class ChiSqSelectorSuite extends MLTest with DefaultReadWriteTest {
   test("Test Chi-Square selector: percentile") {
     val selector = new ChiSqSelector()
       .setOutputCol("filtered").setSelectorType("percentile").setPercentile(0.17)
-    testSelector(selector, dataset)
+    val model = testSelector(selector, dataset)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("Test Chi-Square selector: fpr") {
     val selector = new ChiSqSelector()
       .setOutputCol("filtered").setSelectorType("fpr").setFpr(0.02)
-    testSelector(selector, dataset)
+    val model = testSelector(selector, dataset)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("Test Chi-Square selector: fdr") {
     val selector = new ChiSqSelector()
       .setOutputCol("filtered").setSelectorType("fdr").setFdr(0.12)
-    testSelector(selector, dataset)
+    val model = testSelector(selector, dataset)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("Test Chi-Square selector: fwe") {
     val selector = new ChiSqSelector()
       .setOutputCol("filtered").setSelectorType("fwe").setFwe(0.12)
-    testSelector(selector, dataset)
+    val model = testSelector(selector, dataset)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("read/write") {

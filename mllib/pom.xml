@@ -20,18 +20,18 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.12</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.13</artifactId>
+    <version>4.2.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-mllib_2.12</artifactId>
+  <artifactId>spark-mllib_2.13</artifactId>
   <properties>
     <sbt.project.name>mllib</sbt.project.name>
   </properties>
   <packaging>jar</packaging>
   <name>Spark Project ML Library</name>
-  <url>http://spark.apache.org/</url>
+  <url>https://spark.apache.org/</url>
 
   <dependencies>
     <dependency>
@@ -92,6 +92,10 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>org.scala-lang.modules</groupId>
+      <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.scalanlp</groupId>
       <artifactId>breeze_${scala.binary.version}</artifactId>
     </dependency>
@@ -110,6 +114,16 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>net.bytebuddy</groupId>
+      <artifactId>byte-buddy</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>net.bytebuddy</groupId>
+      <artifactId>byte-buddy-agent</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-streaming_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
@@ -120,6 +134,15 @@
       <groupId>org.jpmml</groupId>
       <artifactId>pmml-model</artifactId>
       <scope>compile</scope>
+    </dependency>
+    <!-- JPMML seems to be the piece that needs JAXB right now: -->
+    <dependency>
+      <groupId>org.glassfish.jaxb</groupId>
+      <artifactId>jaxb-runtime</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>jakarta.xml.bind</groupId>
+      <artifactId>jakarta.xml.bind-api</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -137,20 +160,20 @@
       <scope>test</scope>
     </dependency>
 
+    <dependency>
+      <groupId>dev.ludovic.netlib</groupId>
+      <artifactId>blas</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>dev.ludovic.netlib</groupId>
+      <artifactId>lapack</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>dev.ludovic.netlib</groupId>
+      <artifactId>arpack</artifactId>
+    </dependency>
+
   </dependencies>
-  <profiles>
-    <profile>
-      <id>netlib-lgpl</id>
-      <dependencies>
-        <dependency>
-          <groupId>com.github.fommil.netlib</groupId>
-          <artifactId>all</artifactId>
-          <version>${netlib.java.version}</version>
-          <type>pom</type>
-        </dependency>
-      </dependencies>
-    </profile>
-  </profiles>
 
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>

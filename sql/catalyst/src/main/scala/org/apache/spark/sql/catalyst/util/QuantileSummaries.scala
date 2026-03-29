@@ -20,12 +20,13 @@ package org.apache.spark.sql.catalyst.util
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
 import org.apache.spark.sql.catalyst.util.QuantileSummaries.Stats
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Helper class to compute approximate quantile summary.
  * This implementation is based on the algorithm proposed in the paper:
  * "Space-efficient Online Computation of Quantile Summaries" by Greenwald, Michael
- * and Khanna, Sanjeev. (http://dx.doi.org/10.1145/375663.375670)
+ * and Khanna, Sanjeev. (https://doi.org/10.1145/375663.375670)
  *
  * In order to optimize for speed, it maintains an internal buffer of the last seen samples,
  * and only inserts them after crossing a certain size threshold. This guarantees a near-constant
@@ -136,8 +137,8 @@ class QuantileSummaries(
     val inserted = this.withHeadBufferInserted
     assert(inserted.headSampled.isEmpty)
     assert(inserted.count == count + headSampled.size)
-    val compressed =
-      compressImmut(inserted.sampled, mergeThreshold = 2 * relativeError * inserted.count)
+    val compressed = compressImmut(
+      inserted.sampled.toImmutableArraySeq, mergeThreshold = 2 * relativeError * inserted.count)
     new QuantileSummaries(compressThreshold, relativeError, compressed, inserted.count, true)
   }
 
@@ -159,58 +160,169 @@ class QuantileSummaries(
       other.shallowCopy
     } else {
       // Merge the two buffers.
-      // The GK algorithm is a bit unclear about it, but it seems there is no need to adjust the
-      // statistics during the merging: the invariants are still respected after the merge.
-      // TODO: could replace full sort by ordered merge, the two lists are known to be sorted
-      // already.
-      val res = (sampled ++ other.sampled).sortBy(_.value)
-      val comp = compressImmut(res, mergeThreshold = 2 * relativeError * count)
-      new QuantileSummaries(
-        other.compressThreshold, other.relativeError, comp, other.count + count, true)
+      // The GK algorithm is a bit unclear about it, but we need to adjust the statistics during the
+      // merging. The main idea is that samples that come from one side will suffer from the lack of
+      // precision of the other.
+      // As a concrete example, take two QuantileSummaries whose samples (value, g, delta) are:
+      // `a = [(0, 1, 0), (20, 99, 0)]` and `b = [(10, 1, 0), (30, 49, 0)]`
+      // This means `a` has 100 values, whose minimum is 0 and maximum is 20,
+      // while `b` has 50 values, between 10 and 30.
+      // The resulting samples of the merge will be:
+      // a+b = [(0, 1, 0), (10, 1, ??), (20, 99, ??), (30, 49, 0)]
+      // The values of `g` do not change, as they represent the minimum number of values between two
+      // consecutive samples. The values of `delta` should be adjusted, however.
+      // Take the case of the sample `10` from `b`. In the original stream, it could have appeared
+      // right after `0` (as expressed by `g=1`) or right before `20`, so `delta=99+0-1=98`.
+      // In the GK algorithm's style of working in terms of maximum bounds, one can observe that the
+      // maximum additional uncertainty over samples coming from `b` is `max(g_a + delta_a) =
+      // floor(2 * eps_a * n_a)`. Likewise, additional uncertainty over samples from `a` is
+      // `floor(2 * eps_b * n_b)`.
+      // Only samples that interleave the other side are affected. That means that samples from
+      // one side that are lesser (or greater) than all samples from the other side are just copied
+      // unmodified.
+      // If the merging instances have different `relativeError`, the resulting instance will carry
+      // the largest one: `eps_ab = max(eps_a, eps_b)`.
+      // The main invariant of the GK algorithm is kept:
+      // `max(g_ab + delta_ab) <= floor(2 * eps_ab * (n_a + n_b))` since
+      // `max(g_ab + delta_ab) <= floor(2 * eps_a * n_a) + floor(2 * eps_b * n_b)`
+      // Finally, one can see how the `insert(x)` operation can be expressed as `merge([(x, 1, 0])`
+
+      val mergedSampled = new ArrayBuffer[Stats]()
+      val mergedRelativeError = math.max(relativeError, other.relativeError)
+      val mergedCount = count + other.count
+      val additionalSelfDelta = math.floor(2 * other.relativeError * other.count).toLong
+      val additionalOtherDelta = math.floor(2 * relativeError * count).toLong
+
+      // Do a merge of two sorted lists until one of the lists is fully consumed
+      var selfIdx = 0
+      var otherIdx = 0
+      while (selfIdx < sampled.length && otherIdx < other.sampled.length) {
+        val selfSample = sampled(selfIdx)
+        val otherSample = other.sampled(otherIdx)
+
+        // Detect next sample
+        val (nextSample, additionalDelta) = if (selfSample.value < otherSample.value) {
+          selfIdx += 1
+          (selfSample, if (otherIdx > 0) additionalSelfDelta else 0)
+        } else {
+          otherIdx += 1
+          (otherSample, if (selfIdx > 0) additionalOtherDelta else 0)
+        }
+
+        // Insert it
+        mergedSampled += nextSample.copy(delta = nextSample.delta + additionalDelta)
+      }
+
+      // Copy the remaining samples from the other list
+      // (by construction, at most one `while` loop will run)
+      while (selfIdx < sampled.length) {
+        mergedSampled += sampled(selfIdx)
+        selfIdx += 1
+      }
+      while (otherIdx < other.sampled.length) {
+        mergedSampled += other.sampled(otherIdx)
+        otherIdx += 1
+      }
+
+      val comp = compressImmut(mergedSampled.toIndexedSeq, 2 * mergedRelativeError * mergedCount)
+      new QuantileSummaries(other.compressThreshold, mergedRelativeError, comp, mergedCount, true)
     }
   }
 
   /**
-   * Runs a query for a given quantile.
+   * Finds the approximate quantile for a percentile, starting at a specific index in the summary.
+   * This is a helper method that is called as we are making a pass over the summary and a sorted
+   * sequence of input percentiles.
+   *
+   * @param index The point at which to start scanning the summary for an approximate value.
+   * @param minRankAtIndex The accumulated minimum rank at the given index.
+   * @param targetError Target error from the summary.
+   * @param percentile The percentile whose value is computed.
+   * @return A tuple (i, r, a) where: i is the updated index for the next call, r is the updated
+   *         rank at i, and a is the approximate quantile.
+   */
+  private def findApproxQuantile(
+      index: Int,
+      minRankAtIndex: Long,
+      targetError: Double,
+      percentile: Double): (Int, Long, Double) = {
+    var curSample = sampled(index)
+    val rank = math.ceil(percentile * count).toLong
+    var i = index
+    var minRank = minRankAtIndex
+    while (i < sampled.length - 1) {
+      val maxRank = minRank + curSample.delta
+      if (maxRank - targetError <= rank && rank <= minRank + targetError) {
+        return (i, minRank, curSample.value)
+      } else {
+        i += 1
+        curSample = sampled(i)
+        minRank += curSample.g
+      }
+    }
+    (sampled.length - 1, 0, sampled.last.value)
+  }
+
+  /**
+   * Runs a query for a given sequence of percentiles.
    * The result follows the approximation guarantees detailed above.
    * The query can only be run on a compressed summary: you need to call compress() before using
    * it.
    *
-   * @param quantile the target quantile
-   * @return
+   * @param percentiles the target percentiles
+   * @return the corresponding approximate quantiles, in the same order as the input
    */
-  def query(quantile: Double): Option[Double] = {
-    require(quantile >= 0 && quantile <= 1.0, "quantile should be in the range [0.0, 1.0]")
-    require(headSampled.isEmpty,
+  def query(percentiles: Seq[Double]): Option[Seq[Double]] = {
+    percentiles.foreach(p =>
+      require(p >= 0 && p <= 1.0, "percentile should be in the range [0.0, 1.0]"))
+    require(
+      headSampled.isEmpty,
       "Cannot operate on an uncompressed summary, call compress() first")
 
     if (sampled.isEmpty) return None
 
-    if (quantile <= relativeError) {
-      return Some(sampled.head.value)
-    }
+    val targetError = sampled.foldLeft(Long.MinValue)((currentMax, stats) =>
+      currentMax.max(stats.delta + stats.g)) / 2
 
-    if (quantile >= 1 - relativeError) {
-      return Some(sampled.last.value)
-    }
-
-    // Target rank
-    val rank = math.ceil(quantile * count).toLong
-    val targetError = relativeError * count
+    // Index to track the current sample
+    var index = 0
     // Minimum rank at current sample
-    var minRank = 0L
-    var i = 0
-    while (i < sampled.length - 1) {
-      val curSample = sampled(i)
-      minRank += curSample.g
-      val maxRank = minRank + curSample.delta
-      if (maxRank - targetError <= rank && rank <= minRank + targetError) {
-        return Some(curSample.value)
-      }
-      i += 1
+    var minRank = sampled(0).g
+
+    val sortedPercentiles = percentiles.zipWithIndex.sortBy(_._1)
+    val result = Array.fill(percentiles.length)(0.0)
+    sortedPercentiles.foreach {
+      case (percentile, pos) =>
+        if (percentile <= relativeError) {
+          result(pos) = sampled.head.value
+        } else if (percentile >= 1 - relativeError) {
+          result(pos) = sampled.last.value
+        } else {
+          val (newIndex, newMinRank, approxQuantile) =
+            findApproxQuantile(index, minRank, targetError.toDouble, percentile)
+          index = newIndex
+          minRank = newMinRank
+          result(pos) = approxQuantile
+        }
     }
-    Some(sampled.last.value)
+    Some(result.toImmutableArraySeq)
   }
+
+  /**
+   * Runs a query for a given percentile.
+   * The result follows the approximation guarantees detailed above.
+   * The query can only be run on a compressed summary: you need to call compress() before using
+   * it.
+   *
+   * @param percentile the target percentile
+   * @return the corresponding approximate quantile
+   */
+  def query(percentile: Double): Option[Double] =
+    query(Seq(percentile)) match {
+      case Some(approxSeq) if approxSeq.nonEmpty => Some(approxSeq.head)
+      case _ => None
+    }
+
 }
 
 object QuantileSummaries {

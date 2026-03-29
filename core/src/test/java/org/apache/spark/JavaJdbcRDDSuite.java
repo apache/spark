@@ -22,26 +22,28 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.UUID;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.rdd.JdbcRDD;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class JavaJdbcRDDSuite implements Serializable {
+  private String dbName = "db_" + UUID.randomUUID().toString().replace('-', '_');
   private transient JavaSparkContext sc;
 
-  @Before
+  @BeforeEach
   public void setUp() throws ClassNotFoundException, SQLException {
     sc = new JavaSparkContext("local", "JavaAPISuite");
 
     Class.forName("org.apache.derby.jdbc.EmbeddedDriver");
 
     try (Connection connection = DriverManager.getConnection(
-        "jdbc:derby:target/JavaJdbcRDDSuiteDb;create=true")) {
+        "jdbc:derby:target/" + dbName + ";create=true")) {
 
       try (Statement create = connection.createStatement()) {
         create.execute(
@@ -64,10 +66,10 @@ public class JavaJdbcRDDSuite implements Serializable {
     }
   }
 
-  @After
+  @AfterEach
   public void tearDown() throws SQLException {
     try {
-      DriverManager.getConnection("jdbc:derby:target/JavaJdbcRDDSuiteDb;shutdown=true");
+      DriverManager.getConnection("jdbc:derby:target/" + dbName + ";shutdown=true");
     } catch(SQLException e) {
       // Throw if not normal single database shutdown
       // https://db.apache.org/derby/docs/10.2/ref/rrefexcept71493.html
@@ -84,13 +86,13 @@ public class JavaJdbcRDDSuite implements Serializable {
   public void testJavaJdbcRDD() throws Exception {
     JavaRDD<Integer> rdd = JdbcRDD.create(
       sc,
-      () -> DriverManager.getConnection("jdbc:derby:target/JavaJdbcRDDSuiteDb"),
+      () -> DriverManager.getConnection("jdbc:derby:target/" + dbName),
       "SELECT DATA FROM FOO WHERE ? <= ID AND ID <= ?",
       1, 100, 1,
       r -> r.getInt(1)
     ).cache();
 
-    Assert.assertEquals(100, rdd.count());
-    Assert.assertEquals(Integer.valueOf(10100), rdd.reduce((i1, i2) -> i1 + i2));
+    Assertions.assertEquals(100, rdd.count());
+    Assertions.assertEquals(Integer.valueOf(10100), rdd.reduce((i1, i2) -> i1 + i2));
   }
 }

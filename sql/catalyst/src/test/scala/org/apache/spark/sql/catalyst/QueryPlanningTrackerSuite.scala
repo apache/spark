@@ -17,25 +17,33 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.mockito.Mockito.{times, verify}
+import org.scalatestplus.mockito.MockitoSugar.mock
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 class QueryPlanningTrackerSuite extends SparkFunSuite {
 
   test("phases") {
     val t = new QueryPlanningTracker
-    t.measureTime("p1") {
+    t.measurePhase("p1") {
       Thread.sleep(1)
     }
 
-    assert(t.phases("p1") > 0)
+    assert(t.phases("p1").durationMs > 0)
     assert(!t.phases.contains("p2"))
+  }
 
-    val old = t.phases("p1")
+  test("multiple measurePhase call") {
+    val t = new QueryPlanningTracker
+    t.measurePhase("p1") { Thread.sleep(1) }
+    val s1 = t.phases("p1")
+    assert(s1.durationMs > 0)
 
-    t.measureTime("p1") {
-      Thread.sleep(1)
-    }
-    assert(t.phases("p1") > old)
+    t.measurePhase("p1") { Thread.sleep(1) }
+    val s2 = t.phases("p1")
+    assert(s2.durationMs > s1.durationMs)
   }
 
   test("rules") {
@@ -62,17 +70,45 @@ class QueryPlanningTrackerSuite extends SparkFunSuite {
 
   test("topRulesByTime") {
     val t = new QueryPlanningTracker
+
+    // Return empty seq when k = 0
+    assert(t.topRulesByTime(0) == Seq.empty)
+    assert(t.topRulesByTime(1) == Seq.empty)
+
     t.recordRuleInvocation("r2", 2, effective = true)
     t.recordRuleInvocation("r4", 4, effective = true)
     t.recordRuleInvocation("r1", 1, effective = false)
     t.recordRuleInvocation("r3", 3, effective = false)
 
+    // k <= total size
+    assert(t.topRulesByTime(0) == Seq.empty)
     val top = t.topRulesByTime(2)
     assert(top.size == 2)
     assert(top(0)._1 == "r4")
     assert(top(1)._1 == "r3")
 
-    // Don't crash when k > total size
+    // k > total size
     assert(t.topRulesByTime(10).size == 4)
+  }
+
+  test("test ready for execution callback") {
+    val mockCallback = mock[QueryPlanningTrackerCallback]
+    val mockPlan1 = mock[LogicalPlan]
+    val mockPlan2 = mock[LogicalPlan]
+    val mockPlan3 = mock[LogicalPlan]
+    val mockPlan4 = mock[LogicalPlan]
+    val t = new QueryPlanningTracker(Some(mockCallback))
+    t.setAnalysisFailed(mockPlan3)
+    verify(mockCallback, times(1)).analysisFailed(t, mockPlan3)
+    t.setAnalysisFailed(mockPlan4)
+    verify(mockCallback, times(1)).analysisFailed(t, mockPlan4)
+    t.setAnalyzed(mockPlan1)
+    verify(mockCallback, times(1)).analyzed(t, mockPlan1)
+    t.setAnalyzed(mockPlan2)
+    verify(mockCallback, times(1)).analyzed(t, mockPlan2)
+    t.setReadyForExecution()
+    verify(mockCallback, times(1)).readyForExecution(t)
+    t.setReadyForExecution()
+    verify(mockCallback, times(1)).readyForExecution(t)
   }
 }

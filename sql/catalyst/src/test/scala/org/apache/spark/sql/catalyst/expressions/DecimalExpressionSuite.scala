@@ -18,6 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
+import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{Decimal, DecimalType, LongType}
 
 class DecimalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -31,32 +34,64 @@ class DecimalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("MakeDecimal") {
-    checkEvaluation(MakeDecimal(Literal(101L), 3, 1), Decimal("10.1"))
-    checkEvaluation(MakeDecimal(Literal.create(null, LongType), 3, 1), null)
-  }
-
-  test("PromotePrecision") {
-    val d1 = Decimal("10.1")
-    checkEvaluation(PromotePrecision(Literal(d1)), d1)
-    val d2 = Decimal(101, 3, 1)
-    checkEvaluation(PromotePrecision(Literal(d2)), d2)
-    checkEvaluation(PromotePrecision(Literal.create(null, DecimalType(2, 1))), null)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkEvaluation(MakeDecimal(Literal(101L), 3, 1), Decimal("10.1"))
+      checkEvaluation(MakeDecimal(Literal.create(null, LongType), 3, 1), null)
+      val overflowExpr = MakeDecimal(Literal.create(1000L, LongType), 3, 1)
+      checkEvaluation(overflowExpr, null)
+      checkEvaluationWithMutableProjection(overflowExpr, null)
+      evaluateWithoutCodegen(overflowExpr, null)
+      checkEvaluationWithUnsafeProjection(overflowExpr, null)
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkEvaluation(MakeDecimal(Literal(101L), 3, 1), Decimal("10.1"))
+      checkEvaluation(MakeDecimal(Literal.create(null, LongType), 3, 1), null)
+      val overflowExpr = MakeDecimal(Literal.create(1000L, LongType), 3, 1)
+      intercept[ArithmeticException](checkEvaluationWithMutableProjection(overflowExpr, null))
+      intercept[ArithmeticException](evaluateWithoutCodegen(overflowExpr, null))
+      intercept[ArithmeticException](checkEvaluationWithUnsafeProjection(overflowExpr, null))
+    }
   }
 
   test("CheckOverflow") {
     val d1 = Decimal("10.1")
-    checkEvaluation(CheckOverflow(Literal(d1), DecimalType(4, 0)), Decimal("10"))
-    checkEvaluation(CheckOverflow(Literal(d1), DecimalType(4, 1)), d1)
-    checkEvaluation(CheckOverflow(Literal(d1), DecimalType(4, 2)), d1)
-    checkEvaluation(CheckOverflow(Literal(d1), DecimalType(4, 3)), null)
+    checkEvaluation(CheckOverflow(Literal(d1), DecimalType(4, 0), true), Decimal("10"))
+    checkEvaluation(CheckOverflow(Literal(d1), DecimalType(4, 1), true), d1)
+    checkEvaluation(CheckOverflow(Literal(d1), DecimalType(4, 2), true), d1)
+    checkEvaluation(CheckOverflow(Literal(d1), DecimalType(4, 3), true), null)
+    intercept[ArithmeticException](CheckOverflow(Literal(d1), DecimalType(4, 3), false).eval())
+    intercept[ArithmeticException](checkEvaluationWithMutableProjection(
+      CheckOverflow(Literal(d1), DecimalType(4, 3), false), null))
 
     val d2 = Decimal(101, 3, 1)
-    checkEvaluation(CheckOverflow(Literal(d2), DecimalType(4, 0)), Decimal("10"))
-    checkEvaluation(CheckOverflow(Literal(d2), DecimalType(4, 1)), d2)
-    checkEvaluation(CheckOverflow(Literal(d2), DecimalType(4, 2)), d2)
-    checkEvaluation(CheckOverflow(Literal(d2), DecimalType(4, 3)), null)
+    checkEvaluation(CheckOverflow(Literal(d2), DecimalType(4, 0), true), Decimal("10"))
+    checkEvaluation(CheckOverflow(Literal(d2), DecimalType(4, 1), true), d2)
+    checkEvaluation(CheckOverflow(Literal(d2), DecimalType(4, 2), true), d2)
+    checkEvaluation(CheckOverflow(Literal(d2), DecimalType(4, 3), true), null)
+    intercept[ArithmeticException](CheckOverflow(Literal(d2), DecimalType(4, 3), false).eval())
+    intercept[ArithmeticException](checkEvaluationWithMutableProjection(
+      CheckOverflow(Literal(d2), DecimalType(4, 3), false), null))
 
-    checkEvaluation(CheckOverflow(Literal.create(null, DecimalType(2, 1)), DecimalType(3, 2)), null)
+    checkEvaluation(CheckOverflow(
+      Literal.create(null, DecimalType(2, 1)), DecimalType(3, 2), true), null)
+    checkEvaluation(CheckOverflow(
+      Literal.create(null, DecimalType(2, 1)), DecimalType(3, 2), false), null)
   }
 
+  test("SPARK-39208: CheckOverflow & CheckOverflowInSum support query context in runtime errors") {
+    val d = Decimal(101, 3, 1)
+    val query = "select cast(d as decimal(4, 3)) from t"
+    val origin = Origin(
+      startIndex = Some(7),
+      stopIndex = Some(30),
+      sqlText = Some(query))
+    val expr1 = withOrigin(origin) {
+      CheckOverflow(Literal(d), DecimalType(4, 3), false)
+    }
+    checkExceptionInExpression[ArithmeticException](expr1, query)
+
+    val expr2 = CheckOverflowInSum(
+      Literal(d), DecimalType(4, 3), false, context = origin.context)
+    checkExceptionInExpression[ArithmeticException](expr2, query)
+  }
 }

@@ -22,9 +22,11 @@ import java.util.Random
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.math3.distribution.PoissonDistribution
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.util.collection.Utils.createArray
 
 class RandomSamplerSuite extends SparkFunSuite with Matchers {
   /**
@@ -59,7 +61,7 @@ class RandomSamplerSuite extends SparkFunSuite with Matchers {
   // will always fail with some nonzero probability, so I'll fix the seed to prevent these
   // tests from generating random failure noise in CI testing, etc.
   val rngSeed: Random = RandomSampler.newDefaultRNG
-  rngSeed.setSeed(235711)
+  rngSeed.setSeed(235711345678901011L)
 
   // Reference implementation of sampling without replacement (bernoulli)
   def sample[T](data: Iterator[T], f: Double): Iterator[T] = {
@@ -99,8 +101,8 @@ class RandomSamplerSuite extends SparkFunSuite with Matchers {
     assert(math.min(d1.length, d2.length) > 0)
     assert(math.min(d1.min, d2.min)  >=  0)
     val m = 1 + math.max(d1.max, d2.max)
-    val h1 = Array.fill[Int](m)(0)
-    val h2 = Array.fill[Int](m)(0)
+    val h1 = createArray(m, 0)
+    val h2 = createArray(m, 0)
     for (v <- d1) { h1(v) += 1 }
     for (v <- d2) { h2(v) += 1 }
     assert(h1.sum == h2.sum)
@@ -322,7 +324,7 @@ class RandomSamplerSuite extends SparkFunSuite with Matchers {
     RandomSampler.defaultMaxGapSamplingFraction should be (0.4)
 
     var d: Double = 0.0
-    var sampler = new BernoulliSampler[Int](0.1)
+    val sampler = new BernoulliSampler[Int](0.1)
     sampler.setSeed(rngSeed.nextLong)
 
     // Array iterator (indexable type)
@@ -333,7 +335,7 @@ class RandomSamplerSuite extends SparkFunSuite with Matchers {
 
     // ArrayBuffer iterator (indexable type)
     d = medianKSD(
-      gaps(sampler.sample(Iterator.from(0).take(20*sampleSize).to[ArrayBuffer].iterator)),
+      gaps(sampler.sample(ArrayBuffer(Iterator.from(0).take(20*sampleSize).toSeq: _*).iterator)),
       gaps(sample(Iterator.from(0), 0.1)))
     d should be < D
 
@@ -546,7 +548,7 @@ class RandomSamplerSuite extends SparkFunSuite with Matchers {
     RandomSampler.defaultMaxGapSamplingFraction should be (0.4)
 
     var d: Double = 0.0
-    var sampler = new PoissonSampler[Int](0.1)
+    val sampler = new PoissonSampler[Int](0.1)
     sampler.setSeed(rngSeed.nextLong)
 
     // Array iterator (indexable type)
@@ -557,7 +559,7 @@ class RandomSamplerSuite extends SparkFunSuite with Matchers {
 
     // ArrayBuffer iterator (indexable type)
     d = medianKSD(
-      gaps(sampler.sample(Iterator.from(0).take(20*sampleSize).to[ArrayBuffer].iterator)),
+      gaps(sampler.sample(ArrayBuffer(Iterator.from(0).take(20*sampleSize).toSeq: _*).iterator)),
       gaps(sampleWR(Iterator.from(0), 0.1)))
     d should be < D
 
@@ -730,7 +732,7 @@ class RandomSamplerSuite extends SparkFunSuite with Matchers {
     val s1 = sampler.sample(data.iterator).toArray
     s1.length should be > 0
 
-    sampler = base.cloneComplement
+    sampler = base.cloneComplement()
     sampler.setSeed(seed)
     val s2 = sampler.sample(data.iterator).toArray
     s2.length should be > 0

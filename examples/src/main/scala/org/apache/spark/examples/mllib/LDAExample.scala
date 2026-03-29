@@ -20,7 +20,8 @@ package org.apache.spark.examples.mllib
 
 import java.util.Locale
 
-import org.apache.log4j.{Level, Logger}
+import org.apache.logging.log4j.Level
+import org.apache.logging.log4j.core.config.Configurator
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -53,7 +54,7 @@ object LDAExample {
       checkpointDir: Option[String] = None,
       checkpointInterval: Int = 10) extends AbstractParams[Params]
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val defaultParams = Params()
 
     val parser = new OptionParser[Params]("LDAExample") {
@@ -111,7 +112,7 @@ object LDAExample {
     val conf = new SparkConf().setAppName(s"LDAExample with $params")
     val sc = new SparkContext(conf)
 
-    Logger.getRootLogger.setLevel(Level.WARN)
+    Configurator.setRootLevel(Level.WARN)
 
     // Load documents, and prepare them for LDA.
     val preprocessStart = System.nanoTime()
@@ -157,17 +158,18 @@ object LDAExample {
     println(s"Finished training LDA model.  Summary:")
     println(s"\t Training time: $elapsed sec")
 
-    if (ldaModel.isInstanceOf[DistributedLDAModel]) {
-      val distLDAModel = ldaModel.asInstanceOf[DistributedLDAModel]
-      val avgLogLikelihood = distLDAModel.logLikelihood / actualCorpusSize.toDouble
-      println(s"\t Training data average log likelihood: $avgLogLikelihood")
-      println()
+    ldaModel match {
+      case distLDAModel: DistributedLDAModel =>
+        val avgLogLikelihood = distLDAModel.logLikelihood / actualCorpusSize.toDouble
+        println(s"\t Training data average log likelihood: $avgLogLikelihood")
+        println()
+      case _ => // do nothing
     }
 
     // Print the topics, showing the top-weighted terms for each topic.
     val topicIndices = ldaModel.describeTopics(maxTermsPerTopic = 10)
     val topics = topicIndices.map { case (terms, termWeights) =>
-      terms.zip(termWeights).map { case (term, weight) => (vocabArray(term.toInt), weight) }
+      terms.zip(termWeights).map { case (term, weight) => (vocabArray(term), weight) }
     }
     println(s"${params.k} topics:")
     topics.zipWithIndex.foreach { case (topic, i) =>
@@ -191,7 +193,7 @@ object LDAExample {
       stopwordFile: String): (RDD[(Long, Vector)], Array[String], Long) = {
 
     val spark = SparkSession
-      .builder
+      .builder()
       .sparkContext(sc)
       .getOrCreate()
     import spark.implicits._

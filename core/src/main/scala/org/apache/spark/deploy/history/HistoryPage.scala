@@ -17,79 +17,116 @@
 
 package org.apache.spark.deploy.history
 
-import javax.servlet.http.HttpServletRequest
+import scala.xml.{Node, Unparsed}
 
-import scala.xml.Node
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.status.api.v1.ApplicationInfo
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.{CspNonce, UIUtils, WebUIPage}
+import org.apache.spark.ui.UIUtils.formatImportJavaScript
 
 private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    // stripXSS is called first to remove suspicious characters used in XSS attacks
-    val requestedIncomplete =
-      Option(UIUtils.stripXSS(request.getParameter("showIncomplete"))).getOrElse("false").toBoolean
+    val requestedIncomplete = Option(request.getParameter("showIncomplete"))
+      .getOrElse("false").toBoolean
 
-    val displayApplications = parent.getApplicationList()
-      .exists(isApplicationCompleted(_) != requestedIncomplete)
+    val displayApplications = shouldDisplayApplications(requestedIncomplete)
     val eventLogsUnderProcessCount = parent.getEventLogsUnderProcess()
     val lastUpdatedTime = parent.getLastUpdatedTime()
     val providerConfig = parent.getProviderConfig()
-    val content =
-      <script src={UIUtils.prependBaseUri(request, "/static/historypage-common.js")}></script> ++
-      <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script>
-      <div>
-          <div class="container-fluid">
-            <ul class="unstyled">
-              {providerConfig.map { case (k, v) => <li><strong>{k}:</strong> {v}</li> }}
-            </ul>
-            {
-            if (eventLogsUnderProcessCount > 0) {
-              <p>There are {eventLogsUnderProcessCount} event log(s) currently being
-                processed which may result in additional applications getting listed on this page.
-                Refresh the page to view updates. </p>
-            }
-            }
 
-            {
-            if (lastUpdatedTime > 0) {
-              <p>Last updated: <span id="last-updated">{lastUpdatedTime}</span></p>
-            }
-            }
-
-            {
-            <p>Client local time zone: <span id="time-zone"></span></p>
-            }
-
-            {
-            if (displayApplications) {
-              <script src={UIUtils.prependBaseUri(
-                request, "/static/dataTables.rowsGroup.js")}></script> ++
-                <div id="history-summary" class="row-fluid"></div> ++
-                <script src={UIUtils.prependBaseUri(request, "/static/historypage.js")}></script> ++
-                <script>setAppLimit({parent.maxApplications})</script>
-            } else if (requestedIncomplete) {
-              <h4>No incomplete applications found!</h4>
-            } else if (eventLogsUnderProcessCount > 0) {
-              <h4>No completed applications found!</h4>
+    val summary =
+      <div class="container-fluid">
+        <ul class="list-unstyled">
+          {providerConfig.map { case (k, v) =>
+            if (k == "Event log directory" && v.contains(",")) {
+              val dirs = v.split(",").map(_.trim)
+              <li>
+                <strong>{k}:</strong> {dirs.length} directories
+                <a class="ms-1" data-bs-toggle="collapse" href="#logDirList" role="button"
+                  aria-expanded="false" aria-controls="logDirList">
+                  (show)
+                </a>
+                <ul class="collapse mt-1" id="logDirList">
+                    {dirs.map(d => <li>{d}</li>)}
+                </ul>
+              </li>
             } else {
-              <h4>No completed applications found!</h4> ++ parent.emptyListingHtml
+              <li><strong>{k}:</strong> {v}</li>
             }
-            }
+          }}
+        </ul>
+        {
+          if (eventLogsUnderProcessCount > 0) {
+          <p>There are {eventLogsUnderProcessCount} event log(s) currently being
+            processed which may result in additional applications getting listed on this page.
+            Refresh the page to view updates. </p>
+          } else Seq.empty
 
-            <a href={makePageLink(request, !requestedIncomplete)}>
-              {
-              if (requestedIncomplete) {
-                "Back to completed applications"
-              } else {
-                "Show incomplete applications"
-              }
-              }
-            </a>
-          </div>
+        }
+        {
+          if (lastUpdatedTime > 0) {
+            <p>Last updated: <span id="last-updated">{lastUpdatedTime}</span></p>
+          } else Seq.empty
+        }
+        {
+          <p>Client local time zone: <span id="time-zone"></span></p>
+        }
       </div>
-    UIUtils.basicSparkPage(request, content, "History Server", true)
+
+    val appList =
+      <div class="container-fluid">
+        {
+          val js =
+            s"""
+               |${formatImportJavaScript(request, "/static/historypage.js", "setAppLimit")}
+               |
+               |setAppLimit(${parent.maxApplications});
+               |""".stripMargin
+
+          if (displayApplications) {
+            <script src={UIUtils.prependBaseUri(
+              request, "/static/dataTables.rowsGroup.js")}></script> ++
+            <script type="module" src={UIUtils.prependBaseUri(
+              request, "/static/historypage.js")} ></script> ++
+            <script type="module" nonce={CspNonce.get}>{Unparsed(js)}</script> ++
+              <div id="history-summary"></div>
+          } else if (requestedIncomplete) {
+            <h4>No incomplete applications found!</h4>
+          } else if (eventLogsUnderProcessCount > 0) {
+            <h4>No completed applications found!</h4>
+          } else {
+            <h4>No completed applications found!</h4> ++ parent.emptyListingHtml()
+          }
+        }
+      </div>
+
+    val pageLink =
+      <div class="container-fluid">
+        <a href={makePageLink(request, !requestedIncomplete)}>
+          {
+            if (requestedIncomplete) {
+              "Back to completed applications"
+            } else {
+              "Show incomplete applications"
+            }
+          }
+        </a>
+        <p><a href={UIUtils.prependBaseUri(request, "/logPage/?self&logType=out")}>
+          Show server log</a></p>
+      </div>
+    val content =
+      <script type="module" src={UIUtils.prependBaseUri(
+        request, "/static/historypage-common.js")}></script> ++
+      <script type="module" src={UIUtils.prependBaseUri(
+        request, "/static/utils.js")}></script> ++
+      summary ++ appList ++ pageLink
+    UIUtils.basicSparkPage(request, content, parent.title, true)
+  }
+
+  def shouldDisplayApplications(requestedIncomplete: Boolean): Boolean = {
+    parent.getApplicationInfoList(1)(isApplicationCompleted(_) != requestedIncomplete).nonEmpty
   }
 
   private def makePageLink(request: HttpServletRequest, showIncomplete: Boolean): String = {

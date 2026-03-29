@@ -29,7 +29,7 @@ import org.apache.spark.sql.SparkSession
 object GradientBoostedTreeClassifierExample {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("GradientBoostedTreeClassifierExample")
       .getOrCreate()
 
@@ -65,7 +65,7 @@ object GradientBoostedTreeClassifierExample {
     val labelConverter = new IndexToString()
       .setInputCol("prediction")
       .setOutputCol("predictedLabel")
-      .setLabels(labelIndexer.labels)
+      .setLabels(labelIndexer.labelsArray(0))
 
     // Chain indexers and GBT in a Pipeline.
     val pipeline = new Pipeline()

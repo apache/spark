@@ -25,21 +25,23 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 private[libsvm] class LibSVMOutputWriter(
-    path: String,
+    val path: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter {
@@ -65,9 +67,9 @@ private[libsvm] class LibSVMOutputWriter(
   }
 }
 
-/** @see [[LibSVMDataSource]] for public documentation. */
+// see `LibSVMDataSource` for public documentation.
 // If this is moved or renamed, please update DataSource's backwardCompatibilityMap.
-private[libsvm] class LibSVMFileFormat
+private[libsvm] case class LibSVMFileFormat()
   extends TextBasedFileFormat
   with DataSourceRegister
   with Logging {
@@ -79,8 +81,8 @@ private[libsvm] class LibSVMFileFormat
   private def verifySchema(dataSchema: StructType, forWriting: Boolean): Unit = {
     if (
       dataSchema.size != 2 ||
-        !dataSchema(0).dataType.sameType(DataTypes.DoubleType) ||
-        !dataSchema(1).dataType.sameType(new VectorUDT()) ||
+        !DataTypeUtils.sameType(dataSchema(0).dataType, DataTypes.DoubleType) ||
+        !DataTypeUtils.sameType(dataSchema(1).dataType, new VectorUDT()) ||
         !(forWriting || dataSchema(1).metadata.getLong(LibSVMOptions.NUM_FEATURES).toInt > 0)
     ) {
       throw new IOException(s"Illegal schema for libsvm data, schema=$dataSchema")
@@ -99,19 +101,20 @@ private[libsvm] class LibSVMFileFormat
         "though the input. If you know the number in advance, please specify it via " +
         "'numFeatures' option to avoid the extra scan.")
 
-      val paths = files.map(_.getPath.toUri.toString)
-      val parsed = MLUtils.parseLibSVMFile(sparkSession, paths)
+      val paths = files.map(_.getPath.toString)
+      val parsed = MLUtils.parseLibSVMFile(sparkSession, paths, options)
       MLUtils.computeNumFeatures(parsed)
     }
 
-    val featuresMetadata = new MetadataBuilder()
+    val labelField = StructField("label", DoubleType, nullable = false)
+
+    val extraMetadata = new MetadataBuilder()
       .putLong(LibSVMOptions.NUM_FEATURES, numFeatures)
       .build()
+    val attrGroup = new AttributeGroup(name = "features", numAttributes = numFeatures)
+    val featuresField = attrGroup.toStructField(extraMetadata)
 
-    Some(
-      StructType(
-        StructField("label", DoubleType, nullable = false) ::
-        StructField("features", new VectorUDT(), nullable = false, featuresMetadata) :: Nil))
+    Some(StructType(Array(labelField, featuresField)))
   }
 
   override def prepareWrite(
@@ -150,10 +153,12 @@ private[libsvm] class LibSVMFileFormat
     val isSparse = libSVMOptions.isSparse
 
     val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
 
     (file: PartitionedFile) => {
-      val linesReader = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
+      val linesReader = Utils.createResourceUninterruptiblyIfInTaskThread(
+        new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
+      )
       Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => linesReader.close()))
 
       val points = linesReader
@@ -164,7 +169,7 @@ private[libsvm] class LibSVMFileFormat
             LabeledPoint(label, Vectors.sparse(numFeatures, indices, values))
           }
 
-      val converter = RowEncoder(dataSchema)
+      val toRow = ExpressionEncoder(dataSchema).createSerializer()
       val fullOutput = dataSchema.map { f =>
         AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()
       }
@@ -176,7 +181,7 @@ private[libsvm] class LibSVMFileFormat
 
       points.map { pt =>
         val features = if (isSparse) pt.features.toSparse else pt.features.toDense
-        requiredColumns(converter.toRow(Row(pt.label, features)))
+        requiredColumns(toRow(Row(pt.label, features)))
       }
     }
   }

@@ -21,11 +21,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Random;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.SparkConf;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TestMemoryConsumer;
@@ -38,7 +39,7 @@ public class ShuffleInMemorySorterSuite {
   protected boolean shouldUseRadixSort() { return false; }
 
   final TestMemoryManager memoryManager =
-    new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false"));
+    new TestMemoryManager(new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false));
   final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
   final TestMemoryConsumer consumer = new TestMemoryConsumer(taskMemoryManager);
 
@@ -53,11 +54,11 @@ public class ShuffleInMemorySorterSuite {
     final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(
       consumer, 100, shouldUseRadixSort());
     final ShuffleInMemorySorter.ShuffleSorterIterator iter = sorter.getSortedIterator();
-    Assert.assertFalse(iter.hasNext());
+    Assertions.assertFalse(iter.hasNext());
   }
 
   @Test
-  public void testBasicSorting() throws Exception {
+  public void testBasicSorting() {
     final String[] dataToSort = new String[] {
       "Boba",
       "Pearls",
@@ -69,7 +70,7 @@ public class ShuffleInMemorySorterSuite {
       "Lychee",
       "Mango"
     };
-    final SparkConf conf = new SparkConf().set("spark.memory.offHeap.enabled", "false");
+    final SparkConf conf = new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false);
     final TaskMemoryManager memoryManager =
       new TaskMemoryManager(new TestMemoryManager(conf), 0);
     final MemoryConsumer c = new TestMemoryConsumer(memoryManager);
@@ -101,12 +102,12 @@ public class ShuffleInMemorySorterSuite {
     int prevPartitionId = -1;
     Arrays.sort(dataToSort);
     for (int i = 0; i < dataToSort.length; i++) {
-      Assert.assertTrue(iter.hasNext());
+      Assertions.assertTrue(iter.hasNext());
       iter.loadNext();
       final int partitionId = iter.packedRecordPointer.getPartitionId();
-      Assert.assertTrue(partitionId >= 0 && partitionId <= 3);
-      Assert.assertTrue("Partition id " + partitionId + " should be >= prev id " + prevPartitionId,
-        partitionId >= prevPartitionId);
+      Assertions.assertTrue(partitionId >= 0 && partitionId <= 3);
+      Assertions.assertTrue(partitionId >= prevPartitionId,
+        "Partition id " + partitionId + " should be >= prev id " + prevPartitionId);
       final long recordAddress = iter.packedRecordPointer.getRecordPointer();
       final int recordLength = Platform.getInt(
         memoryManager.getPage(recordAddress), memoryManager.getOffsetInPage(recordAddress));
@@ -114,13 +115,13 @@ public class ShuffleInMemorySorterSuite {
         memoryManager.getPage(recordAddress),
         memoryManager.getOffsetInPage(recordAddress) + 4, // skip over record length
         recordLength);
-      Assert.assertTrue(Arrays.binarySearch(dataToSort, str) != -1);
+      Assertions.assertTrue(Arrays.binarySearch(dataToSort, str) != -1);
     }
-    Assert.assertFalse(iter.hasNext());
+    Assertions.assertFalse(iter.hasNext());
   }
 
   @Test
-  public void testSortingManyNumbers() throws Exception {
+  public void testSortingManyNumbers() {
     ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(consumer, 4, shouldUseRadixSort());
     int[] numbersToSort = new int[128000];
     Random random = new Random(16);
@@ -140,6 +141,6 @@ public class ShuffleInMemorySorterSuite {
       sorterResult[j] = iter.packedRecordPointer.getPartitionId();
       j += 1;
     }
-    Assert.assertArrayEquals(numbersToSort, sorterResult);
+    Assertions.assertArrayEquals(numbersToSort, sorterResult);
   }
 }

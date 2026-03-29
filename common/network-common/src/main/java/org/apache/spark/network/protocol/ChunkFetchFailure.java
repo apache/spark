@@ -17,7 +17,8 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
+
 import io.netty.buffer.ByteBuf;
 
 /**
@@ -54,13 +55,12 @@ public final class ChunkFetchFailure extends AbstractMessage implements Response
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(streamChunkId, errorString);
+    return Objects.hash(streamChunkId, errorString);
   }
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof ChunkFetchFailure) {
-      ChunkFetchFailure o = (ChunkFetchFailure) other;
+    if (other instanceof ChunkFetchFailure o) {
       return streamChunkId.equals(o.streamChunkId) && errorString.equals(o.errorString);
     }
     return false;
@@ -68,9 +68,6 @@ public final class ChunkFetchFailure extends AbstractMessage implements Response
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("streamChunkId", streamChunkId)
-      .add("errorString", errorString)
-      .toString();
+    return "ChunkFetchFailure[streamChunkId=" + streamChunkId + ",errorString=" + errorString + "]";
   }
 }

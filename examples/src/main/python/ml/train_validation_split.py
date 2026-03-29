@@ -17,7 +17,7 @@
 
 """
 This example demonstrates applying TrainValidationSplit to split data
-and preform model selection.
+and perform model selection.
 Run with:
 
   bin/spark-submit examples/src/main/python/ml/train_validation_split.py

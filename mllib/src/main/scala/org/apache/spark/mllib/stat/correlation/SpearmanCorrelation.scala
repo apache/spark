@@ -46,9 +46,7 @@ private[stat] object SpearmanCorrelation extends Correlation with Logging {
   override def computeCorrelationMatrix(X: RDD[Vector]): Matrix = {
     // ((columnIndex, value), rowUid)
     val colBased = X.zipWithUniqueId().flatMap { case (vec, uid) =>
-      vec.toArray.view.zipWithIndex.map { case (v, j) =>
-        ((j, v), uid)
-      }
+      vec.iterator.map(t => (t, uid))
     }
     // global sort by (columnIndex, value)
     val sorted = colBased.sortByKey()
@@ -72,7 +70,7 @@ private[stat] object SpearmanCorrelation extends Correlation with Logging {
           val output = flush()
           preCol = j
           preVal = v
-          startRank = rank
+          startRank = rank.toDouble
           cachedUids += uid
           output
         } else {

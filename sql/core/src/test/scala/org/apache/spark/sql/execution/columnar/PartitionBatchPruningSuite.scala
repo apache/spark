@@ -17,25 +17,19 @@
 
 package org.apache.spark.sql.execution.columnar
 
-import org.scalatest.BeforeAndAfterEach
-
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 
 
-class PartitionBatchPruningSuite
-  extends SparkFunSuite
-  with BeforeAndAfterEach
-  with SharedSQLContext {
+class PartitionBatchPruningSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 
-  private lazy val originalColumnBatchSize = spark.conf.get(SQLConf.COLUMN_BATCH_SIZE)
+  private lazy val originalColumnBatchSize = spark.conf.get(SQLConf.COLUMN_BATCH_SIZE.key)
   private lazy val originalInMemoryPartitionPruning =
-    spark.conf.get(SQLConf.IN_MEMORY_PARTITION_PRUNING)
+    spark.conf.get(SQLConf.IN_MEMORY_PARTITION_PRUNING.key)
   private val testArrayData = (1 to 100).map { key =>
     Tuple1(Array.fill(key)(key))
   }
@@ -50,7 +44,7 @@ class PartitionBatchPruningSuite
     // Enable in-memory partition pruning
     spark.conf.set(SQLConf.IN_MEMORY_PARTITION_PRUNING.key, true)
     // Enable in-memory table scan accumulators
-    spark.conf.set("spark.sql.inMemoryTableScanStatistics.enable", "true")
+    spark.conf.set(SQLConf.IN_MEMORY_TABLE_SCAN_STATISTICS_ENABLED.key, "true")
   }
 
   override protected def afterAll(): Unit = {
@@ -170,6 +164,15 @@ class PartitionBatchPruningSuite
     }
   }
 
+  // Support `StartsWith` predicate
+  checkBatchPruning("SELECT CAST(s AS INT) FROM pruningStringData WHERE s like '18%'", 1, 1)(
+    180 to 189
+  )
+  checkBatchPruning("SELECT CAST(s AS INT) FROM pruningStringData WHERE s like '%'", 5, 11)(
+    100 to 200
+  )
+  checkBatchPruning("SELECT CAST(s AS INT) FROM pruningStringData WHERE '18%' like s", 5, 11)(Seq())
+
   // With disable IN_MEMORY_PARTITION_PRUNING option
   test("disable IN_MEMORY_PARTITION_PRUNING") {
     spark.conf.set(SQLConf.IN_MEMORY_PARTITION_PRUNING.key, false)
@@ -178,7 +181,7 @@ class PartitionBatchPruningSuite
     val result = df.collect().map(_(0)).toArray
     assert(result.length === 1)
 
-    val (readPartitions, readBatches) = df.queryExecution.sparkPlan.collect {
+    val (readPartitions, readBatches) = collect(df.queryExecution.executedPlan) {
         case in: InMemoryTableScanExec => (in.readPartitions.value, in.readBatches.value)
       }.head
     assert(readPartitions === 5)
@@ -199,7 +202,7 @@ class PartitionBatchPruningSuite
         df.collect().map(_(0)).toArray
       }
 
-      val (readPartitions, readBatches) = df.queryExecution.sparkPlan.collect {
+      val (readPartitions, readBatches) = collect(df.queryExecution.executedPlan) {
         case in: InMemoryTableScanExec => (in.readPartitions.value, in.readBatches.value)
       }.head
 

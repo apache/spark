@@ -19,16 +19,16 @@ package org.apache.spark.streaming.scheduler
 
 import java.nio.ByteBuffer
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.language.implicitConversions
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.internal.LogKeys.{RECEIVED_BLOCK_INFO, RECEIVED_BLOCK_TRACKER_LOG_EVENT}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.util.{WriteAheadLog, WriteAheadLogUtils}
@@ -100,7 +100,8 @@ private[streaming] class ReceivedBlockTracker(
       writeResult
     } catch {
       case NonFatal(e) =>
-        logError(s"Error adding block $receivedBlockInfo", e)
+        logError(
+          log"Error adding block ${MDC(RECEIVED_BLOCK_INFO, receivedBlockInfo)}", e)
         false
     }
   }
@@ -111,8 +112,14 @@ private[streaming] class ReceivedBlockTracker(
    */
   def allocateBlocksToBatch(batchTime: Time): Unit = synchronized {
     if (lastAllocatedBatchTime == null || batchTime > lastAllocatedBatchTime) {
+      // We explicitly create an ArrayBuffer here because at least as of Scala 2.11 and 2.12
+      // a mutable.Queue fails serialization with a StackOverflow error if it has more than
+      // a few thousand elements.  So we explicitly allocate a collection for serialization which
+      // we know doesn't have this issue.  (See SPARK-26734).
       val streamIdToBlocks = streamIds.map { streamId =>
-        (streamId, getReceivedBlockQueue(streamId).clone())
+        val blocks = mutable.ArrayBuffer[ReceivedBlockInfo]()
+        blocks ++= getReceivedBlockQueue(streamId).clone()
+        (streamId, blocks.toSeq)
       }.toMap
       val allocatedBlocks = AllocatedBlocks(streamIdToBlocks)
       if (writeToLog(BatchAllocationEvent(batchTime, allocatedBlocks))) {
@@ -120,7 +127,9 @@ private[streaming] class ReceivedBlockTracker(
         timeToAllocatedBlocks.put(batchTime, allocatedBlocks)
         lastAllocatedBatchTime = batchTime
       } else {
-        logInfo(s"Possibly processed batch $batchTime needs to be processed again in WAL recovery")
+        logInfo(log"Possibly processed batch ${MDC(LogKeys.BATCH_TIMESTAMP,
+          batchTime)} needs to be " +
+          log"processed again in WAL recovery")
       }
     } else {
       // This situation occurs when:
@@ -130,7 +139,9 @@ private[streaming] class ReceivedBlockTracker(
       // 2. Slow checkpointing makes recovered batch time older than WAL recovered
       // lastAllocatedBatchTime.
       // This situation will only occurs in recovery time.
-      logInfo(s"Possibly processed batch $batchTime needs to be processed again in WAL recovery")
+      logInfo(log"Possibly processed batch ${MDC(LogKeys.BATCH_TIMESTAMP,
+        batchTime)} needs to be processed " +
+        log"again in WAL recovery")
     }
   }
 
@@ -168,7 +179,7 @@ private[streaming] class ReceivedBlockTracker(
   def cleanupOldBatches(cleanupThreshTime: Time, waitForCompletion: Boolean): Unit = synchronized {
     require(cleanupThreshTime.milliseconds < clock.getTimeMillis())
     val timesToCleanup = timeToAllocatedBlocks.keys.filter { _ < cleanupThreshTime }.toSeq
-    logInfo(s"Deleting batches: ${timesToCleanup.mkString(" ")}")
+    logInfo(log"Deleting batches: ${MDC(LogKeys.DURATION, timesToCleanup.mkString(" "))}")
     if (writeToLog(BatchCleanupEvent(timesToCleanup))) {
       timeToAllocatedBlocks --= timesToCleanup
       writeAheadLogOption.foreach(_.clean(cleanupThreshTime.milliseconds, waitForCompletion))
@@ -178,7 +189,7 @@ private[streaming] class ReceivedBlockTracker(
   }
 
   /** Stop the block tracker. */
-  def stop() {
+  def stop(): Unit = {
     writeAheadLogOption.foreach { _.close() }
   }
 
@@ -188,7 +199,7 @@ private[streaming] class ReceivedBlockTracker(
    */
   private def recoverPastEvents(): Unit = synchronized {
     // Insert the recovered block information
-    def insertAddedBlock(receivedBlockInfo: ReceivedBlockInfo) {
+    def insertAddedBlock(receivedBlockInfo: ReceivedBlockInfo): Unit = {
       logTrace(s"Recovery: Inserting added block $receivedBlockInfo")
       receivedBlockInfo.setBlockIdInvalid()
       getReceivedBlockQueue(receivedBlockInfo.streamId) += receivedBlockInfo
@@ -196,7 +207,7 @@ private[streaming] class ReceivedBlockTracker(
 
     // Insert the recovered block-to-batch allocations and removes them from queue of
     // received blocks.
-    def insertAllocatedBatch(batchTime: Time, allocatedBlocks: AllocatedBlocks) {
+    def insertAllocatedBatch(batchTime: Time, allocatedBlocks: AllocatedBlocks): Unit = {
       logTrace(s"Recovery: Inserting allocated batch for time $batchTime to " +
         s"${allocatedBlocks.streamIdToAllocatedBlocks}")
       allocatedBlocks.streamIdToAllocatedBlocks.foreach {
@@ -208,15 +219,16 @@ private[streaming] class ReceivedBlockTracker(
     }
 
     // Cleanup the batch allocations
-    def cleanupBatches(batchTimes: Seq[Time]) {
+    def cleanupBatches(batchTimes: Seq[Time]): Unit = {
       logTrace(s"Recovery: Cleaning up batches $batchTimes")
       timeToAllocatedBlocks --= batchTimes
     }
 
     writeAheadLogOption.foreach { writeAheadLog =>
-      logInfo(s"Recovering from write ahead logs in ${checkpointDirOption.get}")
+      logInfo(log"Recovering from write ahead logs in " +
+        log"${MDC(LogKeys.PATH, checkpointDirOption.get)}")
       writeAheadLog.readAll().asScala.foreach { byteBuffer =>
-        logInfo("Recovering record " + byteBuffer)
+        logInfo(log"Recovering record ${MDC(LogKeys.BYTE_BUFFER, byteBuffer)}")
         Utils.deserialize[ReceivedBlockTrackerLogEvent](
           JavaUtils.bufferToArray(byteBuffer), Thread.currentThread().getContextClassLoader) match {
           case BlockAdditionEvent(receivedBlockInfo) =>
@@ -240,7 +252,8 @@ private[streaming] class ReceivedBlockTracker(
         true
       } catch {
         case NonFatal(e) =>
-          logWarning(s"Exception thrown while writing record: $record to the WriteAheadLog.", e)
+          logWarning(log"Exception thrown while writing record: " +
+            log"${MDC(RECEIVED_BLOCK_TRACKER_LOG_EVENT, record)} to the WriteAheadLog.", e)
           false
       }
     } else {

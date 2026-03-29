@@ -27,12 +27,13 @@ import scala.util.matching.Regex
 import org.apache.hadoop.hive.common.StatsSetupConst
 
 import org.apache.spark.metrics.source.HiveCatalogMetrics
-import org.apache.spark.sql._
+import org.apache.spark.sql.{AnalysisException, _}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, HiveTableRelation}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, HistogramBin, HistogramSerializer}
+import org.apache.spark.sql.catalyst.plans.logical.HistogramBin
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, StringUtils}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.command.{AnalyzeColumnCommand, CommandUtils, DDLUtils}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.joins._
@@ -40,7 +41,7 @@ import org.apache.spark.sql.hive.HiveExternalCatalog._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-
+import org.apache.spark.util.Utils
 
 class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleton {
 
@@ -53,7 +54,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
       Seq(dsTbl, hiveTbl).foreach { tbl =>
         sql(s"ANALYZE TABLE $tbl COMPUTE STATISTICS")
-        val catalogStats = getCatalogStatistics(tbl)
+        val catalogStats = getTableStats(tbl)
         withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
           val relationStats = spark.table(tbl).queryExecution.optimizedPlan.stats
           assert(relationStats.sizeInBytes == catalogStats.sizeInBytes)
@@ -76,15 +77,15 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       withTable("csv_table") {
         withTempDir { tempDir =>
           // EXTERNAL OpenCSVSerde table pointing to LOCATION
-          val file1 = new File(tempDir + "/data1")
-          val writer1 = new PrintWriter(file1)
-          writer1.write("1,2")
-          writer1.close()
+          val file1 = new File(s"$tempDir/data1")
+          Utils.tryWithResource(new PrintWriter(file1)) { writer =>
+            writer.write("1,2")
+          }
 
-          val file2 = new File(tempDir + "/data2")
-          val writer2 = new PrintWriter(file2)
-          writer2.write("1,2")
-          writer2.close()
+          val file2 = new File(s"$tempDir/data2")
+          Utils.tryWithResource(new PrintWriter(file2)) { writer =>
+            writer.write("1,2")
+          }
 
           sql(
             s"""
@@ -100,11 +101,46 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             .asInstanceOf[HiveTableRelation]
 
           val properties = relation.tableMeta.ignoredProperties
-          assert(properties("totalSize").toLong <= 0, "external table totalSize must be <= 0")
-          assert(properties("rawDataSize").toLong <= 0, "external table rawDataSize must be <= 0")
+          // Since HIVE-6727, Hive fixes table-level stats for external tables are incorrect.
+          assert(properties("totalSize").toLong == 6)
+          assert(properties.get("rawDataSize").isEmpty)
 
           val sizeInBytes = relation.stats.sizeInBytes
           assert(sizeInBytes === BigInt(file1.length() + file2.length()))
+        }
+      }
+    }
+  }
+
+  test("Hive serde table with incorrect statistics") {
+    withTempDir { tempDir =>
+      withTable("t1") {
+        spark.range(5).write.mode(SaveMode.Overwrite).parquet(tempDir.getCanonicalPath)
+        val dataSize = getDataSize(tempDir)
+        spark.sql(
+          s"""
+             |CREATE EXTERNAL TABLE t1(id BIGINT)
+             |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+             |STORED AS
+             |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+             |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+             |LOCATION '${tempDir.getCanonicalPath}'
+             |TBLPROPERTIES (
+             |'rawDataSize'='-1', 'numFiles'='0', 'totalSize'='0',
+             |'COLUMN_STATS_ACCURATE'='false', 'numRows'='-1'
+             |)""".stripMargin)
+
+        spark.sql("REFRESH TABLE t1")
+        // After SPARK-28573, sizeInBytes should be equal to dataSize.
+        val relation1 = spark.table("t1").queryExecution.analyzed.children.head
+        assert(relation1.stats.sizeInBytes === dataSize)
+
+        spark.sql("REFRESH TABLE t1")
+        // After SPARK-19678 and enable ENABLE_FALL_BACK_TO_HDFS_FOR_STATS,
+        // sizeInBytes should be equal to dataSize.
+        withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
+          val relation2 = spark.table("t1").queryExecution.analyzed.children.head
+          assert(relation2.stats.sizeInBytes === dataSize)
         }
       }
     }
@@ -117,7 +153,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     // Non-partitioned table
     val nonPartTable = "non_part_table"
     withTable(nonPartTable) {
-      sql(s"CREATE TABLE $nonPartTable (key STRING, value STRING)")
+      sql(s"CREATE TABLE $nonPartTable (key STRING, value STRING) USING hive")
       sql(s"INSERT INTO TABLE $nonPartTable SELECT * FROM src")
       sql(s"INSERT INTO TABLE $nonPartTable SELECT * FROM src")
 
@@ -129,7 +165,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     // Partitioned table
     val partTable = "part_table"
     withTable(partTable) {
-      sql(s"CREATE TABLE $partTable (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+      sql(s"CREATE TABLE $partTable (key STRING, value STRING) USING hive " +
+        "PARTITIONED BY (ds STRING)")
       sql(s"INSERT INTO TABLE $partTable PARTITION (ds='2010-01-01') SELECT * FROM src")
       sql(s"INSERT INTO TABLE $partTable PARTITION (ds='2010-01-02') SELECT * FROM src")
       sql(s"INSERT INTO TABLE $partTable PARTITION (ds='2010-01-03') SELECT * FROM src")
@@ -155,7 +192,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION.key -> "True") {
       val checkSizeTable = "checkSizeTable"
       withTable(checkSizeTable) {
-          sql(s"CREATE TABLE $checkSizeTable (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+          sql(s"CREATE TABLE $checkSizeTable (key STRING, value STRING) USING hive " +
+            "PARTITIONED BY (ds STRING)")
           sql(s"INSERT INTO TABLE $checkSizeTable PARTITION (ds='2010-01-01') SELECT * FROM src")
           sql(s"INSERT INTO TABLE $checkSizeTable PARTITION (ds='2010-01-02') SELECT * FROM src")
           sql(s"INSERT INTO TABLE $checkSizeTable PARTITION (ds='2010-01-03') SELECT * FROM src")
@@ -163,7 +201,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             .getTableMetadata(TableIdentifier(checkSizeTable))
           HiveCatalogMetrics.reset()
           assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
-          val size = CommandUtils.calculateTotalSize(spark, tableMeta)
+          val (size, _) = CommandUtils.calculateTotalSize(spark, tableMeta)
           assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 1)
           assert(size === BigInt(17436))
       }
@@ -238,7 +276,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   test("SPARK-22745 - read Hive's statistics for partition") {
     val tableName = "hive_stats_part_table"
     withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) USING hive " +
+        "PARTITIONED BY (ds STRING)")
       sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2017-01-01') SELECT * FROM src")
       var partition = spark.sessionState.catalog
         .getPartition(TableIdentifier(tableName), Map("ds" -> "2017-01-01"))
@@ -260,7 +299,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     val tableName = "analyzeTable_part"
     withTable(tableName) {
       withTempPath { path =>
-        sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+        sql(s"CREATE TABLE $tableName (key STRING, value STRING) USING hive " +
+          "PARTITIONED BY (ds STRING)")
 
         val partitionDates = List("2010-01-01", "2010-01-02", "2010-01-03")
         partitionDates.foreach { ds =>
@@ -271,7 +311,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
         sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS noscan")
 
-        assert(getCatalogStatistics(tableName).sizeInBytes === BigInt(17436))
+        assert(getTableStats(tableName).sizeInBytes === BigInt(17436))
       }
     }
   }
@@ -285,6 +325,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           sql(
             s"""
                |CREATE TABLE $sourceTableName (key STRING, value STRING)
+               |USING hive
                |PARTITIONED BY (ds STRING)
                |LOCATION '${path.toURI}'
              """.stripMargin)
@@ -302,6 +343,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           sql(
             s"""
                |CREATE TABLE $tableName (key STRING, value STRING)
+               |USING hive
                |PARTITIONED BY (ds STRING)
                |LOCATION '${path.toURI}'
              """.stripMargin)
@@ -312,12 +354,90 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
           // Analyze original table - expect 3 partitions
           sql(s"ANALYZE TABLE $sourceTableName COMPUTE STATISTICS noscan")
-          assert(getCatalogStatistics(sourceTableName).sizeInBytes === BigInt(3 * 5812))
+          assert(getTableStats(sourceTableName).sizeInBytes === BigInt(3 * 5812))
 
           // Analyze partial-copy table - expect only 1 partition
           sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS noscan")
-          assert(getCatalogStatistics(tableName).sizeInBytes === BigInt(5812))
+          assert(getTableStats(tableName).sizeInBytes === BigInt(5812))
         }
+    }
+  }
+
+  test("SPARK-45731: update partition stats with ANALYZE TABLE") {
+    val tableName = "analyzeTable_part"
+
+    def queryStats(ds: String): Option[CatalogStatistics] = {
+      val partition =
+        spark.sessionState.catalog.getPartition(TableIdentifier(tableName), Map("ds" -> ds))
+      partition.stats
+    }
+
+    val partitionDates = List("2010-01-01", "2010-01-02", "2010-01-03")
+    val expectedRowCount = 500
+
+    Seq(true, false).foreach { partitionStatsEnabled =>
+      withSQLConf(SQLConf.UPDATE_PART_STATS_IN_ANALYZE_TABLE_ENABLED.key ->
+        partitionStatsEnabled.toString) {
+        withTable(tableName) {
+          withTempPath { path =>
+            // Create a table with 3 partitions all located under a directory 'path'
+            sql(
+              s"""
+                 |CREATE TABLE $tableName (key INT, value STRING)
+                 |USING parquet
+                 |PARTITIONED BY (ds STRING)
+                 |LOCATION '${path.toURI}'
+               """.stripMargin)
+
+            partitionDates.foreach { ds =>
+              sql(s"ALTER TABLE $tableName ADD PARTITION (ds='$ds') LOCATION '$path/ds=$ds'")
+              sql("SELECT * FROM src").write.mode(SaveMode.Overwrite)
+                .format("parquet").save(s"$path/ds=$ds")
+            }
+
+            assert(getCatalogTable(tableName).stats.isEmpty)
+            partitionDates.foreach { ds =>
+              assert(queryStats(ds).isEmpty)
+            }
+
+            sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS NOSCAN")
+
+            // Table size should also have been updated
+            assert(getTableStats(tableName).sizeInBytes > 0)
+            // Row count should NOT be updated with the `NOSCAN` option
+            assert(getTableStats(tableName).rowCount.isEmpty)
+
+            partitionDates.foreach { ds =>
+              val partStats = queryStats(ds)
+              if (partitionStatsEnabled) {
+                assert(partStats.nonEmpty)
+                assert(partStats.get.sizeInBytes > 0)
+                assert(partStats.get.rowCount.isEmpty)
+              } else {
+                assert(partStats.isEmpty)
+              }
+            }
+
+            sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS")
+
+            assert(getTableStats(tableName).sizeInBytes > 0)
+            // Table row count should be updated
+            assert(getTableStats(tableName).rowCount.get == 3 * expectedRowCount)
+
+            partitionDates.foreach { ds =>
+              val partStats = queryStats(ds)
+              if (partitionStatsEnabled) {
+                assert(partStats.nonEmpty)
+                // The scan option should update partition row count
+                assert(partStats.get.sizeInBytes > 0)
+                assert(partStats.get.rowCount.get == expectedRowCount)
+              } else {
+                assert(partStats.isEmpty)
+              }
+            }
+          }
+        }
+      }
     }
   }
 
@@ -335,7 +455,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
 
     withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) USING hive " +
+        "PARTITIONED BY (ds STRING)")
 
       createPartition("2010-01-01", "SELECT '1', 'A' from src")
       createPartition("2010-01-02", "SELECT '1', 'A' from src UNION ALL SELECT '1', 'A' from src")
@@ -388,7 +509,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
 
     withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING, hr INT)")
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) USING hive " +
+        "PARTITIONED BY (ds STRING, hr INT)")
 
       createPartition("2010-01-01", 10, "SELECT '1', 'A' from src")
       createPartition("2010-01-01", 11, "SELECT '1', 'A' from src")
@@ -436,7 +558,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
 
     withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING, hr INT)")
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) USING hive " +
+        "PARTITIONED BY (ds STRING, hr INT)")
 
       createPartition("2010-01-01", 10, "SELECT '1', 'A' from src")
       createPartition("2010-01-01", 11, "SELECT '1', 'A' from src")
@@ -486,12 +609,15 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        val message = intercept[AnalysisException] {
-          sql(s"ANALYZE TABLE $tableName PARTITION (DS='2010-01-01') COMPUTE STATISTICS")
-        }.getMessage
-        assert(message.contains(
-          "DS is not a valid partition column in table " +
-            s"`default`.`${tableName.toLowerCase(Locale.ROOT)}`"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ANALYZE TABLE $tableName PARTITION (DS='2010-01-01') COMPUTE STATISTICS")
+          },
+          condition = "PARTITIONS_NOT_FOUND",
+          parameters = Map(
+            "partitionList" -> "`DS`",
+            "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$tableName`")
+        )
       }
     }
   }
@@ -536,6 +662,24 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
+  test("analyze not found column") {
+    val tableName = "analyzeTable"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS fakeColumn")
+        },
+        condition = "COLUMN_NOT_FOUND",
+        parameters = Map(
+          "colName" -> "`fakeColumn`",
+          "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\""
+        )
+      )
+    }
+  }
+
   test("analyze non-existent partition") {
 
     def assertAnalysisException(analyzeCommand: String, errorMessage: String): Unit = {
@@ -551,16 +695,26 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
       sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2010-01-01') SELECT * FROM src")
 
-      assertAnalysisException(
-        s"ANALYZE TABLE $tableName PARTITION (hour=20) COMPUTE STATISTICS",
-        "hour is not a valid partition column in table " +
-          s"`default`.`${tableName.toLowerCase(Locale.ROOT)}`"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName PARTITION (hour=20) COMPUTE STATISTICS")
+        },
+        condition = "PARTITIONS_NOT_FOUND",
+        parameters = Map(
+          "partitionList" -> "`hour`",
+          "tableName" ->
+            s"`$SESSION_CATALOG_NAME`.`default`.`${tableName.toLowerCase(Locale.ROOT)}`")
       )
 
-      assertAnalysisException(
-        s"ANALYZE TABLE $tableName PARTITION (hour) COMPUTE STATISTICS",
-        "hour is not a valid partition column in table " +
-          s"`default`.`${tableName.toLowerCase(Locale.ROOT)}`"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName PARTITION (hour) COMPUTE STATISTICS")
+        },
+        condition = "PARTITIONS_NOT_FOUND",
+        parameters = Map(
+          "partitionList" -> "`hour`",
+          "tableName" ->
+            s"`$SESSION_CATALOG_NAME`.`default`.`${tableName.toLowerCase(Locale.ROOT)}`")
       )
 
       intercept[NoSuchPartitionException] {
@@ -690,7 +844,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
-  test("analyze column command paramaters validation") {
+  test("analyze column command parameters validation") {
     val e1 = intercept[IllegalArgumentException] {
       AnalyzeColumnCommand(TableIdentifier("test"), Option(Seq("c1")), true).run(spark)
     }
@@ -699,7 +853,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     val e2 = intercept[IllegalArgumentException] {
       AnalyzeColumnCommand(TableIdentifier("test"), None, false).run(spark)
     }
-    assert(e1.getMessage.contains("Parameter `columnNames` or `allColumns` are" +
+    assert(e2.getMessage.contains("Parameter `columnNames` or `allColumns` are" +
       " mutually exclusive"))
   }
 
@@ -770,36 +924,10 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
-  test("alter table rename after analyze table") {
-    Seq(true, false).foreach { analyzedBySpark =>
-      val oldName = "tab1"
-      val newName = "tab2"
-      withTable(oldName, newName) {
-        createNonPartitionedTable(oldName, analyzedByHive = true, analyzedBySpark = analyzedBySpark)
-        val fetchedStats1 = checkTableStats(
-          oldName, hasSizeInBytes = true, expectedRowCounts = Some(500))
-        sql(s"ALTER TABLE $oldName RENAME TO $newName")
-        val fetchedStats2 = checkTableStats(
-          newName, hasSizeInBytes = true, expectedRowCounts = Some(500))
-        assert(fetchedStats1 == fetchedStats2)
-
-        // ALTER TABLE RENAME does not affect the contents of Hive specific statistics
-        val describeResult = hiveClient.runSqlHive(s"DESCRIBE FORMATTED $newName")
-
-        val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
-        val numRows = extractStatsPropValues(describeResult, "numRows")
-        val totalSize = extractStatsPropValues(describeResult, "totalSize")
-        assert(rawDataSize.isDefined && rawDataSize.get > 0, "rawDataSize is lost")
-        assert(numRows.isDefined && numRows.get == 500, "numRows is lost")
-        assert(totalSize.isDefined && totalSize.get > 0, "totalSize is lost")
-      }
-    }
-  }
-
   test("alter table should not have the side effect to store statistics in Spark side") {
     val table = "alter_table_side_effect"
     withTable(table) {
-      sql(s"CREATE TABLE $table (i string, j string)")
+      sql(s"CREATE TABLE $table (i string, j string) USING hive")
       sql(s"INSERT INTO TABLE $table SELECT 'a', 'b'")
       val catalogTable1 = getCatalogTable(table)
       val hiveSize1 = BigInt(catalogTable1.ignoredProperties(StatsSetupConst.TOTAL_SIZE))
@@ -830,18 +958,11 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         val totalSize = extractStatsPropValues(describeResult, "totalSize")
         assert(totalSize.isDefined && totalSize.get > 0, "totalSize is lost")
 
-        // ALTER TABLE SET/UNSET TBLPROPERTIES invalidates some Hive specific statistics, but not
-        // Spark specific statistics. This is triggered by the Hive alterTable API.
         val numRows = extractStatsPropValues(describeResult, "numRows")
-        assert(numRows.isDefined && numRows.get == -1, "numRows is lost")
+        assert(numRows.isDefined && numRows.get == 500)
         val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
-        assert(rawDataSize.isDefined && rawDataSize.get == -1, "rawDataSize is lost")
-
-        if (analyzedBySpark) {
-          checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
-        } else {
-          checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = None)
-        }
+        assert(rawDataSize.isDefined && rawDataSize.get == 5312)
+        checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
       }
     }
   }
@@ -862,7 +983,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
    */
   private def getStatsProperties(tableName: String): Map[String, String] = {
     val hTable = hiveClient.getTable(spark.sessionState.catalog.getCurrentDatabase, tableName)
-    hTable.properties.filterKeys(_.startsWith(STATISTICS_PREFIX))
+    hTable.properties.filter { case (k, _) => k.startsWith(STATISTICS_PREFIX) }
   }
 
   test("change stats after insert command for hive table") {
@@ -907,10 +1028,10 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
           withTempDir { loadPath =>
             // load data command
-            val file = new File(loadPath + "/data")
-            val writer = new PrintWriter(file)
-            writer.write("2,xyz")
-            writer.close()
+            val file = new File(s"$loadPath/data")
+            Utils.tryWithResource(new PrintWriter(file)) { writer =>
+              writer.write("2,xyz")
+            }
             sql(s"LOAD DATA INPATH '${loadPath.toURI.toString}' INTO TABLE $table")
             if (autoUpdate) {
               val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
@@ -932,7 +1053,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     Seq(false, true).foreach { autoUpdate =>
       withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTable(table) {
-          sql(s"CREATE TABLE $table (i INT, j STRING) PARTITIONED BY (ds STRING, hr STRING)")
+          sql(s"CREATE TABLE $table (i INT, j STRING) USING hive " +
+            "PARTITIONED BY (ds STRING, hr STRING)")
           // table has two partitions initially
           for (ds <- Seq("2008-04-08"); hr <- Seq("11", "12")) {
             sql(s"INSERT OVERWRITE TABLE $table PARTITION (ds='$ds',hr='$hr') SELECT 1, 'a'")
@@ -944,22 +1066,26 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           assert(fetched1.get.colStats.size == 2)
 
           withTempPaths(numPaths = 2) { case Seq(dir1, dir2) =>
-            val file1 = new File(dir1 + "/data")
-            val writer1 = new PrintWriter(file1)
-            writer1.write("1,a")
-            writer1.close()
+            val partDir1 = new File(new File(dir1, "ds=2008-04-09"), "hr=11")
+            val file1 = new File(partDir1, "data")
+            Utils.createDirectory(file1.getParentFile)
+            Utils.tryWithResource(new PrintWriter(file1)) { writer =>
+              writer.write("1,a")
+            }
 
-            val file2 = new File(dir2 + "/data")
-            val writer2 = new PrintWriter(file2)
-            writer2.write("1,a")
-            writer2.close()
+            val partDir2 = new File(new File(dir2, "ds=2008-04-09"), "hr=12")
+            val file2 = new File(partDir2, "data")
+            Utils.createDirectory(file2.getParentFile)
+            Utils.tryWithResource(new PrintWriter(file2)) { writer =>
+              writer.write("1,a")
+            }
 
             // add partition command
             sql(
               s"""
                  |ALTER TABLE $table ADD
-                 |PARTITION (ds='2008-04-09', hr='11') LOCATION '${dir1.toURI.toString}'
-                 |PARTITION (ds='2008-04-09', hr='12') LOCATION '${dir2.toURI.toString}'
+                 |PARTITION (ds='2008-04-09', hr='11') LOCATION '${partDir1.toURI.toString}'
+                 |PARTITION (ds='2008-04-09', hr='12') LOCATION '${partDir2.toURI.toString}'
             """.stripMargin)
             if (autoUpdate) {
               val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
@@ -967,6 +1093,16 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
               assert(fetched2.get.colStats.isEmpty)
               val statsProp = getStatsProperties(table)
               assert(statsProp(STATISTICS_TOTAL_SIZE).toLong == fetched2.get.sizeInBytes)
+
+              // SPARK-38573: Support Partition Level Statistics Collection
+              val partStats1 = getPartitionStats(table, Map("ds" -> "2008-04-08", "hr" -> "11"))
+              assert(partStats1.sizeInBytes > 0)
+              val partStats2 = getPartitionStats(table, Map("ds" -> "2008-04-08", "hr" -> "12"))
+              assert(partStats2.sizeInBytes > 0)
+              val partStats3 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "11"))
+              assert(partStats3.sizeInBytes > 0)
+              val partStats4 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "12"))
+              assert(partStats4.sizeInBytes > 0)
             } else {
               assert(getStatsProperties(table).isEmpty)
             }
@@ -982,6 +1118,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             sql(s"ALTER TABLE $table DROP PARTITION (ds='2008-04-08'), PARTITION (hr='12')")
             assert(spark.sessionState.catalog.listPartitions(TableIdentifier(table))
               .map(_.spec).toSet == Set(Map("ds" -> "2008-04-09", "hr" -> "11")))
+            assert(partDir1.exists())
             // only one partition left
             if (autoUpdate) {
               val fetched4 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
@@ -989,6 +1126,10 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
               assert(fetched4.get.colStats.isEmpty)
               val statsProp = getStatsProperties(table)
               assert(statsProp(STATISTICS_TOTAL_SIZE).toLong == fetched4.get.sizeInBytes)
+
+              // SPARK-38573: Support Partition Level Statistics Collection
+              val partStats3 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "11"))
+              assert(partStats3.sizeInBytes > 0)
             } else {
               assert(getStatsProperties(table).isEmpty)
             }
@@ -1005,6 +1146,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       sql(
         s"""
            |CREATE TABLE $managedTable (key INT, value STRING)
+           |USING hive
            |PARTITIONED BY (ds STRING, hr STRING)
          """.stripMargin)
 
@@ -1079,7 +1221,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     def checkColStatsProps(expected: Map[String, String]): Unit = {
       sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS " + stats.keys.mkString(", "))
       val table = hiveClient.getTable("default", tableName)
-      val props = table.properties.filterKeys(_.startsWith("spark.sql.statistics.colStats"))
+      val props =
+        table.properties.filter { case (k, _) => k.startsWith("spark.sql.statistics.colStats") }
       assert(props == expected)
     }
 
@@ -1103,7 +1246,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     val tableName = "column_stats_test_de"
     // (data.head.productArity - 1) because the last column does not support stats collection.
     assert(stats.size == data.head.productArity - 1)
-    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
+    // Hive can't parse data type "timestamp_ntz"
+    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*).drop("ctimestamp_ntz")
 
     withTable(tableName) {
       df.write.saveAsTable(tableName)
@@ -1147,15 +1291,15 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS cint, ctimestamp")
         val table = hiveClient.getTable("default", tableName)
         val intHistogramProps = table.properties
-          .filterKeys(_.startsWith("spark.sql.statistics.colStats.cint.histogram"))
+          .filter { case (k, _) => k.startsWith("spark.sql.statistics.colStats.cint.histogram") }
         assert(intHistogramProps.size == 1)
 
-        val tsHistogramProps = table.properties
-          .filterKeys(_.startsWith("spark.sql.statistics.colStats.ctimestamp.histogram"))
+        val tsHistogramProps = table.properties.filter {
+          case (k, _) => k.startsWith("spark.sql.statistics.colStats.ctimestamp.histogram") }
         assert(tsHistogramProps.size == 1)
 
         // Validate histogram after deserialization.
-        val cs = getCatalogStatistics(tableName).colStats
+        val cs = getTableStats(tableName).colStats
         val intHistogram = cs("cint").histogram.get
         val tsHistogram = cs("ctimestamp").histogram.get
         assert(intHistogram.bins.length == spark.sessionState.conf.histogramNumBins)
@@ -1287,10 +1431,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
       checkAnswer(df, expectedAnswer) // check correctness of output
 
-      spark.sessionState.conf.settings.synchronized {
-        val tmp = spark.sessionState.conf.autoBroadcastJoinThreshold
-
-        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=-1""")
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
         df = sql(query)
         bhj = df.queryExecution.sparkPlan.collect { case j: BroadcastHashJoinExec => j }
         assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
@@ -1298,10 +1439,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         val shj = df.queryExecution.sparkPlan.collect { case j: SortMergeJoinExec => j }
         assert(shj.size === 1,
           "SortMergeJoin should be planned when BroadcastHashJoin is turned off")
-
-        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=$tmp""")
       }
-
       after()
     }
 
@@ -1343,10 +1481,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
     checkAnswer(df, answer) // check correctness of output
 
-    spark.sessionState.conf.settings.synchronized {
-      val tmp = spark.sessionState.conf.autoBroadcastJoinThreshold
-
-      sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=-1")
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       df = sql(leftSemiJoinQuery)
       bhj = df.queryExecution.sparkPlan.collect {
         case j: BroadcastHashJoinExec => j
@@ -1358,10 +1493,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       }
       assert(shj.size === 1,
         "SortMergeJoinExec should be planned when BroadcastHashJoin is turned off")
-
-      sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=$tmp")
     }
-
   }
 
   test("Deals with wrong Hive's statistics (zero rowCount)") {
@@ -1379,6 +1511,223 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       val catalogStats = catalogTable.stats.get
       assert(catalogStats.sizeInBytes > 0)
       assert(catalogStats.rowCount.isEmpty)
+    }
+  }
+
+  test(s"CTAS should update statistics if ${SQLConf.AUTO_SIZE_UPDATE_ENABLED.key} is enabled") {
+    val tableName = "SPARK_23263"
+    Seq(false, true).foreach { isConverted =>
+      Seq(false, true).foreach { updateEnabled =>
+        withSQLConf(
+          SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> updateEnabled.toString,
+          HiveUtils.CONVERT_METASTORE_PARQUET.key -> isConverted.toString) {
+          withTable(tableName) {
+            sql(s"CREATE TABLE $tableName STORED AS parquet AS SELECT 'a', 'b'")
+            val catalogTable = getCatalogTable(tableName)
+            // Hive serde tables always update statistics by Hive metastore
+            if (!isConverted || updateEnabled) {
+              assert(catalogTable.stats.nonEmpty)
+            } else {
+              assert(catalogTable.stats.isEmpty)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-28518 fix getDataSize refer to ChecksumFileSystem#isChecksumFile") {
+    withTempDir { tempDir =>
+      withTable("t1") {
+        spark.range(5).write.mode(SaveMode.Overwrite).parquet(tempDir.getCanonicalPath)
+        Utils.tryWithResource(new PrintWriter(new File(s"$tempDir/temp.crc"))) { writer =>
+          writer.write("1,2")
+        }
+
+        spark.sql(
+          s"""
+             |CREATE EXTERNAL TABLE t1(id BIGINT)
+             |STORED AS parquet
+             |LOCATION '${tempDir.getCanonicalPath}'
+             |TBLPROPERTIES (
+             |'rawDataSize'='-1', 'numFiles'='0', 'totalSize'='0',
+             |'COLUMN_STATS_ACCURATE'='false', 'numRows'='-1'
+             |)""".stripMargin)
+
+        spark.sql("REFRESH TABLE t1")
+        val relation1 = spark.table("t1").queryExecution.analyzed.children.head
+        // After SPARK-28573, sizeInBytes should be the actual size.
+        assert(relation1.stats.sizeInBytes === getDataSize(tempDir))
+
+        spark.sql("REFRESH TABLE t1")
+        withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
+          val relation2 = spark.table("t1").queryExecution.analyzed.children.head
+          assert(relation2.stats.sizeInBytes === getDataSize(tempDir))
+        }
+      }
+    }
+  }
+
+  test("fallBackToHdfs should not support Hive partitioned table") {
+    Seq(true, false).foreach { fallBackToHdfs =>
+      withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> s"$fallBackToHdfs",
+        HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
+        withTempDir { dir =>
+          val tableDir = new File(dir, "table")
+          val partitionDir = new File(dir, "partition")
+          withTable("spark_28876") {
+            sql(
+              s"""
+                 |CREATE TABLE spark_28876(id bigint)
+                 |PARTITIONED BY (ds STRING)
+                 |STORED AS PARQUET
+                 |LOCATION '${tableDir.toURI}'
+             """.stripMargin)
+
+            spark.range(5).write.mode(SaveMode.Overwrite).parquet(partitionDir.getCanonicalPath)
+            sql(s"ALTER TABLE spark_28876 ADD PARTITION (ds='p1') LOCATION '$partitionDir'")
+
+            assert(getCatalogTable("spark_28876").stats.isEmpty)
+            val sizeInBytes = spark.table("spark_28876").queryExecution.analyzed.children.head
+              .asInstanceOf[HiveTableRelation].stats.sizeInBytes
+            assert(sizeInBytes === conf.defaultSizeInBytes)
+            assert(spark.table("spark_28876").count() === 5)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-30269 failed to update partition stats if it's equal to table's old stats") {
+    val tbl = "SPARK_30269"
+    val ext_tbl = "SPARK_30269_external"
+    withTempDir { dir =>
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "false") {
+        withTable(tbl, ext_tbl) {
+          sql(s"CREATE TABLE $tbl (key INT, value STRING, ds STRING)" +
+            "USING parquet PARTITIONED BY (ds)")
+          sql(
+            s"""
+               | CREATE TABLE $ext_tbl (key INT, value STRING, ds STRING)
+               | USING PARQUET
+               | PARTITIONED BY (ds)
+               | LOCATION '${dir.toURI}'
+           """.stripMargin)
+
+          Seq(tbl, ext_tbl).foreach { tblName =>
+            sql(s"INSERT INTO $tblName VALUES (1, 'a', '2019-12-13')")
+            assert(getCatalogTable(tblName).stats.isEmpty)
+
+            // analyze table
+            sql(s"ANALYZE TABLE $tblName COMPUTE STATISTICS NOSCAN")
+            var tableStats = getTableStats(tblName)
+            val expectedSize = tableStats.sizeInBytes
+            assert(tableStats.rowCount.isEmpty)
+
+            sql(s"ANALYZE TABLE $tblName COMPUTE STATISTICS")
+            tableStats = getTableStats(tblName)
+            assert(tableStats.sizeInBytes == expectedSize)
+            assert(tableStats.rowCount.get == 1)
+
+            // analyze a single partition
+            sql(s"ANALYZE TABLE $tblName PARTITION (ds='2019-12-13') COMPUTE STATISTICS NOSCAN")
+            var partStats = getPartitionStats(tblName, Map("ds" -> "2019-12-13"))
+            assert(partStats.sizeInBytes == expectedSize)
+            assert(partStats.rowCount.isEmpty)
+
+            sql(s"ANALYZE TABLE $tblName PARTITION (ds='2019-12-13') COMPUTE STATISTICS")
+            partStats = getPartitionStats(tblName, Map("ds" -> "2019-12-13"))
+            assert(partStats.sizeInBytes == expectedSize)
+            assert(partStats.rowCount.get == 1)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-38573: partition stats auto update for dynamic partitions") {
+    val table = "partition_stats_dynamic_partition"
+    Seq("hive", "parquet").foreach { source =>
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+        withTable(table) {
+          sql(s"CREATE TABLE $table (id INT, sp INT, dp INT) USING $source PARTITIONED BY (sp, dp)")
+          sql(s"INSERT INTO $table PARTITION (sp=0, dp) VALUES (0, 0)")
+          sql(s"INSERT OVERWRITE TABLE $table PARTITION (sp=0, dp) SELECT id, id FROM range(5)")
+          for (i <- 0 until 5) {
+            val partStats = getPartitionStats(table, Map("sp" -> s"0", "dp" -> s"$i"))
+            assert(partStats.sizeInBytes > 0)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-38573: change partition stats after load/set/truncate data command") {
+    val table = "partition_stats_load_set_truncate"
+    withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+      withTable(table) {
+        sql(s"CREATE TABLE $table (i INT, j STRING) USING hive " +
+          "PARTITIONED BY (ds STRING, hr STRING)")
+
+        withTempPaths(numPaths = 2) { case Seq(dir1, dir2) =>
+          val partDir1 = new File(new File(dir1, "ds=2008-04-09"), "hr=11")
+          val file1 = new File(partDir1, "data")
+          Utils.createDirectory(file1.getParentFile)
+          Utils.tryWithResource(new PrintWriter(file1)) { writer =>
+            writer.write("1,a")
+          }
+
+          val partDir2 = new File(new File(dir2, "ds=2008-04-09"), "hr=12")
+          val file2 = new File(partDir2, "data")
+          Utils.createDirectory(file2.getParentFile)
+          Utils.tryWithResource(new PrintWriter(file2)) { writer =>
+            writer.write("1,a")
+          }
+
+          sql(s"""
+            |LOAD DATA INPATH '${file1.toURI.toString}' INTO TABLE $table
+            |PARTITION (ds='2008-04-09', hr='11')
+            """.stripMargin)
+          sql(s"ALTER TABLE $table ADD PARTITION (ds='2008-04-09', hr='12')")
+          sql(s"""
+            |ALTER TABLE $table PARTITION (ds='2008-04-09', hr='12')
+            |SET LOCATION '${partDir2.toURI.toString}'
+            |""".stripMargin)
+          val partStats1 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "11"))
+          assert(partStats1.sizeInBytes > 0)
+          val partStats2 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "12"))
+          assert(partStats2.sizeInBytes > 0)
+
+
+          sql(s"TRUNCATE TABLE $table PARTITION (ds='2008-04-09', hr='11')")
+          val partStats3 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "11"))
+          assert(partStats3.sizeInBytes == 0)
+          val partStats4 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "12"))
+          assert(partStats4.sizeInBytes > 0)
+          sql(s"TRUNCATE TABLE $table")
+          val partStats5 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "12"))
+          assert(partStats5.sizeInBytes == 0)
+        }
+      }
+    }
+  }
+
+  test("Don't support MapType") {
+    val tableName = "analyzeTable_column"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value MAP<STRING, STRING>) " +
+        s"PARTITIONED BY (ds STRING)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS value")
+        },
+        condition = "UNSUPPORTED_FEATURE.ANALYZE_UNSUPPORTED_COLUMN_TYPE",
+        parameters = Map(
+          "columnType" -> "\"MAP<STRING, STRING>\"",
+          "columnName" -> "`value`",
+          "tableName" -> "`spark_catalog`.`default`.`analyzetable_column`"
+        )
+      )
     }
   }
 }

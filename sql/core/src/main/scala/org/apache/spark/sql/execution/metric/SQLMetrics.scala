@@ -17,60 +17,95 @@
 
 package org.apache.spark.sql.execution.metric
 
-import java.text.NumberFormat
-import java.util.Locale
+import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.AccumulableInfo
+import org.apache.spark.sql.connector.metric.CustomMetric
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
-import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
-
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
+import org.apache.spark.util.AccumulatorContext.internOption
 
 /**
  * A metric used in a SQL query plan. This is implemented as an [[AccumulatorV2]]. Updates on
  * the executor side are automatically propagated and shown in the SQL UI through metrics. Updates
  * on the driver side must be explicitly posted using [[SQLMetrics.postDriverMetricUpdates()]].
  */
-class SQLMetric(val metricType: String, initValue: Long = 0L) extends AccumulatorV2[Long, Long] {
-  // This is a workaround for SPARK-11013.
-  // We may use -1 as initial value of the accumulator, if the accumulator is valid, we will
-  // update it at the end of task and the value will be at least 0. Then we can filter out the -1
-  // values before calculate max, min, etc.
-  private[this] var _value = initValue
-  private var _zeroValue = initValue
+class SQLMetric(
+    val metricType: String,
+    initValue: Long = 0L) extends AccumulatorV2[Long, Long] {
+  // initValue defines the initial value of the metric. 0 is the lowest value considered valid.
+  // If a SQLMetric is invalid, it is set to 0 upon receiving any updates, and it also reports
+  // 0 as its value to avoid exposing it to the user programmatically.
+  //
+  // For many SQLMetrics, we use initValue = -1 to indicate that the metric is by default invalid.
+  // At the end of a task, we will update the metric making it valid, and the invalid metrics will
+  // be filtered out when calculating min, max, etc. as a workaround
+  // for SPARK-11013.
+  assert(initValue <= 0)
+  // _value will always be either initValue or non-negative.
+  private var _value = initValue
 
   override def copy(): SQLMetric = {
-    val newAcc = new SQLMetric(metricType, _value)
-    newAcc._zeroValue = initValue
+    val newAcc = new SQLMetric(metricType, initValue)
+    newAcc._value = _value
     newAcc
   }
 
-  override def reset(): Unit = _value = _zeroValue
+  override def reset(): Unit = _value = initValue
 
   override def merge(other: AccumulatorV2[Long, Long]): Unit = other match {
-    case o: SQLMetric => _value += o.value
-    case _ => throw new UnsupportedOperationException(
-      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+    case o: SQLMetric =>
+      if (!o.isZero) {
+        if (isZero) _value = 0
+        _value += o.value
+      }
+    case _ => throw QueryExecutionErrors.cannotMergeClassWithOtherClassError(
+      this.getClass.getName, other.getClass.getName)
   }
 
-  override def isZero(): Boolean = _value == _zeroValue
+  // This is used to filter out metrics. Metrics with value equal to initValue should
+  // be filtered out, since they are either invalid or safe to filter without changing
+  // the aggregation defined in [[MetricUtils.stringValue]].
+  // Note that we don't use 0 here since we may want to collect 0 metrics for
+  // calculating min, max, etc. See SPARK-11013.
+  override def isZero: Boolean = _value == initValue
 
-  override def add(v: Long): Unit = _value += v
+  override def add(v: Long): Unit = {
+    if (v >= 0) {
+      if (isZero) _value = 0
+      _value += v
+    }
+  }
 
   // We can set a double value to `SQLMetric` which stores only long value, if it is
   // average metrics.
-  def set(v: Double): Unit = SQLMetrics.setDoubleForAverageMetrics(this, v)
+  def set(v: Double): Unit = if (v >= 0) {
+    SQLMetrics.setDoubleForAverageMetrics(this, v)
+  }
 
-  def set(v: Long): Unit = _value = v
+  def set(v: Long): Unit = if (v >= 0) {
+    _value = v
+  }
 
-  def +=(v: Long): Unit = _value += v
+  def +=(v: Long): Unit = add(v)
 
-  override def value: Long = _value
+  // _value may be uninitialized, in many cases being -1. We should not expose it to the user
+  // and instead return 0.
+  override def value: Long = if (isZero) 0 else _value
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
-    new AccumulableInfo(
-      id, name, update, value, true, true, Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
+    AccumulableInfo(id, name, internOption(update), internOption(value), true, true,
+      SQLMetrics.cachedSQLAccumIdentifier)
+  }
+
+  // We should provide the raw value which can be -1, so that `MetricUtils.stringValue` can
+  // correctly filter out the invalid -1 values.
+  override def toInfoUpdate: AccumulableInfo = {
+    AccumulableInfo(id, name, internOption(Some(_value)), None, true, true,
+      SQLMetrics.cachedSQLAccumIdentifier)
   }
 }
 
@@ -78,9 +113,20 @@ object SQLMetrics {
   private val SUM_METRIC = "sum"
   private val SIZE_METRIC = "size"
   private val TIMING_METRIC = "timing"
+  private val NS_TIMING_METRIC = "nsTiming"
   private val AVERAGE_METRIC = "average"
 
   private val baseForAvgMetric: Int = 10
+
+  val cachedSQLAccumIdentifier = Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER)
+
+  private val metricsCache: LoadingCache[String, Option[String]] =
+    CacheBuilder.newBuilder().maximumSize(10000)
+    .build(new CacheLoader[String, Option[String]] {
+      override def load(name: String): Option[String] = {
+        Option(name)
+      }
+    })
 
   /**
    * Converts a double value to long value by multiplying a base integer, so we can store it in
@@ -95,7 +141,16 @@ object SQLMetrics {
 
   def createMetric(sc: SparkContext, name: String): SQLMetric = {
     val acc = new SQLMetric(SUM_METRIC)
-    acc.register(sc, name = Some(name), countFailedValues = false)
+    acc.register(sc, name = metricsCache.get(name), countFailedValues = false)
+    acc
+  }
+
+  /**
+   * Create a metric to report data source v2 custom metric.
+   */
+  def createV2CustomMetric(sc: SparkContext, customMetric: CustomMetric): SQLMetric = {
+    val acc = new SQLMetric(CustomMetrics.buildV2CustomMetricTypeName(customMetric))
+    acc.register(sc, name = metricsCache.get(customMetric.description()), countFailedValues = false)
     acc
   }
 
@@ -103,21 +158,28 @@ object SQLMetrics {
    * Create a metric to report the size information (including total, min, med, max) like data size,
    * spill size, etc.
    */
-  def createSizeMetric(sc: SparkContext, name: String): SQLMetric = {
+  def createSizeMetric(sc: SparkContext, name: String, initValue: Long = -1): SQLMetric = {
     // The final result of this metric in physical operator UI may look like:
     // data size total (min, med, max):
     // 100GB (100MB, 1GB, 10GB)
-    val acc = new SQLMetric(SIZE_METRIC, -1)
-    acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
+    val acc = new SQLMetric(SIZE_METRIC, initValue)
+    acc.register(sc, name = metricsCache.get(name), countFailedValues = false)
     acc
   }
 
-  def createTimingMetric(sc: SparkContext, name: String): SQLMetric = {
+  def createTimingMetric(sc: SparkContext, name: String, initValue: Long = -1): SQLMetric = {
     // The final result of this metric in physical operator UI may looks like:
-    // duration(min, med, max):
+    // duration total (min, med, max):
     // 5s (800ms, 1s, 2s)
-    val acc = new SQLMetric(TIMING_METRIC, -1)
-    acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
+    val acc = new SQLMetric(TIMING_METRIC, initValue)
+    acc.register(sc, name = metricsCache.get(name), countFailedValues = false)
+    acc
+  }
+
+  def createNanoTimingMetric(sc: SparkContext, name: String, initValue: Long = -1): SQLMetric = {
+    // Same with createTimingMetric, just normalize the unit of time to millisecond.
+    val acc = new SQLMetric(NS_TIMING_METRIC, initValue)
+    acc.register(sc, name = metricsCache.get(name), countFailedValues = false)
     acc
   }
 
@@ -132,52 +194,17 @@ object SQLMetrics {
     // probe avg (min, med, max):
     // (1.2, 2.2, 6.3)
     val acc = new SQLMetric(AVERAGE_METRIC)
-    acc.register(sc, name = Some(s"$name (min, med, max)"), countFailedValues = false)
+    acc.register(sc, name = metricsCache.get(name), countFailedValues = false)
     acc
   }
 
-  /**
-   * A function that defines how we aggregate the final accumulator results among all tasks,
-   * and represent it in string for a SQL physical operator.
-   */
-  def stringValue(metricsType: String, values: Seq[Long]): String = {
-    if (metricsType == SUM_METRIC) {
-      val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
-      numberFormat.format(values.sum)
-    } else if (metricsType == AVERAGE_METRIC) {
-      val numberFormat = NumberFormat.getNumberInstance(Locale.US)
-
-      val validValues = values.filter(_ > 0)
-      val Seq(min, med, max) = {
-        val metric = if (validValues.isEmpty) {
-          Seq.fill(3)(0L)
-        } else {
-          val sorted = validValues.sorted
-          Seq(sorted(0), sorted(validValues.length / 2), sorted(validValues.length - 1))
-        }
-        metric.map(v => numberFormat.format(v.toDouble / baseForAvgMetric))
-      }
-      s"\n($min, $med, $max)"
-    } else {
-      val strFormat: Long => String = if (metricsType == SIZE_METRIC) {
-        Utils.bytesToString
-      } else if (metricsType == TIMING_METRIC) {
-        Utils.msDurationToString
-      } else {
-        throw new IllegalStateException("unexpected metrics type: " + metricsType)
-      }
-
-      val validValues = values.filter(_ >= 0)
-      val Seq(sum, min, med, max) = {
-        val metric = if (validValues.isEmpty) {
-          Seq.fill(4)(0L)
-        } else {
-          val sorted = validValues.sorted
-          Seq(sorted.sum, sorted(0), sorted(validValues.length / 2), sorted(validValues.length - 1))
-        }
-        metric.map(strFormat)
-      }
-      s"\n$sum ($min, $med, $max)"
+  def postDriverMetricsUpdatedByValue(
+      sc: SparkContext,
+      executionId: String,
+      accumUpdates: Seq[(Long, Long)]): Unit = {
+    if (executionId != null) {
+      sc.listenerBus.post(
+        SparkListenerDriverAccumUpdates(executionId.toLong, accumUpdates))
     }
   }
 
@@ -193,5 +220,20 @@ object SQLMetrics {
       sc.listenerBus.post(
         SparkListenerDriverAccumUpdates(executionId.toLong, metrics.map(m => m.id -> m.value)))
     }
+  }
+
+  /**
+   * Measures the time taken by the function `f` in nanoseconds and adds it to the provided metric.
+   *
+   * @param metric SQLMetric to record the time taken.
+   * @param f Function/Codeblock to execute and measure.
+   * @return The result of the function `f`.
+   */
+  def withTimingNs[T](metric: SQLMetric)(f: => T): T = {
+      val startTime = System.nanoTime()
+      val result = f
+      val endTime = System.nanoTime()
+      metric.add(endTime - startTime)
+      result
   }
 }

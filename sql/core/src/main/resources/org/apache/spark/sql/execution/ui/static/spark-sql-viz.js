@@ -15,13 +15,26 @@
  * limitations under the License.
  */
 
+/* global $, d3, dagreD3, graphlibDot, uiRoot, appBasePath, sorttable, showToast */
+
 var PlanVizConstants = {
   svgMarginX: 16,
   svgMarginY: 16
 };
 
+// Track selected node for re-rendering the detail panel on checkbox toggle
+var selectedNodeId = null;
+var cachedNodeDetails = null;
+
+function shouldRenderPlanViz() {
+  return planVizContainer().selectAll("svg").empty();
+}
+
 function renderPlanViz() {
-  var svg = planVizContainer().append("svg");
+  var svg = planVizContainer()
+    .append("svg")
+    .attr("width", window.innerWidth || 1920)
+    .attr("height", 1000);
   var metadata = d3.select("#plan-viz-metadata");
   var dot = metadata.select(".dot-file").text().trim();
   var graph = svg.append("g");
@@ -37,12 +50,12 @@ function renderPlanViz() {
     .attr("rx", "5")
     .attr("ry", "5");
 
-  var nodeSize = parseInt($("#plan-viz-metadata-size").text());
-  for (var i = 0; i < nodeSize; i++) {
-    setupTooltipForSparkPlanNode(i);
-  }
-
-  resizeSvg(svg)
+  setupLayoutForSparkPlanCluster(g, svg);
+  setupSelectionForSparkPlanNode(g);
+  setupTooltipForSparkPlanNode(g);
+  resizeSvg(svg);
+  postprocessForAdditionalMetrics();
+  setupDetailedLabelsToggle();
 }
 
 /* -------------------- *
@@ -55,21 +68,51 @@ function planVizContainer() { return d3.select("#plan-viz-graph"); }
  * Set up the tooltip for a SparkPlan node using metadata. When the user moves the mouse on the
  * node, it will display the details of this SparkPlan node in the right.
  */
-function setupTooltipForSparkPlanNode(nodeId) {
-  var nodeTooltip = d3.select("#plan-meta-data-" + nodeId).text()
-  d3.select("svg g .node_" + nodeId)
-    .on('mouseover', function(d) {
-      var domNode = d3.select(this).node();
-      $(domNode).tooltip({
-        title: nodeTooltip, trigger: "manual", container: "body", placement: "right"
+function setupTooltipForSparkPlanNode(g) {
+  g.nodes().forEach(function (v) {
+    const node = g.node(v);
+    d3.select("svg g #" + node.id).each(function () {
+      $(this).tooltip({
+        title: node.tooltip, trigger: "hover focus", container: "body", placement: "top"
       });
-      $(domNode).tooltip("show");
-    })
-    .on('mouseout', function(d) {
-      var domNode = d3.select(this).node();
-      $(domNode).tooltip("destroy");
-    })
+    });
+  });
 }
+
+/*
+ * Set up the layout for SparkPlan cluster.
+ * By default, the label of a cluster is placed in the middle of the cluster. This function moves
+ * the label to the right top corner of the cluster and expands the cluster to fit the label.
+ */
+function setupLayoutForSparkPlanCluster(g, svg) {
+  g.nodes().filter((v) => g.node(v).isCluster).forEach((v) => {
+    const node = g.node(v);
+    const cluster = svg.select("#" + node.id);
+    const labelGroup = cluster.select(".label");
+    const bbox = labelGroup.node().getBBox();
+    const rect = cluster.select("rect");
+    const oldWidth = parseFloat(rect.attr("width"));
+    const newWidth = Math.max(oldWidth, bbox.width + 20);
+    const height = parseFloat(rect.attr("height"));
+
+    // Expand width if label is wider than cluster
+    if (newWidth > oldWidth) {
+      rect
+        .attr("width", newWidth)
+        .attr("x", parseFloat(rect.attr("x")) - (newWidth - oldWidth) / 2);
+    }
+
+    // Move label to top-right corner
+    labelGroup
+      .select("g")
+      .attr("text-anchor", "end")
+      .attr("transform", "translate(" + (newWidth / 2 - 5) + "," + (-height / 2 + 5) + ")");
+  })
+}
+
+// labelSeparator should be a non-graphical character in order not to affect the width of boxes.
+var labelSeparator = "\x01";
+var stageAndTaskMetricsPattern = "^(.*)(\\(stage.*task[^)]*\\))(.*)$";
 
 /*
  * Helper function to pre-process the graph layout.
@@ -77,17 +120,50 @@ function setupTooltipForSparkPlanNode(nodeId) {
  * and sizes of graph elements, e.g. padding, font style, shape.
  */
 function preprocessGraphLayout(g) {
-  var nodes = g.nodes();
-  for (var i = 0; i < nodes.length; i++) {
-      var node = g.node(nodes[i]);
-      node.padding = "5";
-  }
-  // Curve the edges
-  var edges = g.edges();
-  for (var j = 0; j < edges.length; j++) {
-    var edge = g.edge(edges[j]);
-    edge.lineInterpolate = "basis";
-  }
+  g.graph().ranksep = "35";
+  g.graph().nodesep = "15";
+  g.nodes().forEach(function (v) {
+    const node = g.node(v);
+    node.padding = "3";
+    if (node.isCluster) {
+      node.clusterLabelPos = "top";
+      node.paddingTop = "35";
+      node.paddingBottom = "10";
+      node.paddingLeft = "10";
+      node.paddingRight = "10";
+    }
+
+    var firstSeparator;
+    var secondSeparator;
+    var splitter;
+    if (node.isCluster) {
+      firstSeparator = secondSeparator = labelSeparator;
+      splitter = "\\n";
+    } else {
+      firstSeparator = "<span class='stageId-and-taskId-metrics'>";
+      secondSeparator = "</span>";
+      splitter = "<br>";
+    }
+
+    node.label.split(splitter).forEach(function(text, _ignored_i) {
+      var newTexts = text.match(stageAndTaskMetricsPattern);
+      if (newTexts) {
+        node.label = node.label.replace(
+          newTexts[0],
+          newTexts[1] + firstSeparator + newTexts[2] + secondSeparator + newTexts[3]);
+      }
+    });
+  });
+  // Curve the edges and preserve labels from DOT
+  g.edges().forEach(function (edge) {
+    var edgeObj = g.edge(edge);
+    g.setEdge(edge.v, edge.w, {
+      curve: d3.curveBasis,
+      label: edgeObj.label || "",
+      style: "fill: none",
+      labelStyle: "font-size: 10px;"
+    })
+  })
 }
 
 /*
@@ -95,11 +171,9 @@ function preprocessGraphLayout(g) {
  * This assumes that all outermost elements are clusters (rectangles).
  */
 function resizeSvg(svg) {
-  var allClusters = svg.selectAll("g rect")[0];
-  console.log(allClusters);
+  var allClusters = svg.selectAll("g rect").nodes();
   var startX = -PlanVizConstants.svgMarginX +
     toFloat(d3.min(allClusters, function(e) {
-      console.log(e);
       return getAbsolutePosition(d3.select(e)).x;
     }));
   var startY = -PlanVizConstants.svgMarginY +
@@ -145,16 +219,528 @@ function getAbsolutePosition(d3selection) {
   while (!obj.empty()) {
     var transformText = obj.attr("transform");
     if (transformText) {
-      var translate = d3.transform(transformText).translate;
+      var translate = transformText.substring("translate(".length, transformText.length - 1).split(",")
       _x += toFloat(translate[0]);
       _y += toFloat(translate[1]);
     }
     // Climb upwards to find how our parents are translated
     obj = d3.select(obj.node().parentNode);
     // Stop when we've reached the graph container itself
-    if (obj.node() == planVizContainer().node()) {
+    if (obj.node() === planVizContainer().node()) {
       break;
     }
   }
   return { x: _x, y: _y };
+}
+
+/*
+ * Helper function for postprocess for additional metrics.
+ */
+function postprocessForAdditionalMetrics() {
+  // With dagre-d3, we can choose normal text (default) or HTML as a label type.
+  // HTML label for node works well but not for cluster so we need to choose the default label type
+  // and manipulate DOM.
+  $("g.cluster text tspan")
+    .each(function() {
+      var originalText = $(this).text();
+      if (originalText.indexOf(labelSeparator) > 0) {
+        var newTexts = originalText.split(labelSeparator);
+        var thisD3Node = d3.selectAll($(this));
+        thisD3Node.text(newTexts[0]);
+        thisD3Node.append("tspan").attr("class", "stageId-and-taskId-metrics").text(newTexts[1]);
+        $(this).append(newTexts[2]);
+      } else {
+        return originalText;
+      }
+    });
+
+  var checkboxNode = $("#stageId-and-taskId-checkbox");
+  checkboxNode.click(function() {
+    onClickAdditionalMetricsCheckbox($(this), true);
+  });
+  var isChecked = window.localStorage.getItem("stageId-and-taskId-checked") === "true";
+  checkboxNode.prop("checked", isChecked);
+  onClickAdditionalMetricsCheckbox(checkboxNode);
+}
+
+/*
+ * Helper function which defines the action on click the checkbox.
+ */
+function onClickAdditionalMetricsCheckbox(checkboxNode, fromUserClick) {
+  var additionalMetrics = $(".stageId-and-taskId-metrics");
+  var isChecked = checkboxNode.prop("checked");
+  if (isChecked) {
+    additionalMetrics.show();
+  } else {
+    additionalMetrics.hide();
+  }
+  window.localStorage.setItem("stageId-and-taskId-checked", isChecked);
+  // Re-render the detail panel to update stage/task column visibility
+  if (selectedNodeId && cachedNodeDetails) {
+    updateDetailsPanel(selectedNodeId, cachedNodeDetails);
+  }
+  // Re-render graph nodes if in detailed mode (only on user click, not init)
+  if (fromUserClick) {
+    var detailedCheckbox = document.getElementById("detailed-labels-checkbox");
+    if (detailedCheckbox && detailedCheckbox.checked) {
+      rerenderWithDetailedLabels();
+    }
+  }
+}
+
+function togglePlanViz() { // eslint-disable-line no-unused-vars
+  const arrow = d3.select("#plan-viz-graph-arrow");
+  arrow.each(function () {
+    $(this).toggleClass("arrow-open").toggleClass("arrow-closed")
+  });
+  if (arrow.classed("arrow-open")) {
+    d3.select("#plan-viz-content").style("display", "flex");
+  } else {
+    d3.select("#plan-viz-content").style("display", "none");
+  }
+}
+
+/*
+ * Parse the node details JSON from the hidden metadata div.
+ */
+function getNodeDetails() {
+  var detailsText = d3.select("#plan-viz-metadata .node-details").text().trim();
+  try {
+    return JSON.parse(detailsText);
+  } catch (e) {
+    return {};
+  }
+}
+
+/*
+ * Format a metric value for display in the detail panel.
+ * Detects "total (min, med, max ...)\nVALUE (v1, v2, v3 (...))" patterns
+ * and renders them as a structured sub-table.
+ */
+/*
+ * Format a metric value for display in the detail panel.
+ * Uses metricType to determine layout instead of regex parsing.
+ * Types: "size", "timing", "nsTiming" have total + (min, med, max).
+ *        "average" has (min, med, max) only.
+ *        "sum" is a plain value.
+ */
+function formatMetricValue(val, metricType, showStageTask) {
+  var lines = val.split("\n");
+  if (lines.length < 2) return val;
+
+  // Multi-line: header line + data line
+  var dataLine = lines[1].trim();
+  var hasTotal = (metricType === "size" || metricType === "timing"
+    || metricType === "nsTiming");
+
+  // Parse data: "TOTAL (MIN, MED, MAX (stage X: task Y))" or "(MIN, MED, MAX (...))"
+  var total = null, min, med, maxVal, stageId = "", taskId = "";
+  if (hasTotal) {
+    // Split "7.5 KiB (240.0 B, 240.0 B, 240.0 B (stage 3.0: task 36))"
+    var idx = dataLine.indexOf("(");
+    if (idx < 0) return val;
+    total = dataLine.substring(0, idx).trim();
+    dataLine = dataLine.substring(idx);
+  }
+  // Now dataLine is "(MIN, MED, MAX ...)" — strip outer parens
+  var inner = dataLine.replace(/^\(/, "").replace(/\)$/, "");
+  // Split by comma, but respect parenthesized stage/task
+  var parts = [];
+  var depth = 0, start = 0;
+  for (var i = 0; i < inner.length; i++) {
+    if (inner[i] === "(") depth++;
+    else if (inner[i] === ")") depth--;
+    else if (inner[i] === "," && depth === 0) {
+      parts.push(inner.substring(start, i).trim());
+      start = i + 1;
+    }
+  }
+  parts.push(inner.substring(start).trim());
+
+  min = parts[0] || "";
+  med = parts[1] || "";
+  // Max may contain "(stage X: task Y)"
+  var maxPart = parts[2] || "";
+  var stageMatch = maxPart.match(/^(.+?)\s*\(stage\s+(.+?):\s*task\s+(.+)\)$/);
+  if (stageMatch) {
+    maxVal = stageMatch[1];
+    stageId = stageMatch[2];
+    taskId = stageMatch[3];
+  } else {
+    maxVal = maxPart;
+  }
+
+  return buildStatTable(total, min, med, maxVal,
+    stageId, taskId, showStageTask);
+}
+
+function buildStatTable(total, min, med, maxVal,
+  stageId, taskId, showStageTask) {
+  var h = '<table class="table table-sm table-bordered mb-0"><thead><tr>';
+  if (total !== null) h += "<th>Total</th>";
+  h += "<th>Min</th><th>Med</th><th>Max</th>";
+  if (showStageTask) h += "<th>Stage</th><th>Task</th>";
+  h += "</tr></thead><tbody><tr>";
+  if (total !== null) h += "<td>" + total + "</td>";
+  h += "<td>" + min + "</td><td>" + med +
+    "</td><td>" + maxVal + "</td>";
+  if (showStageTask) {
+    h += "<td>" + stageLink(stageId) + "</td><td>" + taskId + "</td>";
+  }
+  h += "</tr></tbody></table>";
+  return h;
+}
+
+function stageLink(stageId) {
+  if (!stageId) return "";
+  var parts = stageId.split(".");
+  var id = parts[0];
+  var attempt = parts.length > 1 ? parts[1] : "0";
+  var url = uiRoot + appBasePath + "/stages/stage/?id=" + id + "&attempt=" + attempt;
+  return '<a href="' + url + '">' + stageId + '</a>';
+}
+
+/*
+ * Update the detail side panel with the selected node's information.
+ */
+function updateDetailsPanel(nodeId, nodeDetails) {
+  var titleEl = document.getElementById("plan-viz-details-title");
+  var bodyEl = document.getElementById("plan-viz-details-body");
+  if (!titleEl || !bodyEl) return;
+
+  showDetailsPanel();
+
+  selectedNodeId = nodeId;
+  cachedNodeDetails = nodeDetails;
+
+  var details = nodeDetails[nodeId];
+  if (!details) {
+    titleEl.textContent = "Details";
+    bodyEl.innerHTML = '<p class="text-muted mb-0">No details available</p>';
+    return;
+  }
+
+  titleEl.textContent = details.name;
+
+  // Show node description as a tooltip on the title
+  var existingDesc = document.getElementById("plan-viz-details-desc");
+  if (existingDesc) existingDesc.remove();
+  if (details.desc) {
+    titleEl.setAttribute("data-bs-toggle", "tooltip");
+    titleEl.setAttribute("title", details.desc);
+    var existing = bootstrap.Tooltip.getInstance(titleEl);
+    if (existing) existing.dispose();
+    new bootstrap.Tooltip(titleEl, {container: "body"});
+  } else {
+    titleEl.removeAttribute("data-bs-toggle");
+    titleEl.removeAttribute("title");
+  }
+
+  var showStageTask = document.getElementById("stageId-and-taskId-checkbox")
+    && document.getElementById("stageId-and-taskId-checkbox").checked;
+
+  var totalMetrics = (details.metrics ? details.metrics.length : 0) +
+    (details.children || []).reduce(function (sum, childId) {
+      var child = nodeDetails[childId];
+      return sum + (child && child.metrics ? child.metrics.length : 0);
+    }, 0);
+
+  var html = "";
+  // Add search box when there are many metrics
+  if (totalMetrics > 5) {
+    html += '<input type="text" id="metric-search" class="form-control form-control-sm mb-2" ' +
+      'placeholder="Filter metrics...">';
+  }
+  if (details.metrics && details.metrics.length > 0) {
+    html += buildMetricsTable(details.metrics, showStageTask, true);
+  } else if (!details.children) {
+    html += '<p class="text-muted mb-0">No metrics</p>';
+  }
+
+  // For clusters, show child node metrics
+  if (details.children && details.children.length > 0) {
+    details.children.forEach(function (childId) {
+      var child = nodeDetails[childId];
+      if (child) {
+        html += '<h6 class="mt-2 mb-1 fw-bold">' + htmlEscape(child.name) + '</h6>';
+        if (child.metrics && child.metrics.length > 0) {
+          html += buildMetricsTable(child.metrics, showStageTask, true);
+        } else {
+          html += '<p class="text-muted mb-0">No metrics</p>';
+        }
+      }
+    });
+  }
+  bodyEl.innerHTML = html;
+
+  // Initialize sorttable on dynamically injected metrics tables
+  if (typeof sorttable !== "undefined") {
+    bodyEl.querySelectorAll("table.sortable").forEach(function (table) {
+      sorttable.makeSortable(table);
+    });
+  }
+
+  // Wire up metric search/filter
+  var searchBox = document.getElementById("metric-search");
+  if (searchBox) {
+    searchBox.addEventListener("input", function () {
+      var query = this.value.toLowerCase();
+      bodyEl.querySelectorAll("table tbody tr").forEach(function (row) {
+        var metricName = row.cells[0] ? row.cells[0].textContent.toLowerCase() : "";
+        row.style.display = metricName.indexOf(query) >= 0 ? "" : "none";
+      });
+    });
+  }
+}
+
+function htmlEscape(str) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+/*
+ * Build an HTML metrics table from a metrics array.
+ */
+function buildMetricsTable(metrics, showStageTask, enableSort) {
+  var cls = "table table-sm table-bordered mb-0" + (enableSort ? " sortable" : "");
+  var html = '<table class="' + cls + '">';
+  html += "<thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>";
+  metrics.forEach(function (m) {
+    var name = htmlEscape(m.name);
+    var val = htmlEscape(m.value);
+    html += "<tr><td>" + name + "</td><td>" +
+      formatMetricValue(val, m.type, showStageTask) + "</td></tr>";
+  });
+  html += "</tbody></table>";
+  return html;
+}
+
+/*
+ * Light up the selected node and its linked nodes and edges.
+ * Also updates the detail side panel with the selected node's metrics.
+ */
+function setupSelectionForSparkPlanNode(g) {
+  const linkedNodes = new Map();
+  const linkedEdges = new Map();
+  const nodeDetails = getNodeDetails();
+
+  g.edges().forEach(function (e) {
+    const edge = g.edge(e);
+    const from = g.node(e.v);
+    const to = g.node(e.w);
+    collectLinks(linkedNodes, from.id, to.id);
+    collectLinks(linkedNodes, to.id, from.id);
+    collectLinks(linkedEdges, from.id, edge.arrowheadId);
+    collectLinks(linkedEdges, to.id, edge.arrowheadId);
+  });
+
+  linkedNodes.forEach((linkedNodes, selectNode) => {
+    d3.select("#" + selectNode).on("click", (event) => {
+      event.stopPropagation();
+      planVizContainer().selectAll(".selected").classed("selected", false);
+      planVizContainer().selectAll(".linked").classed("linked", false);
+      d3.select("#" + selectNode + " rect").classed("selected", true);
+      linkedNodes.forEach((linkedNode) => {
+        d3.select("#" + linkedNode + " rect").classed("linked", true);
+      });
+      linkedEdges.get(selectNode).forEach((linkedEdge) => {
+        const arrowHead = d3.select("#" + linkedEdge + " path");
+        arrowHead.classed("linked", true);
+        const arrowShaft = $(arrowHead.node()).parents("g.edgePath").children("path");
+        arrowShaft.addClass("linked");
+      });
+      updateDetailsPanel(selectNode, nodeDetails);
+    });
+  });
+
+  // Add click handlers for clusters (WholeStageCodegen groups)
+  planVizContainer().selectAll("g.cluster").each(function() {
+    const clusterId = d3.select(this).attr("id");
+    if (clusterId && nodeDetails[clusterId]) {
+      d3.select(this).on("click", (event) => {
+        // Skip if click was on a child node
+        if (event.target.closest("g.node")) return;
+        event.stopPropagation();
+        planVizContainer().selectAll(".selected").classed("selected", false);
+        planVizContainer().selectAll(".linked").classed("linked", false);
+        d3.select(this).select(":scope > rect").classed("selected", true);
+        updateDetailsPanel(clusterId, nodeDetails);
+      });
+    }
+  });
+}
+
+function collectLinks(map, key, value) {
+  if (!map.has(key)) {
+    map.set(key, new Set());
+  }
+  map.get(key).add(value);
+}
+
+function downloadPlanBlob(b, ext) {
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(b);
+  link.download = `plan.${ext}`;
+  link.click();
+}
+
+document.getElementById("plan-viz-download-btn").addEventListener("click", async function () {
+  const format = document.getElementById("plan-viz-format-select").value;
+  let blob;
+  if (format === "svg") {
+    const svg = planVizContainer().select("svg").node().cloneNode(true);
+    let css = "";
+    try {
+      css = await fetch("/static/sql/spark-sql-viz.css").then((resp) => resp.text());
+    } catch (e) {
+      console.error("Failed to fetch CSS for SVG download", e);
+    }
+    d3.select(svg).insert("style", ":first-child").text(css);
+    const svgData = new XMLSerializer().serializeToString(svg);
+    blob = new Blob([svgData], { type: "image/svg+xml" });
+  } else if (format === "dot") {
+    const dot = d3.select("#plan-viz-metadata .dot-file").text().trim();
+    blob = new Blob([dot], { type: "text/plain" });
+  } else if (format === "txt") {
+    const txt = d3.select("#physical-plan-details pre").text().trim();
+    blob = new Blob([txt], { type: "text/plain" });
+  } else {
+    return;
+  }
+  downloadPlanBlob(blob, format);
+});
+
+/* eslint-disable no-unused-vars */
+function clickPhysicalPlanDetails() {
+/* eslint-enable no-unused-vars */
+  $('#physical-plan-details').toggle();
+  $('#physical-plan-details-arrow').toggleClass('arrow-open').toggleClass('arrow-closed');
+}
+
+/*
+ * Set up the toggle for detailed node labels (show metrics inside graph nodes).
+ * Stores original compact labels so they can be restored on toggle-off.
+ */
+/*
+ * Set up the toggle for detailed node labels.
+ * Re-renders the graph from the detailed DOT file instead of patching SVG in-place.
+ */
+/*
+ * Toggle between compact and detailed node labels.
+ * Re-renders the graph with metrics injected into node labels from the JSON metadata.
+ */
+function setupDetailedLabelsToggle() {
+  var checkbox = document.getElementById("detailed-labels-checkbox");
+  if (!checkbox) return;
+
+  var isChecked = window.localStorage.getItem("detailed-labels-checked") === "true";
+  checkbox.checked = isChecked;
+  if (isChecked) {
+    rerenderWithDetailedLabels();
+  }
+
+  checkbox.addEventListener("click", function () {
+    window.localStorage.setItem("detailed-labels-checked", String(checkbox.checked));
+    rerenderWithDetailedLabels();
+  });
+}
+
+function rerenderWithDetailedLabels() {
+  var metadata = d3.select("#plan-viz-metadata");
+  var dot = metadata.select(".dot-file").text().trim();
+  if (!dot) return;
+
+  var container = planVizContainer();
+  container.selectAll("svg").remove();
+
+  var svg = container
+    .append("svg")
+    .attr("width", window.innerWidth || 1920)
+    .attr("height", 1000);
+  var graph = svg.append("g");
+
+  var g = graphlibDot.read(dot);
+
+  // If detailed mode, inject HTML labels with metrics tables
+  var detailed = document.getElementById("detailed-labels-checkbox");
+  if (detailed && detailed.checked) {
+    var nodeDetails = getNodeDetails();
+    var showStageTask = document.getElementById("stageId-and-taskId-checkbox")
+      && document.getElementById("stageId-and-taskId-checkbox").checked;
+    g.nodes().forEach(function (v) {
+      var node = g.node(v);
+      if (!node.isCluster && nodeDetails[node.id]) {
+        var details = nodeDetails[node.id];
+        if (details.metrics && details.metrics.length > 0) {
+          var html = '<div style="padding:4px;text-align:left;font-size:10px;">';
+          html += '<strong>' + htmlEscape(details.name) + '</strong>';
+          html += buildMetricsTable(details.metrics, showStageTask, false);
+          html += '</div>';
+          node.labelType = "html";
+          node.label = html;
+        }
+      }
+    });
+  }
+
+  preprocessGraphLayout(g);
+  var renderer = new dagreD3.render();
+  renderer(graph, g);
+
+  svg.selectAll("rect").attr("rx", "5").attr("ry", "5");
+
+  setupLayoutForSparkPlanCluster(g, svg);
+  setupSelectionForSparkPlanNode(g);
+  setupTooltipForSparkPlanNode(g);
+  resizeSvg(svg);
+  postprocessForAdditionalMetrics();
+}
+document.addEventListener("DOMContentLoaded", function () {
+  if (shouldRenderPlanViz()) {
+    renderPlanViz();
+  }
+
+  // Copy physical plan text to clipboard
+  var copyPlanBtn = document.getElementById("copy-plan-btn");
+  if (copyPlanBtn) {
+    copyPlanBtn.addEventListener("click", function () {
+      var planEl = document.getElementById("physical-plan-details");
+      var text = planEl ? planEl.textContent : "";
+      navigator.clipboard.writeText(text.trim()).then(function () {
+        if (typeof showToast === "function") {
+          showToast("Plan copied to clipboard", "success");
+        }
+      });
+    });
+  }
+
+  // Copy shareable link to clipboard
+  var copyLinkBtn = document.getElementById("copy-link-btn");
+  if (copyLinkBtn) {
+    copyLinkBtn.addEventListener("click", function () {
+      navigator.clipboard.writeText(window.location.href).then(function () {
+        if (typeof showToast === "function") {
+          showToast("Link copied to clipboard", "success");
+        }
+      });
+    });
+  }
+});
+
+// Panel show/hide
+$(function() {
+  $("#plan-viz-panel-close").on("click", function() {
+    $("#plan-viz-details-col").addClass("d-none");
+    $("#plan-viz-graph-col").removeClass("col-8").addClass("col-12");
+  });
+});
+
+function showDetailsPanel() {
+  var col = document.getElementById("plan-viz-details-col");
+  var graphCol = document.getElementById("plan-viz-graph-col");
+  if (col && graphCol) {
+    col.classList.remove("d-none");
+    graphCol.classList.remove("col-12");
+    graphCol.classList.add("col-8");
+  }
 }

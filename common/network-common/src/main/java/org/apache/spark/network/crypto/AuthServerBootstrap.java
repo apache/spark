@@ -43,6 +43,7 @@ public class AuthServerBootstrap implements TransportServerBootstrap {
     this.secretKeyHolder = secretKeyHolder;
   }
 
+  @Override
   public RpcHandler doBootstrap(Channel channel, RpcHandler rpcHandler) {
     if (!conf.encryptionEnabled()) {
       TransportServerBootstrap sasl = new SaslServerBootstrap(conf, secretKeyHolder);

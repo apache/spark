@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive
 
 import java.util
-import java.util.{Locale, TimeZone}
 
 import org.apache.hadoop.hive.ql.udf.UDAFPercentile
 import org.apache.hadoop.hive.serde2.io.DoubleWritable
@@ -28,7 +27,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.io.LongWritable
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Row, TestUserClassUDT}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
@@ -73,11 +72,6 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
       .get(0)
       .get())
   }
-
-  // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
-  TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
-  // Add Locale setting
-  Locale.setDefault(Locale.US)
 
   val data =
     Literal(true) ::
@@ -212,6 +206,12 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     checkValues(row, row.zip(ois).zip(dataTypes).map {
       case ((data, oi), dt) => unwrap(wrap(data, oi, dt), oi)
     })
+  }
+
+  test("wrap / unwrap UDT Type") {
+    val dt = new TestUserClassUDT
+    checkValue(1, unwrap(wrap(1, toInspector(dt), dt), toInspector(dt)))
+    checkValue(null, unwrap(wrap(null, toInspector(dt), dt), toInspector(dt)))
   }
 
   test("wrap / unwrap Struct Type") {

@@ -18,9 +18,14 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
+import org.apache.spark.sql.test.SharedSparkSession
 
-class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
+class FileFormatWriterSuite
+  extends QueryTest
+  with SharedSparkSession
+  with CodegenInterpretedPlanTest {
+
   import testImplicits._
 
   test("empty file should be skipped while write to file") {
@@ -34,14 +39,42 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-22252: FileFormatWriter should respect the input query schema") {
     withTable("t1", "t2", "t3", "t4") {
-      spark.range(1).select('id as 'col1, 'id as 'col2).write.saveAsTable("t1")
+      spark.range(1).select($"id" as Symbol("col1"), $"id" as Symbol("col2"))
+        .write.saveAsTable("t1")
       spark.sql("select COL1, COL2 from t1").write.saveAsTable("t2")
       checkAnswer(spark.table("t2"), Row(0, 0))
 
       // Test picking part of the columns when writing.
-      spark.range(1).select('id, 'id as 'col1, 'id as 'col2).write.saveAsTable("t3")
+      spark.range(1)
+        .select($"id", $"id" as Symbol("col1"), $"id" as Symbol("col2"))
+        .write.saveAsTable("t3")
       spark.sql("select COL1, COL2 from t3").write.saveAsTable("t4")
       checkAnswer(spark.table("t4"), Row(0, 0))
+    }
+  }
+
+  test("Null and '' values should not cause dynamic partition failure of string types") {
+    withTable("t1", "t2") {
+      Seq((0, None), (1, Some("")), (2, None)).toDF("id", "p")
+        .write.partitionBy("p").saveAsTable("t1")
+      checkAnswer(spark.table("t1").sort("id"), Seq(Row(0, null), Row(1, null), Row(2, null)))
+
+      sql("create table t2(id long, p string) using parquet partitioned by (p)")
+      sql("insert overwrite table t2 partition(p) select id, p from t1")
+      checkAnswer(spark.table("t2").sort("id"), Seq(Row(0, null), Row(1, null), Row(2, null)))
+    }
+  }
+
+  test("SPARK-33904: save and insert into a table in a namespace of spark_catalog") {
+    val ns = "spark_catalog.ns"
+    withNamespace(ns) {
+      spark.sql(s"CREATE NAMESPACE $ns")
+      val t = s"$ns.tbl"
+      withTable(t) {
+        spark.range(1).write.saveAsTable(t)
+        Seq(100).toDF().write.insertInto(t)
+        checkAnswer(spark.table(t), Seq(Row(0), Row(100)))
+      }
     }
   }
 }

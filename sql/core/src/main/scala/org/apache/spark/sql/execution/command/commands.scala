@@ -17,21 +17,25 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.util.UUID
+import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
-import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.debug._
+import org.apache.spark.sql.catalyst.plans.logical.{Command, ExecutableDuringAnalysis, LogicalPlan, SupervisingCommand}
+import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
+import org.apache.spark.sql.connector.ExternalCommandRunner
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.{CommandExecutionMode, ExplainMode, LeafExecNode, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.execution.streaming.runtime.IncrementalExecution
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
@@ -39,12 +43,17 @@ import org.apache.spark.sql.types._
  */
 trait RunnableCommand extends Command {
 
+  override def children: Seq[LogicalPlan] = Nil
+
   // The map used to record the metrics of running the command. This will be passed to
   // `ExecutedCommand` during query planning.
   lazy val metrics: Map[String, SQLMetric] = Map.empty
 
   def run(sparkSession: SparkSession): Seq[Row]
 }
+
+trait LeafRunnableCommand extends RunnableCommand with LeafLike[LogicalPlan]
+trait UnaryRunnableCommand extends RunnableCommand with UnaryLike[LogicalPlan]
 
 /**
  * A physical operator that executes the run method of a `RunnableCommand` and
@@ -67,10 +76,10 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
    */
   protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-    cmd.run(sqlContext.sparkSession).map(converter(_).asInstanceOf[InternalRow])
+    cmd.run(session).map(converter(_).asInstanceOf[InternalRow])
   }
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = cmd :: Nil
+  override def innerChildren: Seq[QueryPlan[_]] = cmd :: Nil
 
   override def output: Seq[Attribute] = cmd.output
 
@@ -78,12 +87,16 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
 
   override def executeCollect(): Array[InternalRow] = sideEffectResult.toArray
 
-  override def executeToIterator: Iterator[InternalRow] = sideEffectResult.toIterator
+  override def executeToIterator(): Iterator[InternalRow] = sideEffectResult.iterator
 
   override def executeTake(limit: Int): Array[InternalRow] = sideEffectResult.take(limit).toArray
 
+  override def executeTail(limit: Int): Array[InternalRow] = {
+    sideEffectResult.takeRight(limit).toArray
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
-    sqlContext.sparkContext.parallelize(sideEffectResult, 1)
+    sparkContext.parallelize(sideEffectResult, 1)
   }
 }
 
@@ -101,7 +114,7 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
 
   protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-    val rows = cmd.run(sqlContext.sparkSession, child)
+    val rows = cmd.run(session, child)
 
     rows.map(converter(_).asInstanceOf[InternalRow])
   }
@@ -110,15 +123,25 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
 
   override def nodeName: String = "Execute " + cmd.nodeName
 
+  // override the default one, otherwise the `cmd.nodeName` will appear twice from simpleString
+  override def argString(maxFields: Int): String = cmd.argString(maxFields)
+
   override def executeCollect(): Array[InternalRow] = sideEffectResult.toArray
 
-  override def executeToIterator: Iterator[InternalRow] = sideEffectResult.toIterator
+  override def executeToIterator(): Iterator[InternalRow] = sideEffectResult.iterator
 
   override def executeTake(limit: Int): Array[InternalRow] = sideEffectResult.take(limit).toArray
 
-  protected override def doExecute(): RDD[InternalRow] = {
-    sqlContext.sparkContext.parallelize(sideEffectResult, 1)
+  override def executeTail(limit: Int): Array[InternalRow] = {
+    sideEffectResult.takeRight(limit).toArray
   }
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    sparkContext.parallelize(sideEffectResult, 1)
+  }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): DataWritingCommandExec =
+    copy(child = newChild)
 }
 
 /**
@@ -128,56 +151,43 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
  * (but do NOT actually execute it).
  *
  * {{{
- *   EXPLAIN (EXTENDED | CODEGEN) SELECT * FROM ...
+ *   EXPLAIN (EXTENDED | CODEGEN | COST | FORMATTED) SELECT * FROM ...
  * }}}
  *
  * @param logicalPlan plan to explain
- * @param extended whether to do extended explain or not
- * @param codegen whether to output generated code from whole-stage codegen or not
- * @param cost whether to show cost information for operators.
+ * @param mode explain mode
  */
 case class ExplainCommand(
     logicalPlan: LogicalPlan,
-    extended: Boolean = false,
-    codegen: Boolean = false,
-    cost: Boolean = false)
-  extends RunnableCommand {
+    mode: ExplainMode)
+  extends RunnableCommand with SupervisingCommand {
 
   override val output: Seq[Attribute] =
     Seq(AttributeReference("plan", StringType, nullable = true)())
 
   // Run through the optimizer to generate the physical plan.
   override def run(sparkSession: SparkSession): Seq[Row] = try {
-    val queryExecution =
-      if (logicalPlan.isStreaming) {
-        // This is used only by explaining `Dataset/DataFrame` created by `spark.readStream`, so the
-        // output mode does not matter since there is no `Sink`.
-        new IncrementalExecution(
-          sparkSession, logicalPlan, OutputMode.Append(), "<unknown>",
-          UUID.randomUUID, 0, OffsetSeqMetadata(0, 0))
-      } else {
-        sparkSession.sessionState.executePlan(logicalPlan)
-      }
-    val outputString =
-      if (codegen) {
-        codegenString(queryExecution.executedPlan)
-      } else if (extended) {
-        queryExecution.toString
-      } else if (cost) {
-        queryExecution.stringWithStats
-      } else {
-        queryExecution.simpleString
-      }
+    val stagedLogicalPlan = stageForAnalysis(logicalPlan)
+    val qe = sparkSession.sessionState.executePlan(stagedLogicalPlan, CommandExecutionMode.SKIP)
+    val outputString = qe.explainString(mode)
     Seq(Row(outputString))
-  } catch { case cause: TreeNodeException[_] =>
-    ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))
+  } catch { case NonFatal(cause) =>
+    ("Error occurred during query planning: \n" + cause.getMessage).split("\n")
+      .map(Row(_)).toImmutableArraySeq
   }
+
+  private def stageForAnalysis(plan: LogicalPlan): LogicalPlan = plan transform {
+    case p: ExecutableDuringAnalysis => p.stageForExplain()
+  }
+
+  def withTransformedSupervisedPlan(transformer: LogicalPlan => LogicalPlan): LogicalPlan =
+    copy(logicalPlan = transformer(logicalPlan))
 }
 
 /** An explain command for users to see how a streaming batch is executed. */
 case class StreamingExplainCommand(
     queryExecution: IncrementalExecution,
-    extended: Boolean) extends RunnableCommand {
+    extended: Boolean) extends LeafRunnableCommand {
 
   override val output: Seq[Attribute] =
     Seq(AttributeReference("plan", StringType, nullable = true)())
@@ -191,7 +201,46 @@ case class StreamingExplainCommand(
         queryExecution.simpleString
       }
     Seq(Row(outputString))
-  } catch { case cause: TreeNodeException[_] =>
-    ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))
+  } catch { case NonFatal(cause) =>
+    ("Error occurred during query planning: \n" + cause.getMessage).split("\n")
+      .map(Row(_)).toImmutableArraySeq
+  }
+}
+
+/**
+ * Used to execute an arbitrary string command inside an external execution engine
+ * rather than Spark. Please check [[ExternalCommandRunner]] for more details.
+ */
+case class ExternalCommandExecutor(
+    runner: ExternalCommandRunner,
+    command: String,
+    options: Map[String, String]) extends LeafRunnableCommand {
+
+  override def output: Seq[Attribute] =
+    Seq(AttributeReference("command_output", StringType)())
+
+  def execute(): Seq[String] = {
+    runner.executeCommand(command, new CaseInsensitiveStringMap(options.asJava)).toIndexedSeq
+  }
+
+  override def run(sparkSession: SparkSession): Seq[Row] = execute().map(Row(_))
+}
+
+object ExternalCommandExecutor {
+  def apply(
+      session: SparkSession,
+      runner: String,
+      command: String,
+      options: Map[String, String]): ExternalCommandExecutor = {
+    DataSource.lookupDataSource(runner, session.sessionState.conf) match {
+      case source if classOf[ExternalCommandRunner].isAssignableFrom(source) =>
+        ExternalCommandExecutor(
+          source.getDeclaredConstructor().newInstance().asInstanceOf[ExternalCommandRunner],
+          command,
+          options)
+
+      case _ =>
+        throw QueryCompilationErrors.commandExecutionInRunnerUnsupportedError(runner)
+    }
   }
 }

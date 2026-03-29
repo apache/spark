@@ -17,20 +17,24 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.CreateNamedStruct
+import scala.jdk.CollectionConverters._
+
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CreateNamedStruct, GetStructField, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{ArrayType, IntegerType, MetadataBuilder, StringType, StructField, StructType}
 
-class ComplexTypesSuite extends QueryTest with SharedSQLContext {
+class ComplexTypesSuite extends QueryTest with SharedSparkSession {
+  import testImplicits._
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     spark.range(10).selectExpr(
       "id + 1 as i1", "id + 2 as i2", "id + 3 as i3", "id + 4 as i4", "id + 5 as i5")
       .write.saveAsTable("tab")
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       spark.sql("DROP TABLE IF EXISTS tab")
     } finally {
@@ -105,5 +109,80 @@ class ComplexTypesSuite extends QueryTest with SharedSQLContext {
       .selectExpr("cola.exp.i2", "cola.i4").filter("cola.i4 > 11")
     checkAnswer(df1, Row(10, 12) :: Row(11, 13) :: Nil)
     checkNamedStruct(df.queryExecution.optimizedPlan, expectedCount = 0)
+  }
+
+  test("SPARK-32167: get field from an array of struct") {
+    val innerStruct = new StructType().add("i", "int", nullable = true)
+    val schema = new StructType().add("arr", ArrayType(innerStruct, containsNull = false))
+    val df = spark.createDataFrame(List(Row(Seq(Row(1), Row(null)))).asJava, schema)
+    checkAnswer(df.select($"arr".getField("i")), Row(Seq(1, null)))
+  }
+
+  test("SPARK-40527: correct named_struct field names in CreateStruct") {
+    val df = spark.sql(
+      """
+      select struct(a['x'], a['y']) as c
+      from (select named_struct('x', 1, 'y', 2) as a)
+      """)
+
+    val expectedSchema = StructType(
+      StructField("c", StructType(
+        StructField("x", IntegerType, false) ::
+        StructField("y", IntegerType, false) ::
+        Nil), false) ::
+      Nil)
+
+    assert(df.schema == expectedSchema)
+    checkAnswer(df, Seq(Row(Row(1, 2))))
+  }
+
+  test("SPARK-40527: correct map key names in CreateStruct") {
+    val df = spark.sql(
+      """
+      select struct(a['x'], a['y']) as c
+      from (select map('x', 1, 'y', 2) as a)
+      """)
+
+    val expectedSchema = StructType(
+      StructField("c", StructType(
+        StructField("x", IntegerType, true) ::
+        StructField("y", IntegerType, true) ::
+        Nil), false) ::
+      Nil)
+
+    assert(df.schema == expectedSchema)
+    checkAnswer(df, Seq(Row(Row(1, 2))))
+  }
+
+  test("SPARK-40527: keep generic names for non-literal expressions in CreateStruct") {
+    val df = spark.sql(
+      """
+      select struct(a[concat('x', '')], a['y']) as c
+      from (select map('x', 1, 'y', 2) as a)
+      """)
+
+    val expectedSchema = StructType(
+      StructField("c", StructType(
+        StructField("col1", IntegerType, true) ::
+        StructField("y", IntegerType, true) ::
+        Nil), false) ::
+      Nil)
+
+    assert(df.schema == expectedSchema)
+    checkAnswer(df, Seq(Row(Row(1, 2))))
+  }
+
+  test("SPARK-51624: Propagate StructField metadata in CreateNamedStruct.dataType") {
+    val metadata = new MetadataBuilder().putString("comment", "hello").build()
+    val structRef = AttributeReference("s1",
+      StructType(StructField("col1", StringType, false, metadata) :: Nil))()
+    val createNamedStruct = CreateNamedStruct(
+      Seq(
+        Literal("a"),
+        GetStructField(structRef, 0)
+      )
+    )
+    val dataType = createNamedStruct.dataType
+    assert(dataType.asInstanceOf[StructType].fields.head.metadata == metadata)
   }
 }

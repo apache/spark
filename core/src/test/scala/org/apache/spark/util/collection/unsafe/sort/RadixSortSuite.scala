@@ -22,16 +22,15 @@ import java.util.{Arrays, Comparator}
 
 import scala.util.Random
 
-import com.google.common.primitives.Ints
-
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.Logging
+import org.apache.spark.network.util.JavaUtils.checkedCast
 import org.apache.spark.unsafe.array.LongArray
 import org.apache.spark.unsafe.memory.MemoryBlock
 import org.apache.spark.util.collection.Sorter
+import org.apache.spark.util.collection.Utils.createArray
 import org.apache.spark.util.random.XORShiftRandom
 
-class RadixSortSuite extends SparkFunSuite with Logging {
+class RadixSortSuite extends SparkFunSuite {
   private val N = 10000L  // scale this down for more readable results
 
   /**
@@ -69,28 +68,27 @@ class RadixSortSuite extends SparkFunSuite with Logging {
         override def sortDescending = false
         override def sortSigned = false
         override def nullsFirst = true
-        override def compare(a: Long, b: Long): Int = {
-          return PrefixComparators.BINARY.compare(a & 0xffffff0000L, b & 0xffffff0000L)
-        }
+        override def compare(a: Long, b: Long): Int =
+          PrefixComparators.BINARY.compare(a & 0xffffff0000L, b & 0xffffff0000L)
       },
       2, 4, false, false, true))
 
   private def generateTestData(size: Long, rand: => Long): (Array[JLong], LongArray) = {
-    val ref = Array.tabulate[Long](Ints.checkedCast(size)) { i => rand }
-    val extended = ref ++ Array.fill[Long](Ints.checkedCast(size))(0)
+    val ref = Array.tabulate[Long](checkedCast(size)) { i => rand }
+    val extended = ref ++ createArray(checkedCast(size), 0L)
     (ref.map(i => JLong.valueOf(i)), new LongArray(MemoryBlock.fromLongArray(extended)))
   }
 
   private def generateKeyPrefixTestData(size: Long, rand: => Long): (LongArray, LongArray) = {
-    val ref = Array.tabulate[Long](Ints.checkedCast(size * 2)) { i => rand }
-    val extended = ref ++ Array.fill[Long](Ints.checkedCast(size * 2))(0)
+    val ref = Array.tabulate[Long](checkedCast(size * 2)) { i => rand }
+    val extended = ref ++ createArray(checkedCast(size * 2), 0L)
     (new LongArray(MemoryBlock.fromLongArray(ref)),
      new LongArray(MemoryBlock.fromLongArray(extended)))
   }
 
   private def collectToArray(array: LongArray, offset: Int, length: Long): Array[Long] = {
     var i = 0
-    val out = new Array[Long](Ints.checkedCast(length))
+    val out = new Array[Long](checkedCast(length))
     while (i < length) {
       out(i) = array.get(offset + i)
       i += 1
@@ -109,14 +107,13 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     }
   }
 
-  private def referenceKeyPrefixSort(buf: LongArray, lo: Long, hi: Long, refCmp: PrefixComparator) {
+  private def referenceKeyPrefixSort(buf: LongArray, lo: Long, hi: Long,
+      refCmp: PrefixComparator): Unit = {
     val sortBuffer = new LongArray(MemoryBlock.fromLongArray(new Array[Long](buf.size().toInt)))
     new Sorter(new UnsafeSortDataFormat(sortBuffer)).sort(
-      buf, Ints.checkedCast(lo), Ints.checkedCast(hi), new Comparator[RecordPointerAndKeyPrefix] {
-        override def compare(
-            r1: RecordPointerAndKeyPrefix,
-            r2: RecordPointerAndKeyPrefix): Int = refCmp.compare(r1.keyPrefix, r2.keyPrefix)
-      })
+      buf, checkedCast(lo), checkedCast(hi),
+      (r1: RecordPointerAndKeyPrefix, r2: RecordPointerAndKeyPrefix) =>
+        refCmp.compare(r1.keyPrefix, r2.keyPrefix))
   }
 
   private def fuzzTest(name: String)(testFn: Long => Unit): Unit = {
@@ -139,7 +136,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
   def randomBitMask(rand: Random): Long = {
     var tmp = ~0L
     for (i <- 0 to rand.nextInt(5)) {
-      tmp &= rand.nextLong
+      tmp &= rand.nextLong()
     }
     tmp
   }
@@ -159,7 +156,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
         buffer, N, sortType.startByteIdx, sortType.endByteIdx,
         sortType.descending, sortType.signed)
       val result = collectToArray(buffer, outOffset, N)
-      assert(ref.view == result.view)
+      assert(ref === result)
     }
 
     test("sort key prefix " + sortType.name) {
@@ -171,7 +168,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
         sortType.descending, sortType.signed)
       val res1 = collectToArray(buf1, 0, N * 2)
       val res2 = collectToArray(buf2, outOffset, N * 2)
-      assert(res1.view == res2.view)
+      assert(res1 === res2)
     }
 
     fuzzTest(s"fuzz test ${sortType.name} with random bitmasks") { seed =>
@@ -183,7 +180,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
         buffer, N, sortType.startByteIdx, sortType.endByteIdx,
         sortType.descending, sortType.signed)
       val result = collectToArray(buffer, outOffset, N)
-      assert(ref.view == result.view)
+      assert(ref === result)
     }
 
     fuzzTest(s"fuzz test key prefix ${sortType.name} with random bitmasks") { seed =>
@@ -196,7 +193,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
         sortType.descending, sortType.signed)
       val res1 = collectToArray(buf1, 0, N * 2)
       val res2 = collectToArray(buf2, outOffset, N * 2)
-      assert(res1.view == res2.view)
+      assert(res1 ===res2)
     }
   }
 }

@@ -29,7 +29,7 @@ import org.apache.spark.sql.SparkSession
 object RandomForestClassifierExample {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("RandomForestClassifierExample")
       .getOrCreate()
 
@@ -64,7 +64,7 @@ object RandomForestClassifierExample {
     val labelConverter = new IndexToString()
       .setInputCol("prediction")
       .setOutputCol("predictedLabel")
-      .setLabels(labelIndexer.labels)
+      .setLabels(labelIndexer.labelsArray(0))
 
     // Chain indexers and forest in a Pipeline.
     val pipeline = new Pipeline()

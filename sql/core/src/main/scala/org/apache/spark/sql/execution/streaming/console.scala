@@ -17,30 +17,29 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql._
-import org.apache.spark.sql.execution.streaming.sources.ConsoleWriteSupport
+import java.util
+
+import org.apache.spark.sql.{Column => _, _}
+import org.apache.spark.sql.connector.catalog.{Column, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsTruncate, Write, WriteBuilder}
+import org.apache.spark.sql.connector.write.streaming.StreamingWrite
+import org.apache.spark.sql.execution.streaming.sources.ConsoleWrite
+import org.apache.spark.sql.internal.connector.{SimpleTableProvider, SupportsStreamingUpdateAsAppend}
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister}
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, StreamingWriteSupportProvider}
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
-import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class ConsoleRelation(override val sqlContext: SQLContext, data: DataFrame)
   extends BaseRelation {
   override def schema: StructType = data.schema
 }
 
-class ConsoleSinkProvider extends DataSourceV2
-  with StreamingWriteSupportProvider
+class ConsoleSinkProvider extends SimpleTableProvider
   with DataSourceRegister
   with CreatableRelationProvider {
 
-  override def createStreamingWriteSupport(
-      queryId: String,
-      schema: StructType,
-      mode: OutputMode,
-      options: DataSourceOptions): StreamingWriteSupport = {
-    new ConsoleWriteSupport(schema, options)
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    ConsoleTable
   }
 
   def createRelation(
@@ -59,4 +58,33 @@ class ConsoleSinkProvider extends DataSourceV2
   }
 
   def shortName(): String = "console"
+}
+
+object ConsoleTable extends Table with SupportsWrite {
+
+  override def name(): String = "console"
+
+  override def columns(): Array[Column] = Array.empty
+
+  override def capabilities(): util.Set[TableCapability] = {
+    util.EnumSet.of(TableCapability.STREAMING_WRITE)
+  }
+
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+    new WriteBuilder with SupportsTruncate with SupportsStreamingUpdateAsAppend {
+      private val inputSchema: StructType = info.schema()
+
+      // Do nothing for truncate. Console sink is special and it just prints all the records.
+      override def truncate(): WriteBuilder = this
+
+      override def build(): Write = {
+        new Write {
+          override def toStreaming: StreamingWrite = {
+            assert(inputSchema != null)
+            new ConsoleWrite(inputSchema, info.options)
+          }
+        }
+      }
+    }
+  }
 }

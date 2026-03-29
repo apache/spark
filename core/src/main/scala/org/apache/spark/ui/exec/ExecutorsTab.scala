@@ -17,11 +17,12 @@
 
 package org.apache.spark.ui.exec
 
-import javax.servlet.http.HttpServletRequest
+import scala.xml.{Node, Unparsed}
 
-import scala.xml.Node
+import jakarta.servlet.http.HttpServletRequest
 
-import org.apache.spark.ui.{SparkUI, SparkUITab, UIUtils, WebUIPage}
+import org.apache.spark.internal.config.UI._
+import org.apache.spark.ui.{CspNonce, SparkUI, SparkUITab, UIUtils, WebUIPage}
 
 private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "executors") {
 
@@ -29,11 +30,16 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "exec
 
   private def init(): Unit = {
     val threadDumpEnabled =
-      parent.sc.isDefined && parent.conf.getBoolean("spark.ui.threadDumpsEnabled", true)
+      parent.sc.isDefined && parent.conf.get(UI_THREAD_DUMPS_ENABLED)
+    val heapHistogramEnabled =
+      parent.sc.isDefined && parent.conf.get(UI_HEAP_HISTOGRAM_ENABLED)
 
-    attachPage(new ExecutorsPage(this, threadDumpEnabled))
+    attachPage(new ExecutorsPage(this, threadDumpEnabled, heapHistogramEnabled))
     if (threadDumpEnabled) {
       attachPage(new ExecutorThreadDumpPage(this, parent.sc))
+    }
+    if (heapHistogramEnabled) {
+      attachPage(new ExecutorHeapHistogramPage(this, parent.sc))
     }
   }
 
@@ -41,19 +47,43 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "exec
 
 private[ui] class ExecutorsPage(
     parent: SparkUITab,
-    threadDumpEnabled: Boolean)
+    threadDumpEnabled: Boolean,
+    heapHistogramEnabled: Boolean)
   extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
+    val imported = UIUtils.formatImportJavaScript(
+      request,
+      "/static/executorspage.js",
+      "setThreadDumpEnabled",
+      "setHeapHistogramEnabled")
+    val js =
+      s"""
+         |$imported
+         |
+         |setThreadDumpEnabled($threadDumpEnabled);
+         |setHeapHistogramEnabled($heapHistogramEnabled)
+         |""".stripMargin
     val content =
-      <div>
-        {
-          <div id="active-executors" class="row-fluid"></div> ++
-          <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
-          <script src={UIUtils.prependBaseUri(request, "/static/executorspage.js")}></script> ++
-          <script>setThreadDumpEnabled({threadDumpEnabled})</script>
-        }
-      </div>
+      {
+        <div id="active-executors"></div> ++
+        <div class="offcanvas offcanvas-end" tabindex="-1" id="executor-detail-offcanvas"
+             aria-labelledby="executor-detail-offcanvas-label"
+             style="width: 60vw; max-width: 900px;">
+          <div class="offcanvas-resize-handle" id="offcanvas-resize-handle"></div>
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="executor-detail-offcanvas-label"></h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas"
+                    aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body" id="executor-detail-offcanvas-body">
+          </div>
+        </div> ++
+        <script type="module" src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
+        <script type="module"
+                src={UIUtils.prependBaseUri(request, "/static/executorspage.js")}></script> ++
+        <script type="module" nonce={CspNonce.get}>{Unparsed(js)}</script>
+      }
 
     UIUtils.headerSparkPage(request, "Executors", content, parent, useDataTables = true)
   }

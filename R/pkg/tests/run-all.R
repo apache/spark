@@ -20,7 +20,6 @@ library(SparkR)
 
 # SPARK-25572
 if (identical(Sys.getenv("NOT_CRAN"), "true")) {
-
   # Turn all warnings into errors
   options("warn" = 2)
 
@@ -36,8 +35,8 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
   install.spark(overwrite = TRUE)
 
   sparkRDir <- file.path(Sys.getenv("SPARK_HOME"), "R")
-  sparkRWhitelistSQLDirs <- c("spark-warehouse", "metastore_db")
-  invisible(lapply(sparkRWhitelistSQLDirs,
+  sparkRAllowedSQLDirs <- c("spark-warehouse", "metastore_db")
+  invisible(lapply(sparkRAllowedSQLDirs,
                    function(x) { unlink(file.path(sparkRDir, x), recursive = TRUE, force = TRUE)}))
   sparkRFilesBefore <- list.files(path = sparkRDir, all.files = TRUE)
 
@@ -60,11 +59,38 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
   if (identical(Sys.getenv("NOT_CRAN"), "true")) {
     # set random seed for predictable results. mostly for base's sample() in tree and classification
     set.seed(42)
-    # for testthat 1.0.2 later, change reporter from "summary" to default_reporter()
-    testthat:::run_tests("SparkR",
-                         file.path(sparkRDir, "pkg", "tests", "fulltests"),
-                         NULL,
-                         "summary")
+
+    if (packageVersion("testthat")$major <= 1) stop("testhat 1.x is not supported")
+
+    test_runner <- if (packageVersion("testthat")$major == 2) {
+      # testthat >= 2.0.0, < 3.0.0
+      function(path, package, reporter, filter) {
+        testthat:::test_package_dir(
+          test_path = path,
+          package = package,
+          filter = filter,
+          reporter = reporter
+        )
+      }
+    } else {
+      # testthat >= 3.0.0
+      testthat::test_dir
+    }
+
+    dir.create("target/test-reports", showWarnings = FALSE)
+    reporter <- MultiReporter$new(list(
+      SummaryReporter$new(),
+      JunitReporter$new(
+        file = file.path(getwd(), "target/test-reports/test-results.xml")
+      )
+    ))
+
+    test_runner(
+      path = file.path(sparkRDir, "pkg", "tests", "fulltests"),
+      package = "SparkR",
+      reporter = reporter,
+      filter = NULL
+    )
   }
 
   SparkR:::uninstallDownloadedSpark()

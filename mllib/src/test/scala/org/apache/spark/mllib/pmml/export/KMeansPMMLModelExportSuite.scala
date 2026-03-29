@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.pmml.export
+package org.apache.spark.mllib.pmml.`export`
 
-import org.dmg.pmml.ClusteringModel
+import org.dmg.pmml.clustering.ClusteringModel
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.clustering.KMeansModel
@@ -36,7 +36,7 @@ class KMeansPMMLModelExportSuite extends SparkFunSuite {
 
     // assert that the PMML format is as expected
     assert(modelExport.isInstanceOf[PMMLModelExport])
-    val pmml = modelExport.asInstanceOf[PMMLModelExport].getPmml
+    val pmml = modelExport.getPmml()
     assert(pmml.getHeader.getDescription === "k-means clustering")
     // check that the number of fields match the single vector size
     assert(pmml.getDataDictionary.getNumberOfFields === clusterCenters(0).size)

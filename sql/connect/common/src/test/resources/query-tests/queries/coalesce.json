@@ -1,0 +1,17 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "repartition": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "numPartitions": 5,
+    "shuffle": false
+  }
+}

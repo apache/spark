@@ -20,7 +20,6 @@ package org.apache.spark.network.protocol;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
-import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -90,8 +89,7 @@ public final class UploadStream extends AbstractMessage implements RequestMessag
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof UploadStream) {
-      UploadStream o = (UploadStream) other;
+    if (other instanceof UploadStream o) {
       return requestId == o.requestId && super.equals(o);
     }
     return false;
@@ -99,9 +97,6 @@ public final class UploadStream extends AbstractMessage implements RequestMessag
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("requestId", requestId)
-      .add("body", body())
-      .toString();
+    return "UploadStream[requestId=" + requestId + ",body=" + body() + "]";
   }
 }

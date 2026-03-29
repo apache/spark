@@ -19,15 +19,15 @@ package org.apache.spark.mllib.regression
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{MODEL_WEIGHTS, TIME}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.streaming.api.java.{JavaDStream, JavaPairDStream}
 import org.apache.spark.streaming.dstream.DStream
 
 /**
- * :: DeveloperApi ::
  * StreamingLinearAlgorithm implements methods for continuously
  * training a generalized linear model on streaming data,
  * and using it for prediction on (possibly different) streaming data.
@@ -56,7 +56,6 @@ import org.apache.spark.streaming.dstream.DStream
  *
  */
 @Since("1.1.0")
-@DeveloperApi
 abstract class StreamingLinearAlgorithm[
     M <: GeneralizedLinearModel,
     A <: GeneralizedLinearAlgorithm[M]] extends Logging {
@@ -90,14 +89,14 @@ abstract class StreamingLinearAlgorithm[
       throw new IllegalArgumentException("Model must be initialized before starting training.")
     }
     data.foreachRDD { (rdd, time) =>
-      if (!rdd.isEmpty) {
+      if (!rdd.isEmpty()) {
         model = Some(algorithm.run(rdd, model.get.weights))
-        logInfo(s"Model updated at time ${time.toString}")
+        logInfo(log"Model updated at time ${MDC(TIME, time)}")
         val display = model.get.weights.size match {
           case x if x > 100 => model.get.weights.toArray.take(100).mkString("[", ",", "...")
           case _ => model.get.weights.toArray.mkString("[", ",", "]")
         }
-        logInfo(s"Current model: weights, ${display}")
+        logInfo(log"Current model: weights, ${MDC(MODEL_WEIGHTS, display)}")
       }
     }
   }

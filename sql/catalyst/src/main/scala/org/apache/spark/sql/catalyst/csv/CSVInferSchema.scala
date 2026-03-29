@@ -17,16 +17,64 @@
 
 package org.apache.spark.sql.catalyst.csv
 
-import java.math.BigDecimal
+import java.util.Locale
 
 import scala.util.control.Exception.allCatch
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.expressions.ExprUtils
+import org.apache.spark.sql.catalyst.util.{DateFormatter, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-object CSVInferSchema {
+class CSVInferSchema(val options: CSVOptions) extends Serializable {
+
+  private val timestampParser = TimestampFormatter(
+    options.timestampFormatInRead,
+    options.zoneId,
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
+
+  private val timestampNTZFormatter = TimestampFormatter(
+    options.timestampNTZFormatInRead,
+    options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true,
+    forTimestampNTZ = true)
+
+  private lazy val dateFormatter = DateFormatter(
+    options.dateFormatInRead,
+    options.locale,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
+
+  private val decimalParser = if (options.locale == Locale.US) {
+    // Special handling the default locale for backward compatibility
+    s: String => new java.math.BigDecimal(s)
+  } else {
+    ExprUtils.getDecimalParser(options.locale)
+  }
+
+  // Date formats that could be parsed in DefaultTimestampFormatter
+  // Reference: DateTimeUtils.parseTimestampString
+  // Used to determine inferring a column with mixture of dates and timestamps as TimestampType or
+  // StringType when no timestamp format is specified (the lenient timestamp formatter will be used)
+  private val LENIENT_TS_FORMATTER_SUPPORTED_DATE_FORMATS = Set(
+    "yyyy-MM-dd", "yyyy-M-d", "yyyy-M-dd", "yyyy-MM-d", "yyyy-MM", "yyyy-M", "yyyy")
+
+  private val isDefaultNTZ = SQLConf.get.timestampType == TimestampNTZType
+
+  override def equals(obj: Any): Boolean = obj match {
+    case other: CSVInferSchema =>
+      options == other.options
+    case _ => false
+  }
+
+  override def hashCode(): Int = options.hashCode()
 
   /**
    * Similar to the JSON schema inference
@@ -36,14 +84,13 @@ object CSVInferSchema {
    */
   def infer(
       tokenRDD: RDD[Array[String]],
-      header: Array[String],
-      options: CSVOptions): StructType = {
+      header: Array[String]): StructType = {
     val fields = if (options.inferSchemaFlag) {
       val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
       val rootTypes: Array[DataType] =
-        tokenRDD.aggregate(startType)(inferRowType(options), mergeRowTypes)
+        tokenRDD.aggregate(startType)(inferRowType, mergeRowTypes)
 
-      toStructFields(rootTypes, header, options)
+      toStructFields(rootTypes, header)
     } else {
       // By default fields are assumed to be StringType
       header.map(fieldName => StructField(fieldName, StringType, nullable = true))
@@ -54,8 +101,7 @@ object CSVInferSchema {
 
   def toStructFields(
       fieldTypes: Array[DataType],
-      header: Array[String],
-      options: CSVOptions): Array[StructField] = {
+      header: Array[String]): Array[StructField] = {
     header.zip(fieldTypes).map { case (thisHeader, rootType) =>
       val dType = rootType match {
         case _: NullType => StringType
@@ -65,11 +111,10 @@ object CSVInferSchema {
     }
   }
 
-  def inferRowType(options: CSVOptions)
-      (rowSoFar: Array[DataType], next: Array[String]): Array[DataType] = {
+  def inferRowType(rowSoFar: Array[DataType], next: Array[String]): Array[DataType] = {
     var i = 0
     while (i < math.min(rowSoFar.length, next.length)) {  // May have columns on right missing.
-      rowSoFar(i) = inferField(rowSoFar(i), next(i), options)
+      rowSoFar(i) = inferField(rowSoFar(i), next(i))
       i+=1
     }
     rowSoFar
@@ -85,86 +130,106 @@ object CSVInferSchema {
    * Infer type of string field. Given known type Double, and a string "1", there is no
    * point checking if it is an Int, as the final type must be Double or higher.
    */
-  def inferField(typeSoFar: DataType, field: String, options: CSVOptions): DataType = {
+  def inferField(typeSoFar: DataType, field: String): DataType = {
     if (field == null || field.isEmpty || field == options.nullValue) {
       typeSoFar
     } else {
-      typeSoFar match {
-        case NullType => tryParseInteger(field, options)
-        case IntegerType => tryParseInteger(field, options)
-        case LongType => tryParseLong(field, options)
-        case _: DecimalType =>
-          // DecimalTypes have different precisions and scales, so we try to find the common type.
-          compatibleType(typeSoFar, tryParseDecimal(field, options)).getOrElse(StringType)
-        case DoubleType => tryParseDouble(field, options)
-        case TimestampType => tryParseTimestamp(field, options)
-        case BooleanType => tryParseBoolean(field, options)
+      val typeElemInfer = typeSoFar match {
+        case NullType => tryParseInteger(field)
+        case IntegerType => tryParseInteger(field)
+        case LongType => tryParseLong(field)
+        case _: DecimalType => tryParseDecimal(field)
+        case DoubleType => tryParseDouble(field)
+        case DateType => tryParseDate(field)
+        case TimestampNTZType => tryParseTimestampNTZ(field)
+        case TimestampType => tryParseTimestamp(field)
+        case BooleanType => tryParseBoolean(field)
         case StringType => StringType
         case other: DataType =>
-          throw new UnsupportedOperationException(s"Unexpected data type $other")
+          throw SparkException.internalError(s"Unexpected data type $other")
       }
+      compatibleType(typeSoFar, typeElemInfer).getOrElse(StringType)
     }
   }
 
-  private def isInfOrNan(field: String, options: CSVOptions): Boolean = {
+  private def isInfOrNan(field: String): Boolean = {
     field == options.nanValue || field == options.negativeInf || field == options.positiveInf
   }
 
-  private def tryParseInteger(field: String, options: CSVOptions): DataType = {
+  private def tryParseInteger(field: String): DataType = {
     if ((allCatch opt field.toInt).isDefined) {
       IntegerType
     } else {
-      tryParseLong(field, options)
+      tryParseLong(field)
     }
   }
 
-  private def tryParseLong(field: String, options: CSVOptions): DataType = {
+  private def tryParseLong(field: String): DataType = {
     if ((allCatch opt field.toLong).isDefined) {
       LongType
     } else {
-      tryParseDecimal(field, options)
+      tryParseDecimal(field)
     }
   }
 
-  private def tryParseDecimal(field: String, options: CSVOptions): DataType = {
+  private def tryParseDecimal(field: String): DataType = {
     val decimalTry = allCatch opt {
-      // `BigDecimal` conversion can fail when the `field` is not a form of number.
-      val bigDecimal = new BigDecimal(field)
+      // The conversion can fail when the `field` is not a form of number.
+      val bigDecimal = decimalParser(field)
       // Because many other formats do not support decimal, it reduces the cases for
-      // decimals by disallowing values having scale (eg. `1.1`).
+      // decimals by disallowing values having scale (e.g. `1.1`).
       if (bigDecimal.scale <= 0) {
         // `DecimalType` conversion can fail when
         //   1. The precision is bigger than 38.
         //   2. scale is bigger than precision.
         DecimalType(bigDecimal.precision, bigDecimal.scale)
       } else {
-        tryParseDouble(field, options)
+        tryParseDouble(field)
       }
     }
-    decimalTry.getOrElse(tryParseDouble(field, options))
+    decimalTry.getOrElse(tryParseDouble(field))
   }
 
-  private def tryParseDouble(field: String, options: CSVOptions): DataType = {
-    if ((allCatch opt field.toDouble).isDefined || isInfOrNan(field, options)) {
+  private def tryParseDouble(field: String): DataType = {
+    if ((allCatch opt field.toDouble).isDefined || isInfOrNan(field)) {
       DoubleType
+    } else if (options.preferDate) {
+      tryParseDate(field)
     } else {
-      tryParseTimestamp(field, options)
+      tryParseTimestampNTZ(field)
     }
   }
 
-  private def tryParseTimestamp(field: String, options: CSVOptions): DataType = {
+  private def tryParseDate(field: String): DataType = {
+    if ((allCatch opt dateFormatter.parse(field)).isDefined) {
+      DateType
+    } else {
+      tryParseTimestampNTZ(field)
+    }
+  }
+
+  private def tryParseTimestampNTZ(field: String): DataType = {
+    // For text-based format, it's ambiguous to infer a timestamp string without timezone, as it can
+    // be both TIMESTAMP LTZ and NTZ. To avoid behavior changes with the new support of NTZ, here
+    // we only try to infer NTZ if the config is set to use NTZ by default.
+    if (isDefaultNTZ &&
+      timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
+      TimestampNTZType
+    } else {
+      tryParseTimestamp(field)
+    }
+  }
+
+  private def tryParseTimestamp(field: String): DataType = {
     // This case infers a custom `dataFormat` is set.
-    if ((allCatch opt options.timestampFormat.parse(field)).isDefined) {
-      TimestampType
-    } else if ((allCatch opt DateTimeUtils.stringToTime(field)).isDefined) {
-      // We keep this for backwards compatibility.
+    if (timestampParser.parseOptional(field).isDefined) {
       TimestampType
     } else {
-      tryParseBoolean(field, options)
+      tryParseBoolean(field)
     }
   }
 
-  private def tryParseBoolean(field: String, options: CSVOptions): DataType = {
+  private def tryParseBoolean(field: String): DataType = {
     if ((allCatch opt field.toBoolean).isDefined) {
       BooleanType
     } else {
@@ -184,7 +249,40 @@ object CSVInferSchema {
    * is compatible with both input data types.
    */
   private def compatibleType(t1: DataType, t2: DataType): Option[DataType] = {
-    TypeCoercion.findTightestCommonType(t1, t2).orElse(findCompatibleTypeForCSV(t1, t2))
+    (t1, t2) match {
+      case (DateType, TimestampType) | (DateType, TimestampNTZType) |
+           (TimestampNTZType, DateType) | (TimestampType, DateType) =>
+        // For a column containing a mixture of dates and timestamps, infer it as timestamp type
+        // if its dates can be inferred as timestamp type, otherwise infer it as StringType.
+        // This only happens when the timestamp pattern is not specified, as the default timestamp
+        // parser is very lenient and can parse date string as well.
+        val dateFormat = options.dateFormatInRead.getOrElse(DateFormatter.defaultPattern)
+        t1 match {
+          case DateType if canParseDateAsTimestamp(dateFormat, t2) =>
+            Some(t2)
+          case TimestampType | TimestampNTZType if canParseDateAsTimestamp(dateFormat, t1) =>
+            Some(t1)
+          case _ => Some(StringType)
+        }
+      case _ => TypeCoercion.findTightestCommonType(t1, t2).orElse(findCompatibleTypeForCSV(t1, t2))
+    }
+  }
+
+  /**
+   * Return true if strings of given date format can be parsed as timestamps
+   *  1. If user provides timestamp format, we will parse strings as timestamps using
+   *  Iso8601TimestampFormatter (with strict timestamp parsing). Any date string can not be parsed
+   *  as timestamp type in this case
+   *  2. Otherwise, we will use DefaultTimestampFormatter to parse strings as timestamps, which
+   *  is more lenient and can parse strings of some date formats as timestamps.
+   */
+  private def canParseDateAsTimestamp(dateFormat: String, tsType: DataType): Boolean = {
+    if ((tsType.isInstanceOf[TimestampType] && options.timestampFormatInRead.isEmpty) ||
+      (tsType.isInstanceOf[TimestampNTZType] && options.timestampNTZFormatInRead.isEmpty)) {
+      LENIENT_TS_FORMATTER_SUPPORTED_DATE_FORMATS.contains(dateFormat)
+    } else {
+      false
+    }
   }
 
   /**
@@ -215,6 +313,10 @@ object CSVInferSchema {
       } else {
         Some(DecimalType(range + scale, scale))
       }
+
+    case (TimestampNTZType, TimestampType) | (TimestampType, TimestampNTZType) =>
+      Some(TimestampType)
+
     case _ => None
   }
 }

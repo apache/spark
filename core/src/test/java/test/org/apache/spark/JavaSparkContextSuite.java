@@ -24,10 +24,11 @@ import scala.collection.immutable.List$;
 import scala.collection.immutable.Map;
 import scala.collection.immutable.Map$;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.api.java.*;
 import org.apache.spark.*;
+import org.apache.spark.util.Utils;
 
 /**
  * Java apps can use both Java-friendly JavaSparkContext and Scala SparkContext.
@@ -35,14 +36,16 @@ import org.apache.spark.*;
 public class JavaSparkContextSuite implements Serializable {
 
   @Test
-  public void javaSparkContext() {
+  public void javaSparkContext() throws IOException {
+    File tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
+    String dummyJarFile = File.createTempFile(tempDir.toString(), "jarFile").toString();
     String[] jars = new String[] {};
     java.util.Map<String, String> environment = new java.util.HashMap<>();
 
     new JavaSparkContext(new SparkConf().setMaster("local").setAppName("name")).stop();
     new JavaSparkContext("local", "name", new SparkConf()).stop();
     new JavaSparkContext("local", "name").stop();
-    new JavaSparkContext("local", "name", "sparkHome", "jarFile").stop();
+    new JavaSparkContext("local", "name", "sparkHome", dummyJarFile).stop();
     new JavaSparkContext("local", "name", "sparkHome", jars).stop();
     new JavaSparkContext("local", "name", "sparkHome", jars, environment).stop();
   }

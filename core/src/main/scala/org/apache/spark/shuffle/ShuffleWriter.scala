@@ -31,4 +31,7 @@ private[spark] abstract class ShuffleWriter[K, V] {
 
   /** Close this writer, passing along whether the map completed */
   def stop(success: Boolean): Option[MapStatus]
+
+  /** Get the lengths of each partition */
+  def getPartitionLengths(): Array[Long]
 }

@@ -1,11 +1,26 @@
 ---
 layout: global
 title: Accessing OpenStack Swift from Spark
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 Spark's support for Hadoop InputFormat allows it to process data in OpenStack Swift using the
-same URI formats as in Hadoop. You can specify a path in Swift as input through a 
-URI of the form <code>swift://container.PROVIDER/path</code>. You will also need to set your 
+same URI formats as in Hadoop. You can specify a path in Swift as input through a
+URI of the form <code>swift://container.PROVIDER/path</code>. You will also need to set your
 Swift security credentials, through <code>core-site.xml</code> or via
 <code>SparkContext.hadoopConfiguration</code>.
 The current Swift driver requires Swift to use the Keystone authentication method, or
@@ -29,7 +44,7 @@ For example, for Maven support, add the following to the <code>pom.xml</code> fi
   ...
   <dependency>
     <groupId>org.apache.spark</groupId>
-    <artifactId>hadoop-cloud_2.11</artifactId>
+    <artifactId>hadoop-cloud_2.13</artifactId>
     <version>${spark.version}</version>
   </dependency>
   ...
@@ -45,8 +60,8 @@ required by Keystone.
 The following table contains a list of Keystone mandatory parameters. <code>PROVIDER</code> can be
 any (alphanumeric) name.
 
-<table class="table">
-<tr><th>Property Name</th><th>Meaning</th><th>Required</th></tr>
+<table>
+<thead><tr><th>Property Name</th><th>Meaning</th><th>Required</th></tr></thead>
 <tr>
   <td><code>fs.swift.service.PROVIDER.auth.url</code></td>
   <td>Keystone Authentication URL</td>
@@ -130,7 +145,7 @@ defined for tenant <code>test</code>. Then <code>core-site.xml</code> should inc
 
 Notice that
 <code>fs.swift.service.PROVIDER.tenant</code>,
-<code>fs.swift.service.PROVIDER.username</code>, 
+<code>fs.swift.service.PROVIDER.username</code>,
 <code>fs.swift.service.PROVIDER.password</code> contains sensitive information and keeping them in
 <code>core-site.xml</code> is not always a good approach.
 We suggest to keep those parameters in <code>core-site.xml</code> for testing purposes when running Spark

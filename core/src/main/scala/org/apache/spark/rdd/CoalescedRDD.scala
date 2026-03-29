@@ -21,10 +21,10 @@ import java.io.{IOException, ObjectOutputStream}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.apache.spark._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -39,12 +39,12 @@ private[spark] case class CoalescedRDDPartition(
     @transient rdd: RDD[_],
     parentsIndices: Array[Int],
     @transient preferredLocation: Option[String] = None) extends Partition {
-  var parents: Seq[Partition] = parentsIndices.map(rdd.partitions(_))
+  var parents: Seq[Partition] = parentsIndices.map(rdd.partitions(_)).toImmutableArraySeq
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
     // Update the reference to parent partition at the time of task serialization
-    parents = parentsIndices.map(rdd.partitions(_))
+    parents = parentsIndices.map(rdd.partitions(_)).toImmutableArraySeq
     oos.defaultWriteObject()
   }
 
@@ -58,7 +58,7 @@ private[spark] case class CoalescedRDDPartition(
       val parentPreferredLocations = rdd.context.getPreferredLocs(rdd, p.index).map(_.host)
       preferredLocation.exists(parentPreferredLocations.contains)
     }
-    if (parents.size == 0) 0.0 else (loc.toDouble / parents.size.toDouble)
+    if (parents.isEmpty) 0.0 else loc.toDouble / parents.size.toDouble
   }
 }
 
@@ -91,7 +91,7 @@ private[spark] class CoalescedRDD[T: ClassTag](
     pc.coalesce(maxPartitions, prev).zipWithIndex.map {
       case (pg, i) =>
         val ids = pg.partitions.map(_.index).toArray
-        new CoalescedRDDPartition(i, prev, ids, pg.prefLoc)
+        CoalescedRDDPartition(i, prev, ids, pg.prefLoc)
     }
   }
 
@@ -104,11 +104,11 @@ private[spark] class CoalescedRDD[T: ClassTag](
   override def getDependencies: Seq[Dependency[_]] = {
     Seq(new NarrowDependency(prev) {
       def getParents(id: Int): Seq[Int] =
-        partitions(id).asInstanceOf[CoalescedRDDPartition].parentsIndices
+        partitions(id).asInstanceOf[CoalescedRDDPartition].parentsIndices.toImmutableArraySeq
     })
   }
 
-  override def clearDependencies() {
+  override def clearDependencies(): Unit = {
     super.clearDependencies()
     prev = null
   }
@@ -116,7 +116,7 @@ private[spark] class CoalescedRDD[T: ClassTag](
   /**
    * Returns the preferred machine for the partition. If split is of type CoalescedRDDPartition,
    * then the preferred machine will be one which most parent splits prefer too.
-   * @param partition
+   * @param partition the partition for which to retrieve the preferred machine, if exists
    * @return the machine most preferred by split
    */
   override def getPreferredLocations(partition: Partition): Seq[String] = {
@@ -156,9 +156,12 @@ private[spark] class CoalescedRDD[T: ClassTag](
 
 private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
   extends PartitionCoalescer {
-  def compare(o1: PartitionGroup, o2: PartitionGroup): Boolean = o1.numPartitions < o2.numPartitions
-  def compare(o1: Option[PartitionGroup], o2: Option[PartitionGroup]): Boolean =
-    if (o1 == None) false else if (o2 == None) true else compare(o1.get, o2.get)
+
+  implicit object partitionGroupOrdering extends Ordering[PartitionGroup] {
+    override def compare(o1: PartitionGroup, o2: PartitionGroup): Int =
+      java.lang.Integer.compare(o1.numPartitions, o2.numPartitions)
+  }
+
 
   val rnd = new scala.util.Random(7919) // keep this class deterministic
 
@@ -178,7 +181,7 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
     prev.context.getPreferredLocs(prev, part.index).map(tl => tl.host)
   }
 
-  class PartitionLocations(prev: RDD[_]) {
+  private class PartitionLocations(prev: RDD[_]) {
 
     // contains all the partitions from the previous RDD that don't have preferred locations
     val partsWithoutLocs = ArrayBuffer[Partition]()
@@ -213,15 +216,14 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
   }
 
   /**
-   * Sorts and gets the least element of the list associated with key in groupHash
+   * Gets the least element of the list associated with key in groupHash
    * The returned PartitionGroup is the least loaded of all groups that represent the machine "key"
    *
    * @param key string representing a partitioned group on preferred machine key
    * @return Option of [[PartitionGroup]] that has least elements for key
    */
-  def getLeastGroupHash(key: String): Option[PartitionGroup] = {
-    groupHash.get(key).map(_.sortWith(compare).head)
-  }
+  def getLeastGroupHash(key: String): Option[PartitionGroup] =
+    groupHash.get(key).filter(_.nonEmpty).map(_.min)
 
   def addPartToPGroup(part: Partition, pgroup: PartitionGroup): Boolean = {
     if (!initialHash.contains(part)) {
@@ -236,12 +238,12 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
    * is assigned a preferredLocation. This uses coupon collector to estimate how many
    * preferredLocations it must rotate through until it has seen most of the preferred
    * locations (2 * n log(n))
-   * @param targetLen
+   * @param targetLen The number of desired partition groups
    */
-  def setupGroups(targetLen: Int, partitionLocs: PartitionLocations) {
+  def setupGroups(targetLen: Int, partitionLocs: PartitionLocations): Unit = {
     // deal with empty case, just create targetLen partition groups with no preferred location
     if (partitionLocs.partsWithLocs.isEmpty) {
-      (1 to targetLen).foreach(x => groupArr += new PartitionGroup())
+      (1 to targetLen).foreach(_ => groupArr += new PartitionGroup())
       return
     }
 
@@ -297,9 +299,8 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
       partitionLocs: PartitionLocations): PartitionGroup = {
     val slack = (balanceSlack * prev.partitions.length).toInt
     // least loaded pref locs
-    val pref = currPrefLocs(p, prev).map(getLeastGroupHash(_)).sortWith(compare)
-    val prefPart = if (pref == Nil) None else pref.head
-
+    val pref = currPrefLocs(p, prev).flatMap(getLeastGroupHash)
+    val prefPart = if (pref.isEmpty) None else Some(pref.min)
     val r1 = rnd.nextInt(groupArr.size)
     val r2 = rnd.nextInt(groupArr.size)
     val minPowerOfTwo = {
@@ -328,7 +329,7 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
   def throwBalls(
       maxPartitions: Int,
       prev: RDD[_],
-      balanceSlack: Double, partitionLocs: PartitionLocations) {
+      balanceSlack: Double, partitionLocs: PartitionLocations): Unit = {
     if (noLocality) {  // no preferredLocations in parent RDD, no randomization needed
       if (maxPartitions > groupArr.size) { // just return prev.partitions
         for ((p, i) <- prev.partitions.zipWithIndex) {
@@ -351,7 +352,7 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
       val partIter = partitionLocs.partsWithLocs.iterator
       groupArr.filter(pg => pg.numPartitions == 0).foreach { pg =>
         while (partIter.hasNext && pg.numPartitions == 0) {
-          var (nxt_replica, nxt_part) = partIter.next()
+          val (_, nxt_part) = partIter.next()
           if (!initialHash.contains(nxt_part)) {
             pg.partitions += nxt_part
             initialHash += nxt_part
@@ -364,7 +365,7 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
       val partNoLocIter = partitionLocs.partsWithoutLocs.iterator
       groupArr.filter(pg => pg.numPartitions == 0).foreach { pg =>
         while (partNoLocIter.hasNext && pg.numPartitions == 0) {
-          var nxt_part = partNoLocIter.next()
+          val nxt_part = partNoLocIter.next()
           if (!initialHash.contains(nxt_part)) {
             pg.partitions += nxt_part
             initialHash += nxt_part

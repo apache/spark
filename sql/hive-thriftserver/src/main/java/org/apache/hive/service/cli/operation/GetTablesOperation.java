@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,11 +18,12 @@
 package org.apache.hive.service.cli.operation;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
-import org.apache.hadoop.hive.metastore.api.Table;
+import org.apache.hadoop.hive.metastore.api.TableMeta;
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType;
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject;
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObjectUtils;
@@ -35,6 +35,8 @@ import org.apache.hive.service.cli.RowSet;
 import org.apache.hive.service.cli.RowSetFactory;
 import org.apache.hive.service.cli.TableSchema;
 import org.apache.hive.service.cli.session.HiveSession;
+import org.apache.hive.service.rpc.thrift.TRowSet;
+import org.apache.hive.service.rpc.thrift.TTableSchema;
 
 /**
  * GetTablesOperation.
@@ -45,8 +47,8 @@ public class GetTablesOperation extends MetadataOperation {
   private final String catalogName;
   private final String schemaName;
   private final String tableName;
-  private final List<String> tableTypes = new ArrayList<String>();
-  private final RowSet rowSet;
+  private final List<String> tableTypeList;
+  protected final RowSet rowSet;
   private final TableTypeMapping tableTypeMapping;
 
 
@@ -55,7 +57,14 @@ public class GetTablesOperation extends MetadataOperation {
   .addStringColumn("TABLE_SCHEM", "Schema name.")
   .addStringColumn("TABLE_NAME", "Table name.")
   .addStringColumn("TABLE_TYPE", "The table type, e.g. \"TABLE\", \"VIEW\", etc.")
-  .addStringColumn("REMARKS", "Comments about the table.");
+  .addStringColumn("REMARKS", "Comments about the table.")
+  .addStringColumn("TYPE_CAT", "The types catalog.")
+  .addStringColumn("TYPE_SCHEM", "The types schema.")
+  .addStringColumn("TYPE_NAME", "Type name.")
+  .addStringColumn("SELF_REFERENCING_COL_NAME",
+      "Name of the designated \"identifier\" column of a typed table.")
+  .addStringColumn("REF_GENERATION",
+      "Specifies how values in SELF_REFERENCING_COL_NAME are created.");
 
   protected GetTablesOperation(HiveSession parentSession,
       String catalogName, String schemaName, String tableName,
@@ -69,9 +78,14 @@ public class GetTablesOperation extends MetadataOperation {
     tableTypeMapping =
         TableTypeMappingFactory.getTableTypeMapping(tableMappingStr);
     if (tableTypes != null) {
-      this.tableTypes.addAll(tableTypes);
+      tableTypeList = new ArrayList<String>();
+      for (String tableType : tableTypes) {
+        tableTypeList.addAll(Arrays.asList(tableTypeMapping.mapToHiveType(tableType.trim())));
+      }
+    } else {
+      tableTypeList = null;
     }
-    this.rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion());
+    this.rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion(), false);
   }
 
   @Override
@@ -88,21 +102,16 @@ public class GetTablesOperation extends MetadataOperation {
       }
 
       String tablePattern = convertIdentifierPattern(tableName, true);
-      for (String dbName : metastoreClient.getDatabases(schemaPattern)) {
-        List<String> tableNames = metastoreClient.getTables(dbName, tablePattern);
-        for (Table table : metastoreClient.getTableObjectsByName(dbName, tableNames)) {
-          Object[] rowData = new Object[] {
+      for (TableMeta tableMeta :
+          metastoreClient.getTableMeta(schemaPattern, tablePattern, tableTypeList)) {
+        rowSet.addRow(new Object[] {
               DEFAULT_HIVE_CATALOG,
-              table.getDbName(),
-              table.getTableName(),
-              tableTypeMapping.mapToClientType(table.getTableType()),
-              table.getParameters().get("comment")
-              };
-          if (tableTypes.isEmpty() || tableTypes.contains(
-                tableTypeMapping.mapToClientType(table.getTableType()))) {
-            rowSet.addRow(rowData);
-          }
-        }
+              tableMeta.getDbName(),
+              tableMeta.getTableName(),
+              tableTypeMapping.mapToClientType(tableMeta.getTableType()),
+              tableMeta.getComments(),
+              null, null, null, null, null
+              });
       }
       setState(OperationState.FINISHED);
     } catch (Exception e) {
@@ -115,21 +124,21 @@ public class GetTablesOperation extends MetadataOperation {
    * @see org.apache.hive.service.cli.Operation#getResultSetSchema()
    */
   @Override
-  public TableSchema getResultSetSchema() throws HiveSQLException {
+  public TTableSchema getResultSetSchema() throws HiveSQLException {
     assertState(OperationState.FINISHED);
-    return RESULT_SET_SCHEMA;
+    return RESULT_SET_SCHEMA.toTTableSchema();
   }
 
   /* (non-Javadoc)
    * @see org.apache.hive.service.cli.Operation#getNextRowSet(org.apache.hive.service.cli.FetchOrientation, long)
    */
   @Override
-  public RowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException {
+  public TRowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException {
     assertState(OperationState.FINISHED);
     validateDefaultFetchOrientation(orientation);
     if (orientation.equals(FetchOrientation.FETCH_FIRST)) {
       rowSet.setStartOffset(0);
     }
-    return rowSet.extractSubset((int)maxRows);
+    return rowSet.extractSubset((int)maxRows).toTRowSet();
   }
 }

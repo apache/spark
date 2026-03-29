@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException, NoSuchPartitionException, NoSuchTableException}
+import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException}
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -39,13 +40,13 @@ trait ExternalCatalog {
 
   protected def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
-      throw new NoSuchDatabaseException(db)
+      throw new NoSuchNamespaceException(Seq(CatalogManager.SESSION_CATALOG_NAME, db))
     }
   }
 
   protected def requireTableExists(db: String, table: String): Unit = {
     if (!tableExists(db, table)) {
-      throw new NoSuchTableException(db = db, table = table)
+      throw new NoSuchTableException(Seq(CatalogManager.SESSION_CATALOG_NAME, db, table))
     }
   }
 
@@ -57,7 +58,7 @@ trait ExternalCatalog {
 
   protected def requireFunctionNotExists(db: String, funcName: String): Unit = {
     if (functionExists(db, funcName)) {
-      throw new FunctionAlreadyExistsException(db = db, func = funcName)
+      throw new FunctionAlreadyExistsException(Seq(db, funcName))
     }
   }
 
@@ -94,6 +95,17 @@ trait ExternalCatalog {
 
   def createTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit
 
+  /**
+   * Drop a table from the specified database.
+   *
+   * @param db database name
+   * @param table table name
+   * @param ignoreIfNotExists if true, do not throw an error if the table or database
+   *                          does not exist
+   * @param purge if true, completely remove the table data (skip trash)
+   * @throws NoSuchTableException if the table or database does not exist and
+   *                              ignoreIfNotExists is false
+   */
   def dropTable(
       db: String,
       table: String,
@@ -120,19 +132,35 @@ trait ExternalCatalog {
    * @param db Database that table to alter schema for exists in
    * @param table Name of table to alter schema for
    * @param newDataSchema Updated data schema to be used for the table.
+   * @deprecated since 4.1.0 use `alterTableSchema` instead.
    */
   def alterTableDataSchema(db: String, table: String, newDataSchema: StructType): Unit
+
+  /**
+   * Alter the schema of a table identified by the provided database and table name.
+   *
+   * All partition columns must be preserved.
+   *
+   * @param db Database that table to alter schema for exists in
+   * @param table Name of table to alter schema for
+   * @param newSchema Updated data schema to be used for the table.
+   */
+  def alterTableSchema(db: String, table: String, newSchema: StructType): Unit
 
   /** Alter the statistics of a table. If `stats` is None, then remove all existing statistics. */
   def alterTableStats(db: String, table: String, stats: Option[CatalogStatistics]): Unit
 
   def getTable(db: String, table: String): CatalogTable
 
+  def getTablesByName(db: String, tables: Seq[String]): Seq[CatalogTable]
+
   def tableExists(db: String, table: String): Boolean
 
   def listTables(db: String): Seq[String]
 
   def listTables(db: String, pattern: String): Seq[String]
+
+  def listViews(db: String, pattern: String): Seq[String]
 
   /**
    * Loads data into a table.

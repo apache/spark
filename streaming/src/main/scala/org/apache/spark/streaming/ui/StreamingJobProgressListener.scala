@@ -20,11 +20,11 @@ package org.apache.spark.streaming.ui
 import java.util.{LinkedHashMap, Map => JMap, Properties}
 import java.util.concurrent.ConcurrentLinkedQueue
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, Queue}
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.scheduler._
-import org.apache.spark.streaming.{StreamingContext, Time}
+import org.apache.spark.streaming.{StreamingConf, StreamingContext, Time}
 import org.apache.spark.streaming.scheduler._
 
 private[spark] class StreamingJobProgressListener(ssc: StreamingContext)
@@ -33,7 +33,7 @@ private[spark] class StreamingJobProgressListener(ssc: StreamingContext)
   private val waitingBatchUIData = new HashMap[Time, BatchUIData]
   private val runningBatchUIData = new HashMap[Time, BatchUIData]
   private val completedBatchUIData = new Queue[BatchUIData]
-  private val batchUIDataLimit = ssc.conf.getInt("spark.streaming.ui.retainedBatches", 1000)
+  private val batchUIDataLimit = ssc.conf.get(StreamingConf.UI_RETAINED_BATCHES)
   private var totalCompletedBatches = 0L
   private var totalReceivedRecords = 0L
   private var totalProcessedRecords = 0L
@@ -68,23 +68,23 @@ private[spark] class StreamingJobProgressListener(ssc: StreamingContext)
 
   val batchDuration = ssc.graph.batchDuration.milliseconds
 
-  override def onStreamingStarted(streamingStarted: StreamingListenerStreamingStarted) {
+  override def onStreamingStarted(streamingStarted: StreamingListenerStreamingStarted): Unit = {
     _startTime = streamingStarted.time
   }
 
-  override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) {
+  override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted): Unit = {
     synchronized {
       receiverInfos(receiverStarted.receiverInfo.streamId) = receiverStarted.receiverInfo
     }
   }
 
-  override def onReceiverError(receiverError: StreamingListenerReceiverError) {
+  override def onReceiverError(receiverError: StreamingListenerReceiverError): Unit = {
     synchronized {
       receiverInfos(receiverError.receiverInfo.streamId) = receiverError.receiverInfo
     }
   }
 
-  override def onReceiverStopped(receiverStopped: StreamingListenerReceiverStopped) {
+  override def onReceiverStopped(receiverStopped: StreamingListenerReceiverStopped): Unit = {
     synchronized {
       receiverInfos(receiverStopped.receiverInfo.streamId) = receiverStopped.receiverInfo
     }
@@ -216,7 +216,8 @@ private[spark] class StreamingJobProgressListener(ssc: StreamingContext)
   def receivedRecordRateWithBatchTime: Map[Int, Seq[(Long, Double)]] = synchronized {
     val _retainedBatches = retainedBatches
     val latestBatches = _retainedBatches.map { batchUIData =>
-      (batchUIData.batchTime.milliseconds, batchUIData.streamIdToInputInfo.mapValues(_.numRecords))
+      (batchUIData.batchTime.milliseconds,
+        batchUIData.streamIdToInputInfo.transform((_, v) => v.numRecords))
     }
     streamIds.map { streamId =>
       val recordRates = latestBatches.map {
@@ -230,7 +231,7 @@ private[spark] class StreamingJobProgressListener(ssc: StreamingContext)
 
   def lastReceivedBatchRecords: Map[Int, Long] = synchronized {
     val lastReceivedBlockInfoOption =
-      lastReceivedBatch.map(_.streamIdToInputInfo.mapValues(_.numRecords))
+      lastReceivedBatch.map(_.streamIdToInputInfo.transform((_, v) => v.numRecords))
     lastReceivedBlockInfoOption.map { lastReceivedBlockInfo =>
       streamIds.map { streamId =>
         (streamId, lastReceivedBlockInfo.getOrElse(streamId, 0L))

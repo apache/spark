@@ -23,20 +23,22 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.util.control.NonFatal
 
-import com.google.common.util.concurrent.MoreExecutors
 import org.mockito.ArgumentCaptor
-import org.mockito.Matchers.{any, anyLong}
+import org.mockito.ArgumentMatchers.{any, anyLong}
 import org.mockito.Mockito.{spy, times, verify}
+import org.scalatest.Assertions._
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
+import org.apache.spark.TaskState.TaskState
 import org.apache.spark.TestUtils.JavaSourceFromString
+import org.apache.spark.internal.config.MAX_RESULT_SIZE
+import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.storage.TaskResultBlockId
-import org.apache.spark.util.{MutableURLClassLoader, RpcUtils, Utils}
+import org.apache.spark.util.{MutableURLClassLoader, RpcUtils, ThreadUtils, Utils}
 
 
 /**
@@ -52,23 +54,23 @@ private class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: Task
   @volatile var removeBlockSuccessfully = false
 
   override def enqueueSuccessfulTask(
-    taskSetManager: TaskSetManager, tid: Long, serializedData: ByteBuffer) {
+    taskSetManager: TaskSetManager, tid: Long, serializedData: ByteBuffer): Unit = {
     if (!removedResult) {
       // Only remove the result once, since we'd like to test the case where the task eventually
       // succeeds.
       serializer.get().deserialize[TaskResult[_]](serializedData) match {
-        case IndirectTaskResult(blockId, size) =>
+        case IndirectTaskResult(blockId, _) =>
           sparkEnv.blockManager.master.removeBlock(blockId)
           // removeBlock is asynchronous. Need to wait it's removed successfully
           try {
-            eventually(timeout(3 seconds), interval(200 milliseconds)) {
+            eventually(timeout(3.seconds), interval(200.milliseconds)) {
               assert(!sparkEnv.blockManager.master.contains(blockId))
             }
             removeBlockSuccessfully = true
           } catch {
             case NonFatal(e) => removeBlockSuccessfully = false
           }
-        case directResult: DirectTaskResult[_] =>
+        case _: DirectTaskResult[_] =>
           taskSetManager.abort("Internal error: expect only indirect results")
       }
       serializedData.rewind()
@@ -78,6 +80,16 @@ private class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: Task
   }
 }
 
+private class DummyTaskSchedulerImpl(sc: SparkContext)
+  extends TaskSchedulerImpl(sc, 1, true) {
+  override def handleFailedTask(
+      taskSetManager: TaskSetManager,
+      tid: Long,
+      taskState: TaskState,
+      reason: TaskFailedReason): Unit = {
+    // do nothing
+  }
+}
 
 /**
  * A [[TaskResultGetter]] that stores the [[DirectTaskResult]]s it receives from executors
@@ -87,12 +99,12 @@ private class MyTaskResultGetter(env: SparkEnv, scheduler: TaskSchedulerImpl)
   extends TaskResultGetter(env, scheduler) {
 
   // Use the current thread so we can access its results synchronously
-  protected override val getTaskResultExecutor = MoreExecutors.sameThreadExecutor()
+  protected override val getTaskResultExecutor = ThreadUtils.sameThreadExecutorService()
 
   // DirectTaskResults that we receive from the executors
   private val _taskResults = new ArrayBuffer[DirectTaskResult[_]]
 
-  def taskResults: Seq[DirectTaskResult[_]] = _taskResults
+  def taskResults: Seq[DirectTaskResult[_]] = _taskResults.toSeq
 
   override def enqueueSuccessfulTask(tsm: TaskSetManager, tid: Long, data: ByteBuffer): Unit = {
     // work on a copy since the super class still needs to use the buffer
@@ -110,7 +122,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
 
   // Set the RPC message size to be as small as possible (it must be an integer, so 1 is as small
   // as we can make it) so the tests don't take too long.
-  def conf: SparkConf = new SparkConf().set("spark.rpc.message.maxSize", "1")
+  def conf: SparkConf = new SparkConf().set(RPC_MESSAGE_MAX_SIZE, 1)
 
   test("handling results smaller than max RPC message size") {
     sc = new SparkContext("local", "test", conf)
@@ -128,6 +140,31 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     val RESULT_BLOCK_ID = TaskResultBlockId(0)
     assert(sc.env.blockManager.master.getLocations(RESULT_BLOCK_ID).size === 0,
       "Expect result to be removed from the block manager.")
+  }
+
+  test("handling total size of results larger than maxResultSize") {
+    sc = new SparkContext("local", "test", conf)
+    val scheduler = new DummyTaskSchedulerImpl(sc)
+    val spyScheduler = spy[DummyTaskSchedulerImpl](scheduler)
+    val resultGetter = new TaskResultGetter(sc.env, spyScheduler)
+    scheduler.taskResultGetter = resultGetter
+    val myTsm = new TaskSetManager(spyScheduler, FakeTask.createTaskSet(2), 1) {
+      // always returns false
+      override def canFetchMoreResults(size: Long): Boolean = false
+    }
+    val indirectTaskResult = IndirectTaskResult(TaskResultBlockId(0), 0)
+    val directTaskResult = new DirectTaskResult(ByteBuffer.allocate(0), Nil, Array[Long]())
+    val ser = sc.env.closureSerializer.newInstance()
+    val serializedIndirect = ser.serialize(indirectTaskResult)
+    val serializedDirect = ser.serialize(directTaskResult)
+    resultGetter.enqueueSuccessfulTask(myTsm, 0, serializedDirect)
+    resultGetter.enqueueSuccessfulTask(myTsm, 1, serializedIndirect)
+    eventually(timeout(1.second)) {
+      verify(spyScheduler, times(1)).handleFailedTask(
+        myTsm, 0, TaskState.KILLED, TaskKilled("Tasks result size has exceeded maxResultSize"))
+      verify(spyScheduler, times(1)).handleFailedTask(
+        myTsm, 1, TaskState.KILLED, TaskKilled("Tasks result size has exceeded maxResultSize"))
+    }
   }
 
   test("task retried if result missing from block manager") {
@@ -170,7 +207,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     // compile a small jar containing an exception that will be thrown on an executor.
     val tempDir = Utils.createTempDir()
     val srcDir = new File(tempDir, "repro/")
-    srcDir.mkdirs()
+    Utils.createDirectory(srcDir)
     val excSource = new JavaSourceFromString(new File(srcDir, "MyException").toURI.getPath,
       """package repro;
         |
@@ -221,7 +258,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     // Set up custom TaskResultGetter and TaskSchedulerImpl spy
     sc = new SparkContext("local", "test", conf)
     val scheduler = sc.taskScheduler.asInstanceOf[TaskSchedulerImpl]
-    val spyScheduler = spy(scheduler)
+    val spyScheduler = spy[TaskSchedulerImpl](scheduler)
     val resultGetter = new MyTaskResultGetter(sc.env, spyScheduler)
     val newDAGScheduler = new DAGScheduler(sc, spyScheduler)
     scheduler.taskResultGetter = resultGetter
@@ -259,6 +296,18 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     // Job failed, even though the failure reason is unknown.
     val unknownFailure = """(?s).*Lost task.*: UnknownReason.*""".r
     assert(unknownFailure.findFirstMatchIn(message).isDefined)
+  }
+
+  test("SPARK-40261: task result metadata should not be counted into result size") {
+    val conf = new SparkConf().set(MAX_RESULT_SIZE.key, "1M")
+    sc = new SparkContext("local", "test", conf)
+    val rdd = sc.parallelize(1 to 10000, 10000)
+    // This will trigger 10k task but return empty result. The total serialized return tasks
+    // size(including accumUpdates metadata) would be ~10M in total in this example, but the result
+    // value itself is pretty small(empty arrays)
+    // Even setting MAX_RESULT_SIZE to a small value(1M here), it should not throw exception
+    // because the actual result is small
+    assert(rdd.filter(_ < 0).collect().isEmpty)
   }
 
 }

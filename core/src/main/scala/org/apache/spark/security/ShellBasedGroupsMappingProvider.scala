@@ -30,6 +30,8 @@ import org.apache.spark.util.Utils
 private[spark] class ShellBasedGroupsMappingProvider extends GroupMappingServiceProvider
   with Logging {
 
+  private lazy val idPath = Utils.executeAndGetOutput("which" :: "id" :: Nil).stripLineEnd
+
   override def getGroups(username: String): Set[String] = {
     val userGroups = getUnixGroups(username)
     logDebug("User: " + username + " Groups: " + userGroups.mkString(","))
@@ -38,8 +40,7 @@ private[spark] class ShellBasedGroupsMappingProvider extends GroupMappingService
 
   // shells out a "bash -c id -Gn username" to get user groups
   private def getUnixGroups(username: String): Set[String] = {
-    val cmdSeq = Seq("bash", "-c", "id -Gn " + username)
     // we need to get rid of the trailing "\n" from the result of command execution
-    Utils.executeAndGetOutput(cmdSeq).stripLineEnd.split(" ").toSet
+    Utils.executeAndGetOutput(idPath ::  "-Gn" :: username :: Nil).stripLineEnd.split(" ").toSet
   }
 }

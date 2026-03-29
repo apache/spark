@@ -23,9 +23,12 @@ import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeMapData, UnsafeRow}
+import org.apache.spark.sql.catalyst.types.{PhysicalArrayType, PhysicalDataType, PhysicalMapType, PhysicalStructType}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.columnar.compression.CompressibleColumnAccessor
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.{CalendarInterval, VariantVal}
 
 /**
  * An `Iterator` like trait used to extract values from columnar byte buffer. When a value is
@@ -36,7 +39,7 @@ import org.apache.spark.sql.types._
 private[columnar] trait ColumnAccessor {
   initialize()
 
-  protected def initialize()
+  protected def initialize(): Unit
 
   def hasNext: Boolean
 
@@ -50,7 +53,7 @@ private[columnar] abstract class BasicColumnAccessor[JvmType](
     protected val columnType: ColumnType[JvmType])
   extends ColumnAccessor {
 
-  protected def initialize() {}
+  protected def initialize(): Unit = {}
 
   override def hasNext: Boolean = buffer.hasRemaining
 
@@ -69,7 +72,7 @@ private[columnar] class NullColumnAccessor(buffer: ByteBuffer)
   extends BasicColumnAccessor[Any](buffer, NULL)
   with NullableColumnAccessor
 
-private[columnar] abstract class NativeColumnAccessor[T <: AtomicType](
+private[columnar] abstract class NativeColumnAccessor[T <: PhysicalDataType](
     override protected val buffer: ByteBuffer,
     override protected val columnType: NativeColumnType[T])
   extends BasicColumnAccessor(buffer, columnType)
@@ -97,11 +100,19 @@ private[columnar] class FloatColumnAccessor(buffer: ByteBuffer)
 private[columnar] class DoubleColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, DOUBLE)
 
-private[columnar] class StringColumnAccessor(buffer: ByteBuffer)
-  extends NativeColumnAccessor(buffer, STRING)
+private[columnar] class StringColumnAccessor(buffer: ByteBuffer, dataType: StringType)
+  extends NativeColumnAccessor(buffer, STRING(dataType))
 
 private[columnar] class BinaryColumnAccessor(buffer: ByteBuffer)
   extends BasicColumnAccessor[Array[Byte]](buffer, BINARY)
+  with NullableColumnAccessor
+
+private[columnar] class IntervalColumnAccessor(buffer: ByteBuffer)
+  extends BasicColumnAccessor[CalendarInterval](buffer, CALENDAR_INTERVAL)
+  with NullableColumnAccessor
+
+private[columnar] class VariantColumnAccessor(buffer: ByteBuffer)
+  extends BasicColumnAccessor[VariantVal](buffer, VARIANT)
   with NullableColumnAccessor
 
 private[columnar] class CompactDecimalColumnAccessor(buffer: ByteBuffer, dataType: DecimalType)
@@ -112,15 +123,17 @@ private[columnar] class DecimalColumnAccessor(buffer: ByteBuffer, dataType: Deci
   with NullableColumnAccessor
 
 private[columnar] class StructColumnAccessor(buffer: ByteBuffer, dataType: StructType)
-  extends BasicColumnAccessor[UnsafeRow](buffer, STRUCT(dataType))
+  extends BasicColumnAccessor[UnsafeRow](buffer, STRUCT(PhysicalStructType(dataType.fields)))
   with NullableColumnAccessor
 
 private[columnar] class ArrayColumnAccessor(buffer: ByteBuffer, dataType: ArrayType)
-  extends BasicColumnAccessor[UnsafeArrayData](buffer, ARRAY(dataType))
+  extends BasicColumnAccessor[UnsafeArrayData](
+    buffer, ARRAY(PhysicalArrayType(dataType.elementType, dataType.containsNull)))
   with NullableColumnAccessor
 
 private[columnar] class MapColumnAccessor(buffer: ByteBuffer, dataType: MapType)
-  extends BasicColumnAccessor[UnsafeMapData](buffer, MAP(dataType))
+  extends BasicColumnAccessor[UnsafeMapData](
+    buffer, MAP(PhysicalMapType(dataType.keyType, dataType.valueType, dataType.valueContainsNull)))
   with NullableColumnAccessor
 
 private[sql] object ColumnAccessor {
@@ -133,11 +146,12 @@ private[sql] object ColumnAccessor {
       case BooleanType => new BooleanColumnAccessor(buf)
       case ByteType => new ByteColumnAccessor(buf)
       case ShortType => new ShortColumnAccessor(buf)
-      case IntegerType | DateType => new IntColumnAccessor(buf)
-      case LongType | TimestampType => new LongColumnAccessor(buf)
+      case IntegerType | DateType | _: YearMonthIntervalType => new IntColumnAccessor(buf)
+      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+        new LongColumnAccessor(buf)
       case FloatType => new FloatColumnAccessor(buf)
       case DoubleType => new DoubleColumnAccessor(buf)
-      case StringType => new StringColumnAccessor(buf)
+      case s: StringType => new StringColumnAccessor(buf, s)
       case BinaryType => new BinaryColumnAccessor(buf)
       case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
         new CompactDecimalColumnAccessor(buf, dt)
@@ -146,18 +160,17 @@ private[sql] object ColumnAccessor {
       case array: ArrayType => new ArrayColumnAccessor(buf, array)
       case map: MapType => new MapColumnAccessor(buf, map)
       case udt: UserDefinedType[_] => ColumnAccessor(udt.sqlType, buffer)
-      case other =>
-        throw new Exception(s"not support type: $other")
+      case other => throw QueryExecutionErrors.notSupportTypeError(other)
     }
   }
 
   def decompress(columnAccessor: ColumnAccessor, columnVector: WritableColumnVector, numRows: Int):
       Unit = {
-    if (columnAccessor.isInstanceOf[NativeColumnAccessor[_]]) {
-      val nativeAccessor = columnAccessor.asInstanceOf[NativeColumnAccessor[_]]
-      nativeAccessor.decompress(columnVector, numRows)
-    } else {
-      throw new RuntimeException("Not support non-primitive type now")
+    columnAccessor match {
+      case nativeAccessor: NativeColumnAccessor[_] =>
+        nativeAccessor.decompress(columnVector, numRows)
+      case _ =>
+        throw QueryExecutionErrors.notSupportNonPrimitiveTypeError()
     }
   }
 

@@ -21,6 +21,7 @@ import java.io.File
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.util.Utils
 
 /**
@@ -28,9 +29,10 @@ import org.apache.spark.util.Utils
  * To run this benchmark:
  * {{{
  *   1. without sbt:
- *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark sql test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      bin/spark-submit --class <this class>
+ *        --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
+ *   2. build/sbt "sql/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/WideSchemaBenchmark-results.txt".
  * }}}
  */
@@ -68,14 +70,14 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
       desc: String,
       selector: String): Unit = {
     benchmark.addCase(desc + " (read in-mem)") { iter =>
-      df.selectExpr(s"sum($selector)").collect()
+      df.selectExpr(s"sum($selector)").noop()
     }
     benchmark.addCase(desc + " (exec in-mem)") { iter =>
-      df.selectExpr("*", s"hash($selector) as f").selectExpr(s"sum($selector)", "sum(f)").collect()
+      df.selectExpr("*", s"hash($selector) as f").selectExpr(s"sum($selector)", "sum(f)").noop()
     }
     val parquet = saveAsParquet(df)
     benchmark.addCase(desc + " (read parquet)") { iter =>
-      parquet.selectExpr(s"sum($selector) as f").collect()
+      parquet.selectExpr(s"sum($selector) as f").noop()
     }
     benchmark.addCase(desc + " (write parquet)") { iter =>
       saveAsParquet(df.selectExpr(s"sum($selector) as f"))
@@ -87,7 +89,20 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
     for (width <- widthsToTest) {
       val selectExpr = (1 to width).map(i => s"id as a_$i")
       benchmark.addCase(s"$width select expressions") { iter =>
-        spark.range(1).toDF.selectExpr(selectExpr: _*)
+        spark.range(1).toDF().selectExpr(selectExpr: _*)
+      }
+    }
+    benchmark.run()
+  }
+
+  def optimizeLargeSelectExpressions(): Unit = {
+    val benchmark = new Benchmark("optimize large select", 1, output = output)
+    Seq(100, 1000, 10000).foreach { width =>
+      val columns = (1 to width).map(i => s"id as c_$i")
+      val df = spark.range(1).selectExpr(columns: _*).cache()
+      df.count()  // force caching
+      benchmark.addCase(s"$width columns") { iter =>
+        df.withColumn("id", lit(1)).withColumn("name", lit("name")).queryExecution.optimizedPlan
       }
     }
     benchmark.run()
@@ -99,7 +114,7 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
       // normalize by width to keep constant data size
       val numRows = scaleFactor / width
       val selectExpr = (1 to width).map(i => s"id as a_$i")
-      val df = spark.range(numRows).toDF.selectExpr(selectExpr: _*).cache()
+      val df = spark.range(numRows).toDF().selectExpr(selectExpr: _*).cache()
       df.count()  // force caching
       addCases(benchmark, df, s"$width cols x $numRows rows", "a_1")
     }
@@ -194,7 +209,7 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
     for (width <- widthsToTest) {
       val numRows = scaleFactor / width
       val datum = Tuple1((1 to width).map(i => ("value_" + i -> 1)).toMap)
-      val df = spark.range(numRows).map(_ => datum).toDF.cache()
+      val df = spark.range(numRows).map(_ => datum).toDF().cache()
       df.count()  // force caching
       addCases(benchmark, df, s"$width wide x $numRows rows", "_1[\"value_1\"]")
     }
@@ -212,6 +227,10 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
 
     runBenchmarkWithDeleteTmpFiles("parsing large select expressions") {
       parsingLargeSelectExpressions()
+    }
+
+    runBenchmarkWithDeleteTmpFiles("optimize large select expressions") {
+      optimizeLargeSelectExpressions()
     }
 
     runBenchmarkWithDeleteTmpFiles("many column field read and write") {

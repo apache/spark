@@ -133,11 +133,11 @@ class IndexedRowMatrix @Since("1.0.0") (
       val rowInBlock = ir.index % rowsPerBlock
 
       ir.vector match {
-        case SparseVector(size, indices, values) =>
+        case SparseVector(_, indices, values) =>
           indices.zip(values).map { case (index, value) =>
             val blockColumn = index / colsPerBlock
             val columnInBlock = index % colsPerBlock
-            ((blockRow.toInt, blockColumn.toInt), (rowInBlock.toInt, Array((value, columnInBlock))))
+            ((blockRow.toInt, blockColumn), (rowInBlock.toInt, Array((value, columnInBlock))))
           }
         case DenseVector(values) =>
           values.grouped(colsPerBlock)
@@ -145,6 +145,8 @@ class IndexedRowMatrix @Since("1.0.0") (
             .map { case (values, blockColumn) =>
               ((blockRow.toInt, blockColumn), (rowInBlock.toInt, values.zipWithIndex))
             }
+        case v =>
+          throw new IllegalArgumentException(s"Unknown vector type ${v.getClass}.")
       }
     }.groupByKey(GridPartitioner(numRowBlocks, numColBlocks, rows.getNumPartitions)).map {
       case ((blockRow, blockColumn), itr) =>
@@ -187,6 +189,8 @@ class IndexedRowMatrix @Since("1.0.0") (
           Iterator.tabulate(indices.length)(i => MatrixEntry(rowIndex, indices(i), values(i)))
         case DenseVector(values) =>
           Iterator.tabulate(values.length)(i => MatrixEntry(rowIndex, i, values(i)))
+        case v =>
+          throw new IllegalArgumentException(s"Unknown vector type ${v.getClass}.")
       }
     }
     new CoordinateMatrix(entries, numRows(), numCols())
@@ -267,7 +271,7 @@ class IndexedRowMatrix @Since("1.0.0") (
     val mat = BDM.zeros[Double](m, n)
     rows.collect().foreach { case IndexedRow(rowIndex, vector) =>
       val i = rowIndex.toInt
-      vector.foreachActive { case (j, v) =>
+      vector.foreachNonZero { case (j, v) =>
         mat(i, j) = v
       }
     }

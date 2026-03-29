@@ -17,11 +17,12 @@
 
 package org.apache.spark.mllib.classification
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 import scala.util.control.Breaks._
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -30,6 +31,7 @@ import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 
@@ -142,7 +144,7 @@ object LogisticRegressionSuite {
         for (i <- 0 until nClasses) {
           if (p < probs(i)) {
             y = i
-            break
+            break()
           }
         }
       }
@@ -206,7 +208,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
   def validatePrediction(
       predictions: Seq[Double],
       input: Seq[LabeledPoint],
-      expectedAcc: Double = 0.83) {
+      expectedAcc: Double = 0.83): Unit = {
     val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
       prediction != expected.label
     }
@@ -224,12 +226,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
-    val lr = new LogisticRegressionWithSGD().setIntercept(true)
-    lr.optimizer
-      .setStepSize(10.0)
-      .setRegParam(0.0)
-      .setNumIterations(20)
-      .setConvergenceTol(0.0005)
+    val lr = new LogisticRegressionWithSGD(10.0, 20, 0.0, 1.0).setIntercept(true)
+    lr.optimizer.setConvergenceTol(0.0005)
 
     val model = lr.run(testRDD)
 
@@ -240,7 +238,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(
+      model.predict(validationRDD.map(_.features)).collect().toImmutableArraySeq, validationData)
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
@@ -280,7 +279,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(
+      model.predict(validationRDD.map(_.features)).collect().toImmutableArraySeq, validationData)
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
@@ -300,11 +300,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     testRDD.cache()
 
     // Use half as many iterations as the previous test.
-    val lr = new LogisticRegressionWithSGD().setIntercept(true)
-    lr.optimizer
-      .setStepSize(10.0)
-      .setRegParam(0.0)
-      .setNumIterations(10)
+    val lr = new LogisticRegressionWithSGD(10.0, 10, 0.0, 1.0).setIntercept(true)
 
     val model = lr.run(testRDD, initialWeights)
 
@@ -315,7 +311,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(
+      model.predict(validationRDD.map(_.features)).collect().toImmutableArraySeq, validationData)
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
@@ -335,11 +332,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     testRDD.cache()
 
     // Use half as many iterations as the previous test.
-    val lr = new LogisticRegressionWithSGD().setIntercept(true)
-    lr.optimizer.
-      setStepSize(1.0).
-      setNumIterations(10).
-      setRegParam(1.0)
+    val lr = new LogisticRegressionWithSGD(1.0, 10, 1.0, 1.0).setIntercept(true)
 
     val model = lr.run(testRDD, initialWeights)
 
@@ -351,7 +344,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData, 0.8)
+    validatePrediction(model.predict(validationRDD.map(_.features)).collect().toImmutableArraySeq,
+      validationData, 0.8)
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData, 0.8)
@@ -382,7 +376,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(
+      model.predict(validationRDD.map(_.features)).collect().toImmutableArraySeq, validationData)
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
@@ -536,7 +531,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     // The validation accuracy is not good since this model (even the original weights) doesn't have
     // very steep curve in logistic function so that when we draw samples from distribution, it's
     // very easy to assign to another labels. However, this prediction result is consistent to R.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData, 0.47)
+    validatePrediction(model.predict(validationRDD.map(_.features)).collect().toImmutableArraySeq,
+      validationData, 0.47)
 
   }
 
@@ -916,7 +912,7 @@ class LogisticRegressionClusterSuite extends SparkFunSuite with LocalClusterSpar
     }.cache()
     // If we serialize data directly in the task closure, the size of the serialized task would be
     // greater than 1MB and hence Spark would throw an error.
-    val model = LogisticRegressionWithSGD.train(points, 2)
+    val model = new LogisticRegressionWithSGD(1.0, 2, 0.0, 1.0).run(points)
 
     val predictions = model.predict(points.map(_.features))
 

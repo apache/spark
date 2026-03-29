@@ -15,33 +15,71 @@
 # limitations under the License.
 #
 
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    TYPE_CHECKING,
+    Union,
+    cast,
+)
 import cProfile
 import pstats
+import linecache
 import os
 import atexit
 import sys
 
+import pyspark
 from pyspark.accumulators import AccumulatorParam
+from pyspark.errors import PySparkRuntimeError, PySparkValueError
+
+if TYPE_CHECKING:
+    from pyspark.core.context import SparkContext
+
+MemoryTuple = Tuple[float, float, int]
+LineProfile = Tuple[int, Optional[MemoryTuple]]
+CodeMapDict = Dict[str, List[LineProfile]]
 
 
-class ProfilerCollector(object):
+class ProfilerCollector:
     """
     This class keeps track of different profilers on a per
-    stage basis. Also this is used to create new profilers for
-    the different stages.
+    stage/UDF basis. Also this is used to create new profilers for
+    the different stages/UDFs.
     """
 
-    def __init__(self, profiler_cls, dump_path=None):
-        self.profiler_cls = profiler_cls
-        self.profile_dump_path = dump_path
-        self.profilers = []
+    def __init__(
+        self,
+        profiler_cls: Type["Profiler"],
+        udf_profiler_cls: Type["Profiler"],
+        memory_profiler_cls: Type["Profiler"],
+        dump_path: Optional[str] = None,
+    ):
+        self.profiler_cls: Type[Profiler] = profiler_cls
+        self.udf_profiler_cls: Type[Profiler] = udf_profiler_cls
+        self.memory_profiler_cls: Type[Profiler] = memory_profiler_cls
+        self.profile_dump_path: Optional[str] = dump_path
+        self.profilers: List[List[Any]] = []
 
-    def new_profiler(self, ctx):
-        """ Create a new profiler using class `profiler_cls` """
+    def new_profiler(self, ctx: "SparkContext") -> "Profiler":
+        """Create a new profiler using class `profiler_cls`"""
         return self.profiler_cls(ctx)
 
-    def add_profiler(self, id, profiler):
-        """ Add a profiler for RDD `id` """
+    def new_udf_profiler(self, ctx: "SparkContext") -> "Profiler":
+        """Create a new profiler using class `udf_profiler_cls`"""
+        return self.udf_profiler_cls(ctx)
+
+    def new_memory_profiler(self, ctx: "SparkContext") -> "Profiler":
+        """Create a new profiler using class `memory_profiler_cls`"""
+        return self.memory_profiler_cls(ctx)
+
+    def add_profiler(self, id: int, profiler: "Profiler") -> None:
+        """Add a profiler for RDD/UDF `id`"""
         if not self.profilers:
             if self.profile_dump_path:
                 atexit.register(self.dump_profiles, self.profile_dump_path)
@@ -50,14 +88,14 @@ class ProfilerCollector(object):
 
         self.profilers.append([id, profiler, False])
 
-    def dump_profiles(self, path):
-        """ Dump the profile stats into directory `path` """
+    def dump_profiles(self, path: str) -> None:
+        """Dump the profile stats into directory `path`"""
         for id, profiler, _ in self.profilers:
             profiler.dump(id, path)
         self.profilers = []
 
-    def show_profiles(self):
-        """ Print the profile stats to stdout """
+    def show_profiles(self) -> None:
+        """Print the profile stats to stdout"""
         for i, (id, profiler, showed) in enumerate(self.profilers):
             if not showed and profiler:
                 profiler.show(id)
@@ -65,10 +103,8 @@ class ProfilerCollector(object):
                 self.profilers[i][2] = True
 
 
-class Profiler(object):
+class Profiler:
     """
-    .. note:: DeveloperApi
-
     PySpark supports custom profilers, this is to allow for different profilers to
     be used as well as outputting to different formats than what is provided in the
     BasicProfiler.
@@ -81,6 +117,8 @@ class Profiler(object):
 
     The profiler class is chosen when creating a SparkContext
 
+    Examples
+    --------
     >>> from pyspark import SparkConf, SparkContext
     >>> from pyspark import BasicProfiler
     >>> class MyCustomProfiler(BasicProfiler):
@@ -97,50 +135,93 @@ class Profiler(object):
     My custom profiles for RDD:1
     My custom profiles for RDD:3
     >>> sc.stop()
+
+    Notes
+    -----
+    This API is a developer API.
     """
 
-    def __init__(self, ctx):
+    def __init__(self, ctx: "SparkContext") -> None:
         pass
 
-    def profile(self, func):
-        """ Do profiling on the function `func`"""
-        raise NotImplemented
+    def profile(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        """Do profiling on the function `func`"""
+        raise NotImplementedError
 
-    def stats(self):
-        """ Return the collected profiling stats (pstats.Stats)"""
-        raise NotImplemented
+    def stats(self) -> Union[pstats.Stats, Dict]:
+        """Return the collected profiling stats"""
+        raise NotImplementedError
 
-    def show(self, id):
-        """ Print the profile stats to stdout, id is the RDD id """
-        stats = self.stats()
-        if stats:
-            print("=" * 60)
-            print("Profile of RDD<id=%d>" % id)
-            print("=" * 60)
-            stats.sort_stats("time", "cumulative").print_stats()
+    def show(self, id: int) -> None:
+        """Print the profile stats to stdout"""
+        raise NotImplementedError
 
-    def dump(self, id, path):
-        """ Dump the profile into path, id is the RDD id """
-        if not os.path.exists(path):
-            os.makedirs(path)
-        stats = self.stats()
-        if stats:
-            p = os.path.join(path, "rdd_%d.pstats" % id)
-            stats.dump_stats(p)
+    def dump(self, id: int, path: str) -> None:
+        """Dump the profile into path"""
+        raise NotImplementedError
 
 
-class PStatsParam(AccumulatorParam):
+class PStatsParam(AccumulatorParam[Optional[pstats.Stats]]):
     """PStatsParam is used to merge pstats.Stats"""
 
     @staticmethod
-    def zero(value):
+    def zero(value: Optional[pstats.Stats]) -> None:
         return None
 
     @staticmethod
-    def addInPlace(value1, value2):
+    def addInPlace(
+        value1: Optional[pstats.Stats], value2: Optional[pstats.Stats]
+    ) -> Optional[pstats.Stats]:
         if value1 is None:
             return value2
         value1.add(value2)
+        return value1
+
+
+class MemUsageParam(AccumulatorParam[Optional[CodeMapDict]]):
+    """MemUsageParam is used to merge memory usage code map"""
+
+    @staticmethod
+    def zero(value: Optional[CodeMapDict]) -> None:
+        return None
+
+    @staticmethod
+    def addInPlace(
+        value1: Optional[CodeMapDict], value2: Optional[CodeMapDict]
+    ) -> Optional[CodeMapDict]:
+        # An example value looks as below
+        # {'<command-1598004922717618>': [(3, (144.2578125, 144.2578125, 1)),
+        #   (4, (0.0, 144.2578125, 1))]}
+        if value1 is None or len(value1) == 0:
+            return value2
+        if value2 is None or len(value2) == 0:
+            return value1
+
+        # value1, value2 should have same keys - file name
+        for filename in value1:
+            l1 = cast(List[LineProfile], value1.get(filename))
+            l2 = cast(List[LineProfile], value2.get(filename))
+            c1 = dict((k, v) for k, v in l1)
+            c2 = dict((k, v) for k, v in l2)
+            udf_code_map: Dict[int, Optional[MemoryTuple]] = {}
+            all_line_numbers = set(c1.keys()) | set(c2.keys())
+            for lineno in all_line_numbers:
+                c1_line = c1.get(lineno)
+                c2_line = c2.get(lineno)
+                if c1_line and c2_line:
+                    # c1, c2 should have same keys - line number
+                    udf_code_map[lineno] = (
+                        c1_line[0] + c2_line[0],  # increment
+                        c1_line[1] + c2_line[1],  # mem_usage
+                        c1_line[2] + c2_line[2],  # occurrences
+                    )
+                elif c1_line:
+                    udf_code_map[lineno] = c1_line
+                elif c2_line:
+                    udf_code_map[lineno] = c2_line
+                else:
+                    udf_code_map[lineno] = None
+            value1[filename] = [(k, v) for k, v in udf_code_map.items()]
         return value1
 
 
@@ -149,29 +230,193 @@ class BasicProfiler(Profiler):
     BasicProfiler is the default profiler, which is implemented based on
     cProfile and Accumulator
     """
-    def __init__(self, ctx):
-        Profiler.__init__(self, ctx)
+
+    def __init__(self, ctx: "SparkContext") -> None:
+        super().__init__(ctx)
         # Creates a new accumulator for combining the profiles of different
         # partitions of a stage
-        self._accumulator = ctx.accumulator(None, PStatsParam)
+        self._accumulator = ctx.accumulator(None, PStatsParam)  # type: ignore[arg-type]
 
-    def profile(self, func):
-        """ Runs and profiles the method to_profile passed in. A profile object is returned. """
+    def profile(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        """Runs and profiles the method to_profile passed in. A profile object is returned."""
         pr = cProfile.Profile()
-        pr.runcall(func)
+        ret = pr.runcall(func, *args, **kwargs)
         st = pstats.Stats(pr)
-        st.stream = None  # make it picklable
+        st.stream = None  # type: ignore[attr-defined]  # make it picklable
         st.strip_dirs()
 
         # Adds a new profile to the existing accumulated value
-        self._accumulator.add(st)
+        self._accumulator.add(st)  # type: ignore[arg-type]
 
-    def stats(self):
-        return self._accumulator.value
+        return ret
+
+    def stats(self) -> pstats.Stats:
+        return cast(pstats.Stats, self._accumulator.value)
+
+    def show(self, id: int) -> None:
+        """Print the profile stats to stdout, id is the RDD id"""
+        stats = self.stats()
+        if stats:
+            print("=" * 60)
+            print("Profile of RDD<id=%d>" % id)
+            print("=" * 60)
+            stats.sort_stats("time", "cumulative").print_stats()
+
+    def dump(self, id: int, path: str) -> None:
+        """Dump the profile into path, id is the RDD id"""
+        if not os.path.exists(path):
+            os.makedirs(path)
+        stats = self.stats()
+        if stats:
+            p = os.path.join(path, "rdd_%d.pstats" % id)
+            stats.dump_stats(p)
+
+
+class UDFBasicProfiler(BasicProfiler):
+    """
+    UDFBasicProfiler is the profiler for Python/Pandas UDFs.
+    """
+
+    def show(self, id: int) -> None:
+        """Print the profile stats to stdout, id is the PythonUDF id"""
+        stats = self.stats()
+        if stats:
+            print("=" * 60)
+            print("Profile of UDF<id=%d>" % id)
+            print("=" * 60)
+            stats.sort_stats("time", "cumulative").print_stats()
+
+    def dump(self, id: int, path: str) -> None:
+        """Dump the profile into path, id is the PythonUDF id"""
+        if not os.path.exists(path):
+            os.makedirs(path)
+        stats = self.stats()
+        if stats:
+            p = os.path.join(path, "udf_%d.pstats" % id)
+            stats.dump_stats(p)
+
+
+class MemoryProfiler(Profiler):
+    """
+    MemoryProfiler, which is implemented based on memory profiler and Accumulator
+    """
+
+    def __init__(self, ctx: "SparkContext") -> None:
+        super().__init__(ctx)
+        # Creates a new accumulator for combining the profiles
+        self._accumulator = ctx.accumulator(None, MemUsageParam)  # type: ignore[arg-type]
+
+    def profile(  # type: ignore
+        self,
+        sub_lines: Optional[List],
+        start_line: Optional[int],
+        func: Callable[..., Any],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """Runs and profiles the method func passed in. A profile object is returned."""
+        if pyspark.memory_profiler_ext.has_memory_profiler:
+            profiler = pyspark.memory_profiler_ext.UDFLineProfiler()
+            wrapped = profiler(func, sub_lines=sub_lines, start_line=start_line)
+            ret = wrapped(*args, **kwargs)
+            codemap_dict = {
+                filename: list(line_iterator)
+                for filename, line_iterator in profiler.code_map.items()
+            }
+            # Adds a new profile to the existing accumulated value
+            self._accumulator.add(codemap_dict)  # type: ignore[arg-type]
+            return ret
+        else:
+            raise PySparkRuntimeError(
+                errorClass="MISSING_LIBRARY_FOR_PROFILER",
+                messageParameters={},
+            )
+
+    def stats(self) -> CodeMapDict:
+        """Return the collected memory profiles"""
+        return cast(CodeMapDict, self._accumulator.value)
+
+    @staticmethod
+    def _show_results(
+        code_map: CodeMapDict, stream: Optional[Any] = None, precision: int = 1
+    ) -> None:
+        if stream is None:
+            stream = sys.stdout
+        template = "{0:>6} {1:>12} {2:>12}  {3:>10}   {4:<}"
+
+        for filename, lines in code_map.items():
+            header = template.format(
+                "Line #", "Mem usage", "Increment", "Occurrences", "Line Contents"
+            )
+
+            stream.write("Filename: " + filename + "\n\n")
+            stream.write(header + "\n")
+            stream.write("=" * len(header) + "\n")
+
+            if "pyspark.zip/pyspark/" in filename:
+                # if the original filename is in pyspark.zip file, we try to find the actual
+                # file in pyspark module by concatenating pyspark module directory and the
+                # rest of the filename
+                # Eventually we should ask the data provider to provide the actual lines
+                # because there's no guarantee that we can always find the actual file
+                # on driver side
+                filename = os.path.join(
+                    os.path.dirname(pyspark.__file__), filename.rsplit("pyspark.zip/pyspark/", 1)[1]
+                )
+
+            all_lines = linecache.getlines(filename)
+            if len(all_lines) == 0:
+                raise PySparkValueError(
+                    errorClass="MEMORY_PROFILE_INVALID_SOURCE", messageParameters={}
+                )
+
+            float_format = "{0}.{1}f".format(precision + 4, precision)
+            template_mem = "{0:" + float_format + "} MiB"
+
+            lines_dict = {line[0]: line[1] for line in lines}
+            linenos = range(min(lines_dict), max(lines_dict) + 1)
+            for lineno in linenos:
+                total_mem: Union[float, str]
+                inc: Union[float, str]
+                occurrences: Union[float, str]
+                mem = lines_dict.get(lineno)
+                if mem:
+                    inc = mem[0]
+                    total_mem = mem[1]
+                    total_mem = template_mem.format(total_mem)
+                    occurrences = mem[2]
+                    inc = template_mem.format(inc)
+                else:
+                    total_mem = ""
+                    inc = ""
+                    occurrences = ""
+                tmp = template.format(lineno, total_mem, inc, occurrences, all_lines[lineno - 1])
+                stream.write(tmp)
+            stream.write("\n\n")
+
+    def show(self, id: int) -> None:
+        """Print the profile stats to stdout, id is the PythonUDF id"""
+        code_map = self.stats()
+        if code_map:
+            print("=" * 60)
+            print("Profile of UDF<id=%d>" % id)
+            print("=" * 60)
+            self._show_results(code_map)
+
+    def dump(self, id: int, path: str) -> None:
+        """Dump the memory profile into path, id is the PythonUDF id"""
+        if not os.path.exists(path):
+            os.makedirs(path)
+        stats = self.stats()  # dict
+        if stats:
+            p = os.path.join(path, "udf_%d_memory.txt" % id)
+            with open(p, "w+") as f:
+                self._show_results(stats, stream=f)
 
 
 if __name__ == "__main__":
     import doctest
-    (failure_count, test_count) = doctest.testmod()
+
+    failure_count, test_count = doctest.testmod()
     if failure_count:
         sys.exit(-1)

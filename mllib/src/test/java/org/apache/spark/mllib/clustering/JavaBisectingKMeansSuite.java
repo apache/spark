@@ -19,8 +19,8 @@ package org.apache.spark.mllib.clustering;
 
 import java.util.Arrays;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
@@ -42,16 +42,16 @@ public class JavaBisectingKMeansSuite extends SharedSparkSession {
       .setMaxIterations(2)
       .setSeed(1L);
     BisectingKMeansModel model = bkm.run(points);
-    Assert.assertEquals(3, model.k());
-    Assert.assertArrayEquals(new double[]{3.0, 0.0}, model.root().center().toArray(), 1e-12);
+    Assertions.assertEquals(3, model.k());
+    Assertions.assertArrayEquals(new double[]{3.0, 0.0}, model.root().center().toArray(), 1e-12);
     for (ClusteringTreeNode child : model.root().children()) {
       double[] center = child.center().toArray();
       if (center[0] > 2) {
-        Assert.assertEquals(2, child.size());
-        Assert.assertArrayEquals(new double[]{4.0, 0.0}, center, 1e-12);
+        Assertions.assertEquals(2, child.size());
+        Assertions.assertArrayEquals(new double[]{4.0, 0.0}, center, 1e-12);
       } else {
-        Assert.assertEquals(1, child.size());
-        Assert.assertArrayEquals(new double[]{1.0, 0.0}, center, 1e-12);
+        Assertions.assertEquals(1, child.size());
+        Assertions.assertArrayEquals(new double[]{1.0, 0.0}, center, 1e-12);
       }
     }
   }

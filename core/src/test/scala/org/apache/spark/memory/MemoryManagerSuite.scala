@@ -20,14 +20,13 @@ package org.apache.spark.memory
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration.Duration
 
-import org.mockito.Matchers.{any, anyLong}
+import org.mockito.ArgumentMatchers.{any, anyLong}
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
@@ -35,11 +34,10 @@ import org.apache.spark.storage.{BlockId, BlockStatus, StorageLevel}
 import org.apache.spark.storage.memory.MemoryStore
 import org.apache.spark.util.ThreadUtils
 
-
 /**
  * Helper trait for sharing code among [[MemoryManager]] tests.
  */
-private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
+private[memory] trait MemoryManagerSuite extends SparkFunSuite {
 
   protected val evictedBlocks = new mutable.ArrayBuffer[(BlockId, BlockStatus)]
 
@@ -84,11 +82,8 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
    */
   protected def makeBadMemoryStore(mm: MemoryManager): MemoryStore = {
     val ms = mock(classOf[MemoryStore], RETURNS_SMART_NULLS)
-    when(ms.evictBlocksToFreeSpace(any(), anyLong(), any())).thenAnswer(new Answer[Long] {
-      override def answer(invocation: InvocationOnMock): Long = {
-        throw new RuntimeException("bad memory store!")
-      }
-    })
+    when(ms.evictBlocksToFreeSpace(any(), anyLong(), any())).thenAnswer(
+      (_: InvocationOnMock) => throw new RuntimeException("bad memory store!"))
     mm.setMemoryStore(ms)
     ms
   }
@@ -106,27 +101,24 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
    * records the number of bytes this is called with. This variable is expected to be cleared
    * by the test code later through [[assertEvictBlocksToFreeSpaceCalled]].
    */
-  private def evictBlocksToFreeSpaceAnswer(mm: MemoryManager): Answer[Long] = {
-    new Answer[Long] {
-      override def answer(invocation: InvocationOnMock): Long = {
-        val args = invocation.getArguments
-        val numBytesToFree = args(1).asInstanceOf[Long]
-        assert(numBytesToFree > 0)
-        require(evictBlocksToFreeSpaceCalled.get() === DEFAULT_EVICT_BLOCKS_TO_FREE_SPACE_CALLED,
-          "bad test: evictBlocksToFreeSpace() variable was not reset")
-        evictBlocksToFreeSpaceCalled.set(numBytesToFree)
-        if (numBytesToFree <= mm.storageMemoryUsed) {
-          // We can evict enough blocks to fulfill the request for space
-          mm.releaseStorageMemory(numBytesToFree, mm.tungstenMemoryMode)
-          evictedBlocks += Tuple2(null, BlockStatus(StorageLevel.MEMORY_ONLY, numBytesToFree, 0L))
-          numBytesToFree
-        } else {
-          // No blocks were evicted because eviction would not free enough space.
-          0L
-        }
+  private def evictBlocksToFreeSpaceAnswer(mm: MemoryManager): Answer[Long] =
+    (invocation: InvocationOnMock) => {
+      val args = invocation.getArguments
+      val numBytesToFree = args(1).asInstanceOf[Long]
+      assert(numBytesToFree > 0)
+      require(evictBlocksToFreeSpaceCalled.get() === DEFAULT_EVICT_BLOCKS_TO_FREE_SPACE_CALLED,
+        "bad test: evictBlocksToFreeSpace() variable was not reset")
+      evictBlocksToFreeSpaceCalled.set(numBytesToFree)
+      if (numBytesToFree <= mm.storageMemoryUsed) {
+        // We can evict enough blocks to fulfill the request for space
+        mm.releaseStorageMemory(numBytesToFree, mm.tungstenMemoryMode)
+        evictedBlocks += Tuple2(null, BlockStatus(StorageLevel.MEMORY_ONLY, numBytesToFree, 0L))
+        numBytesToFree
+      } else {
+        // No blocks were evicted because eviction would not free enough space.
+        0L
       }
     }
-  }
 
   /**
    * Assert that [[MemoryStore.evictBlocksToFreeSpace]] is called with the given parameters.
@@ -156,7 +148,7 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
   // -- Tests of sharing of execution memory between tasks ----------------------------------------
   // Prior to Spark 1.6, these tests were part of ShuffleMemoryManagerSuite.
 
-  implicit val ec = ExecutionContext.global
+  implicit val ec: ExecutionContextExecutor = ExecutionContext.global
 
   test("single task requesting on-heap execution memory") {
     val manager = createMemoryManager(1000L)
@@ -246,6 +238,40 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
     assert(ThreadUtils.awaitResult(t2Result2, 200.millis) === 0L)
   }
 
+  test("SPARK-35486: memory freed by self-spilling is taken by another task") {
+    val memoryManager = createMemoryManager(1000L)
+    val t1MemManager = new TaskMemoryManager(memoryManager, 1)
+    val t2MemManager = new TaskMemoryManager(memoryManager, 2)
+    val c1 = new TestPartialSpillingMemoryConsumer(t1MemManager)
+    val c2 = new TestMemoryConsumer(t2MemManager)
+    val futureTimeout: Duration = 20.seconds
+
+    // t1 acquires 1000 bytes. This should succeed immediately.
+    val t1Result1 = Future { c1.acquireMemory(1000L) }
+    assert(ThreadUtils.awaitResult(t1Result1, futureTimeout) === 1000L)
+    assert(c1.getUsed() === 1000L)
+    assert(c1.getSpilledBytes() === 0L)
+
+    // t2 attempts to acquire 500 bytes. This should block since there is no memory available.
+    val t2Result1 = Future { c2.acquireMemory(500L) }
+    Thread.sleep(300)
+    assert(!t2Result1.isCompleted)
+    assert(c2.getUsed() === 0L)
+
+    // t1 attempts to acquire 500 bytes, causing its existing reservation to spill partially. After
+    // the spill, t1 is still at its fair share of 500 bytes, so it cannot acquire memory and t2
+    // gets the freed memory instead. t1 must try again, causing the rest of the reservation to
+    // spill.
+    val t1Result2 = Future { c1.acquireMemory(500L) }
+
+    // The spill should release enough memory for both t1's and t2's reservations to be satisfied.
+    assert(ThreadUtils.awaitResult(t2Result1, futureTimeout) === 500L)
+    assert(ThreadUtils.awaitResult(t1Result2, futureTimeout) === 500L)
+    assert(c1.getSpilledBytes() === 1000L)
+    assert(c1.getUsed() === 500L)
+    assert(c2.getUsed() === 500L)
+  }
+
   test("TaskMemoryManager.cleanUpAllAllocatedMemory") {
     val memoryManager = createMemoryManager(1000L)
     val t1MemManager = new TaskMemoryManager(memoryManager, 1)
@@ -291,7 +317,7 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
 
   test("off-heap execution allocations cannot exceed limit") {
     val memoryManager = createMemoryManager(
-      maxOnHeapExecutionMemory = 0L,
+      maxOnHeapExecutionMemory = 2L,
       maxOffHeapExecutionMemory = 1000L)
 
     val tMemManager = new TaskMemoryManager(memoryManager, 1)
@@ -308,6 +334,24 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
     assert(tMemManager.getMemoryConsumptionForThisTask === 500L)
     tMemManager.releaseExecutionMemory(500L, c)
     assert(tMemManager.getMemoryConsumptionForThisTask === 0L)
+  }
+
+  test("task peak execution memory usage") {
+    val memoryManager = createMemoryManager(
+      maxOnHeapExecutionMemory = 1000L,
+      maxOffHeapExecutionMemory = 1000L)
+
+    val tMemManager = new TaskMemoryManager(memoryManager, 1)
+    val offHeapConsumer = new TestMemoryConsumer(tMemManager, MemoryMode.OFF_HEAP)
+    val onHeapConsumer = new TestMemoryConsumer(tMemManager, MemoryMode.ON_HEAP)
+
+    val result1 = tMemManager.acquireExecutionMemory(500L, offHeapConsumer)
+    val result2 = tMemManager.acquireExecutionMemory(400L, onHeapConsumer)
+    assert(result1 === 500L)
+    assert(result2 === 400L)
+    assert(tMemManager.getMemoryConsumptionForThisTask === 900L)
+    assert(tMemManager.getPeakOnHeapExecutionMemory === 400L)
+    assert(tMemManager.getPeakOffHeapExecutionMemory === 500L)
   }
 }
 

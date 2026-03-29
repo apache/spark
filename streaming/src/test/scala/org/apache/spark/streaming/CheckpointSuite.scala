@@ -18,13 +18,12 @@
 package org.apache.spark.streaming
 
 import java.io._
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.concurrent.ConcurrentLinkedQueue
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
-import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{IntWritable, Text}
@@ -39,8 +38,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.util.{Clock, ManualClock, MutableURLClassLoader, ResetSystemProperties,
-  Utils}
+import org.apache.spark.util.{Clock, ManualClock, MutableURLClassLoader, ResetSystemProperties, Utils}
 
 /**
  * A input stream that records the times of restore() invoked
@@ -55,7 +53,7 @@ class CheckpointInputDStream(_ssc: StreamingContext) extends InputDStream[Int](_
   class FileInputDStreamCheckpointData extends DStreamCheckpointData(this) {
     @transient
     var restoredTimes = 0
-    override def restore() {
+    override def restore(): Unit = {
       restoredTimes += 1
       super.restore()
     }
@@ -85,7 +83,7 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
       numBatchesBeforeRestart: Int,
       batchDuration: Duration = Milliseconds(500),
       stopSparkContextAfterTest: Boolean = true
-    ) {
+    ): Unit = {
     require(numBatchesBeforeRestart < expectedOutput.size,
       "Number of batches before context restart less than number of expected output " +
         "(i.e. number of total batches to run)")
@@ -162,14 +160,14 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
 
       val outputStream = getTestOutputStream[V](ssc.graph.getOutputStreams())
 
-      eventually(timeout(10 seconds)) {
+      eventually(timeout(10.seconds)) {
         ssc.awaitTerminationOrTimeout(10)
         assert(batchCounter.getLastCompletedBatchTime === targetBatchTime)
       }
 
-      eventually(timeout(10 seconds)) {
+      eventually(timeout(10.seconds)) {
         val checkpointFilesOfLatestTime = Checkpoint.getCheckpointFiles(checkpointDir).filter {
-          _.getName.contains(clock.getTimeMillis.toString)
+          _.getName.contains(clock.getTimeMillis().toString)
         }
         // Checkpoint files are written twice for every batch interval. So assert that both
         // are written to make sure that both of them have been written.
@@ -206,24 +204,21 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
  * the checkpointing of a DStream's RDDs as well as the checkpointing of
  * the whole DStream graph.
  */
-class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
+class CheckpointSuite extends TestSuiteBase with LocalStreamingContext with DStreamCheckpointTester
   with ResetSystemProperties {
-
-  var ssc: StreamingContext = null
 
   override def batchDuration: Duration = Milliseconds(500)
 
-  override def beforeFunction() {
-    super.beforeFunction()
+  override def beforeEach(): Unit = {
+    super.beforeEach()
     Utils.deleteRecursively(new File(checkpointDir))
   }
 
-  override def afterFunction() {
+  override def afterEach(): Unit = {
     try {
-      if (ssc != null) { ssc.stop() }
       Utils.deleteRecursively(new File(checkpointDir))
     } finally {
-      super.afterFunction()
+      super.afterEach()
     }
   }
 
@@ -241,8 +236,8 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     val stateStreamCheckpointInterval = Seconds(1)
     val fs = FileSystem.getLocal(new Configuration())
     // this ensure checkpointing occurs at least once
-    val firstNumBatches = (stateStreamCheckpointInterval / batchDuration).toLong * 2
-    val secondNumBatches = firstNumBatches
+    val firstNumBatches = (stateStreamCheckpointInterval / batchDuration).toLong
+    val secondNumBatches = firstNumBatches * 2
 
     // Setup the streams
     val input = (1 to 10).map(_ => Seq("a")).toSeq
@@ -255,17 +250,28 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
       .checkpoint(stateStreamCheckpointInterval)
       .map(t => (t._1, t._2))
     }
-    var ssc = setupStreams(input, operation)
+    ssc = setupStreams(input, operation)
     var stateStream = ssc.graph.getOutputStreams().head.dependencies.head.dependencies.head
+
+    def waitForCompletionOfBatch(numBatches: Long): Unit = {
+      eventually(timeout(10.seconds), interval(50.millis)) {
+        val lastProcessed = ssc.scheduler.jobGenerator.lastProcessedBatch
+        assert(lastProcessed != null &&
+          lastProcessed >= Time(batchDuration.milliseconds * numBatches))
+      }
+    }
 
     // Run till a time such that at least one RDD in the stream should have been checkpointed,
     // then check whether some RDD has been checkpointed or not
     ssc.start()
     advanceTimeWithRealDelay(ssc, firstNumBatches)
+    waitForCompletionOfBatch(firstNumBatches)
+
     logInfo("Checkpoint data of state stream = \n" + stateStream.checkpointData)
-    assert(!stateStream.checkpointData.currentCheckpointFiles.isEmpty,
+    var currCheckpointFiles = stateStream.checkpointData.currentCheckpointFiles
+    assert(!currCheckpointFiles.isEmpty,
       "No checkpointed RDDs in state stream before first failure")
-    stateStream.checkpointData.currentCheckpointFiles.foreach {
+    currCheckpointFiles.foreach {
       case (time, file) =>
         assert(fs.exists(new Path(file)), "Checkpoint file '" + file +"' for time " + time +
             " for state stream before first failure does not exist")
@@ -273,8 +279,10 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
 
     // Run till a further time such that previous checkpoint files in the stream would be deleted
     // and check whether the earlier checkpoint files are deleted
-    val checkpointFiles = stateStream.checkpointData.currentCheckpointFiles.map(x => new File(x._2))
-    advanceTimeWithRealDelay(ssc, secondNumBatches)
+    currCheckpointFiles = stateStream.checkpointData.currentCheckpointFiles
+    val checkpointFiles = currCheckpointFiles.map(x => new File(x._2))
+    advanceTimeWithRealDelay(ssc, secondNumBatches - firstNumBatches)
+    waitForCompletionOfBatch(secondNumBatches)
     checkpointFiles.foreach(file =>
       assert(!file.exists, "Checkpoint file '" + file + "' was not deleted"))
     ssc.stop()
@@ -287,14 +295,15 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     assert(!stateStream.generatedRDDs.isEmpty,
       "No restored RDDs in state stream after recovery from first failure")
 
-
     // Run one batch to generate a new checkpoint file and check whether some RDD
     // is present in the checkpoint data or not
     ssc.start()
     advanceTimeWithRealDelay(ssc, 1)
-    assert(!stateStream.checkpointData.currentCheckpointFiles.isEmpty,
+    waitForCompletionOfBatch(secondNumBatches + 1)
+    currCheckpointFiles = stateStream.checkpointData.currentCheckpointFiles
+    assert(!currCheckpointFiles.isEmpty,
       "No checkpointed RDDs in state stream before second failure")
-    stateStream.checkpointData.currentCheckpointFiles.foreach {
+    currCheckpointFiles.foreach {
       case (time, file) =>
         assert(fs.exists(new Path(file)), "Checkpoint file '" + file +"' for time " + time +
           " for state stream before seconds failure does not exist")
@@ -377,6 +386,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
 
     val cp = new Checkpoint(ssc, Time(1000))
     ssc.stop()
+    Thread.sleep(100)
 
     // Serialize/deserialize to simulate write to storage and reading it back
     val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
@@ -408,6 +418,33 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     val defaultConf = new SparkConf()
     assert(restoredConf1.get("spark.driver.host") === defaultConf.get(DRIVER_HOST_ADDRESS))
     assert(restoredConf1.get("spark.driver.port") !== "9999")
+  }
+
+  test("SPARK-30199 get ui port and blockmanager port") {
+    val conf = Map("spark.ui.port" -> "30001", "spark.blockManager.port" -> "30002")
+    conf.foreach { case (k, v) => System.setProperty(k, v) }
+    ssc = new StreamingContext(master, framework, batchDuration)
+    conf.foreach { case (k, v) => assert(ssc.conf.get(k) === v) }
+
+    val cp = new Checkpoint(ssc, Time(1000))
+    ssc.stop()
+
+    // Serialize/deserialize to simulate write to storage and reading it back
+    val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
+
+    val newCpConf = newCp.createSparkConf()
+    conf.foreach { case (k, v) => assert(newCpConf.contains(k) && newCpConf.get(k) === v) }
+
+    // Check if all the parameters have been restored
+    ssc = new StreamingContext(null, newCp, null)
+    conf.foreach { case (k, v) => assert(ssc.conf.get(k) === v) }
+    ssc.stop()
+
+    // If port numbers are not set in system property, these parameters should not be presented
+    // in the newly recovered conf.
+    conf.foreach(kv => System.clearProperty(kv._1))
+    val newCpConf1 = newCp.createSparkConf()
+    conf.foreach { case (k, _) => assert(!newCpConf1.contains(k)) }
   }
 
   // This tests whether the system can recover from a master failure with simple
@@ -612,7 +649,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
      */
     def writeFile(i: Int, clock: Clock): Unit = {
       val file = new File(testDir, i.toString)
-      Files.write(i + "\n", file, StandardCharsets.UTF_8)
+      Files.writeString(file.toPath, s"$i\n")
       assert(file.setLastModified(clock.getTimeMillis()))
       // Check that the file's modification date is actually the value we wrote, since rounding or
       // truncation will break the test:
@@ -842,9 +879,26 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     assert(checkpointFiles.size === 2)
     // Although bytes2 was written with an old time, it contains the latest status, so we should
     // try to read from it at first.
-    assert(Files.toByteArray(checkpointFiles(0)) === bytes2)
-    assert(Files.toByteArray(checkpointFiles(1)) === bytes1)
+    assert(Files.readAllBytes(checkpointFiles(0).toPath) === bytes2)
+    assert(Files.readAllBytes(checkpointFiles(1).toPath) === bytes1)
     checkpointWriter.stop()
+  }
+
+  test("SPARK-28912: Fix MatchError in getCheckpointFiles") {
+    withTempDir { tempDir =>
+      val fs = FileSystem.get(tempDir.toURI, new Configuration)
+      val checkpointDir = tempDir.getAbsolutePath + "/checkpoint-01"
+
+      assert(Checkpoint.getCheckpointFiles(checkpointDir, Some(fs)).length === 0)
+
+      // Ignore files whose parent path match.
+      fs.create(new Path(checkpointDir, "this-is-matched-before-due-to-parent-path")).close()
+      assert(Checkpoint.getCheckpointFiles(checkpointDir, Some(fs)).length === 0)
+
+      // Ignore directories whose names match.
+      fs.mkdirs(new Path(checkpointDir, "checkpoint-1000000000"))
+      assert(Checkpoint.getCheckpointFiles(checkpointDir, Some(fs)).length === 0)
+    }
   }
 
   test("SPARK-6847: stack overflow when updateStateByKey is followed by a checkpointed dstream") {
@@ -912,8 +966,8 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
       }
     ssc.start()
     batchCounter.waitUntilBatchesCompleted(1, 10000)
-    assert(shouldCheckpointAllMarkedRDDs === true)
-    assert(rddsCheckpointed === true)
+    assert(shouldCheckpointAllMarkedRDDs)
+    assert(rddsCheckpointed)
   }
 
   /**

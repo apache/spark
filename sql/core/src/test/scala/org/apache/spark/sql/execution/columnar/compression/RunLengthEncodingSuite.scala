@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.columnar.compression
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
-import org.apache.spark.sql.types.AtomicType
+import org.apache.spark.sql.types.StringType
 
 class RunLengthEncodingSuite extends SparkFunSuite {
   val nullValue = -1
@@ -31,16 +32,23 @@ class RunLengthEncodingSuite extends SparkFunSuite {
   testRunLengthEncoding(new ShortColumnStats, SHORT)
   testRunLengthEncoding(new IntColumnStats, INT)
   testRunLengthEncoding(new LongColumnStats, LONG)
-  testRunLengthEncoding(new StringColumnStats, STRING, false)
+  Seq(
+    "UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI"
+  ).foreach(collation => {
+    val dt = StringType(collation)
+    val typeName = if (collation == "UTF8_BINARY") "STRING" else s"STRING($collation)"
+    testRunLengthEncoding(new StringColumnStats(dt), STRING(dt), false, Some(typeName))
+  })
 
-  def testRunLengthEncoding[T <: AtomicType](
+  def testRunLengthEncoding[T <: PhysicalDataType](
       columnStats: ColumnStats,
       columnType: NativeColumnType[T],
-      testDecompress: Boolean = true) {
+      testDecompress: Boolean = true,
+      testTypeName: Option[String] = None): Unit = {
 
-    val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
+    val typeName = testTypeName.getOrElse(columnType.getClass.getSimpleName.stripSuffix("$"))
 
-    def skeleton(uniqueValueCount: Int, inputRuns: Seq[(Int, Int)]) {
+    def skeleton(uniqueValueCount: Int, inputRuns: Seq[(Int, Int)]): Unit = {
       // -------------
       // Tests encoder
       // -------------
@@ -98,7 +106,7 @@ class RunLengthEncodingSuite extends SparkFunSuite {
       assert(!decoder.hasNext)
     }
 
-    def skeletonForDecompress(uniqueValueCount: Int, inputRuns: Seq[(Int, Int)]) {
+    def skeletonForDecompress(uniqueValueCount: Int, inputRuns: Seq[(Int, Int)]): Unit = {
       if (!testDecompress) return
       val builder = TestCompressibleColumnBuilder(columnStats, columnType, RunLengthEncoding)
       val (values, rows) = makeUniqueValuesAndSingleValueRows(columnType, uniqueValueCount)
@@ -126,7 +134,8 @@ class RunLengthEncodingSuite extends SparkFunSuite {
       assertResult(RunLengthEncoding.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
       val decoder = RunLengthEncoding.decoder(buffer, columnType)
-      val columnVector = new OnHeapColumnVector(inputSeq.length, columnType.dataType)
+      val columnVector = new OnHeapColumnVector(inputSeq.length,
+        ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
       decoder.decompress(columnVector, inputSeq.length)
 
       if (inputSeq.nonEmpty) {

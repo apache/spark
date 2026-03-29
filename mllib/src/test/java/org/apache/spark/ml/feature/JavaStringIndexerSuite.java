@@ -22,8 +22,8 @@ import java.util.List;
 
 import static org.apache.spark.sql.types.DataTypes.*;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.sql.Dataset;
@@ -49,7 +49,7 @@ public class JavaStringIndexerSuite extends SharedSparkSession {
       .setOutputCol("labelIndex");
     Dataset<Row> output = indexer.fit(dataset).transform(dataset);
 
-    Assert.assertEquals(
+    Assertions.assertEquals(
       Arrays.asList(cr(0, 0.0), cr(1, 2.0), cr(2, 1.0), cr(3, 0.0), cr(4, 0.0), cr(5, 1.0)),
       output.orderBy("id").select("id", "labelIndex").collectAsList());
   }

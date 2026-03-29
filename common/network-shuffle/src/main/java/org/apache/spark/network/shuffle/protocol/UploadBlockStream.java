@@ -18,8 +18,8 @@
 package org.apache.spark.network.shuffle.protocol;
 
 import java.util.Arrays;
+import java.util.Objects;
 
-import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.protocol.Encoders;
@@ -53,17 +53,13 @@ public class UploadBlockStream extends BlockTransferMessage {
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("blockId", blockId)
-      .add("metadata size", metadata.length)
-      .toString();
+    return "UploadBlockStream[blockId=" + blockId + ",metadata size=" + metadata.length + "]";
   }
 
   @Override
   public boolean equals(Object other) {
-    if (other != null && other instanceof UploadBlockStream) {
-      UploadBlockStream o = (UploadBlockStream) other;
-      return Objects.equal(blockId, o.blockId)
+    if (other instanceof UploadBlockStream o) {
+      return Objects.equals(blockId, o.blockId)
         && Arrays.equals(metadata, o.metadata);
     }
     return false;

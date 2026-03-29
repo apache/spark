@@ -17,16 +17,17 @@
 
 package org.apache.spark.deploy.worker.ui
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.Node
 
+import jakarta.servlet.http.HttpServletRequest
 import org.json4s.JValue
 
 import org.apache.spark.deploy.{ExecutorState, JsonProtocol}
 import org.apache.spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateResponse}
+import org.apache.spark.deploy.StandaloneResourceUtils.{formatResourcesAddresses, formatResourcesDetails}
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
@@ -38,10 +39,25 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
     JsonProtocol.writeWorkerState(workerState)
   }
 
+  private def formatWorkerResourcesDetails(workerState: WorkerStateResponse): String = {
+    val totalInfo = workerState.resources
+    val usedInfo = workerState.resourcesUsed
+    val freeInfo = totalInfo.map { case (rName, rInfo) =>
+      val freeAddresses = if (usedInfo.contains(rName)) {
+        rInfo.addresses.diff(usedInfo(rName).addresses)
+      } else {
+        rInfo.addresses
+      }
+      rName -> new ResourceInformation(rName, freeAddresses)
+    }
+    formatResourcesDetails(usedInfo, freeInfo)
+  }
+
   def render(request: HttpServletRequest): Seq[Node] = {
     val workerState = workerEndpoint.askSync[WorkerStateResponse](RequestWorkerState)
 
-    val executorHeaders = Seq("ExecutorID", "Cores", "State", "Memory", "Job Details", "Logs")
+    val executorHeaders = Seq("ExecutorID", "State", "Cores", "Memory", "Resources",
+      "Job Details", "Logs")
     val runningExecutors = workerState.executors
     val runningExecutorTable =
       UIUtils.listingTable(executorHeaders, executorRow, runningExecutors)
@@ -49,7 +65,8 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
     val finishedExecutorTable =
       UIUtils.listingTable(executorHeaders, executorRow, finishedExecutors)
 
-    val driverHeaders = Seq("DriverID", "Main Class", "State", "Cores", "Memory", "Logs", "Notes")
+    val driverHeaders = Seq("DriverID", "Main Class", "State", "Cores", "Memory", "Resources",
+      "Logs", "Notes")
     val runningDrivers = workerState.drivers.sortBy(_.driverId).reverse
     val runningDriverTable = UIUtils.listingTable[DriverRunner](driverHeaders,
       driverRow(workerState.workerId, _), runningDrivers)
@@ -60,75 +77,89 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
     // For now we only show driver information if the user has submitted drivers to the cluster.
     // This is until we integrate the notion of drivers and applications in the UI.
 
+    val workerUrlRef = UIUtils.makeHref(parent.worker.reverseProxy, workerState.workerId,
+      parent.webUrl)
     val content =
-      <div class="row-fluid"> <!-- Worker Details -->
-        <div class="span12">
-          <ul class="unstyled">
-            <li><strong>ID:</strong> {workerState.workerId}</li>
+      <div class="row"> <!-- Worker Details -->
+        <div class="col-12">
+          <ul class="list-unstyled">
+            <li><strong>ID:</strong>
+              <a href={s"$workerUrlRef/logPage/?self&logType=out"}>{workerState.workerId}</a>
+            </li>
             <li><strong>
               Master URL:</strong> {workerState.masterUrl}
             </li>
             <li><strong>Cores:</strong> {workerState.cores} ({workerState.coresUsed} Used)</li>
             <li><strong>Memory:</strong> {Utils.megabytesToString(workerState.memory)}
               ({Utils.megabytesToString(workerState.memoryUsed)} Used)</li>
+            <li><strong>Resources:</strong>
+              {formatWorkerResourcesDetails(workerState)}</li>
           </ul>
           <p><a href={workerState.masterWebUiUrl}>Back to Master</a></p>
         </div>
       </div>
-      <div class="row-fluid"> <!-- Executors and Drivers -->
-        <div class="span12">
-          <span class="collapse-aggregated-runningExecutors collapse-table"
-              onClick="collapseTable('collapse-aggregated-runningExecutors',
-              'aggregated-runningExecutors')">
+      <div class="row"> <!-- Executors and Drivers -->
+        <div class="col-12">
+          <span class="collapse-table" data-bs-toggle="collapse"
+              data-bs-target="#aggregated-runningExecutors"
+              aria-expanded="true" aria-controls="aggregated-runningExecutors"
+              data-collapse-name="collapse-aggregated-runningExecutors">
             <h4>
               <span class="collapse-table-arrow arrow-open"></span>
               <a>Running Executors ({runningExecutors.size})</a>
             </h4>
           </span>
-          <div class="aggregated-runningExecutors collapsible-table">
+          <div class="collapsible-table collapse show" id="aggregated-runningExecutors">
             {runningExecutorTable}
           </div>
           {
             if (runningDrivers.nonEmpty) {
-              <span class="collapse-aggregated-runningDrivers collapse-table"
-                  onClick="collapseTable('collapse-aggregated-runningDrivers',
-                  'aggregated-runningDrivers')">
+              <span class="collapse-table" data-bs-toggle="collapse"
+                  data-bs-target="#aggregated-runningDrivers"
+                  aria-expanded="true" aria-controls="aggregated-runningDrivers"
+                  data-collapse-name="collapse-aggregated-runningDrivers">
                 <h4>
                   <span class="collapse-table-arrow arrow-open"></span>
                   <a>Running Drivers ({runningDrivers.size})</a>
                 </h4>
               </span> ++
-              <div class="aggregated-runningDrivers collapsible-table">
+              <div class="collapsible-table collapse show"
+                  id="aggregated-runningDrivers">
                 {runningDriverTable}
               </div>
             }
           }
           {
             if (finishedExecutors.nonEmpty) {
-              <span class="collapse-aggregated-finishedExecutors collapse-table"
-                  onClick="collapseTable('collapse-aggregated-finishedExecutors',
-                  'aggregated-finishedExecutors')">
+              <span class="collapse-table" data-bs-toggle="collapse"
+                  data-bs-target="#aggregated-finishedExecutors"
+                  aria-expanded="true"
+                  aria-controls="aggregated-finishedExecutors"
+                  data-collapse-name="collapse-aggregated-finishedExecutors">
                 <h4>
                   <span class="collapse-table-arrow arrow-open"></span>
                   <a>Finished Executors ({finishedExecutors.size})</a>
                 </h4>
               </span> ++
-              <div class="aggregated-finishedExecutors collapsible-table">
+              <div class="collapsible-table collapse show"
+                  id="aggregated-finishedExecutors">
                 {finishedExecutorTable}
               </div>
             }
           }
           {
             if (finishedDrivers.nonEmpty) {
-              <span class="collapse-aggregated-finishedDrivers collapse-table"
-                  onClick="collapseTable('collapse-aggregated-finishedDrivers',
-                  'aggregated-finishedDrivers')">
+              <span class="collapse-table" data-bs-toggle="collapse"
+                  data-bs-target="#aggregated-finishedDrivers"
+                  aria-expanded="true" aria-controls="aggregated-finishedDrivers"
+                  data-collapse-name="collapse-aggregated-finishedDrivers">
                 <h4>
                   <span class="collapse-table-arrow arrow-open"></span>
                   <a>Finished Drivers ({finishedDrivers.size})</a>
                 </h4>
               </span> ++
-              <div class="aggregated-finishedDrivers collapsible-table">
+              <div class="collapsible-table collapse show"
+                  id="aggregated-finishedDrivers">
                 {finishedDriverTable}
               </div>
             }
@@ -147,13 +178,14 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
 
     <tr>
       <td>{executor.execId}</td>
-      <td>{executor.cores}</td>
       <td>{executor.state}</td>
+      <td>{executor.cores}</td>
       <td sorttable_customkey={executor.memory.toString}>
         {Utils.megabytesToString(executor.memory)}
       </td>
+      <td>{formatResourcesAddresses(executor.resources)}</td>
       <td>
-        <ul class="unstyled">
+        <ul class="list-unstyled">
           <li><strong>ID:</strong> {executor.appId}</li>
           <li><strong>Name:</strong>
           {
@@ -168,9 +200,9 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
         </ul>
       </td>
       <td>
-        <a href={s"$workerUrlRef/logPage?appId=${executor
+        <a href={s"$workerUrlRef/logPage/?appId=${executor
           .appId}&executorId=${executor.execId}&logType=stdout"}>stdout</a>
-        <a href={s"$workerUrlRef/logPage?appId=${executor
+        <a href={s"$workerUrlRef/logPage/?appId=${executor
           .appId}&executorId=${executor.execId}&logType=stderr"}>stderr</a>
       </td>
     </tr>
@@ -189,9 +221,10 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
       <td sorttable_customkey={driver.driverDesc.mem.toString}>
         {Utils.megabytesToString(driver.driverDesc.mem)}
       </td>
+      <td>{formatResourcesAddresses(driver.resources)}</td>
       <td>
-        <a href={s"$workerUrlRef/logPage?driverId=${driver.driverId}&logType=stdout"}>stdout</a>
-        <a href={s"$workerUrlRef/logPage?driverId=${driver.driverId}&logType=stderr"}>stderr</a>
+        <a href={s"$workerUrlRef/logPage/?driverId=${driver.driverId}&logType=stdout"}>stdout</a>
+        <a href={s"$workerUrlRef/logPage/?driverId=${driver.driverId}&logType=stderr"}>stderr</a>
       </td>
       <td>
         {driver.finalException.getOrElse("")}

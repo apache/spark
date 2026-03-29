@@ -20,8 +20,6 @@ An example demonstrating Logistic Regression Summary.
 Run with:
   bin/spark-submit examples/src/main/python/ml/logistic_regression_summary_example.py
 """
-from __future__ import print_function
-
 # $example on$
 from pyspark.ml.classification import LogisticRegression
 # $example off$

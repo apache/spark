@@ -19,6 +19,7 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 
 class JoinTypesTest extends SparkFunSuite {
 
@@ -48,15 +49,31 @@ class JoinTypesTest extends SparkFunSuite {
   test("construct a LeftSemi type") {
     assert(JoinType("leftsemi") === LeftSemi)
     assert(JoinType("left_semi") === LeftSemi)
+    assert(JoinType("semi") === LeftSemi)
   }
 
   test("construct a LeftAnti type") {
     assert(JoinType("leftanti") === LeftAnti)
     assert(JoinType("left_anti") === LeftAnti)
+    assert(JoinType("anti") === LeftAnti)
   }
 
   test("construct a Cross type") {
     assert(JoinType("cross") === Cross)
   }
 
+  test("unsupported join type") {
+    val joinType = "unknown"
+    checkError(
+      exception = intercept[AnalysisException](
+        JoinType(joinType)
+      ),
+      condition = "UNSUPPORTED_JOIN_TYPE",
+      sqlState = "0A000",
+      parameters = Map(
+        "typ" -> joinType,
+        "supported" -> JoinType.supported.mkString("'", "', '", "'")
+      )
+    )
+  }
 }

@@ -22,18 +22,21 @@ import java.nio.ByteBuffer;
 
 import io.netty.channel.Channel;
 import io.netty.channel.local.LocalChannel;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
+import org.apache.spark.network.client.MergedBlockMetaResponseCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.StreamCallback;
 import org.apache.spark.network.client.TransportResponseHandler;
 import org.apache.spark.network.protocol.ChunkFetchFailure;
 import org.apache.spark.network.protocol.ChunkFetchSuccess;
+import org.apache.spark.network.protocol.MergedBlockMetaSuccess;
 import org.apache.spark.network.protocol.RpcFailure;
 import org.apache.spark.network.protocol.RpcResponse;
 import org.apache.spark.network.protocol.StreamChunkId;
@@ -166,5 +169,41 @@ public class TransportResponseHandlerSuite {
     handler.exceptionCaught(new IOException("Oops!"));
 
     verify(cb).onFailure(eq("stream-1"), isA(IOException.class));
+  }
+
+  @Test
+  public void handleSuccessfulMergedBlockMeta() throws Exception {
+    TransportResponseHandler handler = new TransportResponseHandler(new LocalChannel());
+    MergedBlockMetaResponseCallback callback = mock(MergedBlockMetaResponseCallback.class);
+    handler.addRpcRequest(13, callback);
+    assertEquals(1, handler.numOutstandingRequests());
+
+    // This response should be ignored.
+    handler.handle(new MergedBlockMetaSuccess(22, 2,
+      new NioManagedBuffer(ByteBuffer.allocate(7))));
+    assertEquals(1, handler.numOutstandingRequests());
+
+    ByteBuffer resp = ByteBuffer.allocate(10);
+    handler.handle(new MergedBlockMetaSuccess(13, 2, new NioManagedBuffer(resp)));
+    ArgumentCaptor<NioManagedBuffer> bufferCaptor = ArgumentCaptor.forClass(NioManagedBuffer.class);
+    verify(callback, times(1)).onSuccess(eq(2), bufferCaptor.capture());
+    assertEquals(resp, bufferCaptor.getValue().nioByteBuffer());
+    assertEquals(0, handler.numOutstandingRequests());
+  }
+
+  @Test
+  public void handleFailedMergedBlockMeta() throws Exception {
+    TransportResponseHandler handler = new TransportResponseHandler(new LocalChannel());
+    MergedBlockMetaResponseCallback callback = mock(MergedBlockMetaResponseCallback.class);
+    handler.addRpcRequest(51, callback);
+    assertEquals(1, handler.numOutstandingRequests());
+
+    // This response should be ignored.
+    handler.handle(new RpcFailure(6, "failed"));
+    assertEquals(1, handler.numOutstandingRequests());
+
+    handler.handle(new RpcFailure(51, "failed"));
+    verify(callback, times(1)).onFailure(any());
+    assertEquals(0, handler.numOutstandingRequests());
   }
 }

@@ -17,12 +17,9 @@
 package org.apache.spark.ml.optim.aggregator
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.classification.MultiClassSummarizer
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 
 class DifferentiableLossAggregatorSuite extends SparkFunSuite {
 
@@ -115,7 +112,7 @@ class DifferentiableLossAggregatorSuite extends SparkFunSuite {
     BLAS.scal(weight1, addedGradients)
     BLAS.axpy(weight2, grad2, addedGradients)
     BLAS.scal(1 / (weight1 + weight2), addedGradients)
-    assert(merged.gradient === addedGradients)
+    assert(merged.gradient ~== addedGradients relTol 10e-5)
   }
 
   test("loss, gradient, weight") {
@@ -159,39 +156,5 @@ object DifferentiableLossAggregatorSuite {
       }
       this
     }
-  }
-
-  /** Get feature and label summarizers for provided data. */
-  private[ml] def getRegressionSummarizers(
-      instances: Array[Instance]): (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer) = {
-    val seqOp = (c: (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer),
-                 instance: Instance) =>
-      (c._1.add(instance.features, instance.weight),
-        c._2.add(Vectors.dense(instance.label), instance.weight))
-
-    val combOp = (c1: (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer),
-                  c2: (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer)) =>
-      (c1._1.merge(c2._1), c1._2.merge(c2._2))
-
-    instances.aggregate(
-      (new MultivariateOnlineSummarizer, new MultivariateOnlineSummarizer)
-    )(seqOp, combOp)
-  }
-
-  /** Get feature and label summarizers for provided data. */
-  private[ml] def getClassificationSummarizers(
-      instances: Array[Instance]): (MultivariateOnlineSummarizer, MultiClassSummarizer) = {
-    val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
-                 instance: Instance) =>
-      (c._1.add(instance.features, instance.weight),
-        c._2.add(instance.label, instance.weight))
-
-    val combOp = (c1: (MultivariateOnlineSummarizer, MultiClassSummarizer),
-                  c2: (MultivariateOnlineSummarizer, MultiClassSummarizer)) =>
-      (c1._1.merge(c2._1), c1._2.merge(c2._2))
-
-    instances.aggregate(
-      (new MultivariateOnlineSummarizer, new MultiClassSummarizer)
-    )(seqOp, combOp)
   }
 }

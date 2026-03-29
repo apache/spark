@@ -20,10 +20,10 @@ package org.apache.spark.ml.feature;
 import java.util.Arrays;
 import java.util.List;
 
-import edu.emory.mathcs.jtransforms.dct.DoubleDCT_1D;
+import org.jtransforms.dct.DoubleDCT_1D;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.ml.linalg.Vector;
@@ -57,6 +57,6 @@ public class JavaDCTSuite extends SharedSparkSession {
     List<Row> result = dct.transform(dataset).select("resultVec").collectAsList();
     Vector resultVec = result.get(0).getAs("resultVec");
 
-    Assert.assertArrayEquals(expectedResult, resultVec.toArray(), 1e-6);
+    Assertions.assertArrayEquals(expectedResult, resultVec.toArray(), 1e-6);
   }
 }

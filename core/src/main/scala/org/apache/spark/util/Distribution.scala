@@ -19,8 +19,6 @@ package org.apache.spark.util
 
 import java.io.PrintStream
 
-import scala.collection.immutable.IndexedSeq
-
 /**
  * Util for getting some stats from a small sample of numeric values, with some handy
  * summary functions.
@@ -31,7 +29,7 @@ import scala.collection.immutable.IndexedSeq
  */
 private[spark] class Distribution(val data: Array[Double], val startIdx: Int, val endIdx: Int) {
   require(startIdx < endIdx)
-  def this(data: Traversable[Double]) = this(data.toArray, 0, data.size)
+  def this(data: Iterable[Double]) = this(data.toArray, 0, data.size)
   java.util.Arrays.sort(data, startIdx, endIdx)
   val length = endIdx - startIdx
 
@@ -42,7 +40,7 @@ private[spark] class Distribution(val data: Array[Double], val startIdx: Int, va
    * given from 0 to 1
    * @param probabilities
    */
-  def getQuantiles(probabilities: Traversable[Double] = defaultProbabilities)
+  def getQuantiles(probabilities: Iterable[Double] = defaultProbabilities)
       : IndexedSeq[Double] = {
     probabilities.toIndexedSeq.map { p: Double => data(closestIndex(p)) }
   }
@@ -54,7 +52,7 @@ private[spark] class Distribution(val data: Array[Double], val startIdx: Int, va
   def showQuantiles(out: PrintStream = System.out): Unit = {
     // scalastyle:off println
     out.println("min\t25%\t50%\t75%\tmax")
-    getQuantiles(defaultProbabilities).foreach{q => out.print(q + "\t")}
+    getQuantiles(defaultProbabilities).foreach{q => out.print(s"$q\t")}
     out.println
     // scalastyle:on println
   }
@@ -65,7 +63,7 @@ private[spark] class Distribution(val data: Array[Double], val startIdx: Int, va
    * print a summary of this distribution to the given PrintStream.
    * @param out
    */
-  def summary(out: PrintStream = System.out) {
+  def summary(out: PrintStream = System.out): Unit = {
     // scalastyle:off println
     out.println(statCounter)
     showQuantiles(out)
@@ -75,18 +73,18 @@ private[spark] class Distribution(val data: Array[Double], val startIdx: Int, va
 
 private[spark] object Distribution {
 
-  def apply(data: Traversable[Double]): Option[Distribution] = {
-    if (data.size > 0) {
+  def apply(data: Iterable[Double]): Option[Distribution] = {
+    if (data.nonEmpty) {
       Some(new Distribution(data))
     } else {
       None
     }
   }
 
-  def showQuantiles(out: PrintStream = System.out, quantiles: Traversable[Double]) {
+  def showQuantiles(out: PrintStream = System.out, quantiles: Iterable[Double]): Unit = {
     // scalastyle:off println
     out.println("min\t25%\t50%\t75%\tmax")
-    quantiles.foreach{q => out.print(q + "\t")}
+    quantiles.foreach{q => out.print(s"$q\t")}
     out.println
     // scalastyle:on println
   }

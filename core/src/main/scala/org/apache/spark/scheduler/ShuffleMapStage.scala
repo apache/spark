@@ -20,7 +20,7 @@ package org.apache.spark.scheduler
 import scala.collection.mutable.HashSet
 
 import org.apache.spark.{MapOutputTrackerMaster, ShuffleDependency}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.util.CallSite
 
 /**
@@ -42,8 +42,9 @@ private[spark] class ShuffleMapStage(
     firstJobId: Int,
     callSite: CallSite,
     val shuffleDep: ShuffleDependency[_, _, _],
-    mapOutputTrackerMaster: MapOutputTrackerMaster)
-  extends Stage(id, rdd, numTasks, parents, firstJobId, callSite) {
+    mapOutputTrackerMaster: MapOutputTrackerMaster,
+    resourceProfileId: Int)
+  extends Stage(id, rdd, numTasks, parents, firstJobId, callSite, resourceProfileId) {
 
   private[this] var _mapStageJobs: List[ActiveJob] = Nil
 
@@ -51,7 +52,7 @@ private[spark] class ShuffleMapStage(
    * Partitions that either haven't yet been computed, or that were computed on an executor
    * that has since been lost, so should be re-computed.  This variable is used by the
    * DAGScheduler to determine when a stage has completed. Task successes in both the active
-   * attempt for the stage or in earlier attempts for this stage can cause paritition ids to get
+   * attempt for the stage or in earlier attempts for this stage can cause partition ids to get
    * removed from pendingPartitions. As a result, this variable may be inconsistent with the pending
    * tasks in the TaskSetManager for the active attempt for the stage (the partitions stored here
    * will always be a subset of the partitions that the TaskSetManager thinks are pending).
@@ -92,5 +93,21 @@ private[spark] class ShuffleMapStage(
     mapOutputTrackerMaster
       .findMissingPartitions(shuffleDep.shuffleId)
       .getOrElse(0 until numPartitions)
+  }
+
+  /**
+   * Whether the stage is statically declared as indeterminate based on the RDD's
+   * outputDeterministicLevel property. This is known at RDD creation time.
+   */
+  def isStaticallyIndeterminate: Boolean = {
+    rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
+  }
+
+  /**
+   * Whether the stage has been detected as indeterminate at runtime via checksum mismatch.
+   * This means different stage attempts have produced different data for the same partition.
+   */
+  def isRuntimeIndeterminate: Boolean = {
+    !rdd.isReliablyCheckpointed && isChecksumMismatched
   }
 }

@@ -153,7 +153,7 @@ test_that("spark.kmeans", {
   model <- spark.kmeans(data = training, ~ ., k = 2, maxIter = 10, initMode = "random")
   sample <- take(select(predict(model, training), "prediction"), 1)
   expect_equal(typeof(sample$prediction), "integer")
-  expect_equal(sample$prediction, 1)
+  expect_equal(sample$prediction, 0)
 
   # Test stats::kmeans is working
   statsModel <- kmeans(x = newIris, centers = 2)
@@ -171,7 +171,7 @@ test_that("spark.kmeans", {
   expect_equal(sort(collect(distinct(select(cluster, "prediction")))$prediction), c(0, 1))
 
   # test summary coefficients return matrix type
-  expect_true(class(summary.model$coefficients) == "matrix")
+  expect_true(any(class(summary.model$coefficients) == "matrix"))
   expect_true(class(summary.model$coefficients[1, ]) == "numeric")
 
   # Test model save/load
@@ -317,6 +317,19 @@ test_that("spark.posterior and spark.perplexity", {
   posterior <- spark.posterior(model, text)
   local.posterior <- collect(posterior)$topicDistribution
   expect_equal(length(local.posterior), sum(unlist(local.posterior)))
+})
+
+test_that("spark.assignClusters", {
+  df <- createDataFrame(list(list(0L, 1L, 1.0), list(0L, 2L, 1.0),
+                             list(1L, 2L, 1.0), list(3L, 4L, 1.0),
+                             list(4L, 0L, 0.1)),
+                        schema = c("src", "dst", "weight"))
+  clusters <- spark.assignClusters(df, initMode = "degree", weightCol = "weight")
+  expected_result <- createDataFrame(list(list(4L, 1L), list(0L, 0L),
+                                          list(1L, 0L), list(3L, 1L),
+                                          list(2L, 0L)),
+                                     schema = c("id", "cluster"))
+  expect_equivalent(expected_result, clusters)
 })
 
 sparkR.session.stop()

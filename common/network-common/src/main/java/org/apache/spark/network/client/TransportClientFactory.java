@@ -21,15 +21,15 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.codahale.metrics.MetricSet;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
-import com.google.common.collect.Lists;
+import com.google.common.annotations.VisibleForTesting;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
@@ -38,9 +38,14 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import io.netty.handler.ssl.SslHandler;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.GenericFutureListener;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.server.TransportChannelHandler;
 import org.apache.spark.network.util.*;
@@ -61,6 +66,7 @@ public class TransportClientFactory implements Closeable {
   private static class ClientPool {
     TransportClient[] clients;
     Object[] locks;
+    volatile long lastConnectionFailed;
 
     ClientPool(int size) {
       clients = new TransportClient[size];
@@ -68,10 +74,12 @@ public class TransportClientFactory implements Closeable {
       for (int i = 0; i < size; i++) {
         locks[i] = new Object();
       }
+      lastConnectionFailed = 0;
     }
   }
 
-  private static final Logger logger = LoggerFactory.getLogger(TransportClientFactory.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(TransportClientFactory.class);
 
   private final TransportContext context;
   private final TransportConf conf;
@@ -84,15 +92,16 @@ public class TransportClientFactory implements Closeable {
 
   private final Class<? extends Channel> socketChannelClass;
   private EventLoopGroup workerGroup;
-  private PooledByteBufAllocator pooledAllocator;
+  private final PooledByteBufAllocator pooledAllocator;
   private final NettyMemoryMetrics metrics;
+  private final int fastFailTimeWindow;
 
   public TransportClientFactory(
       TransportContext context,
       List<TransportClientBootstrap> clientBootstraps) {
-    this.context = Preconditions.checkNotNull(context);
+    this.context = Objects.requireNonNull(context);
     this.conf = context.getConf();
-    this.clientBootstraps = Lists.newArrayList(Preconditions.checkNotNull(clientBootstraps));
+    this.clientBootstraps = new ArrayList<>(Objects.requireNonNull(clientBootstraps));
     this.connectionPool = new ConcurrentHashMap<>();
     this.numConnectionsPerPeer = conf.numConnectionsPerPeer();
     this.rand = new Random();
@@ -103,10 +112,16 @@ public class TransportClientFactory implements Closeable {
         ioMode,
         conf.clientThreads(),
         conf.getModuleName() + "-client");
-    this.pooledAllocator = NettyUtils.createPooledByteBufAllocator(
-      conf.preferDirectBufs(), false /* allowCache */, conf.clientThreads());
+    if (conf.sharedByteBufAllocators()) {
+      this.pooledAllocator = NettyUtils.getSharedPooledByteBufAllocator(
+          conf.preferDirectBufsForSharedByteBufAllocators(), false /* allowCache */);
+    } else {
+      this.pooledAllocator = NettyUtils.createPooledByteBufAllocator(
+          conf.preferDirectBufs(), false /* allowCache */, conf.clientThreads());
+    }
     this.metrics = new NettyMemoryMetrics(
       this.pooledAllocator, conf.getModuleName() + "-client", conf);
+    fastFailTimeWindow = (int)(conf.ioRetryWaitTimeMs() * 0.95);
   }
 
   public MetricSet getAllMetrics() {
@@ -116,9 +131,13 @@ public class TransportClientFactory implements Closeable {
   /**
    * Create a {@link TransportClient} connecting to the given remote host / port.
    *
-   * We maintains an array of clients (size determined by spark.shuffle.io.numConnectionsPerPeer)
+   * We maintain an array of clients (size determined by spark.shuffle.io.numConnectionsPerPeer)
    * and randomly picks one to use. If no client was previously created in the randomly selected
    * spot, this function creates a new client and places it there.
+   *
+   * If the fastFail parameter is true, fail immediately when the last attempt to the same address
+   * failed within the fast fail time window (95 percent of the io wait retry timeout). The
+   * assumption is the caller will handle retrying.
    *
    * Prior to the creation of a new TransportClient, we will execute all
    * {@link TransportClientBootstrap}s that are registered with this factory.
@@ -126,8 +145,13 @@ public class TransportClientFactory implements Closeable {
    * This blocks until a connection is successfully established and fully bootstrapped.
    *
    * Concurrency: This method is safe to call from multiple threads.
+   *
+   * @param remoteHost remote address host
+   * @param remotePort remote address port
+   * @param fastFail whether this call should fail immediately when the last attempt to the same
+   *                 address failed with in the last fast fail time window.
    */
-  public TransportClient createClient(String remoteHost, int remotePort)
+  public TransportClient createClient(String remoteHost, int remotePort, boolean fastFail)
       throws IOException, InterruptedException {
     // Get connection from the connection pool first.
     // If it is not found or not active, create a new one.
@@ -136,12 +160,8 @@ public class TransportClientFactory implements Closeable {
       InetSocketAddress.createUnresolved(remoteHost, remotePort);
 
     // Create the ClientPool if we don't have it yet.
-    ClientPool clientPool = connectionPool.get(unresolvedAddress);
-    if (clientPool == null) {
-      connectionPool.putIfAbsent(unresolvedAddress, new ClientPool(numConnectionsPerPeer));
-      clientPool = connectionPool.get(unresolvedAddress);
-    }
-
+    ClientPool clientPool = connectionPool.computeIfAbsent(unresolvedAddress,
+        key -> new ClientPool(numConnectionsPerPeer));
     int clientIndex = rand.nextInt(numConnectionsPerPeer);
     TransportClient cachedClient = clientPool.clients[clientIndex];
 
@@ -151,8 +171,10 @@ public class TransportClientFactory implements Closeable {
       // this code was able to update things.
       TransportChannelHandler handler = cachedClient.getChannel().pipeline()
         .get(TransportChannelHandler.class);
-      synchronized (handler) {
-        handler.getResponseHandler().updateTimeOfLastRequest();
+      if (handler != null) {
+        synchronized (handler) {
+          handler.getResponseHandler().updateTimeOfLastRequest();
+        }
       }
 
       if (cachedClient.isActive()) {
@@ -167,10 +189,15 @@ public class TransportClientFactory implements Closeable {
     final long preResolveHost = System.nanoTime();
     final InetSocketAddress resolvedAddress = new InetSocketAddress(remoteHost, remotePort);
     final long hostResolveTimeMs = (System.nanoTime() - preResolveHost) / 1000000;
+    final String resolvMsg = resolvedAddress.isUnresolved() ? "failed" : "succeed";
     if (hostResolveTimeMs > 2000) {
-      logger.warn("DNS resolution for {} took {} ms", resolvedAddress, hostResolveTimeMs);
+      logger.warn("DNS resolution {} for {} took {} ms",
+        MDC.of(LogKeys.STATUS, resolvMsg),
+        MDC.of(LogKeys.HOST_PORT, resolvedAddress),
+        MDC.of(LogKeys.TIME, hostResolveTimeMs));
     } else {
-      logger.trace("DNS resolution for {} took {} ms", resolvedAddress, hostResolveTimeMs);
+      logger.trace("DNS resolution {} for {} took {} ms",
+          resolvMsg, resolvedAddress, hostResolveTimeMs);
     }
 
     synchronized (clientPool.locks[clientIndex]) {
@@ -181,12 +208,32 @@ public class TransportClientFactory implements Closeable {
           logger.trace("Returning cached connection to {}: {}", resolvedAddress, cachedClient);
           return cachedClient;
         } else {
-          logger.info("Found inactive connection to {}, creating a new one.", resolvedAddress);
+          logger.info("Found inactive connection to {}, creating a new one.",
+            MDC.of(LogKeys.HOST_PORT, resolvedAddress));
         }
       }
-      clientPool.clients[clientIndex] = createClient(resolvedAddress);
+      // If this connection should fast fail when last connection failed in last fast fail time
+      // window and it did, fail this connection directly.
+      if (fastFail && System.currentTimeMillis() - clientPool.lastConnectionFailed <
+        fastFailTimeWindow) {
+        throw new IOException(
+          String.format("Connecting to %s failed in the last %s ms, fail this connection directly",
+            resolvedAddress, fastFailTimeWindow));
+      }
+      try {
+        clientPool.clients[clientIndex] = createClient(resolvedAddress);
+        clientPool.lastConnectionFailed = 0;
+      } catch (IOException e) {
+        clientPool.lastConnectionFailed = System.currentTimeMillis();
+        throw e;
+      }
       return clientPool.clients[clientIndex];
     }
+  }
+
+  public TransportClient createClient(String remoteHost, int remotePort)
+    throws IOException, InterruptedException {
+    return createClient(remoteHost, remotePort, false);
   }
 
   /**
@@ -202,17 +249,19 @@ public class TransportClientFactory implements Closeable {
   }
 
   /** Create a completely new {@link TransportClient} to the remote address. */
-  private TransportClient createClient(InetSocketAddress address)
+  @VisibleForTesting
+  TransportClient createClient(InetSocketAddress address)
       throws IOException, InterruptedException {
     logger.debug("Creating new connection to {}", address);
 
     Bootstrap bootstrap = new Bootstrap();
+    int connCreateTimeout = conf.connectionCreationTimeoutMs();
     bootstrap.group(workerGroup)
       .channel(socketChannelClass)
       // Disable Nagle's Algorithm since we don't want packets to wait
       .option(ChannelOption.TCP_NODELAY, true)
       .option(ChannelOption.SO_KEEPALIVE, true)
-      .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, conf.connectionTimeoutMs())
+      .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connCreateTimeout)
       .option(ChannelOption.ALLOCATOR, pooledAllocator);
 
     if (conf.receiveBuf() > 0) {
@@ -229,7 +278,7 @@ public class TransportClientFactory implements Closeable {
     bootstrap.handler(new ChannelInitializer<SocketChannel>() {
       @Override
       public void initChannel(SocketChannel ch) {
-        TransportChannelHandler clientHandler = context.initializePipeline(ch);
+        TransportChannelHandler clientHandler = context.initializePipeline(ch, true);
         clientRef.set(clientHandler.getClient());
         channelRef.set(ch);
       }
@@ -238,11 +287,42 @@ public class TransportClientFactory implements Closeable {
     // Connect to the remote server
     long preConnect = System.nanoTime();
     ChannelFuture cf = bootstrap.connect(address);
-    if (!cf.await(conf.connectionTimeoutMs())) {
+
+    if (connCreateTimeout <= 0) {
+      cf.await();
+      assert cf.isDone();
+      if (cf.isCancelled()) {
+        throw new IOException(String.format("Connecting to %s cancelled", address));
+      } else if (!cf.isSuccess()) {
+        throw new IOException(String.format("Failed to connect to %s", address), cf.cause());
+      }
+    } else if (!cf.await(connCreateTimeout)) {
       throw new IOException(
-        String.format("Connecting to %s timed out (%s ms)", address, conf.connectionTimeoutMs()));
+        String.format("Connecting to %s timed out (%s ms)",
+          address, connCreateTimeout));
     } else if (cf.cause() != null) {
       throw new IOException(String.format("Failed to connect to %s", address), cf.cause());
+    }
+    if (context.sslEncryptionEnabled()) {
+      final SslHandler sslHandler = cf.channel().pipeline().get(SslHandler.class);
+      Future<Channel> future = sslHandler.handshakeFuture().addListener(
+        new GenericFutureListener<Future<Channel>>() {
+          @Override
+          public void operationComplete(final Future<Channel> handshakeFuture) {
+            if (handshakeFuture.isSuccess()) {
+              logger.debug("{} successfully completed TLS handshake to ", address);
+            } else {
+              logger.info("failed to complete TLS handshake to {}", handshakeFuture.cause(),
+                MDC.of(LogKeys.HOST_PORT, address));
+              cf.channel().close();
+            }
+          }
+      });
+      if (!future.await(conf.connectionTimeoutMs())) {
+        cf.channel().close();
+        throw new IOException(
+          String.format("Failed to connect to %s within connection timeout", address));
+      }
     }
 
     TransportClient client = clientRef.get();
@@ -258,14 +338,18 @@ public class TransportClientFactory implements Closeable {
       }
     } catch (Exception e) { // catch non-RuntimeExceptions too as bootstrap may be written in Scala
       long bootstrapTimeMs = (System.nanoTime() - preBootstrap) / 1000000;
-      logger.error("Exception while bootstrapping client after " + bootstrapTimeMs + " ms", e);
+      logger.error("Exception while bootstrapping client after {} ms", e,
+        MDC.of(LogKeys.BOOTSTRAP_TIME, bootstrapTimeMs));
       client.close();
-      throw Throwables.propagate(e);
+      if (e instanceof RuntimeException re) throw re;
+      throw new RuntimeException(e);
     }
     long postBootstrap = System.nanoTime();
 
     logger.info("Successfully created connection to {} after {} ms ({} ms spent in bootstraps)",
-      address, (postBootstrap - preConnect) / 1000000, (postBootstrap - preBootstrap) / 1000000);
+      MDC.of(LogKeys.HOST_PORT, address),
+      MDC.of(LogKeys.ELAPSED_TIME, (postBootstrap - preConnect) / 1000000),
+      MDC.of(LogKeys.BOOTSTRAP_TIME, (postBootstrap - preBootstrap) / 1000000));
 
     return client;
   }
@@ -285,9 +369,8 @@ public class TransportClientFactory implements Closeable {
     }
     connectionPool.clear();
 
-    if (workerGroup != null) {
+    if (workerGroup != null && !workerGroup.isShuttingDown()) {
       workerGroup.shutdownGracefully();
-      workerGroup = null;
     }
   }
 }

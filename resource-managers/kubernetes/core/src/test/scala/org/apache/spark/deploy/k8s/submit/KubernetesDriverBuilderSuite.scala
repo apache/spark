@@ -16,323 +16,112 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import io.fabric8.kubernetes.api.model.PodBuilder
+import io.fabric8.kubernetes.api.model.HasMetadata
+import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinitionBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
-import org.mockito.Mockito._
 
-import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s._
-import org.apache.spark.deploy.k8s.Config.{CONTAINER_IMAGE, KUBERNETES_DRIVER_PODTEMPLATE_FILE, KUBERNETES_EXECUTOR_PODTEMPLATE_FILE}
-import org.apache.spark.deploy.k8s.features._
+import org.apache.spark.deploy.k8s.features.{KubernetesDriverCustomFeatureConfigStep, KubernetesFeatureConfigStep}
+import org.apache.spark.internal.config.ConfigEntry
 
-class KubernetesDriverBuilderSuite extends SparkFunSuite {
+class KubernetesDriverBuilderSuite extends PodBuilderSuite {
+  val POD_ROLE: String = "driver"
+  val TEST_ANNOTATION_KEY: String = "driver-annotation-key"
+  val TEST_ANNOTATION_VALUE: String = "driver-annotation-value"
 
-  private val BASIC_STEP_TYPE = "basic"
-  private val CREDENTIALS_STEP_TYPE = "credentials"
-  private val SERVICE_STEP_TYPE = "service"
-  private val LOCAL_DIRS_STEP_TYPE = "local-dirs"
-  private val SECRETS_STEP_TYPE = "mount-secrets"
-  private val DRIVER_CMD_STEP_TYPE = "driver-command"
-  private val ENV_SECRETS_STEP_TYPE = "env-secrets"
-  private val HADOOP_GLOBAL_STEP_TYPE = "hadoop-global"
-  private val MOUNT_VOLUMES_STEP_TYPE = "mount-volumes"
-  private val TEMPLATE_VOLUME_STEP_TYPE = "template-volume"
+  override protected def templateFileConf: ConfigEntry[_] = {
+    Config.KUBERNETES_DRIVER_PODTEMPLATE_FILE
+  }
 
-  private val basicFeatureStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    BASIC_STEP_TYPE, classOf[BasicDriverFeatureStep])
+  override protected def roleSpecificSchedulerNameConf: ConfigEntry[_] = {
+    Config.KUBERNETES_DRIVER_SCHEDULER_NAME
+  }
 
-  private val credentialsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    CREDENTIALS_STEP_TYPE, classOf[DriverKubernetesCredentialsFeatureStep])
+  override protected def excludedFeatureStepsConf: ConfigEntry[_] = {
+    Config.KUBERNETES_DRIVER_POD_EXCLUDED_FEATURE_STEPS
+  }
 
-  private val serviceStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    SERVICE_STEP_TYPE, classOf[DriverServiceFeatureStep])
+  override protected def userFeatureStepsConf: ConfigEntry[_] = {
+    Config.KUBERNETES_DRIVER_POD_FEATURE_STEPS
+  }
 
-  private val localDirsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    LOCAL_DIRS_STEP_TYPE, classOf[LocalDirsFeatureStep])
+  override protected def userFeatureStepWithExpectedAnnotation: (String, String) = {
+    ("org.apache.spark.deploy.k8s.submit.TestStepWithDrvConf", TEST_ANNOTATION_VALUE)
+  }
 
-  private val secretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    SECRETS_STEP_TYPE, classOf[MountSecretsFeatureStep])
+  override protected def wrongTypeFeatureStep: String = {
+    "org.apache.spark.scheduler.cluster.k8s.TestStepWithExecConf"
+  }
 
-  private val driverCommandStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    DRIVER_CMD_STEP_TYPE, classOf[DriverCommandFeatureStep])
+  override protected def buildPod(sparkConf: SparkConf, client: KubernetesClient): SparkPod = {
+    val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
+    new KubernetesDriverBuilder().buildFromFeatures(conf, client).pod
+  }
 
-  private val envSecretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    ENV_SECRETS_STEP_TYPE, classOf[EnvSecretsFeatureStep])
-
-  private val hadoopGlobalStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    HADOOP_GLOBAL_STEP_TYPE, classOf[KerberosConfDriverFeatureStep])
-
-  private val mountVolumesStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    MOUNT_VOLUMES_STEP_TYPE, classOf[MountVolumesFeatureStep])
-
-  private val templateVolumeStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    TEMPLATE_VOLUME_STEP_TYPE, classOf[PodTemplateConfigMapStep]
+  private val ADDITION_PRE_RESOURCES = Seq(
+    new CustomResourceDefinitionBuilder().withNewMetadata().withName("preCRD").endMetadata().build()
   )
 
-  private val builderUnderTest: KubernetesDriverBuilder =
-    new KubernetesDriverBuilder(
-      _ => basicFeatureStep,
-      _ => credentialsStep,
-      _ => serviceStep,
-      _ => secretsStep,
-      _ => envSecretsStep,
-      _ => localDirsStep,
-      _ => mountVolumesStep,
-      _ => driverCommandStep,
-      _ => hadoopGlobalStep,
-      _ => templateVolumeStep)
-
-  test("Apply fundamental steps all the time.") {
-    val conf = KubernetesConf(
-      new SparkConf(false),
-      KubernetesDriverSpecificConf(
-        JavaMainAppResource(Some("example.jar")),
-        "test-app",
-        "main",
-        Seq.empty),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      hadoopConfSpec = None)
-    validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf),
-      BASIC_STEP_TYPE,
-      CREDENTIALS_STEP_TYPE,
-      SERVICE_STEP_TYPE,
-      LOCAL_DIRS_STEP_TYPE,
-      DRIVER_CMD_STEP_TYPE)
-  }
-
-  test("Apply secrets step if secrets are present.") {
-    val conf = KubernetesConf(
-      new SparkConf(false),
-      KubernetesDriverSpecificConf(
-        JavaMainAppResource(None),
-        "test-app",
-        "main",
-        Seq.empty),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map("secret" -> "secretMountPath"),
-      Map("EnvName" -> "SecretName:secretKey"),
-      Map.empty,
-      Nil,
-      hadoopConfSpec = None)
-    validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf),
-      BASIC_STEP_TYPE,
-      CREDENTIALS_STEP_TYPE,
-      SERVICE_STEP_TYPE,
-      LOCAL_DIRS_STEP_TYPE,
-      SECRETS_STEP_TYPE,
-      ENV_SECRETS_STEP_TYPE,
-      DRIVER_CMD_STEP_TYPE)
-  }
-
-  test("Apply volumes step if mounts are present.") {
-    val volumeSpec = KubernetesVolumeSpec(
-      "volume",
-      "/tmp",
-      false,
-      KubernetesHostPathVolumeConf("/path"))
-    val conf = KubernetesConf(
-      new SparkConf(false),
-      KubernetesDriverSpecificConf(
-        JavaMainAppResource(None),
-        "test-app",
-        "main",
-        Seq.empty),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      volumeSpec :: Nil,
-      hadoopConfSpec = None)
-    validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf),
-      BASIC_STEP_TYPE,
-      CREDENTIALS_STEP_TYPE,
-      SERVICE_STEP_TYPE,
-      LOCAL_DIRS_STEP_TYPE,
-      MOUNT_VOLUMES_STEP_TYPE,
-      DRIVER_CMD_STEP_TYPE)
-  }
-
-  test("Apply template volume step if executor template is present.") {
-    val sparkConf = spy(new SparkConf(false))
-    doReturn(Option("filename")).when(sparkConf)
-      .get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
-    val conf = KubernetesConf(
-      sparkConf,
-      KubernetesDriverSpecificConf(
-        JavaMainAppResource(Some("example.jar")),
-        "test-app",
-        "main",
-        Seq.empty),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      Option.empty)
-    validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf),
-      BASIC_STEP_TYPE,
-      CREDENTIALS_STEP_TYPE,
-      SERVICE_STEP_TYPE,
-      LOCAL_DIRS_STEP_TYPE,
-      DRIVER_CMD_STEP_TYPE,
-      TEMPLATE_VOLUME_STEP_TYPE)
-  }
-
-  test("Apply HadoopSteps if HADOOP_CONF_DIR is defined.") {
-    val conf = KubernetesConf(
-      new SparkConf(false),
-      KubernetesDriverSpecificConf(
-        JavaMainAppResource(None),
-        "test-app",
-        "main",
-        Seq.empty),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      hadoopConfSpec = Some(
-        HadoopConfSpec(
-          Some("/var/hadoop-conf"),
-          None)))
-    validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf),
-      BASIC_STEP_TYPE,
-      CREDENTIALS_STEP_TYPE,
-      SERVICE_STEP_TYPE,
-      LOCAL_DIRS_STEP_TYPE,
-      DRIVER_CMD_STEP_TYPE,
-      HADOOP_GLOBAL_STEP_TYPE)
-  }
-
-  test("Apply HadoopSteps if HADOOP_CONF ConfigMap is defined.") {
-    val conf = KubernetesConf(
-      new SparkConf(false),
-      KubernetesDriverSpecificConf(
-        JavaMainAppResource(None),
-        "test-app",
-        "main",
-        Seq.empty),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      hadoopConfSpec = Some(
-        HadoopConfSpec(
-          None,
-          Some("pre-defined-configMapName"))))
-    validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf),
-      BASIC_STEP_TYPE,
-      CREDENTIALS_STEP_TYPE,
-      SERVICE_STEP_TYPE,
-      LOCAL_DIRS_STEP_TYPE,
-      DRIVER_CMD_STEP_TYPE,
-      HADOOP_GLOBAL_STEP_TYPE)
-  }
-
-  private def validateStepTypesApplied(resolvedSpec: KubernetesDriverSpec, stepTypes: String*)
-  : Unit = {
-    assert(resolvedSpec.systemProperties.size === stepTypes.size)
-    stepTypes.foreach { stepType =>
-      assert(resolvedSpec.pod.pod.getMetadata.getLabels.get(stepType) === stepType)
-      assert(resolvedSpec.driverKubernetesResources.containsSlice(
-        KubernetesFeaturesTestUtils.getSecretsForStepType(stepType)))
-      assert(resolvedSpec.systemProperties(stepType) === stepType)
-    }
-  }
-
-  test("Start with empty pod if template is not specified") {
-    val kubernetesClient = mock(classOf[KubernetesClient])
-    val driverBuilder = KubernetesDriverBuilder.apply(kubernetesClient, new SparkConf())
-    verify(kubernetesClient, never()).pods()
-  }
-
-  test("Starts with template if specified") {
-    val kubernetesClient = PodBuilderSuiteUtils.loadingMockKubernetesClient()
+  test("SPARK-37331: check driver pre kubernetes resource, empty by default") {
     val sparkConf = new SparkConf(false)
-      .set(CONTAINER_IMAGE, "spark-driver:latest")
-      .set(KUBERNETES_DRIVER_PODTEMPLATE_FILE, "template-file.yaml")
-    val kubernetesConf = new KubernetesConf(
-      sparkConf,
-      KubernetesDriverSpecificConf(
-        JavaMainAppResource(Some("example.jar")),
-        "test-app",
-        "main",
-        Seq.empty),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      Option.empty)
-    val driverSpec = KubernetesDriverBuilder
-      .apply(kubernetesClient, sparkConf)
-      .buildFromFeatures(kubernetesConf)
-    PodBuilderSuiteUtils.verifyPodWithSupportedFeatures(driverSpec.pod)
+      .set(Config.CONTAINER_IMAGE, "spark-driver:latest")
+    val client = mockKubernetesClient()
+    val conf = KubernetesTestConf.createDriverConf(sparkConf)
+    val spec = new KubernetesDriverBuilder().buildFromFeatures(conf, client)
+    assert(spec.driverPreKubernetesResources.size === 0)
   }
 
-  test("Throws on misconfigured pod template") {
-    val kubernetesClient = PodBuilderSuiteUtils.loadingMockKubernetesClient(
-      new PodBuilder()
+  test("SPARK-37331: check driver pre kubernetes resource as expected") {
+    val sparkConf = new SparkConf(false)
+      .set(Config.CONTAINER_IMAGE, "spark-driver:latest")
+      .set(Config.KUBERNETES_DRIVER_POD_FEATURE_STEPS.key,
+        "org.apache.spark.deploy.k8s.submit.TestStep")
+    val client = mockKubernetesClient()
+    val conf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf
+    )
+    val spec = new KubernetesDriverBuilder().buildFromFeatures(conf, client)
+    assert(spec.driverPreKubernetesResources.size === 1)
+    assert(spec.driverPreKubernetesResources === ADDITION_PRE_RESOURCES)
+  }
+}
+
+class TestStep extends KubernetesFeatureConfigStep {
+
+  override def configurePod(pod: SparkPod): SparkPod = {
+    pod
+  }
+
+  override def getAdditionalPreKubernetesResources(): Seq[HasMetadata] = Seq(
+    new CustomResourceDefinitionBuilder()
         .withNewMetadata()
-        .addToLabels("test-label-key", "test-label-value")
+          .withName("preCRD")
         .endMetadata()
-        .build())
-    val sparkConf = new SparkConf(false)
-      .set(CONTAINER_IMAGE, "spark-driver:latest")
-      .set(KUBERNETES_DRIVER_PODTEMPLATE_FILE, "template-file.yaml")
-    val kubernetesConf = new KubernetesConf(
-      sparkConf,
-      KubernetesDriverSpecificConf(
-        JavaMainAppResource(Some("example.jar")),
-        "test-app",
-        "main",
-        Seq.empty),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      Option.empty)
-    val exception = intercept[SparkException] {
-      KubernetesDriverBuilder
-        .apply(kubernetesClient, sparkConf)
-        .buildFromFeatures(kubernetesConf)
-    }
-    assert(exception.getMessage.contains("Could not load pod from template file."))
+      .build()
+  )
+}
+
+
+/**
+ * A test driver user feature step would be used in only driver.
+ */
+class TestStepWithDrvConf extends KubernetesDriverCustomFeatureConfigStep {
+  import io.fabric8.kubernetes.api.model._
+
+  private var driverConf: KubernetesDriverConf = _
+
+  override def init(config: KubernetesDriverConf): Unit = {
+    driverConf = config
+  }
+
+  override def configurePod(pod: SparkPod): SparkPod = {
+    val k8sPodBuilder = new PodBuilder(pod.pod)
+      .editOrNewMetadata()
+       // The annotation key = TEST_ANNOTATION_KEY, value = TEST_ANNOTATION_VALUE
+      .addToAnnotations("driver-annotation-key", driverConf.get("driver-annotation-key"))
+      .endMetadata()
+    val k8sPod = k8sPodBuilder.build()
+    SparkPod(k8sPod, pod.container)
   }
 }

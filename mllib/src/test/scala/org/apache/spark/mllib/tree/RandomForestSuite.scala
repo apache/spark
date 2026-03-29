@@ -25,6 +25,7 @@ import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.impurity.{Gini, Variance}
 import org.apache.spark.mllib.tree.model.RandomForestModel
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 
@@ -32,9 +33,9 @@ import org.apache.spark.util.Utils
  * Test suite for [[RandomForest]].
  */
 class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
-  def binaryClassificationTestWithContinuousFeatures(strategy: Strategy) {
+  def binaryClassificationTestWithContinuousFeatures(strategy: Strategy): Unit = {
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
-    val rdd = sc.parallelize(arr)
+    val rdd = sc.parallelize(arr.toImmutableArraySeq)
     val numTrees = 1
 
     val rf = RandomForest.trainClassifier(rdd, strategy, numTrees = numTrees,
@@ -44,8 +45,8 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val dt = DecisionTree.train(rdd, strategy)
 
-    EnsembleTestHelper.validateClassifier(rf, arr, 0.9)
-    DecisionTreeSuite.validateClassifier(dt, arr, 0.9)
+    EnsembleTestHelper.validateClassifier(rf, arr.toImmutableArraySeq, 0.9)
+    DecisionTreeSuite.validateClassifier(dt, arr.toImmutableArraySeq, 0.9)
 
     // Make sure trees are the same.
     assert(rfTree.toString == dt.toString)
@@ -68,9 +69,9 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     binaryClassificationTestWithContinuousFeatures(strategy)
   }
 
-  def regressionTestWithContinuousFeatures(strategy: Strategy) {
+  def regressionTestWithContinuousFeatures(strategy: Strategy): Unit = {
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
-    val rdd = sc.parallelize(arr)
+    val rdd = sc.parallelize(arr.toImmutableArraySeq)
     val numTrees = 1
 
     val rf = RandomForest.trainRegressor(rdd, strategy, numTrees = numTrees,
@@ -80,8 +81,8 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val dt = DecisionTree.train(rdd, strategy)
 
-    EnsembleTestHelper.validateRegressor(rf, arr, 0.01)
-    DecisionTreeSuite.validateRegressor(dt, arr, 0.01)
+    EnsembleTestHelper.validateRegressor(rf, arr.toImmutableArraySeq, 0.01)
+    DecisionTreeSuite.validateRegressor(dt, arr.toImmutableArraySeq, 0.01)
 
     // Make sure trees are the same.
     assert(rfTree.toString == dt.toString)
@@ -112,7 +113,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     arr(2) = new LabeledPoint(0.0, Vectors.dense(2.0, 0.0, 0.0, 6.0, 3.0))
     arr(3) = new LabeledPoint(2.0, Vectors.dense(0.0, 2.0, 1.0, 3.0, 2.0))
     val categoricalFeaturesInfo = Map(0 -> 3, 2 -> 2, 4 -> 4)
-    val input = sc.parallelize(arr)
+    val input = sc.parallelize(arr.toImmutableArraySeq)
 
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
       numClasses = 3, categoricalFeaturesInfo = categoricalFeaturesInfo)
@@ -122,7 +123,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("subsampling rate in RandomForest") {
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(5, 20)
-    val rdd = sc.parallelize(arr)
+    val rdd = sc.parallelize(arr.toImmutableArraySeq)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 2,
       numClasses = 2, categoricalFeaturesInfo = Map.empty[Int, Int],
       useNodeIdCache = true)

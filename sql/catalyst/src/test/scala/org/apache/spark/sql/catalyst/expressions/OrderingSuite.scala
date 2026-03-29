@@ -24,8 +24,11 @@ import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GenerateOrdering, LazilyGeneratedOrdering}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -106,7 +109,7 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
           StructField("a", dataType, nullable = true) ::
             StructField("b", dataType, nullable = true) :: Nil)
         val maybeDataGenerator = RandomDataGenerator.forType(rowType, nullable = false)
-        assume(maybeDataGenerator.isDefined)
+        assert(maybeDataGenerator.isDefined)
         val randGenerator = maybeDataGenerator.get
         val toCatalyst = CatalystTypeConverters.createToCatalystConverter(rowType)
         for (_ <- 1 to 50) {
@@ -128,14 +131,14 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-16845: GeneratedClass$SpecificOrdering grows beyond 64 KB") {
+  test("SPARK-16845: GeneratedClass$SpecificOrdering grows beyond 64 KiB") {
     val sortOrder = Literal("abc").asc
 
     // this is passing prior to SPARK-16845, and it should also be passing after SPARK-16845
-    GenerateOrdering.generate(Array.fill(40)(sortOrder))
+    GenerateOrdering.generate(Array.fill(40)(sortOrder).toImmutableArraySeq)
 
     // verify that we can support up to 5000 ordering comparisons, which should be sufficient
-    GenerateOrdering.generate(Array.fill(5000)(sortOrder))
+    GenerateOrdering.generate(Array.fill(5000)(sortOrder).toImmutableArraySeq)
   }
 
   test("SPARK-21344: BinaryType comparison does signed byte array comparison") {
@@ -164,5 +167,25 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
     val schema = new StructType().add("field", FloatType, nullable = true)
     GenerateOrdering.genComparisons(ctx, schema)
     assert(ctx.INPUT_ROW == null)
+  }
+
+  test("SPARK-53275: ordering by stateful expressions in interpreted mode") {
+    // even though we explicitly create an InterpretedOrdering below, we still need
+    // to set CODEGEN_FACTORY_MODE to NO_CODEGEN because the ScalaUDF expression will
+    // indirectly create an UnsafeProjection, and we want that UnsafeProjection to be
+    // an InterpretedUnsafeProjection
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
+      val udfFunc = (s: String) => s
+      val stringUdf = ScalaUDF(udfFunc, StringType, BoundReference(0, StringType, true) :: Nil,
+        Option(ExpressionEncoder[String]().resolveAndBind()) :: Nil,
+        Some(ExpressionEncoder[String]().resolveAndBind()))
+      val sortOrder = Seq(SortOrder(stringUdf, Ascending))
+      val rowOrdering = new InterpretedOrdering(sortOrder)
+      val rowType = StructType(StructField("col1", StringType, nullable = true) :: Nil)
+      val toCatalyst = CatalystTypeConverters.createToCatalystConverter(rowType)
+      val rowB1 = toCatalyst(Row("B")).asInstanceOf[InternalRow]
+      val rowB2 = toCatalyst(Row("A")).asInstanceOf[InternalRow]
+      assert(rowOrdering.compare(rowB1, rowB2) > 0)
+    }
   }
 }

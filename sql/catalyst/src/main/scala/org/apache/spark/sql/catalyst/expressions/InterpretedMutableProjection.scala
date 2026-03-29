@@ -18,7 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils.avoidSetNullAt
+import org.apache.spark.sql.internal.SQLConf
 
 
 /**
@@ -30,15 +33,15 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
  */
 class InterpretedMutableProjection(expressions: Seq[Expression]) extends MutableProjection {
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
-    this(toBoundExprs(expressions, inputSchema))
+    this(bindReferences(expressions, inputSchema))
+
+  private[this] val subExprEliminationEnabled = SQLConf.get.subexpressionEliminationEnabled
+  private[this] val exprs = prepareExpressions(expressions, subExprEliminationEnabled)
 
   private[this] val buffer = new Array[Any](expressions.size)
 
   override def initialize(partitionIndex: Int): Unit = {
-    expressions.foreach(_.foreach {
-      case n: Nondeterministic => n.initialize(partitionIndex)
-      case _ =>
-    })
+    initializeExprs(exprs, partitionIndex)
   }
 
   private[this] val validExprs = expressions.zipWithIndex.filter {
@@ -49,22 +52,47 @@ class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mutable
   def currentValue: InternalRow = mutableRow
 
   override def target(row: InternalRow): MutableProjection = {
+    // If `mutableRow` is `UnsafeRow`, `MutableProjection` accepts mutable types only
+    require(!row.isInstanceOf[UnsafeRow] ||
+      validExprs.forall { case (e, _) => UnsafeRow.isMutable(e.dataType) },
+      "MutableProjection cannot use UnsafeRow for output data types: " +
+        validExprs.map(_._1.dataType).filterNot(UnsafeRow.isMutable)
+          .map(_.catalogString).mkString(", "))
     mutableRow = row
     this
   }
 
+  private[this] val fieldWriters: Array[Any => Unit] = validExprs.map { case (e, i) =>
+    val writer = InternalRow.getWriter(i, e.dataType)
+    if (!e.nullable || avoidSetNullAt(e.dataType)) {
+      (v: Any) => writer(mutableRow, v)
+    } else {
+      (v: Any) => {
+        if (v == null) {
+          mutableRow.setNullAt(i)
+        } else {
+          writer(mutableRow, v)
+        }
+      }
+    }
+  }.toArray
+
   override def apply(input: InternalRow): InternalRow = {
+    if (subExprEliminationEnabled) {
+      runtime.setInput(input)
+    }
+
     var i = 0
     while (i < validExprs.length) {
-      val (expr, ordinal) = validExprs(i)
+      val (_, ordinal) = validExprs(i)
       // Store the result into buffer first, to make the projection atomic (needed by aggregation)
-      buffer(ordinal) = expr.eval(input)
+      buffer(ordinal) = exprs(ordinal).eval(input)
       i += 1
     }
     i = 0
     while (i < validExprs.length) {
       val (_, ordinal) = validExprs(i)
-      mutableRow(ordinal) = buffer(ordinal)
+      fieldWriters(i)(buffer(ordinal))
       i += 1
     }
     mutableRow
@@ -80,10 +108,6 @@ object InterpretedMutableProjection {
    * Returns a [[MutableProjection]] for given sequence of bound Expressions.
    */
   def createProjection(exprs: Seq[Expression]): MutableProjection = {
-    // We need to make sure that we do not reuse stateful expressions.
-    val cleanedExpressions = exprs.map(_.transform {
-      case s: Stateful => s.freshCopy()
-    })
-    new InterpretedMutableProjection(cleanedExpressions)
+    new InterpretedMutableProjection(exprs)
   }
 }

@@ -19,13 +19,15 @@ package org.apache.spark.status.api.v1
 import java.io.OutputStream
 import java.util.{List => JList}
 import java.util.zip.ZipOutputStream
-import javax.ws.rs._
-import javax.ws.rs.core.{MediaType, Response, StreamingOutput}
 
 import scala.util.control.NonFatal
 
+import jakarta.ws.rs.{NotFoundException => _, _}
+import jakarta.ws.rs.core.{MediaType, Response, StreamingOutput}
+
 import org.apache.spark.{JobExecutionStatus, SparkContext}
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.status.api.v1
+import org.apache.spark.util.Utils
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class AbstractApplicationResource extends BaseAppResource {
@@ -54,15 +56,8 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
   @GET
   @Path("executors/{executorId}/threads")
   def threadDump(@PathParam("executorId") execId: String): Array[ThreadStackTrace] = withUI { ui =>
-    if (execId != SparkContext.DRIVER_IDENTIFIER && !execId.forall(Character.isDigit)) {
-      throw new BadParameterException(
-        s"Invalid executorId: neither '${SparkContext.DRIVER_IDENTIFIER}' nor number.")
-    }
-
-    val safeSparkContext = ui.sc.getOrElse {
-      throw new ServiceUnavailable("Thread dumps not available through the history server.")
-    }
-
+    checkExecutorId(execId)
+    val safeSparkContext = checkAndGetSparkContext()
     ui.store.asOption(ui.store.executorSummary(execId)) match {
       case Some(executorSummary) if executorSummary.isActive =>
           val safeThreadDump = safeSparkContext.getExecutorThreadDump(execId).getOrElse {
@@ -75,8 +70,27 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
   }
 
   @GET
+  @Path("threads")
+  def getTaskThreadDump(
+      @QueryParam("taskId") taskId: Long,
+      @QueryParam("executorId") execId: String): ThreadStackTrace = {
+    checkExecutorId(execId)
+    val safeSparkContext = checkAndGetSparkContext()
+    safeSparkContext
+      .getTaskThreadDump(taskId, execId)
+      .getOrElse {
+        throw new NotFoundException(
+          s"Task '$taskId' is not running on Executor '$execId' right now")
+      }
+  }
+
+  @GET
   @Path("allexecutors")
   def allExecutorList(): Seq[ExecutorSummary] = withUI(_.store.executorList(false))
+
+  @GET
+  @Path("allmiscellaneousprocess")
+  def allProcessList(): Seq[ProcessSummary] = withUI(_.store.miscellaneousProcessList(false))
 
   @Path("stages")
   def stages(): Class[StagesResource] = classOf[StagesResource]
@@ -98,21 +112,31 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
 
   @GET
   @Path("environment")
-  def environmentInfo(): ApplicationEnvironmentInfo = withUI(_.store.environmentInfo())
+  def environmentInfo(): ApplicationEnvironmentInfo = withUI { ui =>
+    val envInfo = ui.store.environmentInfo()
+    val resourceProfileInfo = ui.store.resourceProfileInfo()
+    new v1.ApplicationEnvironmentInfo(
+      envInfo.runtime,
+      Utils.redact(ui.conf, envInfo.sparkProperties).sortBy(_._1),
+      Utils.redact(ui.conf, envInfo.hadoopProperties).sortBy(_._1),
+      Utils.redact(ui.conf, envInfo.systemProperties).sortBy(_._1),
+      Utils.redact(ui.conf, envInfo.metricsProperties).sortBy(_._1),
+      envInfo.classpathEntries.sortBy(_._1),
+      resourceProfileInfo)
+  }
 
   @GET
   @Path("logs")
   @Produces(Array(MediaType.APPLICATION_OCTET_STREAM))
   def getEventLogs(): Response = {
-    // Retrieve the UI for the application just to do access permission checks. For backwards
-    // compatibility, this code also tries with attemptId "1" if the UI without an attempt ID does
-    // not exist.
+    // For backwards compatibility, this code also tries with attemptId "1" if the UI
+    // without an attempt ID does not exist.
     try {
-      withUI { _ => }
+      checkUIViewPermissions()
     } catch {
       case _: NotFoundException if attemptId == null =>
         attemptId = "1"
-        withUI { _ => }
+        checkUIViewPermissions()
         attemptId = null
     }
 
@@ -157,6 +181,18 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
     classOf[OneApplicationAttemptResource]
   }
 
+  private def checkExecutorId(execId: String): Unit = {
+    if (!SparkContext.isDriver(execId) && !execId.forall(Character.isDigit)) {
+      throw new BadParameterException(
+        s"Invalid executorId: neither '${SparkContext.DRIVER_IDENTIFIER}' nor number.")
+    }
+  }
+
+  private def checkAndGetSparkContext(): SparkContext = withUI { ui =>
+    ui.sc.getOrElse {
+      throw new ServiceUnavailable("Thread dumps not available through the history server.")
+    }
+  }
 }
 
 private[v1] class OneApplicationResource extends AbstractApplicationResource {

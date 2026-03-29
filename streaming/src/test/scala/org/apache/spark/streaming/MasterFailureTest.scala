@@ -18,19 +18,21 @@
 package org.apache.spark.streaming
 
 import java.io.{File, IOException}
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.scalatest.Assertions._
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.Utils
 
@@ -41,9 +43,9 @@ object MasterFailureTest extends Logging {
   @volatile var killCount = 0
   @volatile var setupCalled = false
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     // scalastyle:off println
-    if (args.size < 2) {
+    if (args.length < 2) {
       println(
         "Usage: MasterFailureTest <local/HDFS directory> <# batches> " +
           "[<batch size in milliseconds>]")
@@ -51,7 +53,7 @@ object MasterFailureTest extends Logging {
     }
     val directory = args(0)
     val numBatches = args(1).toInt
-    val batchDuration = if (args.size > 2) Milliseconds(args(2).toInt) else Seconds(1)
+    val batchDuration = if (args.length > 2) Milliseconds(args(2).toInt) else Seconds(1)
 
     println("\n\n========================= MAP TEST =========================\n\n")
     testMap(directory, numBatches, batchDuration)
@@ -63,7 +65,7 @@ object MasterFailureTest extends Logging {
     // scalastyle:on println
   }
 
-  def testMap(directory: String, numBatches: Int, batchDuration: Duration) {
+  def testMap(directory: String, numBatches: Int, batchDuration: Duration): Unit = {
     // Input: time=1 ==> [ 1 ] , time=2 ==> [ 2 ] , time=3 ==> [ 3 ] , ...
     val input = (1 to numBatches).map(_.toString).toSeq
     // Expected output: time=1 ==> [ 1 ] , time=2 ==> [ 2 ] , time=3 ==> [ 3 ] , ...
@@ -85,7 +87,7 @@ object MasterFailureTest extends Logging {
   }
 
 
-  def testUpdateStateByKey(directory: String, numBatches: Int, batchDuration: Duration) {
+  def testUpdateStateByKey(directory: String, numBatches: Int, batchDuration: Duration): Unit = {
     // Input: time=1 ==> [ a ] , time=2 ==> [ a, a ] , time=3 ==> [ a, a, a ] , ...
     val input = (1 to numBatches).map(i => (1 to i).map(_ => "a").mkString(" ")).toSeq
     // Expected output: time=1 ==> [ (a, 1) ] , time=2 ==> [ (a, 3) ] , time=3 ==> [ (a,6) ] , ...
@@ -215,7 +217,7 @@ object MasterFailureTest extends Logging {
     val checkpointDir = ssc.checkpointDir
     val batchDuration = ssc.graph.batchDuration
 
-    while(!isLastOutputGenerated && !isTimedOut) {
+    while (!isLastOutputGenerated && !isTimedOut) {
       // Get the output buffer
       val outputQueue = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[T]].output
       def output = outputQueue.asScala.flatten
@@ -234,12 +236,12 @@ object MasterFailureTest extends Logging {
         System.clearProperty("spark.streaming.clock")
         System.clearProperty("spark.driver.port")
         ssc.start()
-        val startTime = System.currentTimeMillis()
+        val startTimeNs = System.nanoTime()
         while (!killed && !isLastOutputGenerated && !isTimedOut) {
           Thread.sleep(100)
-          timeRan = System.currentTimeMillis() - startTime
+          timeRan = System.nanoTime() - startTimeNs
           isLastOutputGenerated = (output.nonEmpty && output.last == lastExpectedOutput)
-          isTimedOut = (timeRan + totalTimeRan > maxTimeToRun)
+          isTimedOut = (timeRan + totalTimeRan > TimeUnit.MILLISECONDS.toNanos(maxTimeToRun))
         }
       } catch {
         case e: Exception => logError("Error running streaming context", e)
@@ -265,7 +267,7 @@ object MasterFailureTest extends Logging {
       logInfo("New output = " + output.toSeq)
       logInfo("Merged output = " + mergedOutput)
       logInfo("Time ran = " + timeRan)
-      logInfo("Total time ran = " + totalTimeRan)
+      logInfo("Total time ran = " + TimeUnit.NANOSECONDS.toMillis(totalTimeRan))
 
       if (!isLastOutputGenerated && !isTimedOut) {
         val sleepTime = Random.nextInt(batchDuration.milliseconds.toInt * 10)
@@ -282,7 +284,7 @@ object MasterFailureTest extends Logging {
         })
       }
     }
-    mergedOutput
+    mergedOutput.toSeq
   }
 
   /**
@@ -292,7 +294,7 @@ object MasterFailureTest extends Logging {
    * duplicate batch outputs of values from the `output`. As a result, the
    * expected output should not have consecutive batches with the same values as output.
    */
-  private def verifyOutput[T: ClassTag](output: Seq[T], expectedOutput: Seq[T]) {
+  private def verifyOutput[T: ClassTag](output: Seq[T], expectedOutput: Seq[T]): Unit = {
     // Verify whether expected outputs do not consecutive batches with same output
     for (i <- 0 until expectedOutput.size - 1) {
       assert(expectedOutput(i) != expectedOutput(i + 1),
@@ -314,7 +316,7 @@ object MasterFailureTest extends Logging {
   }
 
   /** Resets counter to prepare for the test */
-  private def reset() {
+  private def reset(): Unit = {
     killed = false
     killCount = 0
     setupCalled = false
@@ -327,11 +329,11 @@ object MasterFailureTest extends Logging {
 private[streaming]
 class KillingThread(ssc: StreamingContext, maxKillWaitTime: Long) extends Thread with Logging {
 
-  override def run() {
+  override def run(): Unit = {
     try {
       // If it is the first killing, then allow the first checkpoint to be created
-      var minKillWaitTime = if (MasterFailureTest.killCount == 0) 5000 else 2000
-      val killWaitTime = minKillWaitTime + math.abs(Random.nextLong % maxKillWaitTime)
+      val minKillWaitTime = if (MasterFailureTest.killCount == 0) 5000 else 2000
+      val killWaitTime = minKillWaitTime + math.abs(Random.nextLong() % maxKillWaitTime)
       logInfo("Kill wait time = " + killWaitTime)
       Thread.sleep(killWaitTime)
       logInfo(
@@ -361,18 +363,18 @@ private[streaming]
 class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
   extends Thread with Logging {
 
-  override def run() {
+  override def run(): Unit = {
     val localTestDir = Utils.createTempDir()
     var fs = testDir.getFileSystem(new Configuration())
     val maxTries = 3
     try {
       Thread.sleep(5000) // To make sure that all the streaming context has been set up
-      for (i <- 0 until input.size) {
+      for (i <- input.indices) {
         // Write the data to a local file and then move it to the target test directory
         val localFile = new File(localTestDir, (i + 1).toString)
         val hadoopFile = new Path(testDir, (i + 1).toString)
         val tempHadoopFile = new Path(testDir, ".tmp_" + (i + 1).toString)
-        Files.write(input(i) + "\n", localFile, StandardCharsets.UTF_8)
+        Files.writeString(localFile.toPath, input(i) + "\n")
         var tries = 0
         var done = false
             while (!done && tries < maxTries) {
@@ -390,7 +392,7 @@ class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
           }
         }
         if (!done) {
-          logError("Could not generate file " + hadoopFile)
+          logError(log"Could not generate file ${MDC(PATH, hadoopFile)}")
         } else {
           logInfo("Generated file " + hadoopFile + " at " + System.currentTimeMillis)
         }

@@ -22,9 +22,10 @@ import scala.util.Random
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
-import org.apache.spark.sql.types.{AtomicType, Decimal}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.types.Decimal
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 object ColumnarTestUtils {
   def makeNullRow(length: Int): GenericInternalRow = {
@@ -49,8 +50,10 @@ object ColumnarTestUtils {
       case LONG => Random.nextLong()
       case FLOAT => Random.nextFloat()
       case DOUBLE => Random.nextDouble()
-      case STRING => UTF8String.fromString(Random.nextString(Random.nextInt(32)))
+      case _: STRING => UTF8String.fromString(Random.nextString(Random.nextInt(32)))
       case BINARY => randomBytes(Random.nextInt(32))
+      case CALENDAR_INTERVAL =>
+        new CalendarInterval(Random.nextInt(), Random.nextInt(), Random.nextLong())
       case COMPACT_DECIMAL(precision, scale) => Decimal(Random.nextLong() % 100, precision, scale)
       case LARGE_DECIMAL(precision, scale) => Decimal(Random.nextLong(), precision, scale)
       case STRUCT(_) =>
@@ -93,7 +96,7 @@ object ColumnarTestUtils {
     row
   }
 
-  def makeUniqueValuesAndSingleValueRows[T <: AtomicType](
+  def makeUniqueValuesAndSingleValueRows[T <: PhysicalDataType](
       columnType: NativeColumnType[T],
       count: Int): (Seq[T#InternalType], Seq[GenericInternalRow]) = {
 

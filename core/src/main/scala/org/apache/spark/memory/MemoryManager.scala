@@ -27,6 +27,7 @@ import org.apache.spark.storage.memory.MemoryStore
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.memory.MemoryAllocator
+import org.apache.spark.util.Utils
 
 /**
  * An abstract memory manager that enforces how memory is shared between execution and storage.
@@ -40,6 +41,8 @@ private[spark] abstract class MemoryManager(
     numCores: Int,
     onHeapStorageMemory: Long,
     onHeapExecutionMemory: Long) extends Logging {
+
+  require(onHeapExecutionMemory > 0, "onHeapExecutionMemory must be > 0")
 
   // -- Methods related to memory allocation policies and bookkeeping ------------------------------
 
@@ -57,7 +60,7 @@ private[spark] abstract class MemoryManager(
 
   protected[this] val maxOffHeapMemory = conf.get(MEMORY_OFFHEAP_SIZE)
   protected[this] val offHeapStorageMemory =
-    (maxOffHeapMemory * conf.getDouble("spark.memory.storageFraction", 0.5)).toLong
+    (maxOffHeapMemory * conf.get(MEMORY_STORAGE_FRACTION)).toLong
 
   offHeapExecutionMemoryPool.incrementPoolSize(maxOffHeapMemory - offHeapStorageMemory)
   offHeapStorageMemoryPool.incrementPoolSize(offHeapStorageMemory)
@@ -240,8 +243,12 @@ private[spark] abstract class MemoryManager(
    * If user didn't explicitly set "spark.buffer.pageSize", we figure out the default value
    * by looking at the number of cores available to the process, and the total amount of memory,
    * and then divide it by a factor of safety.
+   *
+   * SPARK-37593 If we are using G1GC, ZGC or ShenandoahGC, it's better to take the
+   * LONG_ARRAY_OFFSET into consideration so that the requested memory size is power of 2
+   * and can be divided by heap region size to reduce memory waste.
    */
-  val pageSizeBytes: Long = {
+  private lazy val defaultPageSizeBytes = {
     val minPageSize = 1L * 1024 * 1024   // 1MB
     val maxPageSize = 64L * minPageSize  // 64MB
     val cores = if (numCores > 0) numCores else Runtime.getRuntime.availableProcessors()
@@ -252,9 +259,16 @@ private[spark] abstract class MemoryManager(
       case MemoryMode.OFF_HEAP => offHeapExecutionMemoryPool.poolSize
     }
     val size = ByteArrayMethods.nextPowerOf2(maxTungstenMemory / cores / safetyFactor)
-    val default = math.min(maxPageSize, math.max(minPageSize, size))
-    conf.getSizeAsBytes("spark.buffer.pageSize", default)
+    val chosenPageSize = math.min(maxPageSize, math.max(minPageSize, size))
+    if ((Utils.isG1GC || Utils.isZGC || Utils.isShenandoahGC) &&
+        tungstenMemoryMode == MemoryMode.ON_HEAP) {
+      chosenPageSize - Platform.LONG_ARRAY_OFFSET
+    } else {
+      chosenPageSize
+    }
   }
+
+  val pageSizeBytes: Long = conf.get(BUFFER_PAGESIZE).getOrElse(defaultPageSizeBytes)
 
   /**
    * Allocates memory for use by Unsafe/Tungsten code.

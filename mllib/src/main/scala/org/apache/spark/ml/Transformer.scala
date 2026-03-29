@@ -18,20 +18,20 @@
 package org.apache.spark.ml
 
 import scala.annotation.varargs
+import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 /**
- * :: DeveloperApi ::
  * Abstract class for transformers that transform one dataset into another.
  */
-@DeveloperApi
 abstract class Transformer extends PipelineStage {
 
   /**
@@ -74,12 +74,10 @@ abstract class Transformer extends PipelineStage {
 }
 
 /**
- * :: DeveloperApi ::
  * Abstract class for transformers that take one input column, apply transformation, and output the
  * result as a new column.
  */
-@DeveloperApi
-abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
+abstract class UnaryTransformer[IN: TypeTag, OUT: TypeTag, T <: UnaryTransformer[IN, OUT, T]]
   extends Transformer with HasInputCol with HasOutputCol with Logging {
 
   /** @group setParam */
@@ -106,7 +104,7 @@ abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
   protected def validateInputType(inputType: DataType): Unit = {}
 
   override def transformSchema(schema: StructType): StructType = {
-    val inputType = schema($(inputCol)).dataType
+    val inputType = SchemaUtils.getSchemaFieldType(schema, $(inputCol))
     validateInputType(inputType)
     if (schema.fieldNames.contains($(outputCol))) {
       throw new IllegalArgumentException(s"Output column ${$(outputCol)} already exists.")
@@ -117,9 +115,10 @@ abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
   }
 
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
-    val transformUDF = udf(this.createTransformFunc, outputDataType)
-    dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))))
+    val outputSchema = transformSchema(dataset.schema, logging = true)
+    val transformUDF = udf(this.createTransformFunc)
+    dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   override def copy(extra: ParamMap): T = defaultCopy(extra)

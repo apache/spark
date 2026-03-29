@@ -17,7 +17,6 @@
 
 package org.apache.spark.util
 
-import java.lang.management.ManagementFactory
 import java.lang.reflect.{Field, Modifier}
 import java.util.{IdentityHashMap, Random}
 
@@ -28,15 +27,14 @@ import com.google.common.collect.MapMaker
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Tests.{TEST_USE_COMPACT_OBJECT_HEADERS_KEY, TEST_USE_COMPRESSED_OOPS_KEY}
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
  * A trait that allows a class to give [[SizeEstimator]] more accurate size estimation.
- * When a class extends it, [[SizeEstimator]] will query the `estimatedSize` first.
- * If `estimatedSize` does not return [[None]], [[SizeEstimator]] will use the returned size
- * as the size of the object. Otherwise, [[SizeEstimator]] will do the estimation work.
- * The difference between a [[KnownSizeEstimation]] and
- * [[org.apache.spark.util.collection.SizeTracker]] is that, a
+ * When a class extends it, [[SizeEstimator]] will query the `estimatedSize`, and use
+ * the returned size as the size of the object. The difference between a [[KnownSizeEstimation]]
+ * and [[org.apache.spark.util.collection.SizeTracker]] is that, a
  * [[org.apache.spark.util.collection.SizeTracker]] still uses [[SizeEstimator]] to
  * estimate the size. However, a [[KnownSizeEstimation]] can provide a better estimation without
  * using [[SizeEstimator]].
@@ -51,7 +49,7 @@ private[spark] trait KnownSizeEstimation {
  * memory-aware caches.
  *
  * Based on the following JavaWorld article:
- * http://www.javaworld.com/javaworld/javaqa/2003-12/02-qa-1226-sizeof.html
+ * https://www.infoworld.com/article/2077408/sizeof-for-java.html
  */
 @DeveloperApi
 object SizeEstimator extends Logging {
@@ -97,6 +95,12 @@ object SizeEstimator extends Logging {
   // Size of an object reference
   // Based on https://wikis.oracle.com/display/HotSpotInternals/CompressedOops
   private var isCompressedOops = false
+
+  // Whether Compact Object Headers (JEP 450/519) are enabled.
+  // With Compact Object Headers, the object header is 8 bytes on 64-bit JVMs.
+  // See details at https://openjdk.org/jeps/450
+  private var isCompactObjectHeaders = false
+
   private var pointerSize = 4
 
   // Minimum size of a java.lang.Object
@@ -104,15 +108,18 @@ object SizeEstimator extends Logging {
 
   initialize()
 
-  // Sets object size, pointer size based on architecture and CompressedOops settings
-  // from the JVM.
-  private def initialize() {
-    val arch = System.getProperty("os.arch")
+  // Sets object size, pointer size based on architecture, CompressedOops
+  // and CompactObjectHeaders settings from the JVM.
+  private def initialize(): Unit = {
+    val arch = Utils.osArch
     is64bit = arch.contains("64") || arch.contains("s390x")
+    isCompactObjectHeaders = is64bit && getIsCompactObjectHeaders
     isCompressedOops = getIsCompressedOops
 
     objectSize = if (!is64bit) 8 else {
-      if (!isCompressedOops) {
+      if (isCompactObjectHeaders) {
+        8
+      } else if (!isCompressedOops) {
         16
       } else {
         12
@@ -123,40 +130,41 @@ object SizeEstimator extends Logging {
     classInfos.put(classOf[Object], new ClassInfo(objectSize, Nil))
   }
 
+  private def getIsCompactObjectHeaders: Boolean = {
+    // This is only used by tests to override the detection of Compact Object Headers.
+    if (System.getProperty(TEST_USE_COMPACT_OBJECT_HEADERS_KEY) != null) {
+      return System.getProperty(TEST_USE_COMPACT_OBJECT_HEADERS_KEY).toBoolean
+    }
+
+    // Compact Object Headers is introduced in JEP 450/519, JDK 24/25.
+    if (Runtime.version().feature() < 24) {
+      return false
+    }
+
+    Utils.getVMOptionValue("UseCompactObjectHeaders").contains("true")
+  }
+
   private def getIsCompressedOops: Boolean = {
     // This is only used by tests to override the detection of compressed oops. The test
     // actually uses a system property instead of a SparkConf, so we'll stick with that.
-    if (System.getProperty("spark.test.useCompressedOops") != null) {
-      return System.getProperty("spark.test.useCompressedOops").toBoolean
+    if (System.getProperty(TEST_USE_COMPRESSED_OOPS_KEY) != null) {
+      return System.getProperty(TEST_USE_COMPRESSED_OOPS_KEY).toBoolean
     }
 
-    // java.vm.info provides compressed ref info for IBM JDKs
-    if (System.getProperty("java.vendor").contains("IBM")) {
+    // java.vm.info provides compressed ref info for IBM and OpenJ9 JDKs
+    val javaVendor = System.getProperty("java.vendor")
+    if (javaVendor.contains("IBM") || javaVendor.contains("OpenJ9")) {
       return System.getProperty("java.vm.info").contains("Compressed Ref")
     }
 
-    try {
-      val hotSpotMBeanName = "com.sun.management:type=HotSpotDiagnostic"
-      val server = ManagementFactory.getPlatformMBeanServer()
-
-      // NOTE: This should throw an exception in non-Sun JVMs
-      // scalastyle:off classforname
-      val hotSpotMBeanClass = Class.forName("com.sun.management.HotSpotDiagnosticMXBean")
-      val getVMMethod = hotSpotMBeanClass.getDeclaredMethod("getVMOption",
-          Class.forName("java.lang.String"))
-      // scalastyle:on classforname
-
-      val bean = ManagementFactory.newPlatformMXBeanProxy(server,
-        hotSpotMBeanName, hotSpotMBeanClass)
-      // TODO: We could use reflection on the VMOption returned ?
-      getVMMethod.invoke(bean, "UseCompressedOops").toString.contains("true")
-    } catch {
-      case e: Exception =>
+    Utils.getVMOptionValue("UseCompressedOops") match {
+      case Some(value) => value == "true"
+      case None =>
         // Guess whether they've enabled UseCompressedOops based on whether maxMemory < 32 GB
         val guess = Runtime.getRuntime.maxMemory < (32L*1024*1024*1024)
-        val guessInWords = if (guess) "yes" else "not"
-        logWarning("Failed to check whether UseCompressedOops is set; assuming " + guessInWords)
-        return guess
+        logWarning(log"Failed to check whether UseCompressedOops is set; " +
+          log"assuming " + (if (guess) log"yes" else log"not"))
+        guess
     }
   }
 
@@ -169,7 +177,7 @@ object SizeEstimator extends Logging {
     val stack = new ArrayBuffer[AnyRef]
     var size = 0L
 
-    def enqueue(obj: AnyRef) {
+    def enqueue(obj: AnyRef): Unit = {
       if (obj != null && !visited.containsKey(obj)) {
         visited.put(obj, null)
         stack += obj
@@ -180,7 +188,7 @@ object SizeEstimator extends Logging {
 
     def dequeue(): AnyRef = {
       val elem = stack.last
-      stack.trimEnd(1)
+      stack.dropRightInPlace(1)
       elem
     }
   }
@@ -197,13 +205,13 @@ object SizeEstimator extends Logging {
   private def estimate(obj: AnyRef, visited: IdentityHashMap[AnyRef, AnyRef]): Long = {
     val state = new SearchState(visited)
     state.enqueue(obj)
-    while (!state.isFinished) {
+    while (!state.isFinished()) {
       visitSingleObject(state.dequeue(), state)
     }
     state.size
   }
 
-  private def visitSingleObject(obj: AnyRef, state: SearchState) {
+  private def visitSingleObject(obj: AnyRef, state: SearchState): Unit = {
     val cls = obj.getClass
     if (cls.isArray) {
       visitArray(obj, cls, state)
@@ -232,7 +240,7 @@ object SizeEstimator extends Logging {
   private val ARRAY_SIZE_FOR_SAMPLING = 400
   private val ARRAY_SAMPLE_SIZE = 100 // should be lower than ARRAY_SIZE_FOR_SAMPLING
 
-  private def visitArray(array: AnyRef, arrayClass: Class[_], state: SearchState) {
+  private def visitArray(array: AnyRef, arrayClass: Class[_], state: SearchState): Unit = {
     val length = ScalaRunTime.array_length(array)
     val elementClass = arrayClass.getComponentType()
 
@@ -262,7 +270,7 @@ object SizeEstimator extends Logging {
         val s2 = sampleArray(array, state, rand, drawn, length)
         val size = math.min(s1, s2)
         state.size += math.max(s1, s2) +
-          (size * ((length - ARRAY_SAMPLE_SIZE) / (ARRAY_SAMPLE_SIZE))).toLong
+          (size * ((length - ARRAY_SAMPLE_SIZE) / ARRAY_SAMPLE_SIZE))
       }
     }
   }
@@ -282,7 +290,7 @@ object SizeEstimator extends Logging {
       drawn.add(index)
       val obj = ScalaRunTime.array_apply(array, index).asInstanceOf[AnyRef]
       if (obj != null) {
-        size += SizeEstimator.estimate(obj, state.visited).toLong
+        size += SizeEstimator.estimate(obj, state.visited)
       }
     }
     size
@@ -324,7 +332,7 @@ object SizeEstimator extends Logging {
     val parent = getClassInfo(cls.getSuperclass)
     var shellSize = parent.shellSize
     var pointerFields = parent.pointerFields
-    val sizeCount = Array.fill(fieldSizes.max + 1)(0)
+    val sizeCount = Array.ofDim[Int](fieldSizes.max + 1)
 
     // iterate through the fields of this class and gather information.
     for (field <- cls.getDeclaredFields) {
@@ -333,9 +341,17 @@ object SizeEstimator extends Logging {
         if (fieldClass.isPrimitive) {
           sizeCount(primitiveSize(fieldClass)) += 1
         } else {
-          field.setAccessible(true) // Enable future get()'s on this field
+          try {
+            if (field.trySetAccessible()) { // Enable future get()'s on this field
+              pointerFields = field :: pointerFields
+            }
+          } catch {
+            // If the field isn't accessible, we can still record the pointer size
+            // but can't know more about the field, so ignore it
+            case _: SecurityException =>
+              // do nothing
+          }
           sizeCount(pointerSize) += 1
-          pointerFields = field :: pointerFields
         }
       }
     }

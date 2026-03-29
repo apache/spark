@@ -24,7 +24,7 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Dataset, Row}
-import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.functions.{col, struct, udf}
 
 class VectorAssemblerSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -260,5 +260,32 @@ class VectorAssemblerSuite
     val vectorAssembler = new VectorAssembler().setInputCols(Array()).setOutputCol("a")
     val output = vectorAssembler.transform(dfWithNullsAndNaNs)
     assert(output.select("a").limit(1).collect().head == Row(Vectors.sparse(0, Seq.empty)))
+  }
+
+  test("SPARK-31671: should give explicit error message when can not infer column lengths") {
+    val df = Seq(
+      (Vectors.dense(1.0), Vectors.dense(2.0))
+    ).toDF("n1", "n2")
+    val hintedDf = new VectorSizeHint().setInputCol("n1").setSize(1).transform(df)
+    val assembler = new VectorAssembler()
+      .setInputCols(Array("n1", "n2")).setOutputCol("features")
+    assert(!intercept[RuntimeException](assembler.setHandleInvalid("keep").transform(hintedDf))
+      .getMessage.contains("n1"), "should only show no vector size columns' name")
+  }
+
+  test("VectorAssembler nested input columns") {
+    val df = Seq(
+      (0, 0.0, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 10L)
+    ).toDF("id", "x", "y", "name", "z", "n").select(struct(
+      col("x"), col("y"), col("z"), col("n")
+    ).alias("data"))
+
+    val assembler = new VectorAssembler()
+      .setInputCols(Array("data.x", "data.y", "data.z", "data.n"))
+      .setOutputCol("features")
+    assembler.transform(df).select("features").collect().foreach {
+      case Row(v: Vector) =>
+        assert(v === Vectors.sparse(6, Array(1, 2, 4, 5), Array(1.0, 2.0, 3.0, 10.0)))
+    }
   }
 }

@@ -22,31 +22,48 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Properties
 import java.util.concurrent.TimeUnit._
 
+import scala.jdk.CollectionConverters._
+
 import com.codahale.metrics._
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.metrics.sink.StatsdSink._
 
 class StatsdSinkSuite extends SparkFunSuite {
-  private val securityMgr = new SecurityManager(new SparkConf(false))
   private val defaultProps = Map(
     STATSD_KEY_PREFIX -> "spark",
     STATSD_KEY_PERIOD -> "1",
     STATSD_KEY_UNIT -> "seconds",
     STATSD_KEY_HOST -> "127.0.0.1"
   )
-  private val socketTimeout = 30000 // milliseconds
-  private val socketBufferSize = 8192
+  // The maximum size of a single datagram packet payload. Payloads
+  // larger than this will be truncated.
+  private val maxPayloadSize = 256 // bytes
+
+  // The receive buffer must be large enough to hold all inflight
+  // packets. This includes any kernel and protocol overhead.
+  // This value was determined experimentally and should be
+  // increased if timeouts are seen.
+  private val socketMinRecvBufferSize = 16384 // bytes
+  private val socketTimeout = 30000           // milliseconds
 
   private def withSocketAndSink(testCode: (DatagramSocket, StatsdSink) => Any): Unit = {
     val socket = new DatagramSocket
-    socket.setReceiveBufferSize(socketBufferSize)
+
+    // Leave the receive buffer size untouched unless it is too
+    // small. If the receive buffer is too small packets will be
+    // silently dropped and receive operations will timeout.
+    if (socket.getReceiveBufferSize() < socketMinRecvBufferSize) {
+      socket.setReceiveBufferSize(socketMinRecvBufferSize)
+    }
+
     socket.setSoTimeout(socketTimeout)
     val props = new Properties
     defaultProps.foreach(e => props.put(e._1, e._2))
     props.put(STATSD_KEY_PORT, socket.getLocalPort.toString)
+    props.put(STATSD_KEY_REGEX, "counter|gauge|histogram|timer")
     val registry = new MetricRegistry
-    val sink = new StatsdSink(props, registry, securityMgr)
+    val sink = new StatsdSink(props, registry)
     try {
       testCode(socket, sink)
     } finally {
@@ -61,7 +78,7 @@ class StatsdSinkSuite extends SparkFunSuite {
       sink.registry.register("counter", counter)
       sink.report()
 
-      val p = new DatagramPacket(new Array[Byte](socketBufferSize), socketBufferSize)
+      val p = new DatagramPacket(new Array[Byte](maxPayloadSize), maxPayloadSize)
       socket.receive(p)
 
       val result = new String(p.getData, 0, p.getLength, UTF_8)
@@ -77,7 +94,7 @@ class StatsdSinkSuite extends SparkFunSuite {
       sink.registry.register("gauge", gauge)
       sink.report()
 
-      val p = new DatagramPacket(new Array[Byte](socketBufferSize), socketBufferSize)
+      val p = new DatagramPacket(new Array[Byte](maxPayloadSize), maxPayloadSize)
       socket.receive(p)
 
       val result = new String(p.getData, 0, p.getLength, UTF_8)
@@ -87,7 +104,7 @@ class StatsdSinkSuite extends SparkFunSuite {
 
   test("metrics StatsD sink with Histogram") {
     withSocketAndSink { (socket, sink) =>
-      val p = new DatagramPacket(new Array[Byte](socketBufferSize), socketBufferSize)
+      val p = new DatagramPacket(new Array[Byte](maxPayloadSize), maxPayloadSize)
       val histogram = new Histogram(new UniformReservoir)
       histogram.update(10)
       histogram.update(20)
@@ -121,7 +138,7 @@ class StatsdSinkSuite extends SparkFunSuite {
 
   test("metrics StatsD sink with Timer") {
     withSocketAndSink { (socket, sink) =>
-      val p = new DatagramPacket(new Array[Byte](socketBufferSize), socketBufferSize)
+      val p = new DatagramPacket(new Array[Byte](maxPayloadSize), maxPayloadSize)
       val timer = new Timer()
       timer.update(1, SECONDS)
       timer.update(2, SECONDS)
@@ -155,6 +172,33 @@ class StatsdSinkSuite extends SparkFunSuite {
         assert(expectedResults.contains(result) || result.matches(oneMoreResult),
           "Timer metric received should match data sent")
       }
+    }
+  }
+
+
+  test("metrics StatsD sink with filtered Gauge") {
+    withSocketAndSink { (socket, sink) =>
+      val gauge = new Gauge[Double] {
+        override def getValue: Double = 1.23
+      }
+
+      val filteredMetricKeys = Set(
+        "gauge",
+        "gauge-1"
+      )
+
+      filteredMetricKeys.foreach(sink.registry.register(_, gauge))
+
+      sink.registry.register("excluded-metric", gauge)
+      sink.report()
+
+      val p = new DatagramPacket(new Array[Byte](maxPayloadSize), maxPayloadSize)
+      socket.receive(p)
+
+      val metricKeys = sink.registry.getGauges(sink.filter).keySet.asScala
+
+      assert(metricKeys.equals(filteredMetricKeys),
+        "Should contain only metrics matches regex filter")
     }
   }
 }

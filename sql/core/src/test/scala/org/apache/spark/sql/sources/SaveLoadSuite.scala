@@ -18,16 +18,18 @@
 package org.apache.spark.sql.sources
 
 import java.io.File
+import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Paths}
 
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
+class SaveLoadSuite extends DataSourceTest with SharedSparkSession with BeforeAndAfter {
   import testImplicits._
 
   protected override lazy val sql = spark.sql _
@@ -101,30 +103,32 @@ class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndA
   }
 
   test("save and save again") {
-    df.write.json(path.toString)
-
-    val message = intercept[AnalysisException] {
+    withTempView("jsonTable2") {
       df.write.json(path.toString)
-    }.getMessage
 
-    assert(
-      message.contains("already exists"),
-      "We should complain that the path already exists.")
+      val message = intercept[AnalysisException] {
+        df.write.json(path.toString)
+      }.getMessage
 
-    if (path.exists()) Utils.deleteRecursively(path)
+      assert(
+        message.contains("already exists"),
+        "We should complain that the path already exists.")
 
-    df.write.json(path.toString)
-    checkLoad()
+      if (path.exists()) Utils.deleteRecursively(path)
 
-    df.write.mode(SaveMode.Overwrite).json(path.toString)
-    checkLoad()
+      df.write.json(path.toString)
+      checkLoad()
 
-    // verify the append mode
-    df.write.mode(SaveMode.Append).json(path.toString)
-    val df2 = df.union(df)
-    df2.createOrReplaceTempView("jsonTable2")
+      df.write.mode(SaveMode.Overwrite).json(path.toString)
+      checkLoad()
 
-    checkLoad(df2, "jsonTable2")
+      // verify the append mode
+      df.write.mode(SaveMode.Append).json(path.toString)
+      val df2 = df.union(df)
+      df2.createOrReplaceTempView("jsonTable2")
+
+      checkLoad(df2, "jsonTable2")
+    }
   }
 
   test("SPARK-23459: Improve error message when specified unknown column in partition columns") {
@@ -140,6 +144,19 @@ class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndA
           .save(path)
       }.getMessage
       assert(e.contains(s"Partition column `$unknown` not found in schema $schemaCatalog"))
+    }
+  }
+
+  test("skip empty files in non bucketed read") {
+    Seq("csv", "text").foreach { format =>
+      withTempDir { dir =>
+        val path = dir.getCanonicalPath
+        Files.write(Paths.get(path, "empty"), Array.empty[Byte])
+        Files.write(Paths.get(path, "notEmpty"), "a".getBytes(StandardCharsets.UTF_8))
+        val readBack = spark.read.option("wholetext", true).format(format).load(path)
+
+        assert(readBack.rdd.getNumPartitions === 1)
+      }
     }
   }
 }

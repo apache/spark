@@ -1,0 +1,28 @@
+WholeStageCodegen (5)
+  Sort [custdist,c_count]
+    InputAdapter
+      Exchange [custdist,c_count] #1
+        WholeStageCodegen (4)
+          HashAggregate [c_count,count] [count(1),custdist,count]
+            InputAdapter
+              Exchange [c_count] #2
+                WholeStageCodegen (3)
+                  HashAggregate [c_count] [count,count]
+                    HashAggregate [c_custkey,count] [count(o_orderkeyL),c_count,count]
+                      InputAdapter
+                        Exchange [c_custkey] #3
+                          WholeStageCodegen (2)
+                            HashAggregate [c_custkey,o_orderkey] [count,count]
+                              Project [c_custkey,o_orderkey]
+                                BroadcastHashJoin [c_custkey,o_custkey]
+                                  ColumnarToRow
+                                    InputAdapter
+                                      Scan parquet spark_catalog.default.customer [c_custkey]
+                                  InputAdapter
+                                    BroadcastExchange #4
+                                      WholeStageCodegen (1)
+                                        Project [o_orderkey,o_custkey]
+                                          Filter [o_comment,o_custkey]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet spark_catalog.default.orders [o_orderkey,o_custkey,o_comment]

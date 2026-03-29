@@ -23,20 +23,20 @@ import org.apache.hadoop.fs.Path
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.HasPredictionCol
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
-import org.apache.spark.mllib.fpm.{AssociationRules => MLlibAssociationRules,
-  FPGrowth => MLlibFPGrowth}
+import org.apache.spark.mllib.fpm.{AssociationRules => MLlibAssociationRules, FPGrowth => MLlibFPGrowth}
 import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
 import org.apache.spark.sql._
+import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.VersionUtils
+import org.apache.spark.util.{SizeEstimator, VersionUtils}
 
 /**
  * Common params for FPGrowth and FPGrowthModel
@@ -50,7 +50,6 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
    */
   @Since("2.2.0")
   val itemsCol: Param[String] = new Param[String](this, "itemsCol", "items column name")
-  setDefault(itemsCol -> "items")
 
   /** @group getParam */
   @Since("2.2.0")
@@ -66,7 +65,6 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
   val minSupport: DoubleParam = new DoubleParam(this, "minSupport",
     "the minimal support level of a frequent pattern",
     ParamValidators.inRange(0.0, 1.0))
-  setDefault(minSupport -> 0.3)
 
   /** @group getParam */
   @Since("2.2.0")
@@ -95,11 +93,12 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
   val minConfidence: DoubleParam = new DoubleParam(this, "minConfidence",
     "minimal confidence for generating Association Rule",
     ParamValidators.inRange(0.0, 1.0))
-  setDefault(minConfidence -> 0.8)
 
   /** @group getParam */
   @Since("2.2.0")
   def getMinConfidence: Double = $(minConfidence)
+
+  setDefault(minSupport -> 0.3, itemsCol -> "items", minConfidence -> 0.8)
 
   /**
    * Validates and transforms the input schema.
@@ -116,19 +115,17 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
 }
 
 /**
- * :: Experimental ::
  * A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
- * <a href="http://dx.doi.org/10.1145/1454008.1454027">Li et al., PFP: Parallel FP-Growth for Query
+ * <a href="https://doi.org/10.1145/1454008.1454027">Li et al., PFP: Parallel FP-Growth for Query
  * Recommendation</a>. PFP distributes computation in such a way that each worker executes an
  * independent group of mining tasks. The FP-Growth algorithm is described in
- * <a href="http://dx.doi.org/10.1145/335191.335372">Han et al., Mining frequent patterns without
+ * <a href="https://doi.org/10.1145/335191.335372">Han et al., Mining frequent patterns without
  * candidate generation</a>. Note null values in the itemsCol column are ignored during fit().
  *
  * @see <a href="http://en.wikipedia.org/wiki/Association_rule_learning">
  * Association rule learning (Wikipedia)</a>
  */
 @Since("2.2.0")
-@Experimental
 class FPGrowth @Since("2.2.0") (
     @Since("2.2.0") override val uid: String)
   extends Estimator[FPGrowthModel] with FPGrowthParams with DefaultParamsWritable {
@@ -167,7 +164,8 @@ class FPGrowth @Since("2.2.0") (
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    instr.logParams(this, params: _*)
+    import org.apache.spark.util.ArrayImplicits._
+    instr.logParams(this, params.toImmutableArraySeq: _*)
     val data = dataset.select($(itemsCol))
     val items = data.where(col($(itemsCol)).isNotNull).rdd.map(r => r.getSeq[Any](0).toArray)
     val mllibFP = new MLlibFPGrowth().setMinSupport($(minSupport))
@@ -182,7 +180,7 @@ class FPGrowth @Since("2.2.0") (
     instr.logNumExamples(inputRowCount)
     val parentModel = mllibFP.run(items)
     val rows = parentModel.freqItemsets.map(f => Row(f.items, f.freq))
-    val schema = StructType(Seq(
+    val schema = StructType(Array(
       StructField("items", dataset.schema($(itemsCol)).dataType, nullable = false),
       StructField("freq", LongType, nullable = false)))
     val frequentItems = dataset.sparkSession.createDataFrame(rows, schema)
@@ -213,19 +211,20 @@ object FPGrowth extends DefaultParamsReadable[FPGrowth] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by FPGrowth.
  *
  * @param freqItemsets frequent itemsets in the format of DataFrame("items"[Array], "freq"[Long])
  */
 @Since("2.2.0")
-@Experimental
 class FPGrowthModel private[ml] (
     @Since("2.2.0") override val uid: String,
     @Since("2.2.0") @transient val freqItemsets: DataFrame,
     private val itemSupport: scala.collection.Map[Any, Double],
     private val numTrainingRecords: Long)
   extends Model[FPGrowthModel] with FPGrowthParams with MLWritable {
+
+  // For ml connect only
+  private[ml] def this() = this("", null, Map.empty, -1L)
 
   /** @group setParam */
   @Since("2.2.0")
@@ -248,9 +247,9 @@ class FPGrowthModel private[ml] (
   @transient private var _cachedRules: DataFrame = _
 
   /**
-   * Get association rules fitted using the minConfidence. Returns a dataframe with four fields,
-   * "antecedent", "consequent", "confidence" and "lift", where "antecedent" and "consequent" are
-   * Array[T], whereas "confidence" and "lift" are Double.
+   * Get association rules fitted using the minConfidence. Returns a dataframe with five fields,
+   * "antecedent", "consequent", "confidence", "lift" and "support", where "antecedent" and
+   *  "consequent" are Array[T], whereas "confidence", "lift" and "support" are Double.
    */
   @Since("2.2.0")
   @transient def associationRules: DataFrame = {
@@ -258,7 +257,8 @@ class FPGrowthModel private[ml] (
       _cachedRules
     } else {
       _cachedRules = AssociationRules
-        .getAssociationRulesFromFP(freqItemsets, "items", "freq", $(minConfidence), itemSupport)
+        .getAssociationRulesFromFP(freqItemsets, "items", "freq", $(minConfidence), itemSupport,
+          numTrainingRecords)
       _cachedMinConf = $(minConfidence)
       _cachedRules
     }
@@ -290,14 +290,17 @@ class FPGrowthModel private[ml] (
 
     val dt = dataset.schema($(itemsCol)).dataType
     // For each rule, examine the input items and summarize the consequents
-    val predictUDF = udf((items: Seq[_]) => {
+    val predictUDF = SparkUserDefinedFunction((items: Seq[Any]) => {
       if (items != null) {
         val itemset = items.toSet
         brRules.value.filter(_._1.forall(itemset.contains))
           .flatMap(_._2.filter(!itemset.contains(_))).distinct
       } else {
         Seq.empty
-      }}, dt)
+      }},
+      dt,
+      Nil
+    )
     dataset.withColumn($(predictionCol), predictUDF(col($(itemsCol))))
   }
 
@@ -314,6 +317,21 @@ class FPGrowthModel private[ml] (
 
   @Since("2.2.0")
   override def write: MLWriter = new FPGrowthModel.FPGrowthModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"FPGrowthModel: uid=$uid, numTrainingRecords=$numTrainingRecords"
+  }
+
+  private[spark] override def estimatedSize: Long = {
+    freqItemsets match {
+      case df: org.apache.spark.sql.classic.DataFrame =>
+        df.toArrowBatchRdd.map(_.length.toLong).reduce(_ + _) +
+          SizeEstimator.estimate(itemSupport)
+      case o => throw new UnsupportedOperationException(
+        s"Unsupported dataframe type: ${o.getClass.getName}")
+    }
+  }
 }
 
 @Since("2.2.0")
@@ -331,9 +349,10 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
 
     override protected def saveImpl(path: String): Unit = {
       val extraMetadata: JObject = Map("numTrainingRecords" -> instance.numTrainingRecords)
-      DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata = Some(extraMetadata))
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession,
+        extraMetadata = Some(extraMetadata))
       val dataPath = new Path(path, "data").toString
-      instance.freqItemsets.write.parquet(dataPath)
+      ReadWriteUtils.saveDataFrame(dataPath, instance.freqItemsets)
     }
   }
 
@@ -344,9 +363,9 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
 
     override def load(path: String): FPGrowthModel = {
       implicit val format = DefaultFormats
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
-      val numTrainingRecords = if (major.toInt < 2 || (major.toInt == 2 && minor.toInt < 4)) {
+      val numTrainingRecords = if (major < 2 || (major == 2 && minor < 4)) {
         // 2.3 and before don't store the count
         0L
       } else {
@@ -354,12 +373,12 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
         (metadata.metadata \ "numTrainingRecords").extract[Long]
       }
       val dataPath = new Path(path, "data").toString
-      val frequentItems = sparkSession.read.parquet(dataPath)
+      val frequentItems = ReadWriteUtils.loadDataFrame(dataPath, sparkSession)
       val itemSupport = if (numTrainingRecords == 0L) {
         Map.empty[Any, Double]
       } else {
         frequentItems.rdd.flatMap {
-            case Row(items: Seq[_], count: Long) if items.length == 1 =>
+            case Row(items: scala.collection.Seq[_], count: Long) if items.length == 1 =>
               Some(items.head -> count.toDouble / numTrainingRecords)
             case _ => None
           }.collectAsMap()
@@ -381,6 +400,7 @@ private[fpm] object AssociationRules {
    * @param freqCol column name for appearance count of the frequent itemsets
    * @param minConfidence minimum confidence for generating the association rules
    * @param itemSupport map containing an item and its support
+   * @param numTrainingRecords count of training Dataset
    * @return a DataFrame("antecedent"[Array], "consequent"[Array], "confidence"[Double],
    *         "lift" [Double]) containing the association rules.
    */
@@ -389,21 +409,23 @@ private[fpm] object AssociationRules {
         itemsCol: String,
         freqCol: String,
         minConfidence: Double,
-        itemSupport: scala.collection.Map[T, Double]): DataFrame = {
-
+        itemSupport: scala.collection.Map[T, Double],
+        numTrainingRecords: Long): DataFrame = {
     val freqItemSetRdd = dataset.select(itemsCol, freqCol).rdd
       .map(row => new FreqItemset(row.getSeq[T](0).toArray, row.getLong(1)))
     val rows = new MLlibAssociationRules()
       .setMinConfidence(minConfidence)
       .run(freqItemSetRdd, itemSupport)
-      .map(r => Row(r.antecedent, r.consequent, r.confidence, r.lift.orNull))
+      .map(r => Row(r.antecedent, r.consequent, r.confidence, r.lift.orNull,
+        r.freqUnion / numTrainingRecords))
 
     val dt = dataset.schema(itemsCol).dataType
-    val schema = StructType(Seq(
+    val schema = StructType(Array(
       StructField("antecedent", dt, nullable = false),
       StructField("consequent", dt, nullable = false),
       StructField("confidence", DoubleType, nullable = false),
-      StructField("lift", DoubleType)))
+      StructField("lift", DoubleType),
+      StructField("support", DoubleType, nullable = false)))
     val rules = dataset.sparkSession.createDataFrame(rows, schema)
     rules
   }

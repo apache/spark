@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
+import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils._
+import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 
 class JdbcRelationProvider extends CreatableRelationProvider
@@ -30,11 +33,20 @@ class JdbcRelationProvider extends CreatableRelationProvider
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
     val jdbcOptions = new JDBCOptions(parameters)
-    val resolver = sqlContext.conf.resolver
-    val timeZoneId = sqlContext.conf.sessionLocalTimeZone
-    val schema = JDBCRelation.getSchema(resolver, jdbcOptions)
+    val sparkSession = sqlContext.sparkSession
+    val resolver = sparkSession.sessionState.conf.resolver
+    val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
+    val remoteSchemaFetchMetric = JdbcUtils.createSchemaFetchMetric(sparkSession.sparkContext)
+    val schema = SQLMetrics.withTimingNs(remoteSchemaFetchMetric) {
+      JDBCRelation.getSchema(resolver, jdbcOptions)
+    }
     val parts = JDBCRelation.columnPartition(schema, resolver, timeZoneId, jdbcOptions)
-    JDBCRelation(schema, parts, jdbcOptions)(sqlContext.sparkSession)
+    JDBCRelation(
+      schema,
+      parts,
+      jdbcOptions,
+      Map(JDBCRelation.schemaFetchKey -> remoteSchemaFetchMetric)
+    )(sparkSession)
   }
 
   override def createRelation(
@@ -43,9 +55,9 @@ class JdbcRelationProvider extends CreatableRelationProvider
       parameters: Map[String, String],
       df: DataFrame): BaseRelation = {
     val options = new JdbcOptionsInWrite(parameters)
-    val isCaseSensitive = sqlContext.conf.caseSensitiveAnalysis
-
-    val conn = JdbcUtils.createConnectionFactory(options)()
+    val isCaseSensitive = sqlContext.sparkSession.sessionState.conf.caseSensitiveAnalysis
+    val dialect = JdbcDialects.get(options.url)
+    val conn = dialect.createConnectionFactory(options)(-1)
     try {
       val tableExists = JdbcUtils.tableExists(conn, options)
       if (tableExists) {
@@ -59,7 +71,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
             } else {
               // Otherwise, do not truncate the table, instead drop and recreate it
               dropTable(conn, options.table, options)
-              createTable(conn, df, options)
+              createTable(conn, options.table, df.schema, isCaseSensitive, options)
               saveTable(df, Some(df.schema), isCaseSensitive, options)
             }
 
@@ -68,9 +80,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
             saveTable(df, tableSchema, isCaseSensitive, options)
 
           case SaveMode.ErrorIfExists =>
-            throw new AnalysisException(
-              s"Table or view '${options.table}' already exists. " +
-                s"SaveMode: ErrorIfExists.")
+            throw QueryCompilationErrors.tableOrViewAlreadyExistsError(options.table)
 
           case SaveMode.Ignore =>
             // With `SaveMode.Ignore` mode, if table already exists, the save operation is expected
@@ -78,7 +88,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
             // Therefore, it is okay to do nothing here and then just return the relation below.
         }
       } else {
-        createTable(conn, df, options)
+        createTable(conn, options.table, df.schema, isCaseSensitive, options)
         saveTable(df, Some(df.schema), isCaseSensitive, options)
       }
     } finally {

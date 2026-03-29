@@ -18,18 +18,23 @@
 package org.apache.spark.deploy.master
 
 import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
+import org.apache.spark.resource.ResourceInformation
 
 private[master] class ExecutorDesc(
     val id: Int,
     val application: ApplicationInfo,
     val worker: WorkerInfo,
     val cores: Int,
-    val memory: Int) {
+    val memory: Int,
+    // resources(e.f. gpu/fpga) allocated to this executor
+    // map from resource name to ResourceInformation
+    val resources: Map[String, ResourceInformation],
+    val rpId: Int) {
 
   var state = ExecutorState.LAUNCHING
 
   /** Copy all state (non-val) variables from the given on-the-wire ExecutorDescription. */
-  def copyState(execDesc: ExecutorDescription) {
+  def copyState(execDesc: ExecutorDescription): Unit = {
     state = execDesc.state
   }
 

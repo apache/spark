@@ -33,7 +33,8 @@ private[r] object RWrappers extends MLReader[Object] {
   override def load(path: String): Object = {
     implicit val format = DefaultFormats
     val rMetadataPath = new Path(path, "rMetadata").toString
-    val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
+    val rMetadataStr = sparkSession.read.text(rMetadataPath)
+      .first().getString(0)
     val rMetadata = parse(rMetadataStr)
     val className = (rMetadata \ "class").extract[String]
     className match {
@@ -74,6 +75,12 @@ private[r] object RWrappers extends MLReader[Object] {
         LinearSVCWrapper.load(path)
       case "org.apache.spark.ml.r.FPGrowthWrapper" =>
         FPGrowthWrapper.load(path)
+      case "org.apache.spark.ml.r.FMClassifierWrapper" =>
+        FMClassifierWrapper.load(path)
+     case "org.apache.spark.ml.r.LinearRegressionWrapper" =>
+        LinearRegressionWrapper.load(path)
+      case "org.apache.spark.ml.r.FMRegressorWrapper" =>
+        FMRegressorWrapper.load(path)
       case _ =>
         throw new SparkException(s"SparkR read.ml does not support load $className")
     }

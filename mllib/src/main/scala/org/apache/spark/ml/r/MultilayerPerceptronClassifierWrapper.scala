@@ -40,7 +40,7 @@ private[r] class MultilayerPerceptronClassifierWrapper private (
     pipeline.stages(1).asInstanceOf[MultilayerPerceptronClassificationModel]
 
   lazy val weights: Array[Double] = mlpModel.weights.toArray
-  lazy val layers: Array[Int] = mlpModel.layers
+  lazy val layers: Array[Int] = mlpModel.getLayers
 
   def transform(dataset: Dataset[_]): DataFrame = {
     pipeline.transform(dataset)
@@ -142,7 +142,9 @@ private[r] object MultilayerPerceptronClassifierWrapper
 
       val rMetadata = "class" -> instance.getClass.getName
       val rMetadataJson: String = compact(render(rMetadata))
-      sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
+      // Note that we should write single file. If there are more than one row
+      // it produces more partitions.
+      sparkSession.createDataFrame(Seq(Tuple1(rMetadataJson))).write.text(rMetadataPath)
 
       instance.pipeline.save(pipelinePath)
     }

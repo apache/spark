@@ -28,7 +28,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 /**
  * An exception thrown if RpcTimeout modifies a `TimeoutException`.
  */
-private[rpc] class RpcTimeoutException(message: String, cause: TimeoutException)
+private[spark] class RpcTimeoutException(message: String, cause: TimeoutException)
   extends TimeoutException(message) { initCause(cause) }
 
 
@@ -52,7 +52,7 @@ private[spark] class RpcTimeout(val duration: FiniteDuration, val timeoutProp: S
    *
    * @note This can be used in the recover callback of a Future to add to a TimeoutException
    * Example:
-   *    val timeout = new RpcTimeout(5 millis, "short timeout")
+   *    val timeout = new RpcTimeout(5.milliseconds, "short timeout")
    *    Future(throw new TimeoutException).recover(timeout.addMessageIfTimeout)
    */
   def addMessageIfTimeout[T]: PartialFunction[Throwable, T] = {

@@ -225,7 +225,7 @@ class LauncherServer implements Closeable {
     try {
       while (running) {
         final Socket client = server.accept();
-        TimerTask timeout = new TimerTask() {
+        TimerTask timerTask = new TimerTask() {
           @Override
           public void run() {
             LOG.warning("Timed out waiting for hello message from client.");
@@ -236,7 +236,7 @@ class LauncherServer implements Closeable {
             }
           }
         };
-        ServerConnection clientConnection = new ServerConnection(client, timeout);
+        ServerConnection clientConnection = new ServerConnection(client, timerTask);
         Thread clientThread = factory.newThread(clientConnection);
         clientConnection.setConnectionThread(clientThread);
         synchronized (clients) {
@@ -247,9 +247,9 @@ class LauncherServer implements Closeable {
         // 0 is used for testing to avoid issues with clock resolution / thread scheduling,
         // and force an immediate timeout.
         if (timeoutMs > 0) {
-          timeoutTimer.schedule(timeout, timeoutMs);
+          timeoutTimer.schedule(timerTask, timeoutMs);
         } else {
-          timeout.run();
+          timerTask.run();
         }
 
         clientThread.start();
@@ -263,7 +263,19 @@ class LauncherServer implements Closeable {
 
   private long getConnectionTimeout() {
     String value = SparkLauncher.launcherConfig.get(SparkLauncher.CHILD_CONNECTION_TIMEOUT);
-    return (value != null) ? Long.parseLong(value) : DEFAULT_CONNECT_TIMEOUT;
+    if (value != null) {
+        return Long.parseLong(value);
+    }
+
+    value = SparkLauncher.launcherConfig.get(SparkLauncher.DEPRECATED_CHILD_CONNECTION_TIMEOUT);
+    if (value != null) {
+        LOG.log(Level.WARNING,
+                "Property '" + SparkLauncher.DEPRECATED_CHILD_CONNECTION_TIMEOUT +
+                "' is deprecated, please switch to '" + SparkLauncher.CHILD_CONNECTION_TIMEOUT +
+                "'.");
+        return Long.parseLong(value);
+    }
+    return DEFAULT_CONNECT_TIMEOUT;
   }
 
   private String createSecret() {
@@ -305,10 +317,9 @@ class LauncherServer implements Closeable {
     @Override
     protected void handle(Message msg) throws IOException {
       try {
-        if (msg instanceof Hello) {
+        if (msg instanceof Hello hello) {
           timeout.cancel();
           timeout = null;
-          Hello hello = (Hello) msg;
           AbstractAppHandle handle = secretToPendingApps.remove(hello.secret);
           if (handle != null) {
             handle.setConnection(this);
@@ -318,18 +329,16 @@ class LauncherServer implements Closeable {
             throw new IllegalArgumentException("Received Hello for unknown client.");
           }
         } else {
+          String msgClassName = msg != null ? msg.getClass().getName() : "no message";
           if (handle == null) {
-            throw new IllegalArgumentException("Expected hello, got: " +
-              msg != null ? msg.getClass().getName() : null);
+            throw new IllegalArgumentException("Expected hello, got: " + msgClassName);
           }
-          if (msg instanceof SetAppId) {
-            SetAppId set = (SetAppId) msg;
+          if (msg instanceof SetAppId set) {
             handle.setAppId(set.appId);
-          } else if (msg instanceof SetState) {
-            handle.setState(((SetState)msg).state);
+          } else if (msg instanceof SetState setState) {
+            handle.setState(setState.state);
           } else {
-            throw new IllegalArgumentException("Invalid message: " +
-              msg != null ? msg.getClass().getName() : null);
+            throw new IllegalArgumentException("Invalid message: " + msgClassName);
           }
         }
       } catch (Exception e) {
@@ -365,7 +374,7 @@ class LauncherServer implements Closeable {
      *
      * This method allows a short period for the above to happen (same amount of time as the
      * connection timeout, which is configurable). This should be fine for well-behaved
-     * applications, where they close the connection arond the same time the app handle detects the
+     * applications, where they close the connection around the same time the app handle detects the
      * app has finished.
      *
      * In case the connection is not closed within the grace period, this method forcefully closes

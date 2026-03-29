@@ -16,9 +16,11 @@
  */
 package org.apache.spark.ml.linalg
 
-import org.json4s.DefaultFormats
+import org.json4s.{DefaultFormats, Formats}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
+
+import org.apache.spark.util.ArrayImplicits._
 
 private[ml] object JsonMatrixConverter {
 
@@ -29,7 +31,7 @@ private[ml] object JsonMatrixConverter {
    * Parses the JSON representation of a Matrix into a [[Matrix]].
    */
   def fromJson(json: String): Matrix = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     val jValue = parseJson(json)
     (jValue \ "type").extract[Int] match {
       case 0 => // sparse
@@ -61,9 +63,9 @@ private[ml] object JsonMatrixConverter {
           ("type" -> 0) ~
           ("numRows" -> numRows) ~
           ("numCols" -> numCols) ~
-          ("colPtrs" -> colPtrs.toSeq) ~
-          ("rowIndices" -> rowIndices.toSeq) ~
-          ("values" -> values.toSeq) ~
+          ("colPtrs" -> colPtrs.toImmutableArraySeq) ~
+          ("rowIndices" -> rowIndices.toImmutableArraySeq) ~
+          ("values" -> values.toImmutableArraySeq) ~
           ("isTransposed" -> isTransposed)
         compact(render(jValue))
       case DenseMatrix(numRows, numCols, values, isTransposed) =>
@@ -71,9 +73,11 @@ private[ml] object JsonMatrixConverter {
           ("type" -> 1) ~
           ("numRows" -> numRows) ~
           ("numCols" -> numCols) ~
-          ("values" -> values.toSeq) ~
+          ("values" -> values.toImmutableArraySeq) ~
           ("isTransposed" -> isTransposed)
         compact(render(jValue))
+      case _ =>
+        throw new IllegalArgumentException(s"Unknown matrix type ${m.getClass}.")
     }
   }
 }

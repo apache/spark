@@ -16,214 +16,76 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import io.fabric8.kubernetes.api.model.{Config => _, _}
 import io.fabric8.kubernetes.client.KubernetesClient
-import org.mockito.Mockito.{mock, never, verify}
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.k8s._
-import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.features._
-import org.apache.spark.deploy.k8s.submit.PodBuilderSuiteUtils
+import org.apache.spark.deploy.k8s.features.KubernetesExecutorCustomFeatureConfigStep
+import org.apache.spark.internal.config.ConfigEntry
+import org.apache.spark.resource.ResourceProfile
 
-class KubernetesExecutorBuilderSuite extends SparkFunSuite {
-  private val BASIC_STEP_TYPE = "basic"
-  private val SECRETS_STEP_TYPE = "mount-secrets"
-  private val ENV_SECRETS_STEP_TYPE = "env-secrets"
-  private val LOCAL_DIRS_STEP_TYPE = "local-dirs"
-  private val HADOOP_CONF_STEP_TYPE = "hadoop-conf-step"
-  private val HADOOP_SPARK_USER_STEP_TYPE = "hadoop-spark-user"
-  private val KERBEROS_CONF_STEP_TYPE = "kerberos-step"
-  private val MOUNT_VOLUMES_STEP_TYPE = "mount-volumes"
+class KubernetesExecutorBuilderSuite extends PodBuilderSuite {
+  val POD_ROLE: String = "executor"
+  val TEST_ANNOTATION_KEY: String = "executor-annotation-key"
+  val TEST_ANNOTATION_VALUE: String = "executor-annotation-value"
 
-  private val basicFeatureStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    BASIC_STEP_TYPE, classOf[BasicExecutorFeatureStep])
-  private val mountSecretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    SECRETS_STEP_TYPE, classOf[MountSecretsFeatureStep])
-  private val envSecretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    ENV_SECRETS_STEP_TYPE, classOf[EnvSecretsFeatureStep])
-  private val localDirsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    LOCAL_DIRS_STEP_TYPE, classOf[LocalDirsFeatureStep])
-  private val hadoopConfStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    HADOOP_CONF_STEP_TYPE, classOf[HadoopConfExecutorFeatureStep])
-  private val hadoopSparkUser = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    HADOOP_SPARK_USER_STEP_TYPE, classOf[HadoopSparkUserExecutorFeatureStep])
-  private val kerberosConf = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    KERBEROS_CONF_STEP_TYPE, classOf[KerberosConfExecutorFeatureStep])
-  private val mountVolumesStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    MOUNT_VOLUMES_STEP_TYPE, classOf[MountVolumesFeatureStep])
-
-  private val builderUnderTest = new KubernetesExecutorBuilder(
-    _ => basicFeatureStep,
-    _ => mountSecretsStep,
-    _ => envSecretsStep,
-    _ => localDirsStep,
-    _ => mountVolumesStep,
-    _ => hadoopConfStep,
-    _ => kerberosConf,
-    _ => hadoopSparkUser)
-
-  test("Basic steps are consistently applied.") {
-    val conf = KubernetesConf(
-      new SparkConf(false),
-      KubernetesExecutorSpecificConf(
-        "executor-id", Some(new PodBuilder().build())),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      None)
-    validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf), BASIC_STEP_TYPE, LOCAL_DIRS_STEP_TYPE)
+  override protected def afterEach(): Unit = {
+    ResourceProfile.clearDefaultProfile()
+    super.afterEach()
   }
 
-  test("Apply secrets step if secrets are present.") {
-    val conf = KubernetesConf(
-      new SparkConf(false),
-      KubernetesExecutorSpecificConf(
-        "executor-id", Some(new PodBuilder().build())),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map("secret" -> "secretMountPath"),
-      Map("secret-name" -> "secret-key"),
-      Map.empty,
-      Nil,
-      None)
-    validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf),
-      BASIC_STEP_TYPE,
-      LOCAL_DIRS_STEP_TYPE,
-      SECRETS_STEP_TYPE,
-      ENV_SECRETS_STEP_TYPE)
+  override protected def templateFileConf: ConfigEntry[_] = {
+    Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE
   }
 
-  test("Apply volumes step if mounts are present.") {
-    val volumeSpec = KubernetesVolumeSpec(
-      "volume",
-      "/tmp",
-      false,
-      KubernetesHostPathVolumeConf("/checkpoint"))
-    val conf = KubernetesConf(
-      new SparkConf(false),
-      KubernetesExecutorSpecificConf(
-        "executor-id", Some(new PodBuilder().build())),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      volumeSpec :: Nil,
-      None)
-    validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf),
-      BASIC_STEP_TYPE,
-      LOCAL_DIRS_STEP_TYPE,
-      MOUNT_VOLUMES_STEP_TYPE)
+  override protected def roleSpecificSchedulerNameConf: ConfigEntry[_] = {
+    Config.KUBERNETES_EXECUTOR_SCHEDULER_NAME
   }
 
-  test("Apply basicHadoop step if HADOOP_CONF_DIR is defined") {
-    // HADOOP_DELEGATION_TOKEN
-    val HADOOP_CREDS_PREFIX = "spark.security.credentials."
-    val HADOOPFS_PROVIDER = s"$HADOOP_CREDS_PREFIX.hadoopfs.enabled"
-    val conf = KubernetesConf(
-      new SparkConf(false)
-        .set(HADOOP_CONFIG_MAP_NAME, "hadoop-conf-map-name")
-        .set(KRB5_CONFIG_MAP_NAME, "krb5-conf-map-name")
-        .set(KERBEROS_SPARK_USER_NAME, "spark-user")
-        .set(HADOOPFS_PROVIDER, "true"),
-      KubernetesExecutorSpecificConf(
-        "executor-id", Some(new PodBuilder().build())),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      Some(HadoopConfSpec(Some("/var/hadoop-conf"), None)))
-    validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf),
-      BASIC_STEP_TYPE,
-      LOCAL_DIRS_STEP_TYPE,
-      HADOOP_CONF_STEP_TYPE,
-      HADOOP_SPARK_USER_STEP_TYPE)
+  override protected def excludedFeatureStepsConf: ConfigEntry[_] = {
+    Config.KUBERNETES_EXECUTOR_POD_EXCLUDED_FEATURE_STEPS
   }
 
-  test("Apply kerberos step if DT secrets created") {
-    val conf = KubernetesConf(
-      new SparkConf(false)
-        .set(HADOOP_CONFIG_MAP_NAME, "hadoop-conf-map-name")
-        .set(KRB5_CONFIG_MAP_NAME, "krb5-conf-map-name")
-        .set(KERBEROS_SPARK_USER_NAME, "spark-user")
-        .set(KERBEROS_DT_SECRET_NAME, "dt-secret")
-        .set(KERBEROS_DT_SECRET_KEY, "dt-key"),
-      KubernetesExecutorSpecificConf(
-        "executor-id", Some(new PodBuilder().build())),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      Some(HadoopConfSpec(None, Some("pre-defined-onfigMapName"))))
-    validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf),
-      BASIC_STEP_TYPE,
-      LOCAL_DIRS_STEP_TYPE,
-      HADOOP_CONF_STEP_TYPE,
-      KERBEROS_CONF_STEP_TYPE)
+  override protected def userFeatureStepsConf: ConfigEntry[_] = {
+    Config.KUBERNETES_EXECUTOR_POD_FEATURE_STEPS
   }
 
-  private def validateStepTypesApplied(resolvedPod: SparkPod, stepTypes: String*): Unit = {
-    assert(resolvedPod.pod.getMetadata.getLabels.size === stepTypes.size)
-    stepTypes.foreach { stepType =>
-      assert(resolvedPod.pod.getMetadata.getLabels.get(stepType) === stepType)
-    }
+  override protected def userFeatureStepWithExpectedAnnotation: (String, String) = {
+    ("org.apache.spark.scheduler.cluster.k8s.TestStepWithExecConf", TEST_ANNOTATION_VALUE)
   }
 
-  test("Starts with empty executor pod if template is not specified") {
-    val kubernetesClient = mock(classOf[KubernetesClient])
-    val executorBuilder = KubernetesExecutorBuilder.apply(kubernetesClient, new SparkConf())
-    verify(kubernetesClient, never()).pods()
+  override protected def wrongTypeFeatureStep: String = {
+    "org.apache.spark.deploy.k8s.submit.TestStepWithDrvConf"
   }
 
-  test("Starts with executor template if specified") {
-    val kubernetesClient = PodBuilderSuiteUtils.loadingMockKubernetesClient()
-    val sparkConf = new SparkConf(false)
-      .set("spark.driver.host", "https://driver.host.com")
-      .set(Config.CONTAINER_IMAGE, "spark-executor:latest")
-      .set(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE, "template-file.yaml")
-    val kubernetesConf = KubernetesConf(
-      sparkConf,
-      KubernetesExecutorSpecificConf(
-        "executor-id", Some(new PodBuilder()
-          .withNewMetadata()
-          .withName("driver")
-          .endMetadata()
-          .build())),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      Option.empty)
-    val sparkPod = KubernetesExecutorBuilder
-      .apply(kubernetesClient, sparkConf)
-      .buildFromFeatures(kubernetesConf)
-    PodBuilderSuiteUtils.verifyPodWithSupportedFeatures(sparkPod)
+  override protected def buildPod(sparkConf: SparkConf, client: KubernetesClient): SparkPod = {
+    sparkConf.set("spark.driver.host", "https://driver.host.com")
+    val conf = KubernetesTestConf.createExecutorConf(sparkConf = sparkConf)
+    val secMgr = new SecurityManager(sparkConf)
+    val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    new KubernetesExecutorBuilder().buildFromFeatures(conf, secMgr, client, defaultProfile).pod
+  }
+}
+
+/**
+ * A test executor user feature step would be used in only executor.
+ */
+class TestStepWithExecConf extends KubernetesExecutorCustomFeatureConfigStep {
+  import io.fabric8.kubernetes.api.model._
+
+  private var executorConf: KubernetesExecutorConf = _
+
+  def init(config: KubernetesExecutorConf): Unit = {
+    executorConf = config
+  }
+
+  override def configurePod(pod: SparkPod): SparkPod = {
+    val k8sPodBuilder = new PodBuilder(pod.pod)
+      .editOrNewMetadata()
+       // The annotation key = TEST_ANNOTATION_KEY, value = TEST_ANNOTATION_VALUE
+      .addToAnnotations("executor-annotation-key", executorConf.get("executor-annotation-key"))
+      .endMetadata()
+    val k8sPod = k8sPodBuilder.build()
+    SparkPod(k8sPod, pod.container)
   }
 }

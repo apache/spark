@@ -18,20 +18,24 @@
 package org.apache.spark.sql.hive
 
 import java.lang.reflect.{ParameterizedType, Type, WildcardType}
+import java.time.Duration
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.{io => hadoopIo}
-import org.apache.hadoop.hive.common.`type`.{HiveChar, HiveDecimal, HiveVarchar}
+import org.apache.hadoop.hive.common.`type`.{HiveChar, HiveDecimal, HiveIntervalDayTime, HiveIntervalYearMonth, HiveVarchar}
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.hive.serde2.objectinspector.{StructField => HiveStructField, _}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.hive.serde2.typeinfo.{DecimalTypeInfo, TypeInfoFactory}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
+import org.apache.spark.sql.execution.datasources.DaysWritable
 import org.apache.spark.sql.types
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -236,19 +240,19 @@ private[hive] trait HiveInspectors {
     // raw java list type unsupported
     case c: Class[_] if isSubClassOf(c, classOf[java.util.List[_]]) =>
       throw new AnalysisException(
-        "Raw list type in java is unsupported because Spark cannot infer the element type.")
+        errorClass = "_LEGACY_ERROR_TEMP_3090", messageParameters = Map.empty)
 
     // raw java map type unsupported
     case c: Class[_] if isSubClassOf(c, classOf[java.util.Map[_, _]]) =>
       throw new AnalysisException(
-        "Raw map type in java is unsupported because Spark cannot infer key and value types.")
+        errorClass = "_LEGACY_ERROR_TEMP_3091", messageParameters = Map.empty)
 
     case _: WildcardType =>
       throw new AnalysisException(
-        "Collection types with wildcards (e.g. List<?> or Map<?, ?>) are unsupported because " +
-          "Spark cannot infer the data type for these type parameters.")
+        errorClass = "_LEGACY_ERROR_TEMP_3092", messageParameters = Map.empty)
 
-    case c => throw new AnalysisException(s"Unsupported java type $c")
+    case c => throw new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_3093", messageParameters = Map("c" -> c.toString))
   }
 
   private def isSubClassOf(t: Type, parent: Class[_]): Boolean = t match {
@@ -304,12 +308,17 @@ private[hive] trait HiveInspectors {
         withNullSafe(o => getByteWritable(o))
       case _: ByteObjectInspector =>
         withNullSafe(o => o.asInstanceOf[java.lang.Byte])
-      case _: JavaHiveVarcharObjectInspector =>
+        // To spark HiveVarchar and HiveChar are same as string
+      case _: HiveVarcharObjectInspector if x.preferWritable() =>
+        withNullSafe(o => getStringWritable(o))
+      case _: HiveVarcharObjectInspector =>
         withNullSafe { o =>
             val s = o.asInstanceOf[UTF8String].toString
             new HiveVarchar(s, s.length)
         }
-      case _: JavaHiveCharObjectInspector =>
+      case _: HiveCharObjectInspector if x.preferWritable() =>
+        withNullSafe(o => getStringWritable(o))
+      case _: HiveCharObjectInspector =>
         withNullSafe { o =>
             val s = o.asInstanceOf[UTF8String].toString
             new HiveChar(s, s.length)
@@ -340,6 +349,17 @@ private[hive] trait HiveInspectors {
         withNullSafe(o => getTimestampWritable(o))
       case _: TimestampObjectInspector =>
         withNullSafe(o => DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long]))
+      case _: HiveIntervalDayTimeObjectInspector  if x.preferWritable() =>
+        withNullSafe(o => getHiveIntervalDayTimeWritable(o))
+      case _: HiveIntervalDayTimeObjectInspector =>
+        withNullSafe(o => {
+          val duration = IntervalUtils.microsToDuration(o.asInstanceOf[Long])
+          new HiveIntervalDayTime(duration.getSeconds, duration.getNano)
+        })
+      case _: HiveIntervalYearMonthObjectInspector if x.preferWritable() =>
+        withNullSafe(o => getHiveIntervalYearMonthWritable(o))
+      case _: HiveIntervalYearMonthObjectInspector =>
+        withNullSafe(o => new HiveIntervalYearMonth(o.asInstanceOf[Int]))
       case _: VoidObjectInspector =>
         (_: Any) => null // always be null for void object inspector
     }
@@ -460,7 +480,7 @@ private[hive] trait HiveInspectors {
         _ => constant
       case poi: WritableConstantTimestampObjectInspector =>
         val t = poi.getWritableConstantValue
-        val constant = t.getSeconds * 1000000L + t.getNanos / 1000L
+        val constant = DateTimeUtils.fromJavaTimestamp(t.getTimestamp)
         _ => constant
       case poi: WritableConstantIntObjectInspector =>
         val constant = poi.getWritableConstantValue.get()
@@ -506,6 +526,13 @@ private[hive] trait HiveInspectors {
         _ => constant
       case poi: VoidObjectInspector =>
         _ => null // always be null for void object inspector
+      case dt: WritableConstantHiveIntervalDayTimeObjectInspector =>
+        val constant = dt.getWritableConstantValue.asInstanceOf[HiveIntervalDayTime]
+        _ => IntervalUtils.durationToMicros(
+          Duration.ofSeconds(constant.getTotalSeconds).plusNanos(constant.getNanos.toLong))
+      case ym: WritableConstantHiveIntervalYearMonthObjectInspector =>
+        val constant = ym.getWritableConstantValue.asInstanceOf[HiveIntervalYearMonth]
+        _ => constant.getTotalMonths
       case pi: PrimitiveObjectInspector => pi match {
         // We think HiveVarchar/HiveChar is also a String
         case hvoi: HiveVarcharObjectInspector if hvoi.preferWritable() =>
@@ -598,13 +625,7 @@ private[hive] trait HiveInspectors {
         case x: BinaryObjectInspector if x.preferWritable() =>
           data: Any => {
             if (data != null) {
-              // BytesWritable.copyBytes() only available since Hadoop2
-              // In order to keep backward-compatible, we have to copy the
-              // bytes with old apis
-              val bw = x.getPrimitiveWritableObject(data)
-              val result = new Array[Byte](bw.getLength())
-              System.arraycopy(bw.getBytes(), 0, result, 0, bw.getLength())
-              result
+              x.getPrimitiveWritableObject(data).copyBytes()
             } else {
               null
             }
@@ -612,7 +633,7 @@ private[hive] trait HiveInspectors {
         case x: DateObjectInspector if x.preferWritable() =>
           data: Any => {
             if (data != null) {
-              DateTimeUtils.fromJavaDate(x.getPrimitiveWritableObject(data).get())
+              new DaysWritable(x.getPrimitiveWritableObject(data)).gregorianDays
             } else {
               null
             }
@@ -628,8 +649,7 @@ private[hive] trait HiveInspectors {
         case x: TimestampObjectInspector if x.preferWritable() =>
           data: Any => {
             if (data != null) {
-              val t = x.getPrimitiveWritableObject(data)
-              t.getSeconds * 1000000L + t.getNanos / 1000L
+              DateTimeUtils.fromJavaTimestamp(x.getPrimitiveWritableObject(data).getTimestamp)
             } else {
               null
             }
@@ -638,6 +658,42 @@ private[hive] trait HiveInspectors {
           data: Any => {
             if (data != null) {
               DateTimeUtils.fromJavaTimestamp(ti.getPrimitiveJavaObject(data))
+            } else {
+              null
+            }
+          }
+        case dt: HiveIntervalDayTimeObjectInspector if dt.preferWritable() =>
+          data: Any => {
+            if (data != null) {
+              val dayTime = dt.getPrimitiveWritableObject(data).getHiveIntervalDayTime
+              IntervalUtils.durationToMicros(
+                Duration.ofSeconds(dayTime.getTotalSeconds).plusNanos(dayTime.getNanos.toLong))
+            } else {
+              null
+            }
+          }
+        case dt: HiveIntervalDayTimeObjectInspector =>
+          data: Any => {
+            if (data != null) {
+              val dayTime = dt.getPrimitiveJavaObject(data)
+              IntervalUtils.durationToMicros(
+                Duration.ofSeconds(dayTime.getTotalSeconds).plusNanos(dayTime.getNanos.toLong))
+            } else {
+              null
+            }
+          }
+        case ym: HiveIntervalYearMonthObjectInspector if ym.preferWritable() =>
+          data: Any => {
+            if (data != null) {
+              ym.getPrimitiveWritableObject(data).getHiveIntervalYearMonth.getTotalMonths
+            } else {
+              null
+            }
+          }
+        case ym: HiveIntervalYearMonthObjectInspector =>
+          data: Any => {
+            if (data != null) {
+              ym.getPrimitiveJavaObject(data).getTotalMonths
             } else {
               null
             }
@@ -689,7 +745,7 @@ private[hive] trait HiveInspectors {
         }
         data: Any => {
           if (data != null) {
-            InternalRow.fromSeq(unwrappers.map(_(data)))
+            new GenericInternalRow(unwrappers.map(_(data)).toArray)
           } else {
             null
           }
@@ -746,8 +802,7 @@ private[hive] trait HiveInspectors {
   def wrap(
       row: Seq[Any],
       wrappers: Array[(Any) => Any],
-      cache: Array[AnyRef],
-      dataTypes: Array[DataType]): Array[AnyRef] = {
+      cache: Array[AnyRef]): Array[AnyRef] = {
     var i = 0
     val length = wrappers.length
     while (i < length) {
@@ -780,12 +835,19 @@ private[hive] trait HiveInspectors {
     case BinaryType => PrimitiveObjectInspectorFactory.javaByteArrayObjectInspector
     case DateType => PrimitiveObjectInspectorFactory.javaDateObjectInspector
     case TimestampType => PrimitiveObjectInspectorFactory.javaTimestampObjectInspector
+    case _: DayTimeIntervalType =>
+      PrimitiveObjectInspectorFactory.javaHiveIntervalDayTimeObjectInspector
+    case _: YearMonthIntervalType =>
+      PrimitiveObjectInspectorFactory.javaHiveIntervalYearMonthObjectInspector
     // TODO decimal precision?
     case DecimalType() => PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector
     case StructType(fields) =>
       ObjectInspectorFactory.getStandardStructObjectInspector(
         java.util.Arrays.asList(fields.map(f => f.name) : _*),
         java.util.Arrays.asList(fields.map(f => toInspector(f.dataType)) : _*))
+    case _: UserDefinedType[_] =>
+      val sqlType = dataType.asInstanceOf[UserDefinedType[_]].sqlType
+      toInspector(sqlType)
   }
 
   /**
@@ -822,6 +884,10 @@ private[hive] trait HiveInspectors {
       getDecimalWritableConstantObjectInspector(value)
     case Literal(_, NullType) =>
       getPrimitiveNullWritableConstantObjectInspector
+    case Literal(_, _: DayTimeIntervalType) =>
+      getHiveIntervalDayTimeWritableConstantObjectInspector
+    case Literal(_, _: YearMonthIntervalType) =>
+      getHiveIntervalYearMonthWritableConstantObjectInspector
     case Literal(value, ArrayType(dt, _)) =>
       val listObjectInspector = toInspector(dt)
       if (value == null) {
@@ -846,13 +912,31 @@ private[hive] trait HiveInspectors {
 
         ObjectInspectorFactory.getStandardConstantMapObjectInspector(keyOI, valueOI, jmap)
       }
+    case Literal(_, dt: StructType) =>
+      toInspector(dt)
+    case Literal(_, dt: UserDefinedType[_]) =>
+      toInspector(dt.sqlType)
     // We will enumerate all of the possible constant expressions, throw exception if we missed
-    case Literal(_, dt) => sys.error(s"Hive doesn't support the constant type [$dt].")
+    case Literal(_, dt) =>
+      throw SparkException.internalError(s"Hive doesn't support the constant type [$dt].")
     // ideally, we don't test the foldable here(but in optimizer), however, some of the
     // Hive UDF / UDAF requires its argument to be constant objectinspector, we do it eagerly.
-    case _ if expr.foldable => toInspector(Literal.create(expr.eval(), expr.dataType))
+    case _ if expr.foldable && canEarlyEval(expr) =>
+      toInspector(Literal.create(expr.eval(), expr.dataType))
     // For those non constant expression, map to object inspector according to its data type
     case _ => toInspector(expr.dataType)
+  }
+
+  // TODO: hard-coding a list here is not very robust. A better idea is to have some kind of query
+  //       context to pre-evaluate these current datetime values, and evaluating these expressions
+  //       just get the pre-evaluated values from the query context, so that we don't need to wait
+  //       for the rule `FinishAnalysis` to compute the values.
+  private def canEarlyEval(e: Expression): Boolean = e match {
+    case _: CurrentDate => false
+    case _: CurrentTime => false
+    case _: CurrentTimestampLike => false
+    case _: LocalTimestamp => false
+    case _ => e.children.forall(canEarlyEval)
   }
 
   def inspectorToDataType(inspector: ObjectInspector): DataType = inspector match {
@@ -860,7 +944,7 @@ private[hive] trait HiveInspectors {
       StructType(s.getAllStructFieldRefs.asScala.map(f =>
         types.StructField(
           f.getFieldName, inspectorToDataType(f.getFieldObjectInspector), nullable = true)
-      ))
+      ).toArray)
     case l: ListObjectInspector => ArrayType(inspectorToDataType(l.getListElementObjectInspector))
     case m: MapObjectInspector =>
       MapType(
@@ -894,6 +978,10 @@ private[hive] trait HiveInspectors {
     case _: JavaDateObjectInspector => DateType
     case _: WritableTimestampObjectInspector => TimestampType
     case _: JavaTimestampObjectInspector => TimestampType
+    case _: WritableHiveIntervalDayTimeObjectInspector => DayTimeIntervalType()
+    case _: JavaHiveIntervalDayTimeObjectInspector => DayTimeIntervalType()
+    case _: WritableHiveIntervalYearMonthObjectInspector => YearMonthIntervalType()
+    case _: JavaHiveIntervalYearMonthObjectInspector => YearMonthIntervalType()
     case _: WritableVoidObjectInspector => NullType
     case _: JavaVoidObjectInspector => NullType
   }
@@ -955,6 +1043,14 @@ private[hive] trait HiveInspectors {
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
       TypeInfoFactory.voidTypeInfo, null)
 
+  private def getHiveIntervalDayTimeWritableConstantObjectInspector: ObjectInspector =
+    PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
+      TypeInfoFactory.intervalDayTimeTypeInfo, null)
+
+  private def getHiveIntervalYearMonthWritableConstantObjectInspector: ObjectInspector =
+    PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
+      TypeInfoFactory.intervalYearMonthTypeInfo, null)
+
   private def getStringWritable(value: Any): hadoopIo.Text =
     if (value == null) null else new hadoopIo.Text(value.asInstanceOf[UTF8String].getBytes)
 
@@ -998,14 +1094,34 @@ private[hive] trait HiveInspectors {
       new hadoopIo.BytesWritable(value.asInstanceOf[Array[Byte]])
     }
 
-  private def getDateWritable(value: Any): hiveIo.DateWritable =
-    if (value == null) null else new hiveIo.DateWritable(value.asInstanceOf[Int])
+  private def getDateWritable(value: Any): DaysWritable =
+    if (value == null) {
+      null
+    } else {
+      new DaysWritable(value.asInstanceOf[Int])
+    }
 
   private def getTimestampWritable(value: Any): hiveIo.TimestampWritable =
     if (value == null) {
       null
     } else {
       new hiveIo.TimestampWritable(DateTimeUtils.toJavaTimestamp(value.asInstanceOf[Long]))
+    }
+
+  private def getHiveIntervalDayTimeWritable(value: Any): hiveIo.HiveIntervalDayTimeWritable =
+    if (value == null) {
+      null
+    } else {
+      val duration = IntervalUtils.microsToDuration(value.asInstanceOf[Long])
+      new hiveIo.HiveIntervalDayTimeWritable(
+        new HiveIntervalDayTime(duration.getSeconds, duration.getNano))
+    }
+
+  private def getHiveIntervalYearMonthWritable(value: Any): hiveIo.HiveIntervalYearMonthWritable =
+    if (value == null) {
+      null
+    } else {
+      new hiveIo.HiveIntervalYearMonthWritable(new HiveIntervalYearMonth(value.asInstanceOf[Int]))
     }
 
   private def getDecimalWritable(value: Any): hiveIo.HiveDecimalWritable =
@@ -1023,6 +1139,8 @@ private[hive] trait HiveInspectors {
 
     private def decimalTypeInfo(decimalType: DecimalType): TypeInfo = decimalType match {
       case DecimalType.Fixed(precision, scale) => new DecimalTypeInfo(precision, scale)
+      case dt => throw new AnalysisException(
+        errorClass = "_LEGACY_ERROR_TEMP_3094", messageParameters = Map("dt" -> toSQLType(dt)))
     }
 
     def toTypeInfo: TypeInfo = dt match {
@@ -1030,8 +1148,8 @@ private[hive] trait HiveInspectors {
         getListTypeInfo(elemType.toTypeInfo)
       case StructType(fields) =>
         getStructTypeInfo(
-          java.util.Arrays.asList(fields.map(_.name) : _*),
-          java.util.Arrays.asList(fields.map(_.dataType.toTypeInfo) : _*))
+          java.util.Arrays.asList(fields.map(_.name): _*),
+          java.util.Arrays.asList(fields.map(_.dataType.toTypeInfo): _*))
       case MapType(keyType, valueType, _) =>
         getMapTypeInfo(keyType.toTypeInfo, valueType.toTypeInfo)
       case BinaryType => binaryTypeInfo
@@ -1047,6 +1165,11 @@ private[hive] trait HiveInspectors {
       case DateType => dateTypeInfo
       case TimestampType => timestampTypeInfo
       case NullType => voidTypeInfo
+      case _: DayTimeIntervalType => intervalDayTimeTypeInfo
+      case _: YearMonthIntervalType => intervalYearMonthTypeInfo
+      case dt =>
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3095", messageParameters = Map("dt" -> toSQLType(dt)))
     }
   }
 }

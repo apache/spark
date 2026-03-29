@@ -19,8 +19,8 @@ package org.apache.spark.streaming.util
 
 import java.util.concurrent.ConcurrentLinkedQueue
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually._
@@ -69,7 +69,7 @@ class RecurringTimerSuite extends SparkFunSuite with PrivateMethodTester {
       }
     }
     thread.start()
-    val stopped = PrivateMethod[RecurringTimer]('stopped)
+    val stopped = PrivateMethod[RecurringTimer](Symbol("stopped"))
     // Make sure the `stopped` field has been changed
     eventually(timeout(10.seconds), interval(10.millis)) {
       assert(timer.invokePrivate(stopped()) === true)

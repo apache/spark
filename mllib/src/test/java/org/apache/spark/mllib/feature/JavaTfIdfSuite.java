@@ -20,8 +20,8 @@ package org.apache.spark.mllib.feature;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
@@ -33,7 +33,6 @@ public class JavaTfIdfSuite extends SharedSparkSession {
   public void tfIdf() {
     // The tests are to check Java compatibility.
     HashingTF tf = new HashingTF();
-    @SuppressWarnings("unchecked")
     JavaRDD<List<String>> documents = jsc.parallelize(Arrays.asList(
       Arrays.asList("this is a sentence".split(" ")),
       Arrays.asList("this is another sentence".split(" ")),
@@ -45,7 +44,7 @@ public class JavaTfIdfSuite extends SharedSparkSession {
     List<Vector> localTfIdfs = tfIdfs.collect();
     int indexOfThis = tf.indexOf("this");
     for (Vector v : localTfIdfs) {
-      Assert.assertEquals(0.0, v.apply(indexOfThis), 1e-15);
+      Assertions.assertEquals(0.0, v.apply(indexOfThis), 1e-15);
     }
   }
 
@@ -53,7 +52,6 @@ public class JavaTfIdfSuite extends SharedSparkSession {
   public void tfIdfMinimumDocumentFrequency() {
     // The tests are to check Java compatibility.
     HashingTF tf = new HashingTF();
-    @SuppressWarnings("unchecked")
     JavaRDD<List<String>> documents = jsc.parallelize(Arrays.asList(
       Arrays.asList("this is a sentence".split(" ")),
       Arrays.asList("this is another sentence".split(" ")),
@@ -65,7 +63,7 @@ public class JavaTfIdfSuite extends SharedSparkSession {
     List<Vector> localTfIdfs = tfIdfs.collect();
     int indexOfThis = tf.indexOf("this");
     for (Vector v : localTfIdfs) {
-      Assert.assertEquals(0.0, v.apply(indexOfThis), 1e-15);
+      Assertions.assertEquals(0.0, v.apply(indexOfThis), 1e-15);
     }
   }
 

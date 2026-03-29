@@ -1,0 +1,77 @@
+TakeOrderedAndProject [c_customer_id]
+  WholeStageCodegen (12)
+    Project [c_customer_id]
+      SortMergeJoin [ctr_customer_sk,c_customer_sk]
+        InputAdapter
+          WholeStageCodegen (9)
+            Sort [ctr_customer_sk]
+              InputAdapter
+                Exchange [ctr_customer_sk] #1
+                  WholeStageCodegen (8)
+                    Project [ctr_customer_sk]
+                      BroadcastHashJoin [ctr_store_sk,s_store_sk]
+                        Project [ctr_customer_sk,ctr_store_sk]
+                          BroadcastHashJoin [ctr_store_sk,ctr_store_sk,ctr_total_return,(avg(ctr_total_return) * 1.2)]
+                            Filter [ctr_total_return]
+                              HashAggregate [sr_customer_sk,sr_store_sk,sum] [sum(UnscaledValue(sr_return_amt)),ctr_customer_sk,ctr_store_sk,ctr_total_return,sum]
+                                InputAdapter
+                                  Exchange [sr_customer_sk,sr_store_sk] #2
+                                    WholeStageCodegen (2)
+                                      HashAggregate [sr_customer_sk,sr_store_sk,sr_return_amt] [sum,sum]
+                                        Project [sr_customer_sk,sr_store_sk,sr_return_amt]
+                                          BroadcastHashJoin [sr_returned_date_sk,d_date_sk]
+                                            Filter [sr_store_sk,sr_customer_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet spark_catalog.default.store_returns [sr_customer_sk,sr_store_sk,sr_return_amt,sr_returned_date_sk]
+                                                    SubqueryBroadcast [d_date_sk] #1
+                                                      BroadcastExchange #3
+                                                        WholeStageCodegen (1)
+                                                          Project [d_date_sk]
+                                                            Filter [d_year,d_date_sk]
+                                                              ColumnarToRow
+                                                                InputAdapter
+                                                                  Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year]
+                                            InputAdapter
+                                              ReusedExchange [d_date_sk] #3
+                            InputAdapter
+                              BroadcastExchange #4
+                                WholeStageCodegen (6)
+                                  Filter [(avg(ctr_total_return) * 1.2)]
+                                    HashAggregate [ctr_store_sk,sum,count] [avg(ctr_total_return),(avg(ctr_total_return) * 1.2),sum,count]
+                                      InputAdapter
+                                        Exchange [ctr_store_sk] #5
+                                          WholeStageCodegen (5)
+                                            HashAggregate [ctr_store_sk,ctr_total_return] [sum,count,sum,count]
+                                              HashAggregate [sr_customer_sk,sr_store_sk,sum] [sum(UnscaledValue(sr_return_amt)),ctr_store_sk,ctr_total_return,sum]
+                                                InputAdapter
+                                                  Exchange [sr_customer_sk,sr_store_sk] #6
+                                                    WholeStageCodegen (4)
+                                                      HashAggregate [sr_customer_sk,sr_store_sk,sr_return_amt] [sum,sum]
+                                                        Project [sr_customer_sk,sr_store_sk,sr_return_amt]
+                                                          BroadcastHashJoin [sr_returned_date_sk,d_date_sk]
+                                                            Filter [sr_store_sk]
+                                                              ColumnarToRow
+                                                                InputAdapter
+                                                                  Scan parquet spark_catalog.default.store_returns [sr_customer_sk,sr_store_sk,sr_return_amt,sr_returned_date_sk]
+                                                                    ReusedSubquery [d_date_sk] #1
+                                                            InputAdapter
+                                                              ReusedExchange [d_date_sk] #3
+                        InputAdapter
+                          BroadcastExchange #7
+                            WholeStageCodegen (7)
+                              Project [s_store_sk]
+                                Filter [s_state,s_store_sk]
+                                  ColumnarToRow
+                                    InputAdapter
+                                      Scan parquet spark_catalog.default.store [s_store_sk,s_state]
+        InputAdapter
+          WholeStageCodegen (11)
+            Sort [c_customer_sk]
+              InputAdapter
+                Exchange [c_customer_sk] #8
+                  WholeStageCodegen (10)
+                    Filter [c_customer_sk]
+                      ColumnarToRow
+                        InputAdapter
+                          Scan parquet spark_catalog.default.customer [c_customer_sk,c_customer_id]

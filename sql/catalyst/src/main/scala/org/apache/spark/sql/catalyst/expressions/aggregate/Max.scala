@@ -20,14 +20,20 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the maximum value of `expr`.")
-case class Max(child: Expression) extends DeclarativeAggregate {
-
-  override def children: Seq[Expression] = child :: Nil
+  usage = "_FUNC_(expr) - Returns the maximum value of `expr`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (10), (50), (20) AS tab(col);
+       50
+  """,
+  group = "agg_funcs",
+  since = "1.0.0")
+case class Max(child: Expression) extends DeclarativeAggregate with UnaryLike[Expression] {
 
   override def nullable: Boolean = true
 
@@ -35,7 +41,7 @@ case class Max(child: Expression) extends DeclarativeAggregate {
   override def dataType: DataType = child.dataType
 
   override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForOrderingExpr(child.dataType, "function max")
+    TypeUtils.checkForOrderingExpr(child.dataType, prettyName)
 
   private lazy val max = AttributeReference("max", child.dataType)()
 
@@ -56,4 +62,6 @@ case class Max(child: Expression) extends DeclarativeAggregate {
   }
 
   override lazy val evaluateExpression: AttributeReference = max
+
+  override protected def withNewChildInternal(newChild: Expression): Max = copy(child = newChild)
 }

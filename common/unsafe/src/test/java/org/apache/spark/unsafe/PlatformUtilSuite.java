@@ -21,8 +21,8 @@ import org.apache.spark.unsafe.memory.HeapMemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class PlatformUtilSuite {
 
@@ -36,7 +36,7 @@ public class PlatformUtilSuite {
 
     Platform.copyMemory(data, Platform.BYTE_ARRAY_OFFSET, data, Platform.BYTE_ARRAY_OFFSET, size);
     for (int i = 0; i < data.length; ++i) {
-      Assert.assertEquals((byte)i, data[i]);
+      Assertions.assertEquals((byte)i, data[i]);
     }
 
     Platform.copyMemory(
@@ -46,7 +46,7 @@ public class PlatformUtilSuite {
         Platform.BYTE_ARRAY_OFFSET,
         size);
     for (int i = 0; i < size; ++i) {
-      Assert.assertEquals((byte)(i + 1), data[i]);
+      Assertions.assertEquals((byte)(i + 1), data[i]);
     }
 
     for (int i = 0; i < data.length; ++i) {
@@ -59,7 +59,7 @@ public class PlatformUtilSuite {
         Platform.BYTE_ARRAY_OFFSET + 1,
         size);
     for (int i = 0; i < size; ++i) {
-      Assert.assertEquals((byte)i, data[i + 1]);
+      Assertions.assertEquals((byte)i, data[i + 1]);
     }
   }
 
@@ -70,69 +70,69 @@ public class PlatformUtilSuite {
     MemoryAllocator.HEAP.free(block1);
     MemoryBlock block2 = MemoryAllocator.HEAP.allocate(1024 * 1024);
     Object baseObject2 = block2.getBaseObject();
-    Assert.assertSame(baseObject1, baseObject2);
+    Assertions.assertSame(baseObject1, baseObject2);
     MemoryAllocator.HEAP.free(block2);
   }
 
   @Test
   public void freeingOnHeapMemoryBlockResetsBaseObjectAndOffset() {
     MemoryBlock block = MemoryAllocator.HEAP.allocate(1024);
-    Assert.assertNotNull(block.getBaseObject());
+    Assertions.assertNotNull(block.getBaseObject());
     MemoryAllocator.HEAP.free(block);
-    Assert.assertNull(block.getBaseObject());
-    Assert.assertEquals(0, block.getBaseOffset());
-    Assert.assertEquals(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER, block.pageNumber);
+    Assertions.assertNull(block.getBaseObject());
+    Assertions.assertEquals(0, block.getBaseOffset());
+    Assertions.assertEquals(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER, block.pageNumber);
   }
 
   @Test
   public void freeingOffHeapMemoryBlockResetsOffset() {
     MemoryBlock block = MemoryAllocator.UNSAFE.allocate(1024);
-    Assert.assertNull(block.getBaseObject());
-    Assert.assertNotEquals(0, block.getBaseOffset());
+    Assertions.assertNull(block.getBaseObject());
+    Assertions.assertNotEquals(0, block.getBaseOffset());
     MemoryAllocator.UNSAFE.free(block);
-    Assert.assertNull(block.getBaseObject());
-    Assert.assertEquals(0, block.getBaseOffset());
-    Assert.assertEquals(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER, block.pageNumber);
+    Assertions.assertNull(block.getBaseObject());
+    Assertions.assertEquals(0, block.getBaseOffset());
+    Assertions.assertEquals(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER, block.pageNumber);
   }
 
-  @Test(expected = AssertionError.class)
+  @Test
   public void onHeapMemoryAllocatorThrowsAssertionErrorOnDoubleFree() {
     MemoryBlock block = MemoryAllocator.HEAP.allocate(1024);
     MemoryAllocator.HEAP.free(block);
-    MemoryAllocator.HEAP.free(block);
+    Assertions.assertThrows(AssertionError.class, () -> MemoryAllocator.HEAP.free(block));
   }
 
-  @Test(expected = AssertionError.class)
+  @Test
   public void offHeapMemoryAllocatorThrowsAssertionErrorOnDoubleFree() {
     MemoryBlock block = MemoryAllocator.UNSAFE.allocate(1024);
     MemoryAllocator.UNSAFE.free(block);
-    MemoryAllocator.UNSAFE.free(block);
+    Assertions.assertThrows(AssertionError.class, () -> MemoryAllocator.UNSAFE.free(block));
   }
 
   @Test
   public void memoryDebugFillEnabledInTest() {
-    Assert.assertTrue(MemoryAllocator.MEMORY_DEBUG_FILL_ENABLED);
+    Assertions.assertTrue(MemoryAllocator.MEMORY_DEBUG_FILL_ENABLED);
     MemoryBlock onheap = MemoryAllocator.HEAP.allocate(1);
-    Assert.assertEquals(
-      Platform.getByte(onheap.getBaseObject(), onheap.getBaseOffset()),
-      MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);
+    Assertions.assertEquals(
+      MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE,
+      Platform.getByte(onheap.getBaseObject(), onheap.getBaseOffset()));
 
     MemoryBlock onheap1 = MemoryAllocator.HEAP.allocate(1024 * 1024);
     Object onheap1BaseObject = onheap1.getBaseObject();
     long onheap1BaseOffset = onheap1.getBaseOffset();
     MemoryAllocator.HEAP.free(onheap1);
-    Assert.assertEquals(
-      Platform.getByte(onheap1BaseObject, onheap1BaseOffset),
-      MemoryAllocator.MEMORY_DEBUG_FILL_FREED_VALUE);
+    Assertions.assertEquals(
+      MemoryAllocator.MEMORY_DEBUG_FILL_FREED_VALUE,
+      Platform.getByte(onheap1BaseObject, onheap1BaseOffset));
     MemoryBlock onheap2 = MemoryAllocator.HEAP.allocate(1024 * 1024);
-    Assert.assertEquals(
-      Platform.getByte(onheap2.getBaseObject(), onheap2.getBaseOffset()),
-      MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);
+    Assertions.assertEquals(
+      MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE,
+      Platform.getByte(onheap2.getBaseObject(), onheap2.getBaseOffset()));
 
     MemoryBlock offheap = MemoryAllocator.UNSAFE.allocate(1);
-    Assert.assertEquals(
-      Platform.getByte(offheap.getBaseObject(), offheap.getBaseOffset()),
-      MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);
+    Assertions.assertEquals(
+      MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE,
+      Platform.getByte(offheap.getBaseObject(), offheap.getBaseOffset()));
     MemoryAllocator.UNSAFE.free(offheap);
   }
 
@@ -145,16 +145,23 @@ public class PlatformUtilSuite {
     Object obj1 = onheap1.getBaseObject();
     heapMem.free(onheap1);
     MemoryBlock onheap2 = heapMem.allocate(514);
-    Assert.assertNotEquals(obj1, onheap2.getBaseObject());
+    Assertions.assertNotEquals(obj1, onheap2.getBaseObject());
 
     // The size is greater than `HeapMemoryAllocator.POOLING_THRESHOLD_BYTES`,
     // reuse the previous memory which has released.
     MemoryBlock onheap3 = heapMem.allocate(1024 * 1024 + 1);
-    Assert.assertEquals(onheap3.size(), 1024 * 1024 + 1);
+    Assertions.assertEquals(1024 * 1024 + 1, onheap3.size());
     Object obj3 = onheap3.getBaseObject();
     heapMem.free(onheap3);
     MemoryBlock onheap4 = heapMem.allocate(1024 * 1024 + 7);
-    Assert.assertEquals(onheap4.size(), 1024 * 1024 + 7);
-    Assert.assertEquals(obj3, onheap4.getBaseObject());
+    Assertions.assertEquals(1024 * 1024 + 7, onheap4.size());
+    Assertions.assertEquals(obj3, onheap4.getBaseObject());
+  }
+
+  @Test
+  public void cleanerCreateMethodIsDefined() {
+    // Regression test for SPARK-45508: we don't expect the "no cleaner" fallback
+    // path to be hit in normal usage.
+    Assertions.assertTrue(Platform.cleanerCreateMethodIsDefined());
   }
 }

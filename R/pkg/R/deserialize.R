@@ -57,7 +57,7 @@ readTypedObject <- function(con, type) {
     "s" = readStruct(con),
     "n" = NULL,
     "j" = getJobj(readString(con)),
-    stop(paste("Unsupported type for deserialization", type)))
+    stop("Unsupported type for deserialization ", type))
 }
 
 readStringData <- function(con, len) {
@@ -229,6 +229,29 @@ readMultipleObjectsWithKeys <- function(inputCon) {
     }
   }
   list(keys = keys, data = data) # this is a list of keys and corresponding data
+}
+
+readDeserializeInArrow <- function(inputCon) {
+  if (requireNamespace("arrow", quietly = TRUE)) {
+    # Currently, there looks no way to read batch by batch by socket connection in R side,
+    # See ARROW-4512. Therefore, it reads the whole Arrow streaming-formatted binary at once
+    # for now.
+    dataLen <- readInt(inputCon)
+    arrowData <- readBin(inputCon, raw(), as.integer(dataLen), endian = "big")
+    batches <- arrow::RecordBatchStreamReader$create(arrowData)$batches()
+    lapply(batches, function(batch) as.data.frame(batch))
+  } else {
+    stop("'arrow' package should be installed.")
+  }
+}
+
+readDeserializeWithKeysInArrow <- function(inputCon) {
+  data <- readDeserializeInArrow(inputCon)
+
+  keys <- readMultipleObjects(inputCon)
+
+  # Read keys to map with each grouped batch later.
+  list(keys = keys, data = data)
 }
 
 readRowList <- function(obj) {

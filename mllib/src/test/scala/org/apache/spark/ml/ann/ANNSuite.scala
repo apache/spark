@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.util.ArrayImplicits._
 
 class ANNSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -36,7 +37,7 @@ class ANNSuite extends SparkFunSuite with MLlibTestSparkContext {
     val data = inputs.zip(outputs).map { case (features, label) =>
       (Vectors.dense(features), Vectors.dense(label))
     }
-    val rddData = sc.parallelize(data, 1)
+    val rddData = sc.parallelize(data.toImmutableArraySeq, 1)
     val hiddenLayersTopology = Array(5)
     val dataSample = rddData.first()
     val layerSizes = dataSample._1.size +: hiddenLayersTopology :+ dataSample._2.size
@@ -45,7 +46,7 @@ class ANNSuite extends SparkFunSuite with MLlibTestSparkContext {
     val trainer = new FeedForwardTrainer(topology, 2, 1)
     trainer.setWeights(initialWeights)
     trainer.LBFGSOptimizer.setNumIterations(20)
-    val model = trainer.train(rddData)
+    val (model, _) = trainer.train(rddData)
     val predictionAndLabels = rddData.map { case (input, label) =>
       (model.predict(input)(0), label(0))
     }.collect()
@@ -70,7 +71,7 @@ class ANNSuite extends SparkFunSuite with MLlibTestSparkContext {
     val data = inputs.zip(outputs).map { case (features, label) =>
       (Vectors.dense(features), Vectors.dense(label))
     }
-    val rddData = sc.parallelize(data, 1)
+    val rddData = sc.parallelize(data.toImmutableArraySeq, 1)
     val hiddenLayersTopology = Array(5)
     val dataSample = rddData.first()
     val layerSizes = dataSample._1.size +: hiddenLayersTopology :+ dataSample._2.size
@@ -80,7 +81,7 @@ class ANNSuite extends SparkFunSuite with MLlibTestSparkContext {
     // TODO: add a test for SGD
     trainer.LBFGSOptimizer.setConvergenceTol(1e-4).setNumIterations(20)
     trainer.setWeights(initialWeights).setStackSize(1)
-    val model = trainer.train(rddData)
+    val (model, _) = trainer.train(rddData)
     val predictionAndLabels = rddData.map { case (input, label) =>
       (model.predict(input), label)
     }.collect()

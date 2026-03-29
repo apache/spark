@@ -28,10 +28,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.OutputWriter
 import org.apache.spark.sql.types._
 
-private[orc] class OrcOutputWriter(
-    path: String,
+private[sql] class OrcOutputWriter(
+    val path: String,
     dataSchema: StructType,
-    context: TaskAttemptContext)
+    context: TaskAttemptContext,
+    batchSize: Int)
   extends OutputWriter {
 
   private[this] val serializer = new OrcSerializer(dataSchema)
@@ -44,8 +45,9 @@ private[orc] class OrcOutputWriter(
     }
     val filename = orcOutputFormat.getDefaultWorkFile(context, ".orc")
     val options = OrcMapRedOutputFormat.buildOptions(context.getConfiguration)
+    options.setSchema(OrcUtils.orcTypeDescription(dataSchema))
     val writer = OrcFile.createWriter(filename, options)
-    val recordWriter = new OrcMapreduceRecordWriter[OrcStruct](writer)
+    val recordWriter = new OrcMapreduceRecordWriter[OrcStruct](writer, batchSize)
     OrcUtils.addSparkVersionMetadata(writer)
     recordWriter
   }

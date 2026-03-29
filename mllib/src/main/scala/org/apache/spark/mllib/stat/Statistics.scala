@@ -21,6 +21,7 @@ import scala.annotation.varargs
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD}
+import org.apache.spark.ml.stat._
 import org.apache.spark.mllib.linalg.{Matrix, Vector}
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -44,6 +45,24 @@ object Statistics {
   @Since("1.1.0")
   def colStats(X: RDD[Vector]): MultivariateStatisticalSummary = {
     new RowMatrix(X).computeColumnSummaryStatistics()
+  }
+
+  /**
+   * Computes required column-wise summary statistics for the input RDD[(Vector, Double)].
+   *
+   * @param X an RDD containing vectors and weights for which column-wise summary statistics
+   *          are to be computed.
+   * @return [[SummarizerBuffer]] object containing column-wise summary statistics.
+   */
+  private[mllib] def colStats(X: RDD[(Vector, Double)], requested: Seq[String]) = {
+    X.treeAggregate[SummarizerBuffer](
+      zeroValue = Summarizer.createSummarizerBuffer(requested: _*),
+      seqOp = (c: SummarizerBuffer,
+               vw: (Vector, Double)) => c.add(vw._1.nonZeroIterator, vw._1.size, vw._2),
+      combOp = (c1: SummarizerBuffer, c2: SummarizerBuffer) => c1.merge(c2),
+      depth = 2,
+      finalAggregateOnExecutor = true
+    )
   }
 
   /**

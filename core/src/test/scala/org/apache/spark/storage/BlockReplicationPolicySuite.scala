@@ -21,7 +21,8 @@ import scala.collection.mutable
 import scala.language.implicitConversions
 import scala.util.Random
 
-import org.scalatest.{BeforeAndAfter, Matchers}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.{LocalSparkContext, SparkFunSuite}
 
@@ -127,7 +128,7 @@ class TopologyAwareBlockReplicationPolicyBehavior extends RandomBlockReplication
       assert(prioritizedPeers.toSet.size == numReplicas)
       val priorityPeers = prioritizedPeers.take(2)
       assert(priorityPeers.forall(p => p.host != blockManager.host))
-      if(numReplicas > 1) {
+      if (numReplicas > 1) {
         // both these conditions should be satisfied when numReplicas > 1
         assert(priorityPeers.exists(p => p.topologyInfo == blockManager.topologyInfo))
         assert(priorityPeers.exists(p => p.topologyInfo != blockManager.topologyInfo))

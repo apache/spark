@@ -19,19 +19,18 @@ package org.apache.spark.streaming.scheduler
 
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
-import scala.collection.JavaConverters._
+import scala.concurrent.duration.FiniteDuration
+import scala.jdk.CollectionConverters._
 import scala.util.Failure
 
-import org.apache.commons.lang3.SerializationUtils
-
 import org.apache.spark.ExecutorAllocationClient
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.io.SparkHadoopWriterUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.api.python.PythonDStream
-import org.apache.spark.streaming.ui.UIUtils
-import org.apache.spark.util.{EventLoop, ThreadUtils}
+import org.apache.spark.ui.{UIUtils => SparkUIUtils}
+import org.apache.spark.util.{EventLoop, ThreadUtils, Utils}
 
 
 private[scheduler] sealed trait JobSchedulerEvent
@@ -49,11 +48,12 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   // Use of ConcurrentHashMap.keySet later causes an odd runtime problem due to Java 7/8 diff
   // https://gist.github.com/AlainODea/1375759b8720a3f9f094
   private val jobSets: java.util.Map[Time, JobSet] = new ConcurrentHashMap[Time, JobSet]
-  private val numConcurrentJobs = ssc.conf.getInt("spark.streaming.concurrentJobs", 1)
+  private val numConcurrentJobs = ssc.conf.get(StreamingConf.CONCURRENT_JOBS)
   private val jobExecutor =
     ThreadUtils.newDaemonFixedThreadPool(numConcurrentJobs, "streaming-job-executor")
-  private val jobGenerator = new JobGenerator(this)
+  private[streaming] val jobGenerator = new JobGenerator(this)
   val clock = jobGenerator.clock
+
   val listenerBus = new StreamingListenerBus(ssc.sparkContext.listenerBus)
 
   // These two are created only when scheduler starts.
@@ -79,7 +79,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
 
     // attach rate controllers of input streams to receive batch completion updates
     for {
-      inputDStream <- ssc.graph.getInputStreams
+      inputDStream <- ssc.graph.getInputStreams()
       rateController <- inputDStream.rateController
     } ssc.addStreamingListener(rateController)
 
@@ -124,17 +124,15 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
 
     // Stop the executor for receiving new jobs
     logDebug("Stopping job executor")
-    jobExecutor.shutdown()
 
     // Wait for the queued jobs to complete if indicated
-    val terminated = if (processAllReceivedData) {
-      jobExecutor.awaitTermination(1, TimeUnit.HOURS)  // just a very large period of time
+    if (processAllReceivedData) {
+      // just a very large period of time
+      ThreadUtils.shutdown(jobExecutor, FiniteDuration(1, TimeUnit.HOURS))
     } else {
-      jobExecutor.awaitTermination(2, TimeUnit.SECONDS)
+      ThreadUtils.shutdown(jobExecutor, FiniteDuration(2, TimeUnit.SECONDS))
     }
-    if (!terminated) {
-      jobExecutor.shutdownNow()
-    }
+
     logDebug("Stopped job executor")
 
     // Stop everything else
@@ -144,14 +142,14 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     logInfo("Stopped JobScheduler")
   }
 
-  def submitJobSet(jobSet: JobSet) {
+  def submitJobSet(jobSet: JobSet): Unit = {
     if (jobSet.jobs.isEmpty) {
-      logInfo("No jobs added for time " + jobSet.time)
+      logInfo(log"No jobs added for time ${MDC(LogKeys.TIME, jobSet.time)}")
     } else {
       listenerBus.post(StreamingListenerBatchSubmitted(jobSet.toBatchInfo))
       jobSets.put(jobSet.time, jobSet)
       jobSet.jobs.foreach(job => jobExecutor.execute(new JobHandler(job)))
-      logInfo("Added jobs for time " + jobSet.time)
+      logInfo(log"Added jobs for time ${MDC(LogKeys.TIME, jobSet.time)}")
     }
   }
 
@@ -159,7 +157,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     jobSets.asScala.keys.toSeq
   }
 
-  def reportError(msg: String, e: Throwable) {
+  def reportError(msg: String, e: Throwable): Unit = {
     eventLoop.post(ErrorReported(msg, e))
   }
 
@@ -167,7 +165,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     eventLoop != null
   }
 
-  private def processEvent(event: JobSchedulerEvent) {
+  private def processEvent(event: JobSchedulerEvent): Unit = {
     try {
       event match {
         case JobStarted(job, startTime) => handleJobStart(job, startTime)
@@ -180,7 +178,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     }
   }
 
-  private def handleJobStart(job: Job, startTime: Long) {
+  private def handleJobStart(job: Job, startTime: Long): Unit = {
     val jobSet = jobSets.get(job.time)
     val isFirstJobOfJobSet = !jobSet.hasStarted
     jobSet.handleJobStart(job)
@@ -191,15 +189,17 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     }
     job.setStartTime(startTime)
     listenerBus.post(StreamingListenerOutputOperationStarted(job.toOutputOperationInfo))
-    logInfo("Starting job " + job.id + " from job set of time " + jobSet.time)
+    logInfo(log"Starting job ${MDC(LogKeys.JOB_ID, job.id)} from job set of time " +
+      log"${MDC(LogKeys.TIME, jobSet.time)}")
   }
 
-  private def handleJobCompletion(job: Job, completedTime: Long) {
+  private def handleJobCompletion(job: Job, completedTime: Long): Unit = {
     val jobSet = jobSets.get(job.time)
     jobSet.handleJobCompletion(job)
     job.setEndTime(completedTime)
     listenerBus.post(StreamingListenerOutputOperationCompleted(job.toOutputOperationInfo))
-    logInfo("Finished job " + job.id + " from job set of time " + jobSet.time)
+    logInfo(log"Finished job ${MDC(LogKeys.JOB_ID, job.id)} from job set of time " +
+      log"${MDC(LogKeys.TIME, jobSet.time)}")
     if (jobSet.hasCompleted) {
       listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo))
     }
@@ -218,7 +218,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     }
   }
 
-  private def handleError(msg: String, e: Throwable) {
+  private def handleError(msg: String, e: Throwable): Unit = {
     logError(msg, e)
     ssc.waiter.notifyError(e)
     PythonDStream.stopStreamingContextIfPythonProcessIsDead(e)
@@ -227,11 +227,11 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   private class JobHandler(job: Job) extends Runnable with Logging {
     import JobScheduler._
 
-    def run() {
+    def run(): Unit = {
       val oldProps = ssc.sparkContext.getLocalProperties
       try {
-        ssc.sparkContext.setLocalProperties(SerializationUtils.clone(ssc.savedProperties.get()))
-        val formattedTime = UIUtils.formatBatchTime(
+        ssc.sparkContext.setLocalProperties(Utils.cloneProperties(ssc.savedProperties.get()))
+        val formattedTime = SparkUIUtils.formatBatchTime(
           job.time.milliseconds, ssc.graph.batchDuration.milliseconds, showYYYYMMSS = false)
         val batchUrl = s"/streaming/batch/?id=${job.time.milliseconds}"
         val batchLinkText = s"[output operation ${job.outputOpId}, batch time ${formattedTime}]"

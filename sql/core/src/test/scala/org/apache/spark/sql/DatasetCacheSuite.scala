@@ -17,16 +17,26 @@
 
 package org.apache.spark.sql
 
+import java.time.LocalTime
+
 import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.execution.ColumnarToRowExec
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.Metadata
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.tags.SlowSQLTest
 
-
-class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits {
+@SlowSQLTest
+class DatasetCacheSuite extends QueryTest
+  with SharedSparkSession
+  with TimeLimits
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   /**
@@ -36,7 +46,8 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     val plan = df.queryExecution.withCachedData
     assert(plan.isInstanceOf[InMemoryRelation])
     val internalPlan = plan.asInstanceOf[InMemoryRelation].cacheBuilder.cachedPlan
-    assert(internalPlan.find(_.isInstanceOf[InMemoryTableScanExec]).size == numOfCachesDependedUpon)
+    assert(find(internalPlan)(_.isInstanceOf[InMemoryTableScanExec]).size
+      == numOfCachesDependedUpon)
   }
 
   test("get storage level") {
@@ -49,7 +60,7 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     assert(ds1.storageLevel == StorageLevel.MEMORY_AND_DISK)
     assert(ds2.storageLevel == StorageLevel.MEMORY_AND_DISK)
     // unpersist
-    ds1.unpersist()
+    ds1.unpersist(blocking = true)
     assert(ds1.storageLevel == StorageLevel.NONE)
     // non-default storage level
     ds1.persist(StorageLevel.MEMORY_ONLY_2)
@@ -71,7 +82,7 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
       cached,
       2, 3, 4)
     // Drop the cache.
-    cached.unpersist()
+    cached.unpersist(blocking = true)
     assert(cached.storageLevel == StorageLevel.NONE, "The Dataset should not be cached.")
   }
 
@@ -88,27 +99,28 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     checkDataset(joined, ("2", 2))
     assertCached(joined, 2)
 
-    ds1.unpersist()
+    ds1.unpersist(blocking = true)
     assert(ds1.storageLevel == StorageLevel.NONE, "The Dataset ds1 should not be cached.")
-    ds2.unpersist()
+    ds2.unpersist(blocking = true)
     assert(ds2.storageLevel == StorageLevel.NONE, "The Dataset ds2 should not be cached.")
   }
 
   test("persist and then groupBy columns asKey, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupByKey(_._1)
-    val agged = grouped.mapGroups { case (g, iter) => (g, iter.map(_._2).sum) }
-    agged.persist()
+    val aggregated = grouped.mapGroups { (g, iter) => (g, iter.map(_._2).sum) }
+    aggregated.persist()
 
     checkDataset(
-      agged.filter(_._1 == "b"),
+      aggregated.filter(_._1 == "b"),
       ("b", 3))
-    assertCached(agged.filter(_._1 == "b"))
+    assertCached(aggregated.filter(_._1 == "b"))
 
-    ds.unpersist()
+    ds.unpersist(blocking = true)
     assert(ds.storageLevel == StorageLevel.NONE, "The Dataset ds should not be cached.")
-    agged.unpersist()
-    assert(agged.storageLevel == StorageLevel.NONE, "The Dataset agged should not be cached.")
+    aggregated.unpersist(blocking = true)
+    assert(aggregated.storageLevel == StorageLevel.NONE,
+           "The Dataset aggregated should not be cached.")
   }
 
   test("persist and then withColumn") {
@@ -122,7 +134,7 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     df.count()
     assertCached(df2)
 
-    df.unpersist()
+    df.unpersist(blocking = true)
     assert(df.storageLevel == StorageLevel.NONE)
   }
 
@@ -136,11 +148,11 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     assertCached(df2)
 
     // udf has been evaluated during caching, and thus should not be re-evaluated here
-    failAfter(2 seconds) {
+    failAfter(2.seconds) {
       df2.collect()
     }
 
-    df.unpersist()
+    df.unpersist(blocking = true)
     assert(df.storageLevel == StorageLevel.NONE)
   }
 
@@ -158,15 +170,15 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
 
   test("SPARK-24596 Non-cascading Cache Invalidation") {
     val df = Seq(("a", 1), ("b", 2)).toDF("s", "i")
-    val df2 = df.filter('i > 1)
-    val df3 = df.filter('i < 2)
+    val df2 = df.filter($"i" > 1)
+    val df3 = df.filter($"i" < 2)
 
     df2.cache()
     df.cache()
     df.count()
     df3.cache()
 
-    df.unpersist()
+    df.unpersist(blocking = true)
 
     // df un-cached; df2 and df3's cache plan re-compiled
     assert(df.storageLevel == StorageLevel.NONE)
@@ -178,8 +190,8 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     val expensiveUDF = udf({ x: Int => Thread.sleep(5000); x })
     val df = spark.range(0, 5).toDF("a")
     val df1 = df.withColumn("b", expensiveUDF($"a"))
-    val df2 = df1.groupBy('a).agg(sum('b))
-    val df3 = df.agg(sum('a))
+    val df2 = df1.groupBy($"a").agg(sum($"b"))
+    val df3 = df.agg(sum($"a"))
 
     df1.cache()
     df2.cache()
@@ -190,20 +202,168 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
 
     df1.unpersist(blocking = true)
 
-    // df1 un-cached; df2's cache plan re-compiled
+    // df1 un-cached; df2's cache plan stays the same
     assert(df1.storageLevel == StorageLevel.NONE)
-    assertCacheDependency(df1.groupBy('a).agg(sum('b)), 0)
+    assertCacheDependency(df1.groupBy($"a").agg(sum($"b")))
 
-    val df4 = df1.groupBy('a).agg(sum('b)).agg(sum("sum(b)"))
+    val df4 = df1.groupBy($"a").agg(sum($"b")).agg(sum("sum(b)"))
     assertCached(df4)
     // reuse loaded cache
-    failAfter(3 seconds) {
+    failAfter(3.seconds) {
       checkDataset(df4, Row(10))
     }
 
-    val df5 = df.agg(sum('a)).filter($"sum(a)" > 1)
+    val df5 = df.agg(sum($"a")).filter($"sum(a)" > 1)
     assertCached(df5)
     // first time use, load cache
     checkDataset(df5, Row(10))
+  }
+
+  test("SPARK-26708 Cache data and cached plan should stay consistent") {
+    val df = spark.range(0, 5).toDF("a")
+    val df1 = df.withColumn("b", $"a" + 1)
+    val df2 = df.filter($"a" > 1)
+
+    df.cache()
+    // Add df1 to the CacheManager; the buffer is currently empty.
+    df1.cache()
+    // After calling collect(), df1's buffer has been loaded.
+    df1.collect()
+    // Add df2 to the CacheManager; the buffer is currently empty.
+    df2.cache()
+
+    // Verify that df1 is a InMemoryRelation plan with dependency on another cached plan.
+    assertCacheDependency(df1)
+    val df1InnerPlan = df1.queryExecution.withCachedData
+      .asInstanceOf[InMemoryRelation].cacheBuilder.cachedPlan
+    // Verify that df2 is a InMemoryRelation plan with dependency on another cached plan.
+    assertCacheDependency(df2)
+
+    df.unpersist(blocking = true)
+
+    // Verify that df1's cache has stayed the same, since df1's cache already has data
+    // before df.unpersist().
+    val df1Limit = df1.limit(2)
+    val df1LimitInnerPlan = df1Limit.queryExecution.withCachedData.collectFirst {
+      case i: InMemoryRelation => i.cacheBuilder.cachedPlan
+    }
+    assert(df1LimitInnerPlan.isDefined && df1LimitInnerPlan.get == df1InnerPlan)
+
+    // Verify that df2's cache has been re-cached, with a new physical plan rid of dependency
+    // on df, since df2's cache had not been loaded before df.unpersist().
+    val df2Limit = df2.limit(2)
+    val df2LimitInnerPlan = df2Limit.queryExecution.withCachedData.collectFirst {
+      case i: InMemoryRelation => i.cacheBuilder.cachedPlan
+    }
+    assert(df2LimitInnerPlan.isDefined &&
+      !df2LimitInnerPlan.get.exists(_.isInstanceOf[InMemoryTableScanExec]))
+  }
+
+  test("SPARK-27739 Save stats from optimized plan") {
+    withTable("a") {
+      spark.range(4)
+        .selectExpr("id", "id % 2 AS p")
+        .write
+        .partitionBy("p")
+        .saveAsTable("a")
+
+      val df = sql("SELECT * FROM a WHERE p = 0")
+      df.cache()
+      df.count()
+      df.queryExecution.withCachedData match {
+        case i: InMemoryRelation =>
+          // Optimized plan has non-default size in bytes
+          assert(i.statsOfPlanToCache.sizeInBytes !==
+            df.sparkSession.sessionState.conf.defaultSizeInBytes)
+      }
+    }
+  }
+
+  test("SPARK-44653: non-trivial DataFrame unions should not break caching") {
+    val df1 = Seq(1 -> 1).toDF("i", "j")
+    val df2 = Seq(2 -> 2).toDF("i", "j")
+    val df3 = Seq(3 -> 3).toDF("i", "j")
+
+    withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
+      withClue("positive: union by position") {
+        val unionDf = df1.union(df2).select($"i")
+        unionDf.cache()
+        val finalDf = unionDf.union(df3.select($"i"))
+        assert(finalDf.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+      }
+
+      withClue("positive: union by name") {
+        val unionDf = df1.unionByName(df2).select($"i")
+        unionDf.cache()
+        val finalDf = unionDf.unionByName(df3.select($"i"))
+        assert(finalDf.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+      }
+
+      withClue("negative: union by position") {
+        val unionDf = df1.union(df2)
+        unionDf.cache()
+        val finalDf = unionDf.union(df3)
+        // It's by design to break caching here.
+        assert(!finalDf.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+      }
+
+      withClue("negative: union by name") {
+        val unionDf = df1.unionByName(df2)
+        unionDf.cache()
+        val finalDf = unionDf.unionByName(df3)
+        // It's by design to break caching here.
+        assert(!finalDf.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+      }
+    }
+  }
+
+  test("SPARK-50682: inner Alias should be canonicalized") {
+    // Put a metadata in the Alias so that it won't be removed by the analyzer.
+    val metadata = Metadata.fromJson("""{"k": "v"}""")
+    val df1 = spark.range(5).select(struct($"id".as("name", metadata)))
+    df1.cache()
+    // This is exactly the same as df1.
+    val df2 = spark.range(5).select(struct($"id".as("name", metadata)))
+    assert(df2.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+
+    val metadata2 = Metadata.fromJson("""{"k2": "v2"}""")
+    // Same with df1 except for the Alias metadata
+    val df3 = spark.range(5).select(struct($"id".as("name", metadata2)))
+    assert(!df3.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+  }
+
+  test("SPARK-53418: Handle TimeType in ColumnAccessor") {
+    val plan = spark.sql("SELECT TIME '13:33:33'").cache().queryExecution.sparkPlan
+    val value = ColumnarToRowExec(plan).executeCollectPublic().head.get(0)
+    assert(value == LocalTime.of(13, 33, 33))
+  }
+
+  test("SPARK-54812: SHOW TABLES should be a no-op.") {
+    val t1 = "show_tables_test_t1"
+    val t2 = "show_tables_test_t2"
+    withTable(t1, t2) {
+      // Create initial table
+      sql(s"CREATE TABLE $t1 (c1 int) USING parquet")
+
+      // Run SHOW TABLES and save to a DataFrame
+      val showTablesDf = sql("SHOW TABLES")
+
+      // Add another table after creating the DataFrame
+      sql(s"CREATE TABLE $t2 (c1 int) USING parquet")
+
+      // Cache the DataFrame - this should reflect the latest state
+      showTablesDf.cache()
+
+      // Verify cached result reflects the latest state (includes t2)
+      val cachedTables = showTablesDf.select("tableName").collect().map(_.getString(0)).toSet
+      assert(cachedTables.contains(t1))
+      assert(!cachedTables.contains(t2))
+
+      // A fresh SHOW TABLES call should also show both tables
+      val freshShowTablesDf = sql("SHOW TABLES")
+      val freshTables = freshShowTablesDf.select("tableName").collect().map(_.getString(0)).toSet
+      assert(freshTables.contains(t1))
+      assert(freshTables.contains(t2))
+    }
   }
 }

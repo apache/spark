@@ -18,8 +18,8 @@
 package org.apache.spark.serializer
 
 import java.io._
+import java.lang.invoke.MethodHandles
 import java.lang.reflect.{Field, Method}
-import java.security.AccessController
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -67,10 +67,20 @@ private[spark] object SerializationDebugger extends Logging {
     new SerializationDebugger().visit(obj, List.empty)
   }
 
-  private[serializer] var enableDebugging: Boolean = {
-    !AccessController.doPrivileged(new sun.security.action.GetBooleanAction(
-      "sun.io.serialization.extendedDebugInfo")).booleanValue()
-  }
+  private[serializer] var enableDebugging: Boolean =
+    if (Runtime.version().feature() >= 24) {
+      // Access plain system property on modern JDKs.
+      // https://github.com/openjdk/jdk/commit/9b0ab92b16f682e65e9847e8127b6ce09fc5759c
+      !java.lang.Boolean.getBoolean("sun.io.serialization.extendedDebugInfo")
+    } else {
+      // Try to access the private static boolean ObjectOutputStream.extendedDebugInfo
+      // to avoid handling SecurityManager changes across different version of JDKs.
+      // See details at - JEP 486: Permanently Disable the Security Manager (JDK 24)
+      val clazz = classOf[ObjectOutputStream]
+      val lookup = MethodHandles.privateLookupIn(clazz, MethodHandles.lookup())
+      val vh = lookup.findStaticVarHandle(clazz, "extendedDebugInfo", java.lang.Boolean.TYPE)
+      !vh.get().asInstanceOf[Boolean]
+    }
 
   private class SerializationDebugger {
 
@@ -104,7 +114,12 @@ private[spark] object SerializationDebugger extends Logging {
             visitExternalizable(e, elem :: stack)
 
           case s: Object with java.io.Serializable =>
-            val elem = s"object (class ${s.getClass.getName}, $s)"
+            val str = try {
+              s.toString
+            } catch {
+              case NonFatal(_) => "exception in toString"
+            }
+            val elem = s"object (class ${s.getClass.getName}, $str)"
             visitSerializable(s, elem :: stack)
 
           case _ =>
@@ -123,7 +138,7 @@ private[spark] object SerializationDebugger extends Logging {
         }
         i += 1
       }
-      return List.empty
+      List.empty
     }
 
     /**
@@ -145,7 +160,7 @@ private[spark] object SerializationDebugger extends Logging {
         }
         i += 1
       }
-      return List.empty
+      List.empty
     }
 
     private def visitSerializable(o: Object, stack: List[String]): List[String] = {
@@ -212,7 +227,7 @@ private[spark] object SerializationDebugger extends Logging {
         }
         i += 1
       }
-      return List.empty
+      List.empty
     }
 
     /**
@@ -249,7 +264,7 @@ private[spark] object SerializationDebugger extends Logging {
       } else {
         visited ++= innerObjectsCatcher.outputArray
       }
-      return List.empty
+      List.empty
     }
   }
 
@@ -303,7 +318,7 @@ private[spark] object SerializationDebugger extends Logging {
 
   /** An output stream that emulates /dev/null */
   private class NullOutputStream extends OutputStream {
-    override def write(b: Int) { }
+    override def write(b: Int): Unit = { }
   }
 
   /**

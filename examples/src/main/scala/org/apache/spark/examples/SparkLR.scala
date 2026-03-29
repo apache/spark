@@ -20,6 +20,7 @@ package org.apache.spark.examples
 
 import java.util.Random
 
+import scala.collection.immutable
 import scala.math.exp
 
 import breeze.linalg.{DenseVector, Vector}
@@ -42,16 +43,16 @@ object SparkLR {
 
   case class DataPoint(x: Vector[Double], y: Double)
 
-  def generateData: Array[DataPoint] = {
+  def generateData: Seq[DataPoint] = {
     def generatePoint(i: Int): DataPoint = {
       val y = if (i % 2 == 0) -1 else 1
       val x = DenseVector.fill(D) {rand.nextGaussian + y * R}
       DataPoint(x, y)
     }
-    Array.tabulate(N)(generatePoint)
+    immutable.ArraySeq.unsafeWrapArray(Array.tabulate(N)(generatePoint))
   }
 
-  def showWarning() {
+  def showWarning(): Unit = {
     System.err.println(
       """WARN: This is a naive implementation of Logistic Regression and is given as an example!
         |Please use org.apache.spark.ml.classification.LogisticRegression
@@ -59,12 +60,12 @@ object SparkLR {
       """.stripMargin)
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     showWarning()
 
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("SparkLR")
       .getOrCreate()
 

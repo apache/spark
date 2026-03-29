@@ -42,4 +42,30 @@ object TypeCheckResult {
   case class TypeCheckFailure(message: String) extends TypeCheckResult {
     def isSuccess: Boolean = false
   }
+
+  /**
+   * Represents an error of data type mismatch with the `DATATYPE_MISMATCH` error class.
+   *
+   * @param errorSubClass A sub-class of `DATATYPE_MISMATCH`.
+   * @param messageParameters Parameters of the sub-class error message.
+   */
+  case class DataTypeMismatch(
+      errorSubClass: String,
+      messageParameters: Map[String, String] = Map.empty)
+    extends TypeCheckResult {
+    def isSuccess: Boolean = false
+  }
+
+  /**
+   * Represents an error of invalid format with the `INVALID_FORMAT` error class.
+   *
+   * @param errorSubClass A sub-class of `INVALID_FORMAT`.
+   * @param messageParameters Parameters of the sub-class error message.
+   */
+  case class InvalidFormat(
+      errorSubClass: String,
+      messageParameters: Map[String, String] = Map.empty)
+    extends TypeCheckResult {
+    def isSuccess: Boolean = false
+  }
 }

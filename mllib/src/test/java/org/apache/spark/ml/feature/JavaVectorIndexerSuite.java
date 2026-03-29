@@ -21,8 +21,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.ml.feature.VectorIndexerSuite.FeatureData;
@@ -47,9 +47,9 @@ public class JavaVectorIndexerSuite extends SharedSparkSession {
       .setOutputCol("indexed")
       .setMaxCategories(2);
     VectorIndexerModel model = indexer.fit(data);
-    Assert.assertEquals(model.numFeatures(), 2);
+    Assertions.assertEquals(2, model.numFeatures());
     Map<Integer, Map<Double, Integer>> categoryMaps = model.javaCategoryMaps();
-    Assert.assertEquals(categoryMaps.size(), 1);
+    Assertions.assertEquals(1, categoryMaps.size());
     Dataset<Row> indexedData = model.transform(data);
   }
 }

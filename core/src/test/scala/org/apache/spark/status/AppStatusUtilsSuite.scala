@@ -19,6 +19,7 @@ package org.apache.spark.status
 import java.util.Date
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.status.AppStatusUtils.getQuantilesValue
 import org.apache.spark.status.api.v1.{TaskData, TaskMetrics}
 
 class AppStatusUtilsSuite extends SparkFunSuite {
@@ -28,6 +29,7 @@ class AppStatusUtilsSuite extends SparkFunSuite {
       taskId = 0,
       index = 0,
       attempt = 0,
+      partitionId = 0,
       launchTime = new Date(1L),
       resultFetchStart = None,
       duration = Some(100L),
@@ -52,13 +54,17 @@ class AppStatusUtilsSuite extends SparkFunSuite {
         inputMetrics = null,
         outputMetrics = null,
         shuffleReadMetrics = null,
-        shuffleWriteMetrics = null)))
+        shuffleWriteMetrics = null)),
+      executorLogs = null,
+      schedulerDelay = 0L,
+      gettingResultTime = 0L)
     assert(AppStatusUtils.schedulerDelay(runningTask) === 0L)
 
     val finishedTask = new TaskData(
       taskId = 0,
       index = 0,
       attempt = 0,
+      partitionId = 0,
       launchTime = new Date(1L),
       resultFetchStart = None,
       duration = Some(100L),
@@ -83,7 +89,20 @@ class AppStatusUtilsSuite extends SparkFunSuite {
         inputMetrics = null,
         outputMetrics = null,
         shuffleReadMetrics = null,
-        shuffleWriteMetrics = null)))
+        shuffleWriteMetrics = null)),
+      executorLogs = null,
+      schedulerDelay = 0L,
+      gettingResultTime = 0L)
     assert(AppStatusUtils.schedulerDelay(finishedTask) === 3L)
+  }
+
+  test("getQuantilesValue") {
+    val values = IndexedSeq(1.0, 2.0, 3.0, 4.0)
+    val quantiles = Array(0.0, 0.25, 0.5, 0.75, 1.0)
+    assert(getQuantilesValue(values, quantiles) == IndexedSeq(1.0, 2.0, 3.0, 4.0, 4.0))
+
+    // When values are empty
+    val emptyValue = IndexedSeq()
+    assert(getQuantilesValue(emptyValue, quantiles) == IndexedSeq(0.0, 0.0, 0.0, 0.0, 0.0))
   }
 }

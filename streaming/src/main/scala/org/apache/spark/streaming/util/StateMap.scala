@@ -26,6 +26,7 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.serializer.{KryoInputObjectInputBridge, KryoOutputObjectOutputBridge}
+import org.apache.spark.streaming.StreamingConf.SESSION_BY_KEY_DELTA_CHAIN_THRESHOLD
 import org.apache.spark.streaming.util.OpenHashMapBasedStateMap._
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -61,8 +62,7 @@ private[streaming] object StateMap {
   def empty[K, S]: StateMap[K, S] = new EmptyStateMap[K, S]
 
   def create[K: ClassTag, S: ClassTag](conf: SparkConf): StateMap[K, S] = {
-    val deltaChainThreshold = conf.getInt("spark.streaming.sessionByKey.deltaChainThreshold",
-      DELTA_CHAIN_LENGTH_THRESHOLD)
+    val deltaChainThreshold = conf.get(SESSION_BY_KEY_DELTA_CHAIN_THRESHOLD)
     new OpenHashMapBasedStateMap[K, S](deltaChainThreshold)
   }
 }
@@ -202,7 +202,7 @@ private[streaming] class OpenHashMapBasedStateMap[K, S](
   /** Get all the data of this map as string formatted as a tree based on the delta depth */
   override def toDebugString(): String = {
     val tabs = if (deltaChainLength > 0) {
-      ("    " * (deltaChainLength - 1)) + "+--- "
+      ("    ".repeat(deltaChainLength - 1)) + "+--- "
     } else ""
     parentStateMap.toDebugString() + "\n" + deltaMap.iterator.mkString(tabs, "\n" + tabs, "")
   }
@@ -244,7 +244,7 @@ private[streaming] class OpenHashMapBasedStateMap[K, S](
     // allocate appropriately sized OpenHashMap.
     outputStream.writeInt(approxSize)
 
-    while(iterOfActiveSessions.hasNext) {
+    while (iterOfActiveSessions.hasNext) {
       parentSessionCount += 1
 
       val (key, state, updateTime) = iterOfActiveSessions.next()
@@ -294,18 +294,19 @@ private[streaming] class OpenHashMapBasedStateMap[K, S](
 
     // Read the records until the limit marking object has been reached
     var parentSessionLoopDone = false
-    while(!parentSessionLoopDone) {
+    while (!parentSessionLoopDone) {
       val obj = inputStream.readObject()
-      if (obj.isInstanceOf[LimitMarker]) {
-        parentSessionLoopDone = true
-        val expectedCount = obj.asInstanceOf[LimitMarker].num
-        assert(expectedCount == newParentSessionStore.deltaMap.size)
-      } else {
-        val key = obj.asInstanceOf[K]
-        val state = inputStream.readObject().asInstanceOf[S]
-        val updateTime = inputStream.readLong()
-        newParentSessionStore.deltaMap.update(
-          key, StateInfo(state, updateTime, deleted = false))
+      obj match {
+        case marker: LimitMarker =>
+          parentSessionLoopDone = true
+          val expectedCount = marker.num
+          assert(expectedCount == newParentSessionStore.deltaMap.size)
+        case _ =>
+          val key = obj.asInstanceOf[K]
+          val state = inputStream.readObject().asInstanceOf[S]
+          val updateTime = inputStream.readLong()
+          newParentSessionStore.deltaMap.update(
+            key, StateInfo(state, updateTime, deleted = false))
       }
     }
     parentStateMap = newParentSessionStore

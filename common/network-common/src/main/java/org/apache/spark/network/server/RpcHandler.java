@@ -19,12 +19,13 @@ package org.apache.spark.network.server;
 
 import java.nio.ByteBuffer;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.network.client.MergedBlockMetaResponseCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.StreamCallbackWithID;
 import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.protocol.MergedBlockMetaRequest;
 
 /**
  * Handler for sendRPC() messages sent by {@link org.apache.spark.network.client.TransportClient}s.
@@ -32,6 +33,8 @@ import org.apache.spark.network.client.TransportClient;
 public abstract class RpcHandler {
 
   private static final RpcResponseCallback ONE_WAY_CALLBACK = new OneWayRpcCallback();
+  private static final MergedBlockMetaReqHandler NOOP_MERGED_BLOCK_META_REQ_HANDLER =
+    new NoopMergedBlockMetaReqHandler();
 
   /**
    * Receive a single RPC message. Any exception thrown while in this method will be sent back to
@@ -100,6 +103,10 @@ public abstract class RpcHandler {
     receive(client, message, ONE_WAY_CALLBACK);
   }
 
+  public MergedBlockMetaReqHandler getMergedBlockMetaReqHandler() {
+    return NOOP_MERGED_BLOCK_META_REQ_HANDLER;
+  }
+
   /**
    * Invoked when the channel associated with the given client is active.
    */
@@ -115,7 +122,7 @@ public abstract class RpcHandler {
 
   private static class OneWayRpcCallback implements RpcResponseCallback {
 
-    private static final Logger logger = LoggerFactory.getLogger(OneWayRpcCallback.class);
+    private static final SparkLogger logger = SparkLoggerFactory.getLogger(OneWayRpcCallback.class);
 
     @Override
     public void onSuccess(ByteBuffer response) {
@@ -129,4 +136,40 @@ public abstract class RpcHandler {
 
   }
 
+  /**
+   * Handler for {@link MergedBlockMetaRequest}.
+   *
+   * @since 3.2.0
+   */
+  public interface MergedBlockMetaReqHandler {
+
+    /**
+     * Receive a {@link MergedBlockMetaRequest}.
+     *
+     * @param client A channel client which enables the handler to make requests back to the sender
+     *     of this RPC.
+     * @param mergedBlockMetaRequest Request for merged block meta.
+     * @param callback Callback which should be invoked exactly once upon success or failure.
+     */
+    void receiveMergeBlockMetaReq(
+        TransportClient client,
+        MergedBlockMetaRequest mergedBlockMetaRequest,
+        MergedBlockMetaResponseCallback callback);
+  }
+
+  /**
+   * A Noop implementation of {@link MergedBlockMetaReqHandler}. This Noop implementation is used
+   * by all the RPC handlers which don't eventually delegate the {@link MergedBlockMetaRequest} to
+   * ExternalBlockHandler in the network-shuffle module.
+   *
+   * @since 3.2.0
+   */
+  private static class NoopMergedBlockMetaReqHandler implements MergedBlockMetaReqHandler {
+
+    @Override
+    public void receiveMergeBlockMetaReq(TransportClient client,
+      MergedBlockMetaRequest mergedBlockMetaRequest, MergedBlockMetaResponseCallback callback) {
+      // do nothing
+    }
+  }
 }

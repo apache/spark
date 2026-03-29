@@ -16,7 +16,7 @@
 #
 
 require 'liquid'
-require 'pygments'
+require 'rouge'
 
 module Jekyll
   class IncludeExampleTag < Liquid::Tag
@@ -54,9 +54,11 @@ module Jekyll
         puts(e.backtrace)
         exit 1
       end
-      code = select_lines(code)
+      code = select_lines(code).strip
 
-      rendered_code = Pygments.highlight(code, :lexer => @lang)
+      formatter = Rouge::Formatters::HTMLPygments.new(Rouge::Formatters::HTML.new)
+      lexer = Rouge::Lexer.find(@lang)
+      rendered_code = formatter.format(lexer.lex(code))
 
       hint = "<div><small>Find full example code at " \
         "\"examples/src/main/#{snippet_file}\" in the Spark repo.</small></div>"
@@ -64,10 +66,10 @@ module Jekyll
       rendered_code + hint
     end
 
-    # Trim the code block so as to have the same indention, regardless of their positions in the
+    # Trim the code block so as to have the same indentation, regardless of their positions in the
     # code file.
     def trim_codeblock(lines)
-      # Select the minimum indention of the current code block.
+      # Select the minimum indentation of the current code block.
       min_start_spaces = lines
         .select { |l| l.strip.size !=0 }
         .map { |l| l[/\A */].size }
@@ -112,8 +114,8 @@ module Jekyll
         range = Range.new(start + 1, endline - 1)
         trimmed = trim_codeblock(lines[range])
         # Filter out possible example tags of overlapped labels.
-        taggs_filtered = trimmed.select { |l| !l.include? '$example ' }
-        result += taggs_filtered.join
+        tags_filtered = trimmed.select { |l| !l.include? '$example ' }
+        result += tags_filtered.join
         result += "\n"
       end
       result

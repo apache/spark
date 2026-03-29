@@ -17,11 +17,12 @@
 
 package org.apache.spark.mllib.regression;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
@@ -33,7 +34,7 @@ public class JavaRidgeRegressionSuite extends SharedSparkSession {
                                         RidgeRegressionModel model) {
     double errorSum = 0;
     for (LabeledPoint point : validationData) {
-      Double prediction = model.predict(point.features());
+      double prediction = model.predict(point.features());
       errorSum += (prediction - point.label()) * (prediction - point.label());
     }
     return errorSum / validationData.size();
@@ -55,14 +56,11 @@ public class JavaRidgeRegressionSuite extends SharedSparkSession {
     int numFeatures = 20;
     List<LabeledPoint> data = generateRidgeData(2 * numExamples, numFeatures, 10.0);
 
-    JavaRDD<LabeledPoint> testRDD = jsc.parallelize(data.subList(0, numExamples));
+    JavaRDD<LabeledPoint> testRDD = jsc.parallelize(
+            new ArrayList<>(data.subList(0, numExamples)));
     List<LabeledPoint> validationData = data.subList(numExamples, 2 * numExamples);
 
-    RidgeRegressionWithSGD ridgeSGDImpl = new RidgeRegressionWithSGD();
-    ridgeSGDImpl.optimizer()
-      .setStepSize(1.0)
-      .setRegParam(0.0)
-      .setNumIterations(200);
+    RidgeRegressionWithSGD ridgeSGDImpl = new RidgeRegressionWithSGD(1.0, 200, 0.0, 1.0);
     RidgeRegressionModel model = ridgeSGDImpl.run(testRDD.rdd());
     double unRegularizedErr = predictionError(validationData, model);
 
@@ -70,7 +68,7 @@ public class JavaRidgeRegressionSuite extends SharedSparkSession {
     model = ridgeSGDImpl.run(testRDD.rdd());
     double regularizedErr = predictionError(validationData, model);
 
-    Assert.assertTrue(regularizedErr < unRegularizedErr);
+    Assertions.assertTrue(regularizedErr < unRegularizedErr);
   }
 
   @Test
@@ -79,15 +77,18 @@ public class JavaRidgeRegressionSuite extends SharedSparkSession {
     int numFeatures = 20;
     List<LabeledPoint> data = generateRidgeData(2 * numExamples, numFeatures, 10.0);
 
-    JavaRDD<LabeledPoint> testRDD = jsc.parallelize(data.subList(0, numExamples));
+    JavaRDD<LabeledPoint> testRDD = jsc.parallelize(
+            new ArrayList<>(data.subList(0, numExamples)));
     List<LabeledPoint> validationData = data.subList(numExamples, 2 * numExamples);
 
-    RidgeRegressionModel model = RidgeRegressionWithSGD.train(testRDD.rdd(), 200, 1.0, 0.0);
+    RidgeRegressionModel model = new RidgeRegressionWithSGD(1.0, 200, 0.0, 1.0)
+        .run(testRDD.rdd());
     double unRegularizedErr = predictionError(validationData, model);
 
-    model = RidgeRegressionWithSGD.train(testRDD.rdd(), 200, 1.0, 0.1);
+    model = new RidgeRegressionWithSGD(1.0, 200, 0.1, 1.0)
+        .run(testRDD.rdd());
     double regularizedErr = predictionError(validationData, model);
 
-    Assert.assertTrue(regularizedErr < unRegularizedErr);
+    Assertions.assertTrue(regularizedErr < unRegularizedErr);
   }
 }

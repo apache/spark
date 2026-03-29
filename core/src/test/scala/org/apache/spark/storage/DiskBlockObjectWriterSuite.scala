@@ -16,16 +16,17 @@
  */
 package org.apache.spark.storage
 
-import java.io.File
+import java.io.{File, InputStream, OutputStream}
+import java.nio.ByteBuffer
 
-import org.scalatest.BeforeAndAfterEach
+import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.executor.ShuffleWriteMetrics
-import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
+import org.apache.spark.serializer.{DeserializationStream, JavaSerializer, SerializationStream, Serializer, SerializerInstance, SerializerManager}
 import org.apache.spark.util.Utils
 
-class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
+class DiskBlockObjectWriterSuite extends SparkFunSuite {
 
   var tempDir: File = _
 
@@ -45,10 +46,14 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
   private def createWriter(): (DiskBlockObjectWriter, File, ShuffleWriteMetrics) = {
     val file = new File(tempDir, "somefile")
     val conf = new SparkConf()
-    val serializerManager = new SerializerManager(new JavaSerializer(conf), conf)
+    val serializerManager = new CustomSerializerManager(new JavaSerializer(conf), conf, None)
     val writeMetrics = new ShuffleWriteMetrics()
     val writer = new DiskBlockObjectWriter(
-      file, serializerManager, new JavaSerializer(new SparkConf()).newInstance(), 1024, true,
+      file,
+      serializerManager,
+      new CustomJavaSerializer(new SparkConf()).newInstance(),
+      1024,
+      true,
       writeMetrics)
     (writer, file, writeMetrics)
   }
@@ -98,7 +103,7 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
 
     writer.open()
     writer.close()
-    intercept[IllegalStateException] {
+    intercept[SparkException] {
       writer.open()
     }
   }
@@ -184,4 +189,90 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
     writer.close()
     assert(segment.length === 0)
   }
+
+  test("calling closeAndDelete() on a partial write file") {
+    val (writer, file, writeMetrics) = createWriter()
+
+    for (i <- 1 to 1000) {
+      writer.write(i, i)
+    }
+    val firstSegment = writer.commitAndGet()
+    assert(firstSegment.length === file.length())
+    assert(writeMetrics.bytesWritten === file.length())
+
+    for (i <- 1 to 500) {
+      writer.write(i, i)
+    }
+
+    val bs = writer.getSerializerWrappedStream.asInstanceOf[OutputStreamWithCloseDetecting]
+    val objOut = writer.getSerializationStream.asInstanceOf[SerializationStreamWithCloseDetecting]
+
+    writer.closeAndDelete()
+    assert(!file.exists())
+    assert(writeMetrics.bytesWritten == 0)
+    assert(writeMetrics.recordsWritten == 0)
+    assert(bs.isClosed)
+    assert(objOut.isClosed)
+  }
+}
+
+trait CloseDetecting {
+  var isClosed = false
+}
+
+class OutputStreamWithCloseDetecting(outputStream: OutputStream)
+    extends OutputStream
+    with CloseDetecting {
+  override def write(b: Int): Unit = outputStream.write(b)
+
+  override def close(): Unit = {
+    isClosed = true
+    outputStream.close()
+  }
+}
+
+class CustomSerializerManager(
+    defaultSerializer: Serializer,
+    conf: SparkConf,
+    encryptionKey: Option[Array[Byte]])
+    extends SerializerManager(defaultSerializer, conf, encryptionKey) {
+  override def wrapStream(blockId: BlockId, s: OutputStream): OutputStream = {
+    new OutputStreamWithCloseDetecting(wrapForCompression(blockId, wrapForEncryption(s)))
+  }
+}
+
+class CustomJavaSerializer(conf: SparkConf) extends JavaSerializer(conf) {
+
+  override def newInstance(): SerializerInstance = {
+    new CustomJavaSerializerInstance(super.newInstance())
+  }
+}
+
+class SerializationStreamWithCloseDetecting(serializationStream: SerializationStream)
+    extends SerializationStream with CloseDetecting {
+
+  override def close(): Unit = {
+    isClosed = true
+    serializationStream.close()
+  }
+
+  override def writeObject[T: ClassTag](t: T): SerializationStream =
+    serializationStream.writeObject(t)
+
+  override def flush(): Unit = serializationStream.flush()
+}
+
+class CustomJavaSerializerInstance(instance: SerializerInstance) extends SerializerInstance {
+  override def serializeStream(s: OutputStream): SerializationStream =
+    new SerializationStreamWithCloseDetecting(instance.serializeStream(s))
+
+  override def serialize[T: ClassTag](t: T): ByteBuffer = instance.serialize(t)
+
+  override def deserialize[T: ClassTag](bytes: ByteBuffer): T = instance.deserialize(bytes)
+
+  override def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T =
+    instance.deserialize(bytes, loader)
+
+  override def deserializeStream(s: InputStream): DeserializationStream =
+    instance.deserializeStream(s)
 }

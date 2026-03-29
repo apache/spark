@@ -63,10 +63,10 @@ public class StreamInterceptor<T extends Message> implements TransportFrameDecod
   }
 
   private void deactivateStream() {
-    if (handler instanceof TransportResponseHandler) {
+    if (handler instanceof TransportResponseHandler transportResponseHandler) {
       // we only have to do this for TransportResponseHandler as it exposes numOutstandingFetches
       // (there is no extra cleanup that needs to happen)
-      ((TransportResponseHandler) handler).deactivateStream();
+      transportResponseHandler.deactivateStream();
     }
   }
 

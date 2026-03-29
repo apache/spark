@@ -45,8 +45,8 @@ Options are:
   -n          : dry run mode. Performs checks and local builds, but do not upload anything.
   -t [tag]    : tag for the spark-rm docker image to use for building (default: "latest").
   -j [path]   : path to local JDK installation to use for building. By default the script will
-                use openjdk8 installed in the docker image.
-  -s [step]   : runs a single step of the process; valid steps are: tag, build, docs, publish
+                use openjdk17 installed in the docker image.
+  -s [step]   : runs a single step of the process; valid steps are: tag, build, docs, publish, finalize
 EOF
 }
 
@@ -54,7 +54,7 @@ WORKDIR=
 IMGTAG=latest
 JAVA=
 RELEASE_STEP=
-while getopts "d:hj:ns:t:" opt; do
+while getopts ":d:hj:ns:t:" opt; do
   case $opt in
     d) WORKDIR="$OPTARG" ;;
     n) DRY_RUN=1 ;;
@@ -62,7 +62,7 @@ while getopts "d:hj:ns:t:" opt; do
     j) JAVA="$OPTARG" ;;
     s) RELEASE_STEP="$OPTARG" ;;
     h) usage ;;
-    ?) error "Invalid option. Run with -h for help." ;;
+    \?) error "Invalid option. Run with -h for help." ;;
   esac
 done
 
@@ -71,9 +71,29 @@ if [ -z "$WORKDIR" ] || [ ! -d "$WORKDIR" ]; then
 fi
 
 if [ -d "$WORKDIR/output" ]; then
-  read -p "Output directory already exists. Overwrite and continue? [y/n] " ANSWER
-  if [ "$ANSWER" != "y" ]; then
+  if [ -z "$ANSWER" ]; then
+    read -p "Output directory already exists. Overwrite and continue? [y/n] " userinput
+    if [ "$userinput" != "y" ]; then
+      error "Exiting."
+    fi
+  elif [ "$ANSWER" != "y" ]; then
     error "Exiting."
+  fi
+fi
+
+if [ ! -z "$RELEASE_STEP" ] && [ "$RELEASE_STEP" = "finalize" ]; then
+  echo "THIS STEP IS IRREVERSIBLE! Make sure the vote has passed and you pick the right RC to finalize."
+  if [ -z "$ANSWER" ]; then
+    read -p "You must be a PMC member to run this step. Continue? [y/n] " userinput
+    if [ "$userinput" != "y" ]; then
+      error "Exiting."
+    fi
+  elif [ "$ANSWER" != "y" ]; then
+    error "Exiting."
+  fi
+
+  if [ -z "$PYPI_API_TOKEN" ]; then
+    stty -echo && printf "PyPi API token: " && read PYPI_API_TOKEN && printf '\n' && stty echo
   fi
 fi
 
@@ -91,10 +111,20 @@ for f in "$SELF"/*; do
   fi
 done
 
+# Add the fallback version of Gemfile, Gemfile.lock and .bundle/config to the local directory.
+cp "$SELF/../../docs/Gemfile" "$WORKDIR"
+cp "$SELF/../../docs/Gemfile.lock" "$WORKDIR"
+cp -r "$SELF/../../docs/.bundle" "$WORKDIR"
+
 GPG_KEY_FILE="$WORKDIR/gpg.key"
 fcreate_secure "$GPG_KEY_FILE"
-$GPG --export-secret-key --armor "$GPG_KEY" > "$GPG_KEY_FILE"
+$GPG --export-secret-key --armor --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" "$GPG_KEY" > "$GPG_KEY_FILE"
 
+# Build base image first (contains common tools shared across all branches)
+run_silent "Building spark-rm-base image..." "docker-build-base.log" \
+  docker build -t "spark-rm-base:latest" -f "$SELF/spark-rm/Dockerfile.base" "$SELF/spark-rm"
+
+# Build branch-specific image (extends base with Java/Python versions for this branch)
 run_silent "Building spark-rm image with tag $IMGTAG..." "docker-build.log" \
   docker build -t "spark-rm:$IMGTAG" --build-arg UID=$UID "$SELF/spark-rm"
 
@@ -121,12 +151,19 @@ RELEASE_TAG=$RELEASE_TAG
 GIT_REF=$GIT_REF
 SPARK_PACKAGE_VERSION=$SPARK_PACKAGE_VERSION
 ASF_USERNAME=$ASF_USERNAME
+ASF_NEXUS_TOKEN=$ASF_NEXUS_TOKEN
 GIT_NAME=$GIT_NAME
 GIT_EMAIL=$GIT_EMAIL
 GPG_KEY=$GPG_KEY
 ASF_PASSWORD=$ASF_PASSWORD
+PYPI_API_TOKEN=$PYPI_API_TOKEN
 GPG_PASSPHRASE=$GPG_PASSPHRASE
 RELEASE_STEP=$RELEASE_STEP
+USER=$USER
+DEBUG_MODE=$DEBUG_MODE
+ANSWER=$ANSWER
+GITHUB_ACTIONS=$GITHUB_ACTIONS
+SPARK_RC_COUNT=$SPARK_RC_COUNT
 EOF
 
 JAVA_VOL=
@@ -135,11 +172,8 @@ if [ -n "$JAVA" ]; then
   JAVA_VOL="--volume $JAVA:/opt/spark-java"
 fi
 
-# SPARK-24530: Sphinx must work with python 3 to generate doc correctly.
-echo "SPHINXPYTHON=/opt/p35/bin/python" >> $ENVFILE
-
 echo "Building $RELEASE_TAG; output will be at $WORKDIR/output"
-docker run -ti \
+docker run $([ -z "$GITHUB_ACTIONS" ] && echo "-ti") \
   --env-file "$ENVFILE" \
   --volume "$WORKDIR:/opt/spark-rm" \
   $JAVA_VOL \

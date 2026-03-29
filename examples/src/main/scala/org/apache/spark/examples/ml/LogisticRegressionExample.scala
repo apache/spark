@@ -55,7 +55,7 @@ object LogisticRegressionExample {
       tol: Double = 1E-6,
       fracTest: Double = 0.2) extends AbstractParams[Params]
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val defaultParams = Params()
 
     val parser = new OptionParser[Params]("LogisticRegressionExample") {
@@ -110,7 +110,7 @@ object LogisticRegressionExample {
 
   def run(params: Params): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName(s"LogisticRegressionExample with $params")
       .getOrCreate()
 

@@ -17,16 +17,19 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable.Map
+
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.executor.ExecutorMetrics
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
+import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.AccumulatorV2
 
 class ExternalClusterManagerSuite extends SparkFunSuite with LocalSparkContext {
   test("launch of backend and scheduler") {
-    val conf = new SparkConf().setMaster("myclusterManager").
-        setAppName("testcm").set("spark.driver.allowMultipleContexts", "true")
+    val conf = new SparkConf().setMaster("myclusterManager").setAppName("testcm")
     sc = new SparkContext(conf)
     // check if the scheduler components are created and initialized
     sc.schedulerBackend match {
@@ -66,11 +69,13 @@ private class DummyExternalClusterManager extends ExternalClusterManager {
 
 private class DummySchedulerBackend extends SchedulerBackend {
   var initialized = false
-  def start() {}
-  def stop() {}
-  def reviveOffers() {}
+  def start(): Unit = {}
+  def stop(): Unit = {}
+  def reviveOffers(): Unit = {}
   def defaultParallelism(): Int = 1
-  def maxNumConcurrentTasks(): Int = 0
+  def maxNumConcurrentTasks(rp: ResourceProfile): Int = 0
+
+  override def getTaskThreadDump(taskId: Long, executorId: String): Option[ThreadStackTrace] = None
 }
 
 private class DummyTaskScheduler extends TaskScheduler {
@@ -78,13 +83,13 @@ private class DummyTaskScheduler extends TaskScheduler {
   override def schedulingMode: SchedulingMode = SchedulingMode.FIFO
   override def rootPool: Pool = new Pool("", schedulingMode, 0, 0)
   override def start(): Unit = {}
-  override def stop(): Unit = {}
+  override def stop(exitCode: Int): Unit = {}
   override def submitTasks(taskSet: TaskSet): Unit = {}
-  override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = {}
   override def killTaskAttempt(
     taskId: Long, interruptThread: Boolean, reason: String): Boolean = false
   override def killAllTaskAttempts(
     stageId: Int, interruptThread: Boolean, reason: String): Unit = {}
+  override def notifyPartitionCompletion(stageId: Int, partitionId: Int): Unit = {}
   override def setDAGScheduler(dagScheduler: DAGScheduler): Unit = {}
   override def defaultParallelism(): Int = 2
   override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
@@ -94,5 +99,10 @@ private class DummyTaskScheduler extends TaskScheduler {
       execId: String,
       accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
       blockManagerId: BlockManagerId,
-      executorMetrics: ExecutorMetrics): Boolean = true
+      executorMetrics: Map[(Int, Int), ExecutorMetrics]): Boolean = true
+  override def executorDecommission(
+    executorId: String,
+    decommissionInfo: ExecutorDecommissionInfo): Unit = {}
+  override def getExecutorDecommissionState(
+    executorId: String): Option[ExecutorDecommissionState] = None
 }

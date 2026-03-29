@@ -1,0 +1,20 @@
+WholeStageCodegen (3)
+  HashAggregate [sum,isEmpty] [sum((l_extendedprice * (1 - l_discount))),revenue,sum,isEmpty]
+    InputAdapter
+      Exchange #1
+        WholeStageCodegen (2)
+          HashAggregate [l_extendedprice,l_discount] [sum,isEmpty,sum,isEmpty]
+            Project [l_extendedprice,l_discount]
+              BroadcastHashJoin [l_partkey,p_partkey,p_brand,p_container,l_quantity,p_size]
+                Project [l_partkey,l_quantity,l_extendedprice,l_discount]
+                  Filter [l_shipinstruct,l_shipmode,l_partkey,l_quantity]
+                    ColumnarToRow
+                      InputAdapter
+                        Scan parquet spark_catalog.default.lineitem [l_partkey,l_quantity,l_extendedprice,l_discount,l_shipinstruct,l_shipmode]
+                InputAdapter
+                  BroadcastExchange #2
+                    WholeStageCodegen (1)
+                      Filter [p_size,p_partkey,p_brand,p_container]
+                        ColumnarToRow
+                          InputAdapter
+                            Scan parquet spark_catalog.default.part [p_partkey,p_brand,p_size,p_container]

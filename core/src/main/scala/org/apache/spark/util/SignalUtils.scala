@@ -19,13 +19,13 @@ package org.apache.spark.util
 
 import java.util.Collections
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import org.apache.commons.lang3.SystemUtils
 import org.slf4j.Logger
 import sun.misc.{Signal, SignalHandler}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MessageWithContext}
+import org.apache.spark.internal.LogKeys._
 
 /**
  * Contains utilities for working with posix signals.
@@ -56,17 +56,40 @@ private[spark] object SignalUtils extends Logging {
    *
    * All actions for a given signal are run in a separate thread.
    */
-  def register(signal: String)(action: => Boolean): Unit = synchronized {
-    if (SystemUtils.IS_OS_UNIX) {
-      try {
-        val handler = handlers.getOrElseUpdate(signal, {
-          logInfo("Registered signal handler for " + signal)
-          new ActionHandler(new Signal(signal))
-        })
-        handler.register(action)
-      } catch {
-        case ex: Exception => logWarning(s"Failed to register signal handler for " + signal, ex)
-      }
+  def register(signal: String)(action: => Boolean): Unit = {
+    if (Utils.isUnix) {
+      register(signal, log"Failed to register signal handler for ${MDC(SIGNAL, signal)}",
+        logStackTrace = true)(action)
+    }
+  }
+
+  /**
+   * Adds an action to be run when a given signal is received by this process.
+   *
+   * This method receives failMessage as additional parameter, which would be logged when it fails
+   * to register the signal. Here the failures include the cases 1) OS doesn't support signal at
+   * all 2) OS doesn't support given signal (Could be possible with non-POSIX signals)
+   *
+   * All actions for a given signal are run in a separate thread.
+   */
+  def register(
+      signal: String,
+      failMessage: MessageWithContext,
+      logStackTrace: Boolean = true)(
+      action: => Boolean): Unit = synchronized {
+    try {
+      val handler = handlers.getOrElseUpdate(signal, {
+        logInfo(log"Registering signal handler for ${MDC(SIGNAL, signal)}")
+        new ActionHandler(new Signal(signal))
+      })
+      handler.register(action)
+    } catch {
+      case ex: Exception =>
+        if (logStackTrace) {
+          logWarning(failMessage, ex)
+        } else {
+          logWarning(failMessage)
+        }
     }
   }
 

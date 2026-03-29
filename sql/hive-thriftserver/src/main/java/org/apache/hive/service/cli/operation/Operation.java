@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,12 +19,13 @@ package org.apache.hive.service.cli.operation;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.ql.QueryState;
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse;
 import org.apache.hadoop.hive.ql.session.OperationLog;
 import org.apache.hive.service.cli.FetchOrientation;
@@ -34,17 +34,22 @@ import org.apache.hive.service.cli.OperationHandle;
 import org.apache.hive.service.cli.OperationState;
 import org.apache.hive.service.cli.OperationStatus;
 import org.apache.hive.service.cli.OperationType;
-import org.apache.hive.service.cli.RowSet;
-import org.apache.hive.service.cli.TableSchema;
 import org.apache.hive.service.cli.session.HiveSession;
-import org.apache.hive.service.cli.thrift.TProtocolVersion;
+import org.apache.hive.service.rpc.thrift.TProtocolVersion;
+import org.apache.hive.service.rpc.thrift.TRowSet;
+import org.apache.hive.service.rpc.thrift.TTableSchema;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 public abstract class Operation {
   protected final HiveSession parentSession;
   private OperationState state = OperationState.INITIALIZED;
   private final OperationHandle opHandle;
   private HiveConf configuration;
-  public static final Log LOG = LogFactory.getLog(Operation.class.getName());
+  public static final SparkLogger LOG = SparkLoggerFactory.getLogger(Operation.class);
   public static final FetchOrientation DEFAULT_FETCH_ORIENTATION = FetchOrientation.FETCH_NEXT;
   public static final long DEFAULT_FETCH_MAX_ROWS = 100;
   protected boolean hasResultSet;
@@ -53,20 +58,38 @@ public abstract class Operation {
   protected volatile Future<?> backgroundHandle;
   protected OperationLog operationLog;
   protected boolean isOperationLogEnabled;
+  protected Map<String, String> confOverlay = new HashMap<String, String>();
 
   private long operationTimeout;
   private long lastAccessTime;
 
-  protected static final EnumSet<FetchOrientation> DEFAULT_FETCH_ORIENTATION_SET =
-      EnumSet.of(FetchOrientation.FETCH_NEXT,FetchOrientation.FETCH_FIRST);
+  protected final QueryState queryState;
 
-  protected Operation(HiveSession parentSession, OperationType opType, boolean runInBackground) {
+  protected static final EnumSet<FetchOrientation> DEFAULT_FETCH_ORIENTATION_SET =
+      EnumSet.of(
+          FetchOrientation.FETCH_NEXT,
+          FetchOrientation.FETCH_FIRST,
+          FetchOrientation.FETCH_PRIOR);
+
+  protected Operation(HiveSession parentSession, OperationType opType) {
+    this(parentSession, null, opType);
+  }
+
+  protected Operation(HiveSession parentSession, Map<String, String> confOverlay,
+      OperationType opType) {
+    this(parentSession, confOverlay, opType, false);
+  }
+
+  protected Operation(HiveSession parentSession,
+      Map<String, String> confOverlay, OperationType opType, boolean runInBackground) {
     this.parentSession = parentSession;
+    this.confOverlay = confOverlay;
     this.runAsync = runInBackground;
     this.opHandle = new OperationHandle(opType, parentSession.getProtocolVersion());
     lastAccessTime = System.currentTimeMillis();
     operationTimeout = HiveConf.getTimeVar(parentSession.getHiveConf(),
         HiveConf.ConfVars.HIVE_SERVER2_IDLE_OPERATION_TIMEOUT, TimeUnit.MILLISECONDS);
+    queryState = new QueryState(parentSession.getHiveConf(), confOverlay, runInBackground);
   }
 
   public Future<?> getBackgroundHandle() {
@@ -188,8 +211,8 @@ public abstract class Operation {
       // create log file
       try {
         if (operationLogFile.exists()) {
-          LOG.warn("The operation log file should not exist, but it is already there: " +
-              operationLogFile.getAbsolutePath());
+          LOG.warn("The operation log file should not exist, but it is already there: {}",
+            MDC.of(LogKeys.PATH, operationLogFile.getAbsolutePath()));
           operationLogFile.delete();
         }
         if (!operationLogFile.createNewFile()) {
@@ -197,13 +220,15 @@ public abstract class Operation {
           // If it can be read/written, keep its contents and use it.
           if (!operationLogFile.canRead() || !operationLogFile.canWrite()) {
             LOG.warn("The already existed operation log file cannot be recreated, " +
-                "and it cannot be read or written: " + operationLogFile.getAbsolutePath());
+              "and it cannot be read or written: {}",
+              MDC.of(LogKeys.PATH, operationLogFile.getAbsolutePath()));
             isOperationLogEnabled = false;
             return;
           }
         }
       } catch (Exception e) {
-        LOG.warn("Unable to create operation log file: " + operationLogFile.getAbsolutePath(), e);
+        LOG.warn("Unable to create operation log file: {}", e,
+          MDC.of(LogKeys.PATH, operationLogFile.getAbsolutePath()));
         isOperationLogEnabled = false;
         return;
       }
@@ -212,8 +237,8 @@ public abstract class Operation {
       try {
         operationLog = new OperationLog(opHandle.toString(), operationLogFile, parentSession.getHiveConf());
       } catch (FileNotFoundException e) {
-        LOG.warn("Unable to instantiate OperationLog object for operation: " +
-            opHandle, e);
+        LOG.warn("Unable to instantiate OperationLog object for operation: {}", e,
+          MDC.of(LogKeys.OPERATION_HANDLE, opHandle));
         isOperationLogEnabled = false;
         return;
       }
@@ -263,8 +288,9 @@ public abstract class Operation {
   protected void cleanupOperationLog() {
     if (isOperationLogEnabled) {
       if (operationLog == null) {
-        LOG.error("Operation [ " + opHandle.getHandleIdentifier() + " ] "
-          + "logging is enabled, but its OperationLog object cannot be found.");
+        LOG.error("Operation [ {} ] logging is enabled, " +
+          "but its OperationLog object cannot be found.",
+          MDC.of(LogKeys.OPERATION_HANDLE_ID, opHandle.getHandleIdentifier()));
       } else {
         operationLog.close();
       }
@@ -277,15 +303,14 @@ public abstract class Operation {
     throw new UnsupportedOperationException("SQLOperation.cancel()");
   }
 
-  public abstract void close() throws HiveSQLException;
-
-  public abstract TableSchema getResultSetSchema() throws HiveSQLException;
-
-  public abstract RowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException;
-
-  public RowSet getNextRowSet() throws HiveSQLException {
-    return getNextRowSet(FetchOrientation.FETCH_NEXT, DEFAULT_FETCH_MAX_ROWS);
+  public void close() throws HiveSQLException {
+    setState(OperationState.CLOSED);
+    cleanupOperationLog();
   }
+
+  public abstract TTableSchema getResultSetSchema() throws HiveSQLException;
+
+  public abstract TRowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException;
 
   /**
    * Verify if the given fetch orientation is part of the default orientation types.
@@ -318,5 +343,9 @@ public abstract class Operation {
       ex.initCause(response.getException());
     }
     return ex;
+  }
+
+  protected Map<String, String> getConfOverlay() {
+    return confOverlay;
   }
 }

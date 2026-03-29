@@ -15,34 +15,128 @@
  * limitations under the License.
  */
 
-#plan-viz-graph .label {
-  font-weight: normal;
-  text-shadow: none;
+:root, [data-bs-theme="light"] {
+  --spark-sql-cluster-fill: #A0DFFF;
+  --spark-sql-cluster-stroke: #3EC0FF;
+  --spark-sql-node-fill: #C3EBFF;
+  --spark-sql-edge: #444;
+  --spark-sql-selected-fill: #E25A1CFF;
+  --spark-sql-selected-stroke: #317EACFF;
+  --spark-sql-linked-fill: #FFC106FF;
+}
+[data-bs-theme="dark"] {
+  --spark-sql-cluster-fill: #1a5276;
+  --spark-sql-cluster-stroke: #5dade2;
+  --spark-sql-node-fill: #1b4f72;
+  --spark-sql-edge: #adb5bd;
+  --spark-sql-selected-fill: #c0470fff;
+  --spark-sql-selected-stroke: #5dade2ff;
+  --spark-sql-linked-fill: #d4a00aff;
 }
 
-#plan-viz-graph svg g.cluster rect {
-  fill: #A0DFFF;
-  stroke: #3EC0FF;
+svg g.label {
+  font-size: 0.85rem;
+  font-weight: normal;
+  text-shadow: none;
+  color: var(--bs-body-color);
+}
+
+svg g.cluster rect {
+  fill: var(--spark-sql-cluster-fill);
+  stroke: var(--spark-sql-cluster-stroke);
   stroke-width: 1px;
 }
 
-#plan-viz-graph svg g.node rect {
-  fill: #C3EBFF;
-  stroke: #3EC0FF;
+svg g.cluster > g.label {
+  font-size: 0.75em;
+  font-style: italic;
+}
+
+svg g.node rect {
+  fill: var(--spark-sql-node-fill);
+  stroke: var(--spark-sql-cluster-stroke);
   stroke-width: 1px;
 }
 
 /* Highlight the SparkPlan node name */
-#plan-viz-graph svg text :first-child {
+svg text :first-child:not(.stageId-and-taskId-metrics) {
   font-weight: bold;
+  font-size: 0.85em;
 }
 
-#plan-viz-graph svg path {
-  stroke: #444;
+svg text {
+  fill: var(--bs-body-color);
+}
+
+svg path {
+  stroke: var(--spark-sql-edge);
   stroke-width: 1.5px;
 }
 
 /* Breaks the long string like file path when showing tooltips */
 .tooltip-inner {
   word-wrap:break-word;
+}
+
+/* Breaks the long job url list when showing Details for Query in SQL */
+.job-url {
+  word-wrap: break-word;
+}
+
+svg g.node rect.selected {
+  fill: var(--spark-sql-selected-fill);
+  stroke: var(--spark-sql-selected-stroke);
+  stroke-width: 2px;
+}
+
+svg g.node rect.linked {
+  fill: var(--spark-sql-linked-fill);
+  stroke: var(--spark-sql-selected-stroke);
+  stroke-width: 2px;
+}
+
+svg path.linked {
+  fill: var(--spark-sql-selected-stroke);
+  stroke: var(--spark-sql-selected-stroke);
+  stroke-width: 2px;
+}
+
+/* Detail side panel */
+#plan-viz-details-panel .card {
+  font-size: 0.75rem;
+}
+
+#plan-viz-details-panel .card-body {
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+#plan-viz-details-panel .card-header {
+  background-color: var(--spark-sql-node-fill);
+  border-bottom-color: var(--spark-sql-cluster-stroke);
+}
+
+#plan-viz-details-panel .table th,
+#plan-viz-details-panel .table td:first-child {
+  white-space: nowrap;
+}
+
+#plan-viz-details-panel .table td:last-child {
+  word-break: break-word;
+}
+
+/* Edge labels showing row counts */
+.edgeLabel text {
+  font-size: 10px;
+  fill: var(--bs-secondary-color);
+}
+
+/* SVG text color for dark mode support */
+#plan-viz-graph .node text,
+#plan-viz-graph g.cluster text {
+  fill: var(--bs-body-color);
+}
+
+#plan-viz-graph {
+  overflow-x: auto;
 }

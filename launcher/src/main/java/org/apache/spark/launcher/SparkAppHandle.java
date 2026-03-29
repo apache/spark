@@ -17,6 +17,8 @@
 
 package org.apache.spark.launcher;
 
+import java.util.Optional;
+
 /**
  * A handle to a running Spark application.
  * <p>
@@ -101,12 +103,18 @@ public interface SparkAppHandle {
   void disconnect();
 
   /**
+   * If the application failed due to an error, return the underlying error. If the app
+   * succeeded, this method returns an empty {@link Optional}.
+   */
+  Optional<Throwable> getError();
+
+  /**
    * Listener for updates to a handle's state. The callbacks do not receive information about
    * what exactly has changed, just that an update has occurred.
    *
    * @since 1.6.0
    */
-  public interface Listener {
+  interface Listener {
 
     /**
      * Callback for changes in the handle's state.

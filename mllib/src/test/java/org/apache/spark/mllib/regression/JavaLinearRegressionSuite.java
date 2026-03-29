@@ -19,8 +19,8 @@ package org.apache.spark.mllib.regression;
 
 import java.util.List;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
@@ -33,7 +33,7 @@ public class JavaLinearRegressionSuite extends SharedSparkSession {
       List<LabeledPoint> validationData, LinearRegressionModel model) {
     int numAccurate = 0;
     for (LabeledPoint point : validationData) {
-      Double prediction = model.predict(point.features());
+      double prediction = model.predict(point.features());
       // A prediction is off if the prediction is more than 0.5 away from expected value.
       if (Math.abs(prediction - point.label()) <= 0.5) {
         numAccurate++;
@@ -53,12 +53,12 @@ public class JavaLinearRegressionSuite extends SharedSparkSession {
     List<LabeledPoint> validationData =
       LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17, 0.1);
 
-    LinearRegressionWithSGD linSGDImpl = new LinearRegressionWithSGD();
+    LinearRegressionWithSGD linSGDImpl = new LinearRegressionWithSGD(1.0, 100, 0.0, 1.0);
     linSGDImpl.setIntercept(true);
     LinearRegressionModel model = linSGDImpl.run(testRDD.rdd());
 
     int numAccurate = validatePrediction(validationData, model);
-    Assert.assertTrue(numAccurate > nPoints * 4.0 / 5.0);
+    Assertions.assertTrue(numAccurate > nPoints * 4.0 / 5.0);
   }
 
   @Test
@@ -72,10 +72,11 @@ public class JavaLinearRegressionSuite extends SharedSparkSession {
     List<LabeledPoint> validationData =
       LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17, 0.1);
 
-    LinearRegressionModel model = LinearRegressionWithSGD.train(testRDD.rdd(), 100);
+    LinearRegressionModel model = new LinearRegressionWithSGD(1.0, 100, 0.0, 1.0)
+        .run(testRDD.rdd());
 
     int numAccurate = validatePrediction(validationData, model);
-    Assert.assertTrue(numAccurate > nPoints * 4.0 / 5.0);
+    Assertions.assertTrue(numAccurate > nPoints * 4.0 / 5.0);
   }
 
   @Test
@@ -85,7 +86,7 @@ public class JavaLinearRegressionSuite extends SharedSparkSession {
     double[] weights = {10, 10};
     JavaRDD<LabeledPoint> testRDD = jsc.parallelize(
       LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 42, 0.1), 2).cache();
-    LinearRegressionWithSGD linSGDImpl = new LinearRegressionWithSGD();
+    LinearRegressionWithSGD linSGDImpl = new LinearRegressionWithSGD(1.0, 100, 0.0, 1.0);
     LinearRegressionModel model = linSGDImpl.run(testRDD.rdd());
     JavaRDD<Vector> vectors = testRDD.map(LabeledPoint::features);
     JavaRDD<Double> predictions = model.predict(vectors);

@@ -1,0 +1,3 @@
+Project [to_protobuf(col#0, org.apache.spark.connect.proto.StorageLevel, None) AS to_protobuf(col, org.apache.spark.connect.proto.StorageLevel, NULL, NULL)#0]
++- Project [from_protobuf(bytes#0, StorageLevel, Some([B)) AS col#0]
+   +- LocalRelation <empty>, [id#0L, bytes#0]

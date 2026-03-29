@@ -21,8 +21,8 @@ import java.io.File;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
@@ -45,7 +45,7 @@ public class JavaPrefixSpanSuite extends SharedSparkSession {
     PrefixSpanModel<Integer> model = prefixSpan.run(sequences);
     JavaRDD<FreqSequence<Integer>> freqSeqs = model.freqSequences().toJavaRDD();
     List<FreqSequence<Integer>> localFreqSeqs = freqSeqs.collect();
-    Assert.assertEquals(5, localFreqSeqs.size());
+    Assertions.assertEquals(5, localFreqSeqs.size());
     // Check that each frequent sequence could be materialized.
     for (PrefixSpan.FreqSequence<Integer> freqSeq : localFreqSeqs) {
       List<List<Integer>> seq = freqSeq.javaSequence();
@@ -77,7 +77,7 @@ public class JavaPrefixSpanSuite extends SharedSparkSession {
           (PrefixSpanModel<Integer>) PrefixSpanModel.load(spark.sparkContext(), outputPath);
       JavaRDD<FreqSequence<Integer>> freqSeqs = newModel.freqSequences().toJavaRDD();
       List<FreqSequence<Integer>> localFreqSeqs = freqSeqs.collect();
-      Assert.assertEquals(5, localFreqSeqs.size());
+      Assertions.assertEquals(5, localFreqSeqs.size());
       // Check that each frequent sequence could be materialized.
       for (PrefixSpan.FreqSequence<Integer> freqSeq : localFreqSeqs) {
         List<List<Integer>> seq = freqSeq.javaSequence();

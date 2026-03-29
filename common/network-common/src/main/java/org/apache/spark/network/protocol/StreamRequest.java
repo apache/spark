@@ -17,7 +17,8 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
+
 import io.netty.buffer.ByteBuf;
 
 /**
@@ -58,8 +59,7 @@ public final class StreamRequest extends AbstractMessage implements RequestMessa
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof StreamRequest) {
-      StreamRequest o = (StreamRequest) other;
+    if (other instanceof StreamRequest o) {
       return streamId.equals(o.streamId);
     }
     return false;
@@ -67,9 +67,7 @@ public final class StreamRequest extends AbstractMessage implements RequestMessa
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("streamId", streamId)
-      .toString();
+    return "StreamRequest[streamId=" + streamId + "]";
   }
 
 }

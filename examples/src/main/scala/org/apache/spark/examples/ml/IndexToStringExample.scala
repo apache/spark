@@ -25,9 +25,9 @@ import org.apache.spark.ml.feature.{IndexToString, StringIndexer}
 import org.apache.spark.sql.SparkSession
 
 object IndexToStringExample {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("IndexToStringExample")
       .getOrCreate()
 

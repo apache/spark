@@ -26,7 +26,8 @@ import org.apache.spark.util.Utils
 
 class JdbcRDDSuite extends SparkFunSuite with BeforeAndAfter with LocalSparkContext {
 
-  before {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     Utils.classForName("org.apache.derby.jdbc.EmbeddedDriver")
     val conn = DriverManager.getConnection("jdbc:derby:target/JdbcRDDSuiteDb;create=true")
     try {
@@ -80,7 +81,7 @@ class JdbcRDDSuite extends SparkFunSuite with BeforeAndAfter with LocalSparkCont
       1, 100, 3,
       (r: ResultSet) => { r.getInt(1) } ).cache()
 
-    assert(rdd.count === 100)
+    assert(rdd.count() === 100)
     assert(rdd.reduce(_ + _) === 10100)
   }
 
@@ -92,11 +93,11 @@ class JdbcRDDSuite extends SparkFunSuite with BeforeAndAfter with LocalSparkCont
       "SELECT DATA FROM BIGINT_TEST WHERE ? <= ID AND ID <= ?",
       1131544775L, 567279358897692673L, 20,
       (r: ResultSet) => { r.getInt(1) } ).cache()
-    assert(rdd.count === 100)
+    assert(rdd.count() === 100)
     assert(rdd.reduce(_ + _) === 5050)
   }
 
-  after {
+  override def afterAll(): Unit = {
     try {
       DriverManager.getConnection("jdbc:derby:target/JdbcRDDSuiteDb;shutdown=true")
     } catch {
@@ -104,5 +105,6 @@ class JdbcRDDSuite extends SparkFunSuite with BeforeAndAfter with LocalSparkCont
         // Normal single database shutdown
         // https://db.apache.org/derby/docs/10.2/ref/rrefexcept71493.html
     }
+    super.afterAll()
   }
 }

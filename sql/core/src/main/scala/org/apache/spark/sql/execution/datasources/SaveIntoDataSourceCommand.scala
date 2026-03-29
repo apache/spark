@@ -17,12 +17,18 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.{Dataset, Row, SaveMode, SparkSession}
+import scala.util.control.NonFatal
+
+import org.apache.spark.SparkThrowable
+import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.command.RunnableCommand
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.CreatableRelationProvider
+import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, WithCTE}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.classic.Dataset
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.command.LeafRunnableCommand
+import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider}
 
 /**
  * Saves the results of `query` in to a data source.
@@ -37,19 +43,56 @@ case class SaveIntoDataSourceCommand(
     query: LogicalPlan,
     dataSource: CreatableRelationProvider,
     options: Map[String, String],
-    mode: SaveMode) extends RunnableCommand {
+    mode: SaveMode) extends LeafRunnableCommand with CTEInChildren {
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
+  override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    dataSource.createRelation(
-      sparkSession.sqlContext, mode, options, Dataset.ofRows(sparkSession, query))
+    var relation: BaseRelation = null
+
+    try {
+      relation = dataSource.createRelation(
+        sparkSession.sqlContext, mode, options, Dataset.ofRows(sparkSession, query))
+    } catch {
+      case e: SparkThrowable =>
+        // We should avoid wrapping `SparkThrowable` exceptions into another `AnalysisException`.
+        throw e
+      case e @ (_: NullPointerException | _: MatchError | _: ArrayIndexOutOfBoundsException) =>
+        // These are some of the exceptions thrown by the data source API. We catch these
+        // exceptions here and rethrow QueryCompilationErrors.externalDataSourceException to
+        // provide a more friendly error message for the user. This list is not exhaustive.
+        throw QueryCompilationErrors.externalDataSourceException(e)
+      case e: Throwable =>
+        // For other exceptions, just rethrow it, since we don't have enough information to
+        // provide a better error message for the user at the moment. We may want to further
+        // improve the error message handling in the future.
+        throw e
+    }
+
+    try {
+      val logicalRelation = LogicalRelation(relation, toAttributes(relation.schema), None,
+        false, None)
+      sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, logicalRelation)
+    } catch {
+      case NonFatal(_) =>
+        // some data source can not support return a valid relation, e.g. `KafkaSourceProvider`
+    }
 
     Seq.empty[Row]
   }
 
-  override def simpleString: String = {
-    val redacted = SQLConf.get.redactOptions(options)
+  override def simpleString(maxFields: Int): String = {
+    val redacted = conf.redactOptions(options)
     s"SaveIntoDataSourceCommand ${dataSource}, ${redacted}, ${mode}"
+  }
+
+  // Override `clone` since the default implementation will turn `CaseInsensitiveMap` to a normal
+  // map.
+  override def clone(): LogicalPlan = {
+    SaveIntoDataSourceCommand(query.clone(), dataSource, options, mode)
+  }
+
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    copy(query = WithCTE(query, cteDefs))
   }
 }

@@ -23,10 +23,7 @@ import org.dmg.pmml.PMML
 import org.scalatest.Suite
 
 import org.apache.spark.SparkContext
-import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
-import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.Dataset
 
 trait PMMLReadWriteTest extends TempDirectory { self: Suite =>
   /**
@@ -47,7 +44,7 @@ trait PMMLReadWriteTest extends TempDirectory { self: Suite =>
       instance.write.format("pmml").save(path)
     }
     instance.write.format("pmml").overwrite().save(path)
-    val pmmlStr = sc.textFile(path).collect.mkString("\n")
+    val pmmlStr = sc.textFile(path).collect().mkString("\n")
     val pmmlModel = PMMLUtils.loadFromString(pmmlStr)
     assert(pmmlModel.getHeader().getApplication().getName().startsWith("Apache Spark"))
     checkModelData(pmmlModel)

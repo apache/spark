@@ -23,7 +23,7 @@ import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapred.SequenceFileOutputFormat
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 
 /**
  * Extra functions available on RDDs of (key, value) pairs to create a Hadoop SequenceFile,
@@ -32,15 +32,12 @@ import org.apache.spark.internal.Logging
  * @note This can't be part of PairRDDFunctions because we need more implicit parameters to
  * convert our keys and values to Writable.
  */
-class SequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable : ClassTag](
+class SequenceFileRDDFunctions[K: IsWritable: ClassTag, V: IsWritable: ClassTag](
     self: RDD[(K, V)],
     _keyWritableClass: Class[_ <: Writable],
     _valueWritableClass: Class[_ <: Writable])
   extends Logging
   with Serializable {
-
-  // TODO the context bound (<%) above should be replaced with simple type bound and implicit
-  // conversion but is a breaking change. This should be fixed in Spark 3.x.
 
   /**
    * Output the RDD as a Hadoop SequenceFile using the Writable types we infer from the RDD's key
@@ -52,7 +49,7 @@ class SequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable : ClassTag
   def saveAsSequenceFile(
       path: String,
       codec: Option[Class[_ <: CompressionCodec]] = None): Unit = self.withScope {
-    def anyToWritable[U <% Writable](u: U): Writable = u
+    def anyToWritable[U: IsWritable](u: U): Writable = u
 
     // TODO We cannot force the return type of `anyToWritable` be same as keyWritableClass and
     // valueWritableClass at the compile time. To implement that, we need to add type parameters to
@@ -61,8 +58,9 @@ class SequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable : ClassTag
     val convertKey = self.keyClass != _keyWritableClass
     val convertValue = self.valueClass != _valueWritableClass
 
-    logInfo("Saving as sequence file of type " +
-      s"(${_keyWritableClass.getSimpleName},${_valueWritableClass.getSimpleName})" )
+    logInfo(log"Saving as sequence file of type " +
+      log"(${MDC(LogKeys.KEY, _keyWritableClass.getSimpleName)}," +
+      log"${MDC(LogKeys.VALUE, _valueWritableClass.getSimpleName)})")
     val format = classOf[SequenceFileOutputFormat[Writable, Writable]]
     val jobConf = new JobConf(self.context.hadoopConfiguration)
     if (!convertKey && !convertValue) {

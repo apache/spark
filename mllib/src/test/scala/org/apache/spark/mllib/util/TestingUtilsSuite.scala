@@ -20,9 +20,11 @@ package org.apache.spark.mllib.util
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.VectorUDT
+import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Matrices, Vectors}
 import org.apache.spark.mllib.util.TestingUtils._
-
+import org.apache.spark.sql.types.{StructField, StructType}
 class TestingUtilsSuite extends SparkFunSuite {
 
   test("Comparing doubles using relative error.") {
@@ -456,5 +458,22 @@ class TestingUtilsSuite extends SparkFunSuite {
 
     assert(Matrices.sparse(2, 2, Array(0, 1, 2), Array(0, 1), Array(3.1, 3.5)) !~=
       Matrices.dense(0, 0, Array()) relTol 0.01)
+  }
+
+  test("SPARK-31400, catalogString distinguish Vectors in ml and mllib") {
+    val schema = StructType(Array[StructField] {
+      StructField("features", new org.apache.spark.mllib.linalg.VectorUDT)
+    })
+    val e = intercept[IllegalArgumentException] {
+      SchemaUtils.checkColumnType(schema, "features", new VectorUDT)
+    }
+    assert(e.getMessage.contains(
+      "org.apache.spark.mllib.linalg.VectorUDT:struct<type:tinyint,size:int,indices:array<int>"),
+      "dataType is not desired")
+
+    val normalSchema = StructType(Array[StructField] {
+      StructField("features", new VectorUDT)
+    })
+    SchemaUtils.checkColumnType(normalSchema, "features", new VectorUDT)
   }
 }

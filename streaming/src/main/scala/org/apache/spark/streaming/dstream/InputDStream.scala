@@ -22,6 +22,7 @@ import java.util.Locale
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkContext
+import org.apache.spark.internal.LogKeys.{LAST_VALID_TIME, TIME}
 import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.streaming.{Duration, StreamingContext, Time}
 import org.apache.spark.streaming.scheduler.RateController
@@ -34,7 +35,7 @@ import org.apache.spark.util.Utils
  * Input streams that can generate RDDs from new data by running a service/thread only on
  * the driver node (that is, without running a receiver on worker nodes), can be
  * implemented by directly inheriting this InputDStream. For example,
- * FileInputDStream, a subclass of InputDStream, monitors a HDFS directory from the driver for
+ * FileInputDStream, a subclass of InputDStream, monitors an HDFS directory from the driver for
  * new files and generates RDDs with the new files. For implementing input streams
  * that requires running a receiver on the worker nodes, use
  * [[org.apache.spark.streaming.dstream.ReceiverInputDStream]] as the parent class.
@@ -48,7 +49,7 @@ abstract class InputDStream[T: ClassTag](_ssc: StreamingContext)
 
   ssc.graph.addInputStream(this)
 
-  /** This is an unique identifier for the input stream. */
+  /** This is a unique identifier for the input stream. */
   val id = ssc.getNewInputStreamId()
 
   // Keep track of the freshest rate for this stream using the rateEstimator
@@ -91,8 +92,8 @@ abstract class InputDStream[T: ClassTag](_ssc: StreamingContext)
     } else {
       // Time is valid, but check it is more than lastValidTime
       if (lastValidTime != null && time < lastValidTime) {
-        logWarning(s"isTimeValid called with $time whereas the last valid time " +
-          s"is $lastValidTime")
+        logWarning(log"isTimeValid called with ${MDC(TIME, time)} whereas the last valid time " +
+          log"is ${MDC(LAST_VALID_TIME, lastValidTime)}")
       }
       lastValidTime = time
       true

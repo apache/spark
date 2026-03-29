@@ -19,12 +19,13 @@ package org.apache.spark.network.server;
 
 import java.io.Closeable;
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricSet;
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
@@ -32,10 +33,9 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
-import org.apache.commons.lang3.SystemUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.util.*;
 
@@ -43,7 +43,7 @@ import org.apache.spark.network.util.*;
  * Server for the efficient, low-level streaming service.
  */
 public class TransportServer implements Closeable {
-  private static final Logger logger = LoggerFactory.getLogger(TransportServer.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(TransportServer.class);
 
   private final TransportContext context;
   private final TransportConf conf;
@@ -53,6 +53,7 @@ public class TransportServer implements Closeable {
   private ServerBootstrap bootstrap;
   private ChannelFuture channelFuture;
   private int port = -1;
+  private final PooledByteBufAllocator pooledAllocator;
   private NettyMemoryMetrics metrics;
 
   /**
@@ -68,7 +69,14 @@ public class TransportServer implements Closeable {
     this.context = context;
     this.conf = context.getConf();
     this.appRpcHandler = appRpcHandler;
-    this.bootstraps = Lists.newArrayList(Preconditions.checkNotNull(bootstraps));
+    if (conf.sharedByteBufAllocators()) {
+      this.pooledAllocator = NettyUtils.getSharedPooledByteBufAllocator(
+          conf.preferDirectBufsForSharedByteBufAllocators(), true /* allowCache */);
+    } else {
+      this.pooledAllocator = NettyUtils.createPooledByteBufAllocator(
+          conf.preferDirectBufs(), true /* allowCache */, conf.serverThreads());
+    }
+    this.bootstraps = new ArrayList<>(Objects.requireNonNull(bootstraps));
 
     boolean shouldClose = true;
     try {
@@ -91,22 +99,22 @@ public class TransportServer implements Closeable {
   private void init(String hostToBind, int portToBind) {
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
-    EventLoopGroup bossGroup =
-      NettyUtils.createEventLoop(ioMode, conf.serverThreads(), conf.getModuleName() + "-server");
-    EventLoopGroup workerGroup = bossGroup;
+    EventLoopGroup bossGroup = NettyUtils.createEventLoop(ioMode, 1,
+      conf.getModuleName() + "-boss");
+    EventLoopGroup workerGroup =  NettyUtils.createEventLoop(ioMode, conf.serverThreads(),
+      conf.getModuleName() + "-server");
 
-    PooledByteBufAllocator allocator = NettyUtils.createPooledByteBufAllocator(
-      conf.preferDirectBufs(), true /* allowCache */, conf.serverThreads());
-
+    String name = System.getProperty("os.name");
+    boolean isNotWindows = !name.regionMatches(true, 0, "Windows", 0, 7);
     bootstrap = new ServerBootstrap()
       .group(bossGroup, workerGroup)
       .channel(NettyUtils.getServerChannelClass(ioMode))
-      .option(ChannelOption.ALLOCATOR, allocator)
-      .option(ChannelOption.SO_REUSEADDR, !SystemUtils.IS_OS_WINDOWS)
-      .childOption(ChannelOption.ALLOCATOR, allocator);
+      .option(ChannelOption.ALLOCATOR, pooledAllocator)
+      .option(ChannelOption.SO_REUSEADDR, isNotWindows)
+      .childOption(ChannelOption.ALLOCATOR, pooledAllocator);
 
     this.metrics = new NettyMemoryMetrics(
-      allocator, conf.getModuleName() + "-server", conf);
+      pooledAllocator, conf.getModuleName() + "-server", conf);
 
     if (conf.backLog() > 0) {
       bootstrap.option(ChannelOption.SO_BACKLOG, conf.backLog());
@@ -120,14 +128,20 @@ public class TransportServer implements Closeable {
       bootstrap.childOption(ChannelOption.SO_SNDBUF, conf.sendBuf());
     }
 
+    if (conf.enableTcpKeepAlive()) {
+      bootstrap.childOption(ChannelOption.SO_KEEPALIVE, true);
+    }
+
     bootstrap.childHandler(new ChannelInitializer<SocketChannel>() {
       @Override
       protected void initChannel(SocketChannel ch) {
+        logger.debug("New connection accepted for remote address {}.", ch.remoteAddress());
+
         RpcHandler rpcHandler = appRpcHandler;
         for (TransportServerBootstrap bootstrap : bootstraps) {
           rpcHandler = bootstrap.doBootstrap(ch, rpcHandler);
         }
-        context.initializePipeline(ch, rpcHandler);
+        context.initializePipeline(ch, rpcHandler, false);
       }
     });
 
@@ -136,8 +150,9 @@ public class TransportServer implements Closeable {
     channelFuture = bootstrap.bind(address);
     channelFuture.syncUninterruptibly();
 
-    port = ((InetSocketAddress) channelFuture.channel().localAddress()).getPort();
-    logger.debug("Shuffle server started on port: {}", port);
+    InetSocketAddress localAddress = (InetSocketAddress) channelFuture.channel().localAddress();
+    port = localAddress.getPort();
+    logger.debug("Shuffle server started on {} with port {}", localAddress.getHostString(), port);
   }
 
   public MetricSet getAllMetrics() {
@@ -158,5 +173,9 @@ public class TransportServer implements Closeable {
       bootstrap.config().childGroup().shutdownGracefully();
     }
     bootstrap = null;
+  }
+
+  public Counter getRegisteredConnections() {
+    return context.getRegisteredConnections();
   }
 }

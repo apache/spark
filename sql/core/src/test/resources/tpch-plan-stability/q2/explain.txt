@@ -1,0 +1,315 @@
+== Physical Plan ==
+TakeOrderedAndProject (55)
++- * Project (54)
+   +- * BroadcastHashJoin Inner BuildRight (53)
+      :- * Project (51)
+      :  +- * BroadcastHashJoin Inner BuildRight (50)
+      :     :- * Project (45)
+      :     :  +- * BroadcastHashJoin Inner BuildRight (44)
+      :     :     :- * Project (39)
+      :     :     :  +- * BroadcastHashJoin Inner BuildRight (38)
+      :     :     :     :- * Project (10)
+      :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (9)
+      :     :     :     :     :- * Project (4)
+      :     :     :     :     :  +- * Filter (3)
+      :     :     :     :     :     +- * ColumnarToRow (2)
+      :     :     :     :     :        +- Scan parquet spark_catalog.default.part (1)
+      :     :     :     :     +- BroadcastExchange (8)
+      :     :     :     :        +- * Filter (7)
+      :     :     :     :           +- * ColumnarToRow (6)
+      :     :     :     :              +- Scan parquet spark_catalog.default.partsupp (5)
+      :     :     :     +- BroadcastExchange (37)
+      :     :     :        +- * Filter (36)
+      :     :     :           +- * HashAggregate (35)
+      :     :     :              +- Exchange (34)
+      :     :     :                 +- * HashAggregate (33)
+      :     :     :                    +- * Project (32)
+      :     :     :                       +- * BroadcastHashJoin Inner BuildRight (31)
+      :     :     :                          :- * Project (25)
+      :     :     :                          :  +- * BroadcastHashJoin Inner BuildRight (24)
+      :     :     :                          :     :- * Project (19)
+      :     :     :                          :     :  +- * BroadcastHashJoin Inner BuildRight (18)
+      :     :     :                          :     :     :- * Filter (13)
+      :     :     :                          :     :     :  +- * ColumnarToRow (12)
+      :     :     :                          :     :     :     +- Scan parquet spark_catalog.default.partsupp (11)
+      :     :     :                          :     :     +- BroadcastExchange (17)
+      :     :     :                          :     :        +- * Filter (16)
+      :     :     :                          :     :           +- * ColumnarToRow (15)
+      :     :     :                          :     :              +- Scan parquet spark_catalog.default.supplier (14)
+      :     :     :                          :     +- BroadcastExchange (23)
+      :     :     :                          :        +- * Filter (22)
+      :     :     :                          :           +- * ColumnarToRow (21)
+      :     :     :                          :              +- Scan parquet spark_catalog.default.nation (20)
+      :     :     :                          +- BroadcastExchange (30)
+      :     :     :                             +- * Project (29)
+      :     :     :                                +- * Filter (28)
+      :     :     :                                   +- * ColumnarToRow (27)
+      :     :     :                                      +- Scan parquet spark_catalog.default.region (26)
+      :     :     +- BroadcastExchange (43)
+      :     :        +- * Filter (42)
+      :     :           +- * ColumnarToRow (41)
+      :     :              +- Scan parquet spark_catalog.default.supplier (40)
+      :     +- BroadcastExchange (49)
+      :        +- * Filter (48)
+      :           +- * ColumnarToRow (47)
+      :              +- Scan parquet spark_catalog.default.nation (46)
+      +- ReusedExchange (52)
+
+
+(1) Scan parquet spark_catalog.default.part
+Output [4]: [p_partkey#1, p_mfgr#2, p_type#3, p_size#4]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/part]
+PushedFilters: [IsNotNull(p_size), IsNotNull(p_type), EqualTo(p_size,15), StringEndsWith(p_type,BRASS), IsNotNull(p_partkey)]
+ReadSchema: struct<p_partkey:bigint,p_mfgr:string,p_type:string,p_size:int>
+
+(2) ColumnarToRow [codegen id : 10]
+Input [4]: [p_partkey#1, p_mfgr#2, p_type#3, p_size#4]
+
+(3) Filter [codegen id : 10]
+Input [4]: [p_partkey#1, p_mfgr#2, p_type#3, p_size#4]
+Condition : ((((isnotnull(p_size#4) AND isnotnull(p_type#3)) AND (p_size#4 = 15)) AND EndsWith(p_type#3, BRASS)) AND isnotnull(p_partkey#1))
+
+(4) Project [codegen id : 10]
+Output [2]: [p_partkey#1, p_mfgr#2]
+Input [4]: [p_partkey#1, p_mfgr#2, p_type#3, p_size#4]
+
+(5) Scan parquet spark_catalog.default.partsupp
+Output [3]: [ps_partkey#5, ps_suppkey#6, ps_supplycost#7]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/partsupp]
+PushedFilters: [IsNotNull(ps_partkey), IsNotNull(ps_supplycost), IsNotNull(ps_suppkey)]
+ReadSchema: struct<ps_partkey:bigint,ps_suppkey:bigint,ps_supplycost:decimal(10,0)>
+
+(6) ColumnarToRow [codegen id : 1]
+Input [3]: [ps_partkey#5, ps_suppkey#6, ps_supplycost#7]
+
+(7) Filter [codegen id : 1]
+Input [3]: [ps_partkey#5, ps_suppkey#6, ps_supplycost#7]
+Condition : ((isnotnull(ps_partkey#5) AND isnotnull(ps_supplycost#7)) AND isnotnull(ps_suppkey#6))
+
+(8) BroadcastExchange
+Input [3]: [ps_partkey#5, ps_suppkey#6, ps_supplycost#7]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=1]
+
+(9) BroadcastHashJoin [codegen id : 10]
+Left keys [1]: [p_partkey#1]
+Right keys [1]: [ps_partkey#5]
+Join type: Inner
+Join condition: None
+
+(10) Project [codegen id : 10]
+Output [4]: [p_partkey#1, p_mfgr#2, ps_suppkey#6, ps_supplycost#7]
+Input [5]: [p_partkey#1, p_mfgr#2, ps_partkey#5, ps_suppkey#6, ps_supplycost#7]
+
+(11) Scan parquet spark_catalog.default.partsupp
+Output [3]: [ps_partkey#8, ps_suppkey#9, ps_supplycost#10]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/partsupp]
+PushedFilters: [IsNotNull(ps_suppkey), IsNotNull(ps_partkey)]
+ReadSchema: struct<ps_partkey:bigint,ps_suppkey:bigint,ps_supplycost:decimal(10,0)>
+
+(12) ColumnarToRow [codegen id : 5]
+Input [3]: [ps_partkey#8, ps_suppkey#9, ps_supplycost#10]
+
+(13) Filter [codegen id : 5]
+Input [3]: [ps_partkey#8, ps_suppkey#9, ps_supplycost#10]
+Condition : (isnotnull(ps_suppkey#9) AND isnotnull(ps_partkey#8))
+
+(14) Scan parquet spark_catalog.default.supplier
+Output [2]: [s_suppkey#11, s_nationkey#12]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/supplier]
+PushedFilters: [IsNotNull(s_suppkey), IsNotNull(s_nationkey)]
+ReadSchema: struct<s_suppkey:bigint,s_nationkey:bigint>
+
+(15) ColumnarToRow [codegen id : 2]
+Input [2]: [s_suppkey#11, s_nationkey#12]
+
+(16) Filter [codegen id : 2]
+Input [2]: [s_suppkey#11, s_nationkey#12]
+Condition : (isnotnull(s_suppkey#11) AND isnotnull(s_nationkey#12))
+
+(17) BroadcastExchange
+Input [2]: [s_suppkey#11, s_nationkey#12]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=2]
+
+(18) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [ps_suppkey#9]
+Right keys [1]: [s_suppkey#11]
+Join type: Inner
+Join condition: None
+
+(19) Project [codegen id : 5]
+Output [3]: [ps_partkey#8, ps_supplycost#10, s_nationkey#12]
+Input [5]: [ps_partkey#8, ps_suppkey#9, ps_supplycost#10, s_suppkey#11, s_nationkey#12]
+
+(20) Scan parquet spark_catalog.default.nation
+Output [2]: [n_nationkey#13, n_regionkey#14]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/nation]
+PushedFilters: [IsNotNull(n_nationkey), IsNotNull(n_regionkey)]
+ReadSchema: struct<n_nationkey:bigint,n_regionkey:bigint>
+
+(21) ColumnarToRow [codegen id : 3]
+Input [2]: [n_nationkey#13, n_regionkey#14]
+
+(22) Filter [codegen id : 3]
+Input [2]: [n_nationkey#13, n_regionkey#14]
+Condition : (isnotnull(n_nationkey#13) AND isnotnull(n_regionkey#14))
+
+(23) BroadcastExchange
+Input [2]: [n_nationkey#13, n_regionkey#14]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=3]
+
+(24) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [s_nationkey#12]
+Right keys [1]: [n_nationkey#13]
+Join type: Inner
+Join condition: None
+
+(25) Project [codegen id : 5]
+Output [3]: [ps_partkey#8, ps_supplycost#10, n_regionkey#14]
+Input [5]: [ps_partkey#8, ps_supplycost#10, s_nationkey#12, n_nationkey#13, n_regionkey#14]
+
+(26) Scan parquet spark_catalog.default.region
+Output [2]: [r_regionkey#15, r_name#16]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/region]
+PushedFilters: [IsNotNull(r_name), EqualTo(r_name,EUROPE), IsNotNull(r_regionkey)]
+ReadSchema: struct<r_regionkey:bigint,r_name:string>
+
+(27) ColumnarToRow [codegen id : 4]
+Input [2]: [r_regionkey#15, r_name#16]
+
+(28) Filter [codegen id : 4]
+Input [2]: [r_regionkey#15, r_name#16]
+Condition : ((isnotnull(r_name#16) AND (r_name#16 = EUROPE)) AND isnotnull(r_regionkey#15))
+
+(29) Project [codegen id : 4]
+Output [1]: [r_regionkey#15]
+Input [2]: [r_regionkey#15, r_name#16]
+
+(30) BroadcastExchange
+Input [1]: [r_regionkey#15]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=4]
+
+(31) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [n_regionkey#14]
+Right keys [1]: [r_regionkey#15]
+Join type: Inner
+Join condition: None
+
+(32) Project [codegen id : 5]
+Output [2]: [ps_partkey#8, ps_supplycost#10]
+Input [4]: [ps_partkey#8, ps_supplycost#10, n_regionkey#14, r_regionkey#15]
+
+(33) HashAggregate [codegen id : 5]
+Input [2]: [ps_partkey#8, ps_supplycost#10]
+Keys [1]: [ps_partkey#8]
+Functions [1]: [partial_min(ps_supplycost#10)]
+Aggregate Attributes [1]: [min#17]
+Results [2]: [ps_partkey#8, min#18]
+
+(34) Exchange
+Input [2]: [ps_partkey#8, min#18]
+Arguments: hashpartitioning(ps_partkey#8, 5), ENSURE_REQUIREMENTS, [plan_id=5]
+
+(35) HashAggregate [codegen id : 6]
+Input [2]: [ps_partkey#8, min#18]
+Keys [1]: [ps_partkey#8]
+Functions [1]: [min(ps_supplycost#10)]
+Aggregate Attributes [1]: [min(ps_supplycost#10)#19]
+Results [2]: [min(ps_supplycost#10)#19 AS min(ps_supplycost)#20, ps_partkey#8]
+
+(36) Filter [codegen id : 6]
+Input [2]: [min(ps_supplycost)#20, ps_partkey#8]
+Condition : isnotnull(min(ps_supplycost)#20)
+
+(37) BroadcastExchange
+Input [2]: [min(ps_supplycost)#20, ps_partkey#8]
+Arguments: HashedRelationBroadcastMode(List(input[0, decimal(10,0), false], input[1, bigint, true]),false), [plan_id=6]
+
+(38) BroadcastHashJoin [codegen id : 10]
+Left keys [2]: [ps_supplycost#7, p_partkey#1]
+Right keys [2]: [min(ps_supplycost)#20, ps_partkey#8]
+Join type: Inner
+Join condition: None
+
+(39) Project [codegen id : 10]
+Output [3]: [p_partkey#1, p_mfgr#2, ps_suppkey#6]
+Input [6]: [p_partkey#1, p_mfgr#2, ps_suppkey#6, ps_supplycost#7, min(ps_supplycost)#20, ps_partkey#8]
+
+(40) Scan parquet spark_catalog.default.supplier
+Output [7]: [s_suppkey#21, s_name#22, s_address#23, s_nationkey#24, s_phone#25, s_acctbal#26, s_comment#27]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/supplier]
+PushedFilters: [IsNotNull(s_suppkey), IsNotNull(s_nationkey)]
+ReadSchema: struct<s_suppkey:bigint,s_name:string,s_address:string,s_nationkey:bigint,s_phone:string,s_acctbal:decimal(10,0),s_comment:string>
+
+(41) ColumnarToRow [codegen id : 7]
+Input [7]: [s_suppkey#21, s_name#22, s_address#23, s_nationkey#24, s_phone#25, s_acctbal#26, s_comment#27]
+
+(42) Filter [codegen id : 7]
+Input [7]: [s_suppkey#21, s_name#22, s_address#23, s_nationkey#24, s_phone#25, s_acctbal#26, s_comment#27]
+Condition : (isnotnull(s_suppkey#21) AND isnotnull(s_nationkey#24))
+
+(43) BroadcastExchange
+Input [7]: [s_suppkey#21, s_name#22, s_address#23, s_nationkey#24, s_phone#25, s_acctbal#26, s_comment#27]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=7]
+
+(44) BroadcastHashJoin [codegen id : 10]
+Left keys [1]: [ps_suppkey#6]
+Right keys [1]: [s_suppkey#21]
+Join type: Inner
+Join condition: None
+
+(45) Project [codegen id : 10]
+Output [8]: [p_partkey#1, p_mfgr#2, s_name#22, s_address#23, s_nationkey#24, s_phone#25, s_acctbal#26, s_comment#27]
+Input [10]: [p_partkey#1, p_mfgr#2, ps_suppkey#6, s_suppkey#21, s_name#22, s_address#23, s_nationkey#24, s_phone#25, s_acctbal#26, s_comment#27]
+
+(46) Scan parquet spark_catalog.default.nation
+Output [3]: [n_nationkey#28, n_name#29, n_regionkey#30]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/nation]
+PushedFilters: [IsNotNull(n_nationkey), IsNotNull(n_regionkey)]
+ReadSchema: struct<n_nationkey:bigint,n_name:string,n_regionkey:bigint>
+
+(47) ColumnarToRow [codegen id : 8]
+Input [3]: [n_nationkey#28, n_name#29, n_regionkey#30]
+
+(48) Filter [codegen id : 8]
+Input [3]: [n_nationkey#28, n_name#29, n_regionkey#30]
+Condition : (isnotnull(n_nationkey#28) AND isnotnull(n_regionkey#30))
+
+(49) BroadcastExchange
+Input [3]: [n_nationkey#28, n_name#29, n_regionkey#30]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=8]
+
+(50) BroadcastHashJoin [codegen id : 10]
+Left keys [1]: [s_nationkey#24]
+Right keys [1]: [n_nationkey#28]
+Join type: Inner
+Join condition: None
+
+(51) Project [codegen id : 10]
+Output [9]: [p_partkey#1, p_mfgr#2, s_name#22, s_address#23, s_phone#25, s_acctbal#26, s_comment#27, n_name#29, n_regionkey#30]
+Input [11]: [p_partkey#1, p_mfgr#2, s_name#22, s_address#23, s_nationkey#24, s_phone#25, s_acctbal#26, s_comment#27, n_nationkey#28, n_name#29, n_regionkey#30]
+
+(52) ReusedExchange [Reuses operator id: 30]
+Output [1]: [r_regionkey#31]
+
+(53) BroadcastHashJoin [codegen id : 10]
+Left keys [1]: [n_regionkey#30]
+Right keys [1]: [r_regionkey#31]
+Join type: Inner
+Join condition: None
+
+(54) Project [codegen id : 10]
+Output [8]: [s_acctbal#26, s_name#22, n_name#29, p_partkey#1, p_mfgr#2, s_address#23, s_phone#25, s_comment#27]
+Input [10]: [p_partkey#1, p_mfgr#2, s_name#22, s_address#23, s_phone#25, s_acctbal#26, s_comment#27, n_name#29, n_regionkey#30, r_regionkey#31]
+
+(55) TakeOrderedAndProject
+Input [8]: [s_acctbal#26, s_name#22, n_name#29, p_partkey#1, p_mfgr#2, s_address#23, s_phone#25, s_comment#27]
+Arguments: 100, [s_acctbal#26 DESC NULLS LAST, n_name#29 ASC NULLS FIRST, s_name#22 ASC NULLS FIRST, p_partkey#1 ASC NULLS FIRST], [s_acctbal#26, s_name#22, n_name#29, p_partkey#1, p_mfgr#2, s_address#23, s_phone#25, s_comment#27]
+

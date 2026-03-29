@@ -20,8 +20,8 @@ package org.apache.spark.ml.feature;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.ml.linalg.Vector;
@@ -69,7 +69,7 @@ public class JavaPolynomialExpansionSuite extends SharedSparkSession {
     for (Row r : pairs) {
       double[] polyFeatures = ((Vector) r.get(0)).toArray();
       double[] expected = ((Vector) r.get(1)).toArray();
-      Assert.assertArrayEquals(polyFeatures, expected, 1e-1);
+      Assertions.assertArrayEquals(polyFeatures, expected, 1e-1);
     }
   }
 }

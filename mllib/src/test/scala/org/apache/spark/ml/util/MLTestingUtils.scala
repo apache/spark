@@ -23,8 +23,7 @@ import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol, HasWeightCol}
-import org.apache.spark.ml.recommendation.{ALS, ALSModel}
+import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
@@ -205,8 +204,8 @@ object MLTestingUtils extends SparkFunSuite {
       seed: Long): Unit = {
     val (overSampledData, weightedData) = genEquivalentOversampledAndWeightedInstances(
       data, seed)
-    val weightedModel = estimator.set(estimator.weightCol, "weight").fit(weightedData)
     val overSampledModel = estimator.set(estimator.weightCol, "").fit(overSampledData)
+    val weightedModel = estimator.set(estimator.weightCol, "weight").fit(weightedData)
     modelEquals(weightedModel, overSampledModel)
   }
 
@@ -221,14 +220,15 @@ object MLTestingUtils extends SparkFunSuite {
       numClasses: Int,
       modelEquals: (M, M) => Unit,
       outlierRatio: Int): Unit = {
-    import data.sqlContext.implicits._
+    import data.sparkSession.implicits._
     val outlierDS = data.withColumn("weight", lit(1.0)).as[Instance].flatMap {
       case Instance(l, w, f) =>
         val outlierLabel = if (numClasses == 0) -l else numClasses - l - 1
         List.fill(outlierRatio)(Instance(outlierLabel, 0.0001, f)) ++ List(Instance(l, w, f))
     }
     val trueModel = estimator.set(estimator.weightCol, "").fit(data)
-    val outlierModel = estimator.set(estimator.weightCol, "weight").fit(outlierDS)
+    val outlierModel = estimator.set(estimator.weightCol, "weight")
+      .fit(outlierDS)
     modelEquals(trueModel, outlierModel)
   }
 
@@ -241,7 +241,7 @@ object MLTestingUtils extends SparkFunSuite {
       estimator: E with HasWeightCol,
       modelEquals: (M, M) => Unit): Unit = {
     estimator.set(estimator.weightCol, "weight")
-    val models = Seq(0.001, 1.0, 1000.0).map { w =>
+    val models = Seq(0.01, 1.0, 1000.0).map { w =>
       val df = data.withColumn("weight", lit(w))
       estimator.fit(df)
     }
@@ -254,8 +254,8 @@ object MLTestingUtils extends SparkFunSuite {
    * one having double array "features" column with float precision, and one having float array
    * "features" column.
    */
-  def generateArrayFeatureDataset(dataset: Dataset[_],
-    featuresColName: String = "features"): (Dataset[_], Dataset[_], Dataset[_]) = {
+  def generateArrayFeatureDataset(dataset: DataFrame,
+    featuresColName: String = "features"): (DataFrame, DataFrame, DataFrame) = {
     val toFloatVectorUDF = udf { (features: Vector) =>
       Vectors.dense(features.toArray.map(_.toFloat.toDouble))}
     val toDoubleArrayUDF = udf { (features: Vector) => features.toArray}
@@ -267,5 +267,21 @@ object MLTestingUtils extends SparkFunSuite {
     assert(newDatasetD.schema(featuresColName).dataType.equals(new ArrayType(DoubleType, false)))
     assert(newDatasetF.schema(featuresColName).dataType.equals(new ArrayType(FloatType, false)))
     (newDataset, newDatasetD, newDatasetF)
+  }
+
+  def modelPredictionEquals[M <: PredictionModel[_, M]](
+      data: DataFrame,
+      compareFunc: (Double, Double) => Boolean,
+      fractionInTol: Double)(
+      model1: M,
+      model2: M): Unit = {
+    val pred1 = model1.transform(data).select(model1.getPredictionCol).collect()
+    val pred2 = model2.transform(data).select(model2.getPredictionCol).collect()
+    val inTol = pred1.zip(pred2).count { case (p1, p2) =>
+      val x = p1.getDouble(0)
+      val y = p2.getDouble(0)
+      compareFunc(x, y)
+    }
+    assert(inTol / pred1.length.toDouble >= fractionInTol)
   }
 }

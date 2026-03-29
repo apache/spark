@@ -53,7 +53,7 @@ object ChiSqSelectorExample {
     // $example off$
 
     println("filtered data: ")
-    filteredData.foreach(x => println(x))
+    filteredData.collect().foreach(x => println(x))
 
     sc.stop()
   }

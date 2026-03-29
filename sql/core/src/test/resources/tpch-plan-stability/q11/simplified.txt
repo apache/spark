@@ -1,0 +1,53 @@
+WholeStageCodegen (5)
+  Sort [value]
+    InputAdapter
+      Exchange [value] #1
+        WholeStageCodegen (4)
+          Filter [value]
+            Subquery #1
+              WholeStageCodegen (4)
+                HashAggregate [sum,isEmpty] [sum((ps_supplycost * cast(ps_availqty as decimal(10,0)))),(sum((ps_supplycost * ps_availqty)) * 0.0001000000),sum,isEmpty]
+                  InputAdapter
+                    Exchange #5
+                      WholeStageCodegen (3)
+                        HashAggregate [ps_supplycost,ps_availqty] [sum,isEmpty,sum,isEmpty]
+                          Project [ps_availqty,ps_supplycost]
+                            BroadcastHashJoin [s_nationkey,n_nationkey]
+                              Project [ps_availqty,ps_supplycost,s_nationkey]
+                                BroadcastHashJoin [ps_suppkey,s_suppkey]
+                                  Filter [ps_suppkey]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet spark_catalog.default.partsupp [ps_suppkey,ps_availqty,ps_supplycost]
+                                  InputAdapter
+                                    ReusedExchange [s_suppkey,s_nationkey] #3
+                              InputAdapter
+                                ReusedExchange [n_nationkey] #4
+            HashAggregate [ps_partkey,sum,isEmpty] [sum((ps_supplycost * cast(ps_availqty as decimal(10,0)))),value,sum,isEmpty]
+              InputAdapter
+                Exchange [ps_partkey] #2
+                  WholeStageCodegen (3)
+                    HashAggregate [ps_partkey,ps_supplycost,ps_availqty] [sum,isEmpty,sum,isEmpty]
+                      Project [ps_partkey,ps_availqty,ps_supplycost]
+                        BroadcastHashJoin [s_nationkey,n_nationkey]
+                          Project [ps_partkey,ps_availqty,ps_supplycost,s_nationkey]
+                            BroadcastHashJoin [ps_suppkey,s_suppkey]
+                              Filter [ps_suppkey]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet spark_catalog.default.partsupp [ps_partkey,ps_suppkey,ps_availqty,ps_supplycost]
+                              InputAdapter
+                                BroadcastExchange #3
+                                  WholeStageCodegen (1)
+                                    Filter [s_suppkey,s_nationkey]
+                                      ColumnarToRow
+                                        InputAdapter
+                                          Scan parquet spark_catalog.default.supplier [s_suppkey,s_nationkey]
+                          InputAdapter
+                            BroadcastExchange #4
+                              WholeStageCodegen (2)
+                                Project [n_nationkey]
+                                  Filter [n_name,n_nationkey]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet spark_catalog.default.nation [n_nationkey,n_name]

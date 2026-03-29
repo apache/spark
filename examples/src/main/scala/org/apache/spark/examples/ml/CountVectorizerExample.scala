@@ -24,9 +24,9 @@ import org.apache.spark.ml.feature.{CountVectorizer, CountVectorizerModel}
 import org.apache.spark.sql.SparkSession
 
 object CountVectorizerExample {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("CountVectorizerExample")
       .getOrCreate()
 

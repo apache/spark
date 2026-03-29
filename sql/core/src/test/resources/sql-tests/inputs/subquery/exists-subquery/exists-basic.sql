@@ -1,5 +1,6 @@
 -- Tests EXISTS subquery support. Tests basic form 
 -- of EXISTS subquery (both EXISTS and NOT EXISTS)
+--ONLY_IF spark
 
 CREATE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
   (100, "emp 1", date "2005-01-01", 100.00D, 10),

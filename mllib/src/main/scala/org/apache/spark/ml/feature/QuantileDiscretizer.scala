@@ -22,16 +22,19 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasInputCols, HasOutputCol, HasOutputCols}
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Params for [[QuantileDiscretizer]].
  */
 private[feature] trait QuantileDiscretizerBase extends Params
-  with HasHandleInvalid with HasInputCol with HasOutputCol {
+  with HasHandleInvalid with HasInputCol with HasOutputCol with HasInputCols with HasOutputCols
+  with HasRelativeError {
 
   /**
    * Number of buckets (quantiles, or categories) into which data points are grouped. Must
@@ -45,7 +48,6 @@ private[feature] trait QuantileDiscretizerBase extends Params
   val numBuckets = new IntParam(this, "numBuckets", "Number of buckets (quantiles, or " +
     "categories) into which data points are grouped. Must be >= 2.",
     ParamValidators.gtEq(2))
-  setDefault(numBuckets -> 2)
 
   /** @group getParam */
   def getNumBuckets: Int = getOrDefault(numBuckets)
@@ -68,22 +70,6 @@ private[feature] trait QuantileDiscretizerBase extends Params
   def getNumBucketsArray: Array[Int] = $(numBucketsArray)
 
   /**
-   * Relative error (see documentation for
-   * `org.apache.spark.sql.DataFrameStatFunctions.approxQuantile` for description)
-   * Must be in the range [0, 1].
-   * Note that in multiple columns case, relative error is applied to all columns.
-   * default: 0.001
-   * @group param
-   */
-  val relativeError = new DoubleParam(this, "relativeError", "The relative target precision " +
-    "for the approximate quantile algorithm used to generate buckets. " +
-    "Must be in the range [0, 1].", ParamValidators.inRange(0.0, 1.0))
-  setDefault(relativeError -> 0.001)
-
-  /** @group getParam */
-  def getRelativeError: Double = getOrDefault(relativeError)
-
-  /**
    * Param for how to handle invalid entries. Options are 'skip' (filter out rows with
    * invalid values), 'error' (throw an error), or 'keep' (keep invalid values in a special
    * additional bucket). Note that in the multiple columns case, the invalid handling is applied
@@ -97,8 +83,8 @@ private[feature] trait QuantileDiscretizerBase extends Params
     "how to handle invalid entries. Options are skip (filter out rows with invalid values), " +
     "error (throw an error), or keep (keep invalid values in a special additional bucket).",
     ParamValidators.inArray(Bucketizer.supportedHandleInvalids))
-  setDefault(handleInvalid, Bucketizer.ERROR_INVALID)
 
+  setDefault(handleInvalid -> Bucketizer.ERROR_INVALID, numBuckets -> 2)
 }
 
 /**
@@ -110,7 +96,8 @@ private[feature] trait QuantileDiscretizerBase extends Params
  * parameter. If both of the `inputCol` and `inputCols` parameters are set, an Exception will be
  * thrown. To specify the number of buckets for each column, the `numBucketsArray` parameter can
  * be set, or if the number of buckets should be the same across columns, `numBuckets` can be
- * set as a convenience.
+ * set as a convenience. Note that in multiple columns case, relative error is applied to all
+ * columns.
  *
  * NaN handling:
  * null and NaN values will be ignored from the column during `QuantileDiscretizer` fitting. This
@@ -129,13 +116,12 @@ private[feature] trait QuantileDiscretizerBase extends Params
  */
 @Since("1.6.0")
 final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val uid: String)
-  extends Estimator[Bucketizer] with QuantileDiscretizerBase with DefaultParamsWritable
-    with HasInputCols with HasOutputCols {
+  extends Estimator[Bucketizer] with QuantileDiscretizerBase with DefaultParamsWritable {
 
   @Since("1.6.0")
   def this() = this(Identifiable.randomUID("quantileDiscretizer"))
 
-  /** @group setParam */
+  /** @group expertSetParam */
   @Since("2.0.0")
   def setRelativeError(value: Double): this.type = set(relativeError, value)
 
@@ -167,31 +153,45 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
   @Since("2.3.0")
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
-  private[feature] def getInOutCols: (Array[String], Array[String]) = {
-    require((isSet(inputCol) && isSet(outputCol) && !isSet(inputCols) && !isSet(outputCols)) ||
-      (!isSet(inputCol) && !isSet(outputCol) && isSet(inputCols) && isSet(outputCols)),
-      "QuantileDiscretizer only supports setting either inputCol/outputCol or" +
-        "inputCols/outputCols."
-    )
-
-    if (isSet(inputCol)) {
-      (Array($(inputCol)), Array($(outputCol)))
-    } else {
-      require($(inputCols).length == $(outputCols).length,
-        "inputCols number do not match outputCols")
-      ($(inputCols), $(outputCols))
-    }
-  }
-
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
-    val (inputColNames, outputColNames) = getInOutCols
-    val existingFields = schema.fields
-    var outputFields = existingFields
+    ParamValidators.checkSingleVsMultiColumnParams(this, Seq(outputCol),
+      Seq(outputCols))
+
+    if (isSet(inputCol)) {
+      require(!isSet(numBucketsArray),
+        s"numBucketsArray can't be set for single-column QuantileDiscretizer.")
+    }
+
+    if (isSet(inputCols)) {
+      require(getInputCols.length == getOutputCols.length,
+        s"QuantileDiscretizer $this has mismatched Params " +
+          s"for multi-column transform. Params (inputCols, outputCols) should have " +
+          s"equal lengths, but they have different lengths: " +
+          s"(${getInputCols.length}, ${getOutputCols.length}).")
+      if (isSet(numBucketsArray)) {
+        require(getInputCols.length == getNumBucketsArray.length,
+          s"QuantileDiscretizer $this has mismatched Params " +
+            s"for multi-column transform. Params (inputCols, outputCols, numBucketsArray) " +
+            s"should have equal lengths, but they have different lengths: " +
+            s"(${getInputCols.length}, ${getOutputCols.length}, ${getNumBucketsArray.length}).")
+        require(!isSet(numBuckets),
+          s"exactly one of numBuckets, numBucketsArray Params to be set, but both are set." )
+      }
+    }
+
+    val (inputColNames, outputColNames) = if (isSet(inputCols)) {
+      ($(inputCols).toImmutableArraySeq, $(outputCols).toImmutableArraySeq)
+    } else {
+      (Seq($(inputCol)), Seq($(outputCol)))
+    }
+
+    var outputFields = schema.fields
+
     inputColNames.zip(outputColNames).foreach { case (inputColName, outputColName) =>
       SchemaUtils.checkNumericType(schema, inputColName)
-      require(existingFields.forall(_.name != outputColName),
-        s"Output column ${outputColName} already exists.")
+      require(!schema.fieldNames.contains(outputColName),
+        s"Output column $outputColName already exists.")
       val attr = NominalAttribute.defaultAttr.withName(outputColName)
       outputFields :+= attr.toStructField()
     }
@@ -203,13 +203,18 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
     transformSchema(dataset.schema, logging = true)
     val bucketizer = new Bucketizer(uid).setHandleInvalid($(handleInvalid))
     if (isSet(inputCols)) {
+      val quantileColNames = Array.tabulate($(inputCols).length)(index => s"c_$index")
+      val quantileDataset = dataset.select($(inputCols).zipWithIndex.map {
+        case (colName, index) => col(colName).alias(quantileColNames(index))
+      }.toImmutableArraySeq: _*)
+
       val splitsArray = if (isSet(numBucketsArray)) {
         val probArrayPerCol = $(numBucketsArray).map { numOfBuckets =>
           (0 to numOfBuckets).map(_.toDouble / numOfBuckets).toArray
         }
 
         val probabilityArray = probArrayPerCol.flatten.sorted.distinct
-        val splitsArrayRaw = dataset.stat.approxQuantile($(inputCols),
+        val splitsArrayRaw = quantileDataset.stat.approxQuantile(quantileColNames,
           probabilityArray, $(relativeError))
 
         splitsArrayRaw.zip(probArrayPerCol).map { case (splits, probs) =>
@@ -224,12 +229,13 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
           }
         }
       } else {
-        dataset.stat.approxQuantile($(inputCols),
+        quantileDataset.stat.approxQuantile(quantileColNames,
           (0 to $(numBuckets)).map(_.toDouble / $(numBuckets)).toArray, $(relativeError))
       }
       bucketizer.setSplitsArray(splitsArray.map(getDistinctSplits))
     } else {
-      val splits = dataset.stat.approxQuantile($(inputCol),
+      val quantileDataset = dataset.select(col($(inputCol)).alias("c_0"))
+      val splits = quantileDataset.stat.approxQuantile("c_0",
         (0 to $(numBuckets)).map(_.toDouble / $(numBuckets)).toArray, $(relativeError))
       bucketizer.setSplits(getDistinctSplits(splits))
     }
@@ -239,6 +245,18 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
   private def getDistinctSplits(splits: Array[Double]): Array[Double] = {
     splits(0) = Double.NegativeInfinity
     splits(splits.length - 1) = Double.PositiveInfinity
+
+    // 0.0 and -0.0 are distinct values, array.distinct will preserve both of them.
+    // but 0.0 > -0.0 is False which will break the parameter validation checking.
+    // and in scala <= 2.12, there's bug which will cause array.distinct generate
+    // non-deterministic results when array contains both 0.0 and -0.0
+    // So that here we should first normalize all 0.0 and -0.0 to be 0.0
+    // See https://github.com/scala/bug/issues/11995
+    for (i <- splits.indices) {
+      if (splits(i) == -0.0) {
+        splits(i) = 0.0
+      }
+    }
     val distinctSplits = splits.distinct
     if (splits.length != distinctSplits.length) {
       log.warn(s"Some quantiles were identical. Bucketing to ${distinctSplits.length - 1}" +

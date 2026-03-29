@@ -21,10 +21,13 @@ import java.util.Objects
 
 import scala.collection.mutable
 import scala.collection.mutable.{ListBuffer, StringBuilder}
+import scala.xml.Utility
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys._
+import org.apache.spark.rdd.DeterministicLevel
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.storage.StorageLevel
 
@@ -36,13 +39,19 @@ import org.apache.spark.storage.StorageLevel
  * the graph from nodes that belong to adjacent graphs.
  */
 private[spark] case class RDDOperationGraph(
-    edges: Seq[RDDOperationEdge],
-    outgoingEdges: Seq[RDDOperationEdge],
-    incomingEdges: Seq[RDDOperationEdge],
+    edges: collection.Seq[RDDOperationEdge],
+    outgoingEdges: collection.Seq[RDDOperationEdge],
+    incomingEdges: collection.Seq[RDDOperationEdge],
     rootCluster: RDDOperationCluster)
 
 /** A node in an RDDOperationGraph. This represents an RDD. */
-private[spark] case class RDDOperationNode(id: Int, name: String, cached: Boolean, callsite: String)
+private[spark] case class RDDOperationNode(
+    id: Int,
+    name: String,
+    cached: Boolean,
+    barrier: Boolean,
+    callsite: String,
+    outputDeterministicLevel: DeterministicLevel.Value)
 
 /**
  * A directed edge connecting two nodes in an RDDOperationGraph.
@@ -56,7 +65,10 @@ private[spark] case class RDDOperationEdge(fromId: Int, toId: Int)
  * This represents any grouping of RDDs, including operation scopes (e.g. textFile, flatMap),
  * stages, jobs, or any higher level construct. A cluster may be nested inside of other clusters.
  */
-private[spark] class RDDOperationCluster(val id: String, private var _name: String) {
+private[spark] class RDDOperationCluster(
+    val id: String,
+    val barrier: Boolean,
+    private var _name: String) {
   private val _childNodes = new ListBuffer[RDDOperationNode]
   private val _childClusters = new ListBuffer[RDDOperationCluster]
 
@@ -72,7 +84,16 @@ private[spark] class RDDOperationCluster(val id: String, private var _name: Stri
 
   /** Return all the nodes which are cached. */
   def getCachedNodes: Seq[RDDOperationNode] = {
-    _childNodes.filter(_.cached) ++ _childClusters.flatMap(_.getCachedNodes)
+    (_childNodes.filter(_.cached) ++ _childClusters.flatMap(_.getCachedNodes)).toSeq
+  }
+
+  def getBarrierClusters: Seq[RDDOperationCluster] = {
+    (_childClusters.filter(_.barrier) ++ _childClusters.flatMap(_.getBarrierClusters)).toSeq
+  }
+
+  def getIndeterminateNodes: Seq[RDDOperationNode] = {
+    (_childNodes.filter(_.outputDeterministicLevel == DeterministicLevel.INDETERMINATE) ++
+      _childClusters.flatMap(_.getIndeterminateNodes)).toSeq
   }
 
   def canEqual(other: Any): Boolean = other.isInstanceOf[RDDOperationCluster]
@@ -116,8 +137,8 @@ private[spark] object RDDOperationGraph extends Logging {
     // Use a special prefix here to differentiate this cluster from other operation clusters
     val stageClusterId = STAGE_CLUSTER_PREFIX + stage.stageId
     val stageClusterName = s"Stage ${stage.stageId}" +
-      { if (stage.attemptNumber == 0) "" else s" (attempt ${stage.attemptNumber})" }
-    val rootCluster = new RDDOperationCluster(stageClusterId, stageClusterName)
+      { if (stage.attemptNumber() == 0) "" else s" (attempt ${stage.attemptNumber()})" }
+    val rootCluster = new RDDOperationCluster(stageClusterId, false, stageClusterName)
 
     var rootNodeCount = 0
     val addRDDIds = new mutable.HashSet[Int]()
@@ -143,7 +164,8 @@ private[spark] object RDDOperationGraph extends Logging {
 
       // TODO: differentiate between the intention to cache an RDD and whether it's actually cached
       val node = nodes.getOrElseUpdate(rdd.id, RDDOperationNode(
-        rdd.id, rdd.name, rdd.storageLevel != StorageLevel.NONE, rdd.callSite))
+        rdd.id, rdd.name, rdd.storageLevel != StorageLevel.NONE, rdd.isBarrier, rdd.callSite,
+        rdd.outputDeterministicLevel))
       if (rdd.scope.isEmpty) {
         // This RDD has no encompassing scope, so we put it directly in the root cluster
         // This should happen only if an RDD is instantiated outside of a public RDD API
@@ -157,7 +179,8 @@ private[spark] object RDDOperationGraph extends Logging {
         val rddClusters = rddScopes.map { scope =>
           val clusterId = scope.id
           val clusterName = scope.name.replaceAll("\\n", "\\\\n")
-          clusters.getOrElseUpdate(clusterId, new RDDOperationCluster(clusterId, clusterName))
+          clusters.getOrElseUpdate(
+            clusterId, new RDDOperationCluster(clusterId, false, clusterName))
         }
         // Build the cluster hierarchy for this RDD
         rddClusters.sliding(2).foreach { pc =>
@@ -192,11 +215,12 @@ private[spark] object RDDOperationGraph extends Logging {
         case (true, false) => outgoingEdges += e
         case (false, true) => incomingEdges += e
         // should never happen
-        case _ => logWarning(s"Found an orphan edge in stage ${stage.stageId}: $e")
+        case _ => logWarning(log"Found an orphan edge in stage " +
+          log"${MDC(STAGE_ID, stage.stageId)}: ${MDC(ERROR, e)}")
       }
     }
 
-    RDDOperationGraph(internalEdges, outgoingEdges, incomingEdges, rootCluster)
+    RDDOperationGraph(internalEdges.toSeq, outgoingEdges.toSeq, incomingEdges.toSeq, rootCluster)
   }
 
   /**
@@ -212,7 +236,10 @@ private[spark] object RDDOperationGraph extends Logging {
   def makeDotFile(graph: RDDOperationGraph): String = {
     val dotFile = new StringBuilder
     dotFile.append("digraph G {\n")
-    makeDotSubgraph(dotFile, graph.rootCluster, indent = "  ")
+    val indent = "  "
+    val graphId = s"graph_${graph.rootCluster.id.replaceAll(STAGE_CLUSTER_PREFIX, "")}"
+    dotFile.append(indent).append(s"""id="$graphId";\n""")
+    makeDotSubgraph(dotFile, graph.rootCluster, indent = indent)
     graph.edges.foreach { edge => dotFile.append(s"""  ${edge.fromId}->${edge.toId};\n""") }
     dotFile.append("}")
     val result = dotFile.toString()
@@ -227,22 +254,44 @@ private[spark] object RDDOperationGraph extends Logging {
     } else {
       ""
     }
-    val label = s"${node.name} [${node.id}]$isCached\n${node.callsite}"
-    s"""${node.id} [label="${StringEscapeUtils.escapeJava(label)}"]"""
+    val isBarrier = if (node.barrier) {
+      " [Barrier]"
+    } else {
+      ""
+    }
+    val outputDeterministicLevel = node.outputDeterministicLevel match {
+      case DeterministicLevel.DETERMINATE => ""
+      case DeterministicLevel.INDETERMINATE => " [Indeterminate]"
+      case DeterministicLevel.UNORDERED => " [Unordered]"
+      case _ => ""
+    }
+    val escapedCallsite = Utility.escape(node.callsite)
+    val label = StringEscapeUtils.escapeJava(
+      s"${node.name} [${node.id}]$isCached$isBarrier$outputDeterministicLevel" +
+        s"<br>$escapedCallsite")
+    s"""${node.id} [id="node_${node.id}" labelType="html" label="$label"]"""
   }
 
-  /** Update the dot representation of the RDDOperationGraph in cluster to subgraph. */
+  /** Update the dot representation of the RDDOperationGraph in cluster to subgraph.
+   *
+   * @param prefix The prefix of the subgraph id. 'graph_' for stages, 'cluster_' for
+   *               for child clusters. See also VizConstants in `spark-dag-viz.js`
+   */
   private def makeDotSubgraph(
       subgraph: StringBuilder,
       cluster: RDDOperationCluster,
-      indent: String): Unit = {
-    subgraph.append(indent).append(s"subgraph cluster${cluster.id} {\n")
+      indent: String,
+      prefix: String = "graph_"): Unit = {
+    val clusterId = s"$prefix${cluster.id}"
+    subgraph.append(indent).append(s"subgraph $clusterId {\n")
+      .append(indent).append(s"""  id="$clusterId";\n""")
+      .append(indent).append(s"""  isCluster="true";\n""")
       .append(indent).append(s"""  label="${StringEscapeUtils.escapeJava(cluster.name)}";\n""")
     cluster.childNodes.foreach { node =>
       subgraph.append(indent).append(s"  ${makeDotNode(node)};\n")
     }
     cluster.childClusters.foreach { cscope =>
-      makeDotSubgraph(subgraph, cscope, indent + "  ")
+      makeDotSubgraph(subgraph, cscope, indent + "  ", "cluster_")
     }
     subgraph.append(indent).append("}\n")
   }

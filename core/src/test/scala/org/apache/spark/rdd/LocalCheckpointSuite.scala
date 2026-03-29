@@ -18,7 +18,6 @@
 package org.apache.spark.rdd
 
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
@@ -45,6 +44,7 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
     assert(transform(StorageLevel.MEMORY_ONLY_SER_2) === StorageLevel.MEMORY_AND_DISK_SER_2)
     assert(transform(StorageLevel.DISK_ONLY) === StorageLevel.DISK_ONLY)
     assert(transform(StorageLevel.DISK_ONLY_2) === StorageLevel.DISK_ONLY_2)
+    assert(transform(StorageLevel.DISK_ONLY_3) === StorageLevel.DISK_ONLY_3)
     assert(transform(StorageLevel.MEMORY_AND_DISK) === StorageLevel.MEMORY_AND_DISK)
     assert(transform(StorageLevel.MEMORY_AND_DISK_SER) === StorageLevel.MEMORY_AND_DISK_SER)
     assert(transform(StorageLevel.MEMORY_AND_DISK_2) === StorageLevel.MEMORY_AND_DISK_2)
@@ -70,7 +70,7 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
     filteredRdd.localCheckpoint()
     assert(filteredRdd.checkpointData.isDefined)
     assert(!filteredRdd.checkpointData.get.isCheckpointed)
-    assert(!filteredRdd.checkpointData.get.checkpointRDD.isDefined)
+    assert(filteredRdd.checkpointData.get.checkpointRDD.isEmpty)
     assert(filteredRdd.getStorageLevel === LocalRDDCheckpointData.DEFAULT_STORAGE_LEVEL)
 
     // After an action, the lineage is truncated
@@ -159,7 +159,7 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
 
   test("missing checkpoint block fails with informative message") {
     val rdd = newRdd.localCheckpoint()
-    val numPartitions = rdd.partitions.size
+    val numPartitions = rdd.partitions.length
     val partitionIndices = rdd.partitions.map(_.index)
     val bmm = sc.env.blockManager.master
 
@@ -174,7 +174,7 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
     val blockId = RDDBlockId(rdd.id, numPartitions - 1)
     bmm.removeBlock(blockId)
     // Wait until the block has been removed successfully.
-    eventually(timeout(1 seconds), interval(100 milliseconds)) {
+    eventually(timeout(1.second), interval(100.milliseconds)) {
       assert(bmm.getBlockStatus(blockId).isEmpty)
     }
     try {
@@ -236,7 +236,7 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
       targetStorageLevel: StorageLevel): Unit = {
     require(targetStorageLevel !== StorageLevel.NONE)
     require(rdd.isLocallyCheckpointed)
-    val rdd1 = rdd.map { i => i + "1" }
+    val rdd1 = rdd.map { i => i.toString + "1" }
     val rdd2 = rdd1.map { i => i + "2" }
     val rdd3 = rdd2.map { i => i + "3" }
     val rddDependencies = rdd.dependencies

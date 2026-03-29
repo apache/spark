@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import org.apache.spark.SparkContext
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.classic.{SparkSession, SQLContext}
 
 
 /**
@@ -34,7 +34,7 @@ class HiveContext private[hive](_sparkSession: SparkSession)
   self =>
 
   def this(sc: SparkContext) = {
-    this(SparkSession.builder().sparkContext(HiveUtils.withHiveExternalCatalog(sc)).getOrCreate())
+    this(SparkSession.builder().enableHiveSupport().sparkContext(sc).getOrCreate())
   }
 
   def this(sc: JavaSparkContext) = this(sc.sc)

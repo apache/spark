@@ -19,6 +19,7 @@ package test.org.apache.spark.streaming;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -36,11 +37,8 @@ import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 
-import org.junit.Assert;
-import org.junit.Test;
-
-import com.google.common.io.Files;
-import com.google.common.collect.Sets;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.SparkConf;
@@ -61,9 +59,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
   public static void equalIterator(Iterator<?> a, Iterator<?> b) {
     while (a.hasNext() && b.hasNext()) {
-      Assert.assertEquals(a.next(), b.next());
+      Assertions.assertEquals(a.next(), b.next());
     }
-    Assert.assertEquals(a.hasNext(), b.hasNext());
+    Assertions.assertEquals(a.hasNext(), b.hasNext());
   }
 
   public static void equalIterable(Iterable<?> a, Iterable<?> b) {
@@ -72,24 +70,22 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
   @Test
   public void testInitialization() {
-    Assert.assertNotNull(ssc.sparkContext());
+    Assertions.assertNotNull(ssc.sparkContext());
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testContextState() {
     List<List<Integer>> inputData = Arrays.asList(Arrays.asList(1, 2, 3, 4));
-    Assert.assertEquals(StreamingContextState.INITIALIZED, ssc.getState());
+    Assertions.assertEquals(StreamingContextState.INITIALIZED, ssc.getState());
     JavaDStream<Integer> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaTestUtils.attachTestOutputStream(stream);
-    Assert.assertEquals(StreamingContextState.INITIALIZED, ssc.getState());
+    Assertions.assertEquals(StreamingContextState.INITIALIZED, ssc.getState());
     ssc.start();
-    Assert.assertEquals(StreamingContextState.ACTIVE, ssc.getState());
+    Assertions.assertEquals(StreamingContextState.ACTIVE, ssc.getState());
     ssc.stop();
-    Assert.assertEquals(StreamingContextState.STOPPED, ssc.getState());
+    Assertions.assertEquals(StreamingContextState.STOPPED, ssc.getState());
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testCount() {
     List<List<Integer>> inputData = Arrays.asList(
@@ -109,7 +105,6 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     assertOrderInvariantEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testMap() {
     List<List<String>> inputData = Arrays.asList(
@@ -128,7 +123,6 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     assertOrderInvariantEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testWindow() {
     List<List<Integer>> inputData = Arrays.asList(
@@ -150,7 +144,6 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     assertOrderInvariantEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testWindowWithSlideDuration() {
     List<List<Integer>> inputData = Arrays.asList(
@@ -175,7 +168,6 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     assertOrderInvariantEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testFilter() {
     List<List<String>> inputData = Arrays.asList(
@@ -194,7 +186,6 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     assertOrderInvariantEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testRepartitionMorePartitions() {
     List<List<Integer>> inputData = Arrays.asList(
@@ -206,15 +197,14 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         stream.repartition(4);
     JavaTestUtils.attachTestOutputStream(repartitioned);
     List<List<List<Integer>>> result = JavaTestUtils.runStreamsWithPartitions(ssc, 2, 2);
-    Assert.assertEquals(2, result.size());
+    Assertions.assertEquals(2, result.size());
     for (List<List<Integer>> rdd : result) {
-      Assert.assertEquals(4, rdd.size());
-      Assert.assertEquals(
+      Assertions.assertEquals(4, rdd.size());
+      Assertions.assertEquals(
         10, rdd.get(0).size() + rdd.get(1).size() + rdd.get(2).size() + rdd.get(3).size());
     }
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testRepartitionFewerPartitions() {
     List<List<Integer>> inputData = Arrays.asList(
@@ -226,14 +216,13 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         stream.repartition(2);
     JavaTestUtils.attachTestOutputStream(repartitioned);
     List<List<List<Integer>>> result = JavaTestUtils.runStreamsWithPartitions(ssc, 2, 2);
-    Assert.assertEquals(2, result.size());
+    Assertions.assertEquals(2, result.size());
     for (List<List<Integer>> rdd : result) {
-      Assert.assertEquals(2, rdd.size());
-      Assert.assertEquals(10, rdd.get(0).size() + rdd.get(1).size());
+      Assertions.assertEquals(2, rdd.size());
+      Assertions.assertEquals(10, rdd.get(0).size() + rdd.get(1).size());
     }
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testGlom() {
     List<List<String>> inputData = Arrays.asList(
@@ -249,10 +238,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(glommed);
     List<List<List<String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testMapPartitions() {
     List<List<String>> inputData = Arrays.asList(
@@ -274,7 +262,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(mapped);
     List<List<String>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
   private static class IntegerSum implements Function2<Integer, Integer, Integer> {
@@ -291,7 +279,6 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     }
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testReduce() {
     List<List<Integer>> inputData = Arrays.asList(
@@ -309,22 +296,19 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(reduced);
     List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testReduceByWindowWithInverse() {
     testReduceByWindow(true);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testReduceByWindowWithoutInverse() {
     testReduceByWindow(false);
   }
 
-  @SuppressWarnings("unchecked")
   private void testReduceByWindow(boolean withInverse) {
     List<List<Integer>> inputData = Arrays.asList(
         Arrays.asList(1,2,3),
@@ -351,10 +335,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(reducedWindowed);
     List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 4, 4);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testQueueStream() {
     ssc.stop();
@@ -383,10 +366,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaDStream<Integer> stream = ssc.queueStream(rdds);
     JavaTestUtils.attachTestOutputStream(stream);
     List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 3, 3);
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testTransform() {
     List<List<Integer>> inputData = Arrays.asList(
@@ -408,7 +390,6 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     assertOrderInvariantEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testVariousTransform() {
     // tests whether all variations of transform can be called from Java
@@ -459,13 +440,13 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
             new Tuple2<>("new york", "islanders")));
 
 
-    List<HashSet<Tuple2<String, Tuple2<String, String>>>> expected = Arrays.asList(
-        Sets.newHashSet(
+    List<Set<Tuple2<String, Tuple2<String, String>>>> expected = Arrays.asList(
+        Set.of(
             new Tuple2<>("california",
                          new Tuple2<>("dodgers", "giants")),
             new Tuple2<>("new york",
                          new Tuple2<>("yankees", "mets"))),
-        Sets.newHashSet(
+        Set.of(
             new Tuple2<>("california",
                          new Tuple2<>("sharks", "ducks")),
             new Tuple2<>("new york",
@@ -488,14 +469,13 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     List<List<Tuple2<String, Tuple2<String, String>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
     List<HashSet<Tuple2<String, Tuple2<String, String>>>> unorderedResult = new ArrayList<>();
     for (List<Tuple2<String, Tuple2<String, String>>> res: result) {
-      unorderedResult.add(Sets.newHashSet(res));
+      unorderedResult.add(new HashSet<>(res));
     }
 
-    Assert.assertEquals(expected, unorderedResult);
+    Assertions.assertEquals(expected, unorderedResult);
   }
 
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testVariousTransformWith() {
     // tests whether all variations of transformWith can be called from Java
@@ -565,7 +545,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     ssc.transform(
       listOfDStreams1,
       (listOfRDDs, time) -> {
-        Assert.assertEquals(2, listOfRDDs.size());
+        Assertions.assertEquals(2, listOfRDDs.size());
         return null;
       }
     );
@@ -576,7 +556,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaPairDStream<Integer, Tuple2<Integer, String>> transformed2 = ssc.transformToPair(
       listOfDStreams2,
       (listOfRDDs, time) -> {
-        Assert.assertEquals(3, listOfRDDs.size());
+        Assertions.assertEquals(3, listOfRDDs.size());
         JavaRDD<Integer> rdd1 = (JavaRDD<Integer>)listOfRDDs.get(0);
         JavaRDD<Integer> rdd2 = (JavaRDD<Integer>)listOfRDDs.get(1);
         JavaRDD<Tuple2<Integer, String>> rdd3 =
@@ -590,10 +570,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(transformed2);
     List<List<Tuple2<Integer, Tuple2<Integer, String>>>> result =
       JavaTestUtils.runStreams(ssc, 2, 2);
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testFlatMap() {
     List<List<String>> inputData = Arrays.asList(
@@ -615,7 +594,6 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     assertOrderInvariantEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testForeachRDD() {
     final LongAccumulator accumRdd = ssc.sparkContext().sc().longAccumulator();
@@ -637,11 +615,10 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
     JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(2, accumRdd.value().intValue());
-    Assert.assertEquals(6, accumEle.value().intValue());
+    Assertions.assertEquals(2, accumRdd.value().intValue());
+    Assertions.assertEquals(6, accumEle.value().intValue());
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testPairFlatMap() {
     List<List<String>> inputData = Arrays.asList(
@@ -687,10 +664,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(flatMapped);
     List<List<Tuple2<Integer, String>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testUnion() {
     List<List<Integer>> inputData1 = Arrays.asList(
@@ -726,18 +702,17 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
       List<List<T>> expected, List<List<T>> actual) {
     List<Set<T>> expectedSets = new ArrayList<>();
     for (List<T> list: expected) {
-      expectedSets.add(Collections.unmodifiableSet(new HashSet<>(list)));
+      expectedSets.add(Set.copyOf(list));
     }
     List<Set<T>> actualSets = new ArrayList<>();
     for (List<T> list: actual) {
-      actualSets.add(Collections.unmodifiableSet(new HashSet<>(list)));
+      actualSets.add(Set.copyOf(list));
     }
-    Assert.assertEquals(expectedSets, actualSets);
+    Assertions.assertEquals(expectedSets, actualSets);
   }
 
 
   // PairDStream Functions
-  @SuppressWarnings("unchecked")
   @Test
   public void testPairFilter() {
     List<List<String>> inputData = Arrays.asList(
@@ -756,10 +731,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(filtered);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   private final List<List<Tuple2<String, String>>> stringStringKVStream = Arrays.asList(
       Arrays.asList(new Tuple2<>("california", "dodgers"),
                     new Tuple2<>("california", "giants"),
@@ -770,7 +744,6 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
                     new Tuple2<>("new york", "rangers"),
                     new Tuple2<>("new york", "islanders")));
 
-  @SuppressWarnings("unchecked")
   private final List<List<Tuple2<String, Integer>>> stringIntKVStream = Arrays.asList(
       Arrays.asList(
           new Tuple2<>("california", 1),
@@ -783,7 +756,6 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
           new Tuple2<>("new york", 3),
           new Tuple2<>("new york", 1)));
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testPairMap() { // Maps pair -> pair of different type
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
@@ -808,10 +780,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(reversed);
     List<List<Tuple2<Integer, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testPairMapPartitions() { // Maps pair -> pair of different type
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
@@ -843,10 +814,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(reversed);
     List<List<Tuple2<Integer, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testPairMap2() { // Maps pair -> single
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
@@ -863,10 +833,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(reversed);
     List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testPairToPairFlatMapWithChangingTypes() { // Maps pair -> pair
     List<List<Tuple2<String, Integer>>> inputData = Arrays.asList(
@@ -902,10 +871,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(flatMapped);
     List<List<Tuple2<Integer, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testPairGroupByKey() {
     List<List<Tuple2<String, String>>> inputData = stringStringKVStream;
@@ -926,7 +894,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(grouped);
     List<List<Tuple2<String, Iterable<String>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected.size(), result.size());
+    Assertions.assertEquals(expected.size(), result.size());
     Iterator<List<Tuple2<String, Iterable<String>>>> resultItr = result.iterator();
     Iterator<List<Tuple2<String, List<String>>>> expectedItr = expected.iterator();
     while (resultItr.hasNext() && expectedItr.hasNext()) {
@@ -935,14 +903,13 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
       while (resultElements.hasNext() && expectedElements.hasNext()) {
         Tuple2<String, Iterable<String>> resultElement = resultElements.next();
         Tuple2<String, List<String>> expectedElement = expectedElements.next();
-        Assert.assertEquals(expectedElement._1(), resultElement._1());
+        Assertions.assertEquals(expectedElement._1(), resultElement._1());
         equalIterable(expectedElement._2(), resultElement._2());
       }
-      Assert.assertEquals(resultElements.hasNext(), expectedElements.hasNext());
+      Assertions.assertEquals(resultElements.hasNext(), expectedElements.hasNext());
     }
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testPairReduceByKey() {
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
@@ -964,10 +931,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(reduced);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testCombineByKey() {
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
@@ -990,10 +956,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(combined);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testCountByValue() {
     List<List<String>> inputData = Arrays.asList(
@@ -1016,10 +981,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(counted);
     List<List<Tuple2<String, Long>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testGroupByKeyAndWindow() {
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
@@ -1048,9 +1012,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(groupWindowed);
     List<List<Tuple2<String, List<Integer>>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
-    Assert.assertEquals(expected.size(), result.size());
+    Assertions.assertEquals(expected.size(), result.size());
     for (int i = 0; i < result.size(); i++) {
-      Assert.assertEquals(convert(expected.get(i)), convert(result.get(i)));
+      Assertions.assertEquals(convert(expected.get(i)), convert(result.get(i)));
     }
   }
 
@@ -1067,7 +1031,6 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     return new Tuple2<>(tuple._1(), new HashSet<>(tuple._2()));
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testReduceByKeyAndWindow() {
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
@@ -1089,10 +1052,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(reduceWindowed);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testUpdateStateByKey() {
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
@@ -1122,10 +1084,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(updated);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testUpdateStateByKeyWithInitial() {
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
@@ -1165,7 +1126,6 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     assertOrderInvariantEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testReduceByKeyAndWindowWithInverse() {
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
@@ -1188,7 +1148,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(reduceWindowed);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
   @SuppressWarnings("unchecked")
@@ -1199,15 +1159,15 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         Arrays.asList("hello", "moon"),
         Arrays.asList("hello"));
 
-    List<HashSet<Tuple2<String, Long>>> expected = Arrays.asList(
-        Sets.newHashSet(
+    List<Set<Tuple2<String, Long>>> expected = Arrays.asList(
+        Set.of(
             new Tuple2<>("hello", 1L),
             new Tuple2<>("world", 1L)),
-        Sets.newHashSet(
+        Set.of(
             new Tuple2<>("hello", 2L),
             new Tuple2<>("world", 1L),
             new Tuple2<>("moon", 1L)),
-        Sets.newHashSet(
+        Set.of(
             new Tuple2<>("hello", 2L),
             new Tuple2<>("moon", 1L)));
 
@@ -1219,13 +1179,12 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     List<List<Tuple2<String, Long>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
     List<Set<Tuple2<String, Long>>> unorderedResult = new ArrayList<>();
     for (List<Tuple2<String, Long>> res: result) {
-      unorderedResult.add(Sets.newHashSet(res));
+      unorderedResult.add(new HashSet<>(res));
     }
 
-    Assert.assertEquals(expected, unorderedResult);
+    Assertions.assertEquals(expected, unorderedResult);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testPairTransform() {
     List<List<Tuple2<Integer, Integer>>> inputData = Arrays.asList(
@@ -1261,10 +1220,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(sorted);
     List<List<Tuple2<Integer, Integer>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testPairToNormalRDDTransform() {
     List<List<Tuple2<Integer, Integer>>> inputData = Arrays.asList(
@@ -1292,10 +1250,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(firstParts);
     List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testMapValues() {
     List<List<Tuple2<String, String>>> inputData = stringStringKVStream;
@@ -1320,10 +1277,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(mapped);
     List<List<Tuple2<String, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testFlatMapValues() {
     List<List<Tuple2<String, String>>> inputData = stringStringKVStream;
@@ -1361,10 +1317,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(flatMapped);
     List<List<Tuple2<String, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testCoGroup() {
     List<List<Tuple2<String, String>>> stringStringKVStream1 = Arrays.asList(
@@ -1407,7 +1362,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     List<List<Tuple2<String, Tuple2<Iterable<String>, Iterable<String>>>>> result =
         JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected.size(), result.size());
+    Assertions.assertEquals(expected.size(), result.size());
     Iterator<List<Tuple2<String, Tuple2<Iterable<String>, Iterable<String>>>>> resultItr =
         result.iterator();
     Iterator<List<Tuple2<String, Tuple2<List<String>, List<String>>>>> expectedItr =
@@ -1422,15 +1377,14 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
             resultElements.next();
         Tuple2<String, Tuple2<List<String>, List<String>>> expectedElement =
             expectedElements.next();
-        Assert.assertEquals(expectedElement._1(), resultElement._1());
+        Assertions.assertEquals(expectedElement._1(), resultElement._1());
         equalIterable(expectedElement._2()._1(), resultElement._2()._1());
         equalIterable(expectedElement._2()._2(), resultElement._2()._2());
       }
-      Assert.assertEquals(resultElements.hasNext(), expectedElements.hasNext());
+      Assertions.assertEquals(resultElements.hasNext(), expectedElements.hasNext());
     }
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testJoin() {
     List<List<Tuple2<String, String>>> stringStringKVStream1 = Arrays.asList(
@@ -1471,10 +1425,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(joined);
     List<List<Tuple2<String, Tuple2<String, String>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testLeftOuterJoin() {
     List<List<Tuple2<String, String>>> stringStringKVStream1 = Arrays.asList(
@@ -1504,12 +1457,11 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(counted);
     List<List<Long>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
-  public void testCheckpointMasterRecovery() throws InterruptedException {
+  public void testCheckpointMasterRecovery() throws InterruptedException, IOException {
     List<List<String>> inputData = Arrays.asList(
         Arrays.asList("this", "is"),
         Arrays.asList("a", "test"),
@@ -1521,7 +1473,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         Arrays.asList(1,4),
         Arrays.asList(8,7));
 
-    File tempDir = Files.createTempDir();
+    File tempDir = Utils.createTempDir();
     tempDir.deleteOnExit();
     ssc.checkpoint(tempDir.getAbsolutePath());
 
@@ -1543,9 +1495,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Utils.deleteRecursively(tempDir);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
-  public void testContextGetOrCreate() throws InterruptedException {
+  public void testContextGetOrCreate() throws IOException {
     ssc.stop();
 
     SparkConf conf = new SparkConf()
@@ -1553,7 +1504,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         .setAppName("test")
         .set("newContext", "true");
 
-    File emptyDir = Files.createTempDir();
+    File emptyDir = Utils.createTempDir();
     emptyDir.deleteOnExit();
     StreamingContextSuite contextSuite = new StreamingContextSuite();
     String corruptedCheckpointDir = contextSuite.createCorruptedCheckpoint();
@@ -1569,33 +1520,33 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
     newContextCreated.set(false);
     ssc = JavaStreamingContext.getOrCreate(emptyDir.getAbsolutePath(), creatingFunc);
-    Assert.assertTrue("new context not created", newContextCreated.get());
+    Assertions.assertTrue(newContextCreated.get(), "new context not created");
     ssc.stop();
 
     newContextCreated.set(false);
     ssc = JavaStreamingContext.getOrCreate(corruptedCheckpointDir, creatingFunc,
         new Configuration(), true);
-    Assert.assertTrue("new context not created", newContextCreated.get());
+    Assertions.assertTrue(newContextCreated.get(), "new context not created");
     ssc.stop();
 
     newContextCreated.set(false);
     ssc = JavaStreamingContext.getOrCreate(checkpointDir, creatingFunc,
         new Configuration());
-    Assert.assertTrue("old context not recovered", !newContextCreated.get());
+    Assertions.assertTrue(!newContextCreated.get(), "old context not recovered");
     ssc.stop();
 
     newContextCreated.set(false);
     JavaSparkContext sc = new JavaSparkContext(conf);
     ssc = JavaStreamingContext.getOrCreate(checkpointDir, creatingFunc,
         new Configuration());
-    Assert.assertTrue("old context not recovered", !newContextCreated.get());
+    Assertions.assertTrue(!newContextCreated.get(), "old context not recovered");
     ssc.stop();
   }
 
   /* TEST DISABLED: Pending a discussion about checkpoint() semantics with TD
   @SuppressWarnings("unchecked")
   @Test
-  public void testCheckpointofIndividualStream() throws InterruptedException {
+  public void testCheckpointOfIndividualStream() throws InterruptedException {
     List<List<String>> inputData = Arrays.asList(
         Arrays.asList("this", "is"),
         Arrays.asList("a", "test"),
@@ -1648,7 +1599,6 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
       StorageLevel.MEMORY_ONLY());
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testTextFileStream() throws IOException {
     File testDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
@@ -1661,7 +1611,6 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     assertOrderInvariantEquals(expected, result);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testFileStream() throws IOException {
     File testDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
@@ -1690,9 +1639,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
   private static List<List<String>> fileTestPrepare(File testDir) throws IOException {
     File existingFile = new File(testDir, "0");
-    Files.write("0\n", existingFile, StandardCharsets.UTF_8);
-    Assert.assertTrue(existingFile.setLastModified(1000));
-    Assert.assertEquals(1000, existingFile.lastModified());
+    Files.writeString(existingFile.toPath(), "0\n");
+    Assertions.assertTrue(existingFile.setLastModified(1000));
+    Assertions.assertEquals(1000, existingFile.lastModified());
     return Arrays.asList(Arrays.asList("0"));
   }
 

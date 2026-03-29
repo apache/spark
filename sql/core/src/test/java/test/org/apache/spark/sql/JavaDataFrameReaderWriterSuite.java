@@ -1,33 +1,40 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package test.org.apache.spark.sql;
 
 import java.io.File;
 import java.util.HashMap;
 
+import org.apache.spark.SparkIllegalArgumentException;
+import org.apache.spark.sql.DataFrameWriter;
 import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.util.Utils;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 
 public class JavaDataFrameReaderWriterSuite {
   private SparkSession spark = new TestSparkSession();
@@ -35,7 +42,7 @@ public class JavaDataFrameReaderWriterSuite {
   private transient String input;
   private transient String output;
 
-  @Before
+  @BeforeEach
   public void setUp() {
     input = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "input").toString();
     File f = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "output");
@@ -43,7 +50,7 @@ public class JavaDataFrameReaderWriterSuite {
     output = f.toString();
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     spark.stop();
     spark = null;
@@ -62,7 +69,7 @@ public class JavaDataFrameReaderWriterSuite {
 
   @Test
   public void testOptionsAPI() {
-    HashMap<String, String> map = new HashMap<String, String>();
+    HashMap<String, String> map = new HashMap<>();
     map.put("e", "1");
     spark
         .read()
@@ -144,15 +151,24 @@ public class JavaDataFrameReaderWriterSuite {
         .write().parquet(output);
   }
 
-  /**
-   * This only tests whether API compiles, but does not run it as orc()
-   * cannot be run without Hive classes.
-   */
+  @Test
   public void testOrcAPI() {
     spark.read().schema(schema).orc();
     spark.read().schema(schema).orc(input);
     spark.read().schema(schema).orc(input, input, input);
     spark.read().schema(schema).orc(new String[]{input, input})
         .write().orc(output);
+  }
+
+  @Test
+  @DisplayName("[SPARK-51182]: DataFrameWriter should throw dataPathNotSpecifiedError when path " +
+      "is not specified")
+  public void testPathNotSpecified() {
+    DataFrameWriter<Long> dataFrameWriter = spark.range(0).write();
+    SparkIllegalArgumentException e = assertThrowsExactly(
+        SparkIllegalArgumentException.class,
+        () -> dataFrameWriter.save(),
+        "Expected save() to throw SparkIllegalArgumentException when path is not specified");
+    assertEquals("'path' is not specified.", e.getMessage());
   }
 }

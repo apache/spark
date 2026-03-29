@@ -19,24 +19,26 @@ package org.apache.spark.ml.tuning
 
 import java.util.{List => JList, Locale}
 
-import scala.collection.JavaConverters._
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{CROSS_VALIDATION_METRIC, CROSS_VALIDATION_METRICS, ESTIMATOR_PARAM_MAP}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
-import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
+import org.apache.spark.ml.param.{IntParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasCollectSubModels, HasParallelism}
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -55,7 +57,18 @@ private[ml] trait CrossValidatorParams extends ValidatorParams {
   /** @group getParam */
   def getNumFolds: Int = $(numFolds)
 
-  setDefault(numFolds -> 3)
+  /**
+   * Param for the column name of user specified fold number. Once this is specified,
+   * `CrossValidator` won't do random k-fold split. Note that this column should be
+   * integer type with range [0, numFolds) and Spark will throw exception on out-of-range
+   * fold numbers.
+   */
+  val foldCol: Param[String] = new Param[String](this, "foldCol",
+    "the column name of user specified fold number")
+
+  def getFoldCol: String = $(foldCol)
+
+  setDefault(foldCol -> "", numFolds -> 3)
 }
 
 /**
@@ -93,6 +106,10 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   /** @group setParam */
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
+
+  /** @group setParam */
+  @Since("3.1.0")
+  def setFoldCol(value: String): this.type = set(foldCol, value)
 
   /**
    * Set the maximum level of parallelism to evaluate models in parallel.
@@ -132,20 +149,25 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    instr.logParams(this, numFolds, seed, parallelism)
+    instr.logParams(this, numFolds, seed, parallelism, foldCol)
     logTuningParams(instr)
 
     val collectSubModelsParam = $(collectSubModels)
 
-    var subModels: Option[Array[Array[Model[_]]]] = if (collectSubModelsParam) {
-      Some(Array.fill($(numFolds))(Array.fill[Model[_]](epm.length)(null)))
+    val subModels: Option[Array[Array[Model[_]]]] = if (collectSubModelsParam) {
+      Some(Array.fill($(numFolds))(Array.ofDim[Model[_]](epm.length)))
     } else None
 
     // Compute metrics for each model over each split
-    val splits = MLUtils.kFold(dataset.toDF.rdd, $(numFolds), $(seed))
+    val (splits, schemaWithoutFold) = if ($(foldCol) == "") {
+      (MLUtils.kFold(dataset.toDF().rdd, $(numFolds), $(seed)), schema)
+    } else {
+      val filteredSchema = StructType(schema.filter(_.name != $(foldCol)).toArray)
+      (MLUtils.kFold(dataset.toDF(), $(numFolds), $(foldCol)), filteredSchema)
+    }
     val metrics = splits.zipWithIndex.map { case ((training, validation), splitIndex) =>
-      val trainingDataset = sparkSession.createDataFrame(training, schema).cache()
-      val validationDataset = sparkSession.createDataFrame(validation, schema).cache()
+      val trainingDataset = sparkSession.createDataFrame(training, schemaWithoutFold).cache()
+      val validationDataset = sparkSession.createDataFrame(validation, schemaWithoutFold).cache()
       instr.logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
       // Fit models in a Future for training in parallel
@@ -171,19 +193,27 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       foldMetrics
     }.transpose.map(_.sum / $(numFolds)) // Calculate average metric over all splits
 
-    instr.logInfo(s"Average cross-validation metrics: ${metrics.toSeq}")
+    instr.logInfo(log"Average cross-validation metrics: ${MDC(
+      CROSS_VALIDATION_METRICS, metrics.mkString("[", ", ", "]"))}")
     val (bestMetric, bestIndex) =
       if (eval.isLargerBetter) metrics.zipWithIndex.maxBy(_._1)
       else metrics.zipWithIndex.minBy(_._1)
-    instr.logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
-    instr.logInfo(s"Best cross-validation metric: $bestMetric.")
+    instr.logInfo(log"Best set of parameters:\n${MDC(ESTIMATOR_PARAM_MAP, epm(bestIndex))}")
+    instr.logInfo(log"Best cross-validation metric: ${MDC(CROSS_VALIDATION_METRIC, bestMetric)}.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
     copyValues(new CrossValidatorModel(uid, bestModel, metrics)
       .setSubModels(subModels).setParent(this))
   }
 
   @Since("1.4.0")
-  override def transformSchema(schema: StructType): StructType = transformSchemaImpl(schema)
+  override def transformSchema(schema: StructType): StructType = {
+    if ($(foldCol) != "") {
+      val foldColDt = schema.apply($(foldCol)).dataType
+      require(foldColDt.isInstanceOf[IntegerType],
+        s"The specified `foldCol` column ${$(foldCol)} must be integer type, but got $foldColDt.")
+    }
+    transformSchemaImpl(schema)
+  }
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): CrossValidator = {
@@ -218,7 +248,7 @@ object CrossValidator extends MLReadable[CrossValidator] {
     ValidatorParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit =
-      ValidatorParams.saveImpl(path, instance, sc)
+      ValidatorParams.saveImpl(path, instance, sparkSession)
   }
 
   private class CrossValidatorReader extends MLReader[CrossValidator] {
@@ -230,7 +260,7 @@ object CrossValidator extends MLReadable[CrossValidator] {
       implicit val format = DefaultFormats
 
       val (metadata, estimator, evaluator, estimatorParamMaps) =
-        ValidatorParams.loadImpl(path, sc, className)
+        ValidatorParams.loadImpl(path, sparkSession, className)
       val cv = new CrossValidator(metadata.uid)
         .setEstimator(estimator)
         .setEvaluator(evaluator)
@@ -323,6 +353,11 @@ class CrossValidatorModel private[ml] (
   override def write: CrossValidatorModel.CrossValidatorModelWriter = {
     new CrossValidatorModel.CrossValidatorModelWriter(this)
   }
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"CrossValidatorModel: uid=$uid, bestModel=$bestModel, numFolds=${$(numFolds)}"
+  }
 }
 
 @Since("1.6.0")
@@ -357,6 +392,11 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
     ValidatorParams.validateParams(instance)
 
     override protected def saveImpl(path: String): Unit = {
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        throw new UnsupportedOperationException(
+          "CrossValidatorModel does not support saving to local filesystem path."
+        )
+      }
       val persistSubModelsParam = optionMap.getOrElse("persistsubmodels",
         if (instance.hasSubModels) "true" else "false")
 
@@ -366,11 +406,11 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
       val persistSubModels = persistSubModelsParam.toBoolean
 
       import org.json4s.JsonDSL._
-      val extraMetadata = ("avgMetrics" -> instance.avgMetrics.toSeq) ~
+      val extraMetadata = ("avgMetrics" -> instance.avgMetrics.toImmutableArraySeq) ~
         ("persistSubModels" -> persistSubModels)
-      ValidatorParams.saveImpl(path, instance, sc, Some(extraMetadata))
+      ValidatorParams.saveImpl(path, instance, sparkSession, Some(extraMetadata))
       val bestModelPath = new Path(path, "bestModel").toString
-      instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
+      instance.bestModel.asInstanceOf[MLWritable].write.session(sparkSession).save(bestModelPath)
       if (persistSubModels) {
         require(instance.hasSubModels, "When persisting tuning models, you can only set " +
           "persistSubModels to true if the tuning was done with collectSubModels set to true. " +
@@ -378,9 +418,10 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
         val subModelsPath = new Path(path, "subModels")
         for (splitIndex <- 0 until instance.getNumFolds) {
           val splitPath = new Path(subModelsPath, s"fold${splitIndex.toString}")
-          for (paramIndex <- 0 until instance.getEstimatorParamMaps.length) {
+          for (paramIndex <- instance.getEstimatorParamMaps.indices) {
             val modelPath = new Path(splitPath, paramIndex.toString).toString
-            instance.subModels(splitIndex)(paramIndex).asInstanceOf[MLWritable].save(modelPath)
+            instance.subModels(splitIndex)(paramIndex).asInstanceOf[MLWritable]
+              .write.session(sparkSession).save(modelPath)
           }
         }
       }
@@ -393,27 +434,32 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
     private val className = classOf[CrossValidatorModel].getName
 
     override def load(path: String): CrossValidatorModel = {
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        throw new UnsupportedOperationException(
+          "CrossValidatorModel does not support loading from local filesystem path."
+        )
+      }
       implicit val format = DefaultFormats
 
       val (metadata, estimator, evaluator, estimatorParamMaps) =
-        ValidatorParams.loadImpl(path, sc, className)
+        ValidatorParams.loadImpl(path, sparkSession, className)
       val numFolds = (metadata.params \ "numFolds").extract[Int]
       val bestModelPath = new Path(path, "bestModel").toString
-      val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sc)
+      val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sparkSession)
       val avgMetrics = (metadata.metadata \ "avgMetrics").extract[Seq[Double]].toArray
       val persistSubModels = (metadata.metadata \ "persistSubModels")
         .extractOrElse[Boolean](false)
 
       val subModels: Option[Array[Array[Model[_]]]] = if (persistSubModels) {
         val subModelsPath = new Path(path, "subModels")
-        val _subModels = Array.fill(numFolds)(Array.fill[Model[_]](
-          estimatorParamMaps.length)(null))
+        val _subModels = Array.fill(numFolds)(
+          Array.ofDim[Model[_]](estimatorParamMaps.length))
         for (splitIndex <- 0 until numFolds) {
           val splitPath = new Path(subModelsPath, s"fold${splitIndex.toString}")
-          for (paramIndex <- 0 until estimatorParamMaps.length) {
+          for (paramIndex <- estimatorParamMaps.indices) {
             val modelPath = new Path(splitPath, paramIndex.toString).toString
             _subModels(splitIndex)(paramIndex) =
-              DefaultParamsReader.loadParamsInstance(modelPath, sc)
+              DefaultParamsReader.loadParamsInstance(modelPath, sparkSession)
           }
         }
         Some(_subModels)

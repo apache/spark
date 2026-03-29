@@ -17,22 +17,30 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.{mutable, GenTraversableOnce}
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.util.SparkStringUtils
+
 object ExpressionSet {
-  /** Constructs a new [[ExpressionSet]] by applying [[Canonicalize]] to `expressions`. */
-  def apply(expressions: TraversableOnce[Expression]): ExpressionSet = {
+  /**
+   * Constructs a new [[ExpressionSet]] by applying [[Expression#canonicalized]] to `expressions`.
+   */
+  def apply(expressions: IterableOnce[Expression]): ExpressionSet = {
     val set = new ExpressionSet()
-    expressions.foreach(set.add)
+    expressions.iterator.foreach(set.add)
     set
+  }
+
+  def apply(): ExpressionSet = {
+    new ExpressionSet()
   }
 }
 
 /**
  * A [[Set]] where membership is determined based on determinacy and a canonical representation of
  * an [[Expression]] (i.e. one that attempts to ignore cosmetic differences).
- * See [[Canonicalize]] for more details.
+ * See [[Expression#canonicalized]] for more details.
  *
  * Internally this set uses the canonical representation, but keeps also track of the original
  * expressions to ease debugging.  Since different expressions can share the same canonical
@@ -51,54 +59,133 @@ object ExpressionSet {
  * For non-deterministic expressions, they are always considered as not contained in the [[Set]].
  * On adding a non-deterministic expression, simply append it to the original expressions.
  * This is consistent with how we define `semanticEquals` between two expressions.
+ *
+ * The constructor of this class is protected so caller can only initialize an Expression from
+ * empty, then build it using `add` and `remove` methods. So every instance of this class holds the
+ * invariant that:
+ * 1. Every expr `e` in `baseSet` satisfies `e.deterministic && e.canonicalized == e`
+ * 2. Every deterministic expr `e` in `originals` satisfies that `e.canonicalized` is already
+ *    accessed.
  */
 class ExpressionSet protected(
-    protected val baseSet: mutable.Set[Expression] = new mutable.HashSet,
-    protected val originals: mutable.Buffer[Expression] = new ArrayBuffer)
-  extends Set[Expression] {
+    private val baseSet: mutable.Set[Expression] = new mutable.HashSet,
+    private var originals: mutable.Buffer[Expression] = new ArrayBuffer)
+  extends scala.collection.Set[Expression]
+    with scala.collection.SetOps[Expression, scala.collection.Set, ExpressionSet] {
+
+  override protected def fromSpecific(coll: IterableOnce[Expression]): ExpressionSet = {
+    val set = new ExpressionSet()
+    coll.iterator.foreach(set.add)
+    set
+  }
+
+  override protected def newSpecificBuilder: mutable.Builder[Expression, ExpressionSet] =
+    new mutable.Builder[Expression, ExpressionSet] {
+      var expr_set: ExpressionSet = new ExpressionSet()
+      def clear(): Unit = expr_set = new ExpressionSet()
+      def result(): ExpressionSet = expr_set
+      def addOne(expr: Expression): this.type = {
+        expr_set.add(expr)
+        this
+      }
+    }
+
+  override def empty: ExpressionSet = new ExpressionSet()
+
+  override def diff(that: scala.collection.Set[Expression]): ExpressionSet = this -- that
 
   protected def add(e: Expression): Unit = {
     if (!e.deterministic) {
       originals += e
-    } else if (!baseSet.contains(e.canonicalized) ) {
+    } else if (!baseSet.contains(e.canonicalized)) {
       baseSet.add(e.canonicalized)
       originals += e
     }
   }
 
+  protected def remove(e: Expression): Unit = {
+    if (e.deterministic) {
+      baseSet.remove(e.canonicalized)
+      originals = originals.filter(!_.semanticEquals(e))
+    }
+  }
+
   override def contains(elem: Expression): Boolean = baseSet.contains(elem.canonicalized)
 
+  override def filter(p: Expression => Boolean): ExpressionSet = {
+    val newBaseSet = baseSet.filter(e => p(e))
+    val newOriginals = originals.filter(e => p(e.canonicalized))
+    new ExpressionSet(newBaseSet, newOriginals)
+  }
+
+  override def filterNot(p: Expression => Boolean): ExpressionSet = {
+    val newBaseSet = baseSet.filterNot(e => p(e))
+    val newOriginals = originals.filterNot(e => p(e.canonicalized))
+    new ExpressionSet(newBaseSet, newOriginals)
+  }
+
   override def +(elem: Expression): ExpressionSet = {
-    val newSet = new ExpressionSet(baseSet.clone(), originals.clone())
+    val newSet = clone()
     newSet.add(elem)
     newSet
   }
 
-  override def ++(elems: GenTraversableOnce[Expression]): ExpressionSet = {
-    val newSet = new ExpressionSet(baseSet.clone(), originals.clone())
-    elems.foreach(newSet.add)
+  override def -(elem: Expression): ExpressionSet = {
+    val newSet = clone()
+    newSet.remove(elem)
     newSet
   }
 
-  override def -(elem: Expression): ExpressionSet = {
-    if (elem.deterministic) {
-      val newBaseSet = baseSet.clone().filterNot(_ == elem.canonicalized)
-      val newOriginals = originals.clone().filterNot(_.canonicalized == elem.canonicalized)
-      new ExpressionSet(newBaseSet, newOriginals)
-    } else {
-      new ExpressionSet(baseSet.clone(), originals.clone())
-    }
+  override def concat(that: IterableOnce[Expression]): ExpressionSet = {
+    val newSet = clone()
+    that.iterator.foreach(newSet.add)
+    newSet
+  }
+
+  override def --(that: IterableOnce[Expression]): ExpressionSet = {
+    val newSet = clone()
+    that.iterator.foreach(newSet.remove)
+    newSet
+  }
+
+  def map(f: Expression => Expression): ExpressionSet = {
+    val newSet = new ExpressionSet()
+    this.iterator.foreach(elem => newSet.add(f(elem)))
+    newSet
+  }
+
+  def flatMap(f: Expression => Iterable[Expression]): ExpressionSet = {
+    val newSet = new ExpressionSet()
+    this.iterator.foreach(f(_).foreach(newSet.add))
+    newSet
   }
 
   override def iterator: Iterator[Expression] = originals.iterator
 
+  override def equals(obj: Any): Boolean = obj match {
+    case other: ExpressionSet => this.baseSet == other.baseSet
+    case _ => false
+  }
+
+  override def hashCode(): Int = baseSet.hashCode()
+
+  override def clone(): ExpressionSet = new ExpressionSet(baseSet.clone(), originals.clone())
+
   /**
-   * Returns a string containing both the post [[Canonicalize]] expressions and the original
-   * expressions in this set.
+   * Returns a string containing both the post [[Expression#canonicalized]] expressions
+   * and the original expressions in this set.
    */
   def toDebugString: String =
     s"""
        |baseSet: ${baseSet.mkString(", ")}
        |originals: ${originals.mkString(", ")}
      """.stripMargin
+
+  /** Returns a length limited string that must be used for logging only. */
+  def simpleString(maxFields: Int): String = {
+    val customToString = { e: Expression => e.simpleString(maxFields) }
+    SparkStringUtils.truncatedString(
+      seq = originals.toSeq, start = "Set(", sep = ", ", end = ")", maxFields, Some(customToString))
+  }
 }
+

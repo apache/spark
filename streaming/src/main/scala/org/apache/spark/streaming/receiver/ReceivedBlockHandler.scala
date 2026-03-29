@@ -17,15 +17,15 @@
 
 package org.apache.spark.streaming.receiver
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.concurrent.duration._
-import scala.language.{existentials, postfixOps}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{EFFECTIVE_STORAGE_LEVEL, STORAGE_LEVEL, STORAGE_LEVEL_DESERIALIZED, STORAGE_LEVEL_REPLICATION}
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver.WriteAheadLogBasedBlockHandler._
@@ -83,7 +83,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
         val countIterator = new CountingIterator(iterator)
         val putResult = blockManager.putIterator(blockId, countIterator, storageLevel,
           tellMaster = true)
-        numRecords = countIterator.count
+        numRecords = countIterator.count()
         putResult
       case ByteBufferBlock(byteBuffer) =>
         blockManager.putBytes(
@@ -99,7 +99,7 @@ private[streaming] class BlockManagerBasedBlockHandler(
     BlockManagerBasedStoreResult(blockId, numRecords)
   }
 
-  def cleanupOldBlocks(threshTime: Long) {
+  def cleanupOldBlocks(threshTime: Long): Unit = {
     // this is not used as blocks inserted into the BlockManager are cleared by DStream's clearing
     // of BlockRDDs.
   }
@@ -138,20 +138,23 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
 
   private val effectiveStorageLevel = {
     if (storageLevel.deserialized) {
-      logWarning(s"Storage level serialization ${storageLevel.deserialized} is not supported when" +
-        s" write ahead log is enabled, change to serialization false")
+      logWarning(log"Storage level serialization " +
+        log"${MDC(STORAGE_LEVEL_DESERIALIZED, storageLevel.deserialized)} is not " +
+        log"supported when write ahead log is enabled, change to serialization false")
     }
     if (storageLevel.replication > 1) {
-      logWarning(s"Storage level replication ${storageLevel.replication} is unnecessary when " +
-        s"write ahead log is enabled, change to replication 1")
+      logWarning(log"Storage level replication " +
+        log"${MDC(STORAGE_LEVEL_REPLICATION, storageLevel.replication)} is unnecessary when " +
+        log"write ahead log is enabled, change to replication 1")
     }
 
     StorageLevel(storageLevel.useDisk, storageLevel.useMemory, storageLevel.useOffHeap, false, 1)
   }
 
   if (storageLevel != effectiveStorageLevel) {
-    logWarning(s"User defined storage level $storageLevel is changed to effective storage level " +
-      s"$effectiveStorageLevel when write ahead log is enabled")
+    logWarning(log"User defined storage level ${MDC(STORAGE_LEVEL, storageLevel)} is changed to " +
+      log"effective storage level ${MDC(EFFECTIVE_STORAGE_LEVEL, effectiveStorageLevel)} when " +
+      log"write ahead log is enabled")
   }
 
   // Write ahead log manages
@@ -160,8 +163,8 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
 
   // For processing futures used in parallel block storing into block manager and write ahead log
   // # threads = 2, so that both writing to BM and WAL can proceed in parallel
-  implicit private val executionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonFixedThreadPool(2, this.getClass.getSimpleName))
+  implicit private val executionContext: ExecutionContextExecutorService = ExecutionContext
+    .fromExecutorService(ThreadUtils.newDaemonFixedThreadPool(2, this.getClass.getSimpleName))
 
   /**
    * This implementation stores the block into the block manager as well as a write ahead log.
@@ -179,7 +182,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
       case IteratorBlock(iterator) =>
         val countIterator = new CountingIterator(iterator)
         val serializedBlock = serializerManager.dataSerialize(blockId, countIterator)
-        numRecords = countIterator.count
+        numRecords = countIterator.count()
         serializedBlock
       case ByteBufferBlock(byteBuffer) =>
         new ChunkedByteBuffer(byteBuffer.duplicate())
@@ -211,11 +214,11 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
     WriteAheadLogBasedStoreResult(blockId, numRecords, walRecordHandle)
   }
 
-  def cleanupOldBlocks(threshTime: Long) {
+  def cleanupOldBlocks(threshTime: Long): Unit = {
     writeAheadLog.clean(threshTime, false)
   }
 
-  def stop() {
+  def stop(): Unit = {
     writeAheadLog.close()
     executionContext.shutdown()
   }
@@ -235,7 +238,7 @@ private[streaming] class CountingIterator[T](iterator: Iterator[T]) extends Iter
 
    private def isFullyConsumed: Boolean = !iterator.hasNext
 
-   def hasNext(): Boolean = iterator.hasNext
+   def hasNext: Boolean = iterator.hasNext
 
    def count(): Option[Long] = {
      if (isFullyConsumed) Some(_count) else None

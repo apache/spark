@@ -30,8 +30,8 @@ import org.apache.spark.streaming.util.WriteAheadLog;
 import org.apache.spark.streaming.util.WriteAheadLogRecordHandle;
 import org.apache.spark.streaming.util.WriteAheadLogUtils;
 
-import org.junit.Test;
-import org.junit.Assert;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Assertions;
 
 public class JavaWriteAheadLogSuite extends WriteAheadLog {
 
@@ -67,8 +67,8 @@ public class JavaWriteAheadLogSuite extends WriteAheadLog {
 
   @Override
   public ByteBuffer read(WriteAheadLogRecordHandle handle) {
-    if (handle instanceof JavaWriteAheadLogSuiteHandle) {
-      int reqdIndex = ((JavaWriteAheadLogSuiteHandle) handle).index;
+    if (handle instanceof JavaWriteAheadLogSuiteHandle javaWriteAheadLogSuiteHandle) {
+      int reqdIndex = javaWriteAheadLogSuiteHandle.index;
       for (Record record: records) {
         if (record.index == reqdIndex) {
           return record.buffer;
@@ -107,8 +107,8 @@ public class JavaWriteAheadLogSuite extends WriteAheadLog {
 
     String data1 = "data1";
     WriteAheadLogRecordHandle handle = wal.write(JavaUtils.stringToBytes(data1), 1234);
-    Assert.assertTrue(handle instanceof JavaWriteAheadLogSuiteHandle);
-    Assert.assertEquals(data1, JavaUtils.bytesToString(wal.read(handle)));
+    Assertions.assertTrue(handle instanceof JavaWriteAheadLogSuiteHandle);
+    Assertions.assertEquals(data1, JavaUtils.bytesToString(wal.read(handle)));
 
     wal.write(JavaUtils.stringToBytes("data2"), 1235);
     wal.write(JavaUtils.stringToBytes("data3"), 1236);
@@ -120,6 +120,6 @@ public class JavaWriteAheadLogSuite extends WriteAheadLog {
     while (dataIterator.hasNext()) {
       readData.add(JavaUtils.bytesToString(dataIterator.next()));
     }
-    Assert.assertEquals(readData, Arrays.asList("data3", "data4"));
+    Assertions.assertEquals(Arrays.asList("data3", "data4"), readData);
   }
 }

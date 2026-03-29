@@ -23,28 +23,91 @@ import org.scalatest.{BeforeAndAfterEach, Suite}
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{DebugFilesystem, SparkConf}
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
+import org.apache.spark.sql.{classic, SparkSession, SparkSessionProvider, SQLContext}
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+
+trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
+
+  /**
+   * Suites extending [[SharedSparkSession]] are sharing resources (e.g. SparkSession) in their
+   * tests. That trait initializes the spark session in its [[beforeAll()]] implementation before
+   * the automatic thread snapshot is performed, so the audit code could fail to report threads
+   * leaked by that shared session.
+   *
+   * The behavior is overridden here to take the snapshot before the spark session is initialized.
+   */
+  override protected val enableAutoThreadAudit = false
+
+  protected override def beforeAll(): Unit = {
+    doThreadPreAudit()
+    super.beforeAll()
+  }
+
+  protected override def afterAll(): Unit = {
+    try {
+      super.afterAll()
+    } finally {
+      doThreadPostAudit()
+    }
+  }
+
+  def runAndFetchMetrics(func: => Unit): Map[String, String] = {
+    val statusStore = spark.sharedState.statusStore
+    val oldCount = statusStore.executionsList().size
+
+    func
+
+    // Wait until the new execution is started and being tracked.
+    eventually(timeout(10.seconds), interval(10.milliseconds)) {
+      assert(statusStore.executionsCount() >= oldCount)
+    }
+
+    // Wait for listener to finish computing the metrics for the execution.
+    eventually(timeout(10.seconds), interval(10.milliseconds)) {
+      assert(statusStore.executionsList().nonEmpty &&
+        statusStore.executionsList().last.metricValues != null)
+    }
+
+    val exec = statusStore.executionsList().last
+    val execId = exec.executionId
+    val sqlMetrics = exec.metrics.map { metric => metric.accumulatorId -> metric.name }.toMap
+    statusStore.executionMetrics(execId).map { case (k, v) => sqlMetrics(k) -> v }
+  }
+}
 
 /**
  * Helper trait for SQL test suites where all tests share a single [[TestSparkSession]].
  */
-trait SharedSparkSession
+trait SharedSparkSessionBase
   extends SQLTestUtilsBase
+  with SparkSessionProvider
   with BeforeAndAfterEach
   with Eventually { self: Suite =>
 
   protected def sparkConf = {
-    new SparkConf()
+    val conf = new SparkConf()
       .set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName)
-      .set("spark.unsafe.exceptionOnMemoryLeak", "true")
+      .set(UNSAFE_EXCEPTION_ON_MEMORY_LEAK, true)
       .set(SQLConf.CODEGEN_FALLBACK.key, "false")
+      .set(SQLConf.CODEGEN_FACTORY_MODE.key, CodegenObjectFactoryMode.CODEGEN_ONLY.toString)
       // Disable ConvertToLocalRelation for better test coverage. Test cases built on
       // LocalRelation will exercise the optimization rules better by disabling it as
       // this rule may potentially block testing of other optimization rules such as
       // ConstantPropagation etc.
       .set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, ConvertToLocalRelation.ruleName)
+    conf.set(
+      StaticSQLConf.WAREHOUSE_PATH,
+      conf.get(StaticSQLConf.WAREHOUSE_PATH) + "/" + getClass.getCanonicalName)
+    conf.set(StaticSQLConf.LOAD_SESSION_EXTENSIONS_FROM_CLASSPATH, false)
+    conf.set(StaticSQLConf.SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD,
+      sys.env.getOrElse("SPARK_TEST_SQL_SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD",
+        StaticSQLConf.SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD.defaultValueString).toInt)
+    conf.set(StaticSQLConf.RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD,
+      sys.env.getOrElse("SPARK_TEST_SQL_RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD",
+        StaticSQLConf.RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD.defaultValueString).toInt)
   }
 
   /**
@@ -58,7 +121,7 @@ trait SharedSparkSession
   /**
    * The [[TestSparkSession]] to use for all tests in this suite.
    */
-  protected implicit def spark: SparkSession = _spark
+  protected override def spark: classic.SparkSession = _spark
 
   /**
    * The [[TestSQLContext]] to use for all tests in this suite.
@@ -66,9 +129,11 @@ trait SharedSparkSession
   protected implicit def sqlContext: SQLContext = _spark.sqlContext
 
   protected def createSparkSession: TestSparkSession = {
-    SparkSession.cleanupAnyExistingSession()
+    classic.SparkSession.cleanupAnyExistingSession()
     new TestSparkSession(sparkConf)
   }
+
+  protected def sqlConf: SQLConf = _spark.sessionState.conf
 
   /**
    * Initialize the [[TestSparkSession]].  Generally, this is just called from

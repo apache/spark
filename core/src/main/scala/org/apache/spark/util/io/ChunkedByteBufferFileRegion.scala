@@ -18,10 +18,6 @@ package org.apache.spark.util.io
 
 import java.nio.channels.WritableByteChannel
 
-import io.netty.channel.FileRegion
-import io.netty.util.AbstractReferenceCounted
-
-import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.AbstractFileRegion
 
 
@@ -73,7 +69,7 @@ private[io] class ChunkedByteBufferFileRegion(
       if (keepGoing) {
         // advance to the next chunk (if there are any more)
         currentChunkIdx += 1
-        if (currentChunkIdx == chunks.size) {
+        if (currentChunkIdx == chunks.length) {
           keepGoing = false
         } else {
           currentChunk = chunks(currentChunkIdx)

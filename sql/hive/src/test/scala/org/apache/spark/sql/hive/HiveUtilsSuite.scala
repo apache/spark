@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.hive
 
-import java.net.URL
+import java.io.File
+import java.net.URI
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SQLTestUtils}
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader}
 
 class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
@@ -48,6 +50,15 @@ class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton 
     }
   }
 
+  test("newTemporaryConfiguration respect spark.hive.foo=bar in SparkConf") {
+    sys.props.put("spark.hive.foo", "bar")
+    Seq(true, false) foreach { useInMemoryDerby =>
+      val hiveConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby)
+      assert(!hiveConf.contains("spark.hive.foo"))
+      assert(hiveConf("hive.foo") === "bar")
+    }
+  }
+
   test("ChildFirstURLClassLoader's parent is null, get spark classloader instead") {
     val conf = new SparkConf
     val contextClassLoader = Thread.currentThread().getContextClassLoader
@@ -63,9 +74,29 @@ class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton 
     }
   }
 
-  test("toHiveString correctly handles UDTs") {
-    val point = new ExamplePoint(50.0, 50.0)
-    val tpe = new ExamplePointUDT()
-    assert(HiveUtils.toHiveString((point, tpe)) === "(50.0, 50.0)")
+  test("SPARK-42539: User-provided JARs should not take precedence over builtin Hive JARs") {
+    withTempDir { tmpDir =>
+        val classFile = TestUtils.createCompiledClass(
+          "Hive", tmpDir, packageName = Some("org.apache.hadoop.hive.ql.metadata"))
+
+      val jarFile = new File(tmpDir, "hive-fake.jar")
+      TestUtils.createJar(Seq(classFile), jarFile, Some("org/apache/hadoop/hive/ql/metadata"))
+
+      val conf = new SparkConf
+      val contextClassLoader = Thread.currentThread().getContextClassLoader
+      val loader = new MutableURLClassLoader(Array(jarFile.toURI.toURL), contextClassLoader)
+      try {
+        Thread.currentThread().setContextClassLoader(loader)
+        val client = HiveUtils.newClientForMetadata(
+          conf,
+          SparkHadoopUtil.newConfiguration(conf),
+          HiveUtils.newTemporaryConfiguration(useInMemoryDerby = true))
+        client.createDatabase(
+          CatalogDatabase("foo", "", URI.create(s"file://${tmpDir.getAbsolutePath}/foo.db"), Map()),
+          ignoreIfExists = true)
+      } finally {
+        Thread.currentThread().setContextClassLoader(contextClassLoader)
+      }
+    }
   }
 }

@@ -32,7 +32,7 @@ inputCon <- socketConnection(
 
 SparkR:::doServerAuth(inputCon, Sys.getenv("SPARKR_WORKER_SECRET"))
 
-# Waits indefinitely for a socket connecion by default.
+# Waits indefinitely for a socket connection by default.
 selectTimeout <- NULL
 
 while (TRUE) {
@@ -72,7 +72,7 @@ while (TRUE) {
       }
     })
   } else if (is.null(children)) {
-    # If it is NULL, there are no children. Waits indefinitely for a socket connecion.
+    # If it is NULL, there are no children. Waits indefinitely for a socket connection.
     selectTimeout <- NULL
   }
 

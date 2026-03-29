@@ -18,32 +18,49 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.{Future, ScheduledExecutorService, TimeUnit}
 
+import scala.jdk.CollectionConverters._
+
+import com.google.common.primitives.UnsignedLong
+import io.fabric8.kubernetes.api.model.ListOptionsBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
-import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkConf
+import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
-private[spark] class ExecutorPodsPollingSnapshotSource(
+/**
+ * :: DeveloperApi ::
+ *
+ * A class used for polling K8s executor pods by ExternalClusterManagers.
+ * @since 3.1.3
+ */
+@Stable
+@DeveloperApi
+class ExecutorPodsPollingSnapshotSource(
     conf: SparkConf,
     kubernetesClient: KubernetesClient,
     snapshotsStore: ExecutorPodsSnapshotsStore,
     pollingExecutor: ScheduledExecutorService) extends Logging {
 
   private val pollingInterval = conf.get(KUBERNETES_EXECUTOR_API_POLLING_INTERVAL)
+  private val pollingEnabled = conf.get(KUBERNETES_EXECUTOR_ENABLE_API_POLLING)
 
   private var pollingFuture: Future[_] = _
 
+  @Since("3.1.3")
   def start(applicationId: String): Unit = {
-    require(pollingFuture == null, "Cannot start polling more than once.")
-    logDebug(s"Starting to check for executor pod state every $pollingInterval ms.")
-    pollingFuture = pollingExecutor.scheduleWithFixedDelay(
-      new PollRunnable(applicationId), pollingInterval, pollingInterval, TimeUnit.MILLISECONDS)
+    if (pollingEnabled) {
+      require(pollingFuture == null, "Cannot start polling more than once.")
+      logDebug(s"Starting to check for executor pod state every $pollingInterval ms.")
+      pollingFuture = pollingExecutor.scheduleWithFixedDelay(
+        new PollRunnable(applicationId), pollingInterval, pollingInterval, TimeUnit.MILLISECONDS)
+    }
   }
 
+  @Since("3.1.3")
   def stop(): Unit = {
     if (pollingFuture != null) {
       pollingFuture.cancel(true)
@@ -53,15 +70,27 @@ private[spark] class ExecutorPodsPollingSnapshotSource(
   }
 
   private class PollRunnable(applicationId: String) extends Runnable {
-    override def run(): Unit = {
+    private var resourceVersion: UnsignedLong = _
+
+    override def run(): Unit = Utils.tryLogNonFatalError {
       logDebug(s"Resynchronizing full executor pod state from Kubernetes.")
-      snapshotsStore.replaceSnapshot(kubernetesClient
+      val pods = kubernetesClient
         .pods()
         .withLabel(SPARK_APP_ID_LABEL, applicationId)
         .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
-        .list()
-        .getItems
-        .asScala)
+        .withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")
+      if (conf.get(KUBERNETES_EXECUTOR_API_POLLING_WITH_RESOURCE_VERSION)) {
+        val list = pods.list(new ListOptionsBuilder().withResourceVersion("0").build())
+        val newResourceVersion = UnsignedLong.valueOf(list.getMetadata.getResourceVersion())
+        // Replace only when we receive a monotonically increased or equal resourceVersion
+        // because some K8s API servers may return old(smaller) cached versions in case of HA setup.
+        if (resourceVersion == null || newResourceVersion.compareTo(resourceVersion) >= 0) {
+          resourceVersion = newResourceVersion
+          snapshotsStore.replaceSnapshot(list.getItems.asScala.toSeq)
+        }
+      } else {
+        snapshotsStore.replaceSnapshot(pods.list().getItems.asScala.toSeq)
+      }
     }
   }
 

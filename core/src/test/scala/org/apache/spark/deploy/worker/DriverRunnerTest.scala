@@ -21,10 +21,9 @@ import java.io.File
 
 import scala.concurrent.duration._
 
-import org.mockito.Matchers._
+import org.mockito.ArgumentMatchers.{any, anyInt}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
@@ -40,8 +39,9 @@ class DriverRunnerTest extends SparkFunSuite {
     val conf = new SparkConf()
     val worker = mock(classOf[RpcEndpointRef])
     doNothing().when(worker).send(any())
-    spy(new DriverRunner(conf, "driverId", new File("workDir"), new File("sparkHome"),
-      driverDescription, worker, "spark://1.2.3.4/worker/", new SecurityManager(conf)))
+    spy[DriverRunner](new DriverRunner(conf, "driverId", new File("workDir"), new File("sparkHome"),
+      driverDescription, worker, "spark://1.2.3.4/worker/", "http://publicAddress:80",
+      new SecurityManager(conf)))
   }
 
   private def createProcessBuilderAndProcess(): (ProcessBuilderLike, Process) = {
@@ -57,11 +57,9 @@ class DriverRunnerTest extends SparkFunSuite {
       superviseRetry: Boolean) = {
     val runner = createDriverRunner()
     runner.setSleeper(mock(classOf[Sleeper]))
-    doAnswer(new Answer[Int] {
-      def answer(invocation: InvocationOnMock): Int = {
-        runner.runCommandWithRetry(processBuilder, p => (), supervise = superviseRetry)
-      }
-    }).when(runner).prepareAndRunDriver()
+    doAnswer { (_: InvocationOnMock) =>
+      runner.runCommandWithRetry(processBuilder, p => (), supervise = superviseRetry)
+    }.when(runner).prepareAndRunDriver()
     runner
   }
 
@@ -120,11 +118,9 @@ class DriverRunnerTest extends SparkFunSuite {
     runner.setSleeper(sleeper)
 
     val (processBuilder, process) = createProcessBuilderAndProcess()
-    when(process.waitFor()).thenAnswer(new Answer[Int] {
-      def answer(invocation: InvocationOnMock): Int = {
-        runner.kill()
-        -1
-      }
+    when(process.waitFor()).thenAnswer((_: InvocationOnMock) => {
+      runner.kill()
+      -1
     })
 
     runner.runCommandWithRetry(processBuilder, p => (), supervise = true)
@@ -169,11 +165,9 @@ class DriverRunnerTest extends SparkFunSuite {
     val (processBuilder, process) = createProcessBuilderAndProcess()
     val runner = createTestableDriverRunner(processBuilder, superviseRetry = true)
 
-    when(process.waitFor()).thenAnswer(new Answer[Int] {
-      def answer(invocation: InvocationOnMock): Int = {
-        runner.kill()
-        -1
-      }
+    when(process.waitFor()).thenAnswer((_: InvocationOnMock) => {
+      runner.kill()
+      -1
     })
 
     runner.start()

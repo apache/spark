@@ -20,22 +20,25 @@ import java.util.concurrent.TimeUnit
 
 import com.google.common.util.concurrent.SettableFuture
 import io.fabric8.kubernetes.api.model.HasMetadata
-import io.fabric8.kubernetes.client.{KubernetesClientException, Watcher}
+import io.fabric8.kubernetes.client.{Watcher, WatcherException}
 import io.fabric8.kubernetes.client.Watcher.Action
-import io.fabric8.kubernetes.client.internal.readiness.Readiness
+import io.fabric8.kubernetes.client.readiness.Readiness
 
 private[spark] class SparkReadinessWatcher[T <: HasMetadata] extends Watcher[T] {
 
   private val signal = SettableFuture.create[Boolean]
+  private val readiness = Readiness.getInstance()
 
   override def eventReceived(action: Action, resource: T): Unit = {
     if ((action == Action.MODIFIED || action == Action.ADDED) &&
-        Readiness.isReady(resource)) {
+        readiness.isReady(resource)) {
       signal.set(true)
     }
   }
 
-  override def onClose(cause: KubernetesClientException): Unit = {}
+  override def onClose(): Unit = {}
+
+  override def onClose(cause: WatcherException): Unit = {}
 
   def waitUntilReady(): Boolean = signal.get(60, TimeUnit.SECONDS)
 }

@@ -21,26 +21,27 @@ import java.io.DataOutputStream
 import java.io.File
 import java.io.FileOutputStream
 
-import scala.collection.immutable.IndexedSeq
-
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
-import org.apache.spark.internal.Logging
-import org.apache.spark.util.Utils
+import org.apache.spark.io.ZStdCompressionCodec
 
 /**
  * Tests the correctness of
  * [[org.apache.spark.input.WholeTextFileRecordReader WholeTextFileRecordReader]]. A temporary
  * directory is created as fake input. Temporal storage would be deleted in the end.
  */
-class WholeTextFileRecordReaderSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
+class WholeTextFileRecordReaderSuite extends SparkFunSuite {
   private var sc: SparkContext = _
   private var factory: CompressionCodecFactory = _
 
-  override def beforeAll() {
+  def getSparkConf(): SparkConf = {
+    new SparkConf()
+  }
+
+  override def beforeAll(): Unit = {
     // Hadoop's FileSystem caching does not use the Configuration as part of its cache key, which
     // can cause Filesystem.get(Configuration) to return a cached instance created with a different
     // configuration than the one passed to get() (see HADOOP-8490 for more details). This caused
@@ -48,7 +49,7 @@ class WholeTextFileRecordReaderSuite extends SparkFunSuite with BeforeAndAfterAl
     // the new value of "fs.local.block.size" (see SPARK-5227 and SPARK-5679). To work around this,
     // we disable FileSystem caching in this suite.
     super.beforeAll()
-    val conf = new SparkConf().set("spark.hadoop.fs.file.impl.disable.cache", "true")
+    val conf = getSparkConf().set("spark.hadoop.fs.file.impl.disable.cache", "true")
 
     sc = new SparkContext("local", "test", conf)
 
@@ -59,7 +60,7 @@ class WholeTextFileRecordReaderSuite extends SparkFunSuite with BeforeAndAfterAl
     factory = new CompressionCodecFactory(sc.hadoopConfiguration)
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       sc.stop()
     } finally {
@@ -67,12 +68,25 @@ class WholeTextFileRecordReaderSuite extends SparkFunSuite with BeforeAndAfterAl
     }
   }
 
-  private def createNativeFile(inputDir: File, fileName: String, contents: Array[Byte],
-                               compress: Boolean) = {
-    val out = if (compress) {
+  import WholeTextFileRecordReaderSuite.CompressionType
+
+  def createNativeFile(inputDir: File, fileName: String, contents: Array[Byte],
+    compressionType: CompressionType.CompressionType = CompressionType.NONE): Unit = {
+    val out = if (compressionType == CompressionType.GZIP ||
+      compressionType == CompressionType.GZ) {
       val codec = new GzipCodec
-      val path = s"${inputDir.toString}/$fileName${codec.getDefaultExtension}"
+      codec.setConf(new Configuration())
+      val extension = if (compressionType == CompressionType.GZIP) {
+        ".gzip" // Try with non-standard extension
+      } else {
+        codec.getDefaultExtension
+      }
+      val path = s"${inputDir.toString}/$fileName${extension}"
       codec.createOutputStream(new DataOutputStream(new FileOutputStream(path)))
+    } else if (compressionType == CompressionType.ZSTD || compressionType == CompressionType.ZST) {
+      val extension = if (compressionType == CompressionType.ZSTD) ".zstd" else ".zst"
+      val path = s"${inputDir.toString}/${fileName}${extension}"
+      new ZStdCompressionCodec(sc.conf).compressedOutputStream(new FileOutputStream(path))
     } else {
       val path = s"${inputDir.toString}/$fileName"
       new DataOutputStream(new FileOutputStream(path))
@@ -89,52 +103,31 @@ class WholeTextFileRecordReaderSuite extends SparkFunSuite with BeforeAndAfterAl
    *   3) Does the contents be the same.
    */
   test("Correctness of WholeTextFileRecordReader.") {
-    val dir = Utils.createTempDir()
-    logInfo(s"Local disk address is ${dir.toString}.")
+    CompressionType.values.foreach { compressionType =>
+      withTempDir { dir =>
+        logInfo(s"Local disk address is ${dir.toString}.")
 
-    WholeTextFileRecordReaderSuite.files.foreach { case (filename, contents) =>
-      createNativeFile(dir, filename, contents, false)
+        WholeTextFileRecordReaderSuite.files.foreach { case (filename, contents) =>
+          createNativeFile(dir, filename, contents, compressionType)
+        }
+
+        val res = sc.wholeTextFiles(dir.toString, 3).collect()
+
+        assert(res.length === WholeTextFileRecordReaderSuite.fileNames.length,
+          "Number of files read out does not fit with the actual value.")
+
+        for ((filename, contents) <- res) {
+          val shortName = compressionType match {
+            case CompressionType.NONE => filename.split('/').last
+            case _ => filename.split('/').last.split('.').head
+          }
+          assert(WholeTextFileRecordReaderSuite.fileNames.contains(shortName),
+            s"Missing file name $filename.")
+          assert(contents === new Text(WholeTextFileRecordReaderSuite.files(shortName)).toString,
+            s"file $filename contents can not match.")
+        }
+      }
     }
-
-    val res = sc.wholeTextFiles(dir.toString, 3).collect()
-
-    assert(res.size === WholeTextFileRecordReaderSuite.fileNames.size,
-      "Number of files read out does not fit with the actual value.")
-
-    for ((filename, contents) <- res) {
-      val shortName = filename.split('/').last
-      assert(WholeTextFileRecordReaderSuite.fileNames.contains(shortName),
-        s"Missing file name $filename.")
-      assert(contents === new Text(WholeTextFileRecordReaderSuite.files(shortName)).toString,
-        s"file $filename contents can not match.")
-    }
-
-    Utils.deleteRecursively(dir)
-  }
-
-  test("Correctness of WholeTextFileRecordReader with GzipCodec.") {
-    val dir = Utils.createTempDir()
-    logInfo(s"Local disk address is ${dir.toString}.")
-
-    WholeTextFileRecordReaderSuite.files.foreach { case (filename, contents) =>
-      createNativeFile(dir, filename, contents, true)
-    }
-
-    val res = sc.wholeTextFiles(dir.toString, 3).collect()
-
-    assert(res.size === WholeTextFileRecordReaderSuite.fileNames.size,
-      "Number of files read out does not fit with the actual value.")
-
-    for ((filename, contents) <- res) {
-      val shortName = filename.split('/').last.split('.')(0)
-
-      assert(WholeTextFileRecordReaderSuite.fileNames.contains(shortName),
-        s"Missing file name $filename.")
-      assert(contents === new Text(WholeTextFileRecordReaderSuite.files(shortName)).toString,
-        s"file $filename contents can not match.")
-    }
-
-    Utils.deleteRecursively(dir)
   }
 }
 
@@ -148,6 +141,11 @@ object WholeTextFileRecordReaderSuite {
   private val fileLengths = Array(10, 100, 1000)
 
   private val files = fileLengths.zip(fileNames).map { case (upperBound, filename) =>
-    filename -> Stream.continually(testWords.toList.toStream).flatten.take(upperBound).toArray
+    filename -> LazyList.continually(testWords.toList.to(LazyList)).flatten.take(upperBound).toArray
   }.toMap
+
+  object CompressionType extends Enumeration {
+    type CompressionType = Value
+    val NONE, GZ, GZIP, ZST, ZSTD = Value
+  }
 }

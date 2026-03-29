@@ -16,7 +16,7 @@
  */
 package org.apache.spark.mllib.fpm
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.annotation.Since
@@ -26,6 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.fpm.AssociationRules.Rule
 import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Generates association rules from a `RDD[FreqItemset[Item]]`. This method only generates
@@ -80,19 +81,19 @@ class AssociationRules private[fpm] (
       items.flatMap { item =>
         items.partition(_ == item) match {
           case (consequent, antecedent) if !antecedent.isEmpty =>
-            Some((antecedent.toSeq, (consequent.toSeq, itemset.freq)))
+            Some((antecedent.toImmutableArraySeq, (consequent.toImmutableArraySeq, itemset.freq)))
           case _ => None
         }
       }
     }
 
     // Join to get (X, ((Y, freq(X union Y)), freq(X))), generate rules, and filter by confidence
-    candidates.join(freqItemsets.map(x => (x.items.toSeq, x.freq)))
-      .map { case (antecendent, ((consequent, freqUnion), freqAntecedent)) =>
-        new Rule(antecendent.toArray,
+    candidates.join(freqItemsets.map(x => (x.items.toImmutableArraySeq, x.freq)))
+      .map { case (antecedent, ((consequent, freqUnion), freqAntecedent)) =>
+        new Rule(antecedent.toArray,
           consequent.toArray,
-          freqUnion,
-          freqAntecedent,
+          freqUnion.toDouble,
+          freqAntecedent.toDouble,
           // the consequent contains always only one element
           itemSupport.get(consequent.head))
       }.filter(_.confidence >= minConfidence)
@@ -124,7 +125,7 @@ object AssociationRules {
   class Rule[Item] private[fpm] (
       @Since("1.5.0") val antecedent: Array[Item],
       @Since("1.5.0") val consequent: Array[Item],
-      freqUnion: Double,
+      private[spark] val freqUnion: Double,
       freqAntecedent: Double,
       freqConsequent: Option[Double]) extends Serializable {
 

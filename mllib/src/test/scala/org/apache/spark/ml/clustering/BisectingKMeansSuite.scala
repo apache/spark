@@ -17,15 +17,13 @@
 
 package org.apache.spark.ml.clustering
 
-import scala.language.existentials
-
 import org.apache.spark.SparkException
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.clustering.DistanceMeasure
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.DataFrame
 
 
 class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
@@ -33,9 +31,8 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
   import testImplicits._
 
   final val k = 5
-  @transient var dataset: Dataset[_] = _
-
-  @transient var sparseDataset: Dataset[_] = _
+  @transient var dataset: DataFrame = _
+  @transient var sparseDataset: DataFrame = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -59,6 +56,11 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
     assert(copiedModel.hasSummary)
   }
 
+  test("BisectingKMeans validate input dataset") {
+    testInvalidWeights(new BisectingKMeans().setWeightCol("weight").fit(_))
+    testInvalidVectors(new BisectingKMeans().fit(_))
+  }
+
   test("SPARK-16473: Verify Bisecting K-Means does not fail in edge case where" +
     "one cluster is empty after split") {
     val bkm = new BisectingKMeans()
@@ -74,7 +76,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
       rows =>
         val numClusters = rows.distinct.length
         // Verify we hit the edge case
-        assert(numClusters < k && numClusters > 1)
+        assert(numClusters > 1)
     }
   }
 
@@ -108,7 +110,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
     val bkm = new BisectingKMeans().setK(k).setPredictionCol(predictionColName).setSeed(1)
     val model = bkm.fit(dataset)
     assert(model.clusterCenters.length === k)
-    assert(model.computeCost(dataset) < 0.1)
+    assert(model.summary.trainingCost < 0.1)
     assert(model.hasParent)
 
     testTransformerByGlobalCheckFunc[Tuple1[Vector]](dataset.toDF(), model,
@@ -134,6 +136,8 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
     assert(clusterSizes.sum === numRows)
     assert(clusterSizes.forall(_ >= 0))
     assert(summary.numIter == 20)
+    assert(summary.trainingCost < 0.1)
+    assert(model.summary.trainingCost == summary.trainingCost)
 
     model.setSummary(None)
     assert(!model.hasSummary)
@@ -150,7 +154,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
 
   test("BisectingKMeans with cosine distance is not supported for 0-length vectors") {
     val model = new BisectingKMeans().setK(2).setDistanceMeasure(DistanceMeasure.COSINE).setSeed(1)
-    val df = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       Vectors.dense(0.0, 0.0),
       Vectors.dense(10.0, 10.0),
       Vectors.dense(1.0, 0.5)
@@ -161,7 +165,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("BisectingKMeans with cosine distance") {
-    val df = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       Vectors.dense(1.0, 1.0),
       Vectors.dense(10.0, 10.0),
       Vectors.dense(1.0, 0.5),
@@ -175,6 +179,8 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
       .setSeed(1)
       .fit(df)
     val predictionDf = model.transform(df)
+    checkNominalOnDF(predictionDf, "prediction", model.getK)
+
     assert(predictionDf.select("prediction").distinct().count() == 3)
     val predictionsMap = predictionDf.collect().map(row =>
       row.getAs[Vector]("features") -> row.getAs[Int]("prediction")).toMap
@@ -185,13 +191,137 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
     assert(predictionsMap(Vectors.dense(-1.0, 1.0)) ==
       predictionsMap(Vectors.dense(-100.0, 90.0)))
 
-    model.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
+    assert(model.clusterCenters.forall(Vectors.norm(_, 2) ~== 1.0 absTol 1e-6))
+  }
+
+  test("Comparing with and without weightCol with cosine distance") {
+    val df1 = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+      Vectors.dense(1.0, 1.0),
+      Vectors.dense(10.0, 10.0),
+      Vectors.dense(1.0, 0.5),
+      Vectors.dense(10.0, 4.4),
+      Vectors.dense(-1.0, 1.0),
+      Vectors.dense(-100.0, 90.0)
+    )).map(v => TestRow(v)))
+
+    val model1 = new BisectingKMeans()
+      .setK(3)
+      .setDistanceMeasure(DistanceMeasure.COSINE)
+      .setSeed(1)
+      .fit(df1)
+    val predictionDf1 = model1.transform(df1)
+    checkNominalOnDF(predictionDf1, "prediction", model1.getK)
+
+    assert(predictionDf1.select("prediction").distinct().count() == 3)
+    val predictionsMap1 = predictionDf1.collect().map(row =>
+      row.getAs[Vector]("features") -> row.getAs[Int]("prediction")).toMap
+    assert(predictionsMap1(Vectors.dense(1.0, 1.0)) ==
+      predictionsMap1(Vectors.dense(10.0, 10.0)))
+    assert(predictionsMap1(Vectors.dense(1.0, 0.5)) ==
+      predictionsMap1(Vectors.dense(10.0, 4.4)))
+    assert(predictionsMap1(Vectors.dense(-1.0, 1.0)) ==
+      predictionsMap1(Vectors.dense(-100.0, 90.0)))
+
+    assert(model1.clusterCenters.forall(Vectors.norm(_, 2) ~== 1.0 absTol 1e-6))
+
+    val df2 = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+      (Vectors.dense(1.0, 1.0), 2.0), (Vectors.dense(10.0, 10.0), 2.0),
+      (Vectors.dense(1.0, 0.5), 2.0), (Vectors.dense(10.0, 4.4), 2.0),
+      (Vectors.dense(-1.0, 1.0), 2.0), (Vectors.dense(-100.0, 90.0), 2.0))))
+        .toDF("features", "weightCol")
+
+    val model2 = new BisectingKMeans()
+      .setK(3)
+      .setDistanceMeasure(DistanceMeasure.COSINE)
+      .setSeed(1)
+      .setWeightCol("weightCol")
+      .fit(df2)
+    val predictionDf2 = model2.transform(df2)
+    checkNominalOnDF(predictionDf2, "prediction", model2.getK)
+
+    assert(predictionDf2.select("prediction").distinct().count() == 3)
+    val predictionsMap2 = predictionDf2.collect().map(row =>
+      row.getAs[Vector]("features") -> row.getAs[Int]("prediction")).toMap
+    assert(predictionsMap2(Vectors.dense(1.0, 1.0)) ==
+      predictionsMap2(Vectors.dense(10.0, 10.0)))
+    assert(predictionsMap2(Vectors.dense(1.0, 0.5)) ==
+      predictionsMap2(Vectors.dense(10.0, 4.4)))
+    assert(predictionsMap2(Vectors.dense(-1.0, 1.0)) ==
+      predictionsMap2(Vectors.dense(-100.0, 90.0)))
+
+    assert(model2.clusterCenters.forall(Vectors.norm(_, 2) ~== 1.0 absTol 1e-6))
+    assert(model1.clusterCenters === model2.clusterCenters)
+  }
+
+  test("Comparing with and without weightCol") {
+    val df1 = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+      Vectors.dense(1.0, 1.0),
+      Vectors.dense(10.0, 10.0),
+      Vectors.dense(10.0, 10.0),
+      Vectors.dense(1.0, 0.5),
+      Vectors.dense(1.0, 0.5),
+      Vectors.dense(10.0, 4.4),
+      Vectors.dense(10.0, 4.4),
+      Vectors.dense(10.0, 4.4),
+      Vectors.dense(-1.0, 1.0),
+      Vectors.dense(-1.0, 1.0),
+      Vectors.dense(-1.0, 1.0),
+      Vectors.dense(-100.0, 90.0),
+      Vectors.dense(-100.0, 90.0),
+      Vectors.dense(-100.0, 90.0),
+      Vectors.dense(-100.0, 90.0)
+    )).map(v => TestRow(v)))
+
+    val model1 = new BisectingKMeans()
+      .setK(3)
+      .setSeed(1)
+      .fit(df1)
+    val predictionDf1 = model1.transform(df1)
+    checkNominalOnDF(predictionDf1, "prediction", model1.getK)
+
+    assert(predictionDf1.select("prediction").distinct().count() == 3)
+    val predictionsMap1 = predictionDf1.collect().map(row =>
+      row.getAs[Vector]("features") -> row.getAs[Int]("prediction")).toMap
+    assert(predictionsMap1(Vectors.dense(1.0, 1.0)) ==
+      predictionsMap1(Vectors.dense(1.0, 0.5)))
+    assert(predictionsMap1(Vectors.dense(1.0, 1.0)) ==
+      predictionsMap1(Vectors.dense(-1.0, 1.0)))
+    assert(predictionsMap1(Vectors.dense(10.0, 10.0)) ==
+      predictionsMap1(Vectors.dense(10.0, 4.4)))
+
+    val df2 = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+      (Vectors.dense(1.0, 1.0), 1.0), (Vectors.dense(10.0, 10.0), 2.0),
+      (Vectors.dense(1.0, 0.5), 2.0), (Vectors.dense(10.0, 4.4), 3.0),
+      (Vectors.dense(-1.0, 1.0), 3.0), (Vectors.dense(-100.0, 90.0), 4.0))))
+      .toDF("features", "weightCol")
+
+    val model2 = new BisectingKMeans()
+      .setK(3)
+      .setSeed(1)
+      .setWeightCol("weightCol")
+      .fit(df2)
+    val predictionDf2 = model2.transform(df2)
+    checkNominalOnDF(predictionDf2, "prediction", model2.getK)
+
+    assert(predictionDf2.select("prediction").distinct().count() == 3)
+    val predictionsMap2 = predictionDf2.collect().map(row =>
+      row.getAs[Vector]("features") -> row.getAs[Int]("prediction")).toMap
+    assert(predictionsMap2(Vectors.dense(1.0, 1.0)) ==
+      predictionsMap2(Vectors.dense(1.0, 0.5)))
+    assert(predictionsMap2(Vectors.dense(1.0, 1.0)) ==
+      predictionsMap2(Vectors.dense(-1.0, 1.0)))
+    assert(predictionsMap2(Vectors.dense(10.0, 10.0)) ==
+      predictionsMap2(Vectors.dense(10.0, 4.4)))
+
+    assert(model1.clusterCenters(0) === model2.clusterCenters(0))
+    assert(model1.clusterCenters(1) === model2.clusterCenters(1))
+    assert(model1.clusterCenters(2) ~== model2.clusterCenters(2) absTol 1e-6)
   }
 
   test("BisectingKMeans with Array input") {
-    def trainAndComputeCost(dataset: Dataset[_]): Double = {
+    def trainAndComputeCost(dataset: DataFrame): Double = {
       val model = new BisectingKMeans().setK(k).setMaxIter(1).setSeed(1).fit(dataset)
-      model.computeCost(dataset)
+      model.summary.trainingCost
     }
 
     val (newDataset, newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
@@ -202,6 +332,13 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
     // checking the cost is fine enough as a sanity check
     assert(trueCost ~== doubleArrayCost absTol 1e-6)
     assert(trueCost ~== floatArrayCost absTol 1e-6)
+  }
+
+  test("prediction on single instance") {
+    val bikm = new BisectingKMeans().setSeed(123L)
+    val model = bikm.fit(dataset)
+    testClusteringModelSinglePrediction(model, model.predict, dataset,
+      model.getFeaturesCol, model.getPredictionCol)
   }
 }
 

@@ -19,16 +19,17 @@ package org.apache.spark.unsafe.types
 
 import org.apache.commons.text.similarity.LevenshteinDistance
 import org.scalacheck.{Arbitrary, Gen}
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
+import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 // scalastyle:off
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.unsafe.types.UTF8String.{fromString => toUTF8}
 
 /**
  * This TestSuite utilize ScalaCheck to generate randomized inputs for UTF8String testing.
  */
-class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenPropertyChecks with Matchers {
+class UTF8StringPropertyCheckSuite extends AnyFunSuite with ScalaCheckDrivenPropertyChecks with Matchers {
 // scalastyle:on
 
   test("toString") {
@@ -79,7 +80,9 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
 
   test("compare") {
     forAll { (s1: String, s2: String) =>
-      assert(Math.signum(toUTF8(s1).compareTo(toUTF8(s2))) === Math.signum(s1.compareTo(s2)))
+      assert(Math.signum {
+        toUTF8(s1).binaryCompare(toUTF8(s2)).toFloat
+      } === Math.signum(s1.compareTo(s2).toFloat))
     }
   }
 
@@ -191,7 +194,7 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
     }
   }
 
-  val nullalbeSeq = Gen.listOf(Gen.oneOf[String](null: String, randomString))
+  val nullableSeq = Gen.listOf(Gen.oneOf[String](null: String, randomString))
 
   test("concat") {
     def concat(origin: Seq[String]): String =
@@ -200,7 +203,7 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
     forAll { (inputs: Seq[String]) =>
       assert(UTF8String.concat(inputs.map(toUTF8): _*) === toUTF8(inputs.mkString))
     }
-    forAll (nullalbeSeq) { (inputs: Seq[String]) =>
+    forAll (nullableSeq) { (inputs: Seq[String]) =>
       assert(UTF8String.concat(inputs.map(toUTF8): _*) === toUTF8(concat(inputs)))
     }
   }
@@ -215,7 +218,7 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
       assert(UTF8String.concatWs(toUTF8(sep), inputs.map(toUTF8): _*) ===
         toUTF8(inputs.mkString(sep)))
     }
-    forAll(randomString, nullalbeSeq) {(sep: String, inputs: Seq[String]) =>
+    forAll(randomString, nullableSeq) {(sep: String, inputs: Seq[String]) =>
       assert(UTF8String.concatWs(toUTF8(sep), inputs.map(toUTF8): _*) ===
         toUTF8(concatWs(sep, inputs)))
     }

@@ -17,28 +17,41 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
-import org.apache.spark.sql.catalyst.expressions.RowOrdering
+import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.st.STExpressionUtils.isGeoSpatialType
+import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalNumericType}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
  * Functions to help with checking for valid data types and value comparison of various types.
  */
-object TypeUtils {
-  def checkForNumericExpr(dt: DataType, caller: String): TypeCheckResult = {
-    if (dt.isInstanceOf[NumericType] || dt == NullType) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(s"$caller requires numeric types, not ${dt.catalogString}")
-    }
-  }
+object TypeUtils extends QueryErrorsBase {
 
   def checkForOrderingExpr(dt: DataType, caller: String): TypeCheckResult = {
     if (RowOrdering.isOrderable(dt)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(
-        s"$caller does not support ordering on type ${dt.catalogString}")
+      DataTypeMismatch(
+        errorSubClass = "INVALID_ORDERING_TYPE",
+        Map(
+          "functionName" -> toSQLId(caller),
+          "dataType" -> toSQLType(dt)
+        )
+      )
+    }
+  }
+
+  def tryThrowNotOrderableExpression(expression: Expression): Unit = {
+    if (!RowOrdering.isOrderable(expression.dataType)) {
+      expression.failAnalysis(
+        errorClass = "EXPRESSION_TYPE_IS_NOT_ORDERABLE",
+        messageParameters =
+          Map("expr" -> toSQLExpr(expression), "exprType" -> toSQLType(expression.dataType))
+      )
     }
   }
 
@@ -46,40 +59,57 @@ object TypeUtils {
     if (TypeCoercion.haveSameType(types)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(
-        s"input to $caller should all be the same type, but it's " +
-          types.map(_.catalogString).mkString("[", ", ", "]"))
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> toSQLId(caller),
+          "dataType" -> types.map(toSQLType).mkString("(", " or ", ")")
+        )
+      )
     }
   }
 
   def checkForMapKeyType(keyType: DataType): TypeCheckResult = {
-    if (keyType.existsRecursively(_.isInstanceOf[MapType])) {
-      TypeCheckResult.TypeCheckFailure("The key of map cannot be/contain map.")
+    if (keyType.existsRecursively(dt => dt.isInstanceOf[MapType] || dt.isInstanceOf[VariantType])) {
+      DataTypeMismatch(
+        errorSubClass = "INVALID_MAP_KEY_TYPE",
+        messageParameters = Map(
+          "keyType" -> toSQLType(keyType)
+        )
+      )
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
   }
 
-  def getNumeric(t: DataType): Numeric[Any] =
-    t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
+  def checkForAnsiIntervalOrNumericType(input: Expression): TypeCheckResult = input.dataType match {
+    case _: AnsiIntervalType | NullType =>
+      TypeCheckResult.TypeCheckSuccess
+    case dt if dt.isInstanceOf[NumericType] => TypeCheckResult.TypeCheckSuccess
+    case other =>
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> Seq(NumericType, AnsiIntervalType).map(toSQLType).mkString(" or "),
+          "inputSql" -> toSQLExpr(input),
+          "inputType" -> toSQLType(other)))
+  }
 
-  def getInterpretedOrdering(t: DataType): Ordering[Any] = {
-    t match {
-      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
-      case a: ArrayType => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
-      case s: StructType => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
-      case udt: UserDefinedType[_] => getInterpretedOrdering(udt.sqlType)
+  def getNumeric(t: DataType, exactNumericRequired: Boolean = false): Numeric[Any] = {
+    if (exactNumericRequired) {
+      PhysicalNumericType.exactNumeric(t.asInstanceOf[NumericType])
+    } else {
+      PhysicalNumericType.numeric(t.asInstanceOf[NumericType])
     }
   }
 
-  def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {
-    for (i <- 0 until x.length; if i < y.length) {
-      val v1 = x(i) & 0xff
-      val v2 = y(i) & 0xff
-      val res = v1 - v2
-      if (res != 0) return res
+  @scala.annotation.tailrec
+  def getInterpretedOrdering(t: DataType): Ordering[Any] = {
+    t match {
+      case udt: UserDefinedType[_] => getInterpretedOrdering(udt.sqlType)
+      case other => PhysicalDataType.ordering(other)
     }
-    x.length - y.length
   }
 
   /**
@@ -89,7 +119,34 @@ object TypeUtils {
    */
   def typeWithProperEquals(dataType: DataType): Boolean = dataType match {
     case BinaryType => false
+    case s: StringType => s.supportsBinaryEquality
     case _: AtomicType => true
     case _ => false
+  }
+
+  def failWithIntervalType(dataType: DataType): Unit = {
+    invokeOnceForInterval(dataType, forbidAnsiIntervals = false) {
+      throw QueryCompilationErrors.cannotUseIntervalTypeInTableSchemaError()
+    }
+  }
+
+  def invokeOnceForInterval(dataType: DataType, forbidAnsiIntervals: Boolean)(f: => Unit): Unit = {
+    def isInterval(dataType: DataType): Boolean = dataType match {
+      case _: AnsiIntervalType => forbidAnsiIntervals
+      case CalendarIntervalType => true
+      case _ => false
+    }
+    if (dataType.existsRecursively(isInterval)) f
+  }
+
+  def failUnsupportedDataType(dataType: DataType, conf: SQLConf): Unit = {
+    if (!conf.isTimeTypeEnabled && dataType.existsRecursively(_.isInstanceOf[TimeType])) {
+      throw QueryCompilationErrors.unsupportedTimeTypeError()
+    }
+    if (!conf.geospatialEnabled && dataType.existsRecursively(isGeoSpatialType)) {
+      throw new org.apache.spark.sql.AnalysisException(
+        errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
+        messageParameters = scala.collection.immutable.Map.empty)
+    }
   }
 }

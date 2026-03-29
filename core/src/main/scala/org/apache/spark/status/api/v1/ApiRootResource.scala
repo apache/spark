@@ -17,13 +17,13 @@
 package org.apache.spark.status.api.v1
 
 import java.util.zip.ZipOutputStream
-import javax.servlet.ServletContext
-import javax.servlet.http.HttpServletRequest
-import javax.ws.rs._
-import javax.ws.rs.core.{Context, Response}
 
+import jakarta.servlet.ServletContext
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.ws.rs._
+import jakarta.ws.rs.core.{Context, Response}
+import org.eclipse.jetty.ee10.servlet.{ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.server.handler.ContextHandler
-import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.glassfish.jersey.server.ServerProperties
 import org.glassfish.jersey.servlet.ServletContainer
 
@@ -77,16 +77,20 @@ private[spark] trait UIRoot {
   /**
    * Runs some code with the current SparkUI instance for the app / attempt.
    *
-   * @throws NoSuchElementException If the app / attempt pair does not exist.
+   * @throws java.util.NoSuchElementException If the app / attempt pair does not exist.
    */
   def withSparkUI[T](appId: String, attemptId: Option[String])(fn: SparkUI => T): T
 
   def getApplicationInfoList: Iterator[ApplicationInfo]
+
+  def getApplicationInfoList(max: Int)(
+      filter: ApplicationInfo => Boolean): Iterator[ApplicationInfo]
+
   def getApplicationInfo(appId: String): Option[ApplicationInfo]
 
   /**
-   * Write the event logs for the given app to the [[ZipOutputStream]] instance. If attemptId is
-   * [[None]], event logs for all attempts of this application will be written out.
+   * Write the event logs for the given app to the `ZipOutputStream` instance. If attemptId is
+   * `None`, event logs for all attempts of this application will be written out.
    */
   def writeEventLogs(appId: String, attemptId: Option[String], zipStream: ZipOutputStream): Unit = {
     Response.serverError()
@@ -95,6 +99,8 @@ private[spark] trait UIRoot {
       .build()
   }
   def securityManager: SecurityManager
+
+  def checkUIViewPermissions(appId: String, attemptId: Option[String], user: String): Boolean
 }
 
 private[v1] object UIRootFromServletContext {
@@ -138,6 +144,19 @@ private[v1] trait BaseAppResource extends ApiRequestContext {
           throw new ForbiddenException(raw"""user "$user" is not authorized""")
         }
         fn(ui)
+      }
+    } catch {
+      case _: NoSuchElementException =>
+        val appKey = Option(attemptId).map(appId + "/" + _).getOrElse(appId)
+        throw new NotFoundException(s"no such app: $appKey")
+    }
+  }
+
+  protected def checkUIViewPermissions(): Unit = {
+    try {
+      val user = httpRequest.getRemoteUser()
+      if (!uiRoot.checkUIViewPermissions(appId, Option(attemptId), user)) {
+        throw new ForbiddenException(raw"""user "$user" is not authorized""")
       }
     } catch {
       case _: NoSuchElementException =>

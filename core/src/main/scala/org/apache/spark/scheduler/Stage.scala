@@ -59,7 +59,8 @@ private[scheduler] abstract class Stage(
     val numTasks: Int,
     val parents: List[Stage],
     val firstJobId: Int,
-    val callSite: CallSite)
+    val callSite: CallSite,
+    val resourceProfileId: Int)
   extends Logging {
 
   val numPartitions = rdd.partitions.length
@@ -69,6 +70,27 @@ private[scheduler] abstract class Stage(
 
   /** The ID to use for the next new attempt for this stage. */
   private var nextAttemptId: Int = 0
+  private[scheduler] def getNextAttemptId: Int = nextAttemptId
+
+  /**
+   * Whether checksum mismatches have been detected across different attempt of the stage, where
+   * checksum mismatches typically indicates that different stage attempts have produced different
+   * data.
+   */
+  private[scheduler] var isChecksumMismatched: Boolean = false
+
+  /**
+   * The maximum of task attempt id where checksum mismatches are detected.
+   */
+  private[scheduler] var maxChecksumMismatchedId: Int = nextAttemptId
+
+  /**
+   * The max attempt id we should ignore results for this stage, indicating there are ancestor
+   * stages having been detected with checksum mismatches. This stage is probably also
+   * indeterminate, so we need to avoid completing the stage and the job with incorrect result
+   * by ignoring the task output from previous attempts which might consume inconsistent data
+   */
+  private[scheduler] var maxAttemptIdToIgnore: Option[Int] = None
 
   val name: String = callSite.shortForm
   val details: String = callSite.longForm
@@ -79,7 +101,8 @@ private[scheduler] abstract class Stage(
    * StageInfo to tell SparkListeners when a job starts (which happens before any stage attempts
    * have been created).
    */
-  private var _latestInfo: StageInfo = StageInfo.fromStage(this, nextAttemptId)
+  private var _latestInfo: StageInfo =
+    StageInfo.fromStage(this, nextAttemptId, resourceProfileId = resourceProfileId)
 
   /**
    * Set of stage attempt IDs that have failed. We keep track of these failures in order to avoid
@@ -93,6 +116,14 @@ private[scheduler] abstract class Stage(
     failedAttemptIds.clear()
   }
 
+  /** Mark the latest attempt as rollback */
+  private[scheduler] def markAsRollingBack(): Unit = {
+    // Only if the stage has been submitted
+    if (getNextAttemptId > 0) {
+      maxAttemptIdToIgnore = Some(latestInfo.attemptNumber())
+    }
+  }
+
   /** Creates a new attempt for this stage by creating a new StageInfo with a new attempt ID. */
   def makeNewStageAttempt(
       numPartitionsToCompute: Int,
@@ -100,8 +131,16 @@ private[scheduler] abstract class Stage(
     val metrics = new TaskMetrics
     metrics.register(rdd.sparkContext)
     _latestInfo = StageInfo.fromStage(
-      this, nextAttemptId, Some(numPartitionsToCompute), metrics, taskLocalityPreferences)
+      this, nextAttemptId, Some(numPartitionsToCompute), metrics, taskLocalityPreferences,
+      resourceProfileId = resourceProfileId)
     nextAttemptId += 1
+  }
+
+  /** Forward the nextAttemptId if skipped and get visited for the first time. */
+  def increaseAttemptIdOnFirstSkip(): Unit = {
+    if (nextAttemptId == 0) {
+      nextAttemptId = 1
+    }
   }
 
   /** Returns the StageInfo for the most recent attempt for this stage. */

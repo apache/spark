@@ -19,7 +19,8 @@ package org.apache.spark.storage
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.util.Utils
 
 /**
@@ -68,7 +69,7 @@ class DefaultTopologyMapper(conf: SparkConf) extends TopologyMapper(conf) with L
  */
 @DeveloperApi
 class FileBasedTopologyMapper(conf: SparkConf) extends TopologyMapper(conf) with Logging {
-  val topologyFile = conf.getOption("spark.storage.replication.topologyFile")
+  val topologyFile = conf.get(config.STORAGE_REPLICATION_TOPOLOGY_FILE)
   require(topologyFile.isDefined, "Please specify topology file via " +
     "spark.storage.replication.topologyFile for FileBasedTopologyMapper.")
   val topologyMap = Utils.getPropertiesFromFile(topologyFile.get)
@@ -78,7 +79,7 @@ class FileBasedTopologyMapper(conf: SparkConf) extends TopologyMapper(conf) with
     if (topology.isDefined) {
       logDebug(s"$hostname -> ${topology.get}")
     } else {
-      logWarning(s"$hostname does not have any topology information")
+      logWarning(log"${MDC(HOST_PORT, hostname)} does not have any topology information")
     }
     topology
   }

@@ -17,16 +17,29 @@
 
 package org.apache.spark.io
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 import java.nio.ByteBuffer
-
-import com.google.common.io.ByteStreams
 
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.internal.config
 import org.apache.spark.network.util.ByteArrayWritableChannel
+import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.Utils.createArray
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 class ChunkedByteBufferSuite extends SparkFunSuite with SharedSparkContext {
+
+  /**
+   * compare two ChunkedByteBuffer:
+   * - chunks nums equal
+   * - each chunk's content
+   */
+  def assertBufferEqual(buffer1: ChunkedByteBuffer, buffer2: ChunkedByteBuffer): Unit = {
+    assert(buffer1.chunks.length == buffer2.chunks.length)
+    assert(buffer1.chunks.zip(buffer2.chunks).forall {
+      case (chunk1, chunk2) => chunk1 == chunk2
+    })
+  }
 
   test("no chunks") {
     val emptyChunkedByteBuffer = new ChunkedByteBuffer(Array.empty[ByteBuffer])
@@ -69,6 +82,43 @@ class ChunkedByteBufferSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
+  test("Externalizable: writeExternal() and readExternal()") {
+    // intentionally generate arrays of different len, in order to verify the chunks layout
+    // is preserved after ser/deser
+    val byteArrays = (1 to 15).map(i => (0 until i).map(_.toByte).toArray)
+    val chunkedByteBuffer = new ChunkedByteBuffer(byteArrays.map(ByteBuffer.wrap).toArray)
+    val baos = new ByteArrayOutputStream()
+    val objOut = new ObjectOutputStream(baos)
+    chunkedByteBuffer.writeExternal(objOut)
+    objOut.close()
+    assert(chunkedByteBuffer.chunks.forall(_.position() == 0))
+
+    val chunkedByteBuffer2 = {
+      val tmp = new ChunkedByteBuffer
+      tmp.readExternal(new ObjectInputStream(new ByteArrayInputStream(baos.toByteArray)))
+      tmp
+    }
+    assertBufferEqual(chunkedByteBuffer, chunkedByteBuffer2)
+  }
+
+  test(
+    "Externalizable: writeExternal() and readExternal() should handle off-heap buffer properly") {
+    val chunkedByteBuffer = new ChunkedByteBuffer(
+      (0 until 10).map(_ => ByteBuffer.allocateDirect(10)).toArray)
+    val baos = new ByteArrayOutputStream()
+    val objOut = new ObjectOutputStream(baos)
+    chunkedByteBuffer.writeExternal(objOut)
+    objOut.close()
+
+    val chunkedByteBuffer2 = {
+      val tmp = new ChunkedByteBuffer
+      tmp.readExternal(new ObjectInputStream(new ByteArrayInputStream(baos.toByteArray)))
+      tmp
+    }
+
+    assertBufferEqual(chunkedByteBuffer, chunkedByteBuffer2)
+  }
+
   test("toArray()") {
     val empty = ByteBuffer.wrap(Array.empty[Byte])
     val bytes = ByteBuffer.wrap(Array.tabulate(8)(_.toByte))
@@ -79,7 +129,7 @@ class ChunkedByteBufferSuite extends SparkFunSuite with SharedSparkContext {
   test("toArray() throws UnsupportedOperationException if size exceeds 2GB") {
     val fourMegabyteBuffer = ByteBuffer.allocate(1024 * 1024 * 4)
     fourMegabyteBuffer.limit(fourMegabyteBuffer.capacity())
-    val chunkedByteBuffer = new ChunkedByteBuffer(Array.fill(1024)(fourMegabyteBuffer))
+    val chunkedByteBuffer = new ChunkedByteBuffer(createArray(1024, fourMegabyteBuffer))
     assert(chunkedByteBuffer.size === (1024L * 1024L * 1024L * 4L))
     intercept[UnsupportedOperationException] {
       chunkedByteBuffer.toArray
@@ -95,7 +145,7 @@ class ChunkedByteBufferSuite extends SparkFunSuite with SharedSparkContext {
 
     val inputStream = chunkedByteBuffer.toInputStream(dispose = false)
     val bytesFromStream = new Array[Byte](chunkedByteBuffer.size.toInt)
-    ByteStreams.readFully(inputStream, bytesFromStream)
+    Utils.readFully(inputStream, bytesFromStream, 0, bytesFromStream.length)
     assert(bytesFromStream === bytes1.array() ++ bytes2.array())
     assert(chunkedByteBuffer.getChunks().head.position() === 0)
   }

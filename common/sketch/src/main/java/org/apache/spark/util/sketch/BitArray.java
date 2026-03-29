@@ -85,6 +85,17 @@ final class BitArray {
     this.bitCount = bitCount;
   }
 
+  /** Combines the two BitArrays using bitwise AND. */
+  void and(BitArray array) {
+    assert data.length == array.data.length : "BitArrays must be of equal length when merging";
+    long bitCount = 0;
+    for (int i = 0; i < data.length; i++) {
+      data[i] &= array.data[i];
+      bitCount += Long.bitCount(data[i]);
+    }
+    this.bitCount = bitCount;
+  }
+
   void writeTo(DataOutputStream out) throws IOException {
     out.writeInt(data.length);
     for (long datum : data) {
@@ -104,8 +115,7 @@ final class BitArray {
   @Override
   public boolean equals(Object other) {
     if (this == other) return true;
-    if (other == null || !(other instanceof BitArray)) return false;
-    BitArray that = (BitArray) other;
+    if (!(other instanceof BitArray that)) return false;
     return Arrays.equals(data, that.data);
   }
 

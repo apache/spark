@@ -22,8 +22,6 @@ Run with:
 
 This example requires NumPy (http://www.numpy.org/).
 """
-from __future__ import print_function
-
 # $example on$
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.evaluation import ClusteringEvaluator

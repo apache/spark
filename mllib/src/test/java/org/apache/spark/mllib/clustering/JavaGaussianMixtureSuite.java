@@ -20,9 +20,9 @@ package org.apache.spark.mllib.clustering;
 import java.util.Arrays;
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
@@ -42,7 +42,7 @@ public class JavaGaussianMixtureSuite extends SharedSparkSession {
     JavaRDD<Vector> data = jsc.parallelize(points, 2);
     GaussianMixtureModel model = new GaussianMixture().setK(2).setMaxIterations(1).setSeed(1234)
       .run(data);
-    assertEquals(model.gaussians().length, 2);
+    assertEquals(2, model.gaussians().length);
     JavaRDD<Integer> predictions = model.predict(data);
     predictions.first();
   }

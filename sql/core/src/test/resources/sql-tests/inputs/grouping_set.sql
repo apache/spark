@@ -13,6 +13,10 @@ SELECT a, b, c, count(d) FROM grouping GROUP BY a, b, c GROUPING SETS ((a));
 -- SPARK-17849: grouping set throws NPE #3
 SELECT a, b, c, count(d) FROM grouping GROUP BY a, b, c GROUPING SETS ((c));
 
+-- SPARK-52007: grouping set doesn't produce expression IDs in grouping expressions
+SELECT a, b, c, d FROM grouping GROUP BY GROUPING SETS (a, b, c, d);
+SELECT a, b FROM grouping GROUP BY GROUPING SETS (a, b, d + 1) ORDER BY `(d + 1)`;
+
 -- Group sets without explicit group by
 SELECT c1, sum(c2) FROM (VALUES ('x', 10, 0), ('y', 20, 0)) AS t (c1, c2, c3) GROUP BY GROUPING SETS (c1);
 
@@ -51,3 +55,16 @@ SELECT a, b, c, count(d) FROM grouping GROUP BY WITH CUBE;
 
 SELECT c1 FROM (values (1,2), (3,2)) t(c1, c2) GROUP BY GROUPING SETS (());
 
+-- duplicate entries in grouping sets
+SELECT k1, k2, avg(v) FROM (VALUES (1,1,1),(2,2,2)) AS t(k1,k2,v) GROUP BY GROUPING SETS ((k1),(k1,k2),(k2,k1));
+
+SELECT grouping__id, k1, k2, avg(v) FROM (VALUES (1,1,1),(2,2,2)) AS t(k1,k2,v) GROUP BY GROUPING SETS ((k1),(k1,k2),(k2,k1));
+
+SELECT grouping(k1), k1, k2, avg(v) FROM (VALUES (1,1,1),(2,2,2)) AS t(k1,k2,v) GROUP BY GROUPING SETS ((k1),(k1,k2),(k2,k1));
+
+-- grouping_id function
+SELECT grouping_id(k1, k2), avg(v) from (VALUES (1,1,1),(2,2,2)) AS t(k1,k2,v) GROUP BY k1, k2 GROUPING SETS ((k2, k1), k1);
+
+SELECT CASE WHEN a IS NULL THEN count(b) WHEN b IS NULL THEN count(c) END
+FROM grouping
+GROUP BY GROUPING SETS (a, b, c);

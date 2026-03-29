@@ -29,8 +29,11 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.internal.LogKeys._
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
+import org.apache.spark.scheduler.ExecutorDecommissionInfo
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
 
 /**
@@ -88,7 +91,7 @@ private[spark] class StandaloneAppClient(
         case e: Exception =>
           logWarning("Failed to connect to master", e)
           markDisconnected()
-          stop()
+          this.stop()
       }
     }
 
@@ -102,12 +105,14 @@ private[spark] class StandaloneAppClient(
             if (registered.get) {
               return
             }
-            logInfo("Connecting to master " + masterAddress.toSparkURL + "...")
+            logInfo(
+              log"Connecting to master ${MDC(LogKeys.MASTER_URL, masterAddress.toSparkURL)}...")
             val masterRef = rpcEnv.setupEndpointRef(masterAddress, Master.ENDPOINT_NAME)
             masterRef.send(RegisterApplication(appDescription, self))
           } catch {
             case ie: InterruptedException => // Cancelled
-            case NonFatal(e) => logWarning(s"Failed to connect to master $masterAddress", e)
+            case NonFatal(e) => logWarning(log"Failed to connect to master " +
+              log"${MDC(MASTER_URL, masterAddress)}", e)
           }
         })
       }
@@ -120,7 +125,7 @@ private[spark] class StandaloneAppClient(
      *
      * nthRetry means this is the nth attempt to register with master.
      */
-    private def registerWithMaster(nthRetry: Int) {
+    private def registerWithMaster(nthRetry: Int): Unit = {
       registerMasterFutures.set(tryRegisterAllMasters())
       registrationRetryTimer.set(registrationRetryThread.schedule(new Runnable {
         override def run(): Unit = {
@@ -144,7 +149,8 @@ private[spark] class StandaloneAppClient(
     private def sendToMaster(message: Any): Unit = {
       master match {
         case Some(masterRef) => masterRef.send(message)
-        case None => logWarning(s"Drop $message because has not yet connected to master")
+        case None => logWarning(
+          log"Drop ${MDC(MESSAGE, message)} because has not yet connected to master")
       }
     }
 
@@ -166,28 +172,35 @@ private[spark] class StandaloneAppClient(
 
       case ApplicationRemoved(message) =>
         markDead("Master removed our application: %s".format(message))
-        stop()
+        this.stop()
 
       case ExecutorAdded(id: Int, workerId: String, hostPort: String, cores: Int, memory: Int) =>
-        val fullId = appId + "/" + id
-        logInfo("Executor added: %s on %s (%s) with %d core(s)".format(fullId, workerId, hostPort,
-          cores))
+        val fullId = s"$appId/$id"
+        logInfo(log"Executor added: ${MDC(LogKeys.EXECUTOR_ID, fullId)} on " +
+          log"${MDC(LogKeys.WORKER_ID, workerId)} (${MDC(LogKeys.HOST_PORT, hostPort)}) " +
+          log"with ${MDC(LogKeys.NUM_CORES, cores)} core(s)")
         listener.executorAdded(fullId, workerId, hostPort, cores, memory)
 
-      case ExecutorUpdated(id, state, message, exitStatus, workerLost) =>
-        val fullId = appId + "/" + id
+      case ExecutorUpdated(id, state, message, exitStatus, workerHost) =>
+        val fullId = s"$appId/$id"
         val messageText = message.map(s => " (" + s + ")").getOrElse("")
-        logInfo("Executor updated: %s is now %s%s".format(fullId, state, messageText))
+        logInfo(log"Executor updated: ${MDC(LogKeys.EXECUTOR_ID, fullId)} is now " +
+          log"${MDC(LogKeys.EXECUTOR_STATE, state)}${MDC(LogKeys.MESSAGE, messageText)}")
         if (ExecutorState.isFinished(state)) {
-          listener.executorRemoved(fullId, message.getOrElse(""), exitStatus, workerLost)
+          listener.executorRemoved(fullId, message.getOrElse(""), exitStatus, workerHost)
+        } else if (state == ExecutorState.DECOMMISSIONED) {
+          listener.executorDecommissioned(fullId,
+            ExecutorDecommissionInfo(message.getOrElse(""), workerHost))
         }
 
       case WorkerRemoved(id, host, message) =>
-        logInfo("Master removed worker %s: %s".format(id, message))
+        logInfo(log"Master removed worker ${MDC(LogKeys.WORKER_ID, id)}: " +
+          log"${MDC(LogKeys.MESSAGE, message)}")
         listener.workerRemoved(id, host, message)
 
       case MasterChanged(masterRef, masterWebUiUrl) =>
-        logInfo("Master has changed, new master is at " + masterRef.address.toSparkURL)
+        logInfo(log"Master has changed, new master is at " +
+          log"${MDC(LogKeys.MASTER_URL, masterRef.address.toSparkURL)}")
         master = Some(masterRef)
         alreadyDisconnected = false
         masterRef.send(MasterChangeAcknowledged(appId.get))
@@ -198,7 +211,7 @@ private[spark] class StandaloneAppClient(
         markDead("Application has been stopped.")
         sendToMaster(UnregisterApplication(appId.get))
         context.reply(true)
-        stop()
+        this.stop()
 
       case r: RequestExecutors =>
         master match {
@@ -232,28 +245,30 @@ private[spark] class StandaloneAppClient(
 
     override def onDisconnected(address: RpcAddress): Unit = {
       if (master.exists(_.address == address)) {
-        logWarning(s"Connection to $address failed; waiting for master to reconnect...")
+        logWarning(
+          log"Connection to ${MDC(MASTER_URL, address)} failed; waiting for master to reconnect...")
         markDisconnected()
       }
     }
 
     override def onNetworkError(cause: Throwable, address: RpcAddress): Unit = {
       if (isPossibleMaster(address)) {
-        logWarning(s"Could not connect to $address: $cause")
+        logWarning(log"Could not connect to ${MDC(MASTER_URL, address)}: " +
+          log"${MDC(ERROR, cause)}")
       }
     }
 
     /**
      * Notify the listener that we disconnected, if we hadn't already done so before.
      */
-    def markDisconnected() {
+    def markDisconnected(): Unit = {
       if (!alreadyDisconnected) {
         listener.disconnected()
         alreadyDisconnected = true
       }
     }
 
-    def markDead(reason: String) {
+    def markDead(reason: String): Unit = {
       if (!alreadyDead.get) {
         listener.dead(reason)
         alreadyDead.set(true)
@@ -271,12 +286,12 @@ private[spark] class StandaloneAppClient(
 
   }
 
-  def start() {
+  def start(): Unit = {
     // Just launch an rpcEndpoint; it will call back into the listener.
     endpoint.set(rpcEnv.setupEndpoint("AppClient", new ClientEndpoint(rpcEnv)))
   }
 
-  def stop() {
+  def stop(): Unit = {
     if (endpoint.get != null) {
       try {
         val timeout = RpcUtils.askRpcTimeout(conf)
@@ -290,14 +305,25 @@ private[spark] class StandaloneAppClient(
   }
 
   /**
-   * Request executors from the Master by specifying the total number desired,
-   * including existing pending and running executors.
+   * Request executors for default resource profile from the Master by specifying the
+   * total number desired, including existing pending and running executors.
    *
    * @return whether the request is acknowledged.
    */
   def requestTotalExecutors(requestedTotal: Int): Future[Boolean] = {
+    requestTotalExecutors(Map(appDescription.defaultProfile -> requestedTotal))
+  }
+
+  /**
+   * Request executors from the Master by specifying the total number desired for each
+   * resource profile, including existing pending and running executors.
+   *
+   * @return whether the request is acknowledged.
+   */
+  def requestTotalExecutors(
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {
     if (endpoint.get != null && appId.get != null) {
-      endpoint.get.ask[Boolean](RequestExecutors(appId.get, requestedTotal))
+      endpoint.get.ask[Boolean](RequestExecutors(appId.get, resourceProfileToTotalExecs))
     } else {
       logWarning("Attempted to request executors before driver fully initialized.")
       Future.successful(false)

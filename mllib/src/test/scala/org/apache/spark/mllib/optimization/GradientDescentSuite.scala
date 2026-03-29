@@ -17,10 +17,10 @@
 
 package org.apache.spark.mllib.optimization
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
@@ -50,7 +50,7 @@ object GradientDescentSuite {
     val unifRand = new Random(45)
     val rLogis = (0 until nPoints).map { i =>
       val u = unifRand.nextDouble()
-      math.log(u) - math.log(1.0-u)
+      math.log(u) - math.log1p(-u)
     }
 
     val y: Seq[Int] = (0 until nPoints).map { i =>
@@ -101,7 +101,7 @@ class GradientDescentSuite extends SparkFunSuite with MLlibTestSparkContext with
     assert(loss.last - loss.head < 0, "loss isn't decreasing.")
 
     val lossDiff = loss.init.zip(loss.tail).map { case (lhs, rhs) => lhs - rhs }
-    assert(lossDiff.count(_ > 0).toDouble / lossDiff.size > 0.8)
+    assert(lossDiff.count(_ > 0).toDouble / lossDiff.length > 0.8)
   }
 
   test("Test the loss and gradient of first iteration with regularization.") {
@@ -190,7 +190,7 @@ class GradientDescentClusterSuite extends SparkFunSuite with LocalClusterSparkCo
       iter.map(i => (1.0, Vectors.dense(Array.fill(n)(random.nextDouble()))))
     }.cache()
     // If we serialize data directly in the task closure, the size of the serialized task would be
-    // greater than 1MB and hence Spark would throw an error.
+    // greater than 1MiB and hence Spark would throw an error.
     val (weights, loss) = GradientDescent.runMiniBatchSGD(
       points,
       new LogisticGradient,

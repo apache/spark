@@ -1,0 +1,4 @@
+---
+BUNDLE_PATH: ".local_ruby_bundle"
+# See: https://issues.apache.org/jira/browse/SPARK-38488
+BUNDLE_BUILD__FFI: "--enable-libffi-alloc"

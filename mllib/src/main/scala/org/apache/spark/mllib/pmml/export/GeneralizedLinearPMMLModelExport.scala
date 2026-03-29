@@ -15,11 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.pmml.export
+package org.apache.spark.mllib.pmml.`export`
 
 import scala.{Array => SArray}
 
-import org.dmg.pmml._
+import org.dmg.pmml.{DataDictionary, DataField, DataType, MiningField, MiningFunction,
+  MiningSchema, OpType}
+import org.dmg.pmml.regression.{NumericPredictor, RegressionModel, RegressionTable}
 
 import org.apache.spark.mllib.regression.GeneralizedLinearModel
 
@@ -40,31 +42,31 @@ private[mllib] class GeneralizedLinearPMMLModelExport(
     pmml.getHeader.setDescription(description)
 
     if (model.weights.size > 0) {
-      val fields = new SArray[FieldName](model.weights.size)
+      val fields = new SArray[String](model.weights.size)
       val dataDictionary = new DataDictionary
       val miningSchema = new MiningSchema
       val regressionTable = new RegressionTable(model.intercept)
       val regressionModel = new RegressionModel()
-        .setFunctionName(MiningFunctionType.REGRESSION)
+        .setMiningFunction(MiningFunction.REGRESSION)
         .setMiningSchema(miningSchema)
         .setModelName(description)
         .addRegressionTables(regressionTable)
 
       for (i <- 0 until model.weights.size) {
-        fields(i) = FieldName.create("field_" + i)
+        fields(i) = "field_" + i
         dataDictionary.addDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
         miningSchema
           .addMiningFields(new MiningField(fields(i))
-          .setUsageType(FieldUsageType.ACTIVE))
+          .setUsageType(MiningField.UsageType.ACTIVE))
         regressionTable.addNumericPredictors(new NumericPredictor(fields(i), model.weights(i)))
       }
 
       // for completeness add target field
-      val targetField = FieldName.create("target")
+      val targetField = "target"
       dataDictionary.addDataFields(new DataField(targetField, OpType.CONTINUOUS, DataType.DOUBLE))
       miningSchema
         .addMiningFields(new MiningField(targetField)
-        .setUsageType(FieldUsageType.TARGET))
+        .setUsageType(MiningField.UsageType.TARGET))
 
       dataDictionary.setNumberOfFields(dataDictionary.getDataFields.size)
 

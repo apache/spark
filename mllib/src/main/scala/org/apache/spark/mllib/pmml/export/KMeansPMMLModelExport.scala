@@ -15,18 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.pmml.export
+package org.apache.spark.mllib.pmml.`export`
 
 import scala.{Array => SArray}
 
-import org.dmg.pmml._
+import org.dmg.pmml.{Array, CompareFunction, ComparisonMeasure, DataDictionary, DataField, DataType,
+  MiningField, MiningFunction, MiningSchema, OpType, SquaredEuclidean}
+import org.dmg.pmml.clustering.{Cluster, ClusteringField, ClusteringModel}
 
 import org.apache.spark.mllib.clustering.KMeansModel
 
 /**
  * PMML Model Export for KMeansModel class
  */
-private[mllib] class KMeansPMMLModelExport(model: KMeansModel) extends PMMLModelExport{
+private[mllib] class KMeansPMMLModelExport(model: KMeansModel) extends PMMLModelExport {
 
   populateKMeansPMML(model)
 
@@ -38,7 +40,7 @@ private[mllib] class KMeansPMMLModelExport(model: KMeansModel) extends PMMLModel
 
     if (model.clusterCenters.length > 0) {
       val clusterCenter = model.clusterCenters(0)
-      val fields = new SArray[FieldName](clusterCenter.size)
+      val fields = new SArray[String](clusterCenter.size)
       val dataDictionary = new DataDictionary
       val miningSchema = new MiningSchema
       val comparisonMeasure = new ComparisonMeasure()
@@ -48,18 +50,18 @@ private[mllib] class KMeansPMMLModelExport(model: KMeansModel) extends PMMLModel
         .setModelName("k-means")
         .setMiningSchema(miningSchema)
         .setComparisonMeasure(comparisonMeasure)
-        .setFunctionName(MiningFunctionType.CLUSTERING)
+        .setMiningFunction(MiningFunction.CLUSTERING)
         .setModelClass(ClusteringModel.ModelClass.CENTER_BASED)
         .setNumberOfClusters(model.clusterCenters.length)
 
       for (i <- 0 until clusterCenter.size) {
-        fields(i) = FieldName.create("field_" + i)
+        fields(i) = "field_" + i
         dataDictionary.addDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
         miningSchema
           .addMiningFields(new MiningField(fields(i))
-          .setUsageType(FieldUsageType.ACTIVE))
+          .setUsageType(MiningField.UsageType.ACTIVE))
         clusteringModel.addClusteringFields(
-          new ClusteringField(fields(i)).setCompareFunction(CompareFunctionType.ABS_DIFF))
+          new ClusteringField(fields(i)).setCompareFunction(CompareFunction.ABS_DIFF))
       }
 
       dataDictionary.setNumberOfFields(dataDictionary.getDataFields.size)

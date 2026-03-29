@@ -21,7 +21,8 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaSparkContext._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.internal.LogKeys.{CLUSTER_CENTROIDS, CLUSTER_LABEL, CLUSTER_WEIGHT, LARGEST_CLUSTER_INDEX, SMALLEST_CLUSTER_INDEX}
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.api.java.{JavaDStream, JavaPairDStream}
@@ -36,14 +37,14 @@ import org.apache.spark.util.random.XORShiftRandom
  * doing a single iteration of the standard k-means algorithm.
  *
  * The update algorithm uses the "mini-batch" KMeans rule,
- * generalized to incorporate forgetfullness (i.e. decay).
+ * generalized to incorporate forgetfulness (i.e. decay).
  * The update rule (for each cluster) is:
  *
  * <blockquote>
  *    $$
  *    \begin{align}
- *     c_t+1 &= [(c_t * n_t * a) + (x_t * m_t)] / [n_t + m_t] \\
- *     n_t+1 &= n_t * a + m_t
+ *     c_{t+1} &= [(c_t * n_t * a) + (x_t * m_t)] / [n_t + m_t] \\
+ *     n_{t+1} &= n_t * a + m_t
  *    \end{align}
  *    $$
  * </blockquote>
@@ -82,23 +83,31 @@ class StreamingKMeansModel @Since("1.2.0") (
     val closest = data.map(point => (this.predict(point), (point, 1L)))
 
     // get sums and counts for updating each cluster
-    val mergeContribs: ((Vector, Long), (Vector, Long)) => (Vector, Long) = (p1, p2) => {
-      BLAS.axpy(1.0, p2._1, p1._1)
-      (p1._1, p1._2 + p2._2)
+    def mergeContribs(p1: (Vector, Long), p2: (Vector, Long)): (Vector, Long) = {
+      val sum =
+        if (p1._1 == null) {
+          p2._1
+        } else if (p2._1 == null) {
+          p1._1
+        } else {
+          BLAS.axpy(1.0, p2._1, p1._1)
+          p1._1
+        }
+      (sum, p1._2 + p2._2)
     }
     val dim = clusterCenters(0).size
 
     val pointStats: Array[(Int, (Vector, Long))] = closest
-      .aggregateByKey((Vectors.zeros(dim), 0L))(mergeContribs, mergeContribs)
+      .aggregateByKey((null.asInstanceOf[Vector], 0L))(mergeContribs, mergeContribs)
       .collect()
 
     val discount = timeUnit match {
       case StreamingKMeans.BATCHES => decayFactor
       case StreamingKMeans.POINTS =>
-        val numNewPoints = pointStats.view.map { case (_, (_, n)) =>
+        val numNewPoints = pointStats.iterator.map { case (_, (_, n)) =>
           n
         }.sum
-        math.pow(decayFactor, numNewPoints)
+        math.pow(decayFactor, numNewPoints.toDouble)
     }
 
     // apply discount to weights
@@ -121,15 +130,16 @@ class StreamingKMeansModel @Since("1.2.0") (
         case _ => centroid.toArray.mkString("[", ",", "]")
       }
 
-      logInfo(s"Cluster $label updated with weight $updatedWeight and centroid: $display")
+      logInfo(log"Cluster ${MDC(CLUSTER_LABEL, label)} updated with weight " +
+        log"${MDC(CLUSTER_WEIGHT, updatedWeight)} and centroid: ${MDC(CLUSTER_CENTROIDS, display)}")
     }
 
     // Check whether the smallest cluster is dying. If so, split the largest cluster.
-    val weightsWithIndex = clusterWeights.view.zipWithIndex
-    val (maxWeight, largest) = weightsWithIndex.maxBy(_._1)
-    val (minWeight, smallest) = weightsWithIndex.minBy(_._1)
+    val (maxWeight, largest) = clusterWeights.iterator.zipWithIndex.maxBy(_._1)
+    val (minWeight, smallest) = clusterWeights.iterator.zipWithIndex.minBy(_._1)
     if (minWeight < 1e-8 * maxWeight) {
-      logInfo(s"Cluster $smallest is dying. Split the largest cluster $largest into two.")
+      logInfo(log"Cluster ${MDC(SMALLEST_CLUSTER_INDEX, smallest)} is dying. " +
+        log"Split the largest cluster ${MDC(LARGEST_CLUSTER_INDEX, largest)} into two.")
       val weight = (maxWeight + minWeight) / 2.0
       clusterWeights(largest) = weight
       clusterWeights(smallest) = weight
@@ -212,7 +222,7 @@ class StreamingKMeans @Since("1.2.0") (
       throw new IllegalArgumentException("Invalid time unit for decay: " + timeUnit)
     }
     this.decayFactor = math.exp(math.log(0.5) / halfLife)
-    logInfo("Setting decay factor to: %g ".format (this.decayFactor))
+    logInfo(log"Setting decay factor to: ${MDC(LogKeys.VALUE, this.decayFactor)}")
     this.timeUnit = timeUnit
     this
   }
@@ -222,10 +232,10 @@ class StreamingKMeans @Since("1.2.0") (
    */
   @Since("1.2.0")
   def setInitialCenters(centers: Array[Vector], weights: Array[Double]): this.type = {
-    require(centers.size == weights.size,
+    require(centers.length == weights.length,
       "Number of initial centers must be equal to number of weights")
-    require(centers.size == k,
-      s"Number of initial centers must be ${k} but got ${centers.size}")
+    require(centers.length == k,
+      s"Number of initial centers must be ${k} but got ${centers.length}")
     require(weights.forall(_ >= 0),
       s"Weight for each initial center must be nonnegative but got [${weights.mkString(" ")}]")
     model = new StreamingKMeansModel(centers, weights)
@@ -269,7 +279,7 @@ class StreamingKMeans @Since("1.2.0") (
    * @param data DStream containing vector data
    */
   @Since("1.2.0")
-  def trainOn(data: DStream[Vector]) {
+  def trainOn(data: DStream[Vector]): Unit = {
     assertInitialized()
     data.foreachRDD { (rdd, time) =>
       model = model.update(rdd, decayFactor, timeUnit)

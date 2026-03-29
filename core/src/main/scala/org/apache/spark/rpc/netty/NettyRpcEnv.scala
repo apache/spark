@@ -29,8 +29,11 @@ import scala.reflect.ClassTag
 import scala.util.{DynamicVariable, Failure, Success, Try}
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.config.EXECUTOR_ID
+import org.apache.spark.internal.config.Network._
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.client._
 import org.apache.spark.network.crypto.{AuthClientBootstrap, AuthServerBootstrap}
@@ -46,11 +49,17 @@ private[netty] class NettyRpcEnv(
     host: String,
     securityManager: SecurityManager,
     numUsableCores: Int) extends RpcEnv(conf) with Logging {
+  val role = conf.get(EXECUTOR_ID).map { id =>
+    if (SparkContext.isDriver(id)) "driver" else "executor"
+  }
 
   private[netty] val transportConf = SparkTransportConf.fromSparkConf(
-    conf.clone.set("spark.rpc.io.numConnectionsPerPeer", "1"),
+    conf.clone.set(RPC_IO_NUM_CONNECTIONS_PER_PEER, 1),
     "rpc",
-    conf.getInt("spark.rpc.io.threads", numUsableCores))
+    conf.get(RPC_IO_THREADS).getOrElse(numUsableCores),
+    role,
+    sslOptions = Some(securityManager.getRpcSSLOptions())
+  )
 
   private val dispatcher: Dispatcher = new Dispatcher(this, numUsableCores)
 
@@ -87,7 +96,7 @@ private[netty] class NettyRpcEnv(
   // TODO: a non-blocking TransportClientFactory.createClient in future
   private[netty] val clientConnectionExecutor = ThreadUtils.newDaemonCachedThreadPool(
     "netty-rpc-connection",
-    conf.getInt("spark.rpc.connect.threads", 64))
+    conf.get(RPC_CONNECT_THREADS))
 
   @volatile private var server: TransportServer = _
 
@@ -198,15 +207,17 @@ private[netty] class NettyRpcEnv(
     clientFactory.createClient(address.host, address.port)
   }
 
-  private[netty] def ask[T: ClassTag](message: RequestMessage, timeout: RpcTimeout): Future[T] = {
+  private[netty] def askAbortable[T: ClassTag](
+      message: RequestMessage, timeout: RpcTimeout): AbortableRpcFuture[T] = {
     val promise = Promise[Any]()
     val remoteAddr = message.receiver.address
+    var rpcMsg: Option[RpcOutboxMessage] = None
 
     def onFailure(e: Throwable): Unit = {
       if (!promise.tryFailure(e)) {
         e match {
-          case e : RpcEnvStoppedException => logDebug (s"Ignored failure: $e")
-          case _ => logWarning(s"Ignored failure: $e")
+          case e : RpcEnvStoppedException => logDebug(s"Ignored failure: $e")
+          case _ => logWarning(log"Ignored failure: ${MDC(ERROR, e)}")
         }
       }
     }
@@ -215,8 +226,13 @@ private[netty] class NettyRpcEnv(
       case RpcFailure(e) => onFailure(e)
       case rpcReply =>
         if (!promise.trySuccess(rpcReply)) {
-          logWarning(s"Ignored message: $reply")
+          logWarning(log"Ignored message: ${MDC(MESSAGE, reply)}")
         }
+    }
+
+    def onAbort(t: Throwable): Unit = {
+      onFailure(t)
+      rpcMsg.foreach(_.onAbort())
     }
 
     try {
@@ -231,6 +247,7 @@ private[netty] class NettyRpcEnv(
         val rpcMessage = RpcOutboxMessage(message.serialize(this),
           onFailure,
           (client, response) => onSuccess(deserialize[Any](client, response)))
+        rpcMsg = Option(rpcMessage)
         postToOutbox(message.receiver, rpcMessage)
         promise.future.failed.foreach {
           case _: TimeoutException => rpcMessage.onTimeout()
@@ -240,7 +257,14 @@ private[netty] class NettyRpcEnv(
 
       val timeoutCancelable = timeoutScheduler.schedule(new Runnable {
         override def run(): Unit = {
-          onFailure(new TimeoutException(s"Cannot receive any reply from ${remoteAddr} " +
+          val remoteRecAddr = if (remoteAddr == null) {
+            Try {
+              message.receiver.client.getChannel.remoteAddress()
+            }.toOption.orNull
+          } else {
+            remoteAddr
+          }
+          onFailure(new TimeoutException(s"Cannot receive any reply from ${remoteRecAddr} " +
             s"in ${timeout.duration}"))
         }
       }, timeout.duration.toNanos, TimeUnit.NANOSECONDS)
@@ -251,7 +275,14 @@ private[netty] class NettyRpcEnv(
       case NonFatal(e) =>
         onFailure(e)
     }
-    promise.future.mapTo[T].recover(timeout.addMessageIfTimeout)(ThreadUtils.sameThread)
+
+    new AbortableRpcFuture[T](
+      promise.future.mapTo[T].recover(timeout.addMessageIfTimeout)(ThreadUtils.sameThread),
+      onAbort)
+  }
+
+  private[netty] def ask[T: ClassTag](message: RequestMessage, timeout: RpcTimeout): Future[T] = {
+    askAbortable(message, timeout).future
   }
 
   private[netty] def serialize(content: Any): ByteBuffer = {
@@ -314,6 +345,9 @@ private[netty] class NettyRpcEnv(
     if (fileDownloadFactory != null) {
       fileDownloadFactory.close()
     }
+    if (transportContext != null) {
+      transportContext.close()
+    }
   }
 
   override def deserialize[T](deserializationAction: () => T): T = {
@@ -360,7 +394,11 @@ private[netty] class NettyRpcEnv(
         }
 
         val ioThreads = clone.getInt("spark.files.io.threads", 1)
-        val downloadConf = SparkTransportConf.fromSparkConf(clone, module, ioThreads)
+        val downloadConf = SparkTransportConf.fromSparkConf(
+          clone,
+          module,
+          ioThreads,
+          sslOptions = Some(securityManager.getRpcSSLOptions()))
         val downloadContext = new TransportContext(downloadConf, new NoOpRpcHandler(), true)
         fileDownloadFactory = downloadContext.createClientFactory(createClientBootstraps())
       }
@@ -420,7 +458,6 @@ private[netty] class NettyRpcEnv(
     }
 
     override def onFailure(streamId: String, cause: Throwable): Unit = {
-      logDebug(s"Error downloading stream $streamId.", cause)
       source.setError(cause)
       sink.close()
     }
@@ -519,8 +556,13 @@ private[netty] class NettyRpcEndpointRef(
 
   override def name: String = endpointAddress.name
 
+  override def askAbortable[T: ClassTag](
+      message: Any, timeout: RpcTimeout): AbortableRpcFuture[T] = {
+    nettyEnv.askAbortable(new RequestMessage(nettyEnv.address, this, message), timeout)
+  }
+
   override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
-    nettyEnv.ask(new RequestMessage(nettyEnv.address, this, message), timeout)
+    askAbortable(message, timeout).future
   }
 
   override def send(message: Any): Unit = {

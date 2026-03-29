@@ -33,7 +33,7 @@ import org.apache.spark.util.StatCounter
 /**
  * Significance testing methods for [[StreamingTest]]. New 2-sample statistical significance tests
  * should extend [[StreamingTestMethod]] and introduce a new entry in
- * [[StreamingTestMethod.TEST_NAME_TO_OBJECT]]
+ * `StreamingTestMethod.TEST_NAME_TO_OBJECT`
  */
 private[stat] sealed trait StreamingTestMethod extends Serializable {
 
@@ -131,7 +131,7 @@ private[stat] object StudentTTest extends StreamingTestMethod with Logging {
       statsA: StatCounter,
       statsB: StatCounter): StreamingTestResult = {
     def studentDF(sample1: StatisticalSummaryValues, sample2: StatisticalSummaryValues): Double =
-      sample1.getN + sample2.getN - 2
+      sample1.getN + sample2.getN - 2.0
 
     new StreamingTestResult(
       tTester.get.homoscedasticTTest(statsA, statsB),

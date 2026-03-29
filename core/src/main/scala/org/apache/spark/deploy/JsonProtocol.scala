@@ -17,15 +17,28 @@
 
 package org.apache.spark.deploy
 
-import org.json4s.JsonAST.JObject
+import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import org.apache.spark.deploy.master._
-import org.apache.spark.deploy.master.RecoveryState.MasterState
 import org.apache.spark.deploy.worker.ExecutorRunner
+import org.apache.spark.resource.{ResourceInformation, ResourceRequirement}
 
 private[deploy] object JsonProtocol {
+
+  private def writeResourcesInfo(info: Map[String, ResourceInformation]): JObject = {
+    val jsonFields = info.map {
+      case (k, v) => JField(k, v.toJson())
+    }
+    JObject(jsonFields.toList)
+  }
+
+  private def writeResourceRequirement(req: ResourceRequirement): JObject = {
+    ("name" -> req.resourceName) ~
+    ("amount" -> req.amount)
+  }
+
   /**
    * Export the [[WorkerInfo]] to a Json object. A [[WorkerInfo]] consists of the information of a
    * worker.
@@ -41,6 +54,9 @@ private[deploy] object JsonProtocol {
    *         `memory` total memory of the worker
    *         `memoryused` allocated memory of the worker
    *         `memoryfree` free memory of the worker
+   *         `resources` total resources of the worker
+   *         `resourcesused` allocated resources of the worker
+   *         `resourcesfree` free resources of the worker
    *         `state` state of the worker, see [[WorkerState]]
    *         `lastheartbeat` time in milliseconds that the latest heart beat message from the
    *         worker is received
@@ -56,12 +72,15 @@ private[deploy] object JsonProtocol {
     ("memory" -> obj.memory) ~
     ("memoryused" -> obj.memoryUsed) ~
     ("memoryfree" -> obj.memoryFree) ~
+    ("resources" -> writeResourcesInfo(obj.resourcesInfo)) ~
+    ("resourcesused" -> writeResourcesInfo(obj.resourcesInfoUsed)) ~
+    ("resourcesfree" -> writeResourcesInfo(obj.resourcesInfoFree)) ~
     ("state" -> obj.state.toString) ~
     ("lastheartbeat" -> obj.lastHeartbeat)
   }
 
   /**
-   * Export the [[ApplicationInfo]] to a Json objec. An [[ApplicationInfo]] consists of the
+   * Export the [[ApplicationInfo]] to a Json object. An [[ApplicationInfo]] consists of the
    * information of an application.
    *
    * @return a Json object containing the following fields:
@@ -70,10 +89,12 @@ private[deploy] object JsonProtocol {
    *         `name` the description of the application
    *         `cores` total cores granted to the application
    *         `user` name of the user who submitted the application
-   *         `memoryperslave` minimal memory in MB required to each executor
+   *         `memoryperexecutor` minimal memory in MB required to each executor
+   *         `resourcesperexecutor` minimal resources required to each executor
    *         `submitdate` time in Date that the application is submitted
    *         `state` state of the application, see [[ApplicationState]]
    *         `duration` time in milliseconds that the application has been running
+   * For compatibility also returns the deprecated `memoryperslave` & `resourcesperslave` fields.
    */
   def writeApplicationInfo(obj: ApplicationInfo): JObject = {
     ("id" -> obj.id) ~
@@ -81,7 +102,12 @@ private[deploy] object JsonProtocol {
     ("name" -> obj.desc.name) ~
     ("cores" -> obj.coresGranted) ~
     ("user" -> obj.desc.user) ~
+    ("memoryperexecutor" -> obj.desc.memoryPerExecutorMB) ~
     ("memoryperslave" -> obj.desc.memoryPerExecutorMB) ~
+    ("resourcesperexecutor" -> obj.desc.resourceReqsPerExecutor
+      .toList.map(writeResourceRequirement)) ~
+    ("resourcesperslave" -> obj.desc.resourceReqsPerExecutor
+      .toList.map(writeResourceRequirement)) ~
     ("submitdate" -> obj.submitDate.toString) ~
     ("state" -> obj.state.toString) ~
     ("duration" -> obj.duration)
@@ -94,14 +120,19 @@ private[deploy] object JsonProtocol {
    * @return a Json object containing the following fields:
    *         `name` the description of the application
    *         `cores` max cores that can be allocated to the application, 0 means unlimited
-   *         `memoryperslave` minimal memory in MB required to each executor
+   *         `memoryperexecutor` minimal memory in MB required to each executor
+   *         `resourcesperexecutor` minimal resources required to each executor
    *         `user` name of the user who submitted the application
    *         `command` the command string used to submit the application
+   * For compatibility also returns the deprecated `memoryperslave` & `resourcesperslave` fields.
    */
   def writeApplicationDescription(obj: ApplicationDescription): JObject = {
     ("name" -> obj.name) ~
     ("cores" -> obj.maxCores.getOrElse(0)) ~
+    ("memoryperexecutor" -> obj.memoryPerExecutorMB) ~
+    ("resourcesperexecutor" -> obj.resourceReqsPerExecutor.toList.map(writeResourceRequirement)) ~
     ("memoryperslave" -> obj.memoryPerExecutorMB) ~
+    ("resourcesperslave" -> obj.resourceReqsPerExecutor.toList.map(writeResourceRequirement)) ~
     ("user" -> obj.user) ~
     ("command" -> obj.command.toString)
   }
@@ -113,6 +144,7 @@ private[deploy] object JsonProtocol {
    * @return a Json object containing the following fields:
    *         `id` an integer identifier of the executor
    *         `memory` memory in MB allocated to the executor
+   *         `resources` resources allocated to the executor
    *         `appid` a string identifier of the application that the executor is working on
    *         `appdesc` a Json object of the [[ApplicationDescription]] of the application that the
    *         executor is working on
@@ -120,6 +152,7 @@ private[deploy] object JsonProtocol {
   def writeExecutorRunner(obj: ExecutorRunner): JObject = {
     ("id" -> obj.execId) ~
     ("memory" -> obj.memory) ~
+    ("resources" -> writeResourcesInfo(obj.resources)) ~
     ("appid" -> obj.appId) ~
     ("appdesc" -> writeApplicationDescription(obj.appDesc))
   }
@@ -134,6 +167,7 @@ private[deploy] object JsonProtocol {
    *         `state` state of the driver, see [[DriverState]]
    *         `cores` cores allocated to the driver
    *         `memory` memory in MB allocated to the driver
+   *         `resources` resources allocated to the driver
    *         `submitdate` time in Date that the driver is created
    *         `worker` identifier of the worker that the driver is running on
    *         `mainclass` main class of the command string that started the driver
@@ -144,6 +178,7 @@ private[deploy] object JsonProtocol {
     ("state" -> obj.state.toString) ~
     ("cores" -> obj.desc.cores) ~
     ("memory" -> obj.desc.mem) ~
+    ("resources" -> writeResourcesInfo(obj.resources)) ~
     ("submitdate" -> obj.submitDate.toString) ~
     ("worker" -> obj.worker.map(_.id).getOrElse("None")) ~
     ("mainclass" -> obj.desc.command.arguments(2))
@@ -153,7 +188,7 @@ private[deploy] object JsonProtocol {
    * Export the [[MasterStateResponse]] to a Json object. A [[MasterStateResponse]] consists the
    * information of a master node.
    *
-   * @return a Json object containing the following fields:
+   * @return a Json object containing the following fields if `field` is None:
    *         `url` the url of the master node
    *         `workers` a list of Json objects of [[WorkerInfo]] of the workers allocated to the
    *         master
@@ -162,6 +197,8 @@ private[deploy] object JsonProtocol {
    *         `coresused` cores used by the master
    *         `memory` total memory available of the master
    *         `memoryused` memory used by the master
+   *         `resources` total resources available of the master
+   *         `resourcesused` resources used by the master
    *         `activeapps` a list of Json objects of [[ApplicationInfo]] of the active applications
    *         running on the master
    *         `completedapps` a list of Json objects of [[ApplicationInfo]] of the applications
@@ -170,22 +207,64 @@ private[deploy] object JsonProtocol {
    *         master
    *         `completeddrivers` a list of Json objects of [[DriverInfo]] of the completed drivers
    *         of the master
-   *         `status` status of the master, see [[MasterState]]
+   *         `status` status of the master,
+   *         see [[org.apache.spark.deploy.master.RecoveryState.MasterState]].
+   *         If `field` is not None, the Json object will contain the matched field.
+   *         If `field` doesn't match, the Json object `(field -> "")` is returned.
    */
-  def writeMasterState(obj: MasterStateResponse): JObject = {
+  def writeMasterState(obj: MasterStateResponse, field: Option[String] = None): JObject = {
     val aliveWorkers = obj.workers.filter(_.isAlive())
-    ("url" -> obj.uri) ~
-    ("workers" -> obj.workers.toList.map(writeWorkerInfo)) ~
-    ("aliveworkers" -> aliveWorkers.length) ~
-    ("cores" -> aliveWorkers.map(_.cores).sum) ~
-    ("coresused" -> aliveWorkers.map(_.coresUsed).sum) ~
-    ("memory" -> aliveWorkers.map(_.memory).sum) ~
-    ("memoryused" -> aliveWorkers.map(_.memoryUsed).sum) ~
-    ("activeapps" -> obj.activeApps.toList.map(writeApplicationInfo)) ~
-    ("completedapps" -> obj.completedApps.toList.map(writeApplicationInfo)) ~
-    ("activedrivers" -> obj.activeDrivers.toList.map(writeDriverInfo)) ~
-    ("completeddrivers" -> obj.completedDrivers.toList.map(writeDriverInfo)) ~
-    ("status" -> obj.status.toString)
+    field match {
+      case None =>
+        ("url" -> obj.uri) ~
+        ("workers" -> obj.workers.toList.map (writeWorkerInfo) ) ~
+        ("aliveworkers" -> aliveWorkers.length) ~
+        ("cores" -> aliveWorkers.map (_.cores).sum) ~
+        ("coresused" -> aliveWorkers.map (_.coresUsed).sum) ~
+        ("memory" -> aliveWorkers.map (_.memory).sum) ~
+        ("memoryused" -> aliveWorkers.map (_.memoryUsed).sum) ~
+        ("resources" -> aliveWorkers.map (_.resourcesInfo).toList.map (writeResourcesInfo) ) ~
+        ("resourcesused" ->
+          aliveWorkers.map (_.resourcesInfoUsed).toList.map (writeResourcesInfo) ) ~
+        ("activeapps" -> obj.activeApps.toList.map (writeApplicationInfo) ) ~
+        ("completedapps" -> obj.completedApps.toList.map (writeApplicationInfo) ) ~
+        ("activedrivers" -> obj.activeDrivers.toList.map (writeDriverInfo) ) ~
+        ("completeddrivers" -> obj.completedDrivers.toList.map (writeDriverInfo) ) ~
+        ("status" -> obj.status.toString)
+      case Some(field) =>
+        field match {
+          case "url" =>
+            ("url" -> obj.uri)
+          case "workers" =>
+            ("workers" -> obj.workers.toList.map (writeWorkerInfo) )
+          case "aliveworkers" =>
+            ("aliveworkers" -> aliveWorkers.length)
+          case "cores" =>
+            ("cores" -> aliveWorkers.map (_.cores).sum)
+          case "coresused" =>
+            ("coresused" -> aliveWorkers.map (_.coresUsed).sum)
+          case "memory" =>
+            ("memory" -> aliveWorkers.map (_.memory).sum)
+          case "memoryused" =>
+            ("memoryused" -> aliveWorkers.map (_.memoryUsed).sum)
+          case "resources" =>
+            ("resources" -> aliveWorkers.map (_.resourcesInfo).toList.map (writeResourcesInfo) )
+          case "resourcesused" =>
+            ("resourcesused" ->
+              aliveWorkers.map (_.resourcesInfoUsed).toList.map (writeResourcesInfo) )
+          case "activeapps" =>
+            ("activeapps" -> obj.activeApps.toList.map (writeApplicationInfo) )
+          case "completedapps" =>
+            ("completedapps" -> obj.completedApps.toList.map (writeApplicationInfo) )
+          case "activedrivers" =>
+            ("activedrivers" -> obj.activeDrivers.toList.map (writeDriverInfo) )
+          case "completeddrivers" =>
+            ("completeddrivers" -> obj.completedDrivers.toList.map (writeDriverInfo) )
+          case "status" =>
+            ("status" -> obj.status.toString)
+          case field => (field -> "")
+        }
+    }
   }
 
   /**
@@ -200,6 +279,8 @@ private[deploy] object JsonProtocol {
    *         `coreused` used cores of the worker
    *         `memory` total memory of the worker
    *         `memoryused` used memory of the worker
+   *         `resources` total resources of the worker
+   *         `resourcesused` used resources of the worker
    *         `executors` a list of Json objects of [[ExecutorRunner]] of the executors running on
    *         the worker
    *         `finishedexecutors` a list of Json objects of [[ExecutorRunner]] of the finished
@@ -213,7 +294,27 @@ private[deploy] object JsonProtocol {
     ("coresused" -> obj.coresUsed) ~
     ("memory" -> obj.memory) ~
     ("memoryused" -> obj.memoryUsed) ~
+    ("resources" -> writeResourcesInfo(obj.resources)) ~
+    ("resourcesused" -> writeResourcesInfo(obj.resourcesUsed)) ~
     ("executors" -> obj.executors.map(writeExecutorRunner)) ~
     ("finishedexecutors" -> obj.finishedExecutors.map(writeExecutorRunner))
+  }
+
+  /**
+   * Export the cluster utilization based on the [[MasterStateResponse]] to a Json object.
+   */
+  def writeClusterUtilization(obj: MasterStateResponse): JObject = {
+    val aliveWorkers = obj.workers.filter(_.isAlive())
+    val cores = aliveWorkers.map(_.cores).sum
+    val coresUsed = aliveWorkers.map(_.coresUsed).sum
+    val memory = aliveWorkers.map(_.memory).sum
+    val memoryUsed = aliveWorkers.map(_.memoryUsed).sum
+    ("waitingDrivers" -> obj.activeDrivers.count(_.state == DriverState.SUBMITTED)) ~
+    ("cores" -> cores) ~
+    ("coresused" -> coresUsed) ~
+    ("coresutilization" -> (if (cores == 0) 100 else 100 * coresUsed / cores)) ~
+    ("memory" -> memory) ~
+    ("memoryused" -> memoryUsed) ~
+    ("memoryutilization" -> (if (memory == 0) 100 else 100 * memoryUsed / memory))
   }
 }

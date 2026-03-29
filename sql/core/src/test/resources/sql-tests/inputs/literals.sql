@@ -45,6 +45,11 @@ select 9223372036854775808, -9223372036854775809;
 select 1234567890123456789012345678901234567890;
 select 1234567890123456789012345678901234567890.0;
 
+-- float
+select 1F, 1.2F, .10f, 0.10f;
+select -1F, -1.2F, -.10F, -0.10F;
+select -3.4028235E39f;
+
 -- double
 select 1D, 1.2D, 1e10, 1.5e5, .10D, 0.10D, .1e5, .9e+2, 0.9e+2, 900e-1, 9.e+1;
 select -1D, -1.2D, -1e10, -1.5e5, -.10D, -0.10D, -.1e5;
@@ -55,6 +60,7 @@ select 1E309, -1E309;
 
 -- decimal parsing
 select 0.3, -0.8, .5, -.18, 0.1111, .1111;
+select 0.3 F, 0.4 D, 0.5 BD;
 
 -- super large scientific notation double literals should still be valid doubles
 select 123456789012345678901234567890123456789e10d, 123456789012345678901234567890123456789.1e10d;
@@ -82,12 +88,6 @@ select tImEstAmp '2016-03-11 20:54:00.000';
 -- invalid timestamp
 select timestamp '2016-33-11 20:54:00.000';
 
--- interval
-select interval 13.123456789 seconds, interval -13.123456789 second;
-select interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond, 9 microsecond;
--- ns is not supported
-select interval 10 nanoseconds;
-
 -- unsupported data type
 select GEO '(10,-6)';
 
@@ -106,5 +106,28 @@ select X'XuZ';
 -- Hive literal_double test.
 SELECT 3.14, -3.14, 3.14e8, 3.14e-8, -3.14e8, -3.14e-8, 3.14e+8, 3.14E8, 3.14E-8;
 
--- map + interval test
-select map(1, interval 1 day, 2, interval 3 week);
+-- awareness of the negative/positive sign before type
+select +date '1999-01-01';
+select +timestamp '1999-01-01';
+select +interval '1 day';
+select +map(1, 2);
+select +array(1,2);
+select +named_struct('a', 1, 'b', 'spark');
+select +X'1';
+-- can't negate date/timestamp/binary
+select -date '1999-01-01';
+select -timestamp '1999-01-01';
+select -x'2379ACFe';
+
+-- normalize -0 and -0.0
+select -0, -0.0;
+
+-- Double-quote escaping ("", '')
+SELECT "S""par""k" AS c1, "S\"par\"k" AS c2, 'S""par""k' AS c3;
+SELECT 'S''par''k' AS c1, 'S\'par\'k' AS c2, "S''par''k" AS c3;
+SELECT "S" "par" "k" AS c1, 'S' 'par' 'k' AS c2, "S" 'par' "k" AS c3, 'S' "par" 'k' AS c4, "S"'par'"k" AS c5, 'S'"par"'k' AS c6;
+
+SET spark.sql.legacy.consecutiveStringLiterals.enabled=true;
+SELECT "S""par""k" AS c1, "S\"par\"k" AS c2, 'S""par""k' AS c3;
+SELECT 'S''par''k' AS c1, 'S\'par\'k' AS c2, "S''par''k" AS c3;
+SELECT "S" "par" "k" AS c1, 'S' 'par' 'k' AS c2, "S" 'par' "k" AS c3, 'S' "par" 'k' AS c4, "S"'par'"k" AS c5, 'S'"par"'k' AS c6;

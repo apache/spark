@@ -17,27 +17,31 @@
 
 package org.apache.spark.ml.tree
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.{Param, Params}
 import org.apache.spark.ml.tree.DecisionTreeModelReadWrite.NodeData
-import org.apache.spark.ml.util.{DefaultParamsReader, DefaultParamsWriter}
+import org.apache.spark.ml.util.{DefaultParamsReader, DefaultParamsWriter, ReadWriteUtils}
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.functions.{col, lit, struct}
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.VersionUtils
 import org.apache.spark.util.collection.OpenHashMap
 
 /**
  * Abstraction for Decision Tree models.
- *
- * TODO: Add support for predicting probabilities and raw predictions  SPARK-3727
  */
 private[spark] trait DecisionTreeModel {
 
@@ -78,22 +82,61 @@ private[spark] trait DecisionTreeModel {
 
   /** Convert to spark.mllib DecisionTreeModel (losing some information) */
   private[spark] def toOld: OldDecisionTreeModel
+
+  /**
+   * @return an iterator that traverses (DFS, left to right) the leaves
+   *         in the subtree of this node.
+   */
+  private def leafIterator(node: Node): Iterator[LeafNode] = {
+    node match {
+      case l: LeafNode => Iterator.single(l)
+      case n: InternalNode =>
+        leafIterator(n.leftChild) ++ leafIterator(n.rightChild)
+    }
+  }
+
+  private[ml] lazy val numLeave: Int =
+    leafIterator(rootNode).size
+
+  private[ml] lazy val leafAttr = {
+    NominalAttribute.defaultAttr
+      .withNumValues(numLeave)
+  }
+
+  private[ml] def getLeafField(leafCol: String) = {
+    leafAttr.withName(leafCol).toStructField()
+  }
+
+  @transient private lazy val leafIndices: Map[LeafNode, Int] = {
+    leafIterator(rootNode).zipWithIndex.toMap
+  }
+
+  /**
+   * @return The index of the leaf corresponding to the feature vector.
+   *         Leaves are indexed in pre-order from 0.
+   */
+  def predictLeaf(features: Vector): Double = {
+    leafIndices(rootNode.predictImpl(features)).toDouble
+  }
+
+  def getEstimatedSize(): Long = {
+    org.apache.spark.util.SizeEstimator.estimate(rootNode)
+  }
 }
 
 /**
  * Abstraction for models which are ensembles of decision trees
- *
- * TODO: Add support for predicting probabilities and raw predictions  SPARK-3727
- *
  * @tparam M  Type of tree model in this ensemble
  */
-private[ml] trait TreeEnsembleModel[M <: DecisionTreeModel] {
+private[spark] trait TreeEnsembleModel[M <: DecisionTreeModel] {
 
   // Note: We use getTrees since subclasses of TreeEnsembleModel will store subclasses of
   //       DecisionTreeModel.
 
   /** Trees in this ensemble. Warning: These have null parent Estimators. */
   def trees: Array[M]
+
+  private[ml] def getTree(i: Int): M = trees(i)
 
   /** Weights for each tree, zippable with [[trees]] */
   def treeWeights: Array[Double]
@@ -118,6 +161,23 @@ private[ml] trait TreeEnsembleModel[M <: DecisionTreeModel] {
 
   /** Total number of nodes, summed over all trees in the ensemble. */
   lazy val totalNumNodes: Int = trees.map(_.numNodes).sum
+
+  /**
+   * @return The indices of the leaves corresponding to the feature vector.
+   *         Leaves are indexed in pre-order from 0.
+   */
+  def predictLeaf(features: Vector): Vector = {
+    val indices = trees.map(_.predictLeaf(features))
+    Vectors.dense(indices)
+  }
+
+  private[ml] def getLeafField(leafCol: String) = {
+    new AttributeGroup(leafCol, attrs = trees.map(_.leafAttr)).toStructField()
+  }
+
+  private[ml] def getEstimatedSize(): Long = {
+    org.apache.spark.util.SizeEstimator.estimate(trees.map(_.rootNode))
+  }
 }
 
 private[ml] object TreeEnsembleModel {
@@ -135,7 +195,7 @@ private[ml] object TreeEnsembleModel {
    *  - Average over trees:
    *     - importance(feature j) = sum (over nodes which split on feature j) of the gain,
    *       where gain is scaled by the number of instances passing through node
-   *     - Normalize importances for tree to sum to 1.
+   *     - Normalize importances for tree to sum to 1 (only if `perTreeNormalization` is `true`).
    *  - Normalize feature importance vector to sum to 1.
    *
    *  References:
@@ -145,9 +205,15 @@ private[ml] object TreeEnsembleModel {
    * @param numFeatures  Number of features in model (even if not all are explicitly used by
    *                     the model).
    *                     If -1, then numFeatures is set based on the max feature index in all trees.
+   * @param perTreeNormalization By default this is set to `true` and it means that the importances
+   *                             of each tree are normalized before being summed. If set to `false`,
+   *                             the normalization is skipped.
    * @return  Feature importance values, of length numFeatures.
    */
-  def featureImportances[M <: DecisionTreeModel](trees: Array[M], numFeatures: Int): Vector = {
+  def featureImportances[M <: DecisionTreeModel](
+      trees: Array[M],
+      numFeatures: Int,
+      perTreeNormalization: Boolean = true): Vector = {
     val totalImportances = new OpenHashMap[Int, Double]()
     trees.foreach { tree =>
       // Aggregate feature importance vector for this tree
@@ -155,10 +221,19 @@ private[ml] object TreeEnsembleModel {
       computeFeatureImportance(tree.rootNode, importances)
       // Normalize importance vector for this tree, and add it to total.
       // TODO: In the future, also support normalizing by tree.rootNode.impurityStats.count?
-      val treeNorm = importances.map(_._2).sum
+      val treeNorm = if (perTreeNormalization) {
+        importances.map(_._2).sum
+      } else {
+        // We won't use it
+        Double.NaN
+      }
       if (treeNorm != 0) {
         importances.foreach { case (idx, impt) =>
-          val normImpt = impt / treeNorm
+          val normImpt = if (perTreeNormalization) {
+            impt / treeNorm
+          } else {
+            impt
+          }
           totalImportances.changeValue(idx, normImpt, _ + normImpt)
         }
       }
@@ -275,6 +350,21 @@ private[ml] object DecisionTreeModelReadWrite {
       case s: ContinuousSplit =>
         SplitData(s.featureIndex, Array(s.threshold), -1)
     }
+
+    private[ml] def serializeData(data: SplitData, dos: DataOutputStream): Unit = {
+      import ReadWriteUtils._
+      dos.writeInt(data.featureIndex)
+      serializeDoubleArray(data.leftCategoriesOrThreshold, dos)
+      dos.writeInt(data.numCategories)
+    }
+
+    private[ml] def deserializeData(dis: DataInputStream): SplitData = {
+      import ReadWriteUtils._
+      val featureIndex = dis.readInt()
+      val leftCategoriesOrThreshold = deserializeDoubleArray(dis)
+      val numCategories = dis.readInt()
+      SplitData(featureIndex, leftCategoriesOrThreshold, numCategories)
+    }
   }
 
   /**
@@ -282,6 +372,7 @@ private[ml] object DecisionTreeModelReadWrite {
    *
    * @param id  Index used for tree reconstruction.  Indices follow a pre-order traversal.
    * @param impurityStats  Stats array.  Impurity type is stored in metadata.
+   * @param rawCount  The unweighted number of samples falling in this node.
    * @param gain  Gain, or arbitrary value if leaf node.
    * @param leftChild  Left child index, or arbitrary value if leaf node.
    * @param rightChild  Right child index, or arbitrary value if leaf node.
@@ -292,6 +383,7 @@ private[ml] object DecisionTreeModelReadWrite {
     prediction: Double,
     impurity: Double,
     impurityStats: Array[Double],
+    rawCount: Long,
     gain: Double,
     leftChild: Int,
     rightChild: Int,
@@ -311,13 +403,53 @@ private[ml] object DecisionTreeModelReadWrite {
         val (leftNodeData, leftIdx) = build(n.leftChild, id + 1)
         val (rightNodeData, rightIdx) = build(n.rightChild, leftIdx + 1)
         val thisNodeData = NodeData(id, n.prediction, n.impurity, n.impurityStats.stats,
-          n.gain, leftNodeData.head.id, rightNodeData.head.id, SplitData(n.split))
+          n.impurityStats.rawCount, n.gain, leftNodeData.head.id, rightNodeData.head.id,
+          SplitData(n.split))
         (thisNodeData +: (leftNodeData ++ rightNodeData), rightIdx)
       case _: LeafNode =>
         (Seq(NodeData(id, node.prediction, node.impurity, node.impurityStats.stats,
-          -1.0, -1, -1, SplitData(-1, Array.empty[Double], -1))),
+          node.impurityStats.rawCount, -1.0, -1, -1, SplitData(-1, Array.emptyDoubleArray, -1))),
           id)
     }
+
+    /**
+     * When save a tree model, infer the number of partitions based on number of nodes.
+     */
+    def inferNumPartitions(numNodes: Long): Int = {
+      require(numNodes > 0)
+      // 7,280,000 nodes is about 128MB
+      (numNodes / 7280000.0).ceil.toInt
+    }
+
+    private[ml] def serializeData(data: NodeData, dos: DataOutputStream): Unit = {
+      import ReadWriteUtils._
+      dos.writeInt(data.id)
+      dos.writeDouble(data.prediction)
+      dos.writeDouble(data.impurity)
+      serializeDoubleArray(data.impurityStats, dos)
+      dos.writeLong(data.rawCount)
+      dos.writeDouble(data.gain)
+      dos.writeInt(data.leftChild)
+      dos.writeInt(data.rightChild)
+      SplitData.serializeData(data.split, dos)
+    }
+
+    private[ml] def deserializeData(dis: DataInputStream): NodeData = {
+      import ReadWriteUtils._
+      val id = dis.readInt()
+      val prediction = dis.readDouble()
+      val impurity = dis.readDouble()
+      val impurityStats = deserializeDoubleArray(dis)
+      val rawCount = dis.readLong()
+      val gain = dis.readDouble()
+      val leftChild = dis.readInt()
+      val rightChild = dis.readInt()
+      val split = SplitData.deserializeData(dis)
+      NodeData(
+        id, prediction, impurity, impurityStats, rawCount, gain, leftChild, rightChild, split
+      )
+    }
+
   }
 
   /**
@@ -338,8 +470,17 @@ private[ml] object DecisionTreeModelReadWrite {
     }
 
     val dataPath = new Path(path, "data").toString
-    val data = sparkSession.read.parquet(dataPath).as[NodeData]
-    buildTreeFromNodes(data.collect(), impurityType)
+    val (major, _) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
+    val nodeDataArray = if (major < 3) {
+      var df = sparkSession.read.parquet(dataPath)
+      df = df.withColumn("rawCount", lit(-1L))
+      df.as[NodeData].collect()
+    } else {
+      import org.apache.spark.ml.util.ReadWriteUtils
+      ReadWriteUtils.loadArray[NodeData](dataPath, sparkSession, NodeData.deserializeData)
+    }
+
+    buildTreeFromNodes(nodeDataArray, impurityType)
   }
 
   /**
@@ -360,7 +501,8 @@ private[ml] object DecisionTreeModelReadWrite {
     // traversal, this guarantees that child nodes will be built before parent nodes.
     val finalNodes = new Array[Node](nodes.length)
     nodes.reverseIterator.foreach { case n: NodeData =>
-      val impurityStats = ImpurityCalculator.getCalculator(impurityType, n.impurityStats)
+      val impurityStats =
+        ImpurityCalculator.getCalculator(impurityType, n.impurityStats, n.rawCount)
       val node = if (n.leftChild != -1) {
         val leftChild = finalNodes(n.leftChild)
         val rightChild = finalNodes(n.rightChild)
@@ -388,23 +530,37 @@ private[ml] object EnsembleModelReadWrite {
   def saveImpl[M <: Params with TreeEnsembleModel[_ <: DecisionTreeModel]](
       instance: M,
       path: String,
-      sql: SparkSession,
+      sparkSession: SparkSession,
       extraMetadata: JObject): Unit = {
-    DefaultParamsWriter.saveMetadata(instance, path, sql.sparkContext, Some(extraMetadata))
-    val treesMetadataWeights: Array[(Int, String, Double)] = instance.trees.zipWithIndex.map {
-      case (tree, treeID) =>
-        (treeID,
-          DefaultParamsWriter.getMetadataToSave(tree.asInstanceOf[Params], sql.sparkContext),
-          instance.treeWeights(treeID))
+    DefaultParamsWriter.saveMetadata(instance, path, sparkSession, Some(extraMetadata))
+    val treesMetadataWeights = instance.trees.zipWithIndex.map { case (tree, treeID) =>
+      (treeID,
+        DefaultParamsWriter.getMetadataToSave(tree.asInstanceOf[Params], sparkSession),
+        instance.treeWeights(treeID))
     }
     val treesMetadataPath = new Path(path, "treesMetadata").toString
-    sql.createDataFrame(treesMetadataWeights).toDF("treeID", "metadata", "weights")
-      .write.parquet(treesMetadataPath)
+    ReadWriteUtils.saveArray[(Int, String, Double)](
+      treesMetadataPath, treesMetadataWeights, sparkSession,
+      (v, dos) => {
+        dos.writeInt(v._1)
+        dos.writeUTF(v._2)
+        dos.writeDouble(v._3)
+      }, numDataParts = 1
+    )
+
     val dataPath = new Path(path, "data").toString
-    val nodeDataRDD = sql.sparkContext.parallelize(instance.trees.zipWithIndex).flatMap {
+    val numDataParts = NodeData.inferNumPartitions(instance.trees.map(_.numNodes.toLong).sum)
+
+    val nodeDataArray = instance.trees.zipWithIndex.flatMap {
       case (tree, treeID) => EnsembleNodeData.build(tree, treeID)
     }
-    sql.createDataFrame(nodeDataRDD).write.parquet(dataPath)
+    ReadWriteUtils.saveArray[EnsembleNodeData](
+      dataPath, nodeDataArray, sparkSession,
+      (v, dos) => {
+        dos.writeInt(v.treeID)
+        NodeData.serializeData(v.nodeData, dos)
+      }, numDataParts
+    )
   }
 
   /**
@@ -419,12 +575,12 @@ private[ml] object EnsembleModelReadWrite {
    */
   def loadImpl(
       path: String,
-      sql: SparkSession,
+      sparkSession: SparkSession,
       className: String,
       treeClassName: String): (Metadata, Array[(Metadata, Node)], Array[Double]) = {
-    import sql.implicits._
+    import sparkSession.implicits._
     implicit val format = DefaultFormats
-    val metadata = DefaultParamsReader.loadMetadata(path, sql.sparkContext, className)
+    val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
     // Get impurity to construct ImpurityCalculator for each node
     val impurityType: String = {
@@ -433,25 +589,52 @@ private[ml] object EnsembleModelReadWrite {
     }
 
     val treesMetadataPath = new Path(path, "treesMetadata").toString
-    val treesMetadataRDD: RDD[(Int, (Metadata, Double))] = sql.read.parquet(treesMetadataPath)
-      .select("treeID", "metadata", "weights").as[(Int, String, Double)].rdd.map {
-      case (treeID: Int, json: String, weights: Double) =>
-        treeID -> ((DefaultParamsReader.parseMetadata(json, treeClassName), weights))
-    }
 
-    val treesMetadataWeights = treesMetadataRDD.sortByKey().values.collect()
+    val treesMetadataWeights = ReadWriteUtils.loadArray[(Int, String, Double)](
+      treesMetadataPath, sparkSession,
+      dis => {
+        val treeID = dis.readInt()
+        val json = dis.readUTF()
+        val weights = dis.readDouble()
+        (treeID, json, weights)
+      }
+    ).map { case (treeID: Int, json: String, weights: Double) =>
+      treeID -> ((DefaultParamsReader.parseMetadata(json, treeClassName), weights))
+    }.sortBy(_._1).map(_._2)
+
     val treesMetadata = treesMetadataWeights.map(_._1)
     val treesWeights = treesMetadataWeights.map(_._2)
 
     val dataPath = new Path(path, "data").toString
-    val nodeData: Dataset[EnsembleNodeData] =
-      sql.read.parquet(dataPath).as[EnsembleNodeData]
-    val rootNodesRDD: RDD[(Int, Node)] =
-      nodeData.rdd.map(d => (d.treeID, d.nodeData)).groupByKey().map {
-        case (treeID: Int, nodeData: Iterable[NodeData]) =>
-          treeID -> DecisionTreeModelReadWrite.buildTreeFromNodes(nodeData.toArray, impurityType)
+    val (major, _) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
+    val ensembleNodeDataArray = if (major < 3) {
+      var df = sparkSession.read.parquet(dataPath)
+      val newNodeDataCol = df.schema("nodeData").dataType match {
+        case StructType(fields) =>
+          val cols = fields.map(f => col(s"nodeData.${f.name}")) :+ lit(-1L).as("rawCount")
+          struct(cols.toImmutableArraySeq: _*)
       }
-    val rootNodes: Array[Node] = rootNodesRDD.sortByKey().values.collect()
+      df = df.withColumn("nodeData", newNodeDataCol)
+      df.as[EnsembleNodeData].collect()
+    } else {
+      ReadWriteUtils.loadArray[EnsembleNodeData](
+        dataPath, sparkSession,
+        dis => {
+          val treeID = dis.readInt()
+          val nodeData = NodeData.deserializeData(dis)
+          EnsembleNodeData(treeID, nodeData)
+        }
+      )
+    }
+    val rootNodes = ensembleNodeDataArray
+      .groupBy(_.treeID)
+      .map { case (treeID: Int, ensembleNodeDataArrayPerTree: Array[EnsembleNodeData]) =>
+        val nodeDataArray = ensembleNodeDataArrayPerTree.map(_.nodeData)
+        treeID -> DecisionTreeModelReadWrite.buildTreeFromNodes(nodeDataArray, impurityType)
+      }.toSeq
+      .sortBy(_._1)
+      .map(_._2)
+
     (metadata, treesMetadata.zip(rootNodes), treesWeights)
   }
 
@@ -476,4 +659,8 @@ private[ml] object EnsembleModelReadWrite {
       nodeData.map(nd => EnsembleNodeData(treeID, nd))
     }
   }
+}
+
+private[spark] object TreeConfig {
+  private[spark] var trainingEarlyStopModelSizeThresholdInBytes: Long = 0L
 }

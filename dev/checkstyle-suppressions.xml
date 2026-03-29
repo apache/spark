@@ -17,7 +17,7 @@
 
 <!DOCTYPE suppressions PUBLIC
 "-//Puppy Crawl//DTD Suppressions 1.1//EN"
-"http://www.puppycrawl.com/dtds/suppressions_1_1.dtd">
+"https://checkstyle.org/dtds/suppressions_1_1.dtd">
 
 <!--
 
@@ -29,9 +29,21 @@
 
 <suppressions>
     <suppress checks=".*"
+              files="core/target/*"/>
+    <suppress checks=".*"
               files="core/src/main/java/org/apache/spark/util/collection/TimSort.java"/>
     <suppress checks=".*"
-              files="sql/core/src/main/java/org/apache/spark/sql/api.java/*"/>
+              files="connector/spark-ganglia-lgpl/src/main/java/com/codahale/metrics/ganglia/GangliaReporter.java"/>
+    <suppress checks=".*"
+              files="sql/core/src/main/java/org/apache/spark/sql/api/java/*"/>
+    <suppress checks=".*"
+              files="antlr4/org/apache/spark/sql/catalyst/parser/*"/>
+    <suppress checks=".*"
+              files="org/apache/spark/connect/proto/*"/>
+    <suppress checks=".*"
+              files="test/gen-java/org/apache/spark/sql/execution/datasources/parquet/test/avro/*"/>
+    <suppress checks=".*"
+              files="generated-test-sources/org/apache/spark/sql/protobuf/*"/>
     <suppress checks="LineLength"
               files="src/test/java/org/apache/spark/sql/hive/test/Complex.java"/>
     <suppress checks="LineLength"
@@ -41,9 +53,21 @@
     <suppress checks="MethodName"
               files="src/main/java/org/apache/hive/service/auth/PasswdAuthenticationProvider.java"/>
     <suppress checks="MethodName"
-              files="sql/catalyst/src/main/java/org/apache/spark/sql/streaming/OutputMode.java"/>
+              files="sql/api/src/main/java/org/apache/spark/sql/streaming/OutputMode.java"/>
     <suppress checks="MethodName"
-              files="sql/catalyst/src/main/java/org/apache/spark/sql/streaming/GroupStateTimeout.java"/>
+              files="sql/api/src/main/java/org/apache/spark/sql/streaming/GroupStateTimeout.java"/>
     <suppress checks="MethodName"
-              files="sql/core/src/main/java/org/apache/spark/sql/streaming/Trigger.java"/>
+              files="sql/api/src/main/java/org/apache/spark/sql/streaming/TimeMode.java"/>
+    <suppress checks="MethodName"
+              files="sql/api/src/main/java/org/apache/spark/sql/streaming/Trigger.java"/>
+    <suppress checks="LineLength"
+              files="src/main/java/org/apache/spark/sql/api/java/*"/>
+    <suppress checks="IllegalImport"
+              files="src/test/java/org/apache/spark/sql/hive/test/Complex.java"/>
+    <suppress checks="Header"
+      files="src/main/java/org/apache/spark/network/util/LimitedInputStream.java" />
+    <suppress checks="Header"
+      files="src/test/java/org/apache/spark/util/collection/TestTimSort.java" />
+    <suppress checks=".*"
+              files="src/main/java/org/apache/spark/sql/execution/streaming/state/StateMessage.java"/>
 </suppressions>

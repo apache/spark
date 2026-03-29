@@ -17,23 +17,48 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Types
+import java.sql.{SQLException, Types}
+import java.util.Locale
 
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.types._
 
 
-private case object TeradataDialect extends JdbcDialect {
+private case class TeradataDialect() extends JdbcDialect with NoLegacyJDBCError {
 
-  override def canHandle(url: String): Boolean = { url.startsWith("jdbc:teradata") }
+  override def canHandle(url: String): Boolean =
+    url.toLowerCase(Locale.ROOT).startsWith("jdbc:teradata")
+
+  // scalastyle:off line.size.limit
+  // See https://docs.teradata.com/r/Teradata-VantageTM-SQL-Functions-Expressions-and-Predicates/March-2019/Aggregate-Functions
+  // scalastyle:on line.size.limit
+  private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
+    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP", "COVAR_POP", "COVAR_SAMP", "CORR")
+  private val supportedFunctions = supportedAggregateFunctions
+
+  override def isSupportedFunction(funcName: String): Boolean =
+    supportedFunctions.contains(funcName)
+
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getErrorCode == 3807
+  }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     case StringType => Some(JdbcType("VARCHAR(255)", java.sql.Types.VARCHAR))
     case BooleanType => Option(JdbcType("CHAR(1)", java.sql.Types.CHAR))
+    case ByteType => Option(JdbcType("BYTEINT", java.sql.Types.TINYINT))
     case _ => None
   }
 
   // Teradata does not support cascading a truncation
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  // scalastyle:off line.size.limit
+  // See https://docs.teradata.com/r/Enterprise_IntelliFlex_VMware/SQL-Stored-Procedures-and-Embedded-SQL/SQLSTATE-Mappings/SQLSTATE-Codes
+  // scalastyle:on line.size.limit
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    Option(exception.getSQLState).exists(_.startsWith("42"))
+  }
 
   /**
    * The SQL query used to truncate a table. Teradata does not support the 'TRUNCATE' syntax that
@@ -46,7 +71,44 @@ private case object TeradataDialect extends JdbcDialect {
    */
   override def getTruncateQuery(
       table: String,
-      cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+      cascade: Option[Boolean] = isCascadingTruncateTable()): String = {
     s"DELETE FROM $table ALL"
+  }
+
+  // See https://docs.teradata.com/reader/scPHvjfglIlB8F70YliLAw/wysTNUMsP~0aGzksLCl1kg
+  override def renameTable(oldTable: Identifier, newTable: Identifier): String = {
+    s"RENAME TABLE ${getFullyQualifiedQuotedTableName(oldTable)} TO " +
+      s"${getFullyQualifiedQuotedTableName(newTable)}"
+  }
+
+  override def getLimitClause(limit: Integer): String = {
+    ""
+  }
+
+  override def getCatalystType(
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    sqlType match {
+      case Types.NUMERIC =>
+        if (md == null) {
+          Some(DecimalType.SYSTEM_DEFAULT)
+        } else {
+          val scale = md.build().getLong("scale")
+          // In Teradata, define Number without parameter means precision and scale is flexible.
+          // However, in this case, the scale returned from JDBC is 0, which will lead to
+          // fractional part loss. And the precision returned from JDBC is 40, which conflicts to
+          // DecimalType.MAX_PRECISION.
+          // Handle this special case by adding explicit conversion to system default decimal type.
+          if (size == 40) {
+            if (scale == 0) Some(DecimalType.SYSTEM_DEFAULT)
+            // In Teradata, Number(*, scale) is valid but in this case, the precision
+            // returned from JDBC is also 40, which conflicts to DecimalType.MAX_PRECISION.
+            else Some(DecimalType(DecimalType.MAX_PRECISION, scale.toInt))
+          } else {
+            // Normal case, Number(precision, scale) is explicitly set in Teradata
+            Some(DecimalType(size, scale.toInt))
+          }
+        }
+        case _ => None
+    }
   }
 }

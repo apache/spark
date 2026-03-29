@@ -17,12 +17,9 @@
 
 package org.apache.spark.executor
 
-import java.lang.management.ManagementFactory
 import java.util.concurrent.ThreadPoolExecutor
-import javax.management.{MBeanServer, ObjectName}
 
-import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
+import scala.jdk.CollectionConverters._
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 import org.apache.hadoop.fs.FileSystem
@@ -30,7 +27,10 @@ import org.apache.hadoop.fs.FileSystem
 import org.apache.spark.metrics.source.Source
 
 private[spark]
-class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends Source {
+class ExecutorSource(
+    threadPool: ThreadPoolExecutor,
+    executorId: String,
+    fileSystemSchemes: Array[String]) extends Source {
 
   private def fileStats(scheme: String) : Option[FileSystem.Statistics] =
     FileSystem.getAllStatistics.asScala.find(s => s.getScheme.equals(scheme))
@@ -56,6 +56,11 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
     override def getValue: Long = threadPool.getCompletedTaskCount()
   })
 
+  // Gauge for executor, number of tasks started
+  metricRegistry.register(MetricRegistry.name("threadpool", "startedTasks"), new Gauge[Long] {
+    override def getValue: Long = threadPool.getTaskCount()
+  })
+
   // Gauge for executor thread pool's current number of threads
   metricRegistry.register(MetricRegistry.name("threadpool", "currentPool_size"), new Gauge[Int] {
     override def getValue: Int = threadPool.getPoolSize()
@@ -68,7 +73,7 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
   })
 
   // Gauge for file system stats of this executor
-  for (scheme <- Array("hdfs", "file")) {
+  for (scheme <- fileSystemSchemes) {
     registerFileSystemStat(scheme, "read_bytes", _.getBytesRead(), 0L)
     registerFileSystemStat(scheme, "write_bytes", _.getBytesWritten(), 0L)
     registerFileSystemStat(scheme, "read_ops", _.getReadOps(), 0)
@@ -76,26 +81,9 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
     registerFileSystemStat(scheme, "write_ops", _.getWriteOps(), 0)
   }
 
-  // Dropwizard metrics gauge measuring the executor's process CPU time.
-  // This Gauge will try to get and return the JVM Process CPU time or return -1 otherwise.
-  // The CPU time value is returned in nanoseconds.
-  // It will use proprietary extensions such as com.sun.management.OperatingSystemMXBean or
-  // com.ibm.lang.management.OperatingSystemMXBean, if available.
-  metricRegistry.register(MetricRegistry.name("jvmCpuTime"), new Gauge[Long] {
-    val mBean: MBeanServer = ManagementFactory.getPlatformMBeanServer
-    val name = new ObjectName("java.lang", "type", "OperatingSystem")
-    override def getValue: Long = {
-      try {
-        // return JVM process CPU time if the ProcessCpuTime method is available
-        mBean.getAttribute(name, "ProcessCpuTime").asInstanceOf[Long]
-      } catch {
-        case NonFatal(_) => -1L
-      }
-    }
-  })
-
   // Expose executor task metrics using the Dropwizard metrics system.
-  // The list is taken from TaskMetrics.scala
+  // The list of available Task metrics can be found in TaskMetrics.scala
+  val SUCCEEDED_TASKS = metricRegistry.counter(MetricRegistry.name("succeededTasks"))
   val METRIC_CPU_TIME = metricRegistry.counter(MetricRegistry.name("cpuTime"))
   val METRIC_RUN_TIME = metricRegistry.counter(MetricRegistry.name("runTime"))
   val METRIC_JVM_GC_TIME = metricRegistry.counter(MetricRegistry.name("jvmGCTime"))
@@ -127,6 +115,26 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
     metricRegistry.counter(MetricRegistry.name("shuffleBytesWritten"))
   val METRIC_SHUFFLE_RECORDS_WRITTEN =
     metricRegistry.counter(MetricRegistry.name("shuffleRecordsWritten"))
+  val METRIC_SHUFFLE_REMOTE_REQS_DURATION =
+    metricRegistry.counter(MetricRegistry.name("shuffleRemoteReqsDuration"))
+  val METRIC_PUSH_BASED_SHUFFLE_CORRUPT_MERGED_BLOCK_CHUNKS =
+    metricRegistry.counter(MetricRegistry.name("shuffleCorruptMergedBlockChunks"))
+  val METRIC_PUSH_BASED_SHUFFLE_MERGED_FETCH_FALLBACK_COUNT =
+    metricRegistry.counter(MetricRegistry.name("shuffleMergedFetchFallbackCount"))
+  val METRIC_PUSH_BASED_SHUFFLE_MERGED_REMOTE_BLOCKS_FETCHED =
+    metricRegistry.counter(MetricRegistry.name("shuffleMergedRemoteBlocksFetched"))
+  val METRIC_PUSH_BASED_SHUFFLE_MERGED_LOCAL_BLOCKS_FETCHED =
+    metricRegistry.counter(MetricRegistry.name("shuffleMergedLocalBlocksFetched"))
+  val METRIC_PUSH_BASED_SHUFFLE_MERGED_REMOTE_CHUNKS_FETCHED =
+    metricRegistry.counter(MetricRegistry.name("shuffleMergedRemoteChunksFetched"))
+  val METRIC_PUSH_BASED_SHUFFLE_MERGED_LOCAL_CHUNKS_FETCHED =
+    metricRegistry.counter(MetricRegistry.name("shuffleMergedLocalChunksFetched"))
+  val METRIC_PUSH_BASED_SHUFFLE_MERGED_REMOTE_BYTES_READ =
+    metricRegistry.counter(MetricRegistry.name("shuffleMergedRemoteBytesRead"))
+  val METRIC_PUSH_BASED_SHUFFLE_MERGED_LOCAL_BYTES_READ =
+    metricRegistry.counter(MetricRegistry.name("shuffleMergedLocalBytesRead"))
+  val METRIC_PUSH_BASED_SHUFFLE_MERGED_REMOTE_REQS_DURATION =
+    metricRegistry.counter(MetricRegistry.name("shuffleMergedRemoteReqsDuration"))
   val METRIC_INPUT_BYTES_READ =
     metricRegistry.counter(MetricRegistry.name("bytesRead"))
   val METRIC_INPUT_RECORDS_READ =

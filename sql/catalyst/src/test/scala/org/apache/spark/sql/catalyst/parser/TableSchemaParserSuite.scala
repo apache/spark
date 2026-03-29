@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkThrowable}
 import org.apache.spark.sql.types._
 
 class TableSchemaParserSuite extends SparkFunSuite {
@@ -29,9 +29,6 @@ class TableSchemaParserSuite extends SparkFunSuite {
       assert(parse(tableSchemaString) === expectedDataType)
     }
   }
-
-  def assertError(sql: String): Unit =
-    intercept[ParseException](CatalystSqlParser.parseTableSchema(sql))
 
   checkTableSchema("a int", new StructType().add("a", "int"))
   checkTableSchema("A int", new StructType().add("A", "int"))
@@ -57,11 +54,6 @@ class TableSchemaParserSuite extends SparkFunSuite {
         |anotherArray:Array<char(9)>>
       """.stripMargin.replace("\n", "")
 
-    val builder = new MetadataBuilder
-    builder.putString(HIVE_TYPE_STRING,
-      "struct<struct:struct<deciMal:decimal(10,0),anotherDecimal:decimal(5,2)>," +
-        "MAP:map<timestamp,varchar(10)>,arrAy:array<double>,anotherArray:array<char(9)>>")
-
     val expectedDataType =
       StructType(
         StructField("complexStructCol", StructType(
@@ -69,22 +61,40 @@ class TableSchemaParserSuite extends SparkFunSuite {
             StructType(
               StructField("deciMal", DecimalType.USER_DEFAULT) ::
                 StructField("anotherDecimal", DecimalType(5, 2)) :: Nil)) ::
-            StructField("MAP", MapType(TimestampType, StringType)) ::
+            StructField("MAP", MapType(TimestampType, VarcharType(10))) ::
             StructField("arrAy", ArrayType(DoubleType)) ::
-            StructField("anotherArray", ArrayType(StringType)) :: Nil),
-          nullable = true,
-          builder.build()) :: Nil)
+            StructField("anotherArray", ArrayType(CharType(9))) :: Nil)) :: Nil)
 
     assert(parse(tableSchemaString) === expectedDataType)
   }
 
   // Negative cases
   test("Negative cases") {
-    assertError("")
-    assertError("a")
-    assertError("a INT b long")
-    assertError("a INT,, b long")
-    assertError("a INT, b long,,")
-    assertError("a INT, b long, c int,")
+    def parseException(sql: String): SparkThrowable =
+      intercept[ParseException](CatalystSqlParser.parseTableSchema(sql))
+
+    checkError(
+      exception = parseException(""),
+      condition = "PARSE_EMPTY_STATEMENT")
+    checkError(
+      exception = parseException("a"),
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "end of input", "hint" -> ""))
+    checkError(
+      exception = parseException("a INT b long"),
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'b'", "hint" -> ""))
+    checkError(
+      exception = parseException("a INT,, b long"),
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "','", "hint" -> ""))
+    checkError(
+      exception = parseException("a INT, b long,,"),
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "','", "hint" -> ""))
+    checkError(
+      exception = parseException("a INT, b long, c int,"),
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "end of input", "hint" -> ""))
   }
 }

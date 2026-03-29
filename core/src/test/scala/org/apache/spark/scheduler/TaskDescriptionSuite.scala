@@ -23,13 +23,19 @@ import java.util.Properties
 
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{JobArtifactSet, SparkFunSuite}
+import org.apache.spark.resource.ResourceAmountUtils
+import org.apache.spark.resource.ResourceUtils.GPU
 
 class TaskDescriptionSuite extends SparkFunSuite {
   test("encoding and then decoding a TaskDescription results in the same TaskDescription") {
     val originalFiles = new HashMap[String, Long]()
     originalFiles.put("fileUrl1", 1824)
     originalFiles.put("fileUrl2", 2)
+
+    val originalArchives = new HashMap[String, Long]()
+    originalArchives.put("archiveUrl1", 1824)
+    originalArchives.put("archiveUrl2", 2)
 
     val originalJars = new HashMap[String, Long]()
     originalJars.put("jar1", 3)
@@ -53,8 +59,20 @@ class TaskDescriptionSuite extends SparkFunSuite {
       }
     }
 
+    val originalResources = Map(GPU ->
+      Map("1" -> ResourceAmountUtils.toInternalResource(0.2),
+        "2" -> ResourceAmountUtils.toInternalResource(0.5),
+        "3" -> ResourceAmountUtils.toInternalResource(0.1)))
+
     // Create a dummy byte buffer for the task.
     val taskBuffer = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
+
+    val artifacts = new JobArtifactSet(
+      None,
+      jars = Map(originalJars.toSeq: _*),
+      files = Map(originalFiles.toSeq: _*),
+      archives = Map(originalArchives.toSeq: _*)
+    )
 
     val originalTaskDescription = new TaskDescription(
       taskId = 1520589,
@@ -63,9 +81,10 @@ class TaskDescriptionSuite extends SparkFunSuite {
       name = "task for test",
       index = 19,
       partitionId = 1,
-      originalFiles,
-      originalJars,
+      artifacts,
       originalProperties,
+      cpus = 2,
+      originalResources,
       taskBuffer
     )
 
@@ -79,9 +98,11 @@ class TaskDescriptionSuite extends SparkFunSuite {
     assert(decodedTaskDescription.name === originalTaskDescription.name)
     assert(decodedTaskDescription.index === originalTaskDescription.index)
     assert(decodedTaskDescription.partitionId === originalTaskDescription.partitionId)
-    assert(decodedTaskDescription.addedFiles.equals(originalFiles))
-    assert(decodedTaskDescription.addedJars.equals(originalJars))
+    assert(decodedTaskDescription.artifacts.equals(artifacts))
     assert(decodedTaskDescription.properties.equals(originalTaskDescription.properties))
+    assert(decodedTaskDescription.cpus.equals(originalTaskDescription.cpus))
+    assert(decodedTaskDescription.resources === originalTaskDescription.resources)
     assert(decodedTaskDescription.serializedTask.equals(taskBuffer))
   }
+
 }

@@ -19,19 +19,25 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.util.{ArrayList => JArrayList, Arrays, List => JList}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Schema}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, SQLContext}
-import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
+import org.apache.spark.internal.LogKeys.COMMAND
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.parser.NamedParameterContext
+import org.apache.spark.sql.catalyst.plans.logical.CommandResult
+import org.apache.spark.sql.execution.{QueryExecution, QueryExecutionException, SQLExecution}
+import org.apache.spark.sql.execution.HiveResult.hiveResultString
+import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
+import org.apache.spark.util.Utils
 
 
-private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlContext)
+private[hive] class SparkSQLDriver(val sparkSession: SparkSession = SparkSQLEnv.sparkSession)
   extends Driver
   with Logging {
 
@@ -56,22 +62,51 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
   }
 
   override def run(command: String): CommandProcessorResponse = {
-    // TODO unify the error code
     try {
-      context.sparkContext.setJobDescription(command)
-      val execution = context.sessionState.executePlan(context.sql(command).logicalPlan)
-      hiveResponse = SQLExecution.withNewExecutionId(context.sparkSession, execution) {
-        execution.hiveResultString()
+      val substitutorCommand = SQLConf.withExistingConf(sparkSession.sessionState.conf) {
+        new VariableSubstitution().substitute(command)
+      }
+      sparkSession.sparkContext.setJobDescription(substitutorCommand)
+
+      // Parse with an empty parameter context to enable pre-parsing phase that scans for
+      // parameter markers. If any parameter markers (:name or ?) are found in the SQL,
+      // the pre-parser will throw UNBOUND_SQL_PARAMETER with proper position information.
+      val emptyParamContext = NamedParameterContext(Map.empty)
+      val logicalPlan = sparkSession.sessionState.sqlParser.parsePlanWithParameters(
+        substitutorCommand, emptyParamContext)
+      val conf = sparkSession.sessionState.conf
+
+      val shuffleCleanupMode =
+        if (conf.getConf(SQLConf.THRIFTSERVER_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)) {
+          org.apache.spark.sql.execution.RemoveShuffleFiles
+        } else {
+          org.apache.spark.sql.execution.DoNotCleanup
+        }
+
+      val execution = new QueryExecution(
+        sparkSession.asInstanceOf[org.apache.spark.sql.classic.SparkSession],
+        logicalPlan,
+        shuffleCleanupModeOpt = Some(shuffleCleanupMode))
+
+      // the above execution already has an execution ID, therefore we don't need to
+      // wrap it again with a new execution ID when getting Hive result.
+      execution.logical match {
+        case _: CommandResult =>
+          hiveResponse = hiveResultString(execution.executedPlan)
+        case _ =>
+          hiveResponse = SQLExecution.withNewExecutionId(execution, Some("cli")) {
+            hiveResultString(execution.executedPlan)
+          }
       }
       tableSchema = getResultSetSchema(execution)
       new CommandProcessorResponse(0)
     } catch {
-        case ae: AnalysisException =>
-          logDebug(s"Failed in [$command]", ae)
-          new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(ae), null, ae)
+        case st: SparkThrowable =>
+          logDebug(s"Failed in [$command]", st)
+          throw st
         case cause: Throwable =>
-          logError(s"Failed in [$command]", cause)
-          new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(cause), null, cause)
+          logError(log"Failed in [${MDC(COMMAND, command)}]", cause)
+          throw new QueryExecutionException(Utils.stackTraceToString(cause))
     }
   }
 
@@ -93,7 +128,7 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
 
   override def getSchema: Schema = tableSchema
 
-  override def destroy() {
+  override def destroy(): Unit = {
     super.destroy()
     hiveResponse = null
     tableSchema = null

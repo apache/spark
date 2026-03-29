@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.evaluation
 
-import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.rdd.RDD
 
 /**
@@ -42,10 +41,35 @@ private[evaluation] object AreaUnderCurve {
    * @param curve an RDD of ordered 2D points stored in pairs representing a curve
    */
   def of(curve: RDD[(Double, Double)]): Double = {
-    curve.sliding(2).aggregate(0.0)(
-      seqOp = (auc: Double, points: Array[(Double, Double)]) => auc + trapezoid(points),
-      combOp = _ + _
-    )
+    val localAreas = curve.mapPartitions { iter =>
+      if (iter.nonEmpty) {
+        var localArea = 0.0
+        var head = true
+        var firstPoint = (Double.NaN, Double.NaN)
+        var lastPoint = (Double.NaN, Double.NaN)
+
+        iter.sliding(2).foreach { points =>
+          if (head) {
+            firstPoint = points.head
+            head = false
+          }
+          lastPoint = points.last
+
+          if (points.length == 2) {
+            localArea += trapezoid(points)
+          }
+        }
+        Iterator.single((localArea, (firstPoint, lastPoint)))
+      } else {
+        Iterator.empty
+      }
+    }.collect()
+
+    localAreas.map(_._1).sum + localAreas.iterator.map(_._2)
+      .sliding(2).withPartial(false)
+      .map { case Seq((_, last1), (first2, _)) =>
+        trapezoid(Seq(last1, first2))
+      }.sum
   }
 
   /**
@@ -54,9 +78,8 @@ private[evaluation] object AreaUnderCurve {
    * @param curve an iterator over ordered 2D points stored in pairs representing a curve
    */
   def of(curve: Iterable[(Double, Double)]): Double = {
-    curve.toIterator.sliding(2).withPartial(false).aggregate(0.0)(
-      seqop = (auc: Double, points: Seq[(Double, Double)]) => auc + trapezoid(points),
-      combop = _ + _
+    curve.iterator.sliding(2).withPartial(false).foldLeft(0.0)(
+      op = (auc: Double, points: Seq[(Double, Double)]) => auc + trapezoid(points)
     )
   }
 }

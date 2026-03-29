@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.sql.Dataset;
@@ -41,7 +41,7 @@ public class JavaStopWordsRemoverSuite extends SharedSparkSession {
       .setOutputCol("filtered");
 
     List<Row> data = Arrays.asList(
-      RowFactory.create(Arrays.asList("I", "saw", "the", "red", "baloon")),
+      RowFactory.create(Arrays.asList("I", "saw", "the", "red", "balloon")),
       RowFactory.create(Arrays.asList("Mary", "had", "a", "little", "lamb"))
     );
     StructType schema = new StructType(new StructField[]{

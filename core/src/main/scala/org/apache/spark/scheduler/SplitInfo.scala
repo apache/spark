@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import collection.mutable.ArrayBuffer
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.DeveloperApi
 
@@ -69,7 +69,7 @@ object SplitInfo {
     for (host <- mapredSplit.getLocations) {
       retval += new SplitInfo(inputFormatClazz, host, path, length, mapredSplit)
     }
-    retval
+    retval.toSeq
   }
 
   def toSplitInfo(inputFormatClazz: Class[_], path: String,
@@ -79,6 +79,6 @@ object SplitInfo {
     for (host <- mapreduceSplit.getLocations) {
       retval += new SplitInfo(inputFormatClazz, host, path, length, mapreduceSplit)
     }
-    retval
+    retval.toSeq
   }
 }

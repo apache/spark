@@ -68,15 +68,28 @@ fi
 # The exit code of the launcher is appended to the output, so the parent shell removes it from the
 # command array and checks the value to see if the launcher succeeded.
 build_command() {
-  "$RUNNER" -Xmx128m -cp "$LAUNCH_CLASSPATH" org.apache.spark.launcher.Main "$@"
+  "$RUNNER" -Xmx128m $SPARK_LAUNCHER_OPTS -cp "$LAUNCH_CLASSPATH" org.apache.spark.launcher.Main "$@"
   printf "%d\0" $?
 }
 
 # Turn off posix mode since it does not allow process substitution
 set +o posix
 CMD=()
-while IFS= read -d '' -r ARG; do
-  CMD+=("$ARG")
+DELIM=$'\n'
+CMD_START_FLAG="false"
+while IFS= read -d "$DELIM" -r _ARG; do
+  ARG=${_ARG//$'\r'}
+  if [ "$CMD_START_FLAG" == "true" ]; then
+    CMD+=("$ARG")
+  else
+    if [ "$ARG" == $'\0' ]; then
+      # After NULL character is consumed, change the delimiter and consume command string.
+      DELIM=''
+      CMD_START_FLAG="true"
+    elif [ "$ARG" != "" ]; then
+      echo "$ARG"
+    fi
+  fi
 done < <(build_command "$@")
 
 COUNT=${#CMD[@]}

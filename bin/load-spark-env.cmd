@@ -21,10 +21,10 @@ rem This script loads spark-env.cmd if it exists, and ensures it is only loaded 
 rem spark-env.cmd is loaded from SPARK_CONF_DIR if set, or within the current directory's
 rem conf\ subdirectory.
 
-if [%SPARK_ENV_LOADED%] == [] (
+if not defined SPARK_ENV_LOADED (
   set SPARK_ENV_LOADED=1
 
-  if [%SPARK_CONF_DIR%] == [] (
+  if not defined SPARK_CONF_DIR (
     set SPARK_CONF_DIR=%~dp0..\conf
   )
 
@@ -33,22 +33,27 @@ if [%SPARK_ENV_LOADED%] == [] (
 
 rem Setting SPARK_SCALA_VERSION if not already set.
 
-set ASSEMBLY_DIR2="%SPARK_HOME%\assembly\target\scala-2.11"
-set ASSEMBLY_DIR1="%SPARK_HOME%\assembly\target\scala-2.12"
+set SCALA_VERSION_1=2.13
+set SCALA_VERSION_2=2.12
 
-if [%SPARK_SCALA_VERSION%] == [] (
-
-  if exist %ASSEMBLY_DIR2% if exist %ASSEMBLY_DIR1% (
-    echo "Presence of build for multiple Scala versions detected."
-    echo "Either clean one of them or, set SPARK_SCALA_VERSION in spark-env.cmd."
-    exit 1
-  )
-  if exist %ASSEMBLY_DIR2% (
-    set SPARK_SCALA_VERSION=2.11
-  ) else (
-    set SPARK_SCALA_VERSION=2.12
-  )
-)
+set ASSEMBLY_DIR1="%SPARK_HOME%\assembly\target\scala-%SCALA_VERSION_1%"
+set ASSEMBLY_DIR2="%SPARK_HOME%\assembly\target\scala-%SCALA_VERSION_2%"
+set ENV_VARIABLE_DOC=https://spark.apache.org/docs/latest/configuration.html#environment-variables
+set SPARK_SCALA_VERSION=2.13
+rem if not defined SPARK_SCALA_VERSION (
+rem   if exist %ASSEMBLY_DIR2% if exist %ASSEMBLY_DIR1% (
+rem     echo Presence of build for multiple Scala versions detected ^(%ASSEMBLY_DIR1% and %ASSEMBLY_DIR2%^).
+rem     echo Remove one of them or, set SPARK_SCALA_VERSION=%SCALA_VERSION_1% in spark-env.cmd.
+rem     echo Visit %ENV_VARIABLE_DOC% for more details about setting environment variables in spark-env.cmd.
+rem     echo Either clean one of them or, set SPARK_SCALA_VERSION in spark-env.cmd.
+rem     exit 1
+rem   )
+rem   if exist %ASSEMBLY_DIR1% (
+rem     set SPARK_SCALA_VERSION=%SCALA_VERSION_1%
+rem   ) else (
+rem     set SPARK_SCALA_VERSION=%SCALA_VERSION_2%
+rem   )
+rem )
 exit /b 0
 
 :LoadSparkEnv

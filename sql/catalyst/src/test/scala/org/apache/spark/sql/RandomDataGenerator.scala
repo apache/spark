@@ -17,18 +17,24 @@
 
 package org.apache.spark.sql
 
-import java.lang.Double.longBitsToDouble
-import java.lang.Float.intBitsToFloat
 import java.math.MathContext
+import java.sql.{Date, Timestamp}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period, ZoneId}
+import java.time.temporal.ChronoUnit
 
 import scala.collection.mutable
-import scala.util.Random
+import scala.util.{Random, Try}
 
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType._
+import org.apache.spark.sql.types.YearMonthIntervalType.YEAR
 import org.apache.spark.unsafe.types.CalendarInterval
-
+import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.collection.Utils
 /**
  * Random data generators for Spark SQL DataTypes. These generators do not generate uniformly random
  * values; instead, they're biased to return "interesting" values (such as maximum / minimum values)
@@ -47,9 +53,12 @@ object RandomDataGenerator {
    */
   private val PROBABILITY_OF_NULL: Float = 0.1f
 
-  final val MAX_STR_LEN: Int = 1024
-  final val MAX_ARR_SIZE: Int = 128
-  final val MAX_MAP_SIZE: Int = 128
+  final val MAX_STR_LEN: Int =
+    System.getProperty("spark.sql.test.randomDataGenerator.maxStrLen", "1024").toInt
+  final val MAX_ARR_SIZE: Int =
+    System.getProperty("spark.sql.test.randomDataGenerator.maxArraySize", "128").toInt
+  final val MAX_MAP_SIZE: Int =
+    System.getProperty("spark.sql.test.randomDataGenerator.maxMapSize", "128").toInt
 
   /**
    * Helper function for constructing a biased random number generator which returns "interesting"
@@ -67,6 +76,28 @@ object RandomDataGenerator {
       }
     }
     Some(f)
+  }
+
+  /**
+   * A wrapper of Float.intBitsToFloat to use a unique NaN value for all NaN values.
+   * This prevents `checkEvaluationWithUnsafeProjection` from failing due to
+   * the difference between `UnsafeRow` binary presentation for NaN.
+   * This is visible for testing.
+   */
+  def intBitsToFloat(bits: Int): Float = {
+    val value = java.lang.Float.intBitsToFloat(bits)
+    if (value.isNaN) Float.NaN else value
+  }
+
+  /**
+   * A wrapper of Double.longBitsToDouble to use a unique NaN value for all NaN values.
+   * This prevents `checkEvaluationWithUnsafeProjection` from failing due to
+   * the difference between `UnsafeRow` binary presentation for NaN.
+   * This is visible for testing.
+   */
+  def longBitsToDouble(bits: Long): Double = {
+    val value = java.lang.Double.longBitsToDouble(bits)
+    if (value.isNaN) Double.NaN else value
   }
 
   /**
@@ -113,8 +144,28 @@ object RandomDataGenerator {
       }
       i += 1
     }
-    StructType(fields)
+    StructType(fields.toSeq)
   }
+
+  private def uniformMicrosRand(rand: Random): Long = {
+    var milliseconds = rand.nextLong() % 253402329599999L
+    // -62135740800000L is the number of milliseconds before January 1, 1970, 00:00:00 GMT
+    // for "0001-01-01 00:00:00.000000". We need to find a
+    // number that is greater or equals to this number as a valid timestamp value.
+    while (milliseconds < -62135740800000L) {
+      // 253402329599999L is the number of milliseconds since
+      // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
+      milliseconds = rand.nextLong() % 253402329599999L
+    }
+    milliseconds * MICROS_PER_MILLIS
+  }
+
+  private val specialTs = Seq(
+    "0001-01-01 00:00:00", // the fist timestamp of Common Era
+    "1582-10-15 23:59:59", // the cutover date from Julian to Gregorian calendar
+    "1970-01-01 00:00:00", // the epoch timestamp
+    "9999-12-31 23:59:59"  // the last supported timestamp according to SQL standard
+  )
 
   /**
    * Returns a function which generates random values for the given `DataType`, or `None` if no
@@ -126,12 +177,15 @@ object RandomDataGenerator {
    * @param dataType the type to generate values for
    * @param nullable whether null values should be generated
    * @param rand an optional random number generator
+   * @param validJulianDatetime whether to generate dates and timestamps that are valid
+   *                            in the Julian calendar.
    * @return a function which can be called to generate random values.
    */
   def forType(
       dataType: DataType,
       nullable: Boolean = true,
-      rand: Random = new Random): Option[() => Any] = {
+      rand: Random = new Random,
+      validJulianDatetime: Boolean = false): Option[() => Any] = {
     val valueGenerator: Option[() => Any] = dataType match {
       case StringType => Some(() => rand.nextString(rand.nextInt(MAX_STR_LEN)))
       case BinaryType => Some(() => {
@@ -141,41 +195,127 @@ object RandomDataGenerator {
       })
       case BooleanType => Some(() => rand.nextBoolean())
       case DateType =>
-        val generator =
-          () => {
-            var milliseconds = rand.nextLong() % 253402329599999L
-            // -62135740800000L is the number of milliseconds before January 1, 1970, 00:00:00 GMT
-            // for "0001-01-01 00:00:00.000000". We need to find a
-            // number that is greater or equals to this number as a valid timestamp value.
-            while (milliseconds < -62135740800000L) {
-              // 253402329599999L is the number of milliseconds since
-              // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
-              milliseconds = rand.nextLong() % 253402329599999L
-            }
-            DateTimeUtils.toJavaDate((milliseconds / DateTimeUtils.MILLIS_PER_DAY).toInt)
+        def uniformDaysRand(rand: Random): Int = {
+          var milliseconds = rand.nextLong() % 253402329599999L
+          // -62135740800000L is the number of milliseconds before January 1, 1970, 00:00:00 GMT
+          // for "0001-01-01 00:00:00.000000". We need to find a
+          // number that is greater or equals to this number as a valid timestamp value.
+          while (milliseconds < -62135740800000L) {
+            // 253402329599999L is the number of milliseconds since
+            // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
+            milliseconds = rand.nextLong() % 253402329599999L
           }
-        Some(generator)
+          (milliseconds / MILLIS_PER_DAY).toInt
+        }
+        val specialDates = Seq(
+          "0001-01-01", // the fist day of Common Era
+          "1582-10-15", // the cutover date from Julian to Gregorian calendar
+          "1970-01-01", // the epoch date
+          "9999-12-31" // the last supported date according to SQL standard
+        )
+        def getRandomDate(rand: Random): java.sql.Date = {
+          val date = DateTimeUtils.toJavaDate(uniformDaysRand(rand))
+          // The generated `date` is based on the hybrid calendar Julian + Gregorian since
+          // 1582-10-15 but it should be valid in Proleptic Gregorian calendar too which is used
+          // by Spark SQL since version 3.0 (see SPARK-26651). We try to convert `date` to
+          // a local date in Proleptic Gregorian calendar to satisfy this requirement. Some
+          // years are leap years in Julian calendar but not in Proleptic Gregorian calendar.
+          // As the consequence of that, 29 February of such years might not exist in Proleptic
+          // Gregorian calendar. When this happens, we shift the date by one day.
+          Try { date.toLocalDate; date }.getOrElse(new Date(date.getTime + MILLIS_PER_DAY))
+        }
+        if (SQLConf.get.getConf(SQLConf.DATETIME_JAVA8API_ENABLED)) {
+          randomNumeric[LocalDate](
+            rand,
+            (rand: Random) => {
+              val days = if (validJulianDatetime) {
+                DateTimeUtils.fromJavaDate(getRandomDate(rand))
+              } else {
+                uniformDaysRand(rand)
+              }
+              LocalDate.ofEpochDay(days)
+            },
+            specialDates.map(LocalDate.parse))
+        } else {
+          randomNumeric[java.sql.Date](
+            rand,
+            getRandomDate,
+            specialDates.map(java.sql.Date.valueOf))
+        }
       case TimestampType =>
-        val generator =
-          () => {
-            var milliseconds = rand.nextLong() % 253402329599999L
-            // -62135740800000L is the number of milliseconds before January 1, 1970, 00:00:00 GMT
-            // for "0001-01-01 00:00:00.000000". We need to find a
-            // number that is greater or equals to this number as a valid timestamp value.
-            while (milliseconds < -62135740800000L) {
-              // 253402329599999L is the number of milliseconds since
-              // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
-              milliseconds = rand.nextLong() % 253402329599999L
-            }
-            // DateTimeUtils.toJavaTimestamp takes microsecond.
-            DateTimeUtils.toJavaTimestamp(milliseconds * 1000)
-          }
-        Some(generator)
+        def getRandomTimestamp(rand: Random): java.sql.Timestamp = {
+          // DateTimeUtils.toJavaTimestamp takes microsecond.
+          val ts = DateTimeUtils.toJavaTimestamp(uniformMicrosRand(rand))
+          // The generated `ts` is based on the hybrid calendar Julian + Gregorian since
+          // 1582-10-15 but it should be valid in Proleptic Gregorian calendar too which is used
+          // by Spark SQL since version 3.0 (see SPARK-26651). We try to convert `ts` to
+          // a local timestamp in Proleptic Gregorian calendar to satisfy this requirement. Some
+          // years are leap years in Julian calendar but not in Proleptic Gregorian calendar.
+          // As the consequence of that, 29 February of such years might not exist in Proleptic
+          // Gregorian calendar. When this happens, we shift the timestamp `ts` by one day.
+          Try { ts.toLocalDateTime; ts }.getOrElse(new Timestamp(ts.getTime + MILLIS_PER_DAY))
+        }
+        if (SQLConf.get.getConf(SQLConf.DATETIME_JAVA8API_ENABLED)) {
+          randomNumeric[Instant](
+            rand,
+            (rand: Random) => {
+              val micros = if (validJulianDatetime) {
+                DateTimeUtils.fromJavaTimestamp(getRandomTimestamp(rand))
+              } else {
+                uniformMicrosRand(rand)
+              }
+              DateTimeUtils.microsToInstant(micros)
+            },
+            specialTs.map { s =>
+              val ldt = LocalDateTime.parse(s.replace(" ", "T"))
+              ldt.atZone(ZoneId.systemDefault()).toInstant
+            })
+        } else {
+          randomNumeric[java.sql.Timestamp](
+            rand,
+            getRandomTimestamp,
+            specialTs.map(java.sql.Timestamp.valueOf))
+        }
+      case TimestampNTZType =>
+        randomNumeric[LocalDateTime](
+          rand,
+          (rand: Random) => {
+            DateTimeUtils.microsToLocalDateTime(uniformMicrosRand(rand))
+          },
+          specialTs.map { s => LocalDateTime.parse(s.replace(" ", "T")) }
+        )
+      case _: TimeType =>
+        val specialTimes = Seq(
+          "00:00:00",
+          "23:59:59.999999"
+        )
+        randomNumeric[LocalTime](
+          rand,
+          (rand: Random) => {
+            DateTimeUtils.nanosToLocalTime(rand.between(0, 24 * 60 * 60 * 1000 * 1000L) * 1000L)
+          },
+          specialTimes.map(LocalTime.parse)
+        )
       case CalendarIntervalType => Some(() => {
         val months = rand.nextInt(1000)
+        val days = rand.nextInt(10000)
         val ns = rand.nextLong()
-        new CalendarInterval(months, ns)
+        new CalendarInterval(months, days, ns)
       })
+      case DayTimeIntervalType(_, DAY) =>
+        val mircoSeconds = rand.nextLong()
+        Some(() => Duration.of(mircoSeconds - mircoSeconds % MICROS_PER_DAY, ChronoUnit.MICROS))
+      case DayTimeIntervalType(_, HOUR) =>
+        val mircoSeconds = rand.nextLong()
+        Some(() => Duration.of(mircoSeconds - mircoSeconds % MICROS_PER_HOUR, ChronoUnit.MICROS))
+      case DayTimeIntervalType(_, MINUTE) =>
+        val mircoSeconds = rand.nextLong()
+        Some(() => Duration.of(mircoSeconds - mircoSeconds % MICROS_PER_MINUTE, ChronoUnit.MICROS))
+      case DayTimeIntervalType(_, SECOND) =>
+        Some(() => Duration.of(rand.nextLong(), ChronoUnit.MICROS))
+      case YearMonthIntervalType(_, YEAR) =>
+        Some(() => Period.ofYears(rand.nextInt() / MONTHS_PER_YEAR).normalized())
+      case YearMonthIntervalType(_, _) => Some(() => Period.ofMonths(rand.nextInt()).normalized())
       case DecimalType.Fixed(precision, scale) => Some(
         () => BigDecimal.apply(
           rand.nextLong() % math.pow(10, precision).toLong,
@@ -183,10 +323,10 @@ object RandomDataGenerator {
           new MathContext(precision)).bigDecimal)
       case DoubleType => randomNumeric[Double](
         rand, r => longBitsToDouble(r.nextLong()), Seq(Double.MinValue, Double.MinPositiveValue,
-          Double.MaxValue, Double.PositiveInfinity, Double.NegativeInfinity, Double.NaN, 0.0))
+          Double.MaxValue, Double.PositiveInfinity, Double.NegativeInfinity, Double.NaN, 0.0, -0.0))
       case FloatType => randomNumeric[Float](
         rand, r => intBitsToFloat(r.nextInt()), Seq(Float.MinValue, Float.MinPositiveValue,
-          Float.MaxValue, Float.PositiveInfinity, Float.NegativeInfinity, Float.NaN, 0.0f))
+          Float.MaxValue, Float.PositiveInfinity, Float.NegativeInfinity, Float.NaN, 0.0f, -0.0f))
       case ByteType => randomNumeric[Byte](
         rand, _.nextInt().toByte, Seq(Byte.MinValue, Byte.MaxValue, 0.toByte))
       case IntegerType => randomNumeric[Int](
@@ -217,13 +357,13 @@ object RandomDataGenerator {
               count += 1
             }
             val values = Seq.fill(keys.size)(valueGenerator())
-            keys.zip(values).toMap
+            Utils.toMap(keys, values)
           }
         }
       case StructType(fields) =>
         val maybeFieldGenerators: Seq[Option[() => Any]] = fields.map { field =>
           forType(field.dataType, nullable = field.nullable, rand)
-        }
+        }.toImmutableArraySeq
         if (maybeFieldGenerators.forall(_.isDefined)) {
           val fieldGenerators: Seq[() => Any] = maybeFieldGenerators.map(_.get)
           Some(() => Row.fromSeq(fieldGenerators.map(_.apply())))
@@ -246,6 +386,51 @@ object RandomDataGenerator {
             }
           }
         }
+      case gt: GeometryType =>
+        val possibleGeometriesWKB = Seq(
+          "010100000000000000000031400000000000001c40", // POINT (17 7)
+          "010100000000000000000014400000000000001440", // POINT (5 5)
+          "010100000000000000008057400000000000003340" // POINT (93.5 19)
+        )
+
+        val possibleSrids = Seq(4326, 3857, 0)
+
+        Some(() => {
+          val wkbIdx = rand.nextInt(possibleGeometriesWKB.length)
+          val sridIdx = rand.nextInt(possibleSrids.length)
+          val wkb = possibleGeometriesWKB(wkbIdx).grouped(2)
+            .map(Integer.parseInt(_, 16).toByte).toArray
+          val srid = if (gt.srid == GeometryType.MIXED_SRID) {
+            possibleSrids(sridIdx)
+          } else {
+            gt.srid
+          }
+
+          Geometry.fromWKB(wkb, srid)
+        })
+
+      case gt: GeographyType =>
+        val possibleGeometriesWKB = Seq(
+          "010100000000000000000031400000000000001c40", // POINT (17 7)
+          "010100000000000000000014400000000000001440", // POINT (5 5)
+          "010100000000000000008057400000000000003340" // POINT (93.5 19)
+        )
+
+        val possibleSrids = Seq(4326)
+
+        Some(() => {
+          val wkbIdx = rand.nextInt(possibleGeometriesWKB.length)
+          val sridIdx = rand.nextInt(possibleSrids.length)
+          val wkb = possibleGeometriesWKB(wkbIdx).grouped(2)
+            .map(Integer.parseInt(_, 16).toByte).toArray
+          val srid = if (gt.srid == GeographyType.MIXED_SRID) {
+            possibleSrids(sridIdx)
+          } else {
+            gt.srid
+          }
+
+          Geography.fromWKB(wkb, srid)
+        })
       case unsupportedType => None
     }
     // Handle nullability by wrapping the non-null value generator:
@@ -283,7 +468,7 @@ object RandomDataGenerator {
               arr += gen()
               i += 1
             }
-            arr
+            arr.toSeq
           }
           fields += data
         case StructType(children) =>
@@ -295,6 +480,6 @@ object RandomDataGenerator {
           fields += gen()
       }
     }
-    Row.fromSeq(fields)
+    Row.fromSeq(fields.toSeq)
   }
 }

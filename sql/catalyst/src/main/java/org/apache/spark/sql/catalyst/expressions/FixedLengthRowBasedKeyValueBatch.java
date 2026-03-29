@@ -46,6 +46,8 @@ public final class FixedLengthRowBasedKeyValueBatch extends RowBasedKeyValueBatc
   public UnsafeRow appendRow(Object kbase, long koff, int klen,
                              Object vbase, long voff, int vlen) {
     // if run out of max supported rows or page size, return null
+    assert(vlen == this.vlen);
+    assert(klen == this.klen);
     if (numRows >= capacity || page == null || page.size() - pageCursor < recordLength) {
       return null;
     }
@@ -162,8 +164,8 @@ public final class FixedLengthRowBasedKeyValueBatch extends RowBasedKeyValueBatc
     };
   }
 
-  protected FixedLengthRowBasedKeyValueBatch(StructType keySchema, StructType valueSchema,
-                                             int maxRows, TaskMemoryManager manager) {
+  FixedLengthRowBasedKeyValueBatch(StructType keySchema, StructType valueSchema,
+      int maxRows, TaskMemoryManager manager) {
     super(keySchema, valueSchema, maxRows, manager);
     int keySize = keySchema.size() * 8; // each fixed-length field is stored in a 8-byte word
     int valueSize = valueSchema.size() * 8;

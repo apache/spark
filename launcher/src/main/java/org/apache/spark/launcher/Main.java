@@ -87,13 +87,18 @@ class Main {
       cmd = buildCommand(builder, env, printLaunchCommand);
     }
 
-    if (isWindows()) {
+    // test for shell environments, to enable non-Windows treatment of command line prep
+    boolean shellflag = !isEmpty(System.getenv("SHELL"));
+    if (isWindows() && !shellflag) {
       System.out.println(prepareWindowsCommand(cmd, env));
     } else {
+      // A sequence of NULL character and newline separates command-strings and others.
+      System.out.println('\0');
+
       // In bash, use NULL as the arg separator since it cannot be used in an argument.
       List<String> bashCmd = prepareBashCommand(cmd, env);
       for (String c : bashCmd) {
-        System.out.print(c);
+        System.out.print(c.replaceFirst("\r$",""));
         System.out.print('\0');
       }
     }
@@ -109,7 +114,7 @@ class Main {
       boolean printLaunchCommand) throws IOException, IllegalArgumentException {
     List<String> cmd = builder.buildCommand(env);
     if (printLaunchCommand) {
-      System.err.println("Spark Command: " + join(" ", cmd));
+      System.err.println("Spark Command: " + join(" ", redactCommandLineArgs(cmd)));
       System.err.println("========================================");
     }
     return cmd;

@@ -2,6 +2,21 @@
 layout: global
 title: Frequent Pattern Mining
 displayTitle: Frequent Pattern Mining
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 Mining frequent items, itemsets, subsequences, or other substructures is usually among the
@@ -18,7 +33,7 @@ for more information.
 ## FP-Growth
 
 The FP-growth algorithm is described in the paper
-[Han et al., Mining frequent patterns without candidate generation](http://dx.doi.org/10.1145/335191.335372),
+[Han et al., Mining frequent patterns without candidate generation](https://doi.org/10.1145/335191.335372),
 where "FP" stands for frequent pattern.
 Given a dataset of transactions, the first step of FP-growth is to calculate item frequencies and identify frequent items.
 Different from [Apriori-like](http://en.wikipedia.org/wiki/Apriori_algorithm) algorithms designed for the same purpose,
@@ -26,10 +41,12 @@ the second step of FP-growth uses a suffix tree (FP-tree) structure to encode tr
 explicitly, which are usually expensive to generate.
 After the second step, the frequent itemsets can be extracted from the FP-tree.
 In `spark.mllib`, we implemented a parallel version of FP-growth called PFP,
-as described in [Li et al., PFP: Parallel FP-growth for query recommendation](http://dx.doi.org/10.1145/1454008.1454027).
+as described in [Li et al., PFP: Parallel FP-growth for query recommendation](https://doi.org/10.1145/1454008.1454027).
 PFP distributes the work of growing FP-trees based on the suffixes of transactions,
 and hence is more scalable than a single-machine implementation.
 We refer users to the papers for more details.
+
+FP-growth operates on _itemsets_. An itemset is an unordered collection of unique items. Spark does not have a _set_ type, so itemsets are represented as arrays.
 
 `spark.ml`'s FP-growth implementation takes the following (hyper-)parameters:
 
@@ -45,9 +62,15 @@ We refer users to the papers for more details.
 
 The `FPGrowthModel` provides:
 
-* `freqItemsets`: frequent itemsets in the format of DataFrame("items"[Array], "freq"[Long])
-* `associationRules`: association rules generated with confidence above `minConfidence`, in the format of 
-  DataFrame("antecedent"[Array], "consequent"[Array], "confidence"[Double]).
+* `freqItemsets`: frequent itemsets in the format of a DataFrame with the following columns:
+  - `items: array`: A given itemset.
+  - `freq: long`: A count of how many times this itemset was seen, given the configured model parameters.
+* `associationRules`: association rules generated with confidence above `minConfidence`, in the format of a DataFrame with the following columns:
+  - `antecedent: array`: The itemset that is the hypothesis of the association rule.
+  - `consequent: array`: An itemset that always contains a single element representing the conclusion of the association rule.
+  - `confidence: double`: Refer to `minConfidence` above for a definition of `confidence`.
+  - `lift: double`: A measure of how well the antecedent predicts the consequent, calculated as `support(antecedent U consequent) / (support(antecedent) x support(consequent))`
+  - `support: double`: Refer to `minSupport` above for a definition of `support`.
 * `transform`: For each transaction in `itemsCol`, the `transform` method will compare its items against the antecedents
   of each association rule. If the record contains all the antecedents of a specific association rule, the rule
   will be considered as applicable and its consequents will be added to the prediction result. The transform
@@ -59,8 +82,14 @@ The `FPGrowthModel` provides:
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.fpm.FPGrowth.html) for more details.
+
+{% include_example python/ml/fpgrowth_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.fpm.FPGrowth) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/fpm/FPGrowth.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/FPGrowthExample.scala %}
 </div>
@@ -71,15 +100,9 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/fpm/FPGrowth.html) for
 {% include_example java/org/apache/spark/examples/ml/JavaFPGrowthExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.fpm.FPGrowth) for more details.
-
-{% include_example python/ml/fpgrowth_example.py %}
-</div>
-
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.fpGrowth.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.fpGrowth.html) for more details.
 
 {% include_example r/ml/fpm.R %}
 </div>
@@ -90,7 +113,7 @@ Refer to the [R API docs](api/R/spark.fpGrowth.html) for more details.
 
 PrefixSpan is a sequential pattern mining algorithm described in
 [Pei et al., Mining Sequential Patterns by Pattern-Growth: The
-PrefixSpan Approach](http://dx.doi.org/10.1109%2FTKDE.2004.77). We refer
+PrefixSpan Approach](https://doi.org/10.1109%2FTKDE.2004.77). We refer
 the reader to the referenced paper for formalizing the sequential
 pattern mining problem.
 
@@ -112,8 +135,14 @@ pattern mining problem.
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.fpm.PrefixSpan) for more details.
+
+{% include_example python/ml/prefixspan_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.fpm.PrefixSpan) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/fpm/PrefixSpan.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/PrefixSpanExample.scala %}
 </div>
@@ -124,15 +153,9 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/fpm/PrefixSpan.html) f
 {% include_example java/org/apache/spark/examples/ml/JavaPrefixSpanExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.fpm.PrefixSpan) for more details.
-
-{% include_example python/ml/prefixspan_example.py %}
-</div>
-
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.prefixSpan.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.prefixSpan.html) for more details.
 
 {% include_example r/ml/prefixSpan.R %}
 </div>

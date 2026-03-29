@@ -45,6 +45,9 @@ sealed abstract class Node extends Serializable {
   /** Recursive prediction helper method */
   private[ml] def predictImpl(features: Vector): LeafNode
 
+  /** Recursive prediction helper method */
+  private[ml] def predictBinned(binned: Array[Int], splits: Array[Array[Split]]): LeafNode
+
   /**
    * Get the number of nodes in tree below this node, including leaf nodes.
    * E.g., if this is a leaf, returns 0.  If both children are leaves, returns 2.
@@ -102,6 +105,11 @@ private[ml] object Node {
         split = Split.fromOld(oldNode.split.get, categoricalFeatures), impurityStats = null)
     }
   }
+
+  // A dummy node used for ml connect only
+  val dummyNode: Node = {
+    new LeafNode(0.0, 0.0, ImpurityCalculator.getCalculator("gini", Array.empty, 0))
+  }
 }
 
 /**
@@ -119,10 +127,14 @@ class LeafNode private[ml] (
 
   override private[ml] def predictImpl(features: Vector): LeafNode = this
 
+  override private[ml] def predictBinned(
+      binned: Array[Int],
+      splits: Array[Array[Split]]): LeafNode = this
+
   override private[tree] def numDescendants: Int = 0
 
   override private[tree] def subtreeToString(indentFactor: Int = 0): String = {
-    val prefix: String = " " * indentFactor
+    val prefix: String = " ".repeat(indentFactor)
     prefix + s"Predict: $prediction\n"
   }
 
@@ -167,11 +179,32 @@ class InternalNode private[ml] (
   }
 
   override private[ml] def predictImpl(features: Vector): LeafNode = {
-    if (split.shouldGoLeft(features)) {
-      leftChild.predictImpl(features)
-    } else {
-      rightChild.predictImpl(features)
+    var node: Node = this
+    while (node.isInstanceOf[InternalNode]) {
+      val n = node.asInstanceOf[InternalNode]
+      if (n.split.shouldGoLeft(features)) {
+        node = n.leftChild
+      } else {
+        node = n.rightChild
+      }
     }
+    node.asInstanceOf[LeafNode]
+  }
+
+  override private[ml] def predictBinned(
+      binned: Array[Int],
+      splits: Array[Array[Split]]): LeafNode = {
+    var node: Node = this
+    while (node.isInstanceOf[InternalNode]) {
+      val n = node.asInstanceOf[InternalNode]
+      val i = n.split.featureIndex
+      if (n.split.shouldGoLeft(binned(i), splits(i))) {
+        node = n.leftChild
+      } else {
+        node = n.rightChild
+      }
+    }
+    node.asInstanceOf[LeafNode]
   }
 
   override private[tree] def numDescendants: Int = {
@@ -179,7 +212,7 @@ class InternalNode private[ml] (
   }
 
   override private[tree] def subtreeToString(indentFactor: Int = 0): String = {
-    val prefix: String = " " * indentFactor
+    val prefix: String = " ".repeat(indentFactor)
     prefix + s"If (${InternalNode.splitToString(split, left = true)})\n" +
       leftChild.subtreeToString(indentFactor + 1) +
       prefix + s"Else (${InternalNode.splitToString(split, left = false)})\n" +
@@ -308,27 +341,27 @@ private[tree] class LearningNode(
    *         [[org.apache.spark.ml.tree.impl.RandomForest.findBestSplits()]].
    */
   def predictImpl(binnedFeatures: Array[Int], splits: Array[Array[Split]]): Int = {
-    if (this.isLeaf || this.split.isEmpty) {
-      this.id
-    } else {
-      val split = this.split.get
+    var node = this
+    while (!node.isLeaf && node.split.nonEmpty) {
+      val split = node.split.get
       val featureIndex = split.featureIndex
       val splitLeft = split.shouldGoLeft(binnedFeatures(featureIndex), splits(featureIndex))
-      if (this.leftChild.isEmpty) {
+      if (node.leftChild.isEmpty) {
         // Not yet split. Return next layer of nodes to train
         if (splitLeft) {
-          LearningNode.leftChildIndex(this.id)
+          return LearningNode.leftChildIndex(node.id)
         } else {
-          LearningNode.rightChildIndex(this.id)
+          return LearningNode.rightChildIndex(node.id)
         }
       } else {
         if (splitLeft) {
-          this.leftChild.get.predictImpl(binnedFeatures, splits)
+          node = node.leftChild.get
         } else {
-          this.rightChild.get.predictImpl(binnedFeatures, splits)
+          node = node.rightChild.get
         }
       }
     }
+    node.id
   }
 
 }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.linalg
 
+import scala.collection.immutable
+import scala.collection.mutable.ArrayBuilder
 import scala.util.Random
 
 import breeze.linalg.{squaredDistance => breezeSquaredDistance, DenseMatrix => BDM}
@@ -51,7 +53,8 @@ class VectorsSuite extends SparkMLFunSuite {
   }
 
   test("sparse vector construction with unordered elements") {
-    val vec = Vectors.sparse(n, indices.zip(values).reverse).asInstanceOf[SparseVector]
+    val vec = Vectors.sparse(n, immutable.ArraySeq.unsafeWrapArray(indices.zip(values).reverse))
+      .asInstanceOf[SparseVector]
     assert(vec.size === n)
     assert(vec.indices === indices)
     assert(vec.values === values)
@@ -233,11 +236,11 @@ class VectorsSuite extends SparkMLFunSuite {
       val nnz = random.nextInt(m)
 
       val indices1 = random.shuffle(0 to m - 1).slice(0, nnz).sorted.toArray
-      val values1 = Array.fill(nnz)(random.nextDouble)
+      val values1 = Array.fill(nnz)(random.nextDouble())
       val sparseVector1 = Vectors.sparse(m, indices1, values1)
 
       val indices2 = random.shuffle(0 to m - 1).slice(0, nnz).sorted.toArray
-      val values2 = Array.fill(nnz)(random.nextDouble)
+      val values2 = Array.fill(nnz)(random.nextDouble())
       val sparseVector2 = Vectors.sparse(m, indices2, values2)
 
       val denseVector1 = Vectors.dense(sparseVector1.toArray)
@@ -254,28 +257,43 @@ class VectorsSuite extends SparkMLFunSuite {
     }
   }
 
+  test("foreach") {
+    val dv = Vectors.dense(0.0, 1.2, 3.1, 0.0)
+    val sv = Vectors.sparse(4, Seq((1, 1.2), (2, 3.1), (3, 0.0)))
+
+    val dvMap = scala.collection.mutable.Map[Int, Double]()
+    dv.foreach { (index, value) => dvMap.put(index, value) }
+    assert(dvMap === Map(0 -> 0.0, 1 -> 1.2, 2 -> 3.1, 3 -> 0.0))
+
+    val svMap = scala.collection.mutable.Map[Int, Double]()
+    sv.foreach { (index, value) => svMap.put(index, value) }
+    assert(svMap === Map(0 -> 0.0, 1 -> 1.2, 2 -> 3.1, 3 -> 0.0))
+  }
+
   test("foreachActive") {
     val dv = Vectors.dense(0.0, 1.2, 3.1, 0.0)
     val sv = Vectors.sparse(4, Seq((1, 1.2), (2, 3.1), (3, 0.0)))
 
     val dvMap = scala.collection.mutable.Map[Int, Double]()
-    dv.foreachActive { (index, value) =>
-      dvMap.put(index, value)
-    }
-    assert(dvMap.size === 4)
-    assert(dvMap.get(0) === Some(0.0))
-    assert(dvMap.get(1) === Some(1.2))
-    assert(dvMap.get(2) === Some(3.1))
-    assert(dvMap.get(3) === Some(0.0))
+    dv.foreachActive { (index, value) => dvMap.put(index, value) }
+    assert(dvMap === Map(0 -> 0.0, 1 -> 1.2, 2 -> 3.1, 3 -> 0.0))
 
     val svMap = scala.collection.mutable.Map[Int, Double]()
-    sv.foreachActive { (index, value) =>
-      svMap.put(index, value)
-    }
-    assert(svMap.size === 3)
-    assert(svMap.get(1) === Some(1.2))
-    assert(svMap.get(2) === Some(3.1))
-    assert(svMap.get(3) === Some(0.0))
+    sv.foreachActive { (index, value) => svMap.put(index, value) }
+    assert(svMap === Map(1 -> 1.2, 2 -> 3.1, 3 -> 0.0))
+  }
+
+  test("foreachNonZero") {
+    val dv = Vectors.dense(0.0, 1.2, 3.1, 0.0)
+    val sv = Vectors.sparse(4, Seq((1, 1.2), (2, 3.1), (3, 0.0)))
+
+    val dvMap = scala.collection.mutable.Map[Int, Double]()
+    dv.foreachNonZero { (index, value) => dvMap.put(index, value) }
+    assert(dvMap === Map(1 -> 1.2, 2 -> 3.1))
+
+    val svMap = scala.collection.mutable.Map[Int, Double]()
+    sv.foreachNonZero { (index, value) => svMap.put(index, value) }
+    assert(dvMap === Map(1 -> 1.2, 2 -> 3.1))
   }
 
   test("vector p-norm") {
@@ -367,9 +385,16 @@ class VectorsSuite extends SparkMLFunSuite {
     assert(v.slice(Array(2, 0, 3, 4)) === new SparseVector(4, Array(0, 3), Array(2.2, 4.4)))
   }
 
+  test("SparseVector.slice with sorted indices") {
+    val v = new SparseVector(5, Array(1, 2, 4), Array(1.1, 2.2, 4.4))
+    assert(v.slice(Array(0, 2), true) === v.slice(Array(0, 2), false))
+    assert(v.slice(Array(0, 2, 4), true) === v.slice(Array(0, 2, 4), false))
+    assert(v.slice(Array(1, 3), true) === v.slice(Array(1, 3), false))
+  }
+
   test("sparse vector only support non-negative length") {
     val v1 = Vectors.sparse(0, Array.emptyIntArray, Array.emptyDoubleArray)
-    val v2 = Vectors.sparse(0, Array.empty[(Int, Double)])
+    val v2 = Vectors.sparse(0, immutable.ArraySeq.unsafeWrapArray(Array.empty[(Int, Double)]))
     assert(v1.size === 0)
     assert(v2.size === 0)
 
@@ -377,7 +402,83 @@ class VectorsSuite extends SparkMLFunSuite {
       Vectors.sparse(-1, Array(1), Array(2.0))
     }
     intercept[IllegalArgumentException] {
-      Vectors.sparse(-1, Array((1, 2.0)))
+      Vectors.sparse(-1, immutable.ArraySeq.unsafeWrapArray(Array((1, 2.0))))
+    }
+  }
+
+  test("dot product only supports vectors of same size") {
+    val vSize4 = Vectors.dense(arr)
+    val vSize1 = Vectors.zeros(1)
+    intercept[IllegalArgumentException]{ vSize1.dot(vSize4) }
+  }
+
+  test("dense vector dot product") {
+    val dv = Vectors.dense(arr)
+    assert(dv.dot(dv) === 0.26)
+  }
+
+  test("sparse vector dot product") {
+    val sv = Vectors.sparse(n, indices, values)
+    assert(sv.dot(sv) === 0.26)
+  }
+
+  test("mixed sparse and dense vector dot product") {
+    val sv = Vectors.sparse(n, indices, values)
+    val dv = Vectors.dense(arr)
+    assert(sv.dot(dv) === 0.26)
+    assert(dv.dot(sv) === 0.26)
+  }
+
+  test("iterator") {
+    Seq(
+      Vectors.dense(arr),
+      Vectors.zeros(n),
+      Vectors.sparse(n, indices, values),
+      Vectors.sparse(n, Array.emptyIntArray, Array.emptyDoubleArray)
+    ).foreach { vec =>
+      val (indices, values) = vec.iterator.toArray.unzip
+      assert(Array.range(0, vec.size) === indices)
+      assert(vec.toArray === values)
+    }
+  }
+
+  test("activeIterator") {
+    Seq(
+      Vectors.dense(arr),
+      Vectors.zeros(n),
+      Vectors.sparse(n, indices, values),
+      Vectors.sparse(n, Array.emptyIntArray, Array.emptyDoubleArray)
+    ).foreach { vec =>
+      val indicesBuilder = ArrayBuilder.make[Int]
+      val valuesBuilder = ArrayBuilder.make[Double]
+      vec.foreachActive { case (i, v) =>
+        indicesBuilder += i
+        valuesBuilder += v
+      }
+      val (indices, values) = vec.activeIterator.toArray.unzip
+      assert(indicesBuilder.result() === indices)
+      assert(valuesBuilder.result() === values)
+    }
+  }
+
+  test("nonZeroIterator") {
+    Seq(
+      Vectors.dense(arr),
+      Vectors.zeros(n),
+      Vectors.sparse(n, indices, values),
+      Vectors.sparse(n, Array.emptyIntArray, Array.emptyDoubleArray)
+    ).foreach { vec =>
+      val indicesBuilder = ArrayBuilder.make[Int]
+      val valuesBuilder = ArrayBuilder.make[Double]
+      vec.foreachActive { case (i, v) =>
+        if (v != 0) {
+          indicesBuilder += i
+          valuesBuilder += v
+        }
+      }
+      val (indices, values) = vec.nonZeroIterator.toArray.unzip
+      assert(indicesBuilder.result() === indices)
+      assert(valuesBuilder.result() === values)
     }
   }
 }

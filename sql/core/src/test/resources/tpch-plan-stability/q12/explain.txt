@@ -1,0 +1,90 @@
+== Physical Plan ==
+* Sort (15)
++- Exchange (14)
+   +- * HashAggregate (13)
+      +- Exchange (12)
+         +- * HashAggregate (11)
+            +- * Project (10)
+               +- * BroadcastHashJoin Inner BuildRight (9)
+                  :- * Filter (3)
+                  :  +- * ColumnarToRow (2)
+                  :     +- Scan parquet spark_catalog.default.orders (1)
+                  +- BroadcastExchange (8)
+                     +- * Project (7)
+                        +- * Filter (6)
+                           +- * ColumnarToRow (5)
+                              +- Scan parquet spark_catalog.default.lineitem (4)
+
+
+(1) Scan parquet spark_catalog.default.orders
+Output [2]: [o_orderkey#1, o_orderpriority#2]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/orders]
+PushedFilters: [IsNotNull(o_orderkey)]
+ReadSchema: struct<o_orderkey:bigint,o_orderpriority:string>
+
+(2) ColumnarToRow [codegen id : 2]
+Input [2]: [o_orderkey#1, o_orderpriority#2]
+
+(3) Filter [codegen id : 2]
+Input [2]: [o_orderkey#1, o_orderpriority#2]
+Condition : isnotnull(o_orderkey#1)
+
+(4) Scan parquet spark_catalog.default.lineitem
+Output [5]: [l_orderkey#3, l_shipdate#4, l_commitdate#5, l_receiptdate#6, l_shipmode#7]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/lineitem]
+PushedFilters: [IsNotNull(l_commitdate), IsNotNull(l_receiptdate), IsNotNull(l_shipdate), In(l_shipmode, [MAIL,SHIP]), GreaterThanOrEqual(l_receiptdate,1994-01-01), LessThan(l_receiptdate,1995-01-01), IsNotNull(l_orderkey)]
+ReadSchema: struct<l_orderkey:bigint,l_shipdate:date,l_commitdate:date,l_receiptdate:date,l_shipmode:string>
+
+(5) ColumnarToRow [codegen id : 1]
+Input [5]: [l_orderkey#3, l_shipdate#4, l_commitdate#5, l_receiptdate#6, l_shipmode#7]
+
+(6) Filter [codegen id : 1]
+Input [5]: [l_orderkey#3, l_shipdate#4, l_commitdate#5, l_receiptdate#6, l_shipmode#7]
+Condition : ((((((((isnotnull(l_commitdate#5) AND isnotnull(l_receiptdate#6)) AND isnotnull(l_shipdate#4)) AND l_shipmode#7 IN (MAIL,SHIP)) AND (l_commitdate#5 < l_receiptdate#6)) AND (l_shipdate#4 < l_commitdate#5)) AND (l_receiptdate#6 >= 1994-01-01)) AND (l_receiptdate#6 < 1995-01-01)) AND isnotnull(l_orderkey#3))
+
+(7) Project [codegen id : 1]
+Output [2]: [l_orderkey#3, l_shipmode#7]
+Input [5]: [l_orderkey#3, l_shipdate#4, l_commitdate#5, l_receiptdate#6, l_shipmode#7]
+
+(8) BroadcastExchange
+Input [2]: [l_orderkey#3, l_shipmode#7]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=1]
+
+(9) BroadcastHashJoin [codegen id : 2]
+Left keys [1]: [o_orderkey#1]
+Right keys [1]: [l_orderkey#3]
+Join type: Inner
+Join condition: None
+
+(10) Project [codegen id : 2]
+Output [2]: [o_orderpriority#2, l_shipmode#7]
+Input [4]: [o_orderkey#1, o_orderpriority#2, l_orderkey#3, l_shipmode#7]
+
+(11) HashAggregate [codegen id : 2]
+Input [2]: [o_orderpriority#2, l_shipmode#7]
+Keys [1]: [l_shipmode#7]
+Functions [2]: [partial_sum(CASE WHEN ((o_orderpriority#2 = 1-URGENT) OR (o_orderpriority#2 = 2-HIGH)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (NOT (o_orderpriority#2 = 1-URGENT) AND NOT (o_orderpriority#2 = 2-HIGH)) THEN 1 ELSE 0 END)]
+Aggregate Attributes [2]: [sum#8, sum#9]
+Results [3]: [l_shipmode#7, sum#10, sum#11]
+
+(12) Exchange
+Input [3]: [l_shipmode#7, sum#10, sum#11]
+Arguments: hashpartitioning(l_shipmode#7, 5), ENSURE_REQUIREMENTS, [plan_id=2]
+
+(13) HashAggregate [codegen id : 3]
+Input [3]: [l_shipmode#7, sum#10, sum#11]
+Keys [1]: [l_shipmode#7]
+Functions [2]: [sum(CASE WHEN ((o_orderpriority#2 = 1-URGENT) OR (o_orderpriority#2 = 2-HIGH)) THEN 1 ELSE 0 END), sum(CASE WHEN (NOT (o_orderpriority#2 = 1-URGENT) AND NOT (o_orderpriority#2 = 2-HIGH)) THEN 1 ELSE 0 END)]
+Aggregate Attributes [2]: [sum(CASE WHEN ((o_orderpriority#2 = 1-URGENT) OR (o_orderpriority#2 = 2-HIGH)) THEN 1 ELSE 0 END)#12, sum(CASE WHEN (NOT (o_orderpriority#2 = 1-URGENT) AND NOT (o_orderpriority#2 = 2-HIGH)) THEN 1 ELSE 0 END)#13]
+Results [3]: [l_shipmode#7, sum(CASE WHEN ((o_orderpriority#2 = 1-URGENT) OR (o_orderpriority#2 = 2-HIGH)) THEN 1 ELSE 0 END)#12 AS high_line_count#14, sum(CASE WHEN (NOT (o_orderpriority#2 = 1-URGENT) AND NOT (o_orderpriority#2 = 2-HIGH)) THEN 1 ELSE 0 END)#13 AS low_line_count#15]
+
+(14) Exchange
+Input [3]: [l_shipmode#7, high_line_count#14, low_line_count#15]
+Arguments: rangepartitioning(l_shipmode#7 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [plan_id=3]
+
+(15) Sort [codegen id : 4]
+Input [3]: [l_shipmode#7, high_line_count#14, low_line_count#15]
+Arguments: [l_shipmode#7 ASC NULLS FIRST], true, 0
+

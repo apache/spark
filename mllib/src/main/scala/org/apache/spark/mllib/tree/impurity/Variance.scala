@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 
 /**
  * Class for calculating variance during regression
@@ -26,27 +26,22 @@ import org.apache.spark.annotation.{DeveloperApi, Since}
 object Variance extends Impurity {
 
   /**
-   * :: DeveloperApi ::
    * information calculation for multiclass classification
    * @param counts Array[Double] with counts for each label
    * @param totalCount sum of counts for all labels
    * @return information value, or 0 if totalCount = 0
    */
   @Since("1.1.0")
-  @DeveloperApi
   override def calculate(counts: Array[Double], totalCount: Double): Double =
      throw new UnsupportedOperationException("Variance.calculate")
 
   /**
-   * :: DeveloperApi ::
    * variance calculation
    * @param count number of instances
    * @param sum sum of labels
    * @param sumSquares summation of squares of the labels
    * @return information value, or 0 if count = 0
    */
-  @Since("1.0.0")
-  @DeveloperApi
   override def calculate(count: Double, sum: Double, sumSquares: Double): Double = {
     if (count == 0) {
       return 0
@@ -66,21 +61,32 @@ object Variance extends Impurity {
 
 /**
  * Class for updating views of a vector of sufficient statistics,
- * in order to compute impurity from a sample.
+ * in order to compute impurity from a sample. For variance, we track:
+ *   - sum(w_i)
+ *   - sum(w_i * y_i)
+ *   - sum(w_i * y_i * y_i)
+ *   - count(y_i)
  * Note: Instances of this class do not hold the data; they operate on views of the data.
  */
 private[spark] class VarianceAggregator()
-  extends ImpurityAggregator(statsSize = 3) with Serializable {
+  extends ImpurityAggregator(statsSize = 4) with Serializable {
 
   /**
    * Update stats for one (node, feature, bin) with the given label.
    * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
    * @param offset    Start index of stats for this (node, feature, bin).
    */
-  def update(allStats: Array[Double], offset: Int, label: Double, instanceWeight: Double): Unit = {
+  def update(
+      allStats: Array[Double],
+      offset: Int,
+      label: Double,
+      numSamples: Int,
+      sampleWeight: Double): Unit = {
+    val instanceWeight = numSamples * sampleWeight
     allStats(offset) += instanceWeight
     allStats(offset + 1) += instanceWeight * label
     allStats(offset + 2) += instanceWeight * label * label
+    allStats(offset + 3) += numSamples
   }
 
   /**
@@ -89,7 +95,8 @@ private[spark] class VarianceAggregator()
    * @param offset    Start index of stats for this (node, feature, bin).
    */
   def getCalculator(allStats: Array[Double], offset: Int): VarianceCalculator = {
-    new VarianceCalculator(allStats.view(offset, offset + statsSize).toArray)
+    new VarianceCalculator(allStats.slice(offset, offset + statsSize - 1),
+      allStats(offset + statsSize - 1).toLong)
   }
 }
 
@@ -99,7 +106,8 @@ private[spark] class VarianceAggregator()
  * (node, feature, bin).
  * @param stats  Array of sufficient statistics for a (node, feature, bin).
  */
-private[spark] class VarianceCalculator(stats: Array[Double]) extends ImpurityCalculator(stats) {
+private[spark] class VarianceCalculator(stats: Array[Double], var rawCount: Long)
+  extends ImpurityCalculator(stats) {
 
   require(stats.length == 3,
     s"VarianceCalculator requires sufficient statistics array stats to be of length 3," +
@@ -108,7 +116,7 @@ private[spark] class VarianceCalculator(stats: Array[Double]) extends ImpurityCa
   /**
    * Make a deep copy of this [[ImpurityCalculator]].
    */
-  def copy: VarianceCalculator = new VarianceCalculator(stats.clone())
+  def copy: VarianceCalculator = new VarianceCalculator(stats.clone(), rawCount)
 
   /**
    * Calculate the impurity from the stored sufficient statistics.
@@ -116,9 +124,9 @@ private[spark] class VarianceCalculator(stats: Array[Double]) extends ImpurityCa
   def calculate(): Double = Variance.calculate(stats(0), stats(1), stats(2))
 
   /**
-   * Number of data points accounted for in the sufficient statistics.
+   * Weighted number of data points accounted for in the sufficient statistics.
    */
-  def count: Long = stats(0).toLong
+  def count: Double = stats(0)
 
   /**
    * Prediction which should be made based on the sufficient statistics.

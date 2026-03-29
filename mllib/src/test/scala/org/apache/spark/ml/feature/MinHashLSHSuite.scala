@@ -182,7 +182,7 @@ class MinHashLSHSuite extends MLTest with DefaultReadWriteTest {
     val model = new MinHashLSHModel("mh", randCoefficients = Array((1, 0)))
     model.set(model.inputCol, "keys")
     testTransformer[Tuple1[Vector]](dataset.toDF(), model, "keys", model.getOutputCol) {
-      case Row(_: Vector, output: Seq[_]) =>
+      case Row(_: Vector, output: scala.collection.Seq[_]) =>
         assert(output.length === model.randCoefficients.length)
         // no AND-amplification yet: SPARK-18450, so each hash output is of length 1
         output.foreach {

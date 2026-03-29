@@ -18,17 +18,18 @@
 package org.apache.spark.ml.tuning
 
 import org.apache.hadoop.fs.Path
-import org.json4s.{DefaultFormats, _}
+import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.SparkContext
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
 import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Common params for [[TrainValidationSplitParams]] and [[CrossValidatorParams]].
@@ -122,7 +123,7 @@ private[ml] object ValidatorParams {
   def saveImpl(
       path: String,
       instance: ValidatorParams,
-      sc: SparkContext,
+      spark: SparkSession,
       extraMetadata: Option[JObject] = None): Unit = {
     import org.json4s.JsonDSL._
 
@@ -147,7 +148,7 @@ private[ml] object ValidatorParams {
                 "isJson" -> compact(render(JBool(true))))
           }
         }
-      }.toSeq
+      }.toImmutableArraySeq
     ))
 
     val params = instance.extractParamMap().toSeq
@@ -159,7 +160,7 @@ private[ml] object ValidatorParams {
       }.toList ++ List("estimatorParamMaps" -> parse(estimatorParamMapsJson))
     )
 
-    DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, Some(jsonParams))
+    DefaultParamsWriter.saveMetadata(instance, path, spark, extraMetadata, Some(jsonParams))
 
     val evaluatorPath = new Path(path, "evaluator").toString
     instance.getEvaluator.asInstanceOf[MLWritable].save(evaluatorPath)
@@ -174,16 +175,16 @@ private[ml] object ValidatorParams {
    */
   def loadImpl[M <: Model[M]](
       path: String,
-      sc: SparkContext,
+      spark: SparkSession,
       expectedClassName: String): (Metadata, Estimator[M], Evaluator, Array[ParamMap]) = {
 
-    val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
+    val metadata = DefaultParamsReader.loadMetadata(path, spark, expectedClassName)
 
     implicit val format = DefaultFormats
     val evaluatorPath = new Path(path, "evaluator").toString
-    val evaluator = DefaultParamsReader.loadParamsInstance[Evaluator](evaluatorPath, sc)
+    val evaluator = DefaultParamsReader.loadParamsInstance[Evaluator](evaluatorPath, spark)
     val estimatorPath = new Path(path, "estimator").toString
-    val estimator = DefaultParamsReader.loadParamsInstance[Estimator[M]](estimatorPath, sc)
+    val estimator = DefaultParamsReader.loadParamsInstance[Estimator[M]](estimatorPath, spark)
 
     val uidToParams = Map(evaluator.uid -> evaluator) ++ MetaAlgorithmReadWrite.getUidMap(estimator)
 
@@ -201,7 +202,7 @@ private[ml] object ValidatorParams {
             } else {
               val relativePath = param.jsonDecode(pInfo("value")).toString
               val value = DefaultParamsReader
-                .loadParamsInstance[MLWritable](new Path(path, relativePath).toString, sc)
+                .loadParamsInstance[MLWritable](new Path(path, relativePath).toString, spark)
               param -> value
             }
           }

@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
 /**
@@ -55,8 +54,7 @@ public final class ChunkFetchRequest extends AbstractMessage implements RequestM
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof ChunkFetchRequest) {
-      ChunkFetchRequest o = (ChunkFetchRequest) other;
+    if (other instanceof ChunkFetchRequest o) {
       return streamChunkId.equals(o.streamChunkId);
     }
     return false;
@@ -64,8 +62,6 @@ public final class ChunkFetchRequest extends AbstractMessage implements RequestM
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("streamChunkId", streamChunkId)
-      .toString();
+    return "ChunkFetchRequest[streamChunkId=" + streamChunkId + "]";
   }
 }

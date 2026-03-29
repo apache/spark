@@ -22,8 +22,6 @@ import java.util.Locale
 
 import scala.util.Random
 
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
@@ -35,7 +33,7 @@ import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
 class HiveSchemaInferenceSuite
-  extends QueryTest with TestHiveSingleton with SQLTestUtils with BeforeAndAfterEach {
+  extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
   import HiveSchemaInferenceSuite._
   import HiveExternalCatalog.DATASOURCE_SCHEMA_PREFIX
@@ -118,18 +116,19 @@ class HiveSchemaInferenceSuite
         properties = Map.empty),
       true)
 
-    // Add partition records (if specified)
-    if (!partitionCols.isEmpty) {
-      spark.catalog.recoverPartitions(TEST_TABLE_NAME)
-    }
-
     // Check that the table returned by HiveExternalCatalog has schemaPreservesCase set to false
     // and that the raw table returned by the Hive client doesn't have any Spark SQL properties
     // set (table needs to be obtained from client since HiveExternalCatalog filters these
     // properties out).
     assert(!externalCatalog.getTable(DATABASE, TEST_TABLE_NAME).schemaPreservesCase)
     val rawTable = client.getTable(DATABASE, TEST_TABLE_NAME)
-    assert(rawTable.properties.filterKeys(_.startsWith(DATASOURCE_SCHEMA_PREFIX)) == Map.empty)
+    assert(!rawTable.properties.exists { case (k, _) => k.startsWith(DATASOURCE_SCHEMA_PREFIX) })
+
+    // Add partition records (if specified)
+    if (!partitionCols.isEmpty) {
+      spark.catalog.recoverPartitions(TEST_TABLE_NAME)
+    }
+
     schema
   }
 
@@ -157,12 +156,10 @@ class HiveSchemaInferenceSuite
       SQLConf.HIVE_CASE_SENSITIVE_INFERENCE.key -> mode.toString)(f)
   }
 
-  private val inferenceKey = SQLConf.HIVE_CASE_SENSITIVE_INFERENCE.key
-
   private def testFieldQuery(fields: Seq[String]): Unit = {
     if (!fields.isEmpty) {
       val query = s"SELECT * FROM ${TEST_TABLE_NAME} WHERE ${Random.shuffle(fields).head} >= 0"
-      assert(spark.sql(query).count == NUM_RECORDS)
+      assert(spark.sql(query).count() == NUM_RECORDS)
     }
   }
 
@@ -263,6 +260,32 @@ class HiveSchemaInferenceSuite
         StructType(Seq(StructField("lower", StringType, nullable = false))),
         StructType(Seq(StructField("lowerCase", BinaryType))))
     }
+
+    // Parquet schema is subset of metaStore schema and has uppercase field name
+    assertResult(
+      StructType(Seq(
+        StructField("UPPERCase", DoubleType, nullable = true),
+        StructField("lowerCase", BinaryType, nullable = true)))) {
+
+      HiveMetastoreCatalog.mergeWithMetastoreSchema(
+        StructType(Seq(
+          StructField("UPPERCase", DoubleType, nullable = true),
+          StructField("lowerCase", BinaryType, nullable = true))),
+
+        StructType(Seq(
+          StructField("lowerCase", BinaryType, nullable = true))))
+    }
+
+    // Metastore schema contains additional nullable fields.
+    assert(intercept[Throwable] {
+      HiveMetastoreCatalog.mergeWithMetastoreSchema(
+        StructType(Seq(
+          StructField("UPPERCase", DoubleType, nullable = false),
+          StructField("lowerCase", BinaryType, nullable = true))),
+
+        StructType(Seq(
+          StructField("lowerCase", BinaryType, nullable = true))))
+    }.getMessage.contains("Detected conflicting schemas"))
 
     // Check that merging missing nullable fields works as expected.
     assertResult(

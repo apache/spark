@@ -18,50 +18,44 @@
 
 package org.apache.spark.sql.execution.datasources.parquet;
 
-import java.io.File;
+import java.io.Closeable;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import scala.Option;
 
-import static org.apache.parquet.filter2.compat.RowGroupFilter.filterRowGroups;
-import static org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER;
-import static org.apache.parquet.format.converter.ParquetMetadataConverter.range;
-import static org.apache.parquet.hadoop.ParquetFileReader.readFooter;
-import static org.apache.parquet.hadoop.ParquetInputFormat.getFilter;
-
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
-import org.apache.parquet.bytes.BytesInput;
-import org.apache.parquet.bytes.BytesUtils;
-import org.apache.parquet.column.ColumnDescriptor;
-import org.apache.parquet.column.values.ValuesReader;
-import org.apache.parquet.column.values.rle.RunLengthBitPackingHybridDecoder;
-import org.apache.parquet.filter2.compat.FilterCompat;
+import org.apache.parquet.HadoopReadOptions;
+import org.apache.parquet.ParquetReadOptions;
+import org.apache.parquet.VersionParser;
+import org.apache.parquet.VersionParser.ParsedVersion;
+import org.apache.parquet.column.page.PageReadStore;
 import org.apache.parquet.hadoop.BadConfigurationException;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.ParquetInputFormat;
-import org.apache.parquet.hadoop.ParquetInputSplit;
 import org.apache.parquet.hadoop.api.InitContext;
 import org.apache.parquet.hadoop.api.ReadSupport;
-import org.apache.parquet.hadoop.metadata.BlockMetaData;
 import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.ConfigurationUtil;
+import org.apache.parquet.hadoop.util.HadoopInputFile;
+import org.apache.parquet.io.SeekableInputStream;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Types;
+
 import org.apache.spark.TaskContext;
 import org.apache.spark.TaskContext$;
+import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.StructType$;
 import org.apache.spark.util.AccumulatorV2;
@@ -79,6 +73,11 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
   protected MessageType fileSchema;
   protected MessageType requestedSchema;
   protected StructType sparkSchema;
+  protected StructType sparkRequestedSchema;
+  // Keep track of the version of the parquet writer. An older version wrote
+  // corrupt delta byte arrays, and the version check is needed to detect that.
+  protected ParsedVersion writerVersion;
+  protected ParquetColumn parquetColumn;
 
   /**
    * The total number of rows this RecordReader will eventually read. The sum of the
@@ -86,70 +85,59 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
    */
   protected long totalRowCount;
 
-  protected ParquetFileReader reader;
+  protected ParquetRowGroupReader reader;
+
+  protected Configuration configuration;
 
   @Override
   public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
       throws IOException, InterruptedException {
-    Configuration configuration = taskAttemptContext.getConfiguration();
-    ParquetInputSplit split = (ParquetInputSplit)inputSplit;
+    initialize(inputSplit, taskAttemptContext, Option.empty(), Option.empty(), Option.empty());
+  }
+
+  public void initialize(
+      InputSplit inputSplit,
+      TaskAttemptContext taskAttemptContext,
+      Option<HadoopInputFile> inputFile,
+      Option<SeekableInputStream> inputStream,
+      Option<ParquetMetadata> fileFooter) throws IOException, InterruptedException {
+    this.configuration = taskAttemptContext.getConfiguration();
+    FileSplit split = (FileSplit) inputSplit;
     this.file = split.getPath();
-    long[] rowGroupOffsets = split.getRowGroupOffsets();
-
-    ParquetMetadata footer;
-    List<BlockMetaData> blocks;
-
-    // if task.side.metadata is set, rowGroupOffsets is null
-    if (rowGroupOffsets == null) {
-      // then we need to apply the predicate push down filter
-      footer = readFooter(configuration, file, range(split.getStart(), split.getEnd()));
-      MessageType fileSchema = footer.getFileMetaData().getSchema();
-      FilterCompat.Filter filter = getFilter(configuration);
-      blocks = filterRowGroups(filter, footer.getBlocks(), fileSchema);
+    ParquetReadOptions options = HadoopReadOptions
+        .builder(configuration, file)
+        .withRange(split.getStart(), split.getStart() + split.getLength())
+        .build();
+    ParquetFileReader fileReader;
+    if (inputFile.isDefined() && fileFooter.isDefined() && inputStream.isDefined()) {
+      fileReader = new ParquetFileReader(
+          inputFile.get(), fileFooter.get(), options, inputStream.get());
     } else {
-      // otherwise we find the row groups that were selected on the client
-      footer = readFooter(configuration, file, NO_FILTER);
-      Set<Long> offsets = new HashSet<>();
-      for (long offset : rowGroupOffsets) {
-        offsets.add(offset);
-      }
-      blocks = new ArrayList<>();
-      for (BlockMetaData block : footer.getBlocks()) {
-        if (offsets.contains(block.getStartingPos())) {
-          blocks.add(block);
-        }
-      }
-      // verify we found them all
-      if (blocks.size() != rowGroupOffsets.length) {
-        long[] foundRowGroupOffsets = new long[footer.getBlocks().size()];
-        for (int i = 0; i < foundRowGroupOffsets.length; i++) {
-          foundRowGroupOffsets[i] = footer.getBlocks().get(i).getStartingPos();
-        }
-        // this should never happen.
-        // provide a good error message in case there's a bug
-        throw new IllegalStateException(
-            "All the offsets listed in the split should be found in the file."
-                + " expected: " + Arrays.toString(rowGroupOffsets)
-                + " found: " + blocks
-                + " out of: " + Arrays.toString(foundRowGroupOffsets)
-                + " in range " + split.getStart() + ", " + split.getEnd());
-      }
+      fileReader = new ParquetFileReader(
+          HadoopInputFile.fromPath(file, configuration), options);
     }
-    this.fileSchema = footer.getFileMetaData().getSchema();
-    Map<String, String> fileMetadata = footer.getFileMetaData().getKeyValueMetaData();
+    this.reader = new ParquetRowGroupReaderImpl(fileReader);
+    this.fileSchema = fileReader.getFileMetaData().getSchema();
+    try {
+      this.writerVersion = VersionParser.parse(fileReader.getFileMetaData().getCreatedBy());
+    } catch (Exception e) {
+      // Swallow any exception, if we cannot parse the version we will revert to a sequential read
+      // if the column is a delta byte array encoding (due to PARQUET-246).
+    }
+    Map<String, String> fileMetadata = fileReader.getFileMetaData().getKeyValueMetaData();
     ReadSupport<T> readSupport = getReadSupportInstance(getReadSupportClass(configuration));
     ReadSupport.ReadContext readContext = readSupport.init(new InitContext(
         taskAttemptContext.getConfiguration(), toSetMultiMap(fileMetadata), fileSchema));
     this.requestedSchema = readContext.getRequestedSchema();
+    fileReader.setRequestedSchema(requestedSchema);
     String sparkRequestedSchemaString =
         configuration.get(ParquetReadSupport$.MODULE$.SPARK_ROW_REQUESTED_SCHEMA());
-    this.sparkSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
-    this.reader = new ParquetFileReader(
-        configuration, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
-    // use the blocks from the reader in case some do not match filters and will not be read
-    for (BlockMetaData block : reader.getRowGroups()) {
-      this.totalRowCount += block.getRowCount();
-    }
+    this.sparkRequestedSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
+    ParquetToSparkSchemaConverter converter = new ParquetToSparkSchemaConverter(configuration);
+    this.parquetColumn = converter.convertParquetColumn(requestedSchema,
+      Option.apply(this.sparkRequestedSchema));
+    this.sparkSchema = (StructType) parquetColumn.sparkType();
+    this.totalRowCount = fileReader.getFilteredRecordCount();
 
     // For test purpose.
     // If the last external accumulator is `NumRowGroupsAccumulator`, the row group number to read
@@ -157,32 +145,16 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     // in test case.
     TaskContext taskContext = TaskContext$.MODULE$.get();
     if (taskContext != null) {
-      Option<AccumulatorV2<?, ?>> accu = taskContext.taskMetrics().externalAccums().lastOption();
-      if (accu.isDefined() && accu.get().getClass().getSimpleName().equals("NumRowGroupsAcc")) {
-        @SuppressWarnings("unchecked")
-        AccumulatorV2<Integer, Integer> intAccum = (AccumulatorV2<Integer, Integer>) accu.get();
-        intAccum.add(blocks.size());
-      }
+      taskContext.taskMetrics().withExternalAccums((accums) -> {
+        Option<AccumulatorV2<?, ?>> accu = accums.lastOption();
+        if (accu.isDefined() && accu.get().getClass().getSimpleName().equals("NumRowGroupsAcc")) {
+          @SuppressWarnings("unchecked")
+          AccumulatorV2<Integer, Integer> intAccum = (AccumulatorV2<Integer, Integer>) accu.get();
+          intAccum.add(fileReader.getRowGroups().size());
+        }
+        return null;
+      });
     }
-  }
-
-  /**
-   * Returns the list of files at 'path' recursively. This skips files that are ignored normally
-   * by MapReduce.
-   */
-  public static List<String> listDirectory(File path) {
-    List<String> result = new ArrayList<>();
-    if (path.isDirectory()) {
-      for (File f: path.listFiles()) {
-        result.addAll(listDirectory(f));
-      }
-    } else {
-      char c = path.getName().charAt(0);
-      if (c != '.' && c != '_') {
-        result.add(path.getAbsolutePath());
-      }
-    }
-    return result;
   }
 
   /**
@@ -194,16 +166,24 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
    * configurations.
    */
   protected void initialize(String path, List<String> columns) throws IOException {
-    Configuration config = new Configuration();
-    config.set("spark.sql.parquet.binaryAsString", "false");
-    config.set("spark.sql.parquet.int96AsTimestamp", "false");
+    this.configuration = new Configuration();
+    this.configuration.setBoolean(SQLConf.PARQUET_BINARY_AS_STRING().key() , false);
+    this.configuration.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP().key(), false);
+    this.configuration.setBoolean(SQLConf.CASE_SENSITIVE().key(), false);
+    this.configuration.setBoolean(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED().key(), false);
+    this.configuration.setBoolean(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG().key(), false);
 
     this.file = new Path(path);
-    long length = this.file.getFileSystem(config).getFileStatus(this.file).getLen();
-    ParquetMetadata footer = readFooter(config, file, range(0, length));
+    long length = this.file.getFileSystem(configuration).getFileStatus(this.file).getLen();
 
-    List<BlockMetaData> blocks = footer.getBlocks();
-    this.fileSchema = footer.getFileMetaData().getSchema();
+    ParquetReadOptions options = HadoopReadOptions
+      .builder(configuration, file)
+      .withRange(0, length)
+      .build();
+    ParquetFileReader fileReader = ParquetFileReader.open(
+      HadoopInputFile.fromPath(file, configuration), options);
+    this.reader = new ParquetRowGroupReaderImpl(fileReader);
+    this.fileSchema = fileReader.getFooter().getFileMetaData().getSchema();
 
     if (columns == null) {
       this.requestedSchema = fileSchema;
@@ -222,13 +202,34 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
         this.requestedSchema = ParquetSchemaConverter.EMPTY_MESSAGE();
       }
     }
-    this.sparkSchema = new ParquetToSparkSchemaConverter(config).convert(requestedSchema);
-    this.reader = new ParquetFileReader(
-        config, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
-    // use the blocks from the reader in case some do not match filters and will not be read
-    for (BlockMetaData block : reader.getRowGroups()) {
-      this.totalRowCount += block.getRowCount();
-    }
+    fileReader.setRequestedSchema(requestedSchema);
+    this.parquetColumn = new ParquetToSparkSchemaConverter(configuration)
+      .convertParquetColumn(requestedSchema, Option.empty());
+    this.sparkSchema = (StructType) parquetColumn.sparkType();
+    this.sparkRequestedSchema = this.sparkSchema;
+    this.totalRowCount = fileReader.getFilteredRecordCount();
+  }
+
+  @VisibleForTesting
+  protected void initialize(
+      MessageType fileSchema,
+      MessageType requestedSchema,
+      ParquetRowGroupReader rowGroupReader,
+      int totalRowCount) throws IOException {
+    this.reader = rowGroupReader;
+    this.fileSchema = fileSchema;
+    this.requestedSchema = requestedSchema;
+    this.configuration = new Configuration();
+    this.configuration.setBoolean(SQLConf.PARQUET_BINARY_AS_STRING().key() , false);
+    this.configuration.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP().key(), false);
+    this.configuration.setBoolean(SQLConf.CASE_SENSITIVE().key(), false);
+    this.configuration.setBoolean(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED().key(), false);
+    this.configuration.setBoolean(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG().key(), false);
+    this.parquetColumn = new ParquetToSparkSchemaConverter(configuration)
+      .convertParquetColumn(requestedSchema, Option.empty());
+    this.sparkSchema = (StructType) parquetColumn.sparkType();
+    this.sparkRequestedSchema = this.sparkSchema;
+    this.totalRowCount = totalRowCount;
   }
 
   @Override
@@ -244,68 +245,10 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     }
   }
 
-  /**
-   * Utility classes to abstract over different way to read ints with different encodings.
-   * TODO: remove this layer of abstraction?
-   */
-  abstract static class IntIterator {
-    abstract int nextInt() throws IOException;
-  }
-
-  protected static final class ValuesReaderIntIterator extends IntIterator {
-    ValuesReader delegate;
-
-    public ValuesReaderIntIterator(ValuesReader delegate) {
-      this.delegate = delegate;
-    }
-
-    @Override
-    int nextInt() {
-      return delegate.readInteger();
-    }
-  }
-
-  protected static final class RLEIntIterator extends IntIterator {
-    RunLengthBitPackingHybridDecoder delegate;
-
-    public RLEIntIterator(RunLengthBitPackingHybridDecoder delegate) {
-      this.delegate = delegate;
-    }
-
-    @Override
-    int nextInt() throws IOException {
-      return delegate.readInt();
-    }
-  }
-
-  protected static final class NullIntIterator extends IntIterator {
-    @Override
-    int nextInt() { return 0; }
-  }
-
-  /**
-   * Creates a reader for definition and repetition levels, returning an optimized one if
-   * the levels are not needed.
-   */
-  protected static IntIterator createRLEIterator(
-      int maxLevel, BytesInput bytes, ColumnDescriptor descriptor) throws IOException {
-    try {
-      if (maxLevel == 0) return new NullIntIterator();
-      return new RLEIntIterator(
-          new RunLengthBitPackingHybridDecoder(
-              BytesUtils.getWidthFromMaxInt(maxLevel),
-              bytes.toInputStream()));
-    } catch (IOException e) {
-      throw new IOException("could not read levels in page for col " + descriptor, e);
-    }
-  }
-
   private static <K, V> Map<K, Set<V>> toSetMultiMap(Map<K, V> map) {
     Map<K, Set<V>> setMultiMap = new HashMap<>();
     for (Map.Entry<K, V> entry : map.entrySet()) {
-      Set<V> set = new HashSet<>();
-      set.add(entry.getValue());
-      setMultiMap.put(entry.getKey(), Collections.unmodifiableSet(set));
+      setMultiMap.put(entry.getKey(), Set.of(entry.getValue()));
     }
     return Collections.unmodifiableMap(setMultiMap);
   }
@@ -327,6 +270,33 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     } catch (InstantiationException | IllegalAccessException |
              NoSuchMethodException | InvocationTargetException e) {
       throw new BadConfigurationException("could not instantiate read support class", e);
+    }
+  }
+
+  interface ParquetRowGroupReader extends Closeable {
+    /**
+     * Reads the next row group from this reader. Returns null if there is no more row group.
+     */
+    PageReadStore readNextRowGroup() throws IOException;
+  }
+
+  private static class ParquetRowGroupReaderImpl implements ParquetRowGroupReader {
+    private final ParquetFileReader reader;
+
+    ParquetRowGroupReaderImpl(ParquetFileReader reader) {
+      this.reader = reader;
+    }
+
+    @Override
+    public PageReadStore readNextRowGroup() throws IOException {
+      return reader.readNextFilteredRowGroup();
+    }
+
+    @Override
+    public void close() throws IOException {
+      if (reader != null) {
+        reader.close();
+      }
     }
   }
 }

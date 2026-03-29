@@ -71,11 +71,9 @@ class ThreadUtilsSuite extends SparkFunSuite {
       keepAliveSeconds = 2)
     try {
       for (_ <- 1 to maxThreadNumber) {
-        cachedThreadPool.execute(new Runnable {
-          override def run(): Unit = {
-            startThreadsLatch.countDown()
-            latch.await(10, TimeUnit.SECONDS)
-          }
+        cachedThreadPool.execute(() => {
+          startThreadsLatch.countDown()
+          latch.await(10, TimeUnit.SECONDS)
         })
       }
       startThreadsLatch.await(10, TimeUnit.SECONDS)
@@ -84,11 +82,7 @@ class ThreadUtilsSuite extends SparkFunSuite {
 
       // Submit a new task and it should be put into the queue since the thread number reaches the
       // limitation
-      cachedThreadPool.execute(new Runnable {
-        override def run(): Unit = {
-          latch.await(10, TimeUnit.SECONDS)
-        }
-      })
+      cachedThreadPool.execute(() => latch.await(10, TimeUnit.SECONDS))
 
       assert(cachedThreadPool.getActiveCount === maxThreadNumber)
       assert(cachedThreadPool.getQueue.size === 1)
@@ -104,6 +98,40 @@ class ThreadUtilsSuite extends SparkFunSuite {
     }
   }
 
+  test("newDaemonBlockingThreadPoolExecutorService") {
+    val nThread = 3
+    val workQueueSize = 5
+    val submithreadsLatch = new CountDownLatch(nThread + workQueueSize + 1)
+    val latch = new CountDownLatch(1)
+    val blockingPool = ThreadUtils.newDaemonBlockingThreadPoolExecutorService(
+      nThread, workQueueSize, "ThreadUtilsSuite-newDaemonBlockingThreadPoolExecutorService")
+
+    try {
+      val submitThread = new Thread(() => {
+        (0 until nThread + workQueueSize + 1).foreach { i =>
+          blockingPool.execute(() => {
+            latch.await(10, TimeUnit.SECONDS)
+          })
+          submithreadsLatch.countDown()
+        }
+      })
+      submitThread.setDaemon(true)
+      submitThread.start()
+
+      // the last one task submission will be blocked until previous tasks completed
+      eventually(timeout(10.seconds)) {
+        assert(submithreadsLatch.getCount === 1L)
+      }
+      latch.countDown()
+      eventually(timeout(10.seconds)) {
+        assert(submithreadsLatch.getCount === 0L)
+        assert(!submitThread.isAlive)
+      }
+    } finally {
+      blockingPool.shutdownNow()
+    }
+  }
+
   test("sameThread") {
     val callerThreadName = Thread.currentThread().getName()
     val f = Future {
@@ -116,7 +144,7 @@ class ThreadUtilsSuite extends SparkFunSuite {
   test("runInNewThread") {
     import ThreadUtils._
     assert(runInNewThread("thread-name") { Thread.currentThread().getName } === "thread-name")
-    assert(runInNewThread("thread-name") { Thread.currentThread().isDaemon } === true)
+    assert(runInNewThread("thread-name") { Thread.currentThread().isDaemon })
     assert(
       runInNewThread("thread-name", isDaemon = false) { Thread.currentThread().isDaemon } === false
     )
@@ -124,12 +152,47 @@ class ThreadUtilsSuite extends SparkFunSuite {
     val exception = intercept[IllegalArgumentException] {
       runInNewThread("thread-name") { throw new IllegalArgumentException(uniqueExceptionMessage) }
     }
-    assert(exception.asInstanceOf[IllegalArgumentException].getMessage === uniqueExceptionMessage)
-    assert(exception.getStackTrace.mkString("\n").contains(
-      "... run in separate thread using org.apache.spark.util.ThreadUtils ...") === true,
+    assert(exception.getMessage === uniqueExceptionMessage)
+    val stacktrace = exception.getStackTrace.mkString("\n")
+    assert(stacktrace.contains(
+      "... run in separate thread using org.apache.spark.util.ThreadUtils ..."),
       "stack trace does not contain expected place holder"
     )
-    assert(exception.getStackTrace.mkString("\n").contains("ThreadUtils.scala") === false,
+    assert(!stacktrace.contains("ThreadUtils.scala"),
+      "stack trace contains unexpected references to ThreadUtils"
+    )
+  }
+
+  test("SPARK-47833: wrapCallerStacktrace") {
+    var runnerThreadName: String = null
+    var exception: Throwable = null
+    val t = new Thread() {
+      override def run(): Unit = {
+        runnerThreadName = Thread.currentThread().getName
+        internalMethod()
+      }
+      private def internalMethod(): Unit = {
+        throw new RuntimeException(s"Error occurred on $runnerThreadName")
+      }
+    }
+    t.setDaemon(true)
+    t.setUncaughtExceptionHandler { case (_, e) => exception = e }
+    t.start()
+    t.join()
+
+    ThreadUtils.wrapCallerStacktrace(exception, s"run in separate thread: $runnerThreadName")
+
+    val stacktrace = exception.getStackTrace.mkString("\n")
+    assert(stacktrace.contains("internalMethod"),
+      "stack trace does not contain real exception stack trace"
+    )
+    assert(stacktrace.contains(s"... run in separate thread: $runnerThreadName ..."),
+      "stack trace does not contain expected place holder"
+    )
+    assert(stacktrace.contains("org.scalatest.Suite.run"),
+      "stack trace does not contain caller stack trace"
+    )
+    assert(!stacktrace.contains("ThreadUtils.scala"),
       "stack trace contains unexpected references to ThreadUtils"
     )
   }
@@ -138,7 +201,7 @@ class ThreadUtilsSuite extends SparkFunSuite {
     val t = new Thread() {
       setDaemon(true)
 
-      override def run() {
+      override def run(): Unit = {
         try {
           // "par" is uninterruptible. The following will keep running even if the thread is
           // interrupted. We should prefer to use "ThreadUtils.parmap".

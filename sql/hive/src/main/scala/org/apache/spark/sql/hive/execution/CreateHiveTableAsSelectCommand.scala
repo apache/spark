@@ -19,18 +19,18 @@ package org.apache.spark.sql.hive.execution
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
+import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.command.DataWritingCommand
-
+import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, WithCTE}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.command.{DataWritingCommand, LeafRunnableCommand}
+import org.apache.spark.sql.hive.execution.InsertIntoHiveTable.BY_CTAS
 
 /**
  * Create table and insert the query result into it.
  *
- * @param tableDesc the Table Describe, which may contain serde, storage handler etc.
+ * @param tableDesc the table description, which may contain serde, storage handler etc.
  * @param query the query whose result will be insert into the new relation
  * @param mode SaveMode
  */
@@ -39,51 +39,50 @@ case class CreateHiveTableAsSelectCommand(
     query: LogicalPlan,
     outputColumnNames: Seq[String],
     mode: SaveMode)
-  extends DataWritingCommand {
+  extends LeafRunnableCommand with CTEInChildren {
+  assert(query.resolved)
+  override def innerChildren: Seq[LogicalPlan] = query :: Nil
 
-  private val tableIdentifier = tableDesc.identifier
+  protected val tableIdentifier = tableDesc.identifier
 
-  override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    if (catalog.tableExists(tableIdentifier)) {
+    val tableExists = catalog.tableExists(tableIdentifier)
+
+    if (tableExists) {
       assert(mode != SaveMode.Overwrite,
         s"Expect the table $tableIdentifier has been dropped when the save mode is Overwrite")
 
       if (mode == SaveMode.ErrorIfExists) {
-        throw new AnalysisException(s"$tableIdentifier already exists.")
+        throw QueryCompilationErrors.tableIdentifierExistsError(tableIdentifier)
       }
       if (mode == SaveMode.Ignore) {
         // Since the table already exists and the save mode is Ignore, we will just return.
         return Seq.empty
       }
 
-      InsertIntoHiveTable(
-        tableDesc,
-        Map.empty,
-        query,
-        overwrite = false,
-        ifPartitionNotExists = false,
-        outputColumnNames = outputColumnNames).run(sparkSession, child)
+      val command = getWritingCommand(tableDesc, tableExists = true)
+      val qe = sparkSession.sessionState.executePlan(command)
+      qe.assertCommandExecuted()
     } else {
+      tableDesc.storage.locationUri.foreach { p =>
+        DataWritingCommand.assertEmptyRootPath(p, mode, sparkSession.sessionState.newHadoopConf())
+      }
       // TODO ideally, we should get the output data ready first and then
       // add the relation into catalog, just in case of failure occurs while data
       // processing.
+      val outputColumns = DataWritingCommand.logicalPlanOutputWithNames(query, outputColumnNames)
+      val tableSchema = CharVarcharUtils.getRawSchema(
+        outputColumns.toStructType, sparkSession.sessionState.conf)
       assert(tableDesc.schema.isEmpty)
-      catalog.createTable(
-        tableDesc.copy(schema = outputColumns.toStructType), ignoreIfExists = false)
+      catalog.createTable(tableDesc.copy(schema = tableSchema), ignoreIfExists = false)
 
       try {
         // Read back the metadata of the table which was created just now.
         val createdTableMeta = catalog.getTableMetadata(tableDesc.identifier)
-        // For CTAS, there is no static partition values to insert.
-        val partition = createdTableMeta.partitionColumnNames.map(_ -> None).toMap
-        InsertIntoHiveTable(
-          createdTableMeta,
-          partition,
-          query,
-          overwrite = true,
-          ifPartitionNotExists = false,
-          outputColumnNames = outputColumnNames).run(sparkSession, child)
+        val command = getWritingCommand(createdTableMeta, tableExists = false)
+        val qe = sparkSession.sessionState.executePlan(command)
+        qe.assertCommandExecuted()
       } catch {
         case NonFatal(e) =>
           // drop the created table.
@@ -95,9 +94,28 @@ case class CreateHiveTableAsSelectCommand(
     Seq.empty[Row]
   }
 
-  override def argString: String = {
-    s"[Database:${tableDesc.database}, " +
-    s"TableName: ${tableDesc.identifier.table}, " +
-    s"InsertIntoHiveTable]"
+  private def getWritingCommand(
+      tableDesc: CatalogTable,
+      tableExists: Boolean): DataWritingCommand = {
+    // For CTAS, there is no static partition values to insert.
+    val partition = tableDesc.partitionColumnNames.map(_ -> None).toMap
+    val insertHive = InsertIntoHiveTable(
+      tableDesc,
+      partition,
+      query,
+      overwrite = false,
+      ifPartitionNotExists = false,
+      outputColumnNames = outputColumnNames)
+    insertHive.setTagValue(BY_CTAS, ())
+    insertHive
+  }
+
+  override def argString(maxFields: Int): String = {
+    s"[Database: ${tableDesc.database}, " +
+      s"TableName: ${tableDesc.identifier.table}]"
+  }
+
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    copy(query = WithCTE(query, cteDefs))
   }
 }

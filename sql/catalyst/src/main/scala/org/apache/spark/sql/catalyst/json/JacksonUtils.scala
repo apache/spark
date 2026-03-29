@@ -19,9 +19,12 @@ package org.apache.spark.sql.catalyst.json
 
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types._
 
-object JacksonUtils {
+object JacksonUtils extends QueryErrorsBase {
   /**
    * Advance the parser until a null or a specific token is found
    */
@@ -32,12 +35,14 @@ object JacksonUtils {
     }
   }
 
-  def verifyType(name: String, dataType: DataType): Unit = {
+  def verifyType(name: String, dataType: DataType): TypeCheckResult = {
     dataType match {
-      case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType |
-           DoubleType | StringType | TimestampType | DateType | BinaryType | _: DecimalType =>
+      case NullType | _: AtomicType | CalendarIntervalType => TypeCheckSuccess
 
-      case st: StructType => st.foreach(field => verifyType(field.name, field.dataType))
+      case st: StructType =>
+        st.foldLeft(TypeCheckSuccess: TypeCheckResult) { case (currResult, field) =>
+          if (currResult.isFailure) currResult else verifyType(field.name, field.dataType)
+        }
 
       case at: ArrayType => verifyType(name, at.elementType)
 
@@ -48,15 +53,11 @@ object JacksonUtils {
       case udt: UserDefinedType[_] => verifyType(name, udt.sqlType)
 
       case _ =>
-        throw new UnsupportedOperationException(
-          s"Unable to convert column $name of type ${dataType.catalogString} to JSON.")
+        DataTypeMismatch(
+          errorSubClass = "CANNOT_CONVERT_TO_JSON",
+          messageParameters = Map(
+            "name" -> toSQLId(name),
+            "type" -> toSQLType(dataType)))
     }
-  }
-
-  /**
-   * Verify if the schema is supported in JSON parsing.
-   */
-  def verifySchema(schema: StructType): Unit = {
-    schema.foreach(field => verifyType(field.name, field.dataType))
   }
 }

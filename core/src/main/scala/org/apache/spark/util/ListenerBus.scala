@@ -19,13 +19,17 @@ package org.apache.spark.util
 
 import java.util.concurrent.CopyOnWriteArrayList
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import com.codahale.metrics.Timer
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.SparkEnv
+import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.LogKeys.{EVENT, LISTENER, TOTAL_TIME}
+import org.apache.spark.scheduler.EventLoggingListener
+import org.apache.spark.scheduler.SparkListenerEnvironmentUpdate
 
 /**
  * An event bus which posts events to its listeners.
@@ -36,6 +40,20 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
 
   // Marked `private[spark]` for access in tests.
   private[spark] def listeners = listenersPlusTimers.asScala.map(_._1).asJava
+
+  private lazy val env = SparkEnv.get
+
+  private lazy val logSlowEventEnabled = if (env != null) {
+    env.conf.get(config.LISTENER_BUS_LOG_SLOW_EVENT_ENABLED)
+  } else {
+    false
+  }
+
+  private lazy val logSlowEventThreshold = if (env != null) {
+    env.conf.get(config.LISTENER_BUS_LOG_SLOW_EVENT_TIME_THRESHOLD)
+  } else {
+    Long.MaxValue
+  }
 
   /**
    * Returns a CodaHale metrics Timer for measuring the listener's event processing time.
@@ -82,7 +100,7 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    * `postToAll` in the same thread for all events.
    */
   def postToAll(event: E): Unit = {
-    // JavaConverters can create a JIterableWrapper if we use asScala.
+    // CollectionConverters can create a JIterableWrapper if we use asScala.
     // However, this method will be called frequently. To avoid the wrapper cost, here we use
     // Java Iterator directly.
     val iter = listenersPlusTimers.iterator
@@ -95,6 +113,7 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
       } else {
         null
       }
+      lazy val listenerName = Utils.getFormattedClassName(listener)
       try {
         doPostEvent(listener, event)
         if (Thread.interrupted()) {
@@ -104,14 +123,19 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
         }
       } catch {
         case ie: InterruptedException =>
-          logError(s"Interrupted while posting to ${Utils.getFormattedClassName(listener)}.  " +
-            s"Removing that listener.", ie)
+          logError(log"Interrupted while posting to " +
+            log"${MDC(LISTENER, listenerName)}. Removing that listener.", ie)
           removeListenerOnError(listener)
         case NonFatal(e) if !isIgnorableException(e) =>
-          logError(s"Listener ${Utils.getFormattedClassName(listener)} threw an exception", e)
+          logError(log"Listener ${MDC(LISTENER, listenerName)} threw an exception", e)
       } finally {
         if (maybeTimerContext != null) {
-          maybeTimerContext.stop()
+          val elapsed = maybeTimerContext.stop()
+          if (logSlowEventEnabled && elapsed > logSlowEventThreshold) {
+            logInfo(log"Process of event ${MDC(EVENT, redactEvent(event))} by" +
+              log"listener ${MDC(LISTENER, listenerName)} took " +
+              log"${MDC(TOTAL_TIME, elapsed / 1000000d)}ms.")
+          }
         }
       }
     }
@@ -129,6 +153,14 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
   private[spark] def findListenersByClass[T <: L : ClassTag](): Seq[T] = {
     val c = implicitly[ClassTag[T]].runtimeClass
     listeners.asScala.filter(_.getClass == c).map(_.asInstanceOf[T]).toSeq
+  }
+
+  private def redactEvent(e: E): E = {
+    e match {
+      case event: SparkListenerEnvironmentUpdate =>
+        EventLoggingListener.redactEvent(env.conf, event).asInstanceOf[E]
+      case _ => e
+    }
   }
 
 }

@@ -198,7 +198,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
   override def size: Int = curSize
 
   /** Increase table size by 1, rehashing if necessary */
-  private def incrementSize() {
+  private def incrementSize(): Unit = {
     curSize += 1
     if (curSize > growThreshold) {
       growTable()
@@ -208,10 +208,10 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
   /**
    * Re-hash a value to deal better with hash functions that don't differ in the lower bits.
    */
-  private def rehash(h: Int): Int = Hashing.murmur3_32().hashInt(h).asInt()
+  private def rehash(h: Int): Int = Hashing.murmur3_32_fixed().hashInt(h).asInt()
 
   /** Double the table's size and re-hash everything */
-  protected def growTable() {
+  protected def growTable(): Unit = {
     // capacity < MAXIMUM_CAPACITY (2 ^ 29) so capacity * 2 won't overflow
     val newCapacity = capacity * 2
     require(newCapacity <= MAXIMUM_CAPACITY, s"Can't contain more than ${growThreshold} elements")

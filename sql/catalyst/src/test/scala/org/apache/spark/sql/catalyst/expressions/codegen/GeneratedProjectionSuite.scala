@@ -23,13 +23,15 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A test suite for generated projections
  */
-class GeneratedProjectionSuite extends SparkFunSuite {
+class GeneratedProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("generated projections on wider table") {
     val N = 1000
@@ -58,7 +60,7 @@ class GeneratedProjectionSuite extends SparkFunSuite {
     }
 
     // test generated SafeProjection
-    val safeProj = FromUnsafeProjection(nestedSchema)
+    val safeProj = SafeProjection.create(nestedSchema)
     val result = safeProj(unsafe)
     // Can't compare GenericInternalRow with JoinedRow directly
     (0 until N).foreach { i =>
@@ -74,7 +76,7 @@ class GeneratedProjectionSuite extends SparkFunSuite {
     // test generated MutableProjection
     val exprs = nestedSchema.fields.zipWithIndex.map { case (f, i) =>
       BoundReference(i, f.dataType, true)
-    }
+    }.toImmutableArraySeq
     val mutableProj = GenerateMutableProjection.generate(exprs)
     val row1 = mutableProj(result)
     assert(result === row1)
@@ -109,7 +111,7 @@ class GeneratedProjectionSuite extends SparkFunSuite {
     }
 
     // test generated SafeProjection
-    val safeProj = FromUnsafeProjection(nestedSchema)
+    val safeProj = SafeProjection.create(nestedSchema)
     val result = safeProj(unsafe)
     // Can't compare GenericInternalRow with JoinedRow directly
     (0 until N).foreach { i =>
@@ -125,7 +127,7 @@ class GeneratedProjectionSuite extends SparkFunSuite {
     // test generated MutableProjection
     val exprs = nestedSchema.fields.zipWithIndex.map { case (f, i) =>
       BoundReference(i, f.dataType, true)
-    }
+    }.toImmutableArraySeq
     val mutableProj = GenerateMutableProjection.generate(exprs)
     val row1 = mutableProj(result)
     assert(result === row1)
@@ -147,7 +149,7 @@ class GeneratedProjectionSuite extends SparkFunSuite {
     assert(unsafeRow.getArray(1).getBinary(1) === null)
     assert(java.util.Arrays.equals(unsafeRow.getArray(1).getBinary(2), Array[Byte](3, 4)))
 
-    val safeProj = FromUnsafeProjection(fields)
+    val safeProj = SafeProjection.create(fields)
     val row2 = safeProj(unsafeRow)
     assert(row2 === row)
   }
@@ -233,17 +235,63 @@ class GeneratedProjectionSuite extends SparkFunSuite {
     val nestedSchema = StructType(
       Seq(StructField("", joinedSchema), StructField("", joinedSchema)) ++ joinedSchema)
 
-    val safeProj = FromUnsafeProjection(nestedSchema)
+    val safeProj = SafeProjection.create(nestedSchema)
     val result = safeProj(nested)
 
     // test generated MutableProjection
     val exprs = nestedSchema.fields.zipWithIndex.map { case (f, i) =>
       BoundReference(i, f.dataType, true)
-    }
+    }.toImmutableArraySeq
     val mutableProj = GenerateMutableProjection.generate(exprs)
     val row1 = mutableProj(result)
     assert(result === row1)
     val row2 = mutableProj(result)
     assert(result === row2)
+  }
+
+  test("SPARK-33473: subexpression elimination for interpreted SafeProjection") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(
+        SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> enabled,
+        SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
+        val one = BoundReference(0, DoubleType, true)
+        val two = BoundReference(1, DoubleType, true)
+
+        val mul = Multiply(one, two)
+        val mul2 = Multiply(mul, mul)
+        val sqrt = Sqrt(mul2)
+        val sum = Add(mul2, sqrt)
+
+        val proj = SafeProjection.create(Seq(sum))
+        val result = (d1: Double, d2: Double) =>
+          ((d1 * d2) * (d1 * d2)) + Math.sqrt((d1 * d2) * (d1 * d2))
+
+        val inputRows = Seq(
+          InternalRow.fromSeq(Seq(1.0, 2.0)),
+          InternalRow.fromSeq(Seq(2.0, 3.0)),
+          InternalRow.fromSeq(Seq(1.0, null)),
+          InternalRow.fromSeq(Seq(null, 2.0)),
+          InternalRow.fromSeq(Seq(3.0, 4.0)),
+          InternalRow.fromSeq(Seq(null, null))
+        )
+        val expectedResults = Seq(
+          result(1.0, 2.0),
+          result(2.0, 3.0),
+          null,
+          null,
+          result(3.0, 4.0),
+          null
+        )
+
+        inputRows.zip(expectedResults).foreach { case (inputRow, expected) =>
+          val projRow = proj.apply(inputRow)
+          if (expected != null) {
+            assert(projRow.getDouble(0) == expected)
+          } else {
+            assert(projRow.isNullAt(0))
+          }
+        }
+      }
+    }
   }
 }

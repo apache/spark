@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ColumnStatsMap
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -527,7 +528,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       rowCount = 30,
       attributeStats = AttributeMap(Seq(attrIntLargerRange -> colStatIntLargerRange)))
     val nonLeafChild = Join(largerTable, smallerTable, LeftOuter,
-      Some(EqualTo(attrIntLargerRange, attrInt)))
+      Some(EqualTo(attrIntLargerRange, attrInt)), JoinHint.NONE)
 
     Seq(IsNull(attrIntLargerRange), IsNotNull(attrIntLargerRange)).foreach { predicate =>
       validateEstimatedStats(
@@ -821,7 +822,71 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       expectedRowCount = 3)
   }
 
-  private def childStatsTestPlan(outList: Seq[Attribute], tableRowCount: BigInt): StatsTestPlan = {
+  test("SPARK-36079: Null count should be no higher than row count after filter") {
+    val colStatNullableString = colStatString.copy(nullCount = Some(10))
+    val condition = Filter(EqualTo(attrBool, Literal(true)),
+      childStatsTestPlan(Seq(attrBool, attrString), tableRowCount = 10L,
+        attributeMap = AttributeMap(Seq(
+          attrBool -> colStatBool, attrString -> colStatNullableString))))
+    validateEstimatedStats(
+      condition,
+      Seq(attrBool -> colStatBool.copy(distinctCount = Some(1), min = Some(true)),
+        attrString -> colStatNullableString.copy(distinctCount = Some(5), nullCount = Some(5))),
+      expectedRowCount = 5)
+  }
+
+  test("SPARK-36079: Null count higher than row count") {
+    val colStatNullableString = colStatString.copy(nullCount = Some(15))
+    val condition = Filter(IsNotNull(attrString),
+      childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
+        attributeMap = AttributeMap(Seq(attrString -> colStatNullableString))))
+    validateEstimatedStats(
+      condition,
+      Seq(attrString -> colStatNullableString),
+      expectedRowCount = 0)
+  }
+
+  test("SPARK-36079: Bound selectivity >= 0") {
+    val colStatNullableString = colStatString.copy(nullCount = Some(-1))
+    val condition = Filter(IsNotNull(attrString),
+      childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
+        attributeMap = AttributeMap(Seq(attrString -> colStatNullableString))))
+    validateEstimatedStats(
+      condition,
+      Seq(attrString -> colStatString),
+      expectedRowCount = 10)
+  }
+
+  test("ColumnStatsMap tests") {
+    val attrNoDistinct = AttributeReference("att_without_distinct", IntegerType)()
+    val attrNoCount = AttributeReference("att_without_count", BooleanType)()
+    val attrNoMinMax = AttributeReference("att_without_min_max", DateType)()
+    val colStatNoDistinct = ColumnStat(distinctCount = None, min = Some(1), max = Some(10),
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
+    val colStatNoCount = ColumnStat(distinctCount = Some(2), min = Some(false), max = Some(true),
+      nullCount = None, avgLen = Some(1), maxLen = Some(1))
+    val colStatNoMinMax = ColumnStat(distinctCount = Some(1), min = None, max = None,
+      nullCount = Some(1), avgLen = None, maxLen = None)
+    val columnStatsMap = ColumnStatsMap(AttributeMap(Seq(
+      attrNoDistinct -> colStatNoDistinct,
+      attrNoCount -> colStatNoCount,
+      attrNoMinMax -> colStatNoMinMax
+    )))
+    assert(!columnStatsMap.hasDistinctCount(attrNoDistinct))
+    assert(columnStatsMap.hasDistinctCount(attrNoCount))
+    assert(columnStatsMap.hasDistinctCount(attrNoMinMax))
+    assert(!columnStatsMap.hasCountStats(attrNoDistinct))
+    assert(!columnStatsMap.hasCountStats(attrNoCount))
+    assert(columnStatsMap.hasCountStats(attrNoMinMax))
+    assert(columnStatsMap.hasMinMaxStats(attrNoDistinct))
+    assert(columnStatsMap.hasMinMaxStats(attrNoCount))
+    assert(!columnStatsMap.hasMinMaxStats(attrNoMinMax))
+  }
+
+  private def childStatsTestPlan(
+      outList: Seq[Attribute],
+      tableRowCount: BigInt,
+      attributeMap: AttributeMap[ColumnStat] = attributeMap): StatsTestPlan = {
     StatsTestPlan(
       outputList = outList,
       rowCount = tableRowCount,

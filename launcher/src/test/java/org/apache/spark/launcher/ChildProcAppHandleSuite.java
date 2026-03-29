@@ -18,6 +18,7 @@
 package org.apache.spark.launcher;
 
 import java.io.File;
+import java.io.Serializable;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -25,16 +26,22 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 import static java.nio.file.attribute.PosixFilePermission.*;
 
-import org.apache.log4j.AppenderSkeleton;
-import org.apache.log4j.spi.LoggingEvent;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import static org.junit.Assert.*;
-import static org.junit.Assume.*;
+import org.apache.logging.log4j.core.config.Property;
+import org.apache.logging.log4j.core.config.plugins.*;
+import org.apache.logging.log4j.core.Filter;
+import org.apache.logging.log4j.core.Layout;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
+import org.apache.logging.log4j.core.LogEvent;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.*;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
@@ -51,7 +58,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
 
   private static File TEST_SCRIPT_PATH;
 
-  @AfterClass
+  @AfterAll
   public static void cleanupClass() throws Exception {
     if (TEST_SCRIPT_PATH != null) {
       TEST_SCRIPT_PATH.delete();
@@ -59,7 +66,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     }
   }
 
-  @BeforeClass
+  @BeforeAll
   public static void setupClass() throws Exception {
     TEST_SCRIPT_PATH = File.createTempFile("output-redir-test", ".sh");
     Files.setPosixFilePermissions(TEST_SCRIPT_PATH.toPath(),
@@ -67,7 +74,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     Files.write(TEST_SCRIPT_PATH.toPath(), TEST_SCRIPT);
   }
 
-  @Before
+  @BeforeEach
   public void cleanupLog() {
     MESSAGES.clear();
   }
@@ -77,11 +84,11 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     SparkLauncher launcher = new SparkLauncher();
     launcher.redirectError(ProcessBuilder.Redirect.PIPE);
     assertNotNull(launcher.errorStream);
-    assertEquals(launcher.errorStream.type(), ProcessBuilder.Redirect.Type.PIPE);
+    assertEquals(ProcessBuilder.Redirect.Type.PIPE, launcher.errorStream.type());
 
     launcher.redirectOutput(ProcessBuilder.Redirect.PIPE);
     assertNotNull(launcher.outputStream);
-    assertEquals(launcher.outputStream.type(), ProcessBuilder.Redirect.Type.PIPE);
+    assertEquals(ProcessBuilder.Redirect.Type.PIPE, launcher.outputStream.type());
   }
 
   @Test
@@ -89,11 +96,11 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     SparkLauncher launcher = new SparkLauncher();
     launcher.redirectError(ProcessBuilder.Redirect.PIPE)
       .redirectError(ProcessBuilder.Redirect.INHERIT);
-    assertEquals(launcher.errorStream.type(), ProcessBuilder.Redirect.Type.INHERIT);
+    assertEquals(ProcessBuilder.Redirect.Type.INHERIT, launcher.errorStream.type());
 
     launcher.redirectOutput(ProcessBuilder.Redirect.PIPE)
       .redirectOutput(ProcessBuilder.Redirect.INHERIT);
-    assertEquals(launcher.outputStream.type(), ProcessBuilder.Redirect.Type.INHERIT);
+    assertEquals(ProcessBuilder.Redirect.Type.INHERIT, launcher.outputStream.type());
   }
 
   @Test
@@ -121,7 +128,9 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     waitFor(handle);
 
     assertTrue(MESSAGES.contains("output"));
-    assertEquals(Arrays.asList("error"), Files.lines(err).collect(Collectors.toList()));
+    try (Stream<String> lines = Files.lines(err)) {
+      assertEquals(Arrays.asList("error"), lines.collect(Collectors.toList()));
+    }
   }
 
   @Test
@@ -137,7 +146,9 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     waitFor(handle);
 
     assertTrue(MESSAGES.contains("error"));
-    assertEquals(Arrays.asList("output"), Files.lines(out).collect(Collectors.toList()));
+    try (Stream<String> lines = Files.lines(out)) {
+      assertEquals(Arrays.asList("output"), lines.collect(Collectors.toList()));
+    }
   }
 
   @Test
@@ -156,31 +167,37 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     waitFor(handle);
 
     assertTrue(MESSAGES.isEmpty());
-    assertEquals(Arrays.asList("error"), Files.lines(err).collect(Collectors.toList()));
-    assertEquals(Arrays.asList("output"), Files.lines(out).collect(Collectors.toList()));
+    try (Stream<String> lines = Files.lines(err)) {
+      assertEquals(Arrays.asList("error"), lines.collect(Collectors.toList()));
+    }
+    try (Stream<String> lines = Files.lines(out)) {
+      assertEquals(Arrays.asList("output"), lines.collect(Collectors.toList()));
+    }
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testBadLogRedirect() throws Exception {
     File out = Files.createTempFile("stdout", "txt").toFile();
     out.deleteOnExit();
-    new SparkLauncher()
-      .redirectError()
-      .redirectOutput(out)
-      .redirectToLog("foo")
-      .launch()
-      .waitFor();
+    assertThrows(IllegalArgumentException.class,
+      () -> new SparkLauncher()
+              .redirectError()
+              .redirectOutput(out)
+              .redirectToLog("foo")
+              .launch()
+              .waitFor());
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testRedirectErrorTwiceFails() throws Exception {
     File err = Files.createTempFile("stderr", "txt").toFile();
     err.deleteOnExit();
-    new SparkLauncher()
-      .redirectError()
-      .redirectError(err)
-      .launch()
-      .waitFor();
+    assertThrows(IllegalArgumentException.class,
+      () -> new SparkLauncher()
+              .redirectError()
+              .redirectError(err)
+              .launch()
+              .waitFor());
   }
 
   @Test
@@ -238,22 +255,29 @@ public class ChildProcAppHandleSuite extends BaseSuite {
    * A log4j appender used by child apps of this test. It records all messages logged through it in
    * memory so the test can check them.
    */
-  public static class LogAppender extends AppenderSkeleton {
+  @Plugin(name="LogAppender", category="Core", elementType="appender", printObject=true)
+  public static class LogAppender extends AbstractAppender {
+
+    protected LogAppender(String name,
+                          Filter filter,
+                          Layout<? extends Serializable> layout,
+                          boolean ignoreExceptions) {
+      super(name, filter, layout, ignoreExceptions, Property.EMPTY_ARRAY);
+    }
 
     @Override
-    protected void append(LoggingEvent event) {
+    public void append(LogEvent event) {
       MESSAGES.add(event.getMessage().toString());
     }
 
-    @Override
-    public boolean requiresLayout() {
-      return false;
+
+    @PluginFactory
+    public static LogAppender createAppender(
+            @PluginAttribute("name") String name,
+            @PluginElement("Layout") Layout<? extends Serializable> layout,
+            @PluginElement("Filter") final Filter filter,
+            @PluginAttribute("otherAttribute") String otherAttribute) {
+      return new LogAppender(name, filter, layout, false);
     }
-
-    @Override
-    public void close() {
-
-    }
-
   }
 }

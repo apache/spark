@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.util
 
+import java.io.{PrintWriter, StringWriter}
 import java.util.UUID
 
 import scala.util.{Failure, Success, Try}
@@ -26,18 +27,21 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.ml.PipelineStage
+import org.apache.spark.internal.{LogEntry, Logging}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, NUM_PARTITIONS, PIPELINE_STAGE_UID, STORAGE_LEVEL}
+import org.apache.spark.ml.{MLEvents, PipelineStage}
 import org.apache.spark.ml.param.{Param, Params}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
- * A small wrapper that defines a training session for an estimator, and some methods to log
- * useful information during this session.
+ * A small wrapper that defines a training session for an estimator, some methods to log
+ * useful information during this session, and some methods to send
+ * [[org.apache.spark.ml.MLEvent]].
  */
-private[spark] class Instrumentation private () extends Logging {
+private[spark] class Instrumentation private () extends Logging with MLEvents {
 
   private val id = UUID.randomUUID()
   private val shortId = id.toString.take(8)
@@ -50,8 +54,8 @@ private[spark] class Instrumentation private () extends Logging {
     // estimator.getClass.getSimpleName can cause Malformed class name error,
     // call safer `Utils.getSimpleName` instead
     val className = Utils.getSimpleName(stage.getClass)
-    logInfo(s"Stage class: $className")
-    logInfo(s"Stage uid: ${stage.uid}")
+    logInfo(log"Stage class: ${MDC(CLASS_NAME, className)}")
+    logInfo(log"Stage uid: ${MDC(PIPELINE_STAGE_UID, stage.uid)}")
   }
 
   /**
@@ -63,8 +67,8 @@ private[spark] class Instrumentation private () extends Logging {
    * Log some data about the dataset being fit.
    */
   def logDataset(dataset: RDD[_]): Unit = {
-    logInfo(s"training: numPartitions=${dataset.partitions.length}" +
-      s" storageLevel=${dataset.getStorageLevel}")
+    logInfo(log"training: numPartitions=${MDC(NUM_PARTITIONS, dataset.partitions.length)}" +
+      log" storageLevel=${MDC(STORAGE_LEVEL, dataset.getStorageLevel)}")
   }
 
   /**
@@ -82,6 +86,17 @@ private[spark] class Instrumentation private () extends Logging {
   }
 
   /**
+   * Logs a LogEntry which message with a prefix that uniquely identifies the training session.
+   */
+  override def logWarning(entry: LogEntry): Unit = {
+    if (log.isWarnEnabled) {
+      withLogContext(entry.context) {
+        log.warn(prefix + entry.message)
+      }
+    }
+  }
+
+  /**
    * Logs a error message with a prefix that uniquely identifies the training session.
    */
   override def logError(msg: => String): Unit = {
@@ -89,10 +104,32 @@ private[spark] class Instrumentation private () extends Logging {
   }
 
   /**
+   * Logs a LogEntry which message with a prefix that uniquely identifies the training session.
+   */
+  override def logError(entry: LogEntry): Unit = {
+    if (log.isErrorEnabled) {
+      withLogContext(entry.context) {
+        log.error(prefix + entry.message)
+      }
+    }
+  }
+
+  /**
    * Logs an info message with a prefix that uniquely identifies the training session.
    */
   override def logInfo(msg: => String): Unit = {
     super.logInfo(prefix + msg)
+  }
+
+  /**
+   * Logs a LogEntry which message with a prefix that uniquely identifies the training session.
+   */
+  override def logInfo(entry: LogEntry): Unit = {
+    if (log.isInfoEnabled) {
+      withLogContext(entry.context) {
+        log.info(prefix + entry.message)
+      }
+    }
   }
 
   /**
@@ -121,6 +158,10 @@ private[spark] class Instrumentation private () extends Logging {
     logNamedValue(Instrumentation.loggerTags.numExamples, num)
   }
 
+  def logSumOfWeights(num: Double): Unit = {
+    logNamedValue(Instrumentation.loggerTags.sumOfWeights, num)
+  }
+
   /**
    * Logs the value with customized name field.
    */
@@ -137,15 +178,15 @@ private[spark] class Instrumentation private () extends Logging {
   }
 
   def logNamedValue(name: String, value: Array[String]): Unit = {
-    logInfo(compact(render(name -> compact(render(value.toSeq)))))
+    logInfo(compact(render(name -> compact(render(value.toImmutableArraySeq)))))
   }
 
   def logNamedValue(name: String, value: Array[Long]): Unit = {
-    logInfo(compact(render(name -> compact(render(value.toSeq)))))
+    logInfo(compact(render(name -> compact(render(value.toImmutableArraySeq)))))
   }
 
   def logNamedValue(name: String, value: Array[Double]): Unit = {
-    logInfo(compact(render(name -> compact(render(value.toSeq)))))
+    logInfo(compact(render(name -> compact(render(value.toImmutableArraySeq)))))
   }
 
 
@@ -160,8 +201,9 @@ private[spark] class Instrumentation private () extends Logging {
    * Logs an exception raised during a training session.
    */
   def logFailure(e: Throwable): Unit = {
-    val msg = e.getStackTrace.mkString("\n")
-    super.logError(msg)
+    val msg = new StringWriter()
+    e.printStackTrace(new PrintWriter(msg))
+    super.logError(msg.toString)
   }
 }
 
@@ -176,6 +218,7 @@ private[spark] object Instrumentation {
     val numExamples = "numExamples"
     val meanOfLabels = "meanOfLabels"
     val varianceOfLabels = "varianceOfLabels"
+    val sumOfWeights = "sumOfWeights"
   }
 
   def instrumented[T](body: (Instrumentation => T)): T = {
@@ -183,6 +226,8 @@ private[spark] object Instrumentation {
     Try(body(instr)) match {
       case Failure(NonFatal(e)) =>
         instr.logFailure(e)
+        throw e
+      case Failure(e) =>
         throw e
       case Success(result) =>
         instr.logSuccess()
@@ -202,21 +247,28 @@ private[spark] class OptionalInstrumentation private(
 
   protected override def logName: String = className
 
-  override def logInfo(msg: => String) {
+  override def logInfo(msg: => String): Unit = {
     instrumentation match {
       case Some(instr) => instr.logInfo(msg)
       case None => super.logInfo(msg)
     }
   }
 
-  override def logWarning(msg: => String) {
+  override def logInfo(logEntry: LogEntry): Unit = {
+    instrumentation match {
+      case Some(instr) => instr.logInfo(logEntry)
+      case None => super.logInfo(logEntry)
+    }
+  }
+
+  override def logWarning(msg: => String): Unit = {
     instrumentation match {
       case Some(instr) => instr.logWarning(msg)
       case None => super.logWarning(msg)
     }
   }
 
-  override def logError(msg: => String) {
+  override def logError(msg: => String): Unit = {
     instrumentation match {
       case Some(instr) => instr.logError(msg)
       case None => super.logError(msg)

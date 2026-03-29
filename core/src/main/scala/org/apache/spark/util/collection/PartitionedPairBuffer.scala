@@ -19,7 +19,6 @@ package org.apache.spark.util.collection
 
 import java.util.Comparator
 
-import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.collection.WritablePartitionedPairCollection._
 
@@ -78,7 +77,7 @@ private[spark] class PartitionedPairBuffer[K, V](initialCapacity: Int = 64)
     : Iterator[((Int, K), V)] = {
     val comparator = keyComparator.map(partitionKeyComparator).getOrElse(partitionComparator)
     new Sorter(new KVArraySortDataFormat[(Int, K), AnyRef]).sort(data, 0, curSize, comparator)
-    iterator
+    iterator()
   }
 
   private def iterator(): Iterator[((Int, K), V)] = new Iterator[((Int, K), V)] {

@@ -17,7 +17,8 @@
 
 package org.apache.spark.ml.feature
 
-import edu.emory.mathcs.jtransforms.dct.DoubleDCT_1D
+import org.jtransforms.dct.DoubleDCT_1D
+import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
@@ -33,14 +34,14 @@ class DCTSuite extends MLTest with DefaultReadWriteTest {
   import testImplicits._
 
   test("forward transform of discrete cosine matches jTransforms result") {
-    val data = Vectors.dense((0 until 128).map(_ => 2D * math.random - 1D).toArray)
+    val data = Vectors.dense((0 until 128).map(_ => 2D * math.random() - 1D).toArray)
     val inverse = false
 
     testDCT(data, inverse)
   }
 
   test("inverse transform of discrete cosine matches jTransforms result") {
-    val data = Vectors.dense((0 until 128).map(_ => 2D * math.random - 1D).toArray)
+    val data = Vectors.dense((0 until 128).map(_ => 2D * math.random() - 1D).toArray)
     val inverse = true
 
     testDCT(data, inverse)
@@ -74,5 +75,24 @@ class DCTSuite extends MLTest with DefaultReadWriteTest {
       case Row(resultVec: Vector, wantedVec: Vector) =>
         assert(Vectors.sqdist(resultVec, wantedVec) < 1e-6)
     }
+
+    val vectorSize = dataset
+      .select("vec")
+      .map { case Row(vec: Vector) => vec.size }
+      .head()
+
+    // Can not infer size of output vector, since no metadata is provided
+    intercept[TestFailedException] {
+      val transformed = transformer.transform(dataset)
+      checkVectorSizeOnDF(transformed, "resultVec", vectorSize)
+    }
+
+    val dataset2 = new VectorSizeHint()
+      .setSize(vectorSize)
+      .setInputCol("vec")
+      .transform(dataset)
+
+    val transformed2 = transformer.transform(dataset2)
+    checkVectorSizeOnDF(transformed2, "resultVec", vectorSize)
   }
 }

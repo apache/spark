@@ -17,25 +17,47 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.types._
 
 
 /**
+ * A base class for generated/interpreted row ordering.
+ */
+class BaseOrdering extends Ordering[InternalRow] {
+  def compare(a: InternalRow, b: InternalRow): Int = {
+    throw SparkUnsupportedOperationException()
+  }
+}
+
+/**
  * An interpreted row ordering comparator.
  */
-class InterpretedOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow] {
+class InterpretedOrdering(ordering: Seq[SortOrder]) extends BaseOrdering {
+  private val leftEvaluators = ordering.map(_.child)
+  private val rightEvaluators = leftEvaluators.map(_.freshCopyIfContainsStatefulExpression())
+  private lazy val physicalDataTypes = ordering.map { order =>
+    val dt = order.dataType match {
+      case udt: UserDefinedType[_] => udt.sqlType
+      case _ => order.dataType
+    }
+    PhysicalDataType(dt)
+  }
 
   def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =
-    this(ordering.map(BindReferences.bindReference(_, inputSchema)))
+    this(bindReferences(ordering, inputSchema))
 
-  def compare(a: InternalRow, b: InternalRow): Int = {
+  override def compare(a: InternalRow, b: InternalRow): Int = {
     var i = 0
     val size = ordering.size
     while (i < size) {
       val order = ordering(i)
-      val left = order.child.eval(a)
-      val right = order.child.eval(b)
+      val left = leftEvaluators(i).eval(a)
+      val right = rightEvaluators(i).eval(b)
 
       if (left == null && right == null) {
         // Both null, continue looking.
@@ -44,21 +66,12 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow
       } else if (right == null) {
         return if (order.nullOrdering == NullsFirst) 1 else -1
       } else {
+        val orderingFunc = physicalDataTypes(i).ordering.asInstanceOf[Ordering[Any]]
         val comparison = order.dataType match {
-          case dt: AtomicType if order.direction == Ascending =>
-            dt.ordering.asInstanceOf[Ordering[Any]].compare(left, right)
-          case dt: AtomicType if order.direction == Descending =>
-            dt.ordering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
-          case a: ArrayType if order.direction == Ascending =>
-            a.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
-          case a: ArrayType if order.direction == Descending =>
-            a.interpretedOrdering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
-          case s: StructType if order.direction == Ascending =>
-            s.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
-          case s: StructType if order.direction == Descending =>
-            s.interpretedOrdering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
-          case other =>
-            throw new IllegalArgumentException(s"Type $other does not support ordered operations")
+          case _ if order.direction == Ascending =>
+            orderingFunc.compare(left, right)
+          case _ if order.direction == Descending =>
+            - orderingFunc.compare(left, right)
         }
         if (comparison != 0) {
           return comparison
@@ -66,7 +79,7 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow
       }
       i += 1
     }
-    return 0
+    0
   }
 }
 
@@ -82,22 +95,37 @@ object InterpretedOrdering {
   }
 }
 
-object RowOrdering {
+object RowOrdering extends CodeGeneratorWithInterpretedFallback[Seq[SortOrder], BaseOrdering] {
 
   /**
    * Returns true iff the data type can be ordered (i.e. can be sorted).
    */
-  def isOrderable(dataType: DataType): Boolean = dataType match {
-    case NullType => true
-    case dt: AtomicType => true
-    case struct: StructType => struct.fields.forall(f => isOrderable(f.dataType))
-    case array: ArrayType => isOrderable(array.elementType)
-    case udt: UserDefinedType[_] => isOrderable(udt.sqlType)
-    case _ => false
-  }
+  def isOrderable(dataType: DataType): Boolean = OrderUtils.isOrderable(dataType)
 
   /**
    * Returns true iff outputs from the expressions can be ordered.
    */
   def isOrderable(exprs: Seq[Expression]): Boolean = exprs.forall(e => isOrderable(e.dataType))
+
+  override protected def createCodeGeneratedObject(in: Seq[SortOrder]): BaseOrdering = {
+    GenerateOrdering.generate(in)
+  }
+
+  override protected def createInterpretedObject(in: Seq[SortOrder]): BaseOrdering = {
+    new InterpretedOrdering(in)
+  }
+
+  def create(order: Seq[SortOrder], inputSchema: Seq[Attribute]): BaseOrdering = {
+    createObject(bindReferences(order, inputSchema))
+  }
+
+  /**
+   * Creates a row ordering for the given schema, in natural ascending order.
+   */
+  def createNaturalAscendingOrdering(dataTypes: Seq[DataType]): BaseOrdering = {
+    val order: Seq[SortOrder] = dataTypes.zipWithIndex.map {
+      case (dt, index) => SortOrder(BoundReference(index, dt, nullable = true), Ascending)
+    }
+    create(order, Seq.empty)
+  }
 }

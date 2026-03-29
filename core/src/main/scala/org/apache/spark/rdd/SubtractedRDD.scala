@@ -19,8 +19,8 @@ package org.apache.spark.rdd
 
 import java.util.{HashMap => JHashMap}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.Dependency
@@ -70,7 +70,7 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
 
   override def getPartitions: Array[Partition] = {
     val array = new Array[Partition](part.numPartitions)
-    for (i <- 0 until array.length) {
+    for (i <- array.indices) {
       // Each CoGroupPartition will depend on rdd1 and rdd2
       array(i) = new CoGroupPartition(i, Seq(rdd1, rdd2).zipWithIndex.map { case (rdd, j) =>
         dependencies(j) match {
@@ -107,9 +107,14 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
             .asInstanceOf[Iterator[Product2[K, V]]].foreach(op)
 
         case shuffleDependency: ShuffleDependency[_, _, _] =>
+          val metrics = context.taskMetrics().createTempShuffleReadMetrics()
           val iter = SparkEnv.get.shuffleManager
             .getReader(
-              shuffleDependency.shuffleHandle, partition.index, partition.index + 1, context)
+              shuffleDependency.shuffleHandle,
+              partition.index,
+              partition.index + 1,
+              context,
+              metrics)
             .read()
           iter.foreach(op)
       }
@@ -119,10 +124,10 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
     integrate(0, t => getSeq(t._1) += t._2)
     // the second dep is rdd2; remove all of its keys
     integrate(1, t => map.remove(t._1))
-    map.asScala.iterator.map(t => t._2.iterator.map((t._1, _))).flatten
+    map.asScala.iterator.flatMap(t => t._2.iterator.map((t._1, _)))
   }
 
-  override def clearDependencies() {
+  override def clearDependencies(): Unit = {
     super.clearDependencies()
     rdd1 = null
     rdd2 = null

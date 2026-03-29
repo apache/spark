@@ -18,6 +18,8 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
+import scala.collection.immutable
+
 // $example on$
 import org.apache.spark.ml.feature.Bucketizer
 // $example off$
@@ -32,7 +34,7 @@ import org.apache.spark.sql.SparkSession
 object BucketizerExample {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("BucketizerExample")
       .getOrCreate()
 
@@ -40,7 +42,8 @@ object BucketizerExample {
     val splits = Array(Double.NegativeInfinity, -0.5, 0.0, 0.5, Double.PositiveInfinity)
 
     val data = Array(-999.9, -0.5, -0.3, 0.0, 0.2, 999.9)
-    val dataFrame = spark.createDataFrame(data.map(Tuple1.apply)).toDF("features")
+    val dataFrame = spark.createDataFrame(
+      immutable.ArraySeq.unsafeWrapArray(data.map(Tuple1.apply))).toDF("features")
 
     val bucketizer = new Bucketizer()
       .setInputCol("features")
@@ -66,7 +69,8 @@ object BucketizerExample {
       (0.0, 0.0),
       (0.2, 0.4),
       (999.9, 999.9))
-    val dataFrame2 = spark.createDataFrame(data2).toDF("features1", "features2")
+    val dataFrame2 = spark.createDataFrame(immutable.ArraySeq.unsafeWrapArray(data2))
+      .toDF("features1", "features2")
 
     val bucketizer2 = new Bucketizer()
       .setInputCols(Array("features1", "features2"))

@@ -22,15 +22,17 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.UUID;
+import java.nio.file.Files;
 
 import com.google.common.io.Closeables;
-import com.google.common.io.Files;
 
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.JavaUtils;
+import org.junit.jupiter.api.Assertions;
+// checkstyle.off: RegexpSinglelineJava
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+// checkstyle.on: RegexpSinglelineJava
 
 /**
  * Manages some sort-shuffle data, including the creation
@@ -47,12 +49,13 @@ public class TestShuffleDataContext {
     this.subDirsPerLocalDir = subDirsPerLocalDir;
   }
 
-  public void create() {
+  public void create() throws IOException {
+    String root = System.getProperty("java.io.tmpdir");
     for (int i = 0; i < localDirs.length; i ++) {
-      localDirs[i] = Files.createTempDir().getAbsolutePath();
+      localDirs[i] = JavaUtils.createDirectory(root, "spark").getAbsolutePath();
 
       for (int p = 0; p < subDirsPerLocalDir; p ++) {
-        new File(localDirs[i], String.format("%02x", p)).mkdirs();
+        Files.createDirectories(new File(localDirs[i], String.format("%02x", p)).toPath());
       }
     }
   }
@@ -61,14 +64,15 @@ public class TestShuffleDataContext {
     for (String localDir : localDirs) {
       try {
         JavaUtils.deleteRecursively(new File(localDir));
-      } catch (IOException e) {
+      } catch (Exception e) {
         logger.warn("Unable to cleanup localDir = " + localDir, e);
       }
     }
   }
 
   /** Creates reducer blocks in a sort-based data format within our local dirs. */
-  public void insertSortShuffleData(int shuffleId, int mapId, byte[][] blocks) throws IOException {
+  public String insertSortShuffleData(int shuffleId, int mapId, byte[][] blocks)
+      throws IOException {
     String blockId = "shuffle_" + shuffleId + "_" + mapId + "_0";
 
     OutputStream dataStream = null;
@@ -76,10 +80,10 @@ public class TestShuffleDataContext {
     boolean suppressExceptionsDuringClose = true;
 
     try {
-      dataStream = new FileOutputStream(
-        ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, blockId + ".data"));
-      indexStream = new DataOutputStream(new FileOutputStream(
-        ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, blockId + ".index")));
+      dataStream = new FileOutputStream(new File(
+        ExecutorDiskUtils.getFilePath(localDirs, subDirsPerLocalDir, blockId + ".data")));
+      indexStream = new DataOutputStream(new FileOutputStream(new File(
+        ExecutorDiskUtils.getFilePath(localDirs, subDirsPerLocalDir, blockId + ".index"))));
 
       long offset = 0;
       indexStream.writeLong(offset);
@@ -93,17 +97,42 @@ public class TestShuffleDataContext {
       Closeables.close(dataStream, suppressExceptionsDuringClose);
       Closeables.close(indexStream, suppressExceptionsDuringClose);
     }
+    return blockId;
   }
 
   /** Creates spill file(s) within the local dirs. */
   public void insertSpillData() throws IOException {
-    String filename = "temp_local_" + UUID.randomUUID();
-    OutputStream dataStream = null;
+    String filename = "temp_local_uuid";
+    insertFile(filename);
+  }
 
+  public void insertBroadcastData() throws IOException {
+    String filename = "broadcast_12_uuid";
+    insertFile(filename);
+  }
+
+  public void insertTempShuffleData() throws IOException {
+    String filename = "temp_shuffle_uuid";
+    insertFile(filename);
+  }
+
+  public void insertCachedRddData(int rddId, int splitId, byte[] block) throws IOException {
+    String blockId = "rdd_" + rddId + "_" + splitId;
+    insertFile(blockId, block);
+  }
+
+  private void insertFile(String filename) throws IOException {
+    insertFile(filename, new byte[] { 42 });
+  }
+
+  private void insertFile(String filename, byte[] block) throws IOException {
+    OutputStream dataStream = null;
+    File file = new File(ExecutorDiskUtils.getFilePath(localDirs, subDirsPerLocalDir, filename));
+    Assertions.assertFalse(file.exists(), "this test file has been already generated");
     try {
       dataStream = new FileOutputStream(
-        ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, filename));
-      dataStream.write(42);
+        new File(ExecutorDiskUtils.getFilePath(localDirs, subDirsPerLocalDir, filename)));
+      dataStream.write(block);
     } finally {
       Closeables.close(dataStream, false);
     }

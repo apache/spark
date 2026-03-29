@@ -20,16 +20,17 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalog.Table
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, JoinHint}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
-class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
+class GlobalTempViewSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    globalTempDB = spark.sharedState.globalTempViewManager.database
+    globalTempDB = spark.sharedState.globalTempDB
   }
 
   private var globalTempDB: String = _
@@ -42,20 +43,20 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
       // If there is no database in table name, we should try local temp view first, if not found,
       // try table/view in current database, which is "default" in this case. So we expect
       // NoSuchTableException here.
-      var e = intercept[AnalysisException](spark.table("src")).getMessage
-      assert(e.contains(expectedErrorMsg))
+      var e = intercept[AnalysisException](spark.table("src"))
+      checkErrorTableNotFound(e, "`src`")
 
       // Use qualified name to refer to the global temp view explicitly.
       checkAnswer(spark.table(s"$globalTempDB.src"), Row(1, "a"))
 
       // Table name without database will never refer to a global temp view.
-      e = intercept[AnalysisException](sql("DROP VIEW src")).getMessage
-      assert(e.contains(expectedErrorMsg))
+      e = intercept[AnalysisException](sql("DROP VIEW src"))
+      checkErrorTableNotFound(e, "`spark_catalog`.`default`.`src`")
 
       sql(s"DROP VIEW $globalTempDB.src")
       // The global temp view should be dropped successfully.
-      e = intercept[AnalysisException](spark.table(s"$globalTempDB.src")).getMessage
-      assert(e.contains(expectedErrorMsg))
+      e = intercept[AnalysisException](spark.table(s"$globalTempDB.src"))
+      checkErrorTableNotFound(e, "`global_temp`.`src`")
 
       // We can also use Dataset API to create global temp view
       Seq(1 -> "a").toDF("i", "j").createGlobalTempView("src")
@@ -63,8 +64,8 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
 
       // Use qualified name to rename a global temp view.
       sql(s"ALTER VIEW $globalTempDB.src RENAME TO src2")
-      e = intercept[AnalysisException](spark.table(s"$globalTempDB.src")).getMessage
-      assert(e.contains(expectedErrorMsg))
+      e = intercept[AnalysisException](spark.table(s"$globalTempDB.src"))
+      checkErrorTableNotFound(e, "`global_temp`.`src`")
       checkAnswer(spark.table(s"$globalTempDB.src2"), Row(1, "a"))
 
       // Use qualified name to alter a global temp view.
@@ -73,8 +74,8 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
 
       // We can also use Catalog API to drop global temp view
       spark.catalog.dropGlobalTempView("src2")
-      e = intercept[AnalysisException](spark.table(s"$globalTempDB.src2")).getMessage
-      assert(e.contains(expectedErrorMsg))
+      e = intercept[AnalysisException](spark.table(s"$globalTempDB.src2"))
+      checkErrorTableNotFound(e, "`global_temp`.`src2`")
 
       // We can also use Dataset API to replace global temp view
       Seq(2 -> "b").toDF("i", "j").createOrReplaceGlobalTempView("src")
@@ -164,10 +165,32 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
       assert(spark.catalog.tableExists(globalTempDB, "src"))
       assert(spark.catalog.getTable(globalTempDB, "src").toString == new Table(
         name = "src",
-        database = globalTempDB,
+        catalog = null,
+        namespace = Array(globalTempDB),
         description = null,
         tableType = "TEMPORARY",
         isTemporary = true).toString)
+    }
+  }
+
+  test("broadcast hint on global temp view") {
+    withGlobalTempView("v1") {
+      spark.range(10).createGlobalTempView("v1")
+      withTempView("v2") {
+        spark.range(10).createTempView("v2")
+
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          Seq(
+            "SELECT /*+ MAPJOIN(v1) */ * FROM global_temp.v1, v2 WHERE v1.id = v2.id",
+            "SELECT /*+ MAPJOIN(global_temp.v1) */ * FROM global_temp.v1, v2 WHERE v1.id = v2.id"
+          ).foreach { statement =>
+            sql(statement).queryExecution.optimizedPlan match {
+              case Join(_, _, _, _, JoinHint(Some(HintInfo(Some(BROADCAST))), None)) =>
+              case _ => fail("broadcast hint not found in a left-side table")
+            }
+          }
+        }
+      }
     }
   }
 }

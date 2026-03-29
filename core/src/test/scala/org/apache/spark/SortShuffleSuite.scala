@@ -17,47 +17,22 @@
 
 package org.apache.spark
 
-import java.io.File
+import scala.jdk.CollectionConverters._
 
-import scala.collection.JavaConverters._
+import org.scalatest.matchers.should.Matchers._
 
-import org.apache.commons.io.FileUtils
-import org.apache.commons.io.filefilter.TrueFileFilter
-import org.scalatest.BeforeAndAfterAll
-
+import org.apache.spark.internal.config.{SHUFFLE_CHECKSUM_ALGORITHM, SHUFFLE_MANAGER}
 import org.apache.spark.rdd.ShuffledRDD
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.util.Utils
 
-class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
+class SortShuffleSuite extends ShuffleSuite {
 
   // This test suite should run all tests in ShuffleSuite with sort-based shuffle.
-
-  private var tempDir: File = _
-
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
-    // Once 'spark.local.dir' is set, it is cached. Unless this is manually cleared
-    // before/after a test, it could return the same directory even if this property
-    // is configured.
-    Utils.clearLocalRootDirs()
-    conf.set("spark.shuffle.manager", "sort")
-  }
-
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    tempDir = Utils.createTempDir()
-    conf.set("spark.local.dir", tempDir.getAbsolutePath)
-  }
-
-  override def afterEach(): Unit = {
-    try {
-      Utils.deleteRecursively(tempDir)
-      Utils.clearLocalRootDirs()
-    } finally {
-      super.afterEach()
-    }
+    conf.set(SHUFFLE_MANAGER, "sort")
   }
 
   test("SortShuffleManager properly cleans up files for shuffles that use the serialized path") {
@@ -83,15 +58,15 @@ class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
   }
 
   private def ensureFilesAreCleanedUp(shuffledRdd: ShuffledRDD[_, _, _]): Unit = {
-    def getAllFiles: Set[File] =
-      FileUtils.listFiles(tempDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
+    def getAllFiles = Utils.listFiles(tempDir).asScala.toSet
     val filesBeforeShuffle = getAllFiles
     // Force the shuffle to be performed
     shuffledRdd.count()
     // Ensure that the shuffle actually created files that will need to be cleaned up
     val filesCreatedByShuffle = getAllFiles -- filesBeforeShuffle
-    filesCreatedByShuffle.map(_.getName) should be
-    Set("shuffle_0_0_0.data", "shuffle_0_0_0.index")
+    filesCreatedByShuffle.map(_.getName) should be(
+      Set("shuffle_0_0_0.data", s"shuffle_0_0_0.checksum.${conf.get(SHUFFLE_CHECKSUM_ALGORITHM)}",
+        "shuffle_0_0_0.index"))
     // Check that the cleanup actually removes the files
     sc.env.blockManager.master.removeShuffle(0, blocking = true)
     for (file <- filesCreatedByShuffle) {

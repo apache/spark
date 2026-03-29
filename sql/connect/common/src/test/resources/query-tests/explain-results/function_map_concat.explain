@@ -1,0 +1,2 @@
+Project [map_concat(f#0, map(foo, struct(id, 12, a, 68, b, 2.718281828459045))) AS map_concat(f, map(foo, struct(12 AS id, 68 AS a, 2.718281828459045 AS b)))#0]
++- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

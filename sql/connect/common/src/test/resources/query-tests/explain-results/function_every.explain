@@ -1,0 +1,2 @@
+Aggregate [min(flag#0) AS every(flag)#0]
++- LocalRelation <empty>, [id#0L, flag#0]

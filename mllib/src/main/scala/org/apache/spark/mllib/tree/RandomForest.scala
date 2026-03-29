@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.tree
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 import org.apache.spark.annotation.Since
@@ -91,8 +91,14 @@ private class RandomForest (
    * @return RandomForestModel that can be used for prediction.
    */
   def run(input: RDD[LabeledPoint]): RandomForestModel = {
-    val trees: Array[NewDTModel] = NewRandomForest.run(input.map(_.asML), strategy, numTrees,
-      featureSubsetStrategy, seed.toLong, None)
+    val treeStrategy = strategy.copy
+    if (numTrees == 1) {
+      treeStrategy.bootstrap = false
+    } else {
+      treeStrategy.bootstrap = true
+    }
+    val trees: Array[NewDTModel] =
+      NewRandomForest.run(input, treeStrategy, numTrees, featureSubsetStrategy, seed.toLong)
     new RandomForestModel(strategy.algo, trees.map(_.toOld))
   }
 

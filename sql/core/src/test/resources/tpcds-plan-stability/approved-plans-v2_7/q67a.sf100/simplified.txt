@@ -1,0 +1,136 @@
+TakeOrderedAndProject [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sumsales,rk]
+  WholeStageCodegen (83)
+    Filter [rk]
+      InputAdapter
+        Window [sumsales,i_category]
+          WindowGroupLimit [i_category,sumsales]
+            WholeStageCodegen (82)
+              Sort [i_category,sumsales]
+                InputAdapter
+                  Exchange [i_category] #1
+                    WindowGroupLimit [i_category,sumsales]
+                      WholeStageCodegen (81)
+                        Sort [i_category,sumsales]
+                          InputAdapter
+                            Union
+                              WholeStageCodegen (8)
+                                HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce((ss_sales_price * cast(ss_quantity as decimal(10,0))), 0.00)),i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sumsales,sum,isEmpty]
+                                  InputAdapter
+                                    Exchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id] #2
+                                      WholeStageCodegen (7)
+                                        HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,ss_sales_price,ss_quantity] [sum,isEmpty,sum,isEmpty]
+                                          Project [ss_quantity,ss_sales_price,d_year,d_moy,d_qoy,s_store_id,i_brand,i_class,i_category,i_product_name]
+                                            SortMergeJoin [ss_item_sk,i_item_sk]
+                                              InputAdapter
+                                                WholeStageCodegen (4)
+                                                  Sort [ss_item_sk]
+                                                    InputAdapter
+                                                      Exchange [ss_item_sk] #3
+                                                        WholeStageCodegen (3)
+                                                          Project [ss_item_sk,ss_quantity,ss_sales_price,d_year,d_moy,d_qoy,s_store_id]
+                                                            BroadcastHashJoin [ss_store_sk,s_store_sk]
+                                                              Project [ss_item_sk,ss_store_sk,ss_quantity,ss_sales_price,d_year,d_moy,d_qoy]
+                                                                BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                                                  Filter [ss_store_sk,ss_item_sk]
+                                                                    ColumnarToRow
+                                                                      InputAdapter
+                                                                        Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_store_sk,ss_quantity,ss_sales_price,ss_sold_date_sk]
+                                                                          SubqueryBroadcast [d_date_sk] #1
+                                                                            BroadcastExchange #4
+                                                                              WholeStageCodegen (1)
+                                                                                Project [d_date_sk,d_year,d_moy,d_qoy]
+                                                                                  Filter [d_month_seq,d_date_sk]
+                                                                                    ColumnarToRow
+                                                                                      InputAdapter
+                                                                                        Scan parquet spark_catalog.default.date_dim [d_date_sk,d_month_seq,d_year,d_moy,d_qoy]
+                                                                  InputAdapter
+                                                                    ReusedExchange [d_date_sk,d_year,d_moy,d_qoy] #4
+                                                              InputAdapter
+                                                                BroadcastExchange #5
+                                                                  WholeStageCodegen (2)
+                                                                    Filter [s_store_sk]
+                                                                      ColumnarToRow
+                                                                        InputAdapter
+                                                                          Scan parquet spark_catalog.default.store [s_store_sk,s_store_id]
+                                              InputAdapter
+                                                WholeStageCodegen (6)
+                                                  Sort [i_item_sk]
+                                                    InputAdapter
+                                                      Exchange [i_item_sk] #6
+                                                        WholeStageCodegen (5)
+                                                          Filter [i_item_sk]
+                                                            ColumnarToRow
+                                                              InputAdapter
+                                                                Scan parquet spark_catalog.default.item [i_item_sk,i_brand,i_class,i_category,i_product_name]
+                              WholeStageCodegen (17)
+                                HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,sum,isEmpty] [sum(sumsales),s_store_id,sumsales,sum,isEmpty]
+                                  InputAdapter
+                                    Exchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy] #7
+                                      WholeStageCodegen (16)
+                                        HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,sumsales] [sum,isEmpty,sum,isEmpty]
+                                          HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce((ss_sales_price * cast(ss_quantity as decimal(10,0))), 0.00)),sumsales,sum,isEmpty]
+                                            InputAdapter
+                                              ReusedExchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] #2
+                              WholeStageCodegen (26)
+                                HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,sum,isEmpty] [sum(sumsales),d_moy,s_store_id,sumsales,sum,isEmpty]
+                                  InputAdapter
+                                    Exchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy] #8
+                                      WholeStageCodegen (25)
+                                        HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,sumsales] [sum,isEmpty,sum,isEmpty]
+                                          HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce((ss_sales_price * cast(ss_quantity as decimal(10,0))), 0.00)),sumsales,sum,isEmpty]
+                                            InputAdapter
+                                              ReusedExchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] #2
+                              WholeStageCodegen (35)
+                                HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,sum,isEmpty] [sum(sumsales),d_qoy,d_moy,s_store_id,sumsales,sum,isEmpty]
+                                  InputAdapter
+                                    Exchange [i_category,i_class,i_brand,i_product_name,d_year] #9
+                                      WholeStageCodegen (34)
+                                        HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,sumsales] [sum,isEmpty,sum,isEmpty]
+                                          HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce((ss_sales_price * cast(ss_quantity as decimal(10,0))), 0.00)),sumsales,sum,isEmpty]
+                                            InputAdapter
+                                              ReusedExchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] #2
+                              WholeStageCodegen (44)
+                                HashAggregate [i_category,i_class,i_brand,i_product_name,sum,isEmpty] [sum(sumsales),d_year,d_qoy,d_moy,s_store_id,sumsales,sum,isEmpty]
+                                  InputAdapter
+                                    Exchange [i_category,i_class,i_brand,i_product_name] #10
+                                      WholeStageCodegen (43)
+                                        HashAggregate [i_category,i_class,i_brand,i_product_name,sumsales] [sum,isEmpty,sum,isEmpty]
+                                          HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce((ss_sales_price * cast(ss_quantity as decimal(10,0))), 0.00)),sumsales,sum,isEmpty]
+                                            InputAdapter
+                                              ReusedExchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] #2
+                              WholeStageCodegen (53)
+                                HashAggregate [i_category,i_class,i_brand,sum,isEmpty] [sum(sumsales),i_product_name,d_year,d_qoy,d_moy,s_store_id,sumsales,sum,isEmpty]
+                                  InputAdapter
+                                    Exchange [i_category,i_class,i_brand] #11
+                                      WholeStageCodegen (52)
+                                        HashAggregate [i_category,i_class,i_brand,sumsales] [sum,isEmpty,sum,isEmpty]
+                                          HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce((ss_sales_price * cast(ss_quantity as decimal(10,0))), 0.00)),sumsales,sum,isEmpty]
+                                            InputAdapter
+                                              ReusedExchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] #2
+                              WholeStageCodegen (62)
+                                HashAggregate [i_category,i_class,sum,isEmpty] [sum(sumsales),i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sumsales,sum,isEmpty]
+                                  InputAdapter
+                                    Exchange [i_category,i_class] #12
+                                      WholeStageCodegen (61)
+                                        HashAggregate [i_category,i_class,sumsales] [sum,isEmpty,sum,isEmpty]
+                                          HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce((ss_sales_price * cast(ss_quantity as decimal(10,0))), 0.00)),sumsales,sum,isEmpty]
+                                            InputAdapter
+                                              ReusedExchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] #2
+                              WholeStageCodegen (71)
+                                HashAggregate [i_category,sum,isEmpty] [sum(sumsales),i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sumsales,sum,isEmpty]
+                                  InputAdapter
+                                    Exchange [i_category] #13
+                                      WholeStageCodegen (70)
+                                        HashAggregate [i_category,sumsales] [sum,isEmpty,sum,isEmpty]
+                                          HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce((ss_sales_price * cast(ss_quantity as decimal(10,0))), 0.00)),sumsales,sum,isEmpty]
+                                            InputAdapter
+                                              ReusedExchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] #2
+                              WholeStageCodegen (80)
+                                HashAggregate [sum,isEmpty] [sum(sumsales),i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sumsales,sum,isEmpty]
+                                  InputAdapter
+                                    Exchange #14
+                                      WholeStageCodegen (79)
+                                        HashAggregate [sumsales] [sum,isEmpty,sum,isEmpty]
+                                          HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce((ss_sales_price * cast(ss_quantity as decimal(10,0))), 0.00)),sumsales,sum,isEmpty]
+                                            InputAdapter
+                                              ReusedExchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] #2

@@ -25,10 +25,10 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.spark.network.util.AbstractFileRegion;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 import org.apache.spark.network.TestManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -129,11 +129,11 @@ public class MessageWithHeaderSuite {
   private ByteBuf doWrite(MessageWithHeader msg, int minExpectedWrites) throws Exception {
     int writes = 0;
     ByteArrayWritableChannel channel = new ByteArrayWritableChannel((int) msg.count());
-    while (msg.transfered() < msg.count()) {
-      msg.transferTo(channel, msg.transfered());
+    while (msg.transferred() < msg.count()) {
+      msg.transferTo(channel, msg.transferred());
       writes++;
     }
-    assertTrue("Not enough writes!", minExpectedWrites <= writes);
+    assertTrue(minExpectedWrites <= writes, "Not enough writes!");
     return Unpooled.wrappedBuffer(channel.getData());
   }
 
@@ -150,7 +150,7 @@ public class MessageWithHeaderSuite {
 
     @Override
     public long count() {
-      return 8 * writeCount;
+      return 8L * writeCount;
     }
 
     @Override
@@ -160,7 +160,7 @@ public class MessageWithHeaderSuite {
 
     @Override
     public long transferred() {
-      return 8 * written;
+      return 8L * written;
     }
 
     @Override
@@ -174,7 +174,7 @@ public class MessageWithHeaderSuite {
         buf.release();
         written++;
       }
-      return 8 * writesPerCall;
+      return 8L * writesPerCall;
     }
 
     @Override

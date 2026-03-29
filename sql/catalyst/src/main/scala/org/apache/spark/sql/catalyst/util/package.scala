@@ -18,15 +18,15 @@
 package org.apache.spark.sql.catalyst
 
 import java.io._
-import java.nio.charset.StandardCharsets
-import java.util.concurrent.atomic.AtomicBoolean
+import java.nio.charset.StandardCharsets.UTF_8
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.analysis.TempResolvedColumn
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{NumericType, StringType}
+import org.apache.spark.sql.connector.catalog.MetadataColumn
+import org.apache.spark.sql.types.{MetadataBuilder, NumericType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkErrorUtils, SparkStringUtils, Utils}
 
 package object util extends Logging {
 
@@ -35,12 +35,8 @@ package object util extends Logging {
     val origErr = System.err
     val origOut = System.out
     try {
-      System.setErr(new PrintStream(new OutputStream {
-        def write(b: Int) = {}
-      }))
-      System.setOut(new PrintStream(new OutputStream {
-        def write(b: Int) = {}
-      }))
+      System.setErr(new PrintStream((_: Int) => {}))
+      System.setOut(new PrintStream((_: Int) => {}))
 
       f
     } finally {
@@ -49,129 +45,110 @@ package object util extends Logging {
     }
   }
 
-  def fileToString(file: File, encoding: String = "UTF-8"): String = {
-    val inStream = new FileInputStream(file)
-    val outStream = new ByteArrayOutputStream
-    try {
-      var reading = true
-      while ( reading ) {
-        inStream.read() match {
-          case -1 => reading = false
-          case c => outStream.write(c)
-        }
-      }
-      outStream.flush()
-    }
-    finally {
-      inStream.close()
-    }
-    new String(outStream.toByteArray, encoding)
-  }
-
   def resourceToBytes(
       resource: String,
       classLoader: ClassLoader = Utils.getSparkClassLoader): Array[Byte] = {
     val inStream = classLoader.getResourceAsStream(resource)
-    val outStream = new ByteArrayOutputStream
     try {
-      var reading = true
-      while ( reading ) {
-        inStream.read() match {
-          case -1 => reading = false
-          case c => outStream.write(c)
-        }
-      }
-      outStream.flush()
-    }
-    finally {
+      inStream.readAllBytes()
+    } finally {
       inStream.close()
     }
-    outStream.toByteArray
   }
 
   def resourceToString(
       resource: String,
-      encoding: String = "UTF-8",
+      encoding: String = UTF_8.name(),
       classLoader: ClassLoader = Utils.getSparkClassLoader): String = {
     new String(resourceToBytes(resource, classLoader), encoding)
   }
 
   def stringToFile(file: File, str: String): File = {
-    val out = new PrintWriter(file)
-    out.write(str)
-    out.close()
+    Utils.tryWithResource(new PrintWriter(file)) { out =>
+      out.write(str)
+    }
     file
   }
 
   def sideBySide(left: String, right: String): Seq[String] = {
-    sideBySide(left.split("\n"), right.split("\n"))
+    SparkStringUtils.sideBySide(left, right)
   }
 
   def sideBySide(left: Seq[String], right: Seq[String]): Seq[String] = {
-    val maxLeftSize = left.map(_.length).max
-    val leftPadded = left ++ Seq.fill(math.max(right.size - left.size, 0))("")
-    val rightPadded = right ++ Seq.fill(math.max(left.size - right.size, 0))("")
-
-    leftPadded.zip(rightPadded).map {
-      case (l, r) => (if (l == r) " " else "!") + l + (" " * ((maxLeftSize - l.length) + 3)) + r
-    }
+    SparkStringUtils.sideBySide(left, right)
   }
 
-  def stackTraceToString(t: Throwable): String = {
-    val out = new java.io.ByteArrayOutputStream
-    val writer = new PrintWriter(out)
-    t.printStackTrace(writer)
-    writer.flush()
-    new String(out.toByteArray, StandardCharsets.UTF_8)
-  }
+  def stackTraceToString(t: Throwable): String = SparkErrorUtils.stackTraceToString(t)
 
-  def stringOrNull(a: AnyRef): String = if (a == null) null else a.toString
-
-  def benchmark[A](f: => A): A = {
-    val startTime = System.nanoTime()
-    val ret = f
-    val endTime = System.nanoTime()
-    // scalastyle:off println
-    println(s"${(endTime - startTime).toDouble / 1000000}ms")
-    // scalastyle:on println
-    ret
-  }
-
-  // Replaces attributes, string literals, complex type extractors with their pretty form so that
-  // generated column names don't contain back-ticks or double-quotes.
-  def usePrettyExpression(e: Expression): Expression = e transform {
+  /**
+   * Replaces attributes, string literals, complex type extractors with their pretty form so that
+   * generated column names don't contain back-ticks or double-quotes.
+   * In case value of `shouldTrimTempResolvedColumn` is true, trim [[TempResolvedColumn]]s from the
+   * expression tree to avoid having it in an [[Alias]] name.
+   */
+  private def usePrettyExpression(
+      e: Expression,
+      shouldTrimTempResolvedColumn: Boolean = false): Expression = e transform {
     case a: Attribute => new PrettyAttribute(a)
     case Literal(s: UTF8String, StringType) => PrettyAttribute(s.toString, StringType)
     case Literal(v, t: NumericType) if v != null => PrettyAttribute(v.toString, t)
+    case Literal(null, dataType) => PrettyAttribute("NULL", dataType)
     case e: GetStructField =>
-      val name = e.name.getOrElse(e.childSchema(e.ordinal).name)
-      PrettyAttribute(usePrettyExpression(e.child).sql + "." + name, e.dataType)
+      e.child.dataType match {
+        case st: StructType =>
+          val name = e.name.getOrElse(st(e.ordinal).name)
+          PrettyAttribute(
+            usePrettyExpression(e.child, shouldTrimTempResolvedColumn).sql + "." + name,
+            st(e.ordinal).dataType
+          )
+        case _ =>
+          // Child type was changed by a plan transformation.
+          val name = e.name.getOrElse(s"_${e.ordinal}")
+          PrettyAttribute(
+            usePrettyExpression(e.child, shouldTrimTempResolvedColumn).sql + "." + name,
+            e.child.dataType
+          )
+      }
     case e: GetArrayStructFields =>
-      PrettyAttribute(usePrettyExpression(e.child) + "." + e.field.name, e.dataType)
+      PrettyAttribute(
+        s"${usePrettyExpression(e.child, shouldTrimTempResolvedColumn)}.${e.field.name}",
+        e.dataType
+      )
+    case r: InheritAnalysisRules =>
+      val proposedParameters = if (shouldTrimTempResolvedColumn) {
+        r.parameters.map(trimTempResolvedColumn)
+      } else {
+        r.parameters
+      }
+      PrettyAttribute(
+        name = r.makeSQLString(
+          proposedParameters.map(parameter => toPrettySQL(parameter, shouldTrimTempResolvedColumn))
+        ),
+        dataType = r.dataType
+      )
+    case c: Cast if !c.containsTag(Cast.USER_SPECIFIED_CAST) =>
+      PrettyAttribute(usePrettyExpression(c.child, shouldTrimTempResolvedColumn).sql, c.dataType)
+    case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
   }
 
   def quoteIdentifier(name: String): String = {
-    // Escapes back-ticks within the identifier name with double-back-ticks, and then quote the
-    // identifier with back-ticks.
-    "`" + name.replace("`", "``") + "`"
+    QuotingUtils.quoteIdentifier(name)
   }
 
-  def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
+  def quoteNameParts(name: Seq[String]): String = {
+    QuotingUtils.quoteNameParts(name)
+  }
 
+  def quoteIfNeeded(part: String): String = {
+    QuotingUtils.quoteIfNeeded(part)
+  }
+
+  def toPrettySQL(e: Expression, shouldTrimTempResolvedColumn: Boolean = false): String =
+    usePrettyExpression(e, shouldTrimTempResolvedColumn).sql
 
   def escapeSingleQuotedString(str: String): String = {
-    val builder = StringBuilder.newBuilder
-
-    str.foreach {
-      case '\'' => builder ++= s"\\\'"
-      case ch => builder += ch
-    }
-
-    builder.toString()
+    QuotingUtils.escapeSingleQuotedString(str)
   }
-
-  /** Whether we have warned about plan string truncation yet. */
-  private val truncationWarningPrinted = new AtomicBoolean(false)
 
   /**
    * Format a sequence with semantics similar to calling .mkString(). Any elements beyond
@@ -184,28 +161,103 @@ package object util extends Logging {
       start: String,
       sep: String,
       end: String,
-      maxNumFields: Int = SQLConf.get.maxToStringFields): String = {
-    if (seq.length > maxNumFields) {
-      if (truncationWarningPrinted.compareAndSet(false, true)) {
-        logWarning(
-          "Truncated the string representation of a plan since it was too large. This " +
-            s"behavior can be adjusted by setting '${SQLConf.MAX_TO_STRING_FIELDS.key}'.")
-      }
-      val numFields = math.max(0, maxNumFields - 1)
-      seq.take(numFields).mkString(
-        start, sep, sep + "... " + (seq.length - numFields) + " more fields" + end)
-    } else {
-      seq.mkString(start, sep, end)
-    }
+      maxFields: Int): String = {
+    SparkStringUtils.truncatedString(seq, start, sep, end, maxFields)
   }
 
   /** Shorthand for calling truncatedString() without start or end strings. */
-  def truncatedString[T](seq: Seq[T], sep: String): String = truncatedString(seq, "", sep, "")
+  def truncatedString[T](seq: Seq[T], sep: String, maxFields: Int): String = {
+    SparkStringUtils.truncatedString(seq, "", sep, "", maxFields)
+  }
 
-  /* FIX ME
-  implicit class debugLogging(a: Any) {
-    def debugLogging() {
-      org.apache.log4j.Logger.getLogger(a.getClass.getName).setLevel(org.apache.log4j.Level.DEBUG)
+  /**
+   * Helper method used to remove all the [[TempResolvedColumn]]s from the provided expression
+   * tree.
+   */
+  def trimTempResolvedColumn(input: Expression): Expression = input.transform {
+    case t: TempResolvedColumn => t.child
+  }
+
+  val METADATA_COL_ATTR_KEY = "__metadata_col"
+
+  /**
+   * If set, this metadata column can only be accessed with qualifiers, e.g. `qualifiers.col` or
+   * `qualifiers.*`. If not set, metadata columns cannot be accessed via star.
+   */
+  val QUALIFIED_ACCESS_ONLY = "__qualified_access_only"
+
+  /**
+   * If set, this metadata column can only be accessed under [[AggregateExpression]]. This is
+   * important when resolving columns in ORDER BY and HAVING clauses on top of [[Aggregate]].
+   * In this case we can only reference attributes from grouping expressions, or attributes marked
+   * as "__aggregated_access_only" under [[AggregateExpression]].
+   */
+  val AGGREGATED_ACCESS_ONLY = "__aggregated_access_only"
+
+  implicit class MetadataColumnHelper(attr: Attribute) {
+
+    def isMetadataCol: Boolean = MetadataAttribute.isValid(attr.metadata)
+
+    def qualifiedAccessOnly: Boolean = attr.isMetadataCol &&
+      attr.metadata.contains(QUALIFIED_ACCESS_ONLY) &&
+      attr.metadata.getBoolean(QUALIFIED_ACCESS_ONLY)
+
+    def aggregatedAccessOnly: Boolean = attr.isMetadataCol &&
+      attr.metadata.contains(AGGREGATED_ACCESS_ONLY) &&
+      attr.metadata.getBoolean(AGGREGATED_ACCESS_ONLY)
+
+    def markAsQualifiedAccessOnly(): Attribute = attr.withMetadata(
+      new MetadataBuilder()
+        .withMetadata(attr.metadata)
+        .putString(METADATA_COL_ATTR_KEY, attr.name)
+        .putBoolean(QUALIFIED_ACCESS_ONLY, true)
+        .build()
+    )
+
+    def markAsAggregatedAccessOnly(): Attribute = attr.withMetadata(
+      new MetadataBuilder()
+        .withMetadata(attr.metadata)
+        .putString(METADATA_COL_ATTR_KEY, attr.name)
+        .putBoolean(AGGREGATED_ACCESS_ONLY, true)
+        .build()
+    )
+
+    def markAsAllowAnyAccess(): Attribute = {
+      if (qualifiedAccessOnly) {
+        attr.withMetadata(
+          new MetadataBuilder()
+            .withMetadata(attr.metadata)
+            .remove(QUALIFIED_ACCESS_ONLY)
+            .remove(AGGREGATED_ACCESS_ONLY)
+            .build()
+        )
+      } else {
+        attr
+      }
     }
-  } */
+  }
+
+  val AUTO_GENERATED_ALIAS = "__autoGeneratedAlias"
+
+  val INTERNAL_METADATA_KEYS = Seq(
+    AUTO_GENERATED_ALIAS,
+    METADATA_COL_ATTR_KEY,
+    QUALIFIED_ACCESS_ONLY,
+    FileSourceMetadataAttribute.FILE_SOURCE_METADATA_COL_ATTR_KEY,
+    FileSourceConstantMetadataStructField.FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY,
+    FileSourceGeneratedMetadataStructField.FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY,
+    MetadataColumn.PRESERVE_ON_DELETE,
+    MetadataColumn.PRESERVE_ON_UPDATE,
+    MetadataColumn.PRESERVE_ON_REINSERT
+  )
+
+  def removeInternalMetadata(schema: StructType): StructType = {
+    StructType(schema.map { field =>
+      var builder = new MetadataBuilder().withMetadata(field.metadata)
+      INTERNAL_METADATA_KEYS.foreach { key =>
+        builder = builder.remove(key)
+      }
+      field.copy(metadata = builder.build())
+    })
+  }
 }

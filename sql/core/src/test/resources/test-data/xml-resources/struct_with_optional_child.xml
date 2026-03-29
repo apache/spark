@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<Foo>
+    <Bar bing="123">
+    </Bar>
+    <Bar bing="345">
+        <Baz/>
+    </Bar>
+</Foo>

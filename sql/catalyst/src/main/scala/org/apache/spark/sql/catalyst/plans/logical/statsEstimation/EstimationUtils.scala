@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 import scala.collection.mutable.ArrayBuffer
 import scala.math.BigDecimal.RoundingMode
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, EmptyRow, Expression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.{DecimalType, _}
 
@@ -52,23 +52,51 @@ object EstimationUtils {
   }
 
   /**
-   * Updates (scales down) the number of distinct values if the number of rows decreases after
-   * some operation (such as filter, join). Otherwise keep it unchanged.
+   * Updates (scales down) a statistic (eg. number of distinct values) if the number of rows
+   * decreases after some operation (such as filter, join). Otherwise keep it unchanged.
    */
-  def updateNdv(oldNumRows: BigInt, newNumRows: BigInt, oldNdv: BigInt): BigInt = {
-    if (newNumRows < oldNumRows) {
-      ceil(BigDecimal(oldNdv) * BigDecimal(newNumRows) / BigDecimal(oldNumRows))
+  def updateStat(
+      oldNumRows: BigInt,
+      newNumRows: BigInt,
+      oldStatOpt: Option[BigInt],
+      updatedStatOpt: Option[BigInt]): Option[BigInt] = {
+    if (oldStatOpt.isDefined && updatedStatOpt.isDefined && updatedStatOpt.get > 1 &&
+      newNumRows < oldNumRows) {
+        // no need to scale down since it is already down to 1
+        Some(ceil(BigDecimal(oldStatOpt.get) * BigDecimal(newNumRows) / BigDecimal(oldNumRows)))
     } else {
-      oldNdv
+      updatedStatOpt
     }
   }
 
-  def ceil(bigDecimal: BigDecimal): BigInt = bigDecimal.setScale(0, RoundingMode.CEILING).toBigInt()
+  def ceil(bigDecimal: BigDecimal): BigInt = bigDecimal.setScale(0, RoundingMode.CEILING).toBigInt
 
   /** Get column stats for output attributes. */
   def getOutputMap(inputMap: AttributeMap[ColumnStat], output: Seq[Attribute])
     : AttributeMap[ColumnStat] = {
     AttributeMap(output.flatMap(a => inputMap.get(a).map(a -> _)))
+  }
+
+  /**
+   * Returns the stats for aliases of child's attributes
+   */
+  def getAliasStats(
+      expressions: Seq[Expression],
+      attributeStats: AttributeMap[ColumnStat],
+      rowCount: BigInt): Seq[(Attribute, ColumnStat)] = {
+    expressions.collect {
+      case alias @ Alias(attr: Attribute, _) if attributeStats.contains(attr) =>
+        alias.toAttribute -> attributeStats(attr)
+      case alias @ Alias(expr: Expression, _) if expr.foldable && expr.deterministic =>
+        val value = expr.eval(EmptyRow)
+        val size = expr.dataType.defaultSize
+        val columnStat = if (value == null) {
+          ColumnStat(Some(0), None, None, Some(rowCount), Some(size), Some(size), None, 2)
+        } else {
+          ColumnStat(Some(1), Some(value), Some(value), Some(0), Some(size), Some(size), None, 2)
+        }
+        alias.toAttribute -> columnStat
+    }
   }
 
   def getSizePerRow(
@@ -309,7 +337,7 @@ object EstimationUtils {
               lo = right.lo,
               hi = right.hi,
               leftNdv = left.ndv * leftRatio,
-              rightNdv = right.ndv,
+              rightNdv = right.ndv.toDouble,
               leftNumRows = leftHeight * leftRatio,
               rightNumRows = rightHeight
             )
@@ -322,7 +350,7 @@ object EstimationUtils {
             OverlappedRange(
               lo = left.lo,
               hi = left.hi,
-              leftNdv = left.ndv,
+              leftNdv = left.ndv.toDouble,
               rightNdv = right.ndv * rightRatio,
               leftNumRows = leftHeight,
               rightNumRows = rightHeight * rightRatio
@@ -332,7 +360,7 @@ object EstimationUtils {
         }
       }
     }
-    overlappedRanges
+    overlappedRanges.toSeq
   }
 
   /**

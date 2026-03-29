@@ -41,7 +41,7 @@ object DataFrameExample {
   case class Params(input: String = "data/mllib/sample_libsvm_data.txt")
     extends AbstractParams[Params]
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val defaultParams = Params()
 
     val parser = new OptionParser[Params]("DataFrameExample") {
@@ -62,7 +62,7 @@ object DataFrameExample {
 
   def run(params: Params): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName(s"DataFrameExample with $params")
       .getOrCreate()
 

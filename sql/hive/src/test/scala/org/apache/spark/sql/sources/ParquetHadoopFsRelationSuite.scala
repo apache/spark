@@ -19,15 +19,16 @@ package org.apache.spark.sql.sources
 
 import java.io.File
 
-import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
+import org.apache.spark.sql.execution.datasources.parquet.ParquetCompressionCodec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 
 class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
@@ -87,8 +88,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       // Creates an arbitrary file.  If this directory gets scanned, ParquetRelation2 will throw
       // since it's not a valid Parquet file.
       val emptyFile = new File(path, "empty")
-      Files.createParentDirs(emptyFile)
-      Files.touch(emptyFile)
+      Utils.touch(emptyFile)
 
       // This shouldn't throw anything.
       df.write.format("parquet").mode(SaveMode.Ignore).save(path)
@@ -104,21 +104,6 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       // This shouldn't throw anything.
       df.write.format("parquet").mode(SaveMode.Overwrite).save(path)
       checkAnswer(spark.read.format("parquet").load(path), df)
-    }
-  }
-
-  test("SPARK-8079: Avoid NPE thrown from BaseWriterContainer.abortJob") {
-    withTempPath { dir =>
-      intercept[AnalysisException] {
-        // Parquet doesn't allow field names with spaces.  Here we are intentionally making an
-        // exception thrown from the `ParquetRelation2.prepareForWriteJob()` method to trigger
-        // the bug.  Please refer to spark-8079 for more details.
-        spark.range(1, 10)
-          .withColumnRenamed("id", "a b")
-          .write
-          .format("parquet")
-          .save(dir.getCanonicalPath)
-      }
     }
   }
 
@@ -152,8 +137,8 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      spark.range(2).select('id as 'a, 'id as 'b).write.partitionBy("b").parquet(path)
-      val df = spark.read.parquet(path).filter('a === 0).select('b)
+      spark.range(2).select($"id" as "a", $"id" as "b").write.partitionBy("b").parquet(path)
+      val df = spark.read.parquet(path).filter($"a" === 0).select("b")
       val physicalPlan = df.queryExecution.sparkPlan
 
       assert(physicalPlan.collect { case p: execution.ProjectExec => p }.length === 1)
@@ -214,7 +199,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
   }
 
   test("SPARK-13543: Support for specifying compression codec for Parquet via option()") {
-    withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "UNCOMPRESSED") {
+    withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> ParquetCompressionCodec.UNCOMPRESSED.name) {
       withTempPath { dir =>
         val path = s"${dir.getCanonicalPath}/table1"
         val df = (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b")

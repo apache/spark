@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable.Map
+
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
@@ -43,18 +45,14 @@ private[spark] trait TaskScheduler {
 
   // Invoked after system has successfully initialized (typically in spark context).
   // Yarn uses this to bootstrap allocation of resources based on preferred locations,
-  // wait for slave registrations, etc.
-  def postStartHook() { }
+  // wait for executor registrations, etc.
+  def postStartHook(): Unit = { }
 
   // Disconnect from the cluster.
-  def stop(): Unit
+  def stop(exitCode: Int = 0): Unit
 
   // Submit a sequence of tasks to run.
   def submitTasks(taskSet: TaskSet): Unit
-
-  // Kill all the tasks in a stage and fail the stage and all the jobs that depend on the stage.
-  // Throw UnsupportedOperationException if the backend doesn't support kill tasks.
-  def cancelTasks(stageId: Int, interruptThread: Boolean): Unit
 
   /**
    * Kills a task attempt.
@@ -64,9 +62,13 @@ private[spark] trait TaskScheduler {
    */
   def killTaskAttempt(taskId: Long, interruptThread: Boolean, reason: String): Boolean
 
-  // Kill all the running task attempts in a stage.
+  // Kill all the tasks in all the stage attempts of the same stage Id
   // Throw UnsupportedOperationException if the backend doesn't support kill tasks.
   def killAllTaskAttempts(stageId: Int, interruptThread: Boolean, reason: String): Unit
+
+  // Notify the corresponding `TaskSetManager`s of the stage, that a partition has already completed
+  // and they can skip running tasks for it.
+  def notifyPartitionCompletion(stageId: Int, partitionId: Int): Unit
 
   // Set the DAG scheduler for upcalls. This is guaranteed to be set before submitTasks is called.
   def setDAGScheduler(dagScheduler: DAGScheduler): Unit
@@ -83,7 +85,7 @@ private[spark] trait TaskScheduler {
       execId: String,
       accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
       blockManagerId: BlockManagerId,
-      executorUpdates: ExecutorMetrics): Boolean
+      executorUpdates: Map[(Int, Int), ExecutorMetrics]): Boolean
 
   /**
    * Get an application ID associated with the job.
@@ -91,6 +93,16 @@ private[spark] trait TaskScheduler {
    * @return An application ID
    */
   def applicationId(): String = appId
+
+  /**
+   * Process a decommissioning executor.
+   */
+  def executorDecommission(executorId: String, decommissionInfo: ExecutorDecommissionInfo): Unit
+
+  /**
+   * If an executor is decommissioned, return its corresponding decommission info
+   */
+  def getExecutorDecommissionState(executorId: String): Option[ExecutorDecommissionState]
 
   /**
    * Process a lost executor

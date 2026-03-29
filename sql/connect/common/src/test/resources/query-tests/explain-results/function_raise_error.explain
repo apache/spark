@@ -1,0 +1,2 @@
+Project [raise_error(USER_RAISED_EXCEPTION, map(errorMessage, kaboom), NullType) AS raise_error(USER_RAISED_EXCEPTION, map(errorMessage, kaboom))#0]
++- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

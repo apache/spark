@@ -1,0 +1,11 @@
+[ {
+  "addTime" : "2021-04-19T15:35:50.218GMT",
+  "hostPort" : "192.168.1.19:8042",
+  "id" : "yarn-am",
+  "isActive" : true,
+  "processLogs" : {
+    "stderr" : "http://192.168.1.19:8042/node/containerlogs/container_1555004656427_0144_01_000001/test/stderr?start=-4096",
+    "stdout" : "http://192.168.1.19:8042/node/containerlogs/container_1555004656427_0144_01_000001/test/stdout?start=-4096"
+  },
+  "totalCores" : 1
+} ]

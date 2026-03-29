@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import glob
 import os
 import tempfile
 import time
@@ -22,64 +21,43 @@ import unittest
 
 from pyspark import SparkConf, SparkContext, RDD
 from pyspark.streaming import StreamingContext
-
-
-def search_kinesis_asl_assembly_jar():
-    kinesis_asl_assembly_dir = os.path.join(
-        os.environ["SPARK_HOME"], "external/kinesis-asl-assembly")
-
-    # We should ignore the following jars
-    ignored_jar_suffixes = ("javadoc.jar", "sources.jar", "test-sources.jar", "tests.jar")
-
-    # Search jar in the project dir using the jar name_prefix for both sbt build and maven
-    # build because the artifact jars are in different directories.
-    name_prefix = "spark-streaming-kinesis-asl-assembly"
-    sbt_build = glob.glob(os.path.join(
-        kinesis_asl_assembly_dir, "target/scala-*/%s-*.jar" % name_prefix))
-    maven_build = glob.glob(os.path.join(
-        kinesis_asl_assembly_dir, "target/%s_*.jar" % name_prefix))
-    jar_paths = sbt_build + maven_build
-    jars = [jar for jar in jar_paths if not jar.endswith(ignored_jar_suffixes)]
-
-    if not jars:
-        return None
-    elif len(jars) > 1:
-        raise Exception(("Found multiple Spark Streaming Kinesis ASL assembly JARs: %s; please "
-                         "remove all but one") % (", ".join(jars)))
-    else:
-        return jars[0]
-
+from pyspark.testing.sqlutils import search_jar
 
 # Must be same as the variable and condition defined in KinesisTestUtils.scala and modules.py
 kinesis_test_environ_var = "ENABLE_KINESIS_TESTS"
-should_skip_kinesis_tests = not os.environ.get(kinesis_test_environ_var) == '1'
+should_skip_kinesis_tests = not os.environ.get(kinesis_test_environ_var) == "1"
 
 if should_skip_kinesis_tests:
     kinesis_requirement_message = (
         "Skipping all Kinesis Python tests as environmental variable 'ENABLE_KINESIS_TESTS' "
-        "was not set.")
+        "was not set."
+    )
 else:
-    kinesis_asl_assembly_jar = search_kinesis_asl_assembly_jar()
+    kinesis_asl_assembly_jar = search_jar(
+        "connector/kinesis-asl-assembly",
+        "spark-streaming-kinesis-asl-assembly-",
+        "spark-streaming-kinesis-asl-assembly_",
+    )
     if kinesis_asl_assembly_jar is None:
         kinesis_requirement_message = (
             "Skipping all Kinesis Python tests as the optional Kinesis project was "
             "not compiled into a JAR. To run these tests, "
             "you need to build Spark with 'build/sbt -Pkinesis-asl assembly/package "
             "streaming-kinesis-asl-assembly/assembly' or "
-            "'build/mvn -Pkinesis-asl package' before running this test.")
+            "'build/mvn -Pkinesis-asl package' before running this test."
+        )
     else:
         existing_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
         jars_args = "--jars %s" % kinesis_asl_assembly_jar
         os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join([jars_args, existing_args])
-        kinesis_requirement_message = None
+        kinesis_requirement_message = ""
 
-should_test_kinesis = kinesis_requirement_message is None
+should_test_kinesis = not kinesis_requirement_message
 
 
 class PySparkStreamingTestCase(unittest.TestCase):
-
     timeout = 30  # seconds
-    duration = .5
+    duration = 0.5
 
     @classmethod
     def setUpClass(cls):
@@ -96,7 +74,7 @@ class PySparkStreamingTestCase(unittest.TestCase):
             jSparkContextOption = SparkContext._jvm.SparkContext.get()
             if jSparkContextOption.nonEmpty():
                 jSparkContextOption.get().stop()
-        except:
+        except BaseException:
             pass
 
     def setUp(self):
@@ -110,7 +88,7 @@ class PySparkStreamingTestCase(unittest.TestCase):
             jStreamingContextOption = StreamingContext._jvm.SparkContext.getActive()
             if jStreamingContextOption.nonEmpty():
                 jStreamingContextOption.get().stop(False)
-        except:
+        except BaseException:
             pass
 
     def wait_for(self, result, n):
@@ -140,7 +118,10 @@ class PySparkStreamingTestCase(unittest.TestCase):
         """
         Collect each RDDs into the returned list.
 
-        :return: list, which will have the collected items.
+        Returns
+        -------
+        list
+            which will have the collected items.
         """
         result = []
 
@@ -161,9 +142,14 @@ class PySparkStreamingTestCase(unittest.TestCase):
 
     def _test_func(self, input, func, expected, sort=False, input2=None):
         """
-        @param input: dataset for the test. This should be list of lists.
-        @param func: wrapped function. This function should return PythonDStream object.
-        @param expected: expected output for this testcase.
+        Parameters
+        ----------
+        input : list
+            dataset for the test. This should be list of lists.
+        func : function
+            wrapped function. This function should return PythonDStream object.
+        expected
+            expected output for this testcase.
         """
         if not isinstance(input[0], RDD):
             input = [self.sc.parallelize(d, 1) for d in input]

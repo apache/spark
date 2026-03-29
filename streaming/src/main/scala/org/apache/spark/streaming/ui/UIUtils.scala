@@ -17,13 +17,11 @@
 
 package org.apache.spark.streaming.ui
 
-import java.text.SimpleDateFormat
-import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import scala.xml.Node
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.spark.ui.{ UIUtils => SparkUIUtils }
 
 private[streaming] object UIUtils {
 
@@ -46,7 +44,7 @@ private[streaming] object UIUtils {
    */
   def normalizeDuration(milliseconds: Long): (Double, TimeUnit) = {
     if (milliseconds < 1000) {
-      return (milliseconds, TimeUnit.MILLISECONDS)
+      return (milliseconds.toDouble, TimeUnit.MILLISECONDS)
     }
     val seconds = milliseconds.toDouble / 1000
     if (seconds < 60) {
@@ -69,66 +67,13 @@ private[streaming] object UIUtils {
    * will discard the fractional part.
    */
   def convertToTimeUnit(milliseconds: Long, unit: TimeUnit): Double = unit match {
-    case TimeUnit.NANOSECONDS => milliseconds * 1000 * 1000
-    case TimeUnit.MICROSECONDS => milliseconds * 1000
-    case TimeUnit.MILLISECONDS => milliseconds
+    case TimeUnit.NANOSECONDS => milliseconds.toDouble * 1000 * 1000
+    case TimeUnit.MICROSECONDS => milliseconds.toDouble * 1000
+    case TimeUnit.MILLISECONDS => milliseconds.toDouble
     case TimeUnit.SECONDS => milliseconds / 1000.0
     case TimeUnit.MINUTES => milliseconds / 1000.0 / 60.0
     case TimeUnit.HOURS => milliseconds / 1000.0 / 60.0 / 60.0
     case TimeUnit.DAYS => milliseconds / 1000.0 / 60.0 / 60.0 / 24.0
-  }
-
-  // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
-  private val batchTimeFormat = new ThreadLocal[SimpleDateFormat]() {
-    override def initialValue(): SimpleDateFormat =
-      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US)
-  }
-
-  private val batchTimeFormatWithMilliseconds = new ThreadLocal[SimpleDateFormat]() {
-    override def initialValue(): SimpleDateFormat =
-      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS", Locale.US)
-  }
-
-  /**
-   * If `batchInterval` is less than 1 second, format `batchTime` with milliseconds. Otherwise,
-   * format `batchTime` without milliseconds.
-   *
-   * @param batchTime the batch time to be formatted
-   * @param batchInterval the batch interval
-   * @param showYYYYMMSS if showing the `yyyy/MM/dd` part. If it's false, the return value wll be
-   *                     only `HH:mm:ss` or `HH:mm:ss.SSS` depending on `batchInterval`
-   * @param timezone only for test
-   */
-  def formatBatchTime(
-      batchTime: Long,
-      batchInterval: Long,
-      showYYYYMMSS: Boolean = true,
-      timezone: TimeZone = null): String = {
-    val oldTimezones =
-      (batchTimeFormat.get.getTimeZone, batchTimeFormatWithMilliseconds.get.getTimeZone)
-    if (timezone != null) {
-      batchTimeFormat.get.setTimeZone(timezone)
-      batchTimeFormatWithMilliseconds.get.setTimeZone(timezone)
-    }
-    try {
-      val formattedBatchTime =
-        if (batchInterval < 1000) {
-          batchTimeFormatWithMilliseconds.get.format(batchTime)
-        } else {
-          // If batchInterval >= 1 second, don't show milliseconds
-          batchTimeFormat.get.format(batchTime)
-        }
-      if (showYYYYMMSS) {
-        formattedBatchTime
-      } else {
-        formattedBatchTime.substring(formattedBatchTime.indexOf(' ') + 1)
-      }
-    } finally {
-      if (timezone != null) {
-        batchTimeFormat.get.setTimeZone(oldTimezones._1)
-        batchTimeFormatWithMilliseconds.get.setTimeZone(oldTimezones._2)
-      }
-    }
   }
 
   def createOutputOperationFailureForUI(failure: String): String = {
@@ -149,14 +94,7 @@ private[streaming] object UIUtils {
       failureReason: String,
       rowspan: Int = 1,
       includeFirstLineInExpandDetails: Boolean = true): Seq[Node] = {
-    val isMultiline = failureReason.indexOf('\n') >= 0
-    // Display the first line by default
-    val failureReasonSummary = StringEscapeUtils.escapeHtml4(
-      if (isMultiline) {
-        failureReason.substring(0, failureReason.indexOf('\n'))
-      } else {
-        failureReason
-      })
+    val (failureReasonSummary, isMultiline) = SparkUIUtils.errorSummary(failureReason)
     val failureDetails =
       if (isMultiline && !includeFirstLineInExpandDetails) {
         // Skip the first line
@@ -164,19 +102,7 @@ private[streaming] object UIUtils {
       } else {
         failureReason
       }
-    val details = if (isMultiline) {
-      // scalastyle:off
-      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
-            class="expand-details">
-        +details
-      </span> ++
-        <div class="stacktrace-details collapsed">
-          <pre>{failureDetails}</pre>
-        </div>
-      // scalastyle:on
-    } else {
-      ""
-    }
+    val details = SparkUIUtils.detailsUINode(isMultiline, failureDetails)
 
     if (rowspan == 1) {
       <td valign="middle" style="max-width: 300px">{failureReasonSummary}{details}</td>

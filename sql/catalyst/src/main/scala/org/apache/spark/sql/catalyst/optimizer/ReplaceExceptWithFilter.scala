@@ -19,9 +19,11 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.EXCEPT
 
 
 /**
@@ -36,7 +38,8 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * Note:
  * Before flipping the filter condition of the right node, we should:
  * 1. Combine all it's [[Filter]].
- * 2. Apply InferFiltersFromConstraints rule (to take into account of NULL values in the condition).
+ * 2. Update the attribute references to the left node;
+ * 3. Add a Coalesce(condition, False) (to take into account of NULL values in the condition).
  */
 object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
 
@@ -45,25 +48,30 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
       return plan
     }
 
-    plan.transform {
+    plan.transformWithPruning(_.containsPattern(EXCEPT), ruleId) {
       case e @ Except(left, right, false) if isEligible(left, right) =>
-        val newCondition = transformCondition(left, skipProject(right))
-        newCondition.map { c =>
-          Distinct(Filter(Not(c), left))
-        }.getOrElse {
+        val filterCondition = combineFilters(skipProject(right)).asInstanceOf[Filter].condition
+        if (filterCondition.deterministic) {
+          transformCondition(left, filterCondition).map { c =>
+            Distinct(Filter(Not(c), left))
+          }.getOrElse {
+            e
+          }
+        } else {
           e
         }
     }
   }
 
-  private def transformCondition(left: LogicalPlan, right: LogicalPlan): Option[Expression] = {
-    val filterCondition =
-      InferFiltersFromConstraints(combineFilters(right)).asInstanceOf[Filter].condition
-
-    val attributeNameMap: Map[String, Attribute] = left.output.map(x => (x.name, x)).toMap
-
-    if (filterCondition.references.forall(r => attributeNameMap.contains(r.name))) {
-      Some(filterCondition.transform { case a: AttributeReference => attributeNameMap(a.name) })
+  private def transformCondition(plan: LogicalPlan, condition: Expression): Option[Expression] = {
+    val attributeNameMap: Map[String, Attribute] = plan.output.map(x => (x.name, x)).toMap
+    if (condition.references.forall(r => attributeNameMap.contains(r.name))) {
+      val rewrittenCondition = condition.transform {
+        case a: AttributeReference => attributeNameMap(a.name)
+      }
+      // We need to consider as False when the condition is NULL, otherwise we do not return those
+      // rows containing NULL which are instead filtered in the Except right plan
+      Some(Coalesce(Seq(rewrittenCondition, Literal.FalseLiteral)))
     } else {
       None
     }
@@ -80,8 +88,8 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
     val rightProjectList = projectList(right)
 
     left.output.size == left.output.map(_.name).distinct.size &&
-      left.find(_.expressions.exists(SubqueryExpression.hasSubquery)).isEmpty &&
-        right.find(_.expressions.exists(SubqueryExpression.hasSubquery)).isEmpty &&
+      !left.exists(_.expressions.exists(SubqueryExpression.hasSubquery)) &&
+        !right.exists(_.expressions.exists(SubqueryExpression.hasSubquery)) &&
           Project(leftProjectList, nonFilterChild(skipProject(left))).sameResult(
             Project(rightProjectList, nonFilterChild(skipProject(right))))
   }
@@ -97,7 +105,7 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
   }
 
   private def nonFilterChild(plan: LogicalPlan) = plan.find(!_.isInstanceOf[Filter]).getOrElse {
-    throw new IllegalStateException("Leaf node is expected")
+    throw SparkException.internalError("Leaf node is expected")
   }
 
   private def combineFilters(plan: LogicalPlan): LogicalPlan = {

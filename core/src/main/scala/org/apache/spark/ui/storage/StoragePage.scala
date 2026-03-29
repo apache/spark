@@ -17,14 +17,15 @@
 
 package org.apache.spark.ui.storage
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.collection.SortedMap
 import scala.xml.Node
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.status.{AppStatusStore, StreamBlockData}
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui._
+import org.apache.spark.ui.storage.ToolTips._
 import org.apache.spark.util.Utils
 
 /** Page showing list of RDD's currently stored in the cluster */
@@ -44,19 +45,22 @@ private[ui] class StoragePage(parent: SparkUITab, store: AppStatusStore) extends
       Nil
     } else {
       <div>
-        <span class="collapse-aggregated-rdds collapse-table"
-            onClick="collapseTable('collapse-aggregated-rdds','aggregated-rdds')">
+        <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-rdds"
+            aria-expanded="true" aria-controls="aggregated-rdds"
+            data-collapse-name="collapse-aggregated-rdds">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
-            <a>RDDs</a>
+            <a>RDDs ({rdds.length})</a>
           </h4>
         </span>
-        <div class="aggregated-rdds collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-rdds">
           {UIUtils.listingTable(
             rddHeader,
             rddRow(request, _: v1.RDDStorageInfo),
             rdds,
-            id = Some("storage-by-rdd-table"))}
+            id = Some("storage-by-rdd-table"),
+            tooltipHeaders = tooltips)}
         </div>
       </div>
     }
@@ -72,13 +76,23 @@ private[ui] class StoragePage(parent: SparkUITab, store: AppStatusStore) extends
     "Size in Memory",
     "Size on Disk")
 
+  /** Tooltips for header fields of the RDD table */
+  val tooltips = Seq(
+    None,
+    Some(RDD_NAME),
+    Some(STORAGE_LEVEL),
+    Some(CACHED_PARTITIONS),
+    Some(FRACTION_CACHED),
+    Some(SIZE_IN_MEMORY),
+    Some(SIZE_ON_DISK))
+
   /** Render an HTML row representing an RDD */
   private def rddRow(request: HttpServletRequest, rdd: v1.RDDStorageInfo): Seq[Node] = {
     // scalastyle:off
     <tr>
       <td>{rdd.id}</td>
       <td>
-        <a href={"%s/storage/rdd?id=%s".format(
+        <a href={"%s/storage/rdd/?id=%s".format(
           UIUtils.prependBaseUri(request, parent.basePath), rdd.id)}>
           {rdd.name}
         </a>
@@ -86,7 +100,7 @@ private[ui] class StoragePage(parent: SparkUITab, store: AppStatusStore) extends
       <td>{rdd.storageLevel}
       </td>
       <td>{rdd.numCachedPartitions.toString}</td>
-      <td>{"%.0f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)}</td>
+      <td>{"%.2f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)}</td>
       <td sorttable_customkey={rdd.memoryUsed.toString}>{Utils.bytesToString(rdd.memoryUsed)}</td>
       <td sorttable_customkey={rdd.diskUsed.toString} >{Utils.bytesToString(rdd.diskUsed)}</td>
     </tr>
@@ -98,7 +112,7 @@ private[ui] class StoragePage(parent: SparkUITab, store: AppStatusStore) extends
       // Don't show the tables if there is no stream block
       Nil
     } else {
-      val sorted = blocks.groupBy(_.name).toSeq.sortBy(_._1.toString)
+      val sorted = blocks.groupBy(_.name).toSeq.sortBy(_._1)
 
       <div>
         <h4>Receiver Blocks</h4>

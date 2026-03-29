@@ -18,9 +18,10 @@
 package org.apache.spark.sql
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateSafeProjection
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types._
 
 /**
@@ -30,9 +31,9 @@ import org.apache.spark.sql.types._
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark catalyst test jar>
- *   2. build/sbt "catalyst/test:runMain <this class>"
+ *   2. build/sbt "catalyst/Test/runMain <this class>"
  *   3. generate result:
- *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "catalyst/test:runMain <this class>"
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "catalyst/Test/runMain <this class>"
  *      Results will be written to "benchmarks/HashBenchmark-results.txt".
  * }}}
  */
@@ -41,13 +42,13 @@ object HashBenchmark extends BenchmarkBase {
   def test(name: String, schema: StructType, numRows: Int, iters: Int): Unit = {
     runBenchmark(name) {
       val generator = RandomDataGenerator.forType(schema, nullable = false).get
-      val encoder = RowEncoder(schema)
-      val attrs = schema.toAttributes
+      val toRow = ExpressionEncoder(schema).createSerializer()
+      val attrs = DataTypeUtils.toAttributes(schema)
       val safeProjection = GenerateSafeProjection.generate(attrs, attrs)
 
       val rows = (1 to numRows).map(_ =>
         // The output of encoder is UnsafeRow, use safeProjection to turn in into safe format.
-        safeProjection(encoder.toRow(generator().asInstanceOf[Row])).copy()
+        safeProjection(toRow(generator().asInstanceOf[Row])).copy()
       ).toArray
 
       val benchmark = new Benchmark("Hash For " + name, iters * numRows.toLong, output = output)

@@ -64,6 +64,10 @@
 #    "/metrics/applications/json" endpoints can be sent separately to get
 #    metrics snapshots of the master instance and applications. This
 #    MetricsServlet does not have to be configured.
+#    6. The metrics system can also be configured using Spark configuration
+#    parameters. The relevant parameter names are formed by adding the
+#    prefix "spark.metrics.conf." to the configuration entries detailed in
+#    this file (see examples below).
 
 ## List of available common sources and their properties.
 
@@ -109,6 +113,15 @@
 #     /metrics/applications/json # App information
 #     /metrics/master/json       # Master information
 
+# org.apache.spark.metrics.sink.PrometheusServlet
+#   Name:     Default:   Description:
+#   path      VARIES*    Path prefix from the web server root
+#
+# * Default path is /metrics/prometheus for all instances except the master. The
+#   master has two paths:
+#     /metrics/applications/prometheus # App information
+#     /metrics/master/prometheus       # Master information
+
 # org.apache.spark.metrics.sink.GraphiteSink
 #   Name:     Default:      Description:
 #   host      NONE          Hostname of the Graphite server, must be set
@@ -117,6 +130,7 @@
 #   unit      seconds       Unit of the poll period
 #   prefix    EMPTY STRING  Prefix to prepend to every metric's name
 #   protocol  tcp           Protocol ("tcp" or "udp") to use
+#   regex     NONE          Optional filter to send only metrics matching this regex string
 
 # org.apache.spark.metrics.sink.StatsdSink
 #   Name:     Default:      Description:
@@ -125,6 +139,7 @@
 #   period    10            Poll period
 #   unit      seconds       Units of poll period
 #   prefix    EMPTY STRING  Prefix to prepend to metric name
+#   regex     NONE          Optional filter to send only metrics matching this regex string
 
 ## Examples
 # Enable JmxSink for all instances by class name
@@ -136,6 +151,7 @@
 # Enable StatsdSink for all instances by class name
 #*.sink.statsd.class=org.apache.spark.metrics.sink.StatsdSink
 #*.sink.statsd.prefix=spark
+#*.sink.statsd.regex=<optional_value>
 
 # Polling period for the ConsoleSink
 #*.sink.console.period=10
@@ -172,6 +188,14 @@
 # Unit of the polling period for the Slf4jSink
 #*.sink.slf4j.unit=minutes
 
+# Example configuration for Graphite sink
+#*.sink.graphite.class=org.apache.spark.metrics.sink.GraphiteSink
+#*.sink.graphite.host=<graphiteEndPoint_hostName>
+#*.sink.graphite.port=<listening_port>
+#*.sink.graphite.period=10
+#*.sink.graphite.unit=seconds
+#*.sink.graphite.prefix=<optional_value>
+
 # Enable JvmSource for instance master, worker, driver and executor
 #master.source.jvm.class=org.apache.spark.metrics.source.JvmSource
 
@@ -180,3 +204,9 @@
 #driver.source.jvm.class=org.apache.spark.metrics.source.JvmSource
 
 #executor.source.jvm.class=org.apache.spark.metrics.source.JvmSource
+
+# Example configuration for PrometheusServlet
+#*.sink.prometheusServlet.class=org.apache.spark.metrics.sink.PrometheusServlet
+#*.sink.prometheusServlet.path=/metrics/prometheus
+#master.sink.prometheusServlet.path=/metrics/master/prometheus
+#applications.sink.prometheusServlet.path=/metrics/applications/prometheus

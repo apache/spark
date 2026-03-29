@@ -22,17 +22,18 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
-import scala.language.{implicitConversions, postfixOps}
+import scala.language.implicitConversions
 import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
-import org.mockito.Matchers.any
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{doThrow, reset, spy}
-import org.scalatest.{BeforeAndAfter, Matchers}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler.{AllocatedBlocks, _}
@@ -40,13 +41,12 @@ import org.apache.spark.streaming.util._
 import org.apache.spark.streaming.util.WriteAheadLogSuite._
 import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
 
-class ReceivedBlockTrackerSuite
-  extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
+class ReceivedBlockTrackerSuite extends SparkFunSuite with BeforeAndAfter with Matchers {
 
   val hadoopConf = new Configuration()
   val streamId = 1
 
-  var allReceivedBlockTrackers = new ArrayBuffer[ReceivedBlockTracker]()
+  val allReceivedBlockTrackers = new ArrayBuffer[ReceivedBlockTracker]()
   var checkpointDirectory: File = null
   var conf: SparkConf = null
 
@@ -96,6 +96,27 @@ class ReceivedBlockTrackerSuite
     receivedBlockTracker.getUnallocatedBlocks(streamId) shouldEqual blockInfos
   }
 
+  test("block addition, and block to batch allocation with many blocks") {
+    val receivedBlockTracker = createTracker()
+    receivedBlockTracker.isWriteAheadLogEnabled should be (true)
+
+    val blockInfos = generateBlockInfos(100000)
+    blockInfos.map(receivedBlockTracker.addBlock)
+    receivedBlockTracker.allocateBlocksToBatch(1)
+
+    receivedBlockTracker.getUnallocatedBlocks(streamId) shouldEqual Seq.empty
+    receivedBlockTracker.hasUnallocatedReceivedBlocks should be (false)
+    receivedBlockTracker.getBlocksOfBatch(1) shouldEqual Map(streamId -> blockInfos)
+    receivedBlockTracker.getBlocksOfBatchAndStream(1, streamId) shouldEqual blockInfos
+
+    val expectedWrittenData1 = blockInfos.map(BlockAdditionEvent) :+
+      BatchAllocationEvent(1, AllocatedBlocks(Map(streamId -> blockInfos)))
+    getWrittenLogData() shouldEqual expectedWrittenData1
+    getWriteAheadLogFiles() should have size 1
+
+    receivedBlockTracker.stop()
+  }
+
   test("recovery with write ahead logs should remove only allocated blocks from received queue") {
     val manualClock = new ManualClock
     val batchTime = manualClock.getTimeMillis()
@@ -118,7 +139,7 @@ class ReceivedBlockTrackerSuite
   }
 
   test("block allocation to batch should not loose blocks from received queue") {
-    val tracker1 = spy(createTracker())
+    val tracker1 = spy[ReceivedBlockTracker](createTracker())
     tracker1.isWriteAheadLogEnabled should be (true)
     tracker1.getUnallocatedBlocks(streamId) shouldEqual Seq.empty
 
@@ -163,7 +184,7 @@ class ReceivedBlockTrackerSuite
     // Set the time increment level to twice the rotation interval so that every increment creates
     // a new log file
 
-    def incrementTime() {
+    def incrementTime(): Unit = {
       val timeIncrementMillis = 2000L
       manualClock.advance(timeIncrementMillis)
     }
@@ -176,7 +197,7 @@ class ReceivedBlockTrackerSuite
     }
 
     // Print the data present in the log ahead files in the log directory
-    def printLogFiles(message: String) {
+    def printLogFiles(message: String): Unit = {
       val fileContents = getWriteAheadLogFiles().map { file =>
         (s"\n>>>>> $file: <<<<<\n${getWrittenLogData(file).mkString("\n")}")
       }.mkString("\n")
@@ -255,7 +276,7 @@ class ReceivedBlockTrackerSuite
     getWrittenLogData(getWriteAheadLogFiles().last) should contain(createBatchCleanup(batchTime1))
 
     // Verify that at least one log file gets deleted
-    eventually(timeout(10 seconds), interval(10 millisecond)) {
+    eventually(timeout(10.seconds), interval(10.millisecond)) {
       getWriteAheadLogFiles() should not contain oldestLogFile
     }
     printLogFiles("After clean")
@@ -355,16 +376,16 @@ class ReceivedBlockTrackerSuite
       recoverFromWriteAheadLog: Boolean = false,
       clock: Clock = new SystemClock): ReceivedBlockTracker = {
     val cpDirOption = if (setCheckpointDir) Some(checkpointDirectory.toString) else None
-    var tracker = new ReceivedBlockTracker(
+    val tracker = new ReceivedBlockTracker(
       conf, hadoopConf, Seq(streamId), clock, recoverFromWriteAheadLog, cpDirOption)
     allReceivedBlockTrackers += tracker
     tracker
   }
 
   /** Generate blocks infos using random ids */
-  def generateBlockInfos(): Seq[ReceivedBlockInfo] = {
-    List.fill(5)(ReceivedBlockInfo(streamId, Some(0L), None,
-      BlockManagerBasedStoreResult(StreamBlockId(streamId, math.abs(Random.nextInt)), Some(0L))))
+  def generateBlockInfos(blockCount: Int = 5): Seq[ReceivedBlockInfo] = {
+    List.fill(blockCount)(ReceivedBlockInfo(streamId, Some(0L), None,
+      BlockManagerBasedStoreResult(StreamBlockId(streamId, math.abs(Random.nextInt())), Some(0L))))
   }
 
   /**
@@ -374,7 +395,7 @@ class ReceivedBlockTrackerSuite
     val writer = HdfsUtils.getOutputStream(filePath, hadoopConf)
     events.foreach { event =>
       val bytes = Utils.serialize(event)
-      writer.writeInt(bytes.size)
+      writer.writeInt(bytes.length)
       writer.write(bytes)
     }
     writer.close()
@@ -395,7 +416,7 @@ class ReceivedBlockTrackerSuite
    * Get all the data written in the given write ahead log files. By default, it will read all
    * files in the test log directory.
    */
-  def getWrittenLogData(logFiles: Seq[String] = getWriteAheadLogFiles)
+  def getWrittenLogData(logFiles: Seq[String] = getWriteAheadLogFiles())
     : Seq[ReceivedBlockTrackerLogEvent] = {
     logFiles.flatMap {
       file => new FileBasedWriteAheadLogReader(file, hadoopConf).toSeq

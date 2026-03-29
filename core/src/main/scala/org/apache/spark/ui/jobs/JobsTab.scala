@@ -17,11 +17,10 @@
 
 package org.apache.spark.ui.jobs
 
-import javax.servlet.http.HttpServletRequest
-
-import scala.collection.JavaConverters._
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.JobExecutionStatus
+import org.apache.spark.internal.config.SCHEDULER_MODE
 import org.apache.spark.scheduler.SchedulingMode
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.ui._
@@ -31,13 +30,16 @@ private[ui] class JobsTab(parent: SparkUI, store: AppStatusStore)
   extends SparkUITab(parent, "jobs") {
 
   val sc = parent.sc
+  val conf = parent.conf
   val killEnabled = parent.killEnabled
 
+  // Show pool information for only live UI.
   def isFairScheduler: Boolean = {
+    sc.isDefined &&
     store
       .environmentInfo()
       .sparkProperties
-      .contains(("spark.scheduler.mode", SchedulingMode.FAIR.toString))
+      .contains((SCHEDULER_MODE.key, SchedulingMode.FAIR.toString))
   }
 
   def getSparkUser: String = parent.getSparkUser
@@ -47,12 +49,10 @@ private[ui] class JobsTab(parent: SparkUI, store: AppStatusStore)
 
   def handleKillRequest(request: HttpServletRequest): Unit = {
     if (killEnabled && parent.securityManager.checkModifyPermissions(request.getRemoteUser)) {
-      // stripXSS is called first to remove suspicious characters used in XSS attacks
-      val jobId = Option(UIUtils.stripXSS(request.getParameter("id"))).map(_.toInt)
-      jobId.foreach { id =>
+      Option(request.getParameter("id")).map(_.toInt).foreach { id =>
         store.asOption(store.job(id)).foreach { job =>
           if (job.status == JobExecutionStatus.RUNNING) {
-            sc.foreach(_.cancelJob(id))
+            sc.foreach(_.cancelJob(id, "killed via Web UI"))
             // Do a quick pause here to give Spark time to kill the job so it shows up as
             // killed after the refresh. Note that this will block the serving thread so the
             // time should be limited in duration.

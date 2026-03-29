@@ -125,7 +125,7 @@ test_that("SerDe of list of lists", {
 
 sparkR.session.stop()
 
-# Note that this test should be at the end of tests since the configruations used here are not
+# Note that this test should be at the end of tests since the configurations used here are not
 # specific to sessions, and the Spark context is restarted.
 test_that("createDataFrame large objects", {
   for (encryptionEnabled in list("true", "false")) {
@@ -138,7 +138,7 @@ test_that("createDataFrame large objects", {
                                     enableHiveSupport = FALSE))
 
     sc <- getSparkContext()
-    actual <- callJStatic("org.apache.spark.api.r.RUtils", "getEncryptionEnabled", sc)
+    actual <- callJStatic("org.apache.spark.api.r.RUtils", "isEncryptionEnabled", sc)
     expected <- as.logical(encryptionEnabled)
     expect_equal(actual, expected)
 

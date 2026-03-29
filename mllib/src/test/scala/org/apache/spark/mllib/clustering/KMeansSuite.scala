@@ -20,6 +20,7 @@ package org.apache.spark.mllib.clustering
 import scala.util.Random
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
@@ -33,7 +34,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
   private val seed = 42
 
   test("single cluster") {
-    val data = sc.parallelize(Array(
+    val data = sc.parallelize(Seq(
       Vectors.dense(1.0, 2.0, 6.0),
       Vectors.dense(1.0, 3.0, 0.0),
       Vectors.dense(1.0, 4.0, 6.0)
@@ -63,7 +64,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("fewer distinct points than clusters") {
     val data = sc.parallelize(
-      Array(
+      Seq(
         Vectors.dense(1.0, 2.0, 3.0),
         Vectors.dense(1.0, 2.0, 3.0),
         Vectors.dense(1.0, 2.0, 3.0)),
@@ -79,7 +80,8 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("unique cluster centers") {
     val rng = new Random(seed)
     val numDistinctPoints = 10
-    val points = (0 until numDistinctPoints).map(i => Vectors.dense(Array.fill(3)(rng.nextDouble)))
+    val points =
+      (0 until numDistinctPoints).map(i => Vectors.dense(Array.fill(3)(rng.nextDouble())))
     val data = sc.parallelize(points.flatMap(Array.fill(1 + rng.nextInt(3))(_)), 2)
     val normedData = data.map(new VectorWithNorm(_))
 
@@ -158,7 +160,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     val center = Vectors.dense(1.0, 3.0, 4.0)
 
     var model = KMeans.train(data, k = 1, maxIterations = 1)
-    assert(model.clusterCenters.size === 1)
+    assert(model.clusterCenters.length === 1)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
 
     model = KMeans.train(data, k = 1, maxIterations = 2)
@@ -316,7 +318,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("Kryo class register") {
     val conf = new SparkConf(false)
-    conf.set("spark.kryo.registrationRequired", "true")
+    conf.set(KRYO_REGISTRATION_REQUIRED, true)
 
     val ser = new KryoSerializer(conf).newInstance()
 
@@ -361,12 +363,12 @@ class KMeansClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
     val n = 200000
     val points = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
       val random = new Random(idx)
-      iter.map(i => Vectors.dense(Array.fill(n)(random.nextDouble)))
+      iter.map(i => Vectors.dense(Array.fill(n)(random.nextDouble())))
     }.cache()
     for (initMode <- Seq(KMeans.RANDOM, KMeans.K_MEANS_PARALLEL)) {
       // If we serialize data directly in the task closure, the size of the serialized task would be
       // greater than 1MB and hence Spark would throw an error.
-      val model = KMeans.train(points, 2, 2, 1, initMode)
+      val model = KMeans.train(points, 2, 2, initMode)
       val predictions = model.predict(points).collect()
       val cost = model.computeCost(points)
     }

@@ -1,0 +1,2 @@
+Project [dayofyear(d#0) AS dayofyear(d)#0]
++- LocalRelation <empty>, [d#0, t#0, s#0, x#0L, wt#0]

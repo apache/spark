@@ -22,6 +22,7 @@ import java.util.concurrent.Semaphore
 import scala.util.Random
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.internal.config.SCHEDULER_MODE
 import org.apache.spark.scheduler.SchedulingMode
 
 // scalastyle:off
@@ -36,7 +37,7 @@ private[spark] object UIWorkloadGenerator {
   val NUM_PARTITIONS = 100
   val INTER_JOB_WAIT_MS = 5000
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 3) {
       // scalastyle:off println
       println(
@@ -49,15 +50,13 @@ private[spark] object UIWorkloadGenerator {
     val conf = new SparkConf().setMaster(args(0)).setAppName("Spark UI tester")
 
     val schedulingMode = SchedulingMode.withName(args(1))
-    if (schedulingMode == SchedulingMode.FAIR) {
-      conf.set("spark.scheduler.mode", "FAIR")
-    }
+    conf.set(SCHEDULER_MODE, schedulingMode)
     val nJobSet = args(2).toInt
     val sc = new SparkContext(conf)
 
     def setProperties(s: String): Unit = {
       if (schedulingMode == SchedulingMode.FAIR) {
-        sc.setLocalProperty("spark.scheduler.pool", s)
+        sc.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, s)
       }
       sc.setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, s)
     }
@@ -66,30 +65,30 @@ private[spark] object UIWorkloadGenerator {
     def nextFloat(): Float = new Random().nextFloat()
 
     val jobs = Seq[(String, () => Long)](
-      ("Count", () => baseData.count),
-      ("Cache and Count", () => baseData.map(x => x).cache().count),
-      ("Single Shuffle", () => baseData.map(x => (x % 10, x)).reduceByKey(_ + _).count),
-      ("Entirely failed phase", () => baseData.map { x => throw new Exception(); 1 }.count),
+      ("Count", () => baseData.count()),
+      ("Cache and Count", () => baseData.map(x => x).cache().count()),
+      ("Single Shuffle", () => baseData.map(x => (x % 10, x)).reduceByKey(_ + _).count()),
+      ("Entirely failed phase", () => baseData.map { x => throw new Exception(); 1 }.count()),
       ("Partially failed phase", () => {
-        baseData.map{x =>
+        baseData.map { x =>
           val probFailure = (4.0 / NUM_PARTITIONS)
           if (nextFloat() < probFailure) {
             throw new Exception("This is a task failure")
           }
           1
-        }.count
+        }.count()
       }),
       ("Partially failed phase (longer tasks)", () => {
-        baseData.map{x =>
+        baseData.map { x =>
           val probFailure = (4.0 / NUM_PARTITIONS)
           if (nextFloat() < probFailure) {
             Thread.sleep(100)
             throw new Exception("This is a task failure")
           }
           1
-        }.count
+        }.count()
       }),
-      ("Job with delays", () => baseData.map(x => Thread.sleep(100)).count)
+      ("Job with delays", () => baseData.map(x => Thread.sleep(100)).count())
     )
 
     val barrier = new Semaphore(-nJobSet * jobs.size + 1)
@@ -97,7 +96,7 @@ private[spark] object UIWorkloadGenerator {
     (1 to nJobSet).foreach { _ =>
       for ((desc, job) <- jobs) {
         new Thread {
-          override def run() {
+          override def run(): Unit = {
             // scalastyle:off println
             try {
               setProperties(desc)

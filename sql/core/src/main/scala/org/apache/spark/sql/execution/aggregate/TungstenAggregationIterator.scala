@@ -17,17 +17,20 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.TaskContext
+import java.util
+
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, UnsafeKVExternalSorter}
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.KVIterator
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * An iterator used to evaluate aggregate functions. It operates on [[UnsafeRow]]s.
@@ -93,7 +96,8 @@ class TungstenAggregationIterator(
     numOutputRows: SQLMetric,
     peakMemory: SQLMetric,
     spillSize: SQLMetric,
-    avgHashProbe: SQLMetric)
+    avgHashProbe: SQLMetric,
+    numTasksFallBacked: SQLMetric)
   extends AggregationIterator(
     partIndex,
     groupingExpressions,
@@ -139,8 +143,8 @@ class TungstenAggregationIterator(
       // Fast path for partial aggregation, UnsafeRowJoiner is usually faster than projection
       val groupingAttributes = groupingExpressions.map(_.toAttribute)
       val bufferAttributes = aggregateFunctions.flatMap(_.aggBufferAttributes)
-      val groupingKeySchema = StructType.fromAttributes(groupingAttributes)
-      val bufferSchema = StructType.fromAttributes(bufferAttributes)
+      val groupingKeySchema = DataTypeUtils.fromAttributes(groupingAttributes)
+      val bufferSchema = DataTypeUtils.fromAttributes(bufferAttributes.toImmutableArraySeq)
       val unsafeRowJoiner = GenerateUnsafeRowJoiner.create(groupingKeySchema, bufferSchema)
 
       (currentGroupingKey: UnsafeRow, currentBuffer: InternalRow) => {
@@ -164,8 +168,9 @@ class TungstenAggregationIterator(
   // all groups and their corresponding aggregation buffers for hash-based aggregation.
   private[this] val hashMap = new UnsafeFixedWidthAggregationMap(
     initialAggregationBuffer,
-    StructType.fromAttributes(aggregateFunctions.flatMap(_.aggBufferAttributes)),
-    StructType.fromAttributes(groupingExpressions.map(_.toAttribute)),
+    DataTypeUtils.fromAttributes(
+      aggregateFunctions.flatMap(_.aggBufferAttributes).toImmutableArraySeq),
+    DataTypeUtils.fromAttributes(groupingExpressions.map(_.toAttribute)),
     TaskContext.get(),
     1024 * 16, // initial capacity
     TaskContext.get().taskMemoryManager().pageSizeBytes
@@ -207,7 +212,7 @@ class TungstenAggregationIterator(
           if (buffer == null) {
             // failed to allocate the first page
             // scalastyle:off throwerror
-            throw new SparkOutOfMemoryError("No enough memory for aggregation")
+            throw new SparkOutOfMemoryError("AGGREGATE_OUT_OF_MEMORY", new util.HashMap())
             // scalastyle:on throwerror
           }
         }
@@ -249,15 +254,16 @@ class TungstenAggregationIterator(
     // Basically the value of the KVIterator returned by externalSorter
     // will be just aggregation buffer, so we rewrite the aggregateExpressions to reflect it.
     val newExpressions = aggregateExpressions.map {
-      case agg @ AggregateExpression(_, Partial, _, _) =>
+      case agg @ AggregateExpression(_, Partial, _, _, _) =>
         agg.copy(mode = PartialMerge)
-      case agg @ AggregateExpression(_, Complete, _, _) =>
+      case agg @ AggregateExpression(_, Complete, _, _, _) =>
         agg.copy(mode = Final)
       case other => other
     }
     val newFunctions = initializeAggregateFunctions(newExpressions, 0)
     val newInputAttributes = newFunctions.flatMap(_.inputAggBufferAttributes)
-    sortBasedProcessRow = generateProcessRow(newExpressions, newFunctions, newInputAttributes)
+    sortBasedProcessRow = generateProcessRow(
+      newExpressions, newFunctions.toImmutableArraySeq, newInputAttributes.toImmutableArraySeq)
 
     // Step 5: Get the sorted iterator from the externalSorter.
     sortedKVIterator = externalSorter.sortedIterator()
@@ -277,6 +283,7 @@ class TungstenAggregationIterator(
 
     // Step 7: set sortBased to true.
     sortBased = true
+    numTasksFallBacked += 1
   }
 
   ///////////////////////////////////////////////////////////////////////////
@@ -387,7 +394,7 @@ class TungstenAggregationIterator(
     metrics.incPeakExecutionMemory(maxMemory)
 
     // Updating average hashmap probe
-    avgHashProbe.set(hashMap.getAverageProbesPerLookup())
+    avgHashProbe.set(hashMap.getAvgHashProbesPerKey)
   })
 
   ///////////////////////////////////////////////////////////////////////////
@@ -456,7 +463,7 @@ class TungstenAggregationIterator(
       hashMap.free()
       resultCopy
     } else {
-      throw new IllegalStateException(
+      throw SparkException.internalError(
         "This method should not be called when groupingExpressions is not empty.")
     }
   }

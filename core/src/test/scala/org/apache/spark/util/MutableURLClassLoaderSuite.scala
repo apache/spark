@@ -19,11 +19,13 @@ package org.apache.spark.util
 
 import java.net.URLClassLoader
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkContext, SparkException, SparkFunSuite, TestUtils}
+import org.apache.spark.util.ArrayImplicits._
 
 class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
 
@@ -34,7 +36,7 @@ class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
       classNames = Seq("FakeClass1"),
       classNamesWithBase = Seq(("FakeClass2", "FakeClass3")), // FakeClass3 is in parent
       toStringValue = "1",
-      classpathUrls = urls2)).toArray
+      classpathUrls = urls2.toImmutableArraySeq)).toArray
 
   val fileUrlsChild = List(TestUtils.createJarWithFiles(Map(
     "resource1" -> "resource1Contents-child",
@@ -111,9 +113,9 @@ class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
     val res1 = classLoader.getResources("resource1").asScala.toList
     assert(res1.size === 2)
     assert(classLoader.getResources("resource2").asScala.size === 1)
-
-    res1.map(scala.io.Source.fromURL(_).mkString) should contain inOrderOnly
-      ("resource1Contents-child", "resource1Contents-parent")
+    res1.map { res =>
+      Utils.tryWithResource(scala.io.Source.fromURL(res))(_.mkString)
+    } should contain inOrderOnly("resource1Contents-child", "resource1Contents-parent")
     classLoader.close()
     parentLoader.close()
   }
@@ -134,10 +136,8 @@ class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
 
     try {
       sc.makeRDD(1 to 5, 2).mapPartitions { x =>
-        val loader = Thread.currentThread().getContextClassLoader
-        // scalastyle:off classforname
-        Class.forName(className, true, loader).getConstructor().newInstance()
-        // scalastyle:on classforname
+        Utils.classForName[AnyRef](className, noSparkClassLoader = true).
+          getConstructor().newInstance()
         Seq().iterator
       }.count()
     }

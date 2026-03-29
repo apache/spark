@@ -46,11 +46,13 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
       s"source vector size $numFeatures must be no less than k=$k")
 
     val mat = if (numFeatures > 65535) {
-      val meanVector = Statistics.colStats(sources).mean.asBreeze
-      val meanCentredRdd = sources.map { rowVector =>
-        Vectors.fromBreeze(rowVector.asBreeze - meanVector)
+      val summary = Statistics.colStats(sources.map((_, 1.0)), Seq("mean"))
+      val mean = Vectors.fromML(summary.mean)
+      val meanCenteredRdd = sources.map { row =>
+        BLAS.axpy(-1, mean, row)
+        row
       }
-      new RowMatrix(meanCentredRdd)
+      new RowMatrix(meanCenteredRdd)
     } else {
       require(PCAUtil.memoryCost(k, numFeatures) < Int.MaxValue,
         "The param k and numFeatures is too large for SVD computation. " +
@@ -111,18 +113,7 @@ class PCAModel private[spark] (
    */
   @Since("1.4.0")
   override def transform(vector: Vector): Vector = {
-    vector match {
-      case dv: DenseVector =>
-        pc.transpose.multiply(dv)
-      case SparseVector(size, indices, values) =>
-        /* SparseVector -> single row SparseMatrix */
-        val sm = Matrices.sparse(size, 1, Array(0, indices.length), indices, values).transpose
-        val projection = sm.multiply(pc)
-        Vectors.dense(projection.values)
-      case _ =>
-        throw new IllegalArgumentException("Unsupported vector format. Expected " +
-          s"SparseVector or DenseVector. Instead got: ${vector.getClass}")
-    }
+    pc.transpose.multiply(vector)
   }
 }
 
@@ -133,9 +124,9 @@ private[feature] object PCAUtil {
   // 6e541be066d547a097f5089165cd7c38c3ca276d/math/src/main/scala/breeze/linalg/
   // functions/svd.scala#L87
   def memoryCost(k: Int, numFeatures: Int): Long = {
-    3L * math.min(k, numFeatures) * math.min(k, numFeatures)
-    + math.max(math.max(k, numFeatures), 4L * math.min(k, numFeatures)
-    * math.min(k, numFeatures) + 4L * math.min(k, numFeatures))
+    3L * math.min(k, numFeatures) * math.min(k, numFeatures) +
+      math.max(math.max(k, numFeatures), 4L * math.min(k, numFeatures) *
+      math.min(k, numFeatures) + 4L * math.min(k, numFeatures))
   }
 
 }

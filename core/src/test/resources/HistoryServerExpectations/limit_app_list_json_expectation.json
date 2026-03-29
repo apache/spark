@@ -1,46 +1,52 @@
 [ {
-  "id" : "application_1506645932520_24630151",
-  "name" : "Spark shell",
   "attempts" : [ {
-    "startTime" : "2018-04-19T23:54:42.734GMT",
-    "endTime" : "2018-04-19T23:56:29.134GMT",
-    "lastUpdated" : "",
-    "duration" : 106400,
-    "sparkUser" : "edlu",
+    "appSparkVersion" : "4.2.0-SNAPSHOT",
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "completed" : true,
-    "appSparkVersion" : "2.4.0-SNAPSHOT",
+    "duration" : 2006,
+    "endTime" : "2025-12-27T14:15:12.221GMT",
+    "endTimeEpoch" : 1766844912221,
+    "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
-    "startTimeEpoch" : 1524182082734,
-    "endTimeEpoch" : 1524182189134
-  } ]
+    "sparkUser" : "<script>alert('XSS')</script>",
+    "startTime" : "2025-12-27T14:15:10.215GMT",
+    "startTimeEpoch" : 1766844910215
+  } ],
+  "id" : "local-1766844910796",
+  "name" : "<script>alert('XSS')</script>"
 }, {
-  "id" : "application_1516285256255_0012",
-  "name" : "Spark shell",
   "attempts" : [ {
-    "startTime" : "2018-01-18T18:30:35.119GMT",
-    "endTime" : "2018-01-18T18:38:27.938GMT",
-    "lastUpdated" : "",
-    "duration" : 472819,
-    "sparkUser" : "attilapiros",
+    "appSparkVersion" : "3.3.0-SNAPSHOT",
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "completed" : true,
-    "appSparkVersion" : "2.3.0-SNAPSHOT",
+    "duration" : 86045,
+    "endTime" : "2022-01-13T02:05:36.564GMT",
+    "endTimeEpoch" : 1642039536564,
+    "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
-    "startTimeEpoch" : 1516300235119,
-    "endTimeEpoch" : 1516300707938
-  } ]
+    "sparkUser" : "lijunqing",
+    "startTime" : "2022-01-13T02:04:10.519GMT",
+    "startTimeEpoch" : 1642039450519
+  } ],
+  "id" : "local-1642039451826",
+  "name" : "Spark shell"
 }, {
-  "id" : "app-20180109111548-0000",
-  "name" : "Spark shell",
   "attempts" : [ {
-    "startTime" : "2018-01-09T10:15:42.372GMT",
-    "endTime" : "2018-01-09T10:24:37.606GMT",
-    "lastUpdated" : "",
-    "duration" : 535234,
-    "sparkUser" : "attilapiros",
+    "appSparkVersion" : "3.1.1.119",
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "completed" : true,
-    "appSparkVersion" : "2.3.0-SNAPSHOT",
+    "duration" : 274875,
+    "endTime" : "2021-08-10T23:29:30.208GMT",
+    "endTimeEpoch" : 1628638170208,
+    "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
-    "startTimeEpoch" : 1515492942372,
-    "endTimeEpoch" : 1515493477606
-  } ]
+    "sparkUser" : "john",
+    "startTime" : "2021-08-10T23:24:55.333GMT",
+    "startTimeEpoch" : 1628637895333
+  } ],
+  "id" : "application_1628109047826_1317105",
+  "name" : "Spark shell"
 } ]

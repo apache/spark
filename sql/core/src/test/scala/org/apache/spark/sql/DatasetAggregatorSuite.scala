@@ -19,11 +19,9 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.expressions.Aggregator
-import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.StringType
-
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType, StructType}
 
 object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, Long)] {
   override def zero: (Long, Long) = (0, 0)
@@ -149,6 +147,7 @@ object VeryComplexResultAgg extends Aggregator[Row, String, ComplexAggData] {
 
 
 case class OptionBooleanData(name: String, isGood: Option[Boolean])
+case class OptionBooleanIntData(name: String, isGood: Option[(Boolean, Int)])
 
 case class OptionBooleanAggregator(colName: String)
     extends Aggregator[Row, Option[Boolean], Option[Boolean]] {
@@ -183,29 +182,56 @@ case class OptionBooleanAggregator(colName: String)
   def OptionalBoolEncoder: Encoder[Option[Boolean]] = ExpressionEncoder()
 }
 
-class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
+case class OptionBooleanIntAggregator(colName: String)
+    extends Aggregator[Row, Option[(Boolean, Int)], Option[(Boolean, Int)]] {
+
+  override def zero: Option[(Boolean, Int)] = None
+
+  override def reduce(buffer: Option[(Boolean, Int)], row: Row): Option[(Boolean, Int)] = {
+    val index = row.fieldIndex(colName)
+    val value = if (row.isNullAt(index)) {
+      Option.empty[(Boolean, Int)]
+    } else {
+      val nestedRow = row.getStruct(index)
+      Some((nestedRow.getBoolean(0), nestedRow.getInt(1)))
+    }
+    merge(buffer, value)
+  }
+
+  override def merge(
+      b1: Option[(Boolean, Int)],
+      b2: Option[(Boolean, Int)]): Option[(Boolean, Int)] = {
+    if ((b1.isDefined && b1.get._1) || (b2.isDefined && b2.get._1)) {
+      val newInt = b1.map(_._2).getOrElse(0) + b2.map(_._2).getOrElse(0)
+      Some((true, newInt))
+    } else if (b1.isDefined) {
+      b1
+    } else {
+      b2
+    }
+  }
+
+  override def finish(reduction: Option[(Boolean, Int)]): Option[(Boolean, Int)] = reduction
+
+  override def bufferEncoder: Encoder[Option[(Boolean, Int)]] = OptionalBoolIntEncoder
+  override def outputEncoder: Encoder[Option[(Boolean, Int)]] = OptionalBoolIntEncoder
+
+  def OptionalBoolIntEncoder: Encoder[Option[(Boolean, Int)]] = ExpressionEncoder()
+}
+
+case class FooAgg(s: Int) extends Aggregator[Row, Int, Int] {
+  def zero: Int = s
+  def reduce(b: Int, r: Row): Int = b + r.getAs[Int](0)
+  def merge(b1: Int, b2: Int): Int = b1 + b2
+  def finish(b: Int): Int = b
+  def bufferEncoder: Encoder[Int] = Encoders.scalaInt
+  def outputEncoder: Encoder[Int] = Encoders.scalaInt
+}
+
+class DatasetAggregatorSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
-  private implicit val ordering = Ordering.by((c: AggData) => c.a -> c.b)
-
-  test("typed aggregation: TypedAggregator") {
-    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-
-    checkDataset(
-      ds.groupByKey(_._1).agg(typed.sum(_._2)),
-      ("a", 30.0), ("b", 3.0), ("c", 1.0))
-  }
-
-  test("typed aggregation: TypedAggregator, expr, expr") {
-    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-
-    checkDataset(
-      ds.groupByKey(_._1).agg(
-        typed.sum(_._2),
-        expr("sum(_2)").as[Long],
-        count("*")),
-      ("a", 30.0, 30L, 2L), ("b", 3.0, 3L, 2L), ("c", 1.0, 1L, 1L))
-  }
+  private implicit val ordering: Ordering[AggData] = Ordering.by((c: AggData) => c.a -> c.b)
 
   test("typed aggregation: complex result type") {
     val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()
@@ -215,17 +241,6 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
         expr("avg(_2)").as[Double],
         ComplexResultAgg.toColumn),
       ("a", 2.0, (2L, 4L)), ("b", 3.0, (1L, 3L)))
-  }
-
-  test("typed aggregation: in project list") {
-    val ds = Seq(1, 3, 2, 5).toDS()
-
-    checkDataset(
-      ds.select(typed.sum((i: Int) => i)),
-      11.0)
-    checkDataset(
-      ds.select(typed.sum((i: Int) => i), typed.sum((i: Int) => i * 2)),
-      11.0 -> 22.0)
   }
 
   test("typed aggregation: class input") {
@@ -277,14 +292,6 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
       ("one", 1), ("two", 1))
   }
 
-  test("typed aggregate: avg, count, sum") {
-    val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()
-    checkDataset(
-      ds.groupByKey(_._1).agg(
-        typed.avg(_._2), typed.count(_._2), typed.sum(_._2), typed.sumLong(_._2)),
-      ("a", 2.0, 2L, 4.0, 4L), ("b", 3.0, 1L, 3.0, 3L))
-  }
-
   test("generic typed sum") {
     val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()
     checkDataset(
@@ -328,18 +335,6 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df2.agg(RowAgg.toColumn as "b").select("b"), Row(6) :: Nil)
   }
 
-  test("spark-15114 shorter system generated alias names") {
-    val ds = Seq(1, 3, 2, 5).toDS()
-    assert(ds.select(typed.sum((i: Int) => i)).columns.head === "TypedSumDouble(int)")
-    val ds2 = ds.select(typed.sum((i: Int) => i), typed.avg((i: Int) => i))
-    assert(ds2.columns.head === "TypedSumDouble(int)")
-    assert(ds2.columns.last === "TypedAverage(int)")
-    val df = Seq(1 -> "a", 2 -> "b", 3 -> "b").toDF("i", "j")
-    assert(df.groupBy($"j").agg(RowAgg.toColumn).columns.last ==
-      "RowAgg(org.apache.spark.sql.Row)")
-    assert(df.groupBy($"j").agg(RowAgg.toColumn as "agg1").columns.last == "agg1")
-  }
-
   test("SPARK-15814 Aggregator can return null result") {
     val ds = Seq(AggData(1, "one"), AggData(2, "two")).toDS()
     checkDatasetUnorderly(
@@ -350,15 +345,6 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
   test("SPARK-16100: use Map as the buffer type of Aggregator") {
     val ds = Seq(1, 2, 3).toDS()
     checkDataset(ds.select(MapTypeBufferAgg.toColumn), 1)
-  }
-
-  test("SPARK-15204 improve nullability inference for Aggregator") {
-    val ds1 = Seq(1, 3, 2, 5).toDS()
-    assert(ds1.select(typed.sum((i: Int) => i)).schema.head.nullable === false)
-    val ds2 = Seq(AggData(1, "a"), AggData(2, "a")).toDS()
-    assert(ds2.select(SeqAgg.toColumn).schema.head.nullable === true)
-    val ds3 = sql("SELECT 'Some String' AS b, 1279869254 AS a").as[AggData]
-    assert(ds3.select(NameAgg.toColumn).schema.head.nullable === true)
   }
 
   test("SPARK-18147: very complex aggregator result type") {
@@ -392,5 +378,68 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
 
     assert(grouped.schema == df.schema)
     checkDataset(grouped.as[OptionBooleanData], OptionBooleanData("bob", Some(true)))
+  }
+
+  test("SPARK-24762: Aggregator should be able to use Option of Product encoder") {
+    val df = Seq(
+      OptionBooleanIntData("bob", Some((true, 1))),
+      OptionBooleanIntData("bob", Some((false, 2))),
+      OptionBooleanIntData("bob", None)).toDF()
+
+    val group = df
+      .groupBy("name")
+      .agg(OptionBooleanIntAggregator("isGood").toColumn.alias("isGood"))
+
+    val expectedSchema = new StructType()
+      .add("name", StringType, nullable = true)
+      .add("isGood",
+        new StructType()
+          .add("_1", BooleanType, nullable = false)
+          .add("_2", IntegerType, nullable = false),
+        nullable = true)
+
+    assert(df.schema == expectedSchema)
+    assert(group.schema == expectedSchema)
+    checkAnswer(group, Row("bob", Row(true, 3)) :: Nil)
+    checkDataset(group.as[OptionBooleanIntData], OptionBooleanIntData("bob", Some((true, 3))))
+  }
+
+  test("SPARK-30590: untyped select should not accept typed column that needs input type") {
+    val df = Seq((1, 2, 3, 4, 5, 6)).toDF("a", "b", "c", "d", "e", "f")
+    val fooAgg = (i: Int) => FooAgg(i).toColumn.name(s"foo_agg_$i")
+
+    val agg1 = df.select(fooAgg(1), fooAgg(2), fooAgg(3), fooAgg(4), fooAgg(5))
+    checkDataset(agg1, (3, 5, 7, 9, 11))
+
+    // Passes typed columns to untyped `Dataset.select` API.
+    val err = intercept[AnalysisException] {
+      df.select(fooAgg(1), fooAgg(2), fooAgg(3), fooAgg(4), fooAgg(5), fooAgg(6))
+    }.getMessage
+    assert(err.contains("cannot be passed in untyped `select` API. " +
+      "Use the typed `Dataset.select` API instead."))
+  }
+
+  test("SPARK-40906: Mode should copy keys before inserting into Map") {
+    val df = spark.sparkContext.parallelize(Seq.empty[Int], 4)
+      .mapPartitionsWithIndex { (idx, iter) =>
+        if (idx == 3) {
+          Iterator("3", "3", "3", "3", "4")
+        } else {
+          Iterator("0", "1", "2", "3", "4")
+        }
+      }.toDF("a")
+
+    val agg = df.select(mode(col("a"))).as[String]
+    checkDataset(agg, "3")
+  }
+
+  test("SPARK-45034: Support deterministic mode function") {
+    val df = Seq(-10, 0, 10).toDF("col")
+
+    val agg = df.select(mode(col("col"), false))
+    checkAnswer(agg, Row(0))
+
+    val agg2 = df.select(mode(col("col"), true))
+    checkAnswer(agg2, Row(-10))
   }
 }

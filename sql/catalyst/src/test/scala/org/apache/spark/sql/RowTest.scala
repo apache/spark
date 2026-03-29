@@ -17,13 +17,20 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.{FunSpec, Matchers}
+import scala.collection.mutable.ArraySeq
 
+import org.json4s.JsonAST.{JArray, JObject, JString}
+import org.scalatest.funspec.AnyFunSpec
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
+
+import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, GenericRowWithSchema}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
-class RowTest extends FunSpec with Matchers {
+class RowTest extends AnyFunSpec with Matchers {
 
   val schema = StructType(
     StructField("col1", StringType) ::
@@ -38,10 +45,10 @@ class RowTest extends FunSpec with Matchers {
 
   describe("Row (without schema)") {
     it("throws an exception when accessing by fieldName") {
-      intercept[UnsupportedOperationException] {
+      intercept[SparkUnsupportedOperationException] {
         noSchemaRow.fieldIndex("col1")
       }
-      intercept[UnsupportedOperationException] {
+      intercept[SparkUnsupportedOperationException] {
         noSchemaRow.getAs("col1")
       }
     }
@@ -59,7 +66,7 @@ class RowTest extends FunSpec with Matchers {
     }
 
     it("Accessing non existent field throws an exception") {
-      intercept[IllegalArgumentException] {
+      intercept[SparkIllegalArgumentException] {
         sampleRow.getAs[String]("non_existent")
       }
     }
@@ -80,14 +87,23 @@ class RowTest extends FunSpec with Matchers {
       sampleRowWithoutCol3.getValuesMap[String](List("col1", "col2")) shouldBe expected
     }
 
-    it("getAs() on type extending AnyVal throws an exception when accessing field that is null") {
-      intercept[NullPointerException] {
+    it("getAnyValAs() on type extending AnyVal throws an exception when accessing " +
+      "field that is null") {
+      intercept[SparkRuntimeException] {
         sampleRowWithoutCol3.getInt(sampleRowWithoutCol3.fieldIndex("col3"))
       }
     }
 
     it("getAs() on type extending AnyVal does not throw exception when value is null") {
       sampleRowWithoutCol3.getAs[String](sampleRowWithoutCol3.fieldIndex("col1")) shouldBe null
+    }
+
+    it("json should convert a mutable array to JSON") {
+      val schema = new StructType().add(StructField("list", ArrayType(StringType)))
+      val values = ArraySeq("1", "2", "3")
+      val row = new GenericRowWithSchema(Array(values), schema)
+      val expectedList = JArray(JString("1") :: JString("2") :: JString("3") :: Nil)
+      row.jsonValue shouldBe new JObject(("list", expectedList) :: Nil)
     }
   }
 
@@ -114,7 +130,7 @@ class RowTest extends FunSpec with Matchers {
     def modifyValues(values: Seq[Any]): Seq[Any] = {
       val array = values.toArray
       array(2) = "42"
-      array
+      array.toImmutableArraySeq
     }
 
     it("copy should return same ref for external rows") {

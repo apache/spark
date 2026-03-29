@@ -2,6 +2,21 @@
 layout: global
 title: Decision Trees - RDD-based API
 displayTitle: Decision Trees - RDD-based API
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -36,26 +51,26 @@ The *node impurity* is a measure of the homogeneity of the labels at the node. T
 implementation provides two impurity measures for classification (Gini impurity and entropy) and one
 impurity measure for regression (variance).
 
-<table class="table">
+<table>
   <thead>
     <tr><th>Impurity</th><th>Task</th><th>Formula</th><th>Description</th></tr>
   </thead>
   <tbody>
     <tr>
       <td>Gini impurity</td>
-	  <td>Classification</td>
-	  <td>$\sum_{i=1}^{C} f_i(1-f_i)$</td><td>$f_i$ is the frequency of label $i$ at a node and $C$ is the number of unique labels.</td>
+      <td>Classification</td>
+      <td>$\sum_{i=1}^{C} f_i(1-f_i)$</td><td>$f_i$ is the frequency of label $i$ at a node and $C$ is the number of unique labels.</td>
     </tr>
     <tr>
       <td>Entropy</td>
-	  <td>Classification</td>
-	  <td>$\sum_{i=1}^{C} -f_ilog(f_i)$</td><td>$f_i$ is the frequency of label $i$ at a node and $C$ is the number of unique labels.</td>
+      <td>Classification</td>
+      <td>$\sum_{i=1}^{C} -f_ilog(f_i)$</td><td>$f_i$ is the frequency of label $i$ at a node and $C$ is the number of unique labels.</td>
     </tr>
     <tr>
       <td>Variance</td>
-	  <td>Regression</td>
-     <td>$\frac{1}{N} \sum_{i=1}^{N} (y_i - \mu)^2$</td><td>$y_i$ is label for an instance,
-	  $N$ is the number of instances and $\mu$ is the mean given by $\frac{1}{N} \sum_{i=1}^N y_i$.</td>
+      <td>Regression</td>
+      <td>$\frac{1}{N} \sum_{i=1}^{N} (y_i - \mu)^2$</td><td>$y_i$ is label for an instance,
+      $N$ is the number of instances and $\mu$ is the mean given by $\frac{1}{N} \sum_{i=1}^N y_i$.</td>
     </tr>
   </tbody>
 </table>
@@ -136,7 +151,7 @@ When tuning these parameters, be careful to validate on held-out test data to av
 
 * **`maxDepth`**: Maximum depth of a tree.  Deeper trees are more expressive (potentially allowing higher accuracy), but they are also more costly to train and are more likely to overfit.
 
-* **`minInstancesPerNode`**: For a node to be split further, each of its children must receive at least this number of training instances.  This is commonly used with [RandomForest](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest$) since those are often trained deeper than individual trees.
+* **`minInstancesPerNode`**: For a node to be split further, each of its children must receive at least this number of training instances.  This is commonly used with [RandomForest](api/scala/org/apache/spark/mllib/tree/RandomForest$.html) since those are often trained deeper than individual trees.
 
 * **`minInfoGain`**: For a node to be split further, the split must improve at least this much (in terms of information gain).
 
@@ -149,16 +164,16 @@ These parameters may be tuned.  Be careful to validate on held-out test data whe
   * Note that the `maxBins` parameter must be at least the maximum number of categories `$M$` for any categorical feature.
 
 * **`maxMemoryInMB`**: Amount of memory to be used for collecting sufficient statistics.
-  * The default value is conservatively chosen to be 256 MB to allow the decision algorithm to work in most scenarios.  Increasing `maxMemoryInMB` can lead to faster training (if the memory is available) by allowing fewer passes over the data.  However, there may be decreasing returns as `maxMemoryInMB` grows since the amount of communication on each iteration can be proportional to `maxMemoryInMB`.
+  * The default value is conservatively chosen to be 256 MiB to allow the decision algorithm to work in most scenarios.  Increasing `maxMemoryInMB` can lead to faster training (if the memory is available) by allowing fewer passes over the data.  However, there may be decreasing returns as `maxMemoryInMB` grows since the amount of communication on each iteration can be proportional to `maxMemoryInMB`.
   * *Implementation details*: For faster processing, the decision tree algorithm collects statistics about groups of nodes to split (rather than 1 node at a time).  The number of nodes which can be handled in one group is determined by the memory requirements (which vary per features).  The `maxMemoryInMB` parameter specifies the memory limit in terms of megabytes which each worker can use for these statistics.
 
-* **`subsamplingRate`**: Fraction of the training data used for learning the decision tree.  This parameter is most relevant for training ensembles of trees (using [`RandomForest`](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest$) and [`GradientBoostedTrees`](api/scala/index.html#org.apache.spark.mllib.tree.GradientBoostedTrees)), where it can be useful to subsample the original data.  For training a single decision tree, this parameter is less useful since the number of training instances is generally not the main constraint.
+* **`subsamplingRate`**: Fraction of the training data used for learning the decision tree.  This parameter is most relevant for training ensembles of trees (using [`RandomForest`](api/scala/org/apache/spark/mllib/tree/RandomForest$.html) and [`GradientBoostedTrees`](api/scala/org/apache/spark/mllib/tree/GradientBoostedTrees.html)), where it can be useful to subsample the original data.  For training a single decision tree, this parameter is less useful since the number of training instances is generally not the main constraint.
 
 * **`impurity`**: Impurity measure (discussed above) used to choose between candidate splits.  This measure must match the `algo` parameter.
 
 ### Caching and checkpointing
 
-MLlib 1.2 adds several features for scaling up to larger (deeper) trees and tree ensembles.  When `maxDepth` is set to be large, it can be useful to turn on node ID caching and checkpointing.  These parameters are also useful for [RandomForest](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest$) when `numTrees` is set to be large.
+MLlib 1.2 adds several features for scaling up to larger (deeper) trees and tree ensembles.  When `maxDepth` is set to be large, it can be useful to turn on node ID caching and checkpointing.  These parameters are also useful for [RandomForest](api/scala/org/apache/spark/mllib/tree/RandomForest$.html) when `numTrees` is set to be large.
 
 * **`useNodeIdCache`**: If this is set to true, the algorithm will avoid passing the current model (tree or trees) to executors on each iteration.
   * This can be useful with deep trees (speeding up computation on workers) and for large Random Forests (reducing communication on each iteration).
@@ -191,8 +206,14 @@ maximum tree depth of 5. The test error is calculated to measure the algorithm a
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+Refer to the [`DecisionTree` Python docs](api/python/reference/api/pyspark.mllib.tree.DecisionTree.html) and [`DecisionTreeModel` Python docs](api/python/reference/api/pyspark.mllib.tree.DecisionTreeModel.html) for more details on the API.
+
+{% include_example python/mllib/decision_tree_classification_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
-Refer to the [`DecisionTree` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree) and [`DecisionTreeModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.model.DecisionTreeModel) for details on the API.
+Refer to the [`DecisionTree` Scala docs](api/scala/org/apache/spark/mllib/tree/DecisionTree.html) and [`DecisionTreeModel` Scala docs](api/scala/org/apache/spark/mllib/tree/model/DecisionTreeModel.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/DecisionTreeClassificationExample.scala %}
 </div>
@@ -201,12 +222,6 @@ Refer to the [`DecisionTree` Scala docs](api/scala/index.html#org.apache.spark.m
 Refer to the [`DecisionTree` Java docs](api/java/org/apache/spark/mllib/tree/DecisionTree.html) and [`DecisionTreeModel` Java docs](api/java/org/apache/spark/mllib/tree/model/DecisionTreeModel.html) for details on the API.
 
 {% include_example java/org/apache/spark/examples/mllib/JavaDecisionTreeClassificationExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-Refer to the [`DecisionTree` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.DecisionTree) and [`DecisionTreeModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.DecisionTreeModel) for more details on the API.
-
-{% include_example python/mllib/decision_tree_classification_example.py %}
 </div>
 
 </div>
@@ -222,8 +237,14 @@ depth of 5. The Mean Squared Error (MSE) is computed at the end to evaluate
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+Refer to the [`DecisionTree` Python docs](api/python/reference/api/pyspark.mllib.tree.DecisionTree.html) and [`DecisionTreeModel` Python docs](api/python/reference/api/pyspark.mllib.tree.DecisionTreeModel.html) for more details on the API.
+
+{% include_example python/mllib/decision_tree_regression_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
-Refer to the [`DecisionTree` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree) and [`DecisionTreeModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.model.DecisionTreeModel) for details on the API.
+Refer to the [`DecisionTree` Scala docs](api/scala/org/apache/spark/mllib/tree/DecisionTree.html) and [`DecisionTreeModel` Scala docs](api/scala/org/apache/spark/mllib/tree/model/DecisionTreeModel.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/DecisionTreeRegressionExample.scala %}
 </div>
@@ -232,12 +253,6 @@ Refer to the [`DecisionTree` Scala docs](api/scala/index.html#org.apache.spark.m
 Refer to the [`DecisionTree` Java docs](api/java/org/apache/spark/mllib/tree/DecisionTree.html) and [`DecisionTreeModel` Java docs](api/java/org/apache/spark/mllib/tree/model/DecisionTreeModel.html) for details on the API.
 
 {% include_example java/org/apache/spark/examples/mllib/JavaDecisionTreeRegressionExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-Refer to the [`DecisionTree` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.DecisionTree) and [`DecisionTreeModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.DecisionTreeModel) for more details on the API.
-
-{% include_example python/mllib/decision_tree_regression_example.py %}
 </div>
 
 </div>

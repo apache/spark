@@ -75,7 +75,7 @@ class FileCommitProtocolInstantiationSuite extends SparkFunSuite {
 
   /**
    * Create a classic two-arg protocol instance.
-   * @param dynamic dyanmic partitioning mode
+   * @param dynamic dynamic partitioning mode
    * @return the instance
    */
   private def instantiateClassic(dynamic: Boolean): ClassicConstructorCommitProtocol = {
@@ -88,7 +88,7 @@ class FileCommitProtocolInstantiationSuite extends SparkFunSuite {
 
   /**
    * Create a three-arg protocol instance.
-   * @param dynamic dyanmic partitioning mode
+   * @param dynamic dynamic partitioning mode
    * @return the instance
    */
   private def instantiateNew(

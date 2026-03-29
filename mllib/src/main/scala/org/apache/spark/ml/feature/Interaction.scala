@@ -30,6 +30,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Implements the feature interaction transform. This transformer takes in Double and Vector type
@@ -69,9 +70,9 @@ class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) ext
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val inputFeatures = $(inputCols).map(c => dataset.schema(c))
-    val featureEncoders = getFeatureEncoders(inputFeatures)
-    val featureAttrs = getFeatureAttrs(inputFeatures)
+    val inputFeatures = $(inputCols).map(c => SchemaUtils.getSchemaField(dataset.schema, c))
+    val featureEncoders = getFeatureEncoders(inputFeatures.toImmutableArraySeq)
+    val featureAttrs = getFeatureAttrs(inputFeatures.toImmutableArraySeq)
 
     def interactFunc = udf { row: Row =>
       var indices = ArrayBuilder.make[Int]
@@ -101,16 +102,18 @@ class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) ext
       Vectors.sparse(size, indices.result(), values.result()).compressed
     }
 
-    val featureCols = inputFeatures.map { f =>
+    val featureCols = inputFeatures.zip($(inputCols)).map { case (f, inputCol) =>
       f.dataType match {
-        case DoubleType => dataset(f.name)
-        case _: VectorUDT => dataset(f.name)
-        case _: NumericType | BooleanType => dataset(f.name).cast(DoubleType)
+        case DoubleType => dataset(inputCol)
+        case _: VectorUDT => dataset(inputCol)
+        case _: NumericType | BooleanType => dataset(inputCol).cast(DoubleType)
       }
     }
+    import org.apache.spark.util.ArrayImplicits._
     dataset.select(
       col("*"),
-      interactFunc(struct(featureCols: _*)).as($(outputCol), featureAttrs.toMetadata()))
+      interactFunc(struct(featureCols.toImmutableArraySeq: _*))
+        .as($(outputCol), featureAttrs.toMetadata()))
   }
 
   /**
@@ -159,14 +162,14 @@ class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) ext
           val attr = Attribute.decodeStructField(f, preserveName = true)
           if (attr == UnresolvedAttribute) {
             encodedFeatureAttrs(Seq(NumericAttribute.defaultAttr.withName(f.name)), None)
-          } else if (!attr.name.isDefined) {
+          } else if (attr.name.isEmpty) {
             encodedFeatureAttrs(Seq(attr.withName(f.name)), None)
           } else {
             encodedFeatureAttrs(Seq(attr), None)
           }
         case _: VectorUDT =>
           val group = AttributeGroup.fromStructField(f)
-          encodedFeatureAttrs(group.attributes.get, Some(group.name))
+          encodedFeatureAttrs(group.attributes.get.toImmutableArraySeq, Some(group.name))
       }
       if (featureAttrs.isEmpty) {
         featureAttrs = encodedAttrs
@@ -218,6 +221,11 @@ class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) ext
   @Since("1.6.0")
   override def copy(extra: ParamMap): Interaction = defaultCopy(extra)
 
+  @Since("3.0.0")
+  override def toString: String = {
+    s"Interaction: uid=$uid" +
+      get(inputCols).map(c => s", numInputCols=${c.length}").getOrElse("")
+  }
 }
 
 @Since("1.6.0")

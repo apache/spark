@@ -22,37 +22,31 @@
   <parent>
     <groupId>org.apache</groupId>
     <artifactId>apache</artifactId>
-    <version>18</version>
+    <version>34</version>
   </parent>
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-parent_2.12</artifactId>
-  <version>3.0.0-SNAPSHOT</version>
+  <artifactId>spark-parent_2.13</artifactId>
+  <version>4.2.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
-  <url>http://spark.apache.org/</url>
+  <url>https://spark.apache.org/</url>
   <licenses>
     <license>
-      <name>Apache 2.0 License</name>
-      <url>http://www.apache.org/licenses/LICENSE-2.0.html</url>
+      <name>Apache-2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.html</url>
       <distribution>repo</distribution>
     </license>
   </licenses>
   <scm>
     <connection>scm:git:git@github.com:apache/spark.git</connection>
-    <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/spark.git</developerConnection>
+    <developerConnection>scm:git:https://gitbox.apache.org/repos/asf/spark.git</developerConnection>
     <url>scm:git:git@github.com:apache/spark.git</url>
     <tag>HEAD</tag>
   </scm>
-  <developers>
-    <developer>
-      <id>matei</id>
-      <name>Matei Zaharia</name>
-      <email>matei.zaharia@gmail.com</email>
-      <url>http://www.cs.berkeley.edu/~matei</url>
-      <organization>Apache Software Foundation</organization>
-      <organizationUrl>http://spark.apache.org</organizationUrl>
-    </developer>
-  </developers>
+  <organization>
+    <name>Apache Software Foundation</name>
+    <url>https://www.apache.org</url>
+  </organization>
   <issueManagement>
     <system>JIRA</system>
     <url>https://issues.apache.org/jira/browse/SPARK</url>
@@ -87,114 +81,186 @@
     <module>common/network-common</module>
     <module>common/network-shuffle</module>
     <module>common/unsafe</module>
+    <module>common/utils</module>
+    <module>common/utils-java</module>
+    <module>common/variant</module>
     <module>common/tags</module>
+    <module>sql/connect/shims</module>
     <module>core</module>
     <module>graphx</module>
     <module>mllib</module>
     <module>mllib-local</module>
     <module>tools</module>
     <module>streaming</module>
+    <module>sql/api</module>
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
+    <module>sql/pipelines</module>
+    <module>sql/connect/server</module>
+    <module>sql/connect/common</module>
+    <module>sql/connect/client/jdbc</module>
+    <module>sql/connect/client/jvm</module>
     <module>assembly</module>
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
-    <module>external/kafka-0-10</module>
-    <module>external/kafka-0-10-assembly</module>
-    <module>external/kafka-0-10-sql</module>
-    <module>external/avro</module>
+    <module>connector/kafka-0-10-token-provider</module>
+    <module>connector/kafka-0-10</module>
+    <module>connector/kafka-0-10-assembly</module>
+    <module>connector/kafka-0-10-sql</module>
+    <module>connector/avro</module>
+    <module>connector/protobuf</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <java.version>1.8</java.version>
-    <maven.compiler.source>${java.version}</maven.compiler.source>
-    <maven.compiler.target>${java.version}</maven.compiler.target>
-    <maven.version>3.5.4</maven.version>
+    <java.version>17</java.version>
+    <java.minimum.version>17.0.11</java.minimum.version>
+    <maven.compiler.release>${java.version}</maven.compiler.release>
+    <maven.version>3.9.14</maven.version>
+    <exec-maven-plugin.version>3.6.1</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
-    <slf4j.version>1.7.16</slf4j.version>
-    <log4j.version>1.2.17</log4j.version>
-    <hadoop.version>2.7.3</hadoop.version>
-    <protobuf.version>2.5.0</protobuf.version>
-    <yarn.version>${hadoop.version}</yarn.version>
-    <zookeeper.version>3.4.6</zookeeper.version>
-    <curator.version>2.7.1</curator.version>
-    <hive.group>org.spark-project.hive</hive.group>
+    <asm.version>9.9.1</asm.version>
+    <slf4j.version>2.0.17</slf4j.version>
+    <log4j.version>2.25.3</log4j.version>
+    <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
+    <hadoop.version>3.4.3</hadoop.version>
+    <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
+    <protobuf.version>4.33.5</protobuf.version>
+    <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
+    <zookeeper.version>3.9.5</zookeeper.version>
+    <curator.version>5.9.0</curator.version>
+    <hive.group>org.apache.hive</hive.group>
+    <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>1.2.1.spark2</hive.version>
-    <!-- Version used for internal directory structure -->
-    <hive.version.short>1.2.1</hive.version.short>
-    <derby.version>10.12.1.1</derby.version>
-    <parquet.version>1.10.0</parquet.version>
-    <orc.version>1.5.3</orc.version>
-    <orc.classifier>nohive</orc.classifier>
-    <hive.parquet.version>1.6.0</hive.parquet.version>
-    <jetty.version>9.4.12.v20180830</jetty.version>
-    <javaxservlet.version>3.1.0</javaxservlet.version>
-    <chill.version>0.9.3</chill.version>
-    <ivy.version>2.4.0</ivy.version>
+    <hive.version>2.3.10</hive.version>
+    <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
+    <kafka.version>3.9.2</kafka.version>
+    <!-- After 10.17.1.0, the minimum required version is JDK19 -->
+    <derby.version>10.16.1.1</derby.version>
+    <parquet.version>1.17.0</parquet.version>
+    <orc.version>2.3.0</orc.version>
+    <orc.classifier>shaded-protobuf</orc.classifier>
+    <jetty.version>12.1.7</jetty.version>
+    <jakartaservlet.version>6.0.0</jakartaservlet.version>
+    <!-- SPARK-46938: Required by Hive / LibThrift libs -->
+    <javaxservlet.version>4.0.1</javaxservlet.version>
+    <chill.version>0.10.0</chill.version>
+    <kryo.version>4.0.3</kryo.version>
+    <ivy.version>2.5.3</ivy.version>
     <oro.version>2.0.8</oro.version>
-    <codahale.metrics.version>3.1.5</codahale.metrics.version>
-    <avro.version>1.8.2</avro.version>
-    <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
-    <aws.kinesis.client.version>1.8.10</aws.kinesis.client.version>
+    <!--
+    If you change codahale.metrics.version, you also need to change
+    the link to metrics.dropwizard.io in docs/monitoring.md.
+    -->
+    <codahale.metrics.version>4.2.37</codahale.metrics.version>
+    <!-- Should be consistent with SparkBuild.scala and docs -->
+    <avro.version>1.12.1</avro.version>
+    <aws.kinesis.client.version>2.7.2</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
-    <aws.java.sdk.version>1.11.271</aws.java.sdk.version>
+    <aws.java.sdk.v2.version>2.35.4</aws.java.sdk.v2.version>
     <!-- the producer is used in tests -->
-    <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
+    <aws.kinesis.producer.version>1.0.6</aws.kinesis.producer.version>
+    <!-- Do not use 3.0.0: https://github.com/GoogleCloudDataproc/hadoop-connectors/issues/1114 -->
+    <gcs-connector.version>hadoop3-2.2.31</gcs-connector.version>
+    <analyticsaccelerator-s3.version>1.3.1</analyticsaccelerator-s3.version>
     <!--  org.apache.httpcomponents/httpclient-->
-    <commons.httpclient.version>4.5.6</commons.httpclient.version>
-    <commons.httpcore.version>4.4.10</commons.httpcore.version>
-    <!--  commons-httpclient/commons-httpclient-->
-    <httpclient.classic.version>3.1</httpclient.classic.version>
-    <commons.math3.version>3.4.1</commons.math3.version>
-    <!-- managed up from 3.2.1 for SPARK-11652 -->
-    <commons.collections.version>3.2.2</commons.collections.version>
-    <scala.version>2.12.7</scala.version>
-    <scala.binary.version>2.12</scala.binary.version>
-    <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.9.6</fasterxml.jackson.version>
-    <snappy.version>1.1.7.1</snappy.version>
-    <netlib.java.version>1.1.2</netlib.java.version>
-    <calcite.version>1.2.0-incubating</calcite.version>
-    <commons-codec.version>1.10</commons-codec.version>
-    <commons-io.version>2.4</commons-io.version>
-    <!-- org.apache.commons/commons-lang/-->
+    <commons.httpclient.version>4.5.14</commons.httpclient.version>
+    <commons.httpcore.version>4.4.16</commons.httpcore.version>
+    <commons.math3.version>3.6.1</commons.math3.version>
+    <commons.collections4.version>4.5.0</commons.collections4.version>
+    <scala.version>2.13.18</scala.version>
+    <scala.binary.version>2.13</scala.binary.version>
+    <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
+    <scala-maven-plugin.version>4.9.9</scala-maven-plugin.version>
+    <maven.scaladoc.skip>false</maven.scaladoc.skip>
+    <versions-maven-plugin.version>2.18.0</versions-maven-plugin.version>
+    <!-- for now, not running scalafmt as part of default verify pipeline -->
+    <scalafmt.skip>true</scalafmt.skip>
+    <scalafmt.validateOnly>true</scalafmt.validateOnly>
+    <scalafmt.changedOnly>true</scalafmt.changedOnly>
+    <!-- Should be consistent with SparkBuild.scala and docs -->
+    <fasterxml.jackson.version>2.21.2</fasterxml.jackson.version>
+    <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
+    <snappy.version>1.1.10.8</snappy.version>
+    <netlib.ludovic.dev.version>3.1.1</netlib.ludovic.dev.version>
+    <commons-codec.version>1.21.0</commons-codec.version>
+    <commons-compress.version>1.28.0</commons-compress.version>
+    <commons-io.version>2.21.0</commons-io.version>
+    <!-- To support Hive UDF jars built by Hive 2.0.0 ~ 2.3.9 and 3.0.0 ~ 3.1.3. -->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
-    <commons-lang3.version>3.8.1</commons-lang3.version>
-    <datanucleus-core.version>3.2.10</datanucleus-core.version>
-    <janino.version>3.0.10</janino.version>
-    <jersey.version>2.22.2</jersey.version>
-    <joda.version>2.9.3</joda.version>
-    <jodd.version>3.5.2</jodd.version>
+    <commons-lang3.version>3.20.0</commons-lang3.version>
+    <!-- org.apache.commons/commons-pool2/-->
+    <commons-pool2.version>2.13.1</commons-pool2.version>
+    <datanucleus-core.version>4.1.17</datanucleus-core.version>
+    <guava.version>33.5.0-jre</guava.version>
+    <guava.failureaccess.version>1.0.3</guava.failureaccess.version>
+    <gson.version>2.13.2</gson.version>
+    <janino.version>3.1.9</janino.version>
+    <jersey.version>3.1.11</jersey.version>
+    <joda.version>2.14.0</joda.version>
     <jsr305.version>3.0.0</jsr305.version>
-    <libthrift.version>0.9.3</libthrift.version>
-    <antlr4.version>4.7.1</antlr4.version>
+    <jaxb.version>2.2.11</jaxb.version>
+    <libthrift.version>0.16.0</libthrift.version>
+    <antlr4.version>4.13.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
-    <selenium.version>2.52.0</selenium.version>
+    <selenium.version>4.32.0</selenium.version>
+    <htmlunit3-driver.version>4.32.0</htmlunit3-driver.version>
+    <maven-antrun.version>3.1.0</maven-antrun.version>
+    <commons-crypto.version>1.1.0</commons-crypto.version>
+    <commons-cli.version>1.11.0</commons-cli.version>
+    <bouncycastle.version>1.83</bouncycastle.version>
+    <tink.version>1.20.0</tink.version>
+    <datasketches.version>6.2.0</datasketches.version>
+    <netty.version>4.2.12.Final</netty.version>
+    <netty-tcnative.version>2.0.75.Final</netty-tcnative.version>
+    <icu4j.version>78.2</icu4j.version>
+    <junit.version>6.0.3</junit.version>
+    <jline.version>2.14.6</jline.version>
     <!--
-    Managed up from older version from Avro; sync with jackson-module-paranamer dependency version
+      SPARK-50299: When updating `sbt-jupiter-interface.version`,
+      also need to update the version in `SparkBuild.scala` and `plugins.sbt`.
     -->
-    <paranamer.version>2.8</paranamer.version>
-    <maven-antrun.version>1.8</maven-antrun.version>
-    <commons-crypto.version>1.0.0</commons-crypto.version>
+    <sbt-jupiter-interface.version>0.17.0</sbt-jupiter-interface.version>
     <!--
-    If you are changing Arrow version specification, please check ./python/pyspark/sql/utils.py,
-    ./python/run-tests.py and ./python/setup.py too.
+    If you are changing Arrow version specification, please check
+    ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py,
+    ./python/packaging/client/setup.py, and ./python/packaging/connect/setup.py too.
     -->
-    <arrow.version>0.10.0</arrow.version>
+    <arrow.version>19.0.0</arrow.version>
+    <ammonite.version>3.0.8</ammonite.version>
+    <jjwt.version>0.13.0</jjwt.version>
+
+    <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
+    <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
+    <kubernetes-client.version>7.6.1</kubernetes-client.version>
+    <vertx.version>4.5.26</vertx.version>
 
     <test.java.home>${java.home}</test.java.home>
+
+    <!--
+      SPARK-51558: During the testing process, the env `OBJC_DISABLE_INITIALIZE_FORK_SAFETY`
+      is automatically set, with a default value of `NO`.
+      When testing on macOS, it will be automatically set to `YES`.
+    -->
+    <test.objc.disable.initialize.fork.safety>NO</test.objc.disable.initialize.fork.safety>
+
+    <!-- Some UI tests require Chrome and Chrome driver installed so those tests are disabled by default. -->
+    <test.default.exclude.tags>org.apache.spark.tags.ChromeUITest</test.default.exclude.tags>
     <test.exclude.tags></test.exclude.tags>
     <test.include.tags></test.include.tags>
 
+    <test.jdwp.address>localhost:0</test.jdwp.address>
+    <test.jdwp.suspend>y</test.jdwp.suspend>
+    <test.jdwp.server>y</test.jdwp.server>
+    <test.debug.suite>false</test.debug.suite>
+
     <!-- Package to use when relocating shaded classes. -->
-    <spark.shade.packageName>org.spark_project</spark.shade.packageName>
+    <spark.shade.packageName>org.sparkproject</spark.shade.packageName>
 
     <!-- Modules that copy jars to the build directory should do so under this location. -->
     <jars.target.dir>${project.build.directory}/scala-${scala.binary.version}/jars</jars.target.dir>
@@ -208,27 +274,104 @@
       declared in the projects that build assemblies.
 
       For other projects the scope should remain as "compile", otherwise they are not available
-      during compilation if the dependency is transivite (e.g. "graphx/" depending on "core/" and
+      during compilation if the dependency is transitive (e.g. "graphx/" depending on "core/" and
       needing Hadoop classes in the classpath to compile).
     -->
+    <derby.deps.scope>compile</derby.deps.scope>
     <hadoop.deps.scope>compile</hadoop.deps.scope>
+    <huaweicloud.deps.scope>compile</huaweicloud.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
+    <hive.storage.version>2.8.1</hive.storage.version>
+    <hive.storage.scope>compile</hive.storage.scope>
+    <hive.common.scope>compile</hive.common.scope>
+    <hive.llap.scope>test</hive.llap.scope>
+    <hive.serde.scope>compile</hive.serde.scope>
+    <hive.shims.scope>compile</hive.shims.scope>
     <orc.deps.scope>compile</orc.deps.scope>
     <parquet.deps.scope>compile</parquet.deps.scope>
     <parquet.test.deps.scope>test</parquet.test.deps.scope>
+    <jjwt.deps.scope>compile</jjwt.deps.scope>
+
+    <spark.yarn.isHadoopProvided>false</spark.yarn.isHadoopProvided>
 
     <!--
       Overridable test home. So that you can call individual pom files directly without
       things breaking.
     -->
     <spark.test.home>${session.executionRootDirectory}</spark.test.home>
+    <spark.test.webdriver.chrome.driver></spark.test.webdriver.chrome.driver>
+    <spark.test.docker.keepContainer>false</spark.test.docker.keepContainer>
+    <spark.test.docker.removePulledImage>true</spark.test.docker.removePulledImage>
 
-    <CodeCacheSize>512m</CodeCacheSize>
+    <!-- Version used in Connect -->
+    <io.grpc.version>1.76.0</io.grpc.version>
+    <mima.version>1.1.4</mima.version>
+
+    <!-- Version used in Profiler -->
+    <ap-loader.version>4.3-12</ap-loader.version>
+
+    <CodeCacheSize>128m</CodeCacheSize>
+    <!-- Needed for consistent times -->
+    <maven.build.timestamp.format>yyyy-MM-dd HH:mm:ss z</maven.build.timestamp.format>
+
+    <!-- SPARK-36796 for JDK-17 test-->
+    <extraJavaTestArgs>
+      -XX:+IgnoreUnrecognizedVMOptions
+      --add-modules=jdk.incubator.vector
+      --add-opens=java.base/java.lang=ALL-UNNAMED
+      --add-opens=java.base/java.lang.invoke=ALL-UNNAMED
+      --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
+      --add-opens=java.base/java.io=ALL-UNNAMED
+      --add-opens=java.base/java.net=ALL-UNNAMED
+      --add-opens=java.base/java.nio=ALL-UNNAMED
+      --add-opens=java.base/java.util=ALL-UNNAMED
+      --add-opens=java.base/java.util.concurrent=ALL-UNNAMED
+      --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED
+      --add-opens=java.base/jdk.internal.ref=ALL-UNNAMED
+      --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
+      --add-opens=java.base/sun.nio.cs=ALL-UNNAMED
+      --add-opens=java.base/sun.security.action=ALL-UNNAMED
+      --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
+      -Dio.netty.tryReflectionSetAccessible=true
+      -Dio.netty.allocator.type=pooled
+      -Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE
+      -Dio.netty.noUnsafe=false
+      --enable-native-access=ALL-UNNAMED
+    </extraJavaTestArgs>
+    <mariadb.java.client.version>3.5.7</mariadb.java.client.version>
+    <mysql.connector.version>9.6.0</mysql.connector.version>
+    <postgresql.version>42.7.10</postgresql.version>
+    <db2.jcc.version>11.5.9.0</db2.jcc.version>
+    <mssql.jdbc.version>13.2.1.jre11</mssql.jdbc.version>
+    <ojdbc17.version>23.26.1.0.0</ojdbc17.version>
+    <databricks.jdbc.version>2.7.1</databricks.jdbc.version>
+    <snowflake.jdbc.version>4.0.2</snowflake.jdbc.version>
+    <terajdbc.version>20.00.00.39</terajdbc.version>
+    <!-- Used for SBT build to retrieve the Spark version -->
+    <spark.version>${project.version}</spark.version>
+    <maven-jar-plugin.version>3.4.2</maven-jar-plugin.version>
   </properties>
   <repositories>
     <repository>
+      <id>gcs-maven-central-mirror</id>
+      <!--
+        Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
+        See https://storage-download.googleapis.com/maven-central/index.html
+      -->
+      <name>GCS Maven Central mirror</name>
+      <url>https://maven-central.storage-download.googleapis.com/maven2/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <!--
+        This is used as a fallback when the first try fails.
+      -->
       <id>central</id>
-      <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
       <name>Maven Repository</name>
       <url>https://repo.maven.apache.org/maven2</url>
       <releases>
@@ -240,6 +383,21 @@
     </repository>
   </repositories>
   <pluginRepositories>
+    <pluginRepository>
+      <id>gcs-maven-central-mirror</id>
+      <!--
+        Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
+        See https://storage-download.googleapis.com/maven-central/index.html
+      -->
+      <name>GCS Maven Central mirror</name>
+      <url>https://maven-central.storage-download.googleapis.com/maven2/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </pluginRepository>
     <pluginRepository>
       <id>central</id>
       <url>https://repo.maven.apache.org/maven2</url>
@@ -278,13 +436,28 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
+      <groupId>org.scalatestplus</groupId>
+      <artifactId>scalacheck-1-18_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>com.novocode</groupId>
-      <artifactId>junit-interface</artifactId>
+      <groupId>org.scalatestplus</groupId>
+      <artifactId>mockito-5-18_${scala.binary.version}</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.scalatestplus</groupId>
+      <artifactId>selenium-4-21_${scala.binary.version}</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.github.sbt.junit</groupId>
+      <artifactId>jupiter-interface</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -302,22 +475,69 @@
         <type>test-jar</type>
       </dependency>
       <dependency>
+        <groupId>org.scala-lang.modules</groupId>
+        <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
+        <version>1.2.0</version>
+      </dependency>
+      <dependency>
         <groupId>com.twitter</groupId>
         <artifactId>chill_${scala.binary.version}</artifactId>
         <version>${chill.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.xbean</groupId>
+            <artifactId>xbean-asm7-shaded</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.esotericsoftware</groupId>
+            <artifactId>kryo-shaded</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.twitter</groupId>
         <artifactId>chill-java</artifactId>
         <version>${chill.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.esotericsoftware</groupId>
+            <artifactId>kryo-shaded</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
-      <!-- This artifact is a shaded version of ASM 7.x. The POM that was used to produce this
-           is at https://github.com/apache/geronimo-xbean/tree/trunk/xbean-asm7-shaded
+      <dependency>
+        <groupId>com.esotericsoftware</groupId>
+        <artifactId>kryo-shaded</artifactId>
+        <version>${kryo.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.objenesis</groupId>
+            <artifactId>objenesis</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <!--
+        SPARK-51806: Kryo 4.0.x depends on objenesis 2.5.1, while Spark currently
+        depends on objenesis 3.5. Here, it is uniformly defined as version 3.5.
+        -->
+      <dependency>
+        <groupId>org.objenesis</groupId>
+        <artifactId>objenesis</artifactId>
+        <version>3.5</version>
+      </dependency>
+      <dependency>
+        <groupId>com.github.jnr</groupId>
+        <artifactId>jnr-posix</artifactId>
+        <version>3.1.15</version>
+        <scope>test</scope>
+      </dependency>
+      <!-- This artifact is a shaded version of ASM 9.x. The POM that was used to produce this
+           is at https://github.com/apache/geronimo-xbean/tree/trunk/xbean-asm9-shaded
            For context on why we shade ASM, see SPARK-782 and SPARK-6152. -->
       <dependency>
         <groupId>org.apache.xbean</groupId>
-        <artifactId>xbean-asm7-shaded</artifactId>
-        <version>4.12</version>
+        <artifactId>xbean-asm9-shaded</artifactId>
+        <version>4.30</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -330,26 +550,20 @@
         <scope>provided</scope>
       </dependency>
       <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-continuation</artifactId>
+        <groupId>org.eclipse.jetty.ee10</groupId>
+        <artifactId>jetty-ee10-servlet</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>
       <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-servlet</artifactId>
+        <groupId>org.eclipse.jetty.ee10</groupId>
+        <artifactId>jetty-ee10-servlets</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>
       <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-servlets</artifactId>
-        <version>${jetty.version}</version>
-        <scope>provided</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-proxy</artifactId>
+        <groupId>org.eclipse.jetty.ee10</groupId>
+        <artifactId>jetty-ee10-proxy</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>
@@ -372,8 +586,8 @@
         <scope>provided</scope>
       </dependency>
       <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-plus</artifactId>
+        <groupId>org.eclipse.jetty.ee10</groupId>
+        <artifactId>jetty-ee10-plus</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>
@@ -384,15 +598,45 @@
         <scope>provided</scope>
       </dependency>
       <dependency>
+        <groupId>org.eclipse.jetty.ee10</groupId>
+        <artifactId>jetty-ee10-webapp</artifactId>
+        <version>${jetty.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty.compression</groupId>
+        <artifactId>jetty-compression-server</artifactId>
+        <version>${jetty.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty.compression</groupId>
+        <artifactId>jetty-compression-common</artifactId>
+        <version>${jetty.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty.compression</groupId>
+        <artifactId>jetty-compression-gzip</artifactId>
+        <version>${jetty.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
         <groupId>com.google.guava</groupId>
         <artifactId>guava</artifactId>
-        <version>14.0.1</version>
+        <version>${guava.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.google.guava</groupId>
+        <artifactId>failureaccess</artifactId>
+        <version>${guava.failureaccess.version}</version>
         <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.jpmml</groupId>
         <artifactId>pmml-model</artifactId>
-        <version>1.2.15</version>
+        <version>1.7.1</version>
         <scope>provided</scope>
         <exclusions>
           <exclusion>
@@ -401,7 +645,43 @@
           </exclusion>
         </exclusions>
       </dependency>
+
       <!-- End of shaded deps -->
+
+      <dependency>
+        <groupId>com.google.code.gson</groupId>
+        <artifactId>gson</artifactId>
+        <version>${gson.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.google.errorprone</groupId>
+            <artifactId>error_prone_annotations</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+
+      <!-- Provide a JAXB impl; no longer auto available in Java 9+ in the JDK -->
+      <dependency>
+        <groupId>org.glassfish.jaxb</groupId>
+        <artifactId>jaxb-runtime</artifactId>
+        <version>4.0.5</version>
+        <scope>compile</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>org.glassfish.jaxb</groupId>
+            <artifactId>txw2</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.eclipse.angus</groupId>
+            <artifactId>angus-activation</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>jakarta.xml.bind</groupId>
+        <artifactId>jakarta.xml.bind-api</artifactId>
+        <version>4.0.2</version>
+      </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>
@@ -410,7 +690,7 @@
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-text</artifactId>
-        <version>1.6</version>
+        <version>1.15.0</version>
       </dependency>
       <dependency>
         <groupId>commons-lang</groupId>
@@ -429,13 +709,28 @@
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
+        <artifactId>commons-compress</artifactId>
+        <version>${commons-compress.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.commons</groupId>
         <artifactId>commons-math3</artifactId>
         <version>${commons.math3.version}</version>
       </dependency>
       <dependency>
-        <groupId>commons-collections</groupId>
-        <artifactId>commons-collections</artifactId>
-        <version>${commons.collections.version}</version>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-collections4</artifactId>
+        <version>${commons.collections4.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.ivy</groupId>
@@ -443,19 +738,37 @@
         <version>${ivy.version}</version>
       </dependency>
       <dependency>
+        <groupId>io.jsonwebtoken</groupId>
+        <artifactId>jjwt-api</artifactId>
+        <version>${jjwt.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.jsonwebtoken</groupId>
+        <artifactId>jjwt-impl</artifactId>
+        <version>${jjwt.version}</version>
+        <scope>${jjwt.deps.scope}</scope>
+      </dependency>
+      <dependency>
+        <groupId>io.jsonwebtoken</groupId>
+        <artifactId>jjwt-jackson</artifactId>
+        <version>${jjwt.version}</version>
+        <scope>${jjwt.deps.scope}</scope>
+      </dependency>
+      <dependency>
         <groupId>com.google.code.findbugs</groupId>
         <artifactId>jsr305</artifactId>
         <version>${jsr305.version}</version>
       </dependency>
       <dependency>
-        <groupId>commons-httpclient</groupId>
-        <artifactId>commons-httpclient</artifactId>
-        <version>${httpclient.classic.version}</version>
-      </dependency>
-      <dependency>
         <groupId>org.apache.httpcomponents</groupId>
         <artifactId>httpclient</artifactId>
         <version>${commons.httpclient.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.httpcomponents</groupId>
@@ -468,7 +781,12 @@
         <version>${commons.httpcore.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.fusesource.leveldbjni</groupId>
+        <groupId>org.rocksdb</groupId>
+        <artifactId>rocksdbjni</artifactId>
+        <version>9.8.4</version>
+      </dependency>
+      <dependency>
+        <groupId>${leveldbjni.group}</groupId>
         <artifactId>leveldbjni-all</artifactId>
         <version>1.8</version>
       </dependency>
@@ -483,33 +801,36 @@
             <artifactId>guava</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>com.google.auto.service</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>net.bytebuddy</groupId>
+            <artifactId>byte-buddy</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
       <dependency>
         <groupId>org.seleniumhq.selenium</groupId>
-        <artifactId>selenium-htmlunit-driver</artifactId>
-        <version>${selenium.version}</version>
+        <artifactId>htmlunit3-driver</artifactId>
+        <version>${htmlunit3-driver.version}</version>
         <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
-      <!-- Added for selenium only, and should match its dependent version: -->
-      <dependency>
-        <groupId>xml-apis</groupId>
-        <artifactId>xml-apis</artifactId>
-        <version>1.4.01</version>
-        <scope>test</scope>
-      </dependency>
+
+      <!-- log4j -->
       <dependency>
         <groupId>org.slf4j</groupId>
         <artifactId>slf4j-api</artifactId>
-        <version>${slf4j.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-log4j12</artifactId>
         <version>${slf4j.version}</version>
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
@@ -524,16 +845,40 @@
         <version>${slf4j.version}</version>
         <!-- runtime scope is appropriate, but causes SBT build problems -->
       </dependency>
+
       <dependency>
-        <groupId>log4j</groupId>
-        <artifactId>log4j</artifactId>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-slf4j2-impl</artifactId>
         <version>${log4j.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
       </dependency>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-api</artifactId>
+        <version>${log4j.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-core</artifactId>
+        <version>${log4j.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-layout-template-json</artifactId>
+        <version>${log4j.version}</version>
+      </dependency>
+      <dependency>
+        <!-- API bridge between log4j 1 and 2 -->
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-1.2-api</artifactId>
+        <version>${log4j.version}</version>
+      </dependency>
+
+      <!-- end -->
+
       <dependency>
         <groupId>com.ning</groupId>
         <artifactId>compress-lzf</artifactId>
-        <version>1.0.3</version>
+        <version>1.2.0</version>
       </dependency>
       <dependency>
         <groupId>org.xerial.snappy</groupId>
@@ -541,19 +886,19 @@
         <version>${snappy.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.lz4</groupId>
+        <groupId>at.yawk.lz4</groupId>
         <artifactId>lz4-java</artifactId>
-        <version>1.5.0</version>
+        <version>1.10.4</version>
       </dependency>
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.3.2-2</version>
+        <version>1.5.7-7</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
         <artifactId>stream</artifactId>
-        <version>2.7.0</version>
+        <version>2.9.8</version>
         <exclusions>
           <!-- Only HyperLogLogPlus is used, which doesn't depend on fastutil -->
           <exclusion>
@@ -562,41 +907,179 @@
           </exclusion>
         </exclusions>
       </dependency>
-      <!-- In theory we need not directly depend on protobuf since Spark does not directly
-           use it. However, when building with Hadoop/YARN 2.2 Maven doesn't correctly bump
-           the protobuf version up from the one Mesos gives. For now we include this variable
-           to explicitly bump the version when building with YARN. It would be nice to figure
-           out why Maven can't resolve this correctly (like SBT does). -->
       <dependency>
         <groupId>com.google.protobuf</groupId>
         <artifactId>protobuf-java</artifactId>
         <version>${protobuf.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.google.protobuf</groupId>
+        <artifactId>protobuf-java-util</artifactId>
+        <version>${protobuf.version}</version>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>0.5.11</version>
+        <version>1.6.10</version>
       </dependency>
-      <dependency>
-        <groupId>commons-net</groupId>
-        <artifactId>commons-net</artifactId>
-        <version>3.1</version>
-      </dependency>
+      <!-- Netty Begin -->
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.1.30.Final</version>
+        <version>${netty.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-haproxy</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-memcache</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-mqtt</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-redis</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-smtp</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-stomp</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-xml</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-http3</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-marshalling</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-classes-quic</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-native-quic</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-protobuf</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-resolver-dns-classes-macos</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-resolver-dns-native-macos</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-transport-rxtx</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-transport-sctp</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-transport-udt</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-transport-classes-io_uring</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-transport-native-io_uring</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-handler-ssl-ocsp</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.jctools</groupId>
+            <artifactId>jctools-core</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <!-- SPARK-38885: After Netty 4.1.76, add the following `Netty` dependencies explicitly
+           to ensure `./dev/test-dependencies.sh` produce the same results on Linux and MacOS.
+      -->
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-transport-native-epoll</artifactId>
+        <version>${netty.version}</version>
+        <classifier>linux-x86_64</classifier>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
-        <artifactId>netty</artifactId>
-        <version>3.9.9.Final</version>
+        <artifactId>netty-transport-native-epoll</artifactId>
+        <version>${netty.version}</version>
+        <classifier>linux-aarch_64</classifier>
       </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-transport-native-kqueue</artifactId>
+        <version>${netty.version}</version>
+        <classifier>osx-aarch_64</classifier>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-transport-native-kqueue</artifactId>
+        <version>${netty.version}</version>
+        <classifier>osx-x86_64</classifier>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-tcnative-boringssl-static</artifactId>
+        <version>${netty-tcnative.version}</version>
+        <classifier>linux-x86_64</classifier>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-tcnative-boringssl-static</artifactId>
+        <version>${netty-tcnative.version}</version>
+        <classifier>linux-aarch_64</classifier>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-tcnative-boringssl-static</artifactId>
+        <version>${netty-tcnative.version}</version>
+        <classifier>osx-aarch_64</classifier>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-tcnative-boringssl-static</artifactId>
+        <version>${netty-tcnative.version}</version>
+        <classifier>osx-x86_64</classifier>
+      </dependency>
+      <!-- Netty End -->
+
       <dependency>
         <groupId>org.apache.derby</groupId>
         <artifactId>derby</artifactId>
         <version>${derby.version}</version>
+        <scope>${derby.deps.scope}</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.derby</groupId>
+        <artifactId>derbytools</artifactId>
+        <version>${derby.version}</version>
+        <scope>${derby.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>io.dropwizard.metrics</groupId>
@@ -615,46 +1098,25 @@
       </dependency>
       <dependency>
         <groupId>io.dropwizard.metrics</groupId>
-        <artifactId>metrics-ganglia</artifactId>
-        <version>${codahale.metrics.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>io.dropwizard.metrics</groupId>
         <artifactId>metrics-graphite</artifactId>
         <version>${codahale.metrics.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.fasterxml.jackson.core</groupId>
-        <artifactId>jackson-core</artifactId>
-        <version>${fasterxml.jackson.version}</version>
+        <groupId>io.dropwizard.metrics</groupId>
+        <artifactId>metrics-jmx</artifactId>
+        <version>${codahale.metrics.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.fasterxml.jackson.core</groupId>
-        <artifactId>jackson-databind</artifactId>
+        <groupId>com.fasterxml.jackson</groupId>
+        <artifactId>jackson-bom</artifactId>
         <version>${fasterxml.jackson.version}</version>
+        <scope>import</scope>
+        <type>pom</type>
       </dependency>
       <dependency>
-        <groupId>com.fasterxml.jackson.core</groupId>
-        <artifactId>jackson-annotations</artifactId>
-        <version>${fasterxml.jackson.version}</version>
-      </dependency>
-      <!-- Guava is excluded because of SPARK-6149.  The Guava version referenced in this module is
-           15.0, which causes runtime incompatibility issues. -->
-      <dependency>
-        <groupId>com.fasterxml.jackson.module</groupId>
-        <artifactId>jackson-module-scala_${scala.binary.version}</artifactId>
-        <version>${fasterxml.jackson.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>com.fasterxml.jackson.module</groupId>
-        <artifactId>jackson-module-jaxb-annotations</artifactId>
-        <version>${fasterxml.jackson.version}</version>
+        <groupId>org.apache.ws.xmlschema</groupId>
+        <artifactId>xmlschema-core</artifactId>
+        <version>${ws.xmlschema.version}</version>
       </dependency>
       <dependency>
         <groupId>org.glassfish.jersey.core</groupId>
@@ -665,6 +1127,13 @@
         <groupId>org.glassfish.jersey.core</groupId>
         <artifactId>jersey-common</artifactId>
         <version>${jersey.version}</version>
+        <!-- SPARK-28765 Unused JDK11-specific dependency -->
+        <exclusions>
+          <exclusion>
+            <groupId>com.sun.activation</groupId>
+            <artifactId>jakarta.activation</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.glassfish.jersey.core</groupId>
@@ -682,36 +1151,45 @@
         <version>${jersey.version}</version>
       </dependency>
       <dependency>
+        <groupId>org.glassfish.jersey.inject</groupId>
+        <artifactId>jersey-hk2</artifactId>
+        <version>${jersey.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.glassfish.jersey.test-framework.providers</groupId>
+        <artifactId>jersey-test-framework-provider-simple</artifactId>
+        <version>${jersey.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
         <groupId>org.glassfish.jersey</groupId>
         <artifactId>jersey-client</artifactId>
         <version>${jersey.version}</version>
       </dependency>
       <dependency>
-        <groupId>javax.ws.rs</groupId>
-        <artifactId>javax.ws.rs-api</artifactId>
-        <version>2.0.1</version>
+        <groupId>javax.xml.bind</groupId>
+        <artifactId>jaxb-api</artifactId>
+        <version>${jaxb.version}</version>
       </dependency>
       <dependency>
         <groupId>org.scalanlp</groupId>
         <artifactId>breeze_${scala.binary.version}</artifactId>
-        <version>0.13.2</version>
+        <version>2.1.0</version>
         <exclusions>
-          <!-- This is included as a compile-scoped dependency by jtransforms, which is
-               a dependency of breeze. -->
-          <exclusion>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-math3</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.scala-lang.modules</groupId>
+            <artifactId>scala-collection-compat_${scala.binary.version}</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
       <dependency>
         <groupId>org.json4s</groupId>
         <artifactId>json4s-jackson_${scala.binary.version}</artifactId>
-        <version>3.5.3</version>
+        <version>4.0.7</version>
         <exclusions>
           <exclusion>
             <groupId>com.fasterxml.jackson.core</groupId>
@@ -720,9 +1198,20 @@
         </exclusions>
       </dependency>
       <dependency>
+        <groupId>org.scala-lang.modules</groupId>
+        <artifactId>scala-xml_${scala.binary.version}</artifactId>
+        <version>2.4.0</version>
+      </dependency>
+      <dependency>
         <groupId>org.scala-lang</groupId>
         <artifactId>scala-compiler</artifactId>
         <version>${scala.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.scala-lang.modules</groupId>
+            <artifactId>scala-xml_2.13</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>
@@ -735,95 +1224,202 @@
         <version>${scala.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.scala-lang</groupId>
-        <artifactId>scala-actors</artifactId>
-        <version>${scala.version}</version>
-      </dependency>
-      <dependency>
         <groupId>org.scala-lang.modules</groupId>
         <artifactId>scala-parser-combinators_${scala.binary.version}</artifactId>
-        <version>1.1.0</version>
+        <version>2.4.0</version>
       </dependency>
-      <!-- SPARK-16770 affecting Scala 2.11.x -->
       <dependency>
         <groupId>jline</groupId>
         <artifactId>jline</artifactId>
-        <version>2.14.6</version>
+        <version>${jline.version}</version>
       </dependency>
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.0.3</version>
+        <version>3.2.19</version>
         <scope>test</scope>
       </dependency>
       <dependency>
-        <groupId>org.mockito</groupId>
-        <artifactId>mockito-core</artifactId>
-        <version>1.10.19</version>
+        <groupId>org.scalatestplus</groupId>
+        <artifactId>scalacheck-1-18_${scala.binary.version}</artifactId>
+        <version>3.2.19.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
-        <groupId>org.jmock</groupId>
-        <artifactId>jmock-junit4</artifactId>
-        <scope>test</scope>
-        <version>2.8.4</version>
-      </dependency>
-      <dependency>
-        <groupId>org.scalacheck</groupId>
-        <artifactId>scalacheck_${scala.binary.version}</artifactId>
-        <version>1.13.5</version>
+        <groupId>org.scalatestplus</groupId>
+        <artifactId>mockito-5-18_${scala.binary.version}</artifactId>
+        <version>3.2.19.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
-        <groupId>junit</groupId>
-        <artifactId>junit</artifactId>
-        <version>4.12</version>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.hamcrest</groupId>
-        <artifactId>hamcrest-core</artifactId>
-        <version>1.3</version>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.hamcrest</groupId>
-        <artifactId>hamcrest-library</artifactId>
-        <version>1.3</version>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>com.novocode</groupId>
-        <artifactId>junit-interface</artifactId>
-        <version>0.11</version>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>com.spotify</groupId>
-        <artifactId>docker-client</artifactId>
-        <version>5.0.2</version>
+        <groupId>org.scalatestplus</groupId>
+        <artifactId>selenium-4-21_${scala.binary.version}</artifactId>
+        <version>3.2.19.0</version>
         <scope>test</scope>
         <exclusions>
           <exclusion>
-            <artifactId>guava</artifactId>
-            <groupId>com.google.guava</groupId>
-          </exclusion>
-          <exclusion>
-            <groupId>commons-logging</groupId>
-            <artifactId>commons-logging</artifactId>
+            <groupId>org.seleniumhq.selenium</groupId>
+            <artifactId>htmlunit-driver</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>mysql</groupId>
-        <artifactId>mysql-connector-java</artifactId>
-        <version>5.1.38</version>
+        <groupId>org.mockito</groupId>
+        <artifactId>mockito-core</artifactId>
+        <version>5.23.0</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>net.bytebuddy</groupId>
+        <artifactId>byte-buddy</artifactId>
+        <version>1.18.4</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>net.bytebuddy</groupId>
+        <artifactId>byte-buddy-agent</artifactId>
+        <version>1.18.4</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.jmock</groupId>
+        <artifactId>jmock-junit5</artifactId>
+        <scope>test</scope>
+        <version>2.13.1</version>
+      </dependency>
+      <dependency>
+        <groupId>org.scalacheck</groupId>
+        <artifactId>scalacheck_${scala.binary.version}</artifactId>
+        <version>1.18.0</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter</artifactId>
+        <version>${junit.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter-api</artifactId>
+        <version>${junit.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter-engine</artifactId>
+        <version>${junit.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter-params</artifactId>
+        <version>${junit.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.platform</groupId>
+        <artifactId>junit-platform-commons</artifactId>
+        <version>${junit.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.platform</groupId>
+        <artifactId>junit-platform-engine</artifactId>
+        <version>${junit.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.platform</groupId>
+        <artifactId>junit-platform-launcher</artifactId>
+        <version>${junit.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.github.sbt.junit</groupId>
+        <artifactId>jupiter-interface</artifactId>
+        <version>${sbt-jupiter-interface.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.github.docker-java</groupId>
+        <artifactId>docker-java</artifactId>
+        <version>3.6.0</version>
+        <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.github.docker-java</groupId>
+            <artifactId>docker-java-transport-netty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.github.docker-java</groupId>
+            <artifactId>docker-java-transport-jersey</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>com.github.docker-java</groupId>
+        <artifactId>docker-java-transport-zerodep</artifactId>
+        <version>3.6.0</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.mysql</groupId>
+        <artifactId>mysql-connector-j</artifactId>
+        <version>${mysql.connector.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.mariadb.jdbc</groupId>
+        <artifactId>mariadb-java-client</artifactId>
+        <version>${mariadb.java.client.version}</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.postgresql</groupId>
         <artifactId>postgresql</artifactId>
-        <version>9.4.1207.jre7</version>
+        <version>${postgresql.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <!-- TODO(SPARK-55707: Re-enable DB2 JDBC Driver tests) -->
+      <!--dependency>
+        <groupId>com.ibm.db2</groupId>
+        <artifactId>jcc</artifactId>
+        <version>${db2.jcc.version}</version>
+        <scope>test</scope>
+      </dependency-->
+      <dependency>
+        <groupId>com.microsoft.sqlserver</groupId>
+        <artifactId>mssql-jdbc</artifactId>
+        <version>${mssql.jdbc.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.oracle.database.jdbc</groupId>
+        <artifactId>ojdbc17</artifactId>
+        <version>${ojdbc17.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.databricks</groupId>
+        <artifactId>databricks-jdbc</artifactId>
+        <version>${databricks.jdbc.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>net.snowflake</groupId>
+        <artifactId>snowflake-jdbc</artifactId>
+        <version>${snowflake.jdbc.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.teradata.jdbc</groupId>
+        <artifactId>terajdbc</artifactId>
+        <version>${terajdbc.version}</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -839,6 +1435,18 @@
           <exclusion>
             <groupId>jline</groupId>
             <artifactId>jline</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -858,115 +1466,97 @@
         <version>${curator.version}</version>
         <scope>test</scope>
       </dependency>
+      <!-- Hadoop 3.x dependencies -->
       <dependency>
         <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-client</artifactId>
+        <artifactId>hadoop-client-api</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-client-runtime</artifactId>
         <version>${hadoop.version}</version>
         <scope>${hadoop.deps.scope}</scope>
         <exclusions>
           <exclusion>
-            <groupId>asm</groupId>
-            <artifactId>asm</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-mapper-asl</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.ow2.asm</groupId>
-            <artifactId>asm</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.jboss.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-client-minicluster</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <!-- End of Hadoop 3.x dependencies -->
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-minikdc</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>test</scope>
+        <exclusions>
           <exclusion>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-all</artifactId>
+            <groupId>org.apache.directory.api</groupId>
+            <artifactId>api-ldap-schema-data</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.mortbay.jetty</groupId>
-            <artifactId>servlet-api-2.5</artifactId>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>javax.servlet</groupId>
-            <artifactId>servlet-api</artifactId>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-reload4j</artifactId>
           </exclusion>
           <exclusion>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
           </exclusion>
-          <exclusion>
-            <groupId>com.sun.jersey</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.sun.jersey.jersey-test-framework</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.sun.jersey.contribs</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>net.java.dev.jets3t</groupId>
-            <artifactId>jets3t</artifactId>
-          </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcprov-jdk18on</artifactId>
+        <version>${bouncycastle.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcpkix-jdk18on</artifactId>
+        <version>${bouncycastle.version}</version>
+        <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro</artifactId>
         <version>${avro.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.avro</groupId>
-        <artifactId>avro-ipc</artifactId>
-        <version>${avro.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
         <exclusions>
           <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.mortbay.jetty</groupId>
-            <artifactId>jetty</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.mortbay.jetty</groupId>
-            <artifactId>jetty-util</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.mortbay.jetty</groupId>
-            <artifactId>servlet-api</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.velocity</groupId>
-            <artifactId>velocity</artifactId>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
           </exclusion>
         </exclusions>
-      </dependency>
-      <!-- avro-mapred for some reason depends on avro-ipc's test jar, so undo that. -->
-      <dependency>
-        <groupId>org.apache.avro</groupId>
-        <artifactId>avro-ipc</artifactId>
-        <classifier>tests</classifier>
-        <version>${avro.version}</version>
-        <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro-mapred</artifactId>
         <version>${avro.version}</version>
-        <classifier>${avro.mapred.classifier}</classifier>
         <scope>${hive.deps.scope}</scope>
         <exclusions>
+          <exclusion>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro-ipc-jetty</artifactId>
+          </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
             <artifactId>netty</artifactId>
@@ -985,220 +1575,34 @@
           </exclusion>
           <exclusion>
             <groupId>org.apache.velocity</groupId>
-            <artifactId>velocity</artifactId>
+            <artifactId>velocity-engine-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>javax.annotation</groupId>
+            <artifactId>javax.annotation-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.github.luben</groupId>
+            <artifactId>zstd-jni</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
-      <!-- See SPARK-23654 for info on this dependency;
-      It is used to keep javax.activation at v1.1.1 after dropping
-      jets3t as a dependency.
-       -->
+      <!--
+        SPARK-41031: `xz` is marked as optional in the dependency tree of `avro`,
+        we need to manually check `xz` version when upgrading `avro`.
+      -->
       <dependency>
-        <groupId>javax.activation</groupId>
-        <artifactId>activation</artifactId>
-        <version>1.1.1</version>
-        <scope>${hadoop.deps.scope}</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-yarn-api</artifactId>
-        <version>${yarn.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
-        <exclusions>
-          <exclusion>
-            <groupId>javax.servlet</groupId>
-            <artifactId>servlet-api</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>asm</groupId>
-            <artifactId>asm</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.ow2.asm</groupId>
-            <artifactId>asm</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.jboss.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>commons-logging</groupId>
-            <artifactId>commons-logging</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.sun.jersey</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.sun.jersey.jersey-test-framework</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.sun.jersey.contribs</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-yarn-common</artifactId>
-        <version>${yarn.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
-        <exclusions>
-          <exclusion>
-            <groupId>asm</groupId>
-            <artifactId>asm</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.ow2.asm</groupId>
-            <artifactId>asm</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.jboss.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>javax.servlet</groupId>
-            <artifactId>servlet-api</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>commons-logging</groupId>
-            <artifactId>commons-logging</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.sun.jersey</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.sun.jersey.jersey-test-framework</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.sun.jersey.contribs</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-yarn-server-tests</artifactId>
-        <version>${yarn.version}</version>
-        <classifier>tests</classifier>
-        <scope>test</scope>
-        <exclusions>
-          <exclusion>
-            <groupId>asm</groupId>
-            <artifactId>asm</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.ow2.asm</groupId>
-            <artifactId>asm</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.jboss.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>javax.servlet</groupId>
-            <artifactId>servlet-api</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>commons-logging</groupId>
-            <artifactId>commons-logging</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.sun.jersey</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.sun.jersey.jersey-test-framework</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.sun.jersey.contribs</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-yarn-server-web-proxy</artifactId>
-        <version>${yarn.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
-        <exclusions>
-          <exclusion>
-            <groupId>asm</groupId>
-            <artifactId>asm</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.ow2.asm</groupId>
-            <artifactId>asm</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.jboss.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>javax.servlet</groupId>
-            <artifactId>servlet-api</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>commons-logging</groupId>
-            <artifactId>commons-logging</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.sun.jersey</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.sun.jersey.jersey-test-framework</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.sun.jersey.contribs</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-yarn-client</artifactId>
-        <version>${yarn.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
-        <exclusions>
-          <exclusion>
-            <groupId>asm</groupId>
-            <artifactId>asm</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.ow2.asm</groupId>
-            <artifactId>asm</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.jboss.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>javax.servlet</groupId>
-            <artifactId>servlet-api</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>commons-logging</groupId>
-            <artifactId>commons-logging</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.sun.jersey</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.sun.jersey.jersey-test-framework</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.sun.jersey.contribs</groupId>
-            <artifactId>*</artifactId>
-          </exclusion>
-        </exclusions>
+        <groupId>org.tukaani</groupId>
+        <artifactId>xz</artifactId>
+        <version>1.12</version>
       </dependency>
       <dependency>
         <groupId>org.apache.zookeeper</groupId>
@@ -1214,29 +1618,43 @@
             <groupId>jline</groupId>
             <artifactId>jline</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-handler</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-transport-native-epoll</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-tcnative-boringssl-static</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.github.spotbugs</groupId>
+            <artifactId>spotbugs-annotations</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-core</artifactId>
+          </exclusion>
         </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.codehaus.jackson</groupId>
-        <artifactId>jackson-core-asl</artifactId>
-        <version>${codehaus.jackson.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.codehaus.jackson</groupId>
-        <artifactId>jackson-mapper-asl</artifactId>
-        <version>${codehaus.jackson.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.codehaus.jackson</groupId>
-        <artifactId>jackson-xc</artifactId>
-        <version>${codehaus.jackson.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.codehaus.jackson</groupId>
-        <artifactId>jackson-jaxrs</artifactId>
-        <version>${codehaus.jackson.version}</version>
       </dependency>
       <dependency>
         <groupId>${hive.group}</groupId>
@@ -1263,6 +1681,10 @@
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-service</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-service-rpc</artifactId>
           </exclusion>
           <exclusion>
             <groupId>${hive.group}</groupId>
@@ -1361,6 +1783,14 @@
             <artifactId>ant</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-auth</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.apache.zookeeper</groupId>
             <artifactId>zookeeper</artifactId>
           </exclusion>
@@ -1380,20 +1810,46 @@
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
+          <!--
+            ORC is needed, but the version should be consistent with the `sql/core` ORC data source.
+            Looks like this is safe, please see the major changes from ORC 1.3.3 to 1.5.4:
+            HIVE-17631 and HIVE-19465
+          -->
+          <exclusion>
+            <groupId>org.apache.orc</groupId>
+            <artifactId>orc-core</artifactId>
+          </exclusion>
+          <!-- jetty-all conflict with Spark's built-in Jetty version -->
+          <exclusion>
+            <groupId>org.eclipse.jetty.aggregate</groupId>
+            <artifactId>jetty-all</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <!-- Hive includes javax.servlet to fix the Hive on Spark test failure; see HIVE-12783 -->
+          <exclusion>
+            <groupId>org.eclipse.jetty.orbit</groupId>
+            <artifactId>javax.servlet</artifactId>
+          </exclusion>
+          <!-- hive-storage-api is needed and must be explicitly included later -->
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-storage-api</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
 
       <dependency>
         <groupId>${hive.group}</groupId>
         <artifactId>hive-exec</artifactId>
-<!--
-        <classifier>core</classifier>
--->
+        <classifier>${hive.classifier}</classifier>
         <version>${hive.version}</version>
         <scope>${hive.deps.scope}</scope>
         <exclusions>
 
-          <!-- pull this in when needed; the explicit definition culls the surplis-->
+          <!-- pull this in when needed; the explicit definition culls the surplus-->
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-metastore</artifactId>
@@ -1405,6 +1861,10 @@
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-ant</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-vector-code-gen</artifactId>
           </exclusion>
           <!-- break the loop -->
           <exclusion>
@@ -1431,17 +1891,17 @@
             <artifactId>commons-codec</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>commons-httpclient</groupId>
-            <artifactId>commons-httpclient</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>org.apache.avro</groupId>
             <artifactId>avro-mapred</artifactId>
           </exclusion>
-          <!--  this is needed and must be explicitly included later-->
+          <!--  Do not need Calcite because we disabled hive.cbo.enable -->
           <exclusion>
             <groupId>org.apache.calcite</groupId>
             <artifactId>calcite-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.calcite</groupId>
+            <artifactId>calcite-avatica</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.apache.curator</groupId>
@@ -1496,6 +1956,40 @@
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
           </exclusion>
+          <!-- Do not need Tez -->
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-llap-tez</artifactId>
+          </exclusion>
+          <!-- Do not need Calcite, see SPARK-27054 -->
+          <exclusion>
+            <groupId>org.apache.calcite</groupId>
+            <artifactId>calcite-druid</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.calcite.avatica</groupId>
+            <artifactId>avatica</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>net.hydromatic</groupId>
+            <artifactId>eigenbase-properties</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.janino</groupId>
+            <artifactId>commons-compiler</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.janino</groupId>
+            <artifactId>janino</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>net.hydromatic</groupId>
+            <artifactId>aggdesigner-algorithm</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1503,10 +1997,6 @@
         <artifactId>hive-jdbc</artifactId>
         <version>${hive.version}</version>
         <exclusions>
-          <exclusion>
-            <groupId>${hive.group}</groupId>
-            <artifactId>hive-common</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-common</artifactId>
@@ -1522,6 +2012,10 @@
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-service</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-service-rpc</artifactId>
           </exclusion>
           <exclusion>
             <groupId>${hive.group}</groupId>
@@ -1563,6 +2057,10 @@
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-all</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>com.lmax</groupId>
+            <artifactId>disruptor</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
 
@@ -1603,6 +2101,19 @@
           <exclusion>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+          <!-- Hive removes the HBase Metastore; see HIVE-17234 -->
+          <exclusion>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-client</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>co.cask.tephra</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.jolbox</groupId>
+            <artifactId>bonecp</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1661,9 +2172,41 @@
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-all</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-service-rpc</artifactId>
+          </exclusion>
+          <!--
+            Parquet is needed, but the version should be consistent with
+            the `sql/core` Parquet data source.
+            -->
+          <exclusion>
+            <groupId>org.apache.parquet</groupId>
+            <artifactId>parquet-hadoop-bundle</artifactId>
+          </exclusion>
+          <!-- Do not need Jasper, see HIVE-19799 -->
+          <exclusion>
+            <groupId>tomcat</groupId>
+            <artifactId>jasper-compiler</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>tomcat</groupId>
+            <artifactId>jasper-runtime</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
 
+      <dependency>
+        <groupId>${hive.group}</groupId>
+        <artifactId>hive-service-rpc</artifactId>
+        <version>4.0.0</version>
+        <exclusions>
+          <exclusion>
+            <groupId>*</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
       <dependency>
         <groupId>net.sf.jpam</groupId>
         <artifactId>jpam</artifactId>
@@ -1726,7 +2269,80 @@
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-all</artifactId>
           </exclusion>
+          <!-- Exclude log4j-slf4j-impl, otherwise throw NCDFE when starting spark-shell -->
+          <exclusion>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
+          </exclusion>
         </exclusions>
+      </dependency>
+
+      <!-- hive-llap-common is needed when registering UDFs in Hive 2.3.
+         We add it here, otherwise -Phive-provided won't work. -->
+      <dependency>
+        <groupId>${hive.group}</groupId>
+        <artifactId>hive-llap-common</artifactId>
+        <version>${hive.version}</version>
+        <scope>${hive.llap.scope}</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-serde</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <!-- hive-llap-client is needed when run MapReduce test in Hive 2.3. -->
+      <dependency>
+        <groupId>${hive.group}</groupId>
+        <artifactId>hive-llap-client</artifactId>
+        <version>${hive.version}</version>
+        <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-serde</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-llap-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.curator</groupId>
+            <artifactId>curator-framework</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.curator</groupId>
+            <artifactId>apache-curator</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.zookeeper</groupId>
+            <artifactId>zookeeper</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+
+      <dependency>
+        <groupId>org.apache.orc</groupId>
+        <artifactId>orc-format</artifactId>
+        <version>1.1.1</version>
+        <classifier>${orc.classifier}</classifier>
+        <scope>${orc.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.orc</groupId>
@@ -1736,6 +2352,18 @@
         <scope>${orc.deps.scope}</scope>
         <exclusions>
           <exclusion>
+            <groupId>org.apache.orc</groupId>
+            <artifactId>orc-format</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.github.luben</groupId>
+            <artifactId>zstd-jni</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.aayushatharva.brotli4j</groupId>
+            <artifactId>brotli4j</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
           </exclusion>
@@ -1744,10 +2372,19 @@
             <artifactId>hadoop-hdfs</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.apache.hive</groupId>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-client-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
             <artifactId>hive-storage-api</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>io.airlift</groupId>
+        <artifactId>aircompressor</artifactId>
+        <version>2.0.3</version>
       </dependency>
       <dependency>
         <groupId>org.apache.orc</groupId>
@@ -1769,7 +2406,7 @@
             <artifactId>orc-core</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.apache.hive</groupId>
+            <groupId>${hive.group}</groupId>
             <artifactId>hive-storage-api</artifactId>
           </exclusion>
           <exclusion>
@@ -1786,6 +2423,27 @@
       </dependency>
       <dependency>
         <groupId>org.apache.parquet</groupId>
+        <artifactId>parquet-encoding</artifactId>
+        <version>${parquet.version}</version>
+        <scope>${parquet.test.deps.scope}</scope>
+        <classifier>tests</classifier>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.parquet</groupId>
+        <artifactId>parquet-common</artifactId>
+        <version>${parquet.version}</version>
+        <scope>${parquet.test.deps.scope}</scope>
+        <classifier>tests</classifier>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.parquet</groupId>
+        <artifactId>parquet-column</artifactId>
+        <version>${parquet.version}</version>
+        <scope>${parquet.test.deps.scope}</scope>
+        <classifier>tests</classifier>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.parquet</groupId>
         <artifactId>parquet-hadoop</artifactId>
         <version>${parquet.version}</version>
         <scope>${parquet.deps.scope}</scope>
@@ -1794,6 +2452,14 @@
             <groupId>commons-pool</groupId>
             <artifactId>commons-pool</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>javax.annotation</groupId>
+            <artifactId>javax.annotation-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.github.luben</groupId>
+            <artifactId>zstd-jni</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1801,77 +2467,6 @@
         <artifactId>parquet-avro</artifactId>
         <version>${parquet.version}</version>
         <scope>${parquet.test.deps.scope}</scope>
-      </dependency>
-      <dependency>
-        <groupId>com.twitter</groupId>
-        <artifactId>parquet-hadoop-bundle</artifactId>
-        <version>${hive.parquet.version}</version>
-        <scope>compile</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.calcite</groupId>
-        <artifactId>calcite-core</artifactId>
-        <version>${calcite.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-annotations</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-core</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.google.code.findbugs</groupId>
-            <artifactId>jsr305</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.codehaus.janino</groupId>
-            <artifactId>janino</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.codehaus.janino</groupId>
-            <artifactId>commons-compiler</artifactId>
-          </exclusion>
-          <!-- hsqldb interferes with the use of derby as the default db
-            in hive's use of datanucleus.
-          -->
-          <exclusion>
-            <groupId>org.hsqldb</groupId>
-            <artifactId>hsqldb</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.pentaho</groupId>
-            <artifactId>pentaho-aggdesigner-algorithm</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.calcite</groupId>
-        <artifactId>calcite-avatica</artifactId>
-        <version>${calcite.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-annotations</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-core</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.codehaus.janino</groupId>
@@ -1889,11 +2484,6 @@
         <version>${joda.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.jodd</groupId>
-        <artifactId>jodd-core</artifactId>
-        <version>${jodd.version}</version>
-      </dependency>
-      <dependency>
         <groupId>org.datanucleus</groupId>
         <artifactId>datanucleus-core</artifactId>
         <version>${datanucleus-core.version}</version>
@@ -1907,12 +2497,16 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>javax.annotation</groupId>
+            <artifactId>javax.annotation-api</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.thrift</groupId>
         <artifactId>libfb303</artifactId>
-        <version>${libthrift.version}</version>
+        <version>0.9.3</version>
         <exclusions>
           <exclusion>
             <groupId>org.slf4j</groupId>
@@ -1926,6 +2520,11 @@
         <version>${antlr4.version}</version>
       </dependency>
       <dependency>
+        <groupId>com.ibm.icu</groupId>
+        <artifactId>icu4j</artifactId>
+        <version>${icu4j.version}</version>
+      </dependency>
+      <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-crypto</artifactId>
         <version>${commons-crypto.version}</version>
@@ -1937,9 +2536,19 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>com.thoughtworks.paranamer</groupId>
-        <artifactId>paranamer</artifactId>
-        <version>${paranamer.version}</version>
+        <groupId>com.google.crypto.tink</groupId>
+        <artifactId>tink</artifactId>
+        <version>${tink.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.google.errorprone</groupId>
+            <artifactId>error_prone_annotations</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.google.http-client</groupId>
+            <artifactId>google-http-client</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.arrow</groupId>
@@ -1952,8 +2561,38 @@
           </exclusion>
           <exclusion>
             <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
+            <artifactId>jackson-core</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-common</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.arrow</groupId>
+        <artifactId>arrow-compression</artifactId>
+        <version>${arrow.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-common</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.arrow</groupId>
+        <artifactId>arrow-memory-netty</artifactId>
+        <version>${arrow.version}</version>
+        <exclusions>
           <exclusion>
             <groupId>io.netty</groupId>
             <artifactId>netty-buffer</artifactId>
@@ -1962,11 +2601,60 @@
             <groupId>io.netty</groupId>
             <artifactId>netty-common</artifactId>
           </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>com.univocity</groupId>
+        <artifactId>univocity-parsers</artifactId>
+        <version>2.9.1</version>
+      </dependency>
+      <dependency>
+        <groupId>${hive.group}</groupId>
+        <artifactId>hive-storage-api</artifactId>
+        <version>${hive.storage.version}</version>
+        <scope>${hive.storage.scope}</scope>
+        <exclusions>
           <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-handler</artifactId>
+            <groupId>commons-lang</groupId>
+            <artifactId>commons-lang</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>commons-cli</groupId>
+        <artifactId>commons-cli</artifactId>
+        <version>${commons-cli.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>dev.ludovic.netlib</groupId>
+        <artifactId>blas</artifactId>
+        <version>${netlib.ludovic.dev.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>dev.ludovic.netlib</groupId>
+        <artifactId>lapack</artifactId>
+        <version>${netlib.ludovic.dev.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>dev.ludovic.netlib</groupId>
+        <artifactId>arpack</artifactId>
+        <version>${netlib.ludovic.dev.version}</version>
+      </dependency>
+      <!-- SPARK-16484 add `datasketches-java` for support Datasketches HllSketch -->
+      <dependency>
+        <groupId>org.apache.datasketches</groupId>
+        <artifactId>datasketches-java</artifactId>
+        <version>${datasketches.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>jakarta.servlet</groupId>
+        <artifactId>jakarta.servlet-api</artifactId>
+        <version>${jakartaservlet.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>javax.servlet</groupId>
+        <artifactId>javax.servlet-api</artifactId>
+        <version>${javaxservlet.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -1977,7 +2665,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-enforcer-plugin</artifactId>
-          <version>3.0.0-M2</version>
+          <version>3.6.2</version>
           <executions>
             <execution>
               <id>enforce-versions</id>
@@ -1994,34 +2682,85 @@
                   </requireJavaVersion>
                   <bannedDependencies>
                     <excludes>
-                      <!--
-                        Akka depends on io.netty:netty, which puts classes under the org.jboss.netty
-                        package. This conflicts with the classes in org.jboss.netty:netty
-                        artifact, so we have to ban that artifact here. In Netty 4.x, the classes
-                        are under the io.netty package, so it's fine for us to depend on both
-                        io.netty:netty and io.netty:netty-all.
-                      -->
+                      <exclude>org.apache.hadoop:hadoop-common</exclude>
+                      <exclude>org.apache.hadoop:hadoop-hdfs-client</exclude>
+                      <exclude>org.apache.hadoop:hadoop-mapreduce-client-core</exclude>
+                      <exclude>org.apache.hadoop:hadoop-mapreduce-client-jobclient</exclude>
                       <exclude>org.jboss.netty</exclude>
                       <exclude>org.codehaus.groovy</exclude>
+                      <exclude>com.amazonaws:aws-java-sdk-bundle</exclude>
+                      <exclude>org.lz4:lz4-java</exclude>
+                      <exclude>*:*_2.12</exclude>
                       <exclude>*:*_2.11</exclude>
                       <exclude>*:*_2.10</exclude>
                     </excludes>
                     <searchTransitive>true</searchTransitive>
                   </bannedDependencies>
+                  <enforceBytecodeVersion>
+                    <maxJdkVersion>${java.version}</maxJdkVersion>
+                    <ignoredScopes>test</ignoredScopes>
+                    <ignoredScopes>provided</ignoredScopes>
+                  </enforceBytecodeVersion>
                 </rules>
+              </configuration>
+            </execution>
+            <execution>
+              <id>enforce-no-duplicate-dependencies</id>
+              <goals>
+                <goal>enforce</goal>
+              </goals>
+              <configuration>
+                <rules>
+                  <banDuplicatePomDependencyVersions/>
+                </rules>
+              </configuration>
+            </execution>
+          </executions>
+          <dependencies>
+            <dependency>
+              <groupId>org.codehaus.mojo</groupId>
+              <artifactId>extra-enforcer-rules</artifactId>
+              <version>1.11.0</version>
+            </dependency>
+          </dependencies>
+        </plugin>
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>build-helper-maven-plugin</artifactId>
+          <version>3.6.1</version>
+          <executions>
+            <execution>
+              <id>module-timestamp-property</id>
+              <phase>validate</phase>
+              <goals>
+                <goal>timestamp-property</goal>
+              </goals>
+              <configuration>
+                <name>module.build.timestamp</name>
+                <pattern>${maven.build.timestamp.format}</pattern>
+                <timeSource>current</timeSource>
+                <timeZone>America/Los_Angeles</timeZone>
+              </configuration>
+            </execution>
+            <execution>
+              <id>local-timestamp-property</id>
+              <phase>validate</phase>
+              <goals>
+                <goal>timestamp-property</goal>
+              </goals>
+              <configuration>
+                <name>local.build.timestamp</name>
+                <pattern>${maven.build.timestamp.format}</pattern>
+                <timeSource>build</timeSource>
+                <timeZone>America/Los_Angeles</timeZone>
               </configuration>
             </execution>
           </executions>
         </plugin>
         <plugin>
-          <groupId>org.codehaus.mojo</groupId>
-          <artifactId>build-helper-maven-plugin</artifactId>
-          <version>3.0.0</version>
-        </plugin>
-        <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <version>3.4.4</version>
+          <version>${scala-maven-plugin.version}</version>
           <executions>
             <execution>
               <id>eclipse-add-source</id>
@@ -2047,40 +2786,72 @@
               <goals>
                 <goal>doc-jar</goal>
               </goals>
+              <configuration>
+                <skip>${maven.scaladoc.skip}</skip>
+              </configuration>
             </execution>
           </executions>
           <configuration>
             <scalaVersion>${scala.version}</scalaVersion>
+            <checkMultipleScalaVersions>true</checkMultipleScalaVersions>
+            <failOnMultipleScalaVersions>true</failOnMultipleScalaVersions>
             <recompileMode>incremental</recompileMode>
-            <useZincServer>true</useZincServer>
             <args>
               <arg>-unchecked</arg>
               <arg>-deprecation</arg>
               <arg>-feature</arg>
               <arg>-explaintypes</arg>
-              <arg>-Yno-adapted-args</arg>
+              <arg>-release</arg>
+              <arg>17</arg>
+              <arg>-Wconf:any:e</arg>
+              <arg>-Wconf:cat=deprecation:wv</arg>
+              <arg>-Wunused:imports</arg>
+              <arg>-Wconf:cat=scaladoc:wv</arg>
+              <arg>-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:e</arg>
+              <arg>-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:e</arg>
+              <!-- SPARK-45610 Convert "Auto-application to `()` is deprecated" to compile error, as it will become a compile error in Scala 3. -->
+              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated:e</arg>
+              <!--
+                SPARK-35574 Prevent the recurrence of compilation warnings related to
+                `procedure syntax is deprecated`
+              -->
+              <arg>-Wconf:cat=deprecation&amp;msg=procedure syntax is deprecated:e</arg>
+              <!--
+                SPARK-45627 Symbol literals are deprecated in Scala 2.13 and it's a compile error in Scala 3.
+              -->
+              <arg>-Wconf:cat=deprecation&amp;msg=symbol literal is deprecated:e</arg>
+              <!--
+                SPARK-45627 `enum`, `export` and `given` will become keywords in Scala 3,
+                so they are prohibited from being used as variable names in Scala 2.13 to
+                reduce the cost of migration in subsequent versions.
+              -->
+              <arg>-Wconf:cat=deprecation&amp;msg=it will become a keyword in Scala 3:e</arg>
+              <!--
+                SPARK-49937 ban call the method `SparkThrowable#getErrorClass`
+              -->
+              <arg>-Wconf:cat=deprecation&amp;msg=method getErrorClass in trait SparkThrowable is deprecated:e</arg>
             </args>
             <jvmArgs>
-              <jvmArg>-Xms1024m</jvmArg>
-              <jvmArg>-Xmx1024m</jvmArg>
+              <jvmArg>-Xss128m</jvmArg>
+              <jvmArg>-Xms4g</jvmArg>
+              <jvmArg>-Xmx4g</jvmArg>
+              <jvmArg>-XX:MaxMetaspaceSize=2g</jvmArg>
               <jvmArg>-XX:ReservedCodeCacheSize=${CodeCacheSize}</jvmArg>
+              <jvmArg>--enable-native-access=ALL-UNNAMED</jvmArg>
             </jvmArgs>
             <javacArgs>
-              <javacArg>-source</javacArg>
-              <javacArg>${java.version}</javacArg>
-              <javacArg>-target</javacArg>
+              <javacArg>--release</javacArg>
               <javacArg>${java.version}</javacArg>
               <javacArg>-Xlint:all,-serial,-path,-try</javacArg>
+              <javacArg>-proc:full</javacArg>
             </javacArgs>
           </configuration>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.8.0</version>
+          <version>3.14.1</version>
           <configuration>
-            <source>${java.version}</source>
-            <target>${java.version}</target>
             <skipMain>true</skipMain> <!-- skip compile -->
             <skip>true</skip> <!-- skip testCompile -->
           </configuration>
@@ -2094,7 +2865,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.0.0-M1</version>
+          <version>3.5.3</version>
           <!-- Note config is repeated in scalatest config -->
           <configuration>
             <includes>
@@ -2104,7 +2875,7 @@
               <include>**/*Suite.java</include>
             </includes>
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
-            <argLine>-ea -Xmx3g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+            <argLine>-ea -Xmx4g -Xss4m -XX:MaxMetaspaceSize=2g -XX:ReservedCodeCacheSize=${CodeCacheSize} ${extraJavaTestArgs}</argLine>
             <environmentVariables>
               <!--
                 Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
@@ -2115,9 +2886,11 @@
               <SPARK_SCALA_VERSION>${scala.binary.version}</SPARK_SCALA_VERSION>
               <SPARK_TESTING>1</SPARK_TESTING>
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
+              <SPARK_BEELINE_OPTS>-DmyKey=yourValue</SPARK_BEELINE_OPTS>
+              <OBJC_DISABLE_INITIALIZE_FORK_SAFETY>${test.objc.disable.initialize.fork.safety}</OBJC_DISABLE_INITIALIZE_FORK_SAFETY>
             </environmentVariables>
-            <systemProperties>
-              <log4j.configuration>file:src/test/resources/log4j.properties</log4j.configuration>
+            <systemPropertyVariables>
+              <log4j.configurationFile>file:src/test/resources/log4j2.properties</log4j.configurationFile>
               <derby.system.durability>test</derby.system.durability>
               <java.awt.headless>true</java.awt.headless>
               <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
@@ -2127,11 +2900,14 @@
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
               <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
+              <spark.hadoop.hadoop.caller.context.enabled>true</spark.hadoop.hadoop.caller.context.enabled>
               <spark.memory.debugFill>true</spark.memory.debugFill>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>src</test.src.tables>
-            </systemProperties>
+              <hive.conf.validation>false</hive.conf.validation>
+            </systemPropertyVariables>
             <failIfNoTests>false</failIfNoTests>
+            <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
             <excludedGroups>${test.exclude.tags}</excludedGroups>
             <groups>${test.include.tags}</groups>
           </configuration>
@@ -2148,13 +2924,13 @@
         <plugin>
           <groupId>org.scalatest</groupId>
           <artifactId>scalatest-maven-plugin</artifactId>
-          <version>2.0.0</version>
+          <version>${scalatest-maven-plugin.version}</version>
           <!-- Note config is repeated in surefire config -->
           <configuration>
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
             <filereports>SparkTestSuite.txt</filereports>
-            <argLine>-ea -Xmx3g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+            <argLine>-ea -Xmx4g -Xss4m -XX:MaxMetaspaceSize=2g -XX:ReservedCodeCacheSize=${CodeCacheSize} ${extraJavaTestArgs}</argLine>
             <stderr/>
             <environmentVariables>
               <!--
@@ -2166,21 +2942,26 @@
               <SPARK_SCALA_VERSION>${scala.binary.version}</SPARK_SCALA_VERSION>
               <SPARK_TESTING>1</SPARK_TESTING>
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
+              <OBJC_DISABLE_INITIALIZE_FORK_SAFETY>${test.objc.disable.initialize.fork.safety}</OBJC_DISABLE_INITIALIZE_FORK_SAFETY>
             </environmentVariables>
             <systemProperties>
-              <log4j.configuration>file:src/test/resources/log4j.properties</log4j.configuration>
+              <log4j.configurationFile>file:src/test/resources/log4j2.properties</log4j.configurationFile>
               <derby.system.durability>test</derby.system.durability>
               <java.awt.headless>true</java.awt.headless>
               <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
+              <spark.hadoop.hadoop.caller.context.enabled>true</spark.hadoop.hadoop.caller.context.enabled>
               <spark.test.home>${spark.test.home}</spark.test.home>
               <spark.testing>1</spark.testing>
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
               <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
+              <spark.test.webdriver.chrome.driver>${spark.test.webdriver.chrome.driver}</spark.test.webdriver.chrome.driver>
+              <spark.test.docker.keepContainer>${spark.test.docker.keepContainer}</spark.test.docker.keepContainer>
+              <spark.test.docker.removePulledImage>${spark.test.docker.removePulledImage}</spark.test.docker.removePulledImage>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>__not_used__</test.src.tables>
             </systemProperties>
-            <tagsToExclude>${test.exclude.tags}</tagsToExclude>
+            <tagsToExclude>${test.exclude.tags},${test.default.exclude.tags}</tagsToExclude>
             <tagsToInclude>${test.include.tags}</tagsToInclude>
           </configuration>
           <executions>
@@ -2195,7 +2976,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-jar-plugin</artifactId>
-          <version>3.1.0</version>
+          <version>${maven-jar-plugin.version}</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -2205,7 +2986,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-source-plugin</artifactId>
-          <version>3.0.1</version>
+          <version>3.3.1</version>
           <configuration>
             <attach>true</attach>
           </configuration>
@@ -2222,7 +3003,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-clean-plugin</artifactId>
-          <version>3.1.0</version>
+          <version>3.5.0</version>
           <configuration>
             <filesets>
               <fileset>
@@ -2234,13 +3015,22 @@
               <fileset>
                 <directory>lib_managed</directory>
               </fileset>
+              <fileset>
+                <directory>metastore_db</directory>
+              </fileset>
+              <fileset>
+                <directory>spark-warehouse</directory>
+              </fileset>
+              <fileset>
+                <directory>dist</directory>
+              </fileset>
             </filesets>
           </configuration>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-javadoc-plugin</artifactId>
-          <version>3.0.1</version>
+          <version>3.11.2</version>
           <configuration>
             <additionalJOptions>
               <additionalJOption>-Xdoclint:all</additionalJOption>
@@ -2283,12 +3073,12 @@
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>exec-maven-plugin</artifactId>
-          <version>1.6.0</version>
+          <version>${exec-maven-plugin.version}</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-assembly-plugin</artifactId>
-          <version>3.1.0</version>
+          <version>3.7.1</version>
           <configuration>
             <tarLongFileMode>posix</tarLongFileMode>
           </configuration>
@@ -2296,34 +3086,37 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
-          <version>3.2.1</version>
+          <version>3.6.0</version>
           <dependencies>
             <dependency>
               <groupId>org.ow2.asm</groupId>
               <artifactId>asm</artifactId>
-              <version>7.0</version>
+              <version>${asm.version}</version>
             </dependency>
             <dependency>
               <groupId>org.ow2.asm</groupId>
               <artifactId>asm-commons</artifactId>
-              <version>7.0</version>
+              <version>${asm.version}</version>
             </dependency>
           </dependencies>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-install-plugin</artifactId>
-          <version>3.0.0-M1</version>
+          <version>3.1.4</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-deploy-plugin</artifactId>
-          <version>3.0.0-M1</version>
+          <version>3.1.4</version>
+          <configuration>
+            <retryFailedDeploymentCount>3</retryFailedDeploymentCount>
+          </configuration>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-dependency-plugin</artifactId>
-          <version>3.1.1</version>
+          <version>3.8.1</version>
           <executions>
             <execution>
               <id>default-cli</id>
@@ -2338,57 +3131,10 @@
             </execution>
           </executions>
         </plugin>
-        <!-- This plugin's configuration is used to store Eclipse m2e settings only. -->
-        <!-- It has no influence on the Maven build itself. -->
         <plugin>
-          <groupId>org.eclipse.m2e</groupId>
-          <artifactId>lifecycle-mapping</artifactId>
-          <version>1.0.0</version>
-          <configuration>
-            <lifecycleMappingMetadata>
-              <pluginExecutions>
-                <pluginExecution>
-                  <pluginExecutionFilter>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-dependency-plugin</artifactId>
-                    <versionRange>[2.8,)</versionRange>
-                    <goals>
-                      <goal>build-classpath</goal>
-                    </goals>
-                  </pluginExecutionFilter>
-                  <action>
-                    <ignore></ignore>
-                  </action>
-                </pluginExecution>
-                <pluginExecution>
-                  <pluginExecutionFilter>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-jar-plugin</artifactId>
-                    <versionRange>3.1.0</versionRange>
-                    <goals>
-                      <goal>test-jar</goal>
-                    </goals>
-                  </pluginExecutionFilter>
-                  <action>
-                    <ignore></ignore>
-                  </action>
-                </pluginExecution>
-                <pluginExecution>
-                  <pluginExecutionFilter>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-antrun-plugin</artifactId>
-                    <versionRange>[${maven-antrun.version},)</versionRange>
-                    <goals>
-                      <goal>run</goal>
-                    </goals>
-                  </pluginExecutionFilter>
-                  <action>
-                    <ignore></ignore>
-                  </action>
-                </pluginExecution>
-              </pluginExecutions>
-            </lifecycleMappingMetadata>
-          </configuration>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>versions-maven-plugin</artifactId>
+          <version>${versions-maven-plugin.version}</version>
         </plugin>
       </plugins>
     </pluginManagement>
@@ -2436,18 +3182,8 @@
           <artifactSet>
             <includes>
               <include>org.spark-project.spark:unused</include>
-              <include>org.eclipse.jetty:jetty-io</include>
-              <include>org.eclipse.jetty:jetty-http</include>
-              <include>org.eclipse.jetty:jetty-proxy</include>
-              <include>org.eclipse.jetty:jetty-client</include>
-              <include>org.eclipse.jetty:jetty-continuation</include>
-              <include>org.eclipse.jetty:jetty-servlet</include>
-              <include>org.eclipse.jetty:jetty-servlets</include>
-              <include>org.eclipse.jetty:jetty-plus</include>
-              <include>org.eclipse.jetty:jetty-security</include>
-              <include>org.eclipse.jetty:jetty-util</include>
-              <include>org.eclipse.jetty:jetty-server</include>
               <include>com.google.guava:guava</include>
+              <include>com.google.guava:failureaccess</include>
               <include>org.jpmml:*</include>
             </includes>
           </artifactSet>
@@ -2462,6 +3198,10 @@
             <relocation>
               <pattern>com.google.common</pattern>
               <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.thirdparty</pattern>
+              <shadedPattern>${spark.shade.packageName}.guava.thirdparty</shadedPattern>
             </relocation>
             <relocation>
               <pattern>org.dmg.pmml</pattern>
@@ -2521,7 +3261,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
-        <version>3.0.0</version>
+        <version>3.6.0</version>
         <configuration>
           <failOnViolation>false</failOnViolation>
           <includeTestSourceDirectory>true</includeTestSourceDirectory>
@@ -2539,9 +3279,13 @@
         </configuration>
         <dependencies>
           <dependency>
+            <!--
+              If you are changing the dependency setting for checkstyle plugin,
+              please check project/plugins.sbt too.
+            -->
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>8.14</version>
+            <version>11.0.1</version>
           </dependency>
         </dependencies>
         <executions>
@@ -2594,9 +3338,54 @@
             </goals>
             <configuration>
               <excludes>
-                <exclude>log4j.properties</exclude>
+                <exclude>log4j2.properties</exclude>
               </excludes>
             </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.antipathy</groupId>
+        <artifactId>mvn-scalafmt_${scala.binary.version}</artifactId>
+        <version>1.1.1713302731.c3d0074</version>
+        <configuration>
+          <validateOnly>${scalafmt.validateOnly}</validateOnly> <!-- (Optional) skip formatting -->
+          <skipSources>${scalafmt.skip}</skipSources>
+          <skipTestSources>${scalafmt.skip}</skipTestSources>
+          <configLocation>dev/.scalafmt.conf</configLocation> <!-- (Optional) config location -->
+          <onlyChangedFiles>${scalafmt.changedOnly}</onlyChangedFiles>
+        </configuration>
+        <executions>
+          <execution>
+            <phase>validate</phase>
+            <goals>
+              <goal>format</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <!--
+        Couple of dependencies are coming in bundle format (bundle is just a normal jar which
+        contains OSGi metadata in the manifest). If one don't use OSGi, then a bundle will work as
+        any other jar. Since maven doesn't have native bundle support it needs an external plugin
+        handle it. If the plugin is not added then the build can't resolve bundle dependencies.
+      -->
+      <plugin>
+        <groupId>org.apache.felix</groupId>
+        <artifactId>maven-bundle-plugin</artifactId>
+        <version>4.2.0</version>
+        <extensions>true</extensions>
+      </plugin>
+      <plugin>
+        <groupId>org.cyclonedx</groupId>
+        <artifactId>cyclonedx-maven-plugin</artifactId>
+        <version>2.9.1</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>makeBom</goal>
+            </goals>
           </execution>
         </executions>
       </plugin>
@@ -2629,7 +3418,7 @@
     <profile>
       <id>spark-ganglia-lgpl</id>
       <modules>
-        <module>external/spark-ganglia-lgpl</module>
+        <module>connector/spark-ganglia-lgpl</module>
       </modules>
     </profile>
 
@@ -2637,15 +3426,15 @@
     <profile>
       <id>kinesis-asl</id>
       <modules>
-        <module>external/kinesis-asl</module>
-        <module>external/kinesis-asl-assembly</module>
+        <module>connector/kinesis-asl</module>
+        <module>connector/kinesis-asl-assembly</module>
       </modules>
     </profile>
 
     <profile>
       <id>docker-integration-tests</id>
       <modules>
-        <module>external/docker-integration-tests</module>
+        <module>connector/docker-integration-tests</module>
       </modules>
     </profile>
 
@@ -2656,17 +3445,8 @@
     -->
 
     <profile>
-      <id>hadoop-2.7</id>
+      <id>hadoop-3</id>
       <!-- Default hadoop profile. Uses global properties. -->
-    </profile>
-
-    <profile>
-      <id>hadoop-3.1</id>
-      <properties>
-        <hadoop.version>3.1.0</hadoop.version>
-        <curator.version>2.12.0</curator.version>
-        <zookeeper.version>3.4.9</zookeeper.version>
-      </properties>
     </profile>
 
     <profile>
@@ -2674,13 +3454,6 @@
       <modules>
         <module>resource-managers/yarn</module>
         <module>common/network-yarn</module>
-      </modules>
-    </profile>
-
-    <profile>
-      <id>mesos</id>
-      <modules>
-        <module>resource-managers/mesos</module>
       </modules>
     </profile>
 
@@ -2714,6 +3487,13 @@
     </profile>
 
     <profile>
+      <id>jvm-profiler</id>
+      <modules>
+        <module>connector/profiler</module>
+      </modules>
+    </profile>
+
+    <profile>
       <id>test-java-home</id>
       <activation>
         <property><name>env.JAVA_HOME</name></property>
@@ -2723,45 +3503,24 @@
       </properties>
     </profile>
 
-    <!-- Exists for backwards compatibility; profile doesn't do anything -->
+    <!--
+     SPARK-34774 Add this property to ensure change-scala-version.sh can replace the public `scala.version`
+     property correctly.
+    -->
+    <!--
     <profile>
-      <id>scala-2.12</id>
-    </profile>
-
-    <profile>
-      <id>scala-2.11</id>
+      <id>scala-2.13</id>
       <properties>
-        <scala.version>2.11.12</scala.version>
-        <scala.binary.version>2.11</scala.binary.version>
+        <scala.version>2.13.11</scala.version>
       </properties>
       <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-enforcer-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>enforce-versions</id>
-                <goals>
-                  <goal>enforce</goal>
-                </goals>
-                <configuration>
-                  <rules>
-                    <bannedDependencies>
-                      <excludes combine.self="override">
-                        <exclude>org.jboss.netty</exclude>
-                        <exclude>org.codehaus.groovy</exclude>
-                        <exclude>*:*_2.10</exclude>
-                      </excludes>
-                    </bannedDependencies>
-                  </rules>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
+        <pluginManagement>
+          <plugins>
+          </plugins>
+        </pluginManagement>
       </build>
     </profile>
+    -->
 
     <!--
      This is a profile to enable the use of the ASF snapshot and staging repositories
@@ -2818,6 +3577,13 @@
     -->
     <profile>
       <id>hadoop-provided</id>
+      <properties>
+        <spark.yarn.isHadoopProvided>true</spark.yarn.isHadoopProvided>
+        <huaweicloud.deps.scope>provided</huaweicloud.deps.scope>
+      </properties>
+    </profile>
+    <profile>
+      <id>derby-provided</id>
     </profile>
     <profile>
       <id>hive-provided</id>
@@ -2830,6 +3596,121 @@
     </profile>
     <profile>
       <id>sparkr</id>
+    </profile>
+    <profile>
+      <id>jjwt-provided</id>
+    </profile>
+    <!-- use org.openlabtesting.leveldbjni on aarch64 platform except MacOS -->
+    <profile>
+      <id>aarch64</id>
+      <properties>
+        <leveldbjni.group>org.openlabtesting.leveldbjni</leveldbjni.group>
+      </properties>
+      <activation>
+        <os>
+          <family>linux</family>
+          <arch>aarch64</arch>
+        </os>
+      </activation>
+    </profile>
+    <profile>
+      <id>applesilicon</id>
+      <properties>
+        <test.default.exclude.tags>org.apache.spark.tags.ChromeUITest,org.apache.spark.tags.ExtendedLevelDBTest</test.default.exclude.tags>
+      </properties>
+      <activation>
+        <os>
+          <family>mac</family>
+          <arch>aarch64</arch>
+        </os>
+      </activation>
+    </profile>
+    <profile>
+      <id>macOS</id>
+      <properties>
+        <test.objc.disable.initialize.fork.safety>YES</test.objc.disable.initialize.fork.safety>
+      </properties>
+      <activation>
+        <os>
+          <family>mac</family>
+        </os>
+      </activation>
+    </profile>
+    <profile>
+      <id>jdwp-test-debug</id>
+      <properties>
+        <jdwp.arg.line>-agentlib:jdwp=transport=dt_socket,suspend=${test.jdwp.suspend},server=${test.jdwp.server},address=${test.jdwp.address}</jdwp.arg.line>
+        <debugArgLine>${jdwp.arg.line}</debugArgLine>
+        <maven.surefire.debug>${jdwp.arg.line}</maven.surefire.debug>
+        <debugForkedProcess>${test.debug.suite}</debugForkedProcess>
+      </properties>
+    </profile>
+    <profile>
+      <id>only-eclipse</id>
+      <activation>
+        <property>
+          <!-- Eclipse M2E plugin exports this property and auto-activates this profile -->
+          <name>m2e.version</name>
+        </property>
+      </activation>
+      <build>
+        <pluginManagement>
+          <plugins>
+            <!-- This plugin's configuration is used to store Eclipse m2e settings only. -->
+            <!-- It has no influence on the Maven build itself. -->
+            <plugin>
+              <groupId>org.eclipse.m2e</groupId>
+              <artifactId>lifecycle-mapping</artifactId>
+              <version>1.0.0</version>
+              <configuration>
+                <lifecycleMappingMetadata>
+                  <pluginExecutions>
+                    <pluginExecution>
+                      <pluginExecutionFilter>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-dependency-plugin</artifactId>
+                        <versionRange>[2.8,)</versionRange>
+                        <goals>
+                          <goal>build-classpath</goal>
+                        </goals>
+                      </pluginExecutionFilter>
+                      <action>
+                        <ignore></ignore>
+                      </action>
+                    </pluginExecution>
+                    <pluginExecution>
+                      <pluginExecutionFilter>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-jar-plugin</artifactId>
+                        <versionRange>${maven-jar-plugin.version}</versionRange>
+                        <goals>
+                          <goal>test-jar</goal>
+                        </goals>
+                      </pluginExecutionFilter>
+                      <action>
+                        <ignore></ignore>
+                      </action>
+                    </pluginExecution>
+                    <pluginExecution>
+                      <pluginExecutionFilter>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <versionRange>[${maven-antrun.version},)</versionRange>
+                        <goals>
+                          <goal>run</goal>
+                        </goals>
+                      </pluginExecutionFilter>
+                      <action>
+                        <ignore></ignore>
+                      </action>
+                    </pluginExecution>
+                  </pluginExecutions>
+                </lifecycleMappingMetadata>
+              </configuration>
+            </plugin>
+          </plugins>
+        </pluginManagement>
+      </build>
     </profile>
   </profiles>
 </project>

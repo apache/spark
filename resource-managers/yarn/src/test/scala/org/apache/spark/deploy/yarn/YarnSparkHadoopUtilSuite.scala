@@ -18,22 +18,19 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{File, IOException}
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
-import com.google.common.io.{ByteStreams, Files}
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
-class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
-  with ResetSystemProperties {
+class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with ResetSystemProperties {
 
   val hasBash =
     try {
@@ -56,12 +53,12 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
     val args = Array("arg1", "${arg.2}", "\"arg3\"", "'arg4'", "$arg5", "\\arg6")
     try {
       val argLine = args.map(a => YarnSparkHadoopUtil.escapeForShell(a)).mkString(" ")
-      Files.write(("bash -c \"echo " + argLine + "\"").getBytes(StandardCharsets.UTF_8), scriptFile)
+      Files.writeString(scriptFile.toPath, "bash -c \"echo " + argLine + "\"")
       scriptFile.setExecutable(true)
 
       val proc = Runtime.getRuntime().exec(Array(scriptFile.getAbsolutePath()))
-      val out = new String(ByteStreams.toByteArray(proc.getInputStream())).trim()
-      val err = new String(ByteStreams.toByteArray(proc.getErrorStream()))
+      val out = Utils.toString(proc.getInputStream()).trim()
+      val err = Utils.toString(proc.getErrorStream())
       val exitCode = proc.waitFor()
       exitCode should be (0)
       out should be (args.mkString(" "))
@@ -83,7 +80,7 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
 
     // spark acls on, just pick up default user
     val sparkConf = new SparkConf()
-    sparkConf.set("spark.acls.enable", "true")
+    sparkConf.set(ACLS_ENABLE, true)
 
     val securityMgr = new SecurityManager(sparkConf)
     val acls = YarnSparkHadoopUtil.getApplicationAclsForYarn(securityMgr)
@@ -111,9 +108,9 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
 
     // default spark acls are on and specify acls
     val sparkConf = new SparkConf()
-    sparkConf.set("spark.acls.enable", "true")
-    sparkConf.set("spark.ui.view.acls", "user1,user2")
-    sparkConf.set("spark.modify.acls", "user3,user4")
+    sparkConf.set(ACLS_ENABLE, true)
+    sparkConf.set(UI_VIEW_ACLS, Seq("user1", "user2"))
+    sparkConf.set(MODIFY_ACLS, Seq("user3", "user4"))
 
     val securityMgr = new SecurityManager(sparkConf)
     val acls = YarnSparkHadoopUtil.getApplicationAclsForYarn(securityMgr)
@@ -142,66 +139,43 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
 
   }
 
-  test("SPARK-24149: retrieve all namenodes from HDFS") {
-    val sparkConf = new SparkConf()
-    val basicFederationConf = new Configuration()
-    basicFederationConf.set("fs.defaultFS", "hdfs://localhost:8020")
-    basicFederationConf.set("dfs.nameservices", "ns1,ns2")
-    basicFederationConf.set("dfs.namenode.rpc-address.ns1", "localhost:8020")
-    basicFederationConf.set("dfs.namenode.rpc-address.ns2", "localhost:8021")
-    val basicFederationExpected = Set(
-      new Path("hdfs://localhost:8020").getFileSystem(basicFederationConf),
-      new Path("hdfs://localhost:8021").getFileSystem(basicFederationConf))
-    val basicFederationResult = YarnSparkHadoopUtil.hadoopFSsToAccess(
-      sparkConf, basicFederationConf)
-    basicFederationResult should be (basicFederationExpected)
-
-    // when viewfs is enabled, namespaces are handled by it, so we don't need to take care of them
-    val viewFsConf = new Configuration()
-    viewFsConf.addResource(basicFederationConf)
-    viewFsConf.set("fs.defaultFS", "viewfs://clusterX/")
-    viewFsConf.set("fs.viewfs.mounttable.clusterX.link./home", "hdfs://localhost:8020/")
-    val viewFsExpected = Set(new Path("viewfs://clusterX/").getFileSystem(viewFsConf))
-    YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, viewFsConf) should be (viewFsExpected)
-
-    // invalid config should not throw NullPointerException
-    val invalidFederationConf = new Configuration()
-    invalidFederationConf.addResource(basicFederationConf)
-    invalidFederationConf.unset("dfs.namenode.rpc-address.ns2")
-    val invalidFederationExpected = Set(
-      new Path("hdfs://localhost:8020").getFileSystem(invalidFederationConf))
-    val invalidFederationResult = YarnSparkHadoopUtil.hadoopFSsToAccess(
-      sparkConf, invalidFederationConf)
-    invalidFederationResult should be (invalidFederationExpected)
-
-    // no namespaces defined, ie. old case
-    val noFederationConf = new Configuration()
-    noFederationConf.set("fs.defaultFS", "hdfs://localhost:8020")
-    val noFederationExpected = Set(
-      new Path("hdfs://localhost:8020").getFileSystem(noFederationConf))
-    val noFederationResult = YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, noFederationConf)
-    noFederationResult should be (noFederationExpected)
-
-    // federation and HA enabled
-    val federationAndHAConf = new Configuration()
-    federationAndHAConf.set("fs.defaultFS", "hdfs://clusterXHA")
-    federationAndHAConf.set("dfs.nameservices", "clusterXHA,clusterYHA")
-    federationAndHAConf.set("dfs.ha.namenodes.clusterXHA", "x-nn1,x-nn2")
-    federationAndHAConf.set("dfs.ha.namenodes.clusterYHA", "y-nn1,y-nn2")
-    federationAndHAConf.set("dfs.namenode.rpc-address.clusterXHA.x-nn1", "localhost:8020")
-    federationAndHAConf.set("dfs.namenode.rpc-address.clusterXHA.x-nn2", "localhost:8021")
-    federationAndHAConf.set("dfs.namenode.rpc-address.clusterYHA.y-nn1", "localhost:8022")
-    federationAndHAConf.set("dfs.namenode.rpc-address.clusterYHA.y-nn2", "localhost:8023")
-    federationAndHAConf.set("dfs.client.failover.proxy.provider.clusterXHA",
-      "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider")
-    federationAndHAConf.set("dfs.client.failover.proxy.provider.clusterYHA",
-      "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider")
-
-    val federationAndHAExpected = Set(
-      new Path("hdfs://clusterXHA").getFileSystem(federationAndHAConf),
-      new Path("hdfs://clusterYHA").getFileSystem(federationAndHAConf))
-    val federationAndHAResult = YarnSparkHadoopUtil.hadoopFSsToAccess(
-      sparkConf, federationAndHAConf)
-    federationAndHAResult should be (federationAndHAExpected)
+  test("SPARK-35672: test replaceEnvVars in Unix mode") {
+    Map(
+      "F_O_O$FOO$BAR" -> "F_O_OBAR",
+      "$FOO" -> "BAR",
+      "$F_O_O$FOO" -> "BarBAR",
+      "${FOO}" -> "BAR",
+      "$FOO.baz$BAR" -> "BAR.baz",
+      "{{FOO}}" -> "BAR",
+      "{{FOO}}$FOO" -> "BARBAR",
+      "%FOO%" -> "%FOO%",
+      """\$FOO\\\$FOO\${FOO}\\$FOO\\\\""" -> """$FOO\$FOO${FOO}\BAR\\"""
+    ).foreach { case (input, expected) =>
+      withClue(s"input string `$input`: ") {
+        val replaced = YarnSparkHadoopUtil
+          .replaceEnvVars(input, Map("F_O_O" -> "Bar", "FOO" -> "BAR"), isWindows = false)
+        assert(replaced === expected)
+      }
+    }
   }
+
+  test("SPARK-35672: test replaceEnvVars in Windows mode") {
+    Map(
+      "Foo%FOO%%BAR%" -> "FooBAR",
+      "%FOO%" -> "BAR",
+      "%F_O_O%%FOO%" -> "BarBAR",
+      "{{FOO}}%FOO%" -> "BARBAR",
+      "$FOO" -> "$FOO",
+      "${FOO}" -> "${FOO}",
+      "%%FOO%%%FOO%%%%%%FOO%" -> "%FOO%BAR%%BAR",
+      "%FOO%^^^%FOO^%^FOO^^^^%FOO%" -> "BAR^%FOO%^FOO^^BAR"
+    ).foreach { case (input, expected) =>
+      withClue(s"input string `$input`: ") {
+        val replaced = YarnSparkHadoopUtil
+          .replaceEnvVars(input, Map("F_O_O" -> "Bar", "FOO" -> "BAR"), isWindows = true)
+        assert(replaced === expected)
+      }
+    }
+  }
+
 }

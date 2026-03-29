@@ -20,12 +20,12 @@ package org.apache.spark.mllib.fpm
 import java.{util => ju}
 import java.lang.{Iterable => JavaIterable}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe._
 
-import org.json4s.DefaultFormats
+import org.json4s.{DefaultFormats, Formats}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, render}
 
@@ -41,6 +41,8 @@ import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.collection.Utils
 
 /**
  * Model trained by [[FPGrowth]], which holds frequent itemsets.
@@ -84,8 +86,6 @@ class FPGrowthModel[Item: ClassTag] @Since("2.4.0") (
   override def save(sc: SparkContext, path: String): Unit = {
     FPGrowthModel.SaveLoadV1_0.save(this, path)
   }
-
-  override protected val formatVersion: String = "1.0"
 }
 
 @Since("2.0.0")
@@ -108,7 +108,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
 
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(Loader.metadataPath(path))
 
       // Get the type of item class
       val sample = model.freqItemsets.first().items(0)
@@ -121,13 +121,13 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
         StructField("freq", LongType))
       val schema = StructType(fields)
       val rowDataRDD = model.freqItemsets.map { x =>
-        Row(x.items.toSeq, x.freq)
+        Row(x.items.toImmutableArraySeq, x.freq)
       }
       spark.createDataFrame(rowDataRDD, schema).write.parquet(Loader.dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): FPGrowthModel[_] = {
-      implicit val formats = DefaultFormats
+      implicit val formats: Formats = DefaultFormats
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
@@ -152,10 +152,10 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
 
 /**
  * A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
- * <a href="http://dx.doi.org/10.1145/1454008.1454027">Li et al., PFP: Parallel FP-Growth for Query
+ * <a href="https://doi.org/10.1145/1454008.1454027">Li et al., PFP: Parallel FP-Growth for Query
  * Recommendation</a>. PFP distributes computation in such a way that each worker executes an
  * independent group of mining tasks. The FP-Growth algorithm is described in
- * <a href="http://dx.doi.org/10.1145/335191.335372">Han et al., Mining frequent patterns without
+ * <a href="https://doi.org/10.1145/335191.335372">Han et al., Mining frequent patterns without
  * candidate generation</a>.
  *
  * @param minSupport the minimal support level of the frequent pattern, any pattern that appears
@@ -248,7 +248,8 @@ class FPGrowth private[spark] (
     data.flatMap { t =>
       val uniq = t.toSet
       if (t.length != uniq.size) {
-        throw new SparkException(s"Items in a transaction must be unique but got ${t.toSeq}.")
+        throw new SparkException(
+          s"Items in a transaction must be unique but got ${t.toImmutableArraySeq}.")
       }
       t
     }.map(v => (v, 1L))
@@ -271,7 +272,7 @@ class FPGrowth private[spark] (
       minCount: Long,
       freqItems: Array[Item],
       partitioner: Partitioner): RDD[FreqItemset[Item]] = {
-    val itemToRank = freqItems.zipWithIndex.toMap
+    val itemToRank = Utils.toMapWithIndex(freqItems)
     data.flatMap { transaction =>
       genCondTransactions(transaction, itemToRank, partitioner)
     }.aggregateByKey(new FPTree[Int], partitioner.numPartitions)(

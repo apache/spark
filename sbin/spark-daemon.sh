@@ -23,14 +23,15 @@
 #
 #   SPARK_CONF_DIR  Alternate conf dir. Default is ${SPARK_HOME}/conf.
 #   SPARK_LOG_DIR   Where log files are stored. ${SPARK_HOME}/logs by default.
+#   SPARK_LOG_MAX_FILES Max log files of Spark daemons can rotate to. Default is 5.
 #   SPARK_MASTER    host:path where spark code should be rsync'd from
 #   SPARK_PID_DIR   The pid files are stored. /tmp by default.
 #   SPARK_IDENT_STRING   A string representing this instance of spark. $USER by default
 #   SPARK_NICENESS The scheduling priority for daemons. Defaults to 0.
 #   SPARK_NO_DAEMONIZE   If set, will run the proposed command in the foreground. It will not output a PID file.
 ##
-
-usage="Usage: spark-daemon.sh [--config <conf-dir>] (start|stop|submit|status) <spark-command> <spark-instance-number> <args...>"
+export SPARK_CONNECT_MODE=0
+usage="Usage: spark-daemon.sh [--config <conf-dir>] (start|stop|submit|decommission|status) <spark-command> <spark-instance-number> <args...>"
 
 # if no args specified, show usage
 if [ $# -le 1 ]; then
@@ -74,23 +75,33 @@ shift
 spark_rotate_log ()
 {
     log=$1;
-    num=5;
-    if [ -n "$2" ]; then
-	num=$2
+
+    if [[ -z ${SPARK_LOG_MAX_FILES} ]]; then
+      num=5
+    elif [[ ${SPARK_LOG_MAX_FILES} -gt 0 ]]; then
+      num=${SPARK_LOG_MAX_FILES}
+    else
+      echo "Error: SPARK_LOG_MAX_FILES must be a positive number, but got ${SPARK_LOG_MAX_FILES}"
+      exit -1
     fi
+
     if [ -f "$log" ]; then # rotate logs
-	while [ $num -gt 1 ]; do
-	    prev=`expr $num - 1`
-	    [ -f "$log.$prev" ] && mv "$log.$prev" "$log.$num"
-	    num=$prev
-	done
-	mv "$log" "$log.$num";
+        while [ $num -gt 1 ]; do
+            prev=`expr $num - 1`
+            [ -f "$log.$prev" ] && mv "$log.$prev" "$log.$num"
+            num=$prev
+        done
+        mv "$log" "$log.$num";
     fi
 }
 
 . "${SPARK_HOME}/bin/load-spark-env.sh"
 
 if [ "$SPARK_IDENT_STRING" = "" ]; then
+  # if for some reason the shell doesn't have $USER defined
+  # (e.g., ssh'd in to execute a command)
+  # let's get the effective username and use that
+  USER=${USER:-$(id -nu)}
   export SPARK_IDENT_STRING="$USER"
 fi
 
@@ -212,6 +223,21 @@ case $option in
       fi
     else
       echo "no $command to stop"
+    fi
+    ;;
+
+  (decommission)
+
+    if [ -f $pid ]; then
+      TARGET_ID="$(cat "$pid")"
+      if [[ $(ps -p "$TARGET_ID" -o comm=) =~ "java" ]]; then
+        echo "decommissioning $command"
+        kill -s SIGPWR "$TARGET_ID"
+      else
+        echo "no $command to decommission"
+      fi
+    else
+      echo "no $command to decommission"
     fi
     ;;
 

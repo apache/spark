@@ -18,22 +18,29 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io.PrintStream
+import java.nio.charset.StandardCharsets.UTF_8
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SparkSession, SQLContext}
-import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.hive.HiveExternalCatalog
+import org.apache.spark.sql.hive.HiveUtils._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.util.Utils
 
-/** A singleton object for the master program. The slaves should not access this. */
+/** A singleton object for the master program. The executors should not access this. */
 private[hive] object SparkSQLEnv extends Logging {
   logDebug("Initializing SparkSQLEnv")
 
-  var sqlContext: SQLContext = _
+  val out = new PrintStream(System.out, true, UTF_8)
+  val err = new PrintStream(System.err, true, UTF_8)
+
+  var sparkSession: SparkSession = _
   var sparkContext: SparkContext = _
 
-  def init() {
-    if (sqlContext == null) {
+  def init(): Unit = {
+    if (sparkSession == null) {
       val sparkConf = new SparkConf(loadDefaults = true)
       // If user doesn't specify the appName, we want to get [SparkSQL::localHostName] instead of
       // the default appName [SparkSQLCLIDriver] in cli or beeline.
@@ -44,28 +51,45 @@ private[hive] object SparkSQLEnv extends Logging {
 
       sparkConf
         .setAppName(maybeAppName.getOrElse(s"SparkSQL::${Utils.localHostName()}"))
+        .set(SQLConf.DATETIME_JAVA8API_ENABLED, true)
 
-      val sparkSession = SparkSession.builder.config(sparkConf).enableHiveSupport().getOrCreate()
+      // if user specified in-memory explicitly, we bypass enable hive support.
+      val shouldUseInMemoryCatalog =
+        sparkConf.getOption(CATALOG_IMPLEMENTATION.key).contains("in-memory")
+
+      val builder = SparkSession.builder()
+        .config(sparkConf)
+        .config(BUILTIN_HIVE_VERSION.key, builtinHiveVersion)
+
+      if (!shouldUseInMemoryCatalog) {
+        builder.enableHiveSupport()
+      }
+      sparkSession = builder.getOrCreate()
       sparkContext = sparkSession.sparkContext
-      sqlContext = sparkSession.sqlContext
 
-      val metadataHive = sparkSession
-        .sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
-      metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
-      metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
-      metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
-      sparkSession.conf.set(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
+      // SPARK-29604: force initialization of the session state with the Spark class loader,
+      // instead of having it happen during the initialization of the Hive client (which may use a
+      // different class loader).
+      sparkSession.sessionState
+
+      if (!shouldUseInMemoryCatalog) {
+        val metadataHive = sparkSession
+          .sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
+        metadataHive.setOut(out)
+        metadataHive.setInfo(err)
+        metadataHive.setError(err)
+      }
     }
   }
 
   /** Cleans up and shuts down the Spark SQL environments. */
-  def stop() {
+  def stop(exitCode: Int = 0): Unit = {
     logDebug("Shutting down Spark SQL Environment")
     // Stop the SparkContext
     if (SparkSQLEnv.sparkContext != null) {
-      sparkContext.stop()
+      sparkContext.stop(exitCode)
       sparkContext = null
-      sqlContext = null
+      sparkSession = null
     }
   }
 }

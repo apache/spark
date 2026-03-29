@@ -17,17 +17,11 @@
 
 package org.apache.spark.sql.execution.window
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, TimestampType}
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 
 /**
  * This class calculates and outputs (windowed) aggregates over the rows in a single (sorted)
@@ -38,17 +32,29 @@ import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, 
  * - Entire partition: The frame is the entire partition, i.e.
  *   UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING. For this case, window function will take all
  *   rows as inputs and be evaluated once.
- * - Growing frame: We only add new rows into the frame, i.e. UNBOUNDED PRECEDING AND ....
+ * - Growing frame: We only add new rows into the frame, Examples are:
+ *     1. UNBOUNDED PRECEDING AND 1 PRECEDING
+ *     2. UNBOUNDED PRECEDING AND CURRENT ROW
+ *     3. UNBOUNDED PRECEDING AND 1 FOLLOWING
  *   Every time we move to a new row to process, we add some rows to the frame. We do not remove
  *   rows from this frame.
- * - Shrinking frame: We only remove rows from the frame, i.e. ... AND UNBOUNDED FOLLOWING.
+ * - Shrinking frame: We only remove rows from the frame, Examples are:
+ *     1. 1 PRECEDING AND UNBOUNDED FOLLOWING
+ *     2. CURRENT ROW AND UNBOUNDED FOLLOWING
+ *     3. 1 FOLLOWING AND UNBOUNDED FOLLOWING
  *   Every time we move to a new row to process, we remove some rows from the frame. We do not add
  *   rows to this frame.
  * - Moving frame: Every time we move to a new row to process, we remove some rows from the frame
  *   and we add some rows to the frame. Examples are:
- *     1 PRECEDING AND CURRENT ROW and 1 FOLLOWING AND 2 FOLLOWING.
+ *     1. 2 PRECEDING AND 1 PRECEDING
+ *     2. 1 PRECEDING AND CURRENT ROW
+ *     3. CURRENT ROW AND 1 FOLLOWING
+ *     4. 1 PRECEDING AND 1 FOLLOWING
+ *     5. 1 FOLLOWING AND 2 FOLLOWING
  * - Offset frame: The frame consist of one row, which is an offset number of rows away from the
- *   current row. Only [[OffsetWindowFunction]]s can be processed in an offset frame.
+ *   current row. Only [[OffsetWindowFunction]]s can be processed in an offset frame. There are
+ *   three implements of offset frame: [[FrameLessOffsetWindowFunctionFrame]],
+ *   [[UnboundedOffsetWindowFunctionFrame]] and [[UnboundedPrecedingOffsetWindowFunctionFrame]].
  *
  * Different frame boundaries can be used in Growing, Shrinking and Moving frames. A frame
  * boundary can be either Row or Range based:
@@ -56,7 +62,7 @@ import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, 
  *   An offset indicates the number of rows above or below the current row, the frame for the
  *   current row starts or ends. For instance, given a row based sliding frame with a lower bound
  *   offset of -1 and a upper bound offset of +2. The frame for row with index 5 would range from
- *   index 4 to index 6.
+ *   index 4 to index 7.
  * - Range based: A range based boundary is based on the actual value of the ORDER BY
  *   expression(s). An offset is used to alter the value of the ORDER BY expression, for
  *   instance if the current order by expression has a value of 10 and the lower bound offset
@@ -83,313 +89,31 @@ case class WindowExec(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
     child: SparkPlan)
-  extends UnaryExecNode {
-
-  override def output: Seq[Attribute] =
-    child.output ++ windowExpression.map(_.toAttribute)
-
-  override def requiredChildDistribution: Seq[Distribution] = {
-    if (partitionSpec.isEmpty) {
-      // Only show warning when the number of bytes is larger than 100 MB?
-      logWarning("No Partition Defined for Window operation! Moving all data to a single "
-        + "partition, this can cause serious performance degradation.")
-      AllTuples :: Nil
-    } else ClusteredDistribution(partitionSpec) :: Nil
-  }
-
-  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    Seq(partitionSpec.map(SortOrder(_, Ascending)) ++ orderSpec)
-
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-
-  override def outputPartitioning: Partitioning = child.outputPartitioning
-
-  /**
-   * Create a bound ordering object for a given frame type and offset. A bound ordering object is
-   * used to determine which input row lies within the frame boundaries of an output row.
-   *
-   * This method uses Code Generation. It can only be used on the executor side.
-   *
-   * @param frame to evaluate. This can either be a Row or Range frame.
-   * @param bound with respect to the row.
-   * @param timeZone the session local timezone for time related calculations.
-   * @return a bound ordering object.
-   */
-  private[this] def createBoundOrdering(
-      frame: FrameType, bound: Expression, timeZone: String): BoundOrdering = {
-    (frame, bound) match {
-      case (RowFrame, CurrentRow) =>
-        RowBoundOrdering(0)
-
-      case (RowFrame, IntegerLiteral(offset)) =>
-        RowBoundOrdering(offset)
-
-      case (RangeFrame, CurrentRow) =>
-        val ordering = newOrdering(orderSpec, child.output)
-        RangeBoundOrdering(ordering, IdentityProjection, IdentityProjection)
-
-      case (RangeFrame, offset: Expression) if orderSpec.size == 1 =>
-        // Use only the first order expression when the offset is non-null.
-        val sortExpr = orderSpec.head
-        val expr = sortExpr.child
-
-        // Create the projection which returns the current 'value'.
-        val current = newMutableProjection(expr :: Nil, child.output)
-
-        // Flip the sign of the offset when processing the order is descending
-        val boundOffset = sortExpr.direction match {
-          case Descending => UnaryMinus(offset)
-          case Ascending => offset
-        }
-
-        // Create the projection which returns the current 'value' modified by adding the offset.
-        val boundExpr = (expr.dataType, boundOffset.dataType) match {
-          case (DateType, IntegerType) => DateAdd(expr, boundOffset)
-          case (TimestampType, CalendarIntervalType) =>
-            TimeAdd(expr, boundOffset, Some(timeZone))
-          case (a, b) if a== b => Add(expr, boundOffset)
-        }
-        val bound = newMutableProjection(boundExpr :: Nil, child.output)
-
-        // Construct the ordering. This is used to compare the result of current value projection
-        // to the result of bound value projection. This is done manually because we want to use
-        // Code Generation (if it is enabled).
-        val boundSortExprs = sortExpr.copy(BoundReference(0, expr.dataType, expr.nullable)) :: Nil
-        val ordering = newOrdering(boundSortExprs, Nil)
-        RangeBoundOrdering(ordering, current, bound)
-
-      case (RangeFrame, _) =>
-        sys.error("Non-Zero range offsets are not supported for windows " +
-          "with multiple order expressions.")
-    }
-  }
-
-  /**
-   * Collection containing an entry for each window frame to process. Each entry contains a frame's
-   * [[WindowExpression]]s and factory function for the WindowFrameFunction.
-   */
-  private[this] lazy val windowFrameExpressionFactoryPairs = {
-    type FrameKey = (String, FrameType, Expression, Expression)
-    type ExpressionBuffer = mutable.Buffer[Expression]
-    val framedFunctions = mutable.Map.empty[FrameKey, (ExpressionBuffer, ExpressionBuffer)]
-
-    // Add a function and its function to the map for a given frame.
-    def collect(tpe: String, fr: SpecifiedWindowFrame, e: Expression, fn: Expression): Unit = {
-      val key = (tpe, fr.frameType, fr.lower, fr.upper)
-      val (es, fns) = framedFunctions.getOrElseUpdate(
-        key, (ArrayBuffer.empty[Expression], ArrayBuffer.empty[Expression]))
-      es += e
-      fns += fn
-    }
-
-    // Collect all valid window functions and group them by their frame.
-    windowExpression.foreach { x =>
-      x.foreach {
-        case e @ WindowExpression(function, spec) =>
-          val frame = spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame]
-          function match {
-            case AggregateExpression(f, _, _, _) => collect("AGGREGATE", frame, e, f)
-            case f: AggregateWindowFunction => collect("AGGREGATE", frame, e, f)
-            case f: OffsetWindowFunction => collect("OFFSET", frame, e, f)
-            case f => sys.error(s"Unsupported window function: $f")
-          }
-        case _ =>
-      }
-    }
-
-    // Map the groups to a (unbound) expression and frame factory pair.
-    var numExpressions = 0
-    val timeZone = conf.sessionLocalTimeZone
-    framedFunctions.toSeq.map {
-      case (key, (expressions, functionSeq)) =>
-        val ordinal = numExpressions
-        val functions = functionSeq.toArray
-
-        // Construct an aggregate processor if we need one.
-        def processor = AggregateProcessor(
-          functions,
-          ordinal,
-          child.output,
-          (expressions, schema) =>
-            newMutableProjection(expressions, schema, subexpressionEliminationEnabled))
-
-        // Create the factory
-        val factory = key match {
-          // Offset Frame
-          case ("OFFSET", _, IntegerLiteral(offset), _) =>
-            target: InternalRow =>
-              new OffsetWindowFunctionFrame(
-                target,
-                ordinal,
-                // OFFSET frame functions are guaranteed be OffsetWindowFunctions.
-                functions.map(_.asInstanceOf[OffsetWindowFunction]),
-                child.output,
-                (expressions, schema) =>
-                  newMutableProjection(expressions, schema, subexpressionEliminationEnabled),
-                offset)
-
-          // Entire Partition Frame.
-          case ("AGGREGATE", _, UnboundedPreceding, UnboundedFollowing) =>
-            target: InternalRow => {
-              new UnboundedWindowFunctionFrame(target, processor)
-            }
-
-          // Growing Frame.
-          case ("AGGREGATE", frameType, UnboundedPreceding, upper) =>
-            target: InternalRow => {
-              new UnboundedPrecedingWindowFunctionFrame(
-                target,
-                processor,
-                createBoundOrdering(frameType, upper, timeZone))
-            }
-
-          // Shrinking Frame.
-          case ("AGGREGATE", frameType, lower, UnboundedFollowing) =>
-            target: InternalRow => {
-              new UnboundedFollowingWindowFunctionFrame(
-                target,
-                processor,
-                createBoundOrdering(frameType, lower, timeZone))
-            }
-
-          // Moving Frame.
-          case ("AGGREGATE", frameType, lower, upper) =>
-            target: InternalRow => {
-              new SlidingWindowFunctionFrame(
-                target,
-                processor,
-                createBoundOrdering(frameType, lower, timeZone),
-                createBoundOrdering(frameType, upper, timeZone))
-            }
-        }
-
-        // Keep track of the number of expressions. This is a side-effect in a map...
-        numExpressions += expressions.size
-
-        // Create the Frame Expression - Factory pair.
-        (expressions, factory)
-    }
-  }
-
-  /**
-   * Create the resulting projection.
-   *
-   * This method uses Code Generation. It can only be used on the executor side.
-   *
-   * @param expressions unbound ordered function expressions.
-   * @return the final resulting projection.
-   */
-  private[this] def createResultProjection(expressions: Seq[Expression]): UnsafeProjection = {
-    val references = expressions.zipWithIndex.map{ case (e, i) =>
-      // Results of window expressions will be on the right side of child's output
-      BoundReference(child.output.size + i, e.dataType, e.nullable)
-    }
-    val unboundToRefMap = expressions.zip(references).toMap
-    val patchedWindowExpression = windowExpression.map(_.transform(unboundToRefMap))
-    UnsafeProjection.create(
-      child.output ++ patchedWindowExpression,
-      child.output)
-  }
+  extends WindowExecBase {
+  override lazy val metrics: Map[String, SQLMetric] = Map(
+    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size")
+  )
 
   protected override def doExecute(): RDD[InternalRow] = {
-    // Unwrap the expressions and factories from the map.
-    val expressions = windowFrameExpressionFactoryPairs.flatMap(_._1)
-    val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
-    val inMemoryThreshold = sqlContext.conf.windowExecBufferInMemoryThreshold
-    val spillThreshold = sqlContext.conf.windowExecBufferSpillThreshold
+    val evaluatorFactory =
+      new WindowEvaluatorFactory(
+        windowExpression,
+        partitionSpec,
+        orderSpec,
+        child.output,
+        longMetric("spillSize"))
 
     // Start processing.
-    child.execute().mapPartitions { stream =>
-      new Iterator[InternalRow] {
-
-        // Get all relevant projections.
-        val result = createResultProjection(expressions)
-        val grouping = UnsafeProjection.create(partitionSpec, child.output)
-
-        // Manage the stream and the grouping.
-        var nextRow: UnsafeRow = null
-        var nextGroup: UnsafeRow = null
-        var nextRowAvailable: Boolean = false
-        private[this] def fetchNextRow() {
-          nextRowAvailable = stream.hasNext
-          if (nextRowAvailable) {
-            nextRow = stream.next().asInstanceOf[UnsafeRow]
-            nextGroup = grouping(nextRow)
-          } else {
-            nextRow = null
-            nextGroup = null
-          }
-        }
-        fetchNextRow()
-
-        // Manage the current partition.
-        val buffer: ExternalAppendOnlyUnsafeRowArray =
-          new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
-
-        var bufferIterator: Iterator[UnsafeRow] = _
-
-        val windowFunctionResult = new SpecificInternalRow(expressions.map(_.dataType))
-        val frames = factories.map(_(windowFunctionResult))
-        val numFrames = frames.length
-        private[this] def fetchNextPartition() {
-          // Collect all the rows in the current partition.
-          // Before we start to fetch new input rows, make a copy of nextGroup.
-          val currentGroup = nextGroup.copy()
-
-          // clear last partition
-          buffer.clear()
-
-          while (nextRowAvailable && nextGroup == currentGroup) {
-            buffer.add(nextRow)
-            fetchNextRow()
-          }
-
-          // Setup the frames.
-          var i = 0
-          while (i < numFrames) {
-            frames(i).prepare(buffer)
-            i += 1
-          }
-
-          // Setup iteration
-          rowIndex = 0
-          bufferIterator = buffer.generateIterator()
-        }
-
-        // Iteration
-        var rowIndex = 0
-
-        override final def hasNext: Boolean =
-          (bufferIterator != null && bufferIterator.hasNext) || nextRowAvailable
-
-        val join = new JoinedRow
-        override final def next(): InternalRow = {
-          // Load the next partition if we need to.
-          if ((bufferIterator == null || !bufferIterator.hasNext) && nextRowAvailable) {
-            fetchNextPartition()
-          }
-
-          if (bufferIterator.hasNext) {
-            val current = bufferIterator.next()
-
-            // Get the results for the window frames.
-            var i = 0
-            while (i < numFrames) {
-              frames(i).write(rowIndex, current)
-              i += 1
-            }
-
-            // 'Merge' the input row with the window function result
-            join(current, windowFunctionResult)
-            rowIndex += 1
-
-            // Return the projection.
-            result(join)
-          } else {
-            throw new NoSuchElementException
-          }
-        }
+    if (conf.usePartitionEvaluator) {
+      child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
+    } else {
+      child.execute().mapPartitionsWithIndex { (index, rowIterator) =>
+        val evaluator = evaluatorFactory.createEvaluator()
+        evaluator.eval(index, rowIterator)
       }
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): WindowExec =
+    copy(child = newChild)
 }

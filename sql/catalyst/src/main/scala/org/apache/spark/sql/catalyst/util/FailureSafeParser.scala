@@ -17,18 +17,17 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 
 class FailureSafeParser[IN](
-    rawParser: IN => Seq[InternalRow],
+    rawParser: IN => Iterable[InternalRow],
     mode: ParseMode,
     schema: StructType,
-    columnNameOfCorruptRecord: String,
-    isMultiLine: Boolean) {
+    columnNameOfCorruptRecord: String) {
 
   private val corruptFieldIndex = schema.getFieldIndex(columnNameOfCorruptRecord)
   private val actualSchema = StructType(schema.filterNot(_.name == columnNameOfCorruptRecord))
@@ -56,26 +55,40 @@ class FailureSafeParser[IN](
     }
   }
 
-  private val skipParsing = !isMultiLine && mode == PermissiveMode && schema.isEmpty
-
   def parse(input: IN): Iterator[InternalRow] = {
     try {
-     if (skipParsing) {
-       Iterator.single(InternalRow.empty)
-     } else {
-       rawParser.apply(input).toIterator.map(row => toResultRow(Some(row), () => null))
-     }
+      rawParser.apply(input).iterator.map(row => toResultRow(Some(row), () => null))
     } catch {
       case e: BadRecordException => mode match {
         case PermissiveMode =>
-          Iterator(toResultRow(e.partialResult(), e.record))
+          val partialResults = e.partialResults()
+          if (partialResults.nonEmpty) {
+            partialResults.iterator.map(row => toResultRow(Some(row), e.record))
+          } else {
+            Iterator(toResultRow(None, e.record))
+          }
         case DropMalformedMode =>
           Iterator.empty
         case FailFastMode =>
-          throw new SparkException("Malformed records are detected in record parsing. " +
-            s"Parse Mode: ${FailFastMode.name}. To process malformed records as null " +
-            "result, try setting the option 'mode' as 'PERMISSIVE'.", e)
+          e.getCause match {
+            case _: JsonArraysAsStructsException =>
+              // SPARK-42298 we recreate the exception here to make sure the error message
+              // have the record content.
+              throw QueryExecutionErrors.cannotParseJsonArraysAsStructsError(e.record().toString)
+            case StringAsDataTypeException(fieldName, fieldValue, dataType) =>
+              throw QueryExecutionErrors.cannotParseStringAsDataTypeError(e.record().toString,
+                fieldName, fieldValue, dataType)
+            case causeWrapper: LazyBadRecordCauseWrapper =>
+              throwMalformedRecordsDetectedInRecordParsingError(e, causeWrapper.cause())
+            case cause => throwMalformedRecordsDetectedInRecordParsingError(e, cause)
+          }
       }
     }
+  }
+
+  private def throwMalformedRecordsDetectedInRecordParsingError(
+      e: BadRecordException, cause: Throwable): Nothing = {
+    throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
+      toResultRow(e.partialResults().headOption, e.record).toString, cause)
   }
 }

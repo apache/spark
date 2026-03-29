@@ -19,7 +19,7 @@ package org.apache.spark.streaming
 
 import java.util.{List => JList}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.api.java.JavaRDDLike
@@ -36,7 +36,7 @@ trait JavaTestBase extends TestSuiteBase {
       ssc: JavaStreamingContext,
       data: JList[JList[T]],
       numPartitions: Int): JavaDStream[T] = {
-    val seqData = data.asScala.map(_.asScala)
+    val seqData = data.asScala.map(_.asScala.toSeq).toSeq
 
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]

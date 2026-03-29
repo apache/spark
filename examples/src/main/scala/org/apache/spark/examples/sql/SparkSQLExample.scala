@@ -16,7 +16,9 @@
  */
 package org.apache.spark.examples.sql
 
-import org.apache.spark.sql.Row
+// $example on:programmatic_schema$
+import org.apache.spark.sql.{Encoder, Row}
+// $example off:programmatic_schema$
 // $example on:init_session$
 import org.apache.spark.sql.SparkSession
 // $example off:init_session$
@@ -32,7 +34,7 @@ object SparkSQLExample {
   case class Person(name: String, age: Long)
   // $example off:create_ds$
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     // $example on:init_session$
     val spark = SparkSession
       .builder()
@@ -40,8 +42,6 @@ object SparkSQLExample {
       .config("spark.some.config.option", "some-value")
       .getOrCreate()
 
-    // For implicit conversions like converting RDDs to DataFrames
-    import spark.implicits._
     // $example off:init_session$
 
     runBasicDataFrameExample(spark)
@@ -220,7 +220,8 @@ object SparkSQLExample {
     // +------------+
 
     // No pre-defined encoders for Dataset[Map[K,V]], define explicitly
-    implicit val mapEncoder = org.apache.spark.sql.Encoders.kryo[Map[String, Any]]
+    implicit val mapEncoder: Encoder[Map[String, Any]] =
+      org.apache.spark.sql.Encoders.kryo[Map[String, Any]]
     // Primitive types and case classes can be also defined as
     // implicit val stringIntMapEncoder: Encoder[Map[String, Any]] = ExpressionEncoder()
 

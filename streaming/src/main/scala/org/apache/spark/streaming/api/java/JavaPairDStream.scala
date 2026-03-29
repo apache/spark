@@ -21,7 +21,7 @@ import java.{lang => jl}
 import java.lang.{Iterable => JIterable}
 import java.util.{List => JList}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
@@ -30,7 +30,6 @@ import org.apache.hadoop.mapred.{JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 
 import org.apache.spark.Partitioner
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{JavaPairRDD, JavaSparkContext, JavaUtils, Optional}
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
@@ -431,7 +430,6 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   }
 
   /**
-   * :: Experimental ::
    * Return a [[JavaMapWithStateDStream]] by applying a function to every key-value element of
    * `this` stream, while maintaining some state data for each unique key. The mapping function
    * and other specification (e.g. partitioners, timeouts, initial state data, etc.) of this
@@ -458,7 +456,6 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * @tparam StateType    Class type of the state data
    * @tparam MappedType   Class type of the mapped data
    */
-  @Experimental
   def mapWithState[StateType, MappedType](spec: StateSpec[K, V, StateType, MappedType]):
     JavaMapWithStateDStream[K, V, StateType, MappedType] = {
     new JavaMapWithStateDStream(dstream.mapWithState(spec)(
@@ -762,7 +759,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * Save each RDD in `this` DStream as a Hadoop file. The file name at each batch interval is
    * generated based on `prefix` and `suffix`: "prefix-TIME_IN_MS.suffix".
    */
-  def saveAsHadoopFiles(prefix: String, suffix: String) {
+  def saveAsHadoopFiles(prefix: String, suffix: String): Unit = {
     dstream.saveAsHadoopFiles(prefix, suffix)
   }
 
@@ -775,7 +772,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       suffix: String,
       keyClass: Class[_],
       valueClass: Class[_],
-      outputFormatClass: Class[F]) {
+      outputFormatClass: Class[F]): Unit = {
     dstream.saveAsHadoopFiles(prefix, suffix, keyClass, valueClass, outputFormatClass)
   }
 
@@ -789,7 +786,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[F],
-      conf: JobConf) {
+      conf: JobConf): Unit = {
     dstream.saveAsHadoopFiles(prefix, suffix, keyClass, valueClass, outputFormatClass, conf)
   }
 
@@ -797,7 +794,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * Save each RDD in `this` DStream as a Hadoop file. The file name at each batch interval is
    * generated based on `prefix` and `suffix`: "prefix-TIME_IN_MS.suffix".
    */
-  def saveAsNewAPIHadoopFiles(prefix: String, suffix: String) {
+  def saveAsNewAPIHadoopFiles(prefix: String, suffix: String): Unit = {
     dstream.saveAsNewAPIHadoopFiles(prefix, suffix)
   }
 
@@ -810,7 +807,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       suffix: String,
       keyClass: Class[_],
       valueClass: Class[_],
-      outputFormatClass: Class[F]) {
+      outputFormatClass: Class[F]): Unit = {
     dstream.saveAsNewAPIHadoopFiles(prefix, suffix, keyClass, valueClass, outputFormatClass)
   }
 
@@ -824,7 +821,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[F],
-      conf: Configuration = dstream.context.sparkContext.hadoopConfiguration) {
+      conf: Configuration = dstream.context.sparkContext.hadoopConfiguration): Unit = {
     dstream.saveAsNewAPIHadoopFiles(prefix, suffix, keyClass, valueClass, outputFormatClass, conf)
   }
 

@@ -277,7 +277,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
         if (Random.nextDouble() < probability) { Some(vidVvals._1) }
         else { None }
       }
-      if (selectedVertices.count > 0) {
+      if (selectedVertices.count() > 0) {
         found = true
         val collectedVertices = selectedVertices.collect()
         retVal = collectedVertices(Random.nextInt(collectedVertices.length))
@@ -422,6 +422,18 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    */
   def staticPageRank(numIter: Int, resetProb: Double = 0.15): Graph[Double, Double] = {
     PageRank.run(graph, numIter, resetProb)
+  }
+
+  /**
+   * Run PageRank for a fixed number of iterations returning a graph with vertex attributes
+   * containing the PageRank and edge attributes the normalized edge weight, optionally including
+   * including a previous pageRank computation to be used as a start point for the new iterations
+   *
+   * @see [[org.apache.spark.graphx.lib.PageRank$#runWithOptionsWithPreviousPageRank]]
+   */
+  def staticPageRank(numIter: Int, resetProb: Double,
+                     prePageRank: Graph[Double, Double]): Graph[Double, Double] = {
+    PageRank.runWithOptionsWithPreviousPageRank(graph, numIter, resetProb, None, prePageRank)
   }
 
   /**

@@ -17,21 +17,32 @@
 
 package org.apache.spark.network;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.handler.codec.MessageToMessageDecoder;
+
+import java.io.Closeable;
 import java.util.ArrayList;
 import java.util.List;
+import javax.annotation.Nullable;
 
+import com.codahale.metrics.Counter;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
+import io.netty.handler.ssl.SslHandler;
+import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.handler.timeout.IdleStateHandler;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import io.netty.handler.codec.MessageToMessageEncoder;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.client.TransportResponseHandler;
+import org.apache.spark.network.protocol.Message;
+import org.apache.spark.network.protocol.SslMessageEncoder;
 import org.apache.spark.network.protocol.MessageDecoder;
 import org.apache.spark.network.protocol.MessageEncoder;
 import org.apache.spark.network.server.ChunkFetchRequestHandler;
@@ -40,8 +51,10 @@ import org.apache.spark.network.server.TransportChannelHandler;
 import org.apache.spark.network.server.TransportRequestHandler;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
+import org.apache.spark.network.ssl.SSLFactory;
 import org.apache.spark.network.util.IOMode;
 import org.apache.spark.network.util.NettyUtils;
+import org.apache.spark.network.util.NettyLogger;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.util.TransportFrameDecoder;
 
@@ -59,13 +72,17 @@ import org.apache.spark.network.util.TransportFrameDecoder;
  * channel. As each TransportChannelHandler contains a TransportClient, this enables server
  * processes to send messages back to the client on an existing channel.
  */
-public class TransportContext {
-  private static final Logger logger = LoggerFactory.getLogger(TransportContext.class);
+public class TransportContext implements Closeable {
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(TransportContext.class);
 
+  private static final NettyLogger nettyLogger = new NettyLogger();
   private final TransportConf conf;
   private final RpcHandler rpcHandler;
   private final boolean closeIdleConnections;
-  private final boolean isClientOnly;
+  // Non-null if SSL is enabled, null otherwise.
+  @Nullable private final SSLFactory sslFactory;
+  // Number of registered connections to the shuffle service
+  private Counter registeredConnections = new Counter();
 
   /**
    * Force to create MessageEncoder and MessageDecoder so that we can make sure they will be created
@@ -79,13 +96,14 @@ public class TransportContext {
    * RPC to load it and cause to load the non-exist matcher class again. JVM will report
    * `ClassCircularityError` to prevent such infinite recursion. (See SPARK-17714)
    */
-  private static final MessageEncoder ENCODER = MessageEncoder.INSTANCE;
+  private static final MessageToMessageEncoder<Message> ENCODER = MessageEncoder.INSTANCE;
+  private static final MessageToMessageEncoder<Message> SSL_ENCODER = SslMessageEncoder.INSTANCE;
   private static final MessageDecoder DECODER = MessageDecoder.INSTANCE;
 
   // Separate thread pool for handling ChunkFetchRequest. This helps to enable throttling
   // max number of TransportServer worker threads that are blocked on writing response
   // of ChunkFetchRequest message back to the client via the underlying channel.
-  private static EventLoopGroup chunkFetchWorkers;
+  private final EventLoopGroup chunkFetchWorkers;
 
   public TransportContext(TransportConf conf, RpcHandler rpcHandler) {
     this(conf, rpcHandler, false, false);
@@ -117,18 +135,17 @@ public class TransportContext {
     this.conf = conf;
     this.rpcHandler = rpcHandler;
     this.closeIdleConnections = closeIdleConnections;
-    this.isClientOnly = isClientOnly;
+    this.sslFactory = createSslFactory();
 
-    synchronized(TransportContext.class) {
-      if (chunkFetchWorkers == null &&
-          conf.getModuleName() != null &&
-          conf.getModuleName().equalsIgnoreCase("shuffle") &&
-          !isClientOnly) {
-        chunkFetchWorkers = NettyUtils.createEventLoop(
-            IOMode.valueOf(conf.ioMode()),
-            conf.chunkFetchHandlerThreads(),
-            "shuffle-chunk-fetch-handler");
-      }
+    if (conf.getModuleName() != null &&
+        conf.getModuleName().equalsIgnoreCase("shuffle") &&
+        !isClientOnly && conf.separateChunkFetchRequest()) {
+      chunkFetchWorkers = NettyUtils.createEventLoop(
+          IOMode.valueOf(conf.ioMode()),
+          conf.chunkFetchHandlerThreads(),
+          "shuffle-chunk-fetch-handler");
+    } else {
+      chunkFetchWorkers = null;
     }
   }
 
@@ -165,8 +182,12 @@ public class TransportContext {
     return createServer(0, new ArrayList<>());
   }
 
-  public TransportChannelHandler initializePipeline(SocketChannel channel) {
-    return initializePipeline(channel, rpcHandler);
+  public TransportChannelHandler initializePipeline(SocketChannel channel, boolean isClient) {
+    return initializePipeline(channel, rpcHandler, isClient);
+  }
+
+  public boolean sslEncryptionEnabled() {
+    return this.sslFactory != null;
   }
 
   /**
@@ -183,30 +204,80 @@ public class TransportContext {
    */
   public TransportChannelHandler initializePipeline(
       SocketChannel channel,
-      RpcHandler channelRpcHandler) {
+      RpcHandler channelRpcHandler,
+      boolean isClient) {
     try {
       TransportChannelHandler channelHandler = createChannelHandler(channel, channelRpcHandler);
-      ChunkFetchRequestHandler chunkFetchHandler =
-        createChunkFetchHandler(channelHandler, channelRpcHandler);
-      ChannelPipeline pipeline = channel.pipeline()
-        .addLast("encoder", ENCODER)
+      ChannelPipeline pipeline = channel.pipeline();
+      if (nettyLogger.getLoggingHandler() != null) {
+        pipeline.addLast("loggingHandler", nettyLogger.getLoggingHandler());
+      }
+
+      if (sslEncryptionEnabled()) {
+        SslHandler sslHandler;
+        try {
+          sslHandler = new SslHandler(sslFactory.createSSLEngine(isClient, channel.alloc()));
+        } catch (Exception e) {
+          throw new IllegalStateException("Error creating Netty SslHandler", e);
+        }
+        pipeline.addFirst("NettySslEncryptionHandler", sslHandler);
+        // Cannot use zero-copy with HTTPS, so we add in our ChunkedWriteHandler just before the
+        // MessageEncoder
+        pipeline.addLast("chunkedWriter", new ChunkedWriteHandler());
+      }
+
+      pipeline
+        .addLast("encoder", sslEncryptionEnabled()? SSL_ENCODER : ENCODER)
         .addLast(TransportFrameDecoder.HANDLER_NAME, NettyUtils.createFrameDecoder())
-        .addLast("decoder", DECODER)
+        .addLast("decoder", getDecoder())
         .addLast("idleStateHandler",
           new IdleStateHandler(0, 0, conf.connectionTimeoutMs() / 1000))
         // NOTE: Chunks are currently guaranteed to be returned in the order of request, but this
         // would require more logic to guarantee if this were not part of the same event loop.
         .addLast("handler", channelHandler);
       // Use a separate EventLoopGroup to handle ChunkFetchRequest messages for shuffle rpcs.
-      if (conf.getModuleName() != null &&
-          conf.getModuleName().equalsIgnoreCase("shuffle")
-          && !isClientOnly) {
+      if (chunkFetchWorkers != null) {
+        ChunkFetchRequestHandler chunkFetchHandler = new ChunkFetchRequestHandler(
+          channelHandler.getClient(), rpcHandler.getStreamManager(),
+          conf.maxChunksBeingTransferred(), true /* syncModeEnabled */);
         pipeline.addLast(chunkFetchWorkers, "chunkFetchHandler", chunkFetchHandler);
       }
       return channelHandler;
     } catch (RuntimeException e) {
       logger.error("Error while initializing Netty pipeline", e);
       throw e;
+    }
+  }
+
+  protected MessageToMessageDecoder<ByteBuf> getDecoder() {
+    return DECODER;
+  }
+
+  private SSLFactory createSslFactory() {
+    if (conf.sslRpcEnabled()) {
+      if (conf.sslRpcEnabledAndKeysAreValid()) {
+        return new SSLFactory.Builder()
+          .openSslEnabled(conf.sslRpcOpenSslEnabled())
+          .requestedProtocol(conf.sslRpcProtocol())
+          .requestedCiphers(conf.sslRpcRequestedCiphers())
+          .keyStore(conf.sslRpcKeyStore(), conf.sslRpcKeyStorePassword())
+          .privateKey(conf.sslRpcPrivateKey())
+          .privateKeyPassword(conf.sslRpcPrivateKeyPassword())
+          .keyPassword(conf.sslRpcKeyPassword())
+          .certChain(conf.sslRpcCertChain())
+          .trustStore(
+            conf.sslRpcTrustStore(),
+            conf.sslRpcTrustStorePassword(),
+            conf.sslRpcTrustStoreReloadingEnabled(),
+            conf.sslRpctrustStoreReloadIntervalMs())
+          .build();
+      } else {
+        logger.error("RPC SSL encryption enabled but keys not found!" +
+          "Please ensure the configured keys are present.");
+        throw new IllegalArgumentException("RPC SSL encryption enabled but keys not found!");
+      }
+    } else {
+      return null;
     }
   }
 
@@ -218,20 +289,32 @@ public class TransportContext {
   private TransportChannelHandler createChannelHandler(Channel channel, RpcHandler rpcHandler) {
     TransportResponseHandler responseHandler = new TransportResponseHandler(channel);
     TransportClient client = new TransportClient(channel, responseHandler);
+    boolean separateChunkFetchRequest = conf.separateChunkFetchRequest();
+    ChunkFetchRequestHandler chunkFetchRequestHandler = null;
+    if (!separateChunkFetchRequest) {
+      chunkFetchRequestHandler = new ChunkFetchRequestHandler(
+        client, rpcHandler.getStreamManager(),
+        conf.maxChunksBeingTransferred(), false /* syncModeEnabled */);
+    }
     TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client,
-      rpcHandler, conf.maxChunksBeingTransferred());
+      rpcHandler, conf.maxChunksBeingTransferred(), chunkFetchRequestHandler);
     return new TransportChannelHandler(client, responseHandler, requestHandler,
-      conf.connectionTimeoutMs(), closeIdleConnections);
-  }
-
-  /**
-   * Creates the dedicated ChannelHandler for ChunkFetchRequest messages.
-   */
-  private ChunkFetchRequestHandler createChunkFetchHandler(TransportChannelHandler channelHandler,
-      RpcHandler rpcHandler) {
-    return new ChunkFetchRequestHandler(channelHandler.getClient(),
-      rpcHandler.getStreamManager(), conf.maxChunksBeingTransferred());
+      conf.connectionTimeoutMs(), separateChunkFetchRequest, closeIdleConnections, this);
   }
 
   public TransportConf getConf() { return conf; }
+
+  public Counter getRegisteredConnections() {
+    return registeredConnections;
+  }
+
+  @Override
+  public void close() {
+    if (chunkFetchWorkers != null) {
+      chunkFetchWorkers.shutdownGracefully();
+    }
+    if (sslFactory != null) {
+      sslFactory.destroy();
+    }
+  }
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.api.python
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.conf.Configuration
@@ -26,6 +26,7 @@ import org.apache.hadoop.io._
 import org.apache.spark.SparkException
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -33,24 +34,23 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
  * A trait for use with reading custom classes in PySpark. Implement this trait and add custom
  * transformation code by overriding the convert method.
  */
-trait Converter[T, + U] extends Serializable {
+trait Converter[-T, +U] extends Serializable {
   def convert(obj: T): U
 }
 
 private[python] object Converter extends Logging {
 
-  def getInstance(converterClass: Option[String],
-                  defaultConverter: Converter[Any, Any]): Converter[Any, Any] = {
+  def getInstance[T, U](converterClass: Option[String],
+                        defaultConverter: Converter[_ >: T, _ <: U]): Converter[T, U] = {
     converterClass.map { cc =>
       Try {
-        val c = Utils.classForName(cc).getConstructor().
-          newInstance().asInstanceOf[Converter[Any, Any]]
-        logInfo(s"Loaded converter: $cc")
+        val c = Utils.classForName[Converter[T, U]](cc).getConstructor().newInstance()
+        logInfo(log"Loaded converter: ${MDC(CLASS_NAME, cc)}")
         c
       } match {
         case Success(c) => c
         case Failure(err) =>
-          logError(s"Failed to load converter: $cc")
+          logError(log"Failed to load converter: ${MDC(CLASS_NAME, cc)}")
           throw err
       }
     }.getOrElse { defaultConverter }
@@ -73,9 +73,11 @@ private[python] class WritableToJavaConverter(
       case iw: IntWritable => iw.get()
       case dw: DoubleWritable => dw.get()
       case lw: LongWritable => lw.get()
+      case sw: ShortWritable => sw.get()
       case fw: FloatWritable => fw.get()
       case t: Text => t.toString
       case bw: BooleanWritable => bw.get()
+      case byw: ByteWritable => byw.get()
       case byw: BytesWritable =>
         val bytes = new Array[Byte](byw.getLength)
         System.arraycopy(byw.getBytes(), 0, bytes, 0, byw.getLength)
@@ -124,9 +126,11 @@ private[python] class JavaToWritableConverter extends Converter[Any, Writable] {
       case i: java.lang.Integer => new IntWritable(i)
       case d: java.lang.Double => new DoubleWritable(d)
       case l: java.lang.Long => new LongWritable(l)
+      case s: java.lang.Short => new ShortWritable(s)
       case f: java.lang.Float => new FloatWritable(f)
       case s: java.lang.String => new Text(s)
       case b: java.lang.Boolean => new BooleanWritable(b)
+      case b: java.lang.Byte => new ByteWritable(b)
       case aob: Array[Byte] => new BytesWritable(aob)
       case null => NullWritable.get()
       case map: java.util.Map[_, _] =>
@@ -157,7 +161,7 @@ private[python] object PythonHadoopUtil {
    * Convert a [[java.util.Map]] of properties to a [[org.apache.hadoop.conf.Configuration]]
    */
   def mapToConf(map: java.util.Map[String, String]): Configuration = {
-    val conf = new Configuration()
+    val conf = new Configuration(false)
     map.asScala.foreach { case (k, v) => conf.set(k, v) }
     conf
   }
@@ -177,8 +181,8 @@ private[python] object PythonHadoopUtil {
    * [[org.apache.hadoop.io.Writable]], into an RDD of base types, or vice versa.
    */
   def convertRDD[K, V](rdd: RDD[(K, V)],
-                       keyConverter: Converter[Any, Any],
-                       valueConverter: Converter[Any, Any]): RDD[(Any, Any)] = {
+                       keyConverter: Converter[K, Any],
+                       valueConverter: Converter[V, Any]): RDD[(Any, Any)] = {
     rdd.map { case (k, v) => (keyConverter.convert(k), valueConverter.convert(v)) }
   }
 

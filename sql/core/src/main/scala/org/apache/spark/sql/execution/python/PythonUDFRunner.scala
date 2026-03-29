@@ -18,62 +18,113 @@
 package org.apache.spark.sql.execution.python
 
 import java.io._
-import java.net._
+import java.util
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark._
 import org.apache.spark.api.python._
+import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A helper class to run Python UDFs in Spark.
  */
-class PythonUDFRunner(
-    funcs: Seq[ChainedPythonFunctions],
+abstract class BasePythonUDFRunner(
+    funcs: Seq[(ChainedPythonFunctions, Long)],
     evalType: Int,
-    argOffsets: Array[Array[Int]])
+    argOffsets: Array[Array[Int]],
+    pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String],
+    sessionUUID: Option[String])
   extends BasePythonRunner[Array[Byte], Array[Byte]](
-    funcs, evalType, argOffsets) {
+    funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics) {
 
-  protected override def newWriterThread(
+  override val envVars: util.Map[String, String] = {
+    val envVars = new util.HashMap(funcs.head._1.funcs.head.envVars)
+    sessionUUID.foreach { uuid =>
+      envVars.put("PYSPARK_SPARK_SESSION_UUID", uuid)
+    }
+    envVars
+  }
+
+  override def runnerConf: Map[String, String] = {
+    super.runnerConf ++ SQLConf.get.pythonUDFProfiler.map(p =>
+      Map(SQLConf.PYTHON_UDF_PROFILER.key -> p)
+    ).getOrElse(Map.empty)
+  }
+
+  override val pythonExec: String =
+    SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
+      funcs.head._1.funcs.head.pythonExec)
+
+  override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
+  override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
+
+  override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
+  override val idleTimeoutSeconds: Long = SQLConf.get.pythonUDFWorkerIdleTimeoutSeconds
+  override val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
+  override val tracebackDumpIntervalSeconds: Long =
+    SQLConf.get.pythonUDFWorkerTracebackDumpIntervalSeconds
+  override val killWorkerOnFlushFailure: Boolean =
+    SQLConf.get.pythonUDFDaemonKillWorkerOnFlushFailure
+
+  override val bufferSize: Int = SQLConf.get.getConf(SQLConf.PYTHON_UDF_BUFFER_SIZE)
+  override val batchSizeForPythonUDF: Int =
+    SQLConf.get.getConf(SQLConf.PYTHON_UDF_MAX_RECORDS_PER_BATCH)
+
+  protected def writeUDF(dataOut: DataOutputStream): Unit
+
+  protected override def newWriter(
       env: SparkEnv,
-      worker: Socket,
+      worker: PythonWorker,
       inputIterator: Iterator[Array[Byte]],
       partitionIndex: Int,
-      context: TaskContext): WriterThread = {
-    new WriterThread(env, worker, inputIterator, partitionIndex, context) {
+      context: TaskContext): Writer = {
+    new Writer(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
-        PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
+        writeUDF(dataOut)
       }
 
-      protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
-        PythonRDD.writeIteratorToStream(inputIterator, dataOut)
-        dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+      override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
+        val startData = dataOut.size()
+        val wroteData = PythonRDD.writeNextElementToStream(inputIterator, dataOut)
+        if (!wroteData) {
+          // Reached the end of input.
+          dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+        }
+        val deltaData = dataOut.size() - startData
+        pythonMetrics("pythonDataSent") += deltaData
+        wroteData
       }
     }
   }
 
   protected override def newReaderIterator(
       stream: DataInputStream,
-      writerThread: WriterThread,
+      writer: Writer,
       startTime: Long,
       env: SparkEnv,
-      worker: Socket,
+      worker: PythonWorker,
+      pid: Option[Int],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[Array[Byte]] = {
-    new ReaderIterator(stream, writerThread, startTime, env, worker, releasedOrClosed, context) {
+    new ReaderIterator(
+      stream, writer, startTime, env, worker, pid, releasedOrClosed, context) {
 
       protected override def read(): Array[Byte] = {
-        if (writerThread.exception.isDefined) {
-          throw writerThread.exception.get
+        if (writer.exception.isDefined) {
+          throw writer.exception.get
         }
         try {
           stream.readInt() match {
-            case length if length > 0 =>
-              val obj = new Array[Byte](length)
-              stream.readFully(obj)
+            case length if length >= 0 =>
+              val obj = PythonWorkerUtils.readBytes(length, stream)
+              pythonMetrics("pythonDataReceived") += length
+              batchesProcessed += 1
+              totalDataReceived += length
               obj
-            case 0 => Array.empty[Byte]
             case SpecialLengths.TIMING_DATA =>
               handleTimingData()
               read()
@@ -89,23 +140,69 @@ class PythonUDFRunner(
   }
 }
 
+class PythonUDFRunner(
+    funcs: Seq[(ChainedPythonFunctions, Long)],
+    evalType: Int,
+    argOffsets: Array[Array[Int]],
+    pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String],
+    sessionUUID: Option[String])
+  extends BasePythonUDFRunner(funcs, evalType, argOffsets, pythonMetrics,
+    jobArtifactUUID, sessionUUID) {
+
+  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
+    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
+  }
+}
+
+class PythonUDFWithNamedArgumentsRunner(
+    funcs: Seq[(ChainedPythonFunctions, Long)],
+    evalType: Int,
+    argMetas: Array[Array[ArgumentMetadata]],
+    pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String],
+    sessionUUID: Option[String])
+  extends BasePythonUDFRunner(
+    funcs, evalType, argMetas.map(_.map(_.offset)), pythonMetrics,
+    jobArtifactUUID, sessionUUID) {
+
+  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
+    PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas)
+  }
+}
+
 object PythonUDFRunner {
 
   def writeUDFs(
       dataOut: DataOutputStream,
-      funcs: Seq[ChainedPythonFunctions],
+      funcs: Seq[(ChainedPythonFunctions, Long)],
       argOffsets: Array[Array[Int]]): Unit = {
+    writeUDFs(dataOut, funcs, argOffsets.map(_.map(ArgumentMetadata(_, None, false))))
+  }
+
+  def writeUDFs(
+      dataOut: DataOutputStream,
+      funcs: Seq[(ChainedPythonFunctions, Long)],
+      argMetas: Array[Array[ArgumentMetadata]]): Unit = {
     dataOut.writeInt(funcs.length)
-    funcs.zip(argOffsets).foreach { case (chained, offsets) =>
-      dataOut.writeInt(offsets.length)
-      offsets.foreach { offset =>
-        dataOut.writeInt(offset)
+    funcs.zip(argMetas).foreach { case ((chained, resultId), metas) =>
+      dataOut.writeInt(metas.length)
+      metas.foreach {
+        case ArgumentMetadata(offset, name, _) =>
+          dataOut.writeInt(offset)
+          name match {
+            case Some(name) =>
+              dataOut.writeBoolean(true)
+              PythonWorkerUtils.writeUTF(name, dataOut)
+            case _ =>
+              dataOut.writeBoolean(false)
+          }
       }
       dataOut.writeInt(chained.funcs.length)
       chained.funcs.foreach { f =>
-        dataOut.writeInt(f.command.length)
-        dataOut.write(f.command)
+        PythonWorkerUtils.writePythonFunction(f, dataOut)
       }
+      dataOut.writeLong(resultId)
     }
   }
 }

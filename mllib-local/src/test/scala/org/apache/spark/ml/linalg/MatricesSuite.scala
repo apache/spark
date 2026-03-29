@@ -19,10 +19,11 @@ package org.apache.spark.ml.linalg
 
 import java.util.Random
 
+import scala.collection.mutable.{Map => MutableMap}
+
 import breeze.linalg.{CSCMatrix, Matrix => BM}
 import org.mockito.Mockito.when
-import org.scalatest.mockito.MockitoSugar._
-import scala.collection.mutable.{Map => MutableMap}
+import org.scalatestplus.mockito.MockitoSugar._
 
 import org.apache.spark.ml.SparkMLFunSuite
 import org.apache.spark.ml.util.TestingUtils._
@@ -596,8 +597,8 @@ class MatricesSuite extends SparkMLFunSuite {
       new DenseMatrix(4, 3, Array(0.0, 1.0, 0.0, 0.0, 2.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 3.0))
     val sA = new SparseMatrix(4, 3, Array(0, 1, 3, 4), Array(1, 0, 2, 3), Array(1.0, 2.0, 1.0, 3.0))
 
-    val dAT = dA.transpose.asInstanceOf[DenseMatrix]
-    val sAT = sA.transpose.asInstanceOf[SparseMatrix]
+    val dAT = dA.transpose
+    val sAT = sA.transpose
     val dATexpected =
       new DenseMatrix(3, 4, Array(0.0, 2.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 3.0))
     val sATexpected =
@@ -611,7 +612,7 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(sA(2, 1) === sAT(1, 2))
 
     assert(!dA.toArray.eq(dAT.toArray), "has to have a new array")
-    assert(dA.values.eq(dAT.transpose.asInstanceOf[DenseMatrix].values), "should not copy array")
+    assert(dA.values.eq(dAT.transpose.values), "should not copy array")
 
     assert(dAT.toSparse.asBreeze === sATexpected.asBreeze)
     assert(sAT.toDense.asBreeze === dATexpected.asBreeze)
@@ -863,10 +864,10 @@ class MatricesSuite extends SparkMLFunSuite {
     mat.toString(Int.MinValue, Int.MinValue)
     mat.toString(Int.MaxValue, Int.MaxValue)
     var lines = mat.toString(6, 50).split('\n')
-    assert(lines.size == 5 && lines.forall(_.size <= 50))
+    assert(lines.length == 5 && lines.forall(_.length <= 50))
 
     lines = mat.toString(5, 100).split('\n')
-    assert(lines.size == 5 && lines.forall(_.size <= 100))
+    assert(lines.length == 5 && lines.forall(_.length <= 100))
   }
 
   test("numNonzeros and numActives") {

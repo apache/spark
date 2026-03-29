@@ -18,8 +18,8 @@
 package org.apache.spark.network.shuffle.protocol;
 
 import java.util.Arrays;
+import java.util.Objects;
 
-import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.protocol.Encoders;
@@ -44,24 +44,20 @@ public class OpenBlocks extends BlockTransferMessage {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(appId, execId) * 41 + Arrays.hashCode(blockIds);
+    return Objects.hash(appId, execId) * 41 + Arrays.hashCode(blockIds);
   }
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("appId", appId)
-      .add("execId", execId)
-      .add("blockIds", Arrays.toString(blockIds))
-      .toString();
+    return "OpenBlocks[appId=" + appId + ",execId=" + execId + ",blockIds=" +
+        Arrays.toString(blockIds) + "]";
   }
 
   @Override
   public boolean equals(Object other) {
-    if (other != null && other instanceof OpenBlocks) {
-      OpenBlocks o = (OpenBlocks) other;
-      return Objects.equal(appId, o.appId)
-        && Objects.equal(execId, o.execId)
+    if (other instanceof OpenBlocks o) {
+      return Objects.equals(appId, o.appId)
+        && Objects.equals(execId, o.execId)
         && Arrays.equals(blockIds, o.blockIds);
     }
     return false;

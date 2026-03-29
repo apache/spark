@@ -17,39 +17,51 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.mockito.Matchers.{eq => meq}
-import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, PrivateMethodTester}
+import org.mockito.ArgumentMatchers.{any, eq => meq}
+import org.mockito.Mockito.{never, reset, times, verify, when}
+import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
-import org.scalatest.mockito.MockitoSugar
 import org.scalatest.time.SpanSugar._
+import org.scalatestplus.mockito.MockitoSugar
 
-import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkFunSuite}
-import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext}
+import org.apache.spark.{ExecutorAllocationClient, SparkConf}
+import org.apache.spark.internal.config.{DECOMMISSION_ENABLED, DYN_ALLOCATION_ENABLED, DYN_ALLOCATION_TESTING}
+import org.apache.spark.internal.config.Streaming._
+import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.scheduler.ExecutorDecommissionInfo
+import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext, TestSuiteBase}
 import org.apache.spark.util.{ManualClock, Utils}
 
-
-class ExecutorAllocationManagerSuite extends SparkFunSuite
-  with BeforeAndAfter with BeforeAndAfterAll with MockitoSugar with PrivateMethodTester {
-
-  import ExecutorAllocationManager._
+class ExecutorAllocationManagerSuite extends TestSuiteBase
+  with MockitoSugar with PrivateMethodTester {
 
   private val batchDurationMillis = 1000L
   private var allocationClient: ExecutorAllocationClient = null
   private var clock: StreamManualClock = null
 
-  before {
+  override def beforeEach(): Unit = {
     allocationClient = mock[ExecutorAllocationClient]
     clock = new StreamManualClock()
   }
 
   test("basic functionality") {
+    basicTest(decommissioning = false)
+  }
+
+  test("basic decommissioning") {
+    basicTest(decommissioning = true)
+  }
+
+  def basicTest(decommissioning: Boolean): Unit = {
     // Test that adding batch processing time info to allocation manager
     // causes executors to be requested and killed accordingly
+    conf.set(DECOMMISSION_ENABLED, decommissioning)
 
     // There is 1 receiver, and exec 1 has been allocated to it
-    withAllocationManager(numReceivers = 1) { case (receiverTracker, allocationManager) =>
-      when(receiverTracker.allocatedExecutors).thenReturn(Map(1 -> Some("1")))
+    withAllocationManager(numReceivers = 1, conf = conf) {
+      case (receiverTracker, allocationManager) =>
+
+      when(receiverTracker.allocatedExecutors()).thenReturn(Map(1 -> Some("1")))
 
       /** Add data point for batch processing time and verify executor allocation */
       def addBatchProcTimeAndVerifyAllocation(batchProcTimeMs: Double)(body: => Unit): Unit = {
@@ -57,11 +69,11 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
         reset(allocationClient)
         when(allocationClient.getExecutorIds()).thenReturn(Seq("1", "2"))
         addBatchProcTime(allocationManager, batchProcTimeMs.toLong)
-        val advancedTime = SCALING_INTERVAL_DEFAULT_SECS * 1000 + 1
+        val advancedTime = STREAMING_DYN_ALLOCATION_SCALING_INTERVAL.defaultValue.get * 1000 + 1
         val expectedWaitTime = clock.getTimeMillis() + advancedTime
         clock.advance(advancedTime)
         // Make sure ExecutorAllocationManager.manageAllocation is called
-        eventually(timeout(10 seconds)) {
+        eventually(timeout(10.seconds)) {
           assert(clock.isStreamWaitingAt(expectedWaitTime))
         }
         body
@@ -72,55 +84,78 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
         if (expectedRequestedTotalExecs.nonEmpty) {
           require(expectedRequestedTotalExecs.get > 0)
           verify(allocationClient, times(1)).requestTotalExecutors(
-            meq(expectedRequestedTotalExecs.get), meq(0), meq(Map.empty))
+              meq(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
+                expectedRequestedTotalExecs.get)),
+              meq(Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0)),
+              meq(Map.empty))
         } else {
-          verify(allocationClient, never).requestTotalExecutors(0, 0, Map.empty)
-        }
+          verify(allocationClient, never).requestTotalExecutors(
+            Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0),
+            Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0),
+            Map.empty)}
       }
 
-      /** Verify that a particular executor was killed */
-      def verifyKilledExec(expectedKilledExec: Option[String]): Unit = {
-        if (expectedKilledExec.nonEmpty) {
-          verify(allocationClient, times(1)).killExecutor(meq(expectedKilledExec.get))
+      /** Verify that a particular executor was scaled down. */
+      def verifyScaledDownExec(expectedExec: Option[String]): Unit = {
+        if (expectedExec.nonEmpty) {
+          val decomInfo = ExecutorDecommissionInfo("spark scale down", None)
+          if (decommissioning) {
+            verify(allocationClient, times(1)).decommissionExecutor(
+              meq(expectedExec.get), meq(decomInfo), meq(true), any())
+            verify(allocationClient, never).killExecutor(meq(expectedExec.get))
+          } else {
+            verify(allocationClient, times(1)).killExecutor(meq(expectedExec.get))
+            verify(allocationClient, never).decommissionExecutor(
+              meq(expectedExec.get), meq(decomInfo), meq(true), any())
+          }
         } else {
-          verify(allocationClient, never).killExecutor(null)
+          if (decommissioning) {
+            verify(allocationClient, never).decommissionExecutor(null, null, false)
+            verify(allocationClient, never).decommissionExecutor(null, null, true)
+          } else {
+            verify(allocationClient, never).killExecutor(null)
+          }
         }
       }
 
       // Batch proc time = batch interval, should increase allocation by 1
-      addBatchProcTimeAndVerifyAllocation(batchDurationMillis) {
+      addBatchProcTimeAndVerifyAllocation(batchDurationMillis.toDouble) {
         verifyTotalRequestedExecs(Some(3)) // one already allocated, increase allocation by 1
-        verifyKilledExec(None)
+        verifyScaledDownExec(None)
       }
 
       // Batch proc time = batch interval * 2, should increase allocation by 2
-      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * 2) {
+      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * 2.0) {
         verifyTotalRequestedExecs(Some(4))
-        verifyKilledExec(None)
+        verifyScaledDownExec(None)
       }
 
       // Batch proc time slightly more than the scale up ratio, should increase allocation by 1
-      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * SCALING_UP_RATIO_DEFAULT + 1) {
+      addBatchProcTimeAndVerifyAllocation(
+        batchDurationMillis * STREAMING_DYN_ALLOCATION_SCALING_UP_RATIO.defaultValue.get + 1) {
         verifyTotalRequestedExecs(Some(3))
-        verifyKilledExec(None)
+        verifyScaledDownExec(None)
       }
 
       // Batch proc time slightly less than the scale up ratio, should not change allocation
-      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * SCALING_UP_RATIO_DEFAULT - 1) {
+      addBatchProcTimeAndVerifyAllocation(
+        batchDurationMillis * STREAMING_DYN_ALLOCATION_SCALING_UP_RATIO.defaultValue.get - 1) {
         verifyTotalRequestedExecs(None)
-        verifyKilledExec(None)
+        verifyScaledDownExec(None)
       }
 
       // Batch proc time slightly more than the scale down ratio, should not change allocation
-      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * SCALING_DOWN_RATIO_DEFAULT + 1) {
+      addBatchProcTimeAndVerifyAllocation(
+        batchDurationMillis * STREAMING_DYN_ALLOCATION_SCALING_DOWN_RATIO.defaultValue.get + 1) {
         verifyTotalRequestedExecs(None)
-        verifyKilledExec(None)
+        verifyScaledDownExec(None)
       }
 
       // Batch proc time slightly more than the scale down ratio, should not change allocation
-      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * SCALING_DOWN_RATIO_DEFAULT - 1) {
+      addBatchProcTimeAndVerifyAllocation(
+        batchDurationMillis * STREAMING_DYN_ALLOCATION_SCALING_DOWN_RATIO.defaultValue.get - 1) {
         verifyTotalRequestedExecs(None)
-        verifyKilledExec(Some("2"))
+        verifyScaledDownExec(Some("2"))
       }
     }
   }
@@ -136,8 +171,11 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
       reset(allocationClient)
       when(allocationClient.getExecutorIds()).thenReturn((1 to numExecs).map(_.toString))
       requestExecutors(allocationManager, numNewExecs)
-      verify(allocationClient, times(1)).requestTotalExecutors(
-        meq(expectedRequestedTotalExecs), meq(0), meq(Map.empty))
+      val defaultProfId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+      verify(allocationClient, times(1)).
+        requestTotalExecutors(
+          meq(Map(defaultProfId -> expectedRequestedTotalExecs)),
+          meq(Map(defaultProfId -> 0)), meq(Map.empty))
     }
 
     withAllocationManager(numReceivers = 1) { case (_, allocationManager) =>
@@ -201,7 +239,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
 
       reset(allocationClient)
       when(allocationClient.getExecutorIds()).thenReturn(execIds)
-      when(receiverTracker.allocatedExecutors).thenReturn(receiverExecIds)
+      when(receiverTracker.allocatedExecutors()).thenReturn(receiverExecIds)
       killExecutor(allocationManager)
       if (expectedKilledExec.nonEmpty) {
         verify(allocationClient, times(1)).killExecutor(meq(expectedKilledExec.get))
@@ -332,9 +370,9 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
 
     val confWithBothDynamicAllocationEnabled = new SparkConf()
       .set("spark.streaming.dynamicAllocation.enabled", "true")
-      .set("spark.dynamicAllocation.enabled", "true")
-      .set("spark.dynamicAllocation.testing", "true")
-    require(Utils.isDynamicAllocationEnabled(confWithBothDynamicAllocationEnabled) === true)
+      .set(DYN_ALLOCATION_ENABLED, true)
+      .set(DYN_ALLOCATION_TESTING, true)
+    require(Utils.isDynamicAllocationEnabled(confWithBothDynamicAllocationEnabled))
     withStreamingContext(confWithBothDynamicAllocationEnabled) { ssc =>
       intercept[IllegalArgumentException] {
         ssc.start()
@@ -360,11 +398,11 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
     }
   }
 
-  private val _addBatchProcTime = PrivateMethod[Unit]('addBatchProcTime)
-  private val _requestExecutors = PrivateMethod[Unit]('requestExecutors)
-  private val _killExecutor = PrivateMethod[Unit]('killExecutor)
+  private val _addBatchProcTime = PrivateMethod[Unit](Symbol("addBatchProcTime"))
+  private val _requestExecutors = PrivateMethod[Unit](Symbol("requestExecutors"))
+  private val _killExecutor = PrivateMethod[Unit](Symbol("killExecutor"))
   private val _executorAllocationManager =
-    PrivateMethod[Option[ExecutorAllocationManager]]('executorAllocationManager)
+    PrivateMethod[Option[ExecutorAllocationManager]](Symbol("executorAllocationManager"))
 
   private def addBatchProcTime(manager: ExecutorAllocationManager, timeMs: Long): Unit = {
     manager invokePrivate _addBatchProcTime(timeMs)
@@ -384,17 +422,13 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
   }
 
   private def withStreamingContext(conf: SparkConf)(body: StreamingContext => Unit): Unit = {
-    conf.setMaster("myDummyLocalExternalClusterManager")
+    conf.setMaster("local-cluster[1,1,1024]")
       .setAppName(this.getClass.getSimpleName)
       .set("spark.streaming.dynamicAllocation.testing", "true")  // to test dynamic allocation
 
-    var ssc: StreamingContext = null
-    try {
-      ssc = new  StreamingContext(conf, Seconds(1))
+    withStreamingContext(new StreamingContext(conf, Seconds(1))) { ssc =>
       new DummyInputDStream(ssc).foreachRDD(_ => { })
       body(ssc)
-    } finally {
-      if (ssc != null) ssc.stop()
     }
   }
 }

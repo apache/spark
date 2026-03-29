@@ -38,11 +38,7 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
       f: (ExternalCatalog, Seq[ExternalCatalogEvent] => Unit) => Unit): Unit = test(name) {
     val catalog = new ExternalCatalogWithListener(newCatalog)
     val recorder = mutable.Buffer.empty[ExternalCatalogEvent]
-    catalog.addListener(new ExternalCatalogEventListener {
-      override def onEvent(event: ExternalCatalogEvent): Unit = {
-        recorder += event
-      }
-    })
+    catalog.addListener((event: ExternalCatalogEvent) => recorder += event)
     f(catalog, (expected: Seq[ExternalCatalogEvent]) => {
       val actual = recorder.clone()
       recorder.clear()
@@ -132,9 +128,9 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
 
     // ALTER schema
     val newSchema = new StructType().add("id", "long", nullable = false)
-    catalog.alterTableDataSchema("db5", "tbl1", newSchema)
-    checkEvents(AlterTablePreEvent("db5", "tbl1", AlterTableKind.DATASCHEMA) ::
-      AlterTableEvent("db5", "tbl1", AlterTableKind.DATASCHEMA) :: Nil)
+    catalog.alterTableSchema("db5", "tbl1", newSchema)
+    checkEvents(AlterTablePreEvent("db5", "tbl1", AlterTableKind.SCHEMA) ::
+      AlterTableEvent("db5", "tbl1", AlterTableKind.SCHEMA) :: Nil)
 
     // ALTER stats
     catalog.alterTableStats("db5", "tbl1", None)
@@ -174,9 +170,6 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
       className = "",
       resources = Seq.empty)
 
-    val newIdentifier = functionDefinition.identifier.copy(funcName = "fn4")
-    val renamedFunctionDefinition = functionDefinition.copy(identifier = newIdentifier)
-
     catalog.createDatabase(dbDefinition, ignoreIfExists = false)
     checkEvents(CreateDatabasePreEvent("db5") :: CreateDatabaseEvent("db5") :: Nil)
 
@@ -215,5 +208,113 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
 
     catalog.dropFunction("db5", "fn4")
     checkEvents(DropFunctionPreEvent("db5", "fn4") :: DropFunctionEvent("db5", "fn4") :: Nil)
+  }
+
+  testWithCatalog("partitions") { (catalog, checkEvents) =>
+    // Prepare db
+    val db = "db1"
+    val dbUri = preparePath(Files.createTempDirectory(db + "_"))
+    val dbDefinition = CatalogDatabase(
+      name = db,
+      description = "",
+      locationUri = dbUri,
+      properties = Map.empty)
+
+    catalog.createDatabase(dbDefinition, ignoreIfExists = false)
+    checkEvents(
+      CreateDatabasePreEvent(db) ::
+      CreateDatabaseEvent(db) :: Nil)
+
+    // Prepare table
+    val table = "table1"
+    val tableUri = preparePath(Files.createTempDirectory(table + "_"))
+    val tableDefinition = CatalogTable(
+      identifier = TableIdentifier(table, Some(db)),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty.copy(locationUri = Option(tableUri)),
+      schema = new StructType()
+        .add("year", "int")
+        .add("month", "int")
+        .add("sales", "long"))
+
+    catalog.createTable(tableDefinition, ignoreIfExists = false)
+    checkEvents(
+      CreateTablePreEvent(db, table) ::
+      CreateTableEvent(db, table) :: Nil)
+
+    // Prepare partitions
+    val storageFormat = CatalogStorageFormat(
+      locationUri = Some(tableUri),
+      inputFormat = Some("tableInputFormat"),
+      outputFormat = Some("tableOutputFormat"),
+      serde = None,
+      compressed = false,
+      properties = Map.empty)
+    val parts = Seq(CatalogTablePartition(Map("year" -> "2025", "month" -> "Jan"), storageFormat))
+    val partSpecs = parts.map(_.spec)
+
+    val newPartSpecs = Seq(Map("year" -> "2026", "month" -> "Feb"))
+
+    // CREATE
+    catalog.createPartitions(db, table, parts, ignoreIfExists = false)
+    checkEvents(
+      CreatePartitionsPreEvent(db, table, partSpecs) ::
+      CreatePartitionsEvent(db, table, partSpecs) :: Nil)
+
+    // Re-create with ignoreIfExists as true
+    catalog.createPartitions(db, table, parts, ignoreIfExists = true)
+    checkEvents(
+      CreatePartitionsPreEvent(db, table, partSpecs) ::
+      CreatePartitionsEvent(db, table, partSpecs) :: Nil)
+
+    // createPartitions() failed because re-creating with ignoreIfExists as false, so PreEvent only
+    intercept[AnalysisException] {
+      catalog.createPartitions(db, table, parts, ignoreIfExists = false)
+    }
+    checkEvents(CreatePartitionsPreEvent(db, table, partSpecs) :: Nil)
+
+    // ALTER
+    catalog.alterPartitions(db, table, parts)
+    checkEvents(
+      AlterPartitionsPreEvent(db, table, partSpecs) ::
+      AlterPartitionsEvent(db, table, partSpecs) ::
+      Nil)
+
+    // RENAME
+    catalog.renamePartitions(db, table, partSpecs, newPartSpecs)
+    checkEvents(
+      RenamePartitionsPreEvent(db, table, partSpecs, newPartSpecs) ::
+      RenamePartitionsEvent(db, table, partSpecs, newPartSpecs) :: Nil)
+
+    // renamePartitions() failed because partitions have been renamed according to newPartSpecs,
+    // so PreEvent only
+    intercept[AnalysisException] {
+      catalog.renamePartitions(db, table, partSpecs, newPartSpecs)
+    }
+    checkEvents(RenamePartitionsPreEvent(db, table, partSpecs, newPartSpecs) :: Nil)
+
+    // DROP
+    // dropPartitions() failed
+    // because partition of (old) partSpecs do not exist and ignoreIfNotExists is false,
+    // So PreEvent only
+    intercept[AnalysisException] {
+      catalog.dropPartitions(db, table, partSpecs,
+        ignoreIfNotExists = false, purge = true, retainData = true)
+    }
+    checkEvents(DropPartitionsPreEvent(db, table, partSpecs) :: Nil)
+
+    // Drop the renamed partitions
+    catalog.dropPartitions(db, table, newPartSpecs,
+      ignoreIfNotExists = false, purge = true, retainData = true)
+    checkEvents(
+      DropPartitionsPreEvent(db, table, newPartSpecs) ::
+      DropPartitionsEvent(db, table, newPartSpecs) :: Nil)
+
+    // Re-drop with ignoreIfNotExists being true
+    catalog.dropPartitions(db, table, newPartSpecs,
+      ignoreIfNotExists = true, purge = true, retainData = true)
+    checkEvents(
+      DropPartitionsPreEvent(db, table, newPartSpecs) ::
+      DropPartitionsEvent(db, table, newPartSpecs) :: Nil)
   }
 }

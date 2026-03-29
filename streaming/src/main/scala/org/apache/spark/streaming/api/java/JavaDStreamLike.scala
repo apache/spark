@@ -20,7 +20,7 @@ package org.apache.spark.streaming.api.java
 import java.{lang => jl}
 import java.util.{List => JList}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
@@ -32,6 +32,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.api.java.JavaDStream._
 import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * As a workaround for https://issues.scala-lang.org/browse/SI-8905, implementations
@@ -146,7 +147,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    * an array.
    */
   def glom(): JavaDStream[JList[T]] =
-    new JavaDStream(dstream.glom().map(_.toSeq.asJava))
+    new JavaDStream(dstream.glom().map(_.toImmutableArraySeq.asJava))
 
 
   /** Return the [[org.apache.spark.streaming.StreamingContext]] associated with this DStream */
@@ -268,7 +269,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
    */
-  def foreachRDD(foreachFunc: JVoidFunction[R]) {
+  def foreachRDD(foreachFunc: JVoidFunction[R]): Unit = {
     dstream.foreachRDD(rdd => foreachFunc.call(wrapRDD(rdd)))
   }
 
@@ -276,7 +277,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
    */
-  def foreachRDD(foreachFunc: JVoidFunction2[R, Time]) {
+  def foreachRDD(foreachFunc: JVoidFunction2[R, Time]): Unit = {
     dstream.foreachRDD((rdd, time) => foreachFunc.call(wrapRDD(rdd), time))
   }
 

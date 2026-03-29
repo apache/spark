@@ -2,6 +2,21 @@
 layout: global
 title: Feature Extraction and Transformation - RDD-based API
 displayTitle: Feature Extraction and Transformation - RDD-based API
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -52,29 +67,32 @@ We refer users to the [Stanford NLP Group](http://nlp.stanford.edu/) and
 [scalanlp/chalk](https://github.com/scalanlp/chalk).
 
 <div class="codetabs">
-<div data-lang="scala" markdown="1">
 
-TF and IDF are implemented in [HashingTF](api/scala/index.html#org.apache.spark.mllib.feature.HashingTF)
-and [IDF](api/scala/index.html#org.apache.spark.mllib.feature.IDF).
-`HashingTF` takes an `RDD[Iterable[_]]` as the input.
-Each record could be an iterable of strings or other types.
-
-Refer to the [`HashingTF` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.HashingTF) for details on the API.
-
-{% include_example scala/org/apache/spark/examples/mllib/TFIDFExample.scala %}
-</div>
 <div data-lang="python" markdown="1">
 
-TF and IDF are implemented in [HashingTF](api/python/pyspark.mllib.html#pyspark.mllib.feature.HashingTF)
-and [IDF](api/python/pyspark.mllib.html#pyspark.mllib.feature.IDF).
+TF and IDF are implemented in [HashingTF](api/python/reference/api/pyspark.mllib.feature.HashingTF.html)
+and [IDF](api/python/reference/api/pyspark.mllib.feature.IDF.html).
 `HashingTF` takes an RDD of list as the input.
 Each record could be an iterable of strings or other types.
 
 
-Refer to the [`HashingTF` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.HashingTF) for details on the API.
+Refer to the [`HashingTF` Python docs](api/python/reference/api/pyspark.mllib.feature.HashingTF.html) for details on the API.
 
 {% include_example python/mllib/tf_idf_example.py %}
 </div>
+
+<div data-lang="scala" markdown="1">
+
+TF and IDF are implemented in [HashingTF](api/scala/org/apache/spark/mllib/feature/HashingTF.html)
+and [IDF](api/scala/org/apache/spark/mllib/feature/IDF.html).
+`HashingTF` takes an `RDD[Iterable[_]]` as the input.
+Each record could be an iterable of strings or other types.
+
+Refer to the [`HashingTF` Scala docs](api/scala/org/apache/spark/mllib/feature/HashingTF.html) for details on the API.
+
+{% include_example scala/org/apache/spark/examples/mllib/TFIDFExample.scala %}
+</div>
+
 </div>
 
 ## Word2Vec 
@@ -119,16 +137,19 @@ the [text8](http://mattmahoney.net/dc/text8.zip) data and extract it to your pre
 Here we assume the extracted file is `text8` and in same directory as you run the spark shell.  
 
 <div class="codetabs">
-<div data-lang="scala" markdown="1">
-Refer to the [`Word2Vec` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.Word2Vec) for details on the API.
 
-{% include_example scala/org/apache/spark/examples/mllib/Word2VecExample.scala %}
-</div>
 <div data-lang="python" markdown="1">
-Refer to the [`Word2Vec` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.Word2Vec) for more details on the API.
+Refer to the [`Word2Vec` Python docs](api/python/reference/api/pyspark.mllib.feature.Word2Vec.html) for more details on the API.
 
 {% include_example python/mllib/word2vec_example.py %}
 </div>
+
+<div data-lang="scala" markdown="1">
+Refer to the [`Word2Vec` Scala docs](api/scala/org/apache/spark/mllib/feature/Word2Vec.html) for details on the API.
+
+{% include_example scala/org/apache/spark/examples/mllib/Word2VecExample.scala %}
+</div>
+
 </div>
 
 ## StandardScaler
@@ -144,19 +165,19 @@ against features with very large variances exerting an overly large influence du
 
 ### Model Fitting
 
-[`StandardScaler`](api/scala/index.html#org.apache.spark.mllib.feature.StandardScaler) has the
+[`StandardScaler`](api/scala/org/apache/spark/mllib/feature/StandardScaler.html) has the
 following parameters in the constructor:
 
 * `withMean` False by default. Centers the data with mean before scaling. It will build a dense
 output, so take care when applying to sparse input.
 * `withStd` True by default. Scales the data to unit standard deviation.
 
-We provide a [`fit`](api/scala/index.html#org.apache.spark.mllib.feature.StandardScaler) method in
+We provide a [`fit`](api/scala/org/apache/spark/mllib/feature/StandardScaler.html) method in
 `StandardScaler` which can take an input of `RDD[Vector]`, learn the summary statistics, and then
 return a model which can transform the input dataset into unit standard deviation and/or zero mean features
 depending how we configure the `StandardScaler`.
 
-This model implements [`VectorTransformer`](api/scala/index.html#org.apache.spark.mllib.feature.VectorTransformer)
+This model implements [`VectorTransformer`](api/scala/org/apache/spark/mllib/feature/VectorTransformer.html)
 which can apply the standardization on a `Vector` to produce a transformed `Vector` or on
 an `RDD[Vector]` to produce a transformed `RDD[Vector]`.
 
@@ -169,17 +190,19 @@ The example below demonstrates how to load a dataset in libsvm format, and stand
 so that the new features have unit standard deviation and/or zero mean.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+Refer to the [`StandardScaler` Python docs](api/python/reference/api/pyspark.mllib.feature.StandardScaler.html) for more details on the API.
+
+{% include_example python/mllib/standard_scaler_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
-Refer to the [`StandardScaler` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.StandardScaler) for details on the API.
+Refer to the [`StandardScaler` Scala docs](api/scala/org/apache/spark/mllib/feature/StandardScaler.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/StandardScalerExample.scala %}
 </div>
 
-<div data-lang="python" markdown="1">
-Refer to the [`StandardScaler` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.StandardScaler) for more details on the API.
-
-{% include_example python/mllib/standard_scaler_example.py %}
-</div>
 </div>
 
 ## Normalizer
@@ -188,12 +211,12 @@ Normalizer scales individual samples to have unit $L^p$ norm. This is a common o
 classification or clustering. For example, the dot product of two $L^2$ normalized TF-IDF vectors
 is the cosine similarity of the vectors.
 
-[`Normalizer`](api/scala/index.html#org.apache.spark.mllib.feature.Normalizer) has the following
+[`Normalizer`](api/scala/org/apache/spark/mllib/feature/Normalizer.html) has the following
 parameter in the constructor:
 
 * `p` Normalization in $L^p$ space, $p = 2$ by default.
 
-`Normalizer` implements [`VectorTransformer`](api/scala/index.html#org.apache.spark.mllib.feature.VectorTransformer)
+`Normalizer` implements [`VectorTransformer`](api/scala/org/apache/spark/mllib/feature/VectorTransformer.html)
 which can apply the normalization on a `Vector` to produce a transformed `Vector` or on
 an `RDD[Vector]` to produce a transformed `RDD[Vector]`.
 
@@ -205,17 +228,19 @@ The example below demonstrates how to load a dataset in libsvm format, and norma
 with $L^2$ norm, and $L^\infty$ norm.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+Refer to the [`Normalizer` Python docs](api/python/reference/api/pyspark.mllib.feature.Normalizer.html) for more details on the API.
+
+{% include_example python/mllib/normalizer_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
-Refer to the [`Normalizer` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.Normalizer) for details on the API.
+Refer to the [`Normalizer` Scala docs](api/scala/org/apache/spark/mllib/feature/Normalizer.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/NormalizerExample.scala %}
 </div>
 
-<div data-lang="python" markdown="1">
-Refer to the [`Normalizer` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.Normalizer) for more details on the API.
-
-{% include_example python/mllib/normalizer_example.py %}
-</div>
 </div>
 
 ## ChiSqSelector
@@ -224,7 +249,7 @@ Refer to the [`Normalizer` Python docs](api/python/pyspark.mllib.html#pyspark.ml
 features for use in model construction. It reduces the size of the feature space, which can improve
 both speed and statistical learning behavior.
 
-[`ChiSqSelector`](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector) implements
+[`ChiSqSelector`](api/scala/org/apache/spark/mllib/feature/ChiSqSelector.html) implements
 Chi-Squared feature selection. It operates on labeled data with categorical features. ChiSqSelector uses the
 [Chi-Squared test of independence](https://en.wikipedia.org/wiki/Chi-squared_test) to decide which
 features to choose. It supports five selection methods: `numTopFeatures`, `percentile`, `fpr`, `fdr`, `fwe`:
@@ -242,7 +267,7 @@ The number of features to select can be tuned using a held-out validation set.
 
 ### Model Fitting
 
-The [`fit`](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector) method takes
+The [`fit`](api/scala/org/apache/spark/mllib/feature/ChiSqSelector.html) method takes
 an input of `RDD[LabeledPoint]` with categorical features, learns the summary statistics, and then
 returns a `ChiSqSelectorModel` which can transform an input dataset into the reduced feature space.
 The `ChiSqSelectorModel` can be applied either to a `Vector` to produce a reduced `Vector`, or to
@@ -257,7 +282,7 @@ The following example shows the basic use of ChiSqSelector. The data set used ha
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [`ChiSqSelector` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector)
+Refer to the [`ChiSqSelector` Scala docs](api/scala/org/apache/spark/mllib/feature/ChiSqSelector.html)
 for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/ChiSqSelectorExample.scala %}
@@ -297,20 +322,27 @@ v_N
   \end{pmatrix}
 \]`
 
-[`ElementwiseProduct`](api/scala/index.html#org.apache.spark.mllib.feature.ElementwiseProduct) has the following parameter in the constructor:
+[`ElementwiseProduct`](api/scala/org/apache/spark/mllib/feature/ElementwiseProduct.html) has the following parameter in the constructor:
 
 * `scalingVec`: the transforming vector.
 
-`ElementwiseProduct` implements [`VectorTransformer`](api/scala/index.html#org.apache.spark.mllib.feature.VectorTransformer) which can apply the weighting on a `Vector` to produce a transformed `Vector` or on an `RDD[Vector]` to produce a transformed `RDD[Vector]`.
+`ElementwiseProduct` implements [`VectorTransformer`](api/scala/org/apache/spark/mllib/feature/VectorTransformer.html) which can apply the weighting on a `Vector` to produce a transformed `Vector` or on an `RDD[Vector]` to produce a transformed `RDD[Vector]`.
 
 ### Example
 
 This example below demonstrates how to transform vectors using a transforming vector value.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+Refer to the [`ElementwiseProduct` Python docs](api/python/reference/api/pyspark.mllib.feature.ElementwiseProduct.html) for more details on the API.
+
+{% include_example python/mllib/elementwise_product_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
-Refer to the [`ElementwiseProduct` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.ElementwiseProduct) for details on the API.
+Refer to the [`ElementwiseProduct` Scala docs](api/scala/org/apache/spark/mllib/feature/ElementwiseProduct.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/ElementwiseProductExample.scala %}
 </div>
@@ -321,11 +353,6 @@ Refer to the [`ElementwiseProduct` Java docs](api/java/org/apache/spark/mllib/fe
 {% include_example java/org/apache/spark/examples/mllib/JavaElementwiseProductExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-Refer to the [`ElementwiseProduct` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.ElementwiseProduct) for more details on the API.
-
-{% include_example python/mllib/elementwise_product_example.py %}
-</div>
 </div>
 
 
@@ -333,17 +360,3 @@ Refer to the [`ElementwiseProduct` Python docs](api/python/pyspark.mllib.html#py
 
 A feature transformer that projects vectors to a low-dimensional space using PCA.
 Details you can read at [dimensionality reduction](mllib-dimensionality-reduction.html).
-
-### Example
-
-The following code demonstrates how to compute principal components on a `Vector`
-and use them to project the vectors into a low-dimensional space while keeping associated labels
-for calculation a [Linear Regression](mllib-linear-methods.html)
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-Refer to the [`PCA` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.PCA) for details on the API.
-
-{% include_example scala/org/apache/spark/examples/mllib/PCAExample.scala %}
-</div>
-</div>

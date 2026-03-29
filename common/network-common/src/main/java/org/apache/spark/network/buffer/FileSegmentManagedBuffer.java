@@ -26,9 +26,8 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.StandardOpenOption;
 
-import com.google.common.base.Objects;
-import com.google.common.io.ByteStreams;
 import io.netty.channel.DefaultFileRegion;
+import io.netty.handler.stream.ChunkedStream;
 
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.LimitedInputStream;
@@ -98,7 +97,7 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
     boolean shouldClose = true;
     try {
       is = new FileInputStream(file);
-      ByteStreams.skipFully(is, offset);
+      is.skipNBytes(offset);
       InputStream r = new LimitedInputStream(is, length);
       shouldClose = false;
       return r;
@@ -136,6 +135,12 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
     }
   }
 
+  @Override
+  public Object convertToNettyForSsl() throws IOException {
+    // Cannot use zero-copy with HTTPS
+    return new ChunkedStream(createInputStream(), conf.sslShuffleChunkSize());
+  }
+
   public File getFile() { return file; }
 
   public long getOffset() { return offset; }
@@ -144,10 +149,7 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("file", file)
-      .add("offset", offset)
-      .add("length", length)
-      .toString();
+    return "FileSegmentManagedBuffer[file=" + file + ",offset=" + offset +
+        ",length=" + length + "]";
   }
 }

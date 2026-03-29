@@ -20,13 +20,14 @@ package org.apache.spark.sql.execution.streaming
 import java.io._
 import java.nio.charset.StandardCharsets._
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.execution.streaming.runtime.CompactibleFileStreamLog
+import org.apache.spark.sql.test.SharedSparkSession
 
-class CompactibleFileStreamLogSuite extends SparkFunSuite with SharedSQLContext {
+class CompactibleFileStreamLogSuite extends SharedSparkSession {
 
-  import CompactibleFileStreamLog._
+  import org.apache.spark.sql.execution.streaming.runtime.CompactibleFileStreamLog._
 
   /** -- testing of `object CompactibleFileStreamLog` begins -- */
 
@@ -232,6 +233,80 @@ class CompactibleFileStreamLogSuite extends SparkFunSuite with SharedSQLContext 
       })
   }
 
+  test("prevent removing metadata files via method purge") {
+    withFakeCompactibleFileStreamLog(
+      fileCleanupDelayMs = 10000,
+      defaultCompactInterval = 2,
+      defaultMinBatchesToRetain = 3,
+      compactibleLog => {
+        // compaction batches: 1
+        compactibleLog.add(0, Array("some_path_0"))
+        compactibleLog.add(1, Array("some_path_1"))
+        compactibleLog.add(2, Array("some_path_2"))
+
+        checkError(
+          exception = intercept[SparkUnsupportedOperationException] {
+            compactibleLog.purge(2)
+          },
+          condition = "_LEGACY_ERROR_TEMP_2260",
+          parameters = Map.empty)
+
+        // Below line would fail with IllegalStateException if we don't prevent purge:
+        // - purge(2) would delete batch 0 and 1 which batch 1 is compaction batch
+        // - allFiles() would read batch 1 (latest compaction) and 2 which batch 1 is deleted
+        compactibleLog.allFiles()
+      })
+  }
+
+  test("allFiles retries when compaction deletes batch files during read") {
+    withTempDir { dir =>
+      // Override getLatestBatchId() so the first call returns a stale value (4),
+      // simulating the reader listing the directory before compaction batch 5 is visible.
+      // The retry in allFiles() calls super.getLatestBatchId() (statically bound to
+      // HDFSMetadataLog), which bypasses this override and reads the real filesystem.
+      @volatile var staleLatestId: Option[Long] = None
+      val compactibleLog = new FakeCompactibleFileStreamLog(
+        FakeCompactibleFileStreamLog.VERSION,
+        _fileCleanupDelayMs = Long.MaxValue,
+        _defaultCompactInterval = 3,
+        _defaultMinBatchesToRetain = 1,
+        spark,
+        dir.getCanonicalPath) {
+        override def getLatestBatchId(): Option[Long] = {
+          staleLatestId match {
+            case some @ Some(_) =>
+              staleLatestId = None
+              some
+            case None =>
+              super.getLatestBatchId()
+          }
+        }
+      }
+
+      val fs = compactibleLog.metadataPath.getFileSystem(spark.sessionState.newHadoopConf())
+
+      for (batchId <- 0 to 5) {
+        compactibleLog.add(batchId, Array("path_" + batchId))
+      }
+
+      // Delete old files as if a concurrent writer's deleteExpiredLog removed them
+      // after writing compaction batch 5.
+      fs.delete(compactibleLog.batchIdToPath(2), false)
+      fs.delete(compactibleLog.batchIdToPath(3), false)
+      fs.delete(compactibleLog.batchIdToPath(4), false)
+
+      // Inject stale latestId=4 right before calling allFiles().
+      // First iteration: getLatestBatchId() returns 4 (stale).
+      //   getAllValidBatches(4, 3) = [2, 3, 4]. Batch 2 is deleted -> FileNotFoundException.
+      //   Retry: super.getLatestBatchId() reads filesystem -> returns 5.
+      //   nextCompactionBatchId(4, 3) = 5, and 5 >= 5, so retry proceeds.
+      // Second iteration: getAllValidBatches(5, 3) = [5]. Reads 5.compact -> success.
+      staleLatestId = Some(4L)
+      val result = compactibleLog.allFiles()
+      assert(result === (0 to 5).map("path_" + _))
+    }
+  }
+
   private def withFakeCompactibleFileStreamLog(
     fileCleanupDelayMs: Long,
     defaultCompactInterval: Int,
@@ -275,6 +350,4 @@ class FakeCompactibleFileStreamLog(
   override protected def defaultCompactInterval: Int = _defaultCompactInterval
 
   override protected val minBatchesToRetain: Int = _defaultMinBatchesToRetain
-
-  override def compactLogs(logs: Seq[String]): Seq[String] = logs
 }

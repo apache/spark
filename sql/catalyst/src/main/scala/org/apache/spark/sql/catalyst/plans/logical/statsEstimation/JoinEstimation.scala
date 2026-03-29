@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, ExpressionSet}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, Join, Statistics}
@@ -56,10 +56,13 @@ case class JoinEstimation(join: Join) extends Logging {
     case _ if !rowCountsExist(join.left, join.right) =>
       None
 
-    case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, _) =>
+    case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _) =>
       // 1. Compute join selectivity
       val joinKeyPairs = extractJoinKeysWithColStats(leftKeys, rightKeys)
-      val (numInnerJoinedRows, keyStatsAfterJoin) = computeCardinalityAndStats(joinKeyPairs)
+      val leftSideUniqueness = left.distinctKeys.exists(_.subsetOf(ExpressionSet(leftKeys)))
+      val rightSideUniqueness = right.distinctKeys.exists(_.subsetOf(ExpressionSet(rightKeys)))
+      val (numInnerJoinedRows, keyStatsAfterJoin) =
+        computeCardinalityAndStats(joinKeyPairs, leftSideUniqueness, rightSideUniqueness)
 
       // 2. Estimate the number of output rows
       val leftRows = leftStats.rowCount.get
@@ -83,8 +86,7 @@ case class JoinEstimation(join: Join) extends Logging {
       }
 
       // 3. Update statistics based on the output of join
-      val inputAttrStats = AttributeMap(
-        leftStats.attributeStats.toSeq ++ rightStats.attributeStats.toSeq)
+      val inputAttrStats = leftStats.attributeStats ++ rightStats.attributeStats
       val attributesWithStat = join.output.filter(a =>
         inputAttrStats.get(a).map(_.hasCountStats).getOrElse(false))
       val (fromLeft, fromRight) = attributesWithStat.partition(join.left.outputSet.contains(_))
@@ -145,8 +147,7 @@ case class JoinEstimation(join: Join) extends Logging {
 
     case _ =>
       // When there is no equi-join condition, we do estimation like cartesian product.
-      val inputAttrStats = AttributeMap(
-        leftStats.attributeStats.toSeq ++ rightStats.attributeStats.toSeq)
+      val inputAttrStats = leftStats.attributeStats ++ rightStats.attributeStats
       // Propagate the original column stats
       val outputRows = leftStats.rowCount.get * rightStats.rowCount.get
       Some(Statistics(
@@ -177,13 +178,20 @@ case class JoinEstimation(join: Join) extends Logging {
    * @return join cardinality, and column stats for join keys after the join
    */
   // scalastyle:on
-  private def computeCardinalityAndStats(keyPairs: Seq[(AttributeReference, AttributeReference)])
-    : (BigInt, AttributeMap[ColumnStat]) = {
+  private def computeCardinalityAndStats(
+      keyPairs: Seq[(AttributeReference, AttributeReference)],
+      leftSideUniqueness: Boolean,
+      rightSideUniqueness: Boolean): (BigInt, AttributeMap[ColumnStat]) = {
     // If there's no column stats available for join keys, estimate as cartesian product.
-    var joinCard: BigInt = leftStats.rowCount.get * rightStats.rowCount.get
+    var joinCard: BigInt = (leftSideUniqueness, rightSideUniqueness) match {
+      case (true, true) => leftStats.rowCount.get.min(rightStats.rowCount.get)
+      case (true, false) => rightStats.rowCount.get
+      case (false, true) => leftStats.rowCount.get
+      case _ => leftStats.rowCount.get * rightStats.rowCount.get
+    }
     val keyStatsAfterJoin = new mutable.HashMap[Attribute, ColumnStat]()
     var i = 0
-    while(i < keyPairs.length && joinCard != 0) {
+    while (i < keyPairs.length && joinCard != 0) {
       val (leftKey, rightKey) = keyPairs(i)
       // Check if the two sides are disjoint
       val leftKeyStat = leftStats.attributeStats(leftKey)
@@ -198,13 +206,12 @@ case class JoinEstimation(join: Join) extends Logging {
           case _ =>
             computeByNdv(leftKey, rightKey, newMin, newMax)
         }
-        keyStatsAfterJoin += (
+        keyStatsAfterJoin +=
           // Histograms are propagated as unchanged. During future estimation, they should be
           // truncated by the updated max/min. In this way, only pointers of the histograms are
           // propagated and thus reduce memory consumption.
-          leftKey -> joinStat.copy(histogram = leftKeyStat.histogram),
-          rightKey -> joinStat.copy(histogram = rightKeyStat.histogram)
-        )
+          (leftKey -> joinStat.copy(histogram = leftKeyStat.histogram)) +=
+            (rightKey -> joinStat.copy(histogram = rightKeyStat.histogram))
         // Return cardinality estimated from the most selective join keys.
         if (card < joinCard) joinCard = card
       } else {
@@ -213,7 +220,7 @@ case class JoinEstimation(join: Join) extends Logging {
       }
       i += 1
     }
-    (joinCard, AttributeMap(keyStatsAfterJoin.toSeq))
+    (joinCard, AttributeMap(keyStatsAfterJoin))
   }
 
   /** Returns join cardinality and the column stat for this pair of join keys. */
@@ -308,22 +315,17 @@ case class JoinEstimation(join: Join) extends Logging {
         outputAttrStats += a -> keyStatsAfterJoin(a)
       } else {
         val oldColStat = oldAttrStats(a)
-        val oldNdv = oldColStat.distinctCount
-        val newNdv = if (oldNdv.isDefined) {
-          Some(if (join.left.outputSet.contains(a)) {
-            updateNdv(oldNumRows = leftRows, newNumRows = outputRows, oldNdv = oldNdv.get)
-          } else {
-            updateNdv(oldNumRows = rightRows, newNumRows = outputRows, oldNdv = oldNdv.get)
-          })
+        val oldNumRows = if (join.left.outputSet.contains(a)) {
+          leftRows
         } else {
-          None
+          rightRows
         }
-        val newColStat = oldColStat.copy(distinctCount = newNdv)
+        val newColStat = oldColStat.updateCountStats(oldNumRows, outputRows)
         // TODO: support nullCount updates for specific outer joins
         outputAttrStats += a -> newColStat
       }
     }
-    outputAttrStats
+    outputAttrStats.toSeq
   }
 
   private def extractJoinKeysWithColStats(

@@ -321,7 +321,7 @@ class TrainValidationSplitSuite
   }
 }
 
-object TrainValidationSplitSuite extends SparkFunSuite{
+object TrainValidationSplitSuite extends SparkFunSuite {
 
   abstract class MyModel extends Model[MyModel]
 

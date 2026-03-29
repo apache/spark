@@ -1,0 +1,338 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.catalyst.analysis.resolver
+
+import java.util.HashSet
+
+import org.apache.spark.sql.catalyst.analysis.{
+  AnalysisErrorAt,
+  UnresolvedAttribute,
+  UnresolvedOrdinal
+}
+import org.apache.spark.sql.catalyst.expressions.{
+  Alias,
+  AliasHelper,
+  AttributeReference,
+  Expression,
+  ExprId,
+  IntegerLiteral,
+  Literal
+}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
+
+/**
+ * Resolves an [[Aggregate]] by resolving its child, aggregate expressions and grouping
+ * expressions. Updates the [[NameScopeStack]] with its output and performs validation
+ * related to [[Aggregate]] resolution.
+ */
+class AggregateResolver(
+    operatorResolver: Resolver,
+    expressionResolver: ExpressionResolver)
+    extends TreeNodeResolver[Aggregate, LogicalPlan]
+    with AliasHelper
+    with RetainsOriginalJoinOutput {
+  private val scopes = operatorResolver.getNameScopes
+  private val cteRegistry = operatorResolver.getCteRegistry
+  private val operatorResolutionContextStack = operatorResolver.getOperatorResolutionContextStack
+  private val lcaResolver = expressionResolver.getLcaResolver
+  private val ordinalResolver = expressionResolver.getOrdinalResolver
+
+  /**
+   * Resolve [[Aggregate]] operator.
+   *
+   * 1. Push [[WindowResolutionContext]] for potential window resolution.
+   * 2. Resolve the child (inline table).
+   * 3. Clear [[NameScope.availableAliases]]. Those are only relevant for the immediate aggregate
+   *    expressions for output prioritization to work correctly in
+   *    [[NameScope.tryResolveMultipartNameByOutput]].
+   * 4. Resolve aggregate expressions using [[ExpressionResolver.resolveAggregateExpressions]] and
+   *    set [[OperatorResolutionContextStack.ordinalReplacementExpressions]] for grouping
+   *    expressions resolution.
+   * 5. If there's just one [[UnresolvedAttribute]] with a single-part name "ALL", expand it using
+   *    aggregate expressions which don't contain aggregate functions. There should not exist a
+   *    column with that name in the lower operator's output, otherwise it takes precedence.
+   * 6. Resolve grouping expressions using [[ExpressionResolver.resolveGroupingExpressions]]. This
+   *    includes alias references to aggregate expressions, which is done in
+   *    [[NameScope.resolveMultipartName]] and replacing [[UnresolvedOrdinals]] with corresponding
+   *    expressions from aggregate list, done in [[OrdinalResolver]].
+   * 7. Remove all the unnecessary [[Alias]]es from the grouping (all the aliases) and aggregate
+   *    (keep the outermost one) expressions. This is needed to stay compatible with the
+   *    fixed-point implementation. For example:
+   *
+   *    {{{ SELECT timestamp(col1:str) FROM VALUES('a') GROUP BY timestamp(col1:str); }}}
+   *
+   *    Here we end up having inner [[Alias]]es in both the grouping and aggregate expressions
+   *    lists which are uncomparable because they have different expression IDs (thus we have to
+   *    strip them).
+   *
+   * If the resulting [[Aggregate]] contains lateral columns references, delegate the resolution of
+   * these columns to [[LateralColumnAliasResolver.handleLcaInAggregate]]. Otherwise, validate the
+   * [[Aggregate]] using the [[AggregationValidator]], update the `scopes` with the output of
+   * [[Aggregate]] and return the result.
+   *
+   * Recursive CTE self-references are disallowed in aggregates per the SQL standard, as aggregates
+   * must see a fixed input set before computing aggregated results.
+   */
+  def resolve(unresolvedAggregate: Aggregate): LogicalPlan = {
+    scopes.pushScope()
+
+    val resolvedAggregate = try {
+      val resolvedChild = operatorResolver.resolve(unresolvedAggregate.child)
+      val childReferencedAttributes = expressionResolver.getLastReferencedAttributes
+
+      scopes.current.clearAvailableAliases()
+
+      val resolvedAggregateExpressions = expressionResolver.resolveAggregateExpressions(
+        unresolvedAggregate.aggregateExpressions,
+        unresolvedAggregate
+      )
+
+      val resolvedChildWithMetadataColumns = retainOriginalJoinOutput(
+        plan = resolvedChild,
+        outputExpressions = resolvedAggregateExpressions.expressions,
+        scopes = scopes,
+        childReferencedAttributes = childReferencedAttributes
+      )
+
+      operatorResolutionContextStack.current.ordinalReplacementExpressions = Some(
+        OrdinalReplacementGroupingExpressions(
+          expressions = resolvedAggregateExpressions.expressions.toIndexedSeq,
+          hasStar = resolvedAggregateExpressions.hasStar,
+          expressionIndicesWithAggregateFunctions =
+            resolvedAggregateExpressions.expressionIndicesWithAggregateFunctions
+        )
+      )
+
+      val resolvedGroupingExpressions =
+        if (canGroupByAll(unresolvedAggregate.groupingExpressions)) {
+          tryResolveGroupByAll(
+            resolvedAggregateExpressions,
+            unresolvedAggregate
+          )
+        } else {
+          val resolvedGroupingExpressions = expressionResolver.resolveGroupingExpressions(
+            unresolvedAggregate.groupingExpressions,
+            unresolvedAggregate
+          )
+
+          resolvedGroupingExpressions
+        }
+
+      val resolvedGroupingExpressionsWithoutAliases = resolvedGroupingExpressions.map(trimAliases)
+      val resolvedAggregateExpressionsWithoutAliases =
+        resolvedAggregateExpressions.expressions.map(trimNonTopLevelAliases)
+
+      val finalAggregate = unresolvedAggregate.copy(
+        groupingExpressions = resolvedGroupingExpressionsWithoutAliases,
+        aggregateExpressions = resolvedAggregateExpressionsWithoutAliases,
+        child = resolvedChildWithMetadataColumns
+      )
+
+      if (resolvedAggregateExpressions.hasLateralColumnAlias) {
+        val aggregateWithLcaResolutionResult =
+          lcaResolver.handleLcaInAggregate(finalAggregate)
+        AggregateResolutionResult(
+          operator = aggregateWithLcaResolutionResult.resolvedOperator,
+          outputList = aggregateWithLcaResolutionResult.outputList,
+          groupingAttributeIds =
+            getGroupingAttributeIds(aggregateWithLcaResolutionResult.baseAggregate),
+          aggregateListAliases = aggregateWithLcaResolutionResult.aggregateListAliases,
+          baseAggregate = aggregateWithLcaResolutionResult.baseAggregate
+        )
+      } else {
+        AggregationValidator(finalAggregate)
+
+        AggregateResolutionResult(
+          operator = finalAggregate,
+          outputList = finalAggregate.aggregateExpressions,
+          groupingAttributeIds = getGroupingAttributeIds(finalAggregate),
+          aggregateListAliases = scopes.current.getTopAggregateExpressionAliases,
+          baseAggregate = finalAggregate
+        )
+      }
+    } finally {
+      scopes.popScope()
+    }
+
+    scopes.overwriteOutputAndExtendHiddenOutput(
+      output = resolvedAggregate.outputList.map(_.toAttribute),
+      groupingAttributeIds = Some(resolvedAggregate.groupingAttributeIds),
+      aggregateListAliases = resolvedAggregate.aggregateListAliases,
+      baseAggregate = Some(resolvedAggregate.baseAggregate)
+    )
+
+    resolvedAggregate.operator
+  }
+
+  /**
+   * Resolve `GROUP BY ALL`.
+   *
+   * Examples below show which queries should be resolved with `tryResolveGroupByAll` and which
+   * should be resolved generically (using the [[ExpressionResolver.resolveGroupingExpressions]]):
+   *
+   * Example 1:
+   *
+   * {{{
+   * -- Table `table_1` has a column `all`.
+   * SELECT * from table_1 GROUP BY all;
+   * }}}
+   * this one should be grouped by the column `all`.
+   *
+   * Example 2:
+   *
+   * {{{
+   * -- Table `table_2` doesn't have a column `all`.
+   * SELECT * from table_2 GROUP BY all;
+   * }}}
+   * this one should be grouped by all the columns from `table_1`.
+   *
+   * Example 3:
+   *
+   * {{{
+   * -- Table `table_3` doesn't have a column `all` and there other grouping expressions.
+   * SELECT * from table_3 GROUP BY all, column;
+   * }}}
+   * this one should be grouped by column `all` which doesn't exist so `UNRESOLVED_COLUMN`
+   * exception is thrown.
+   *
+   * Example 4:
+   *
+   * {{{ SELECT col1, col2 + 1, COUNT(col1 + 1) FROM VALUES(1, 2) GROUP BY ALL; }}}
+   * this one should be grouped by keyword `ALL`. It means that the grouping expressions list is
+   * going to contain all the aggregate expressions that don't have aggregate expressions in their
+   * subtrees. The grouping expressions list will be [col1, col2 + 1], and COUNT(col1 + 1) won't be
+   * included, being an [[AggregateExpression]].
+   *
+   * Example 5:
+   *
+   * {{{ SELECT col1 AS b, sum(col2) + col1 FROM VALUES (1, 2) GROUP BY ALL; }}}
+   * this one should be grouped by keyword `ALL`. It means that the grouping expressions list is
+   * going to contain all the aggregate expressions that don't have aggregate expressions in their
+   * subtrees. The grouping expressions list will be [col1 AS `col1`].
+   * All the [[Alias]]es should be stripped in order to pass logical plan comparison and to prevent
+   * unintentional exceptions from being thrown by [[AggregationValidator]], so the final grouping
+   * expressions list will be [col1].
+   */
+  private def tryResolveGroupByAll(
+      aggregateExpressions: ResolvedAggregateExpressions,
+      aggregate: Aggregate): Seq[Expression] = {
+    if (aggregateExpressions.resolvedExpressionsWithoutAggregates.isEmpty &&
+      aggregateExpressions.hasAttributeOutsideOfAggregateExpressions) {
+      aggregate.failAnalysis(
+        errorClass = "UNRESOLVED_ALL_IN_GROUP_BY",
+        messageParameters = Map.empty
+      )
+    }
+
+    val resolvedExpressionsWithStrippedAliases =
+      aggregateExpressions.resolvedExpressionsWithoutAggregates.map {
+        case alias: Alias =>
+          alias.child
+        case other => other
+      }
+
+    resolvedExpressionsWithStrippedAliases
+  }
+
+  private def canGroupByAll(expressions: Seq[Expression]): Boolean = {
+    val isOrderByAll = expressions match {
+      case Seq(unresolvedAttribute: UnresolvedAttribute) =>
+        unresolvedAttribute.equalsIgnoreCase("ALL")
+      case _ => false
+    }
+    isOrderByAll && scopes.current
+      .resolveMultipartName(
+        Seq("ALL"),
+        NameResolutionParameters(canReferenceAggregateExpressionAliases = true)
+      )
+      .candidates
+      .isEmpty
+  }
+
+  /**
+   * Replaces the integer ordinal with the actual expression from the current scope output using
+   * [[OrdinalResolver]].
+   *
+   * We need to check that resolved grouping expressions originate from unresolved grouping
+   * expressions which are both literals, because resolved grouping expressions may contain
+   * integers expanded using "group by alias":
+   *
+   * {{{
+   * -- Resolution of grouping expressions produces literal `10`
+   * SELECT 10 AS a FROM VALUES(1) GROUP BY a;
+   * }}}
+   *
+   * This logic is only relevant for the legacy ordinal replacement behavior.
+   */
+  private def legacyReplaceOrdinalsInGroupingExpressions(
+      unresolvedGroupingExpressions: Seq[Expression],
+      resolvedGroupingExpressions: Seq[Expression]): Seq[Expression] = {
+    if (!conf.groupByOrdinal) {
+      resolvedGroupingExpressions
+    } else {
+      unresolvedGroupingExpressions.zip(resolvedGroupingExpressions).map {
+        case (unresolvedGroupingExpression: Literal, resolvedGroupingExpression: Literal) =>
+          TryExtractOrdinal(resolvedGroupingExpression) match {
+            case Some(ordinal) =>
+              val replacedExpression = ordinalResolver.resolve(ordinal)
+              tryHackIntegerLiteralToStopBeingReplacedAsOrdinal(
+                expression = replacedExpression,
+                ordinal = ordinal
+              )
+            case None =>
+              resolvedGroupingExpression
+          }
+        case (_, resolvedGroupingExpression) =>
+          resolvedGroupingExpression
+      }
+    }
+  }
+
+  /**
+   * If the expanded grouping expression is an integer literal, don't use it but use an integer
+   * literal of the index. The reason is we may repeatedly analyze the plan, and the original
+   * integer literal may cause failures and correctness issues with a later GROUP BY ordinal
+   * resolution. GROUP BY constant is meaningless so whatever value does not matter here. This is
+   * a hack to stay compatible with the fixed-point Analyzer.
+   *
+   * This logic is only relevant for the legacy ordinal replacement behavior.
+   */
+  private def tryHackIntegerLiteralToStopBeingReplacedAsOrdinal(
+      expression: Expression,
+      ordinal: UnresolvedOrdinal): Expression = {
+    expression match {
+      case IntegerLiteral(_) =>
+        Literal(ordinal.ordinal)
+      case _ =>
+        expression
+    }
+  }
+
+  private def getGroupingAttributeIds(aggregate: Aggregate): HashSet[ExprId] = {
+    val groupingAttributeIds = new HashSet[ExprId](aggregate.groupingExpressions.size)
+    aggregate.groupingExpressions.foreach { rootExpression =>
+      rootExpression.foreach {
+        case attribute: AttributeReference =>
+          groupingAttributeIds.add(attribute.exprId)
+        case _ =>
+      }
+    }
+
+    groupingAttributeIds
+  }
+}

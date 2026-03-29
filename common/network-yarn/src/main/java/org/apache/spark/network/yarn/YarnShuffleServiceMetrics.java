@@ -26,15 +26,17 @@ import org.apache.hadoop.metrics2.MetricsRecordBuilder;
 import org.apache.hadoop.metrics2.MetricsSource;
 
 /**
- * Forward {@link org.apache.spark.network.shuffle.ExternalShuffleBlockHandler.ShuffleMetrics}
+ * Forward {@link org.apache.spark.network.shuffle.ExternalBlockHandler.ShuffleMetrics}
  * to hadoop metrics system.
  * NodeManager by default exposes JMX endpoint where can be collected.
  */
 class YarnShuffleServiceMetrics implements MetricsSource {
 
+  private final String metricsNamespace;
   private final MetricSet metricSet;
 
-  YarnShuffleServiceMetrics(MetricSet metricSet) {
+  YarnShuffleServiceMetrics(String metricsNamespace, MetricSet metricSet) {
+    this.metricsNamespace = metricsNamespace;
     this.metricSet = metricSet;
   }
 
@@ -46,7 +48,7 @@ class YarnShuffleServiceMetrics implements MetricsSource {
    */
   @Override
   public void getMetrics(MetricsCollector collector, boolean all) {
-    MetricsRecordBuilder metricsRecordBuilder = collector.addRecord("sparkShuffleService");
+    MetricsRecordBuilder metricsRecordBuilder = collector.addRecord(metricsNamespace);
 
     for (Map.Entry<String, Metric> entry : metricSet.getMetrics().entrySet()) {
       collectMetric(metricsRecordBuilder, entry.getKey(), entry.getValue());
@@ -55,14 +57,16 @@ class YarnShuffleServiceMetrics implements MetricsSource {
 
   /**
    * The metric types used in
-   * {@link org.apache.spark.network.shuffle.ExternalShuffleBlockHandler.ShuffleMetrics}.
+   * {@link org.apache.spark.network.shuffle.ExternalBlockHandler.ShuffleMetrics}.
    * Visible for testing.
    */
   public static void collectMetric(
     MetricsRecordBuilder metricsRecordBuilder, String name, Metric metric) {
 
-    if (metric instanceof Timer) {
-      Timer t = (Timer) metric;
+    if (metric instanceof Timer t) {
+      // Timer records both the operations count and delay
+      // Snapshot inside the Timer provides the information for the operation delay
+      Snapshot snapshot = t.getSnapshot();
       metricsRecordBuilder
         .addCounter(new ShuffleServiceMetricsInfo(name + "_count", "Count of timer " + name),
           t.getCount())
@@ -76,9 +80,26 @@ class YarnShuffleServiceMetrics implements MetricsSource {
           new ShuffleServiceMetricsInfo(name + "_rate1", "1 minute rate of timer " + name),
           t.getOneMinuteRate())
         .addGauge(new ShuffleServiceMetricsInfo(name + "_rateMean", "Mean rate of timer " + name),
-          t.getMeanRate());
-    } else if (metric instanceof Meter) {
-      Meter m = (Meter) metric;
+          t.getMeanRate())
+        .addGauge(
+          getShuffleServiceMetricsInfoForGenericValue(name, "max"), snapshot.getMax())
+        .addGauge(
+          getShuffleServiceMetricsInfoForGenericValue(name, "min"), snapshot.getMin())
+        .addGauge(
+          getShuffleServiceMetricsInfoForGenericValue(name, "mean"), snapshot.getMean())
+        .addGauge(
+          getShuffleServiceMetricsInfoForGenericValue(name, "stdDev"), snapshot.getStdDev());
+      for (int percentileThousands : new int[] { 10, 50, 250, 500, 750, 950, 980, 990, 999 }) {
+        String percentileStr = switch (percentileThousands) {
+          case 10 -> "1stPercentile";
+          case 999 -> "999thPercentile";
+          default -> String.format("%dthPercentile", percentileThousands / 10);
+        };
+        metricsRecordBuilder.addGauge(
+          getShuffleServiceMetricsInfoForGenericValue(name, percentileStr),
+          snapshot.getValue(percentileThousands / 1000.0));
+      }
+    } else if (metric instanceof Meter m) {
       metricsRecordBuilder
         .addCounter(new ShuffleServiceMetricsInfo(name + "_count", "Count of meter " + name),
           m.getCount())
@@ -93,45 +114,41 @@ class YarnShuffleServiceMetrics implements MetricsSource {
           m.getOneMinuteRate())
         .addGauge(new ShuffleServiceMetricsInfo(name + "_rateMean", "Mean rate of meter " + name),
           m.getMeanRate());
-    } else if (metric instanceof Gauge) {
-      final Object gaugeValue = ((Gauge) metric).getValue();
-      if (gaugeValue instanceof Integer) {
-        metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfo(name), (Integer) gaugeValue);
-      } else if (gaugeValue instanceof Long) {
-        metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfo(name), (Long) gaugeValue);
-      } else if (gaugeValue instanceof Float) {
-        metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfo(name), (Float) gaugeValue);
-      } else if (gaugeValue instanceof Double) {
-        metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfo(name), (Double) gaugeValue);
+    } else if (metric instanceof Gauge gauge) {
+      final Object gaugeValue = gauge.getValue();
+      if (gaugeValue instanceof Integer integer) {
+        metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfoForGauge(name), integer);
+      } else if (gaugeValue instanceof Long longVal) {
+        metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfoForGauge(name), longVal);
+      } else if (gaugeValue instanceof Float floatVal) {
+        metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfoForGauge(name), floatVal);
+      } else if (gaugeValue instanceof Double doubleVal) {
+        metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfoForGauge(name), doubleVal);
       } else {
         throw new IllegalStateException(
                 "Not supported class type of metric[" + name + "] for value " + gaugeValue);
       }
+    } else if (metric instanceof Counter c) {
+      long counterValue = c.getCount();
+      metricsRecordBuilder.addGauge(getShuffleServiceMetricsInfoForCounter(name), counterValue);
     }
   }
 
-  private static MetricsInfo getShuffleServiceMetricsInfo(String name) {
+  private static MetricsInfo getShuffleServiceMetricsInfoForGauge(String name) {
     return new ShuffleServiceMetricsInfo(name, "Value of gauge " + name);
   }
 
-  private static class ShuffleServiceMetricsInfo implements MetricsInfo {
+  private static ShuffleServiceMetricsInfo getShuffleServiceMetricsInfoForCounter(String name) {
+    return new ShuffleServiceMetricsInfo(name, "Value of counter " + name);
+  }
 
-    private final String name;
-    private final String description;
+  private static ShuffleServiceMetricsInfo getShuffleServiceMetricsInfoForGenericValue(
+      String baseName, String valueName) {
+    return new ShuffleServiceMetricsInfo(
+      baseName + "_" + valueName,
+      valueName + " value of " + baseName);
+  }
 
-    ShuffleServiceMetricsInfo(String name, String description) {
-      this.name = name;
-      this.description = description;
-    }
-
-    @Override
-    public String name() {
-      return name;
-    }
-
-    @Override
-    public String description() {
-      return description;
-    }
+  private record ShuffleServiceMetricsInfo(String name, String description) implements MetricsInfo {
   }
 }

@@ -23,6 +23,9 @@ package org.apache.spark.sql.execution
  * DataFrame that queries this relation.
  */
 trait FileRelation {
-  /** Returns the list of files that will be read when scanning this relation. */
+  /**
+   * Returns the list of files that will be read when scanning this relation.
+   * The strings returned are expected to be url-encoded paths.
+   */
   def inputFiles: Array[String]
 }

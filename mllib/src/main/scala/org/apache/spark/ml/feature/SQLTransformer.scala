@@ -90,6 +90,12 @@ class SQLTransformer @Since("1.6.0") (@Since("1.6.0") override val uid: String) 
 
   @Since("1.6.0")
   override def copy(extra: ParamMap): SQLTransformer = defaultCopy(extra)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"SQLTransformer: uid=$uid" +
+      get(statement).map(i => s", statement=$i").getOrElse("")
+  }
 }
 
 @Since("1.6.0")

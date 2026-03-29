@@ -19,13 +19,14 @@ package org.apache.spark.sql.execution.datasources.text
 
 import java.nio.charset.{Charset, StandardCharsets}
 
+import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs}
 
 /**
  * Options for the Text data source.
  */
-private[text] class TextOptions(@transient private val parameters: CaseInsensitiveMap[String])
-  extends Serializable {
+class TextOptions(@transient private val parameters: CaseInsensitiveMap[String])
+  extends FileSourceOptions(parameters) {
 
   import TextOptions._
 
@@ -43,8 +44,9 @@ private[text] class TextOptions(@transient private val parameters: CaseInsensiti
 
   val encoding: Option[String] = parameters.get(ENCODING)
 
-  val lineSeparator: Option[String] = parameters.get(LINE_SEPARATOR).map { lineSep =>
-    require(lineSep.nonEmpty, s"'$LINE_SEPARATOR' cannot be an empty string.")
+  val lineSeparator: Option[String] = parameters.get(LINE_SEP).map { lineSep =>
+    require(lineSep != null, s"'$LINE_SEP' cannot be a null value.")
+    require(lineSep.nonEmpty, s"'$LINE_SEP' cannot be an empty string.")
 
     lineSep
   }
@@ -57,9 +59,9 @@ private[text] class TextOptions(@transient private val parameters: CaseInsensiti
     lineSeparatorInRead.getOrElse("\n".getBytes(StandardCharsets.UTF_8))
 }
 
-private[datasources] object TextOptions {
-  val COMPRESSION = "compression"
-  val WHOLETEXT = "wholetext"
-  val ENCODING = "encoding"
-  val LINE_SEPARATOR = "lineSep"
+private[sql] object TextOptions extends DataSourceOptions {
+  val COMPRESSION = newOption("compression")
+  val WHOLETEXT = newOption("wholetext")
+  val ENCODING = newOption("encoding")
+  val LINE_SEP = newOption("lineSep")
 }

@@ -22,18 +22,15 @@ import java.awt.color.ColorSpace
 import java.io.ByteArrayInputStream
 import javax.imageio.ImageIO
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.input.PortableDataStream
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.annotation.Since
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 
 /**
- * :: Experimental ::
  * Defines the image schema and methods to read and manipulate images.
  */
-@Experimental
 @Since("2.3.0")
 object ImageSchema {
 
@@ -55,22 +52,22 @@ object ImageSchema {
   /**
    * Schema for the image column: Row(String, Int, Int, Int, Int, Array[Byte])
    */
-  val columnSchema = StructType(
-    StructField("origin", StringType, true) ::
-    StructField("height", IntegerType, false) ::
-    StructField("width", IntegerType, false) ::
-    StructField("nChannels", IntegerType, false) ::
+  val columnSchema = StructType(Array(
+    StructField("origin", StringType, true),
+    StructField("height", IntegerType, false),
+    StructField("width", IntegerType, false),
+    StructField("nChannels", IntegerType, false),
     // OpenCV-compatible type: CV_8UC3 in most cases
-    StructField("mode", IntegerType, false) ::
+    StructField("mode", IntegerType, false),
     // Bytes in OpenCV-compatible order: row-wise BGR in most cases
-    StructField("data", BinaryType, false) :: Nil)
+    StructField("data", BinaryType, false)))
 
   val imageFields: Array[String] = columnSchema.fieldNames
 
   /**
    * DataFrame with a single column of images named "image" (nullable)
    */
-  val imageSchema = StructType(StructField("image", columnSchema, true) :: Nil)
+  val imageSchema = StructType(Array(StructField("image", columnSchema, true)))
 
   /**
    * Gets the origin of the image
@@ -133,7 +130,16 @@ object ImageSchema {
    */
   private[spark] def decode(origin: String, bytes: Array[Byte]): Option[Row] = {
 
-    val img = ImageIO.read(new ByteArrayInputStream(bytes))
+    val img = try {
+      ImageIO.read(new ByteArrayInputStream(bytes))
+    } catch {
+      // Note that:
+      // - At this point, the files are already read from the files as bytes. Therefore,
+      //   no real I/O exceptions are expected.
+      // - `ImageIO.read` can throw `javax.imageio.IIOException` that is technically
+      //   a runtime exception but it inherits IOException.
+      case _: Throwable => null
+    }
 
     if (img == null) {
       None
@@ -183,78 +189,6 @@ object ImageSchema {
 
       // the internal "Row" is needed, because the image is a single DataFrame column
       Some(Row(Row(origin, height, width, nChannels, mode, decoded)))
-    }
-  }
-
-  /**
-   * Read the directory of images from the local or remote source
-   *
-   * @note If multiple jobs are run in parallel with different sampleRatio or recursive flag,
-   * there may be a race condition where one job overwrites the hadoop configs of another.
-   * @note If sample ratio is less than 1, sampling uses a PathFilter that is efficient but
-   * potentially non-deterministic.
-   *
-   * @param path Path to the image directory
-   * @return DataFrame with a single column "image" of images;
-   *         see ImageSchema for the details
-   */
-  @deprecated("use `spark.read.format(\"image\").load(path)` and this `readImages` will be " +
-    "removed in 3.0.0.", "2.4.0")
-  def readImages(path: String): DataFrame = readImages(path, null, false, -1, false, 1.0, 0)
-
-  /**
-   * Read the directory of images from the local or remote source
-   *
-   * @note If multiple jobs are run in parallel with different sampleRatio or recursive flag,
-   * there may be a race condition where one job overwrites the hadoop configs of another.
-   * @note If sample ratio is less than 1, sampling uses a PathFilter that is efficient but
-   * potentially non-deterministic.
-   *
-   * @param path Path to the image directory
-   * @param sparkSession Spark Session, if omitted gets or creates the session
-   * @param recursive Recursive path search flag
-   * @param numPartitions Number of the DataFrame partitions,
-   *                      if omitted uses defaultParallelism instead
-   * @param dropImageFailures Drop the files that are not valid images from the result
-   * @param sampleRatio Fraction of the files loaded
-   * @return DataFrame with a single column "image" of images;
-   *         see ImageSchema for the details
-   */
-  @deprecated("use `spark.read.format(\"image\").load(path)` and this `readImages` will be " +
-    "removed in 3.0.0.", "2.4.0")
-  def readImages(
-      path: String,
-      sparkSession: SparkSession,
-      recursive: Boolean,
-      numPartitions: Int,
-      dropImageFailures: Boolean,
-      sampleRatio: Double,
-      seed: Long): DataFrame = {
-    require(sampleRatio <= 1.0 && sampleRatio >= 0, "sampleRatio should be between 0 and 1")
-
-    val session = if (sparkSession != null) sparkSession else SparkSession.builder().getOrCreate
-    val partitions =
-      if (numPartitions > 0) {
-        numPartitions
-      } else {
-        session.sparkContext.defaultParallelism
-      }
-
-    RecursiveFlag.withRecursiveFlag(recursive, session) {
-      SamplePathFilter.withPathFilter(sampleRatio, session, seed) {
-        val binResult = session.sparkContext.binaryFiles(path, partitions)
-        val streams = if (numPartitions == -1) binResult else binResult.repartition(partitions)
-        val convert = (origin: String, bytes: PortableDataStream) =>
-          decode(origin, bytes.toArray())
-        val images = if (dropImageFailures) {
-          streams.flatMap { case (origin, bytes) => convert(origin, bytes) }
-        } else {
-          streams.map { case (origin, bytes) =>
-            convert(origin, bytes).getOrElse(invalidImageRow(origin))
-          }
-        }
-        session.createDataFrame(images, imageSchema)
-      }
     }
   }
 }

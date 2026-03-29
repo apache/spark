@@ -18,12 +18,13 @@
 package org.apache.spark.serializer
 
 import java.io._
+import java.lang.invoke.SerializedLambda
 import java.nio.ByteBuffer
 import java.util.Locale
 import javax.annotation.Nullable
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
@@ -33,17 +34,23 @@ import com.esotericsoftware.kryo.io.{UnsafeInput => KryoUnsafeInput, UnsafeOutpu
 import com.esotericsoftware.kryo.pool.{KryoCallback, KryoFactory, KryoPool}
 import com.esotericsoftware.kryo.serializers.{JavaSerializer => KryoJavaSerializer}
 import com.twitter.chill.{AllScalaRegistrar, EmptyScalaKryoInstantiator}
-import org.apache.avro.generic.{GenericData, GenericRecord}
+import org.apache.avro.generic.{GenericContainer, GenericData, GenericRecord}
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark._
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.CLASS_NAME
+import org.apache.spark.internal.config.Kryo._
+import org.apache.spark.internal.io.FileCommitProtocol._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
-import org.apache.spark.util.{BoundedPriorityQueue, SerializableConfiguration, SerializableJobConf, Utils}
-import org.apache.spark.util.collection.CompactBuffer
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.{BoundedPriorityQueue, ByteBufferInputStream, NextIterator, SerializableConfiguration, SerializableJobConf, Utils}
+import org.apache.spark.util.collection.{BitSet, CompactBuffer}
+import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
  * A Spark serializer that uses the <a href="https://code.google.com/p/kryo/">
@@ -58,34 +65,40 @@ class KryoSerializer(conf: SparkConf)
   with Logging
   with Serializable {
 
-  private val bufferSizeKb = conf.getSizeAsKb("spark.kryoserializer.buffer", "64k")
+  private val bufferSizeKb = conf.get(KRYO_SERIALIZER_BUFFER_SIZE)
 
   if (bufferSizeKb >= ByteUnit.GiB.toKiB(2)) {
-    throw new IllegalArgumentException("spark.kryoserializer.buffer must be less than " +
-      s"2048 mb, got: + ${ByteUnit.KiB.toMiB(bufferSizeKb)} mb.")
+    throw new SparkIllegalArgumentException(
+      errorClass = "INVALID_KRYO_SERIALIZER_BUFFER_SIZE",
+      messageParameters = Map(
+        "bufferSizeConfKey" -> KRYO_SERIALIZER_BUFFER_SIZE.key,
+        "bufferSizeConfValue" -> ByteUnit.KiB.toMiB(bufferSizeKb).toString))
   }
   private val bufferSize = ByteUnit.KiB.toBytes(bufferSizeKb).toInt
 
-  val maxBufferSizeMb = conf.getSizeAsMb("spark.kryoserializer.buffer.max", "64m").toInt
+  val maxBufferSizeMb = conf.get(KRYO_SERIALIZER_MAX_BUFFER_SIZE).toInt
   if (maxBufferSizeMb >= ByteUnit.GiB.toMiB(2)) {
-    throw new IllegalArgumentException("spark.kryoserializer.buffer.max must be less than " +
-      s"2048 mb, got: + $maxBufferSizeMb mb.")
+    throw new SparkIllegalArgumentException(
+      errorClass = "INVALID_KRYO_SERIALIZER_BUFFER_SIZE",
+      messageParameters = Map(
+        "bufferSizeConfKey" -> KRYO_SERIALIZER_MAX_BUFFER_SIZE.key,
+        "bufferSizeConfValue" -> maxBufferSizeMb.toString))
   }
   private val maxBufferSize = ByteUnit.MiB.toBytes(maxBufferSizeMb).toInt
 
-  private val referenceTracking = conf.getBoolean("spark.kryo.referenceTracking", true)
-  private val registrationRequired = conf.getBoolean("spark.kryo.registrationRequired", false)
-  private val userRegistrators = conf.get("spark.kryo.registrator", "")
-    .split(',').map(_.trim)
+  private val referenceTracking = conf.get(KRYO_REFERENCE_TRACKING)
+  private val registrationRequired = conf.get(KRYO_REGISTRATION_REQUIRED)
+  private val userRegistrators = conf.get(KRYO_USER_REGISTRATORS)
+    .map(_.trim)
     .filter(!_.isEmpty)
-  private val classesToRegister = conf.get("spark.kryo.classesToRegister", "")
-    .split(',').map(_.trim)
+  private val classesToRegister = conf.get(KRYO_CLASSES_TO_REGISTER)
+    .map(_.trim)
     .filter(!_.isEmpty)
 
   private val avroSchemas = conf.getAvroSchema
   // whether to use unsafe based IO for serialization
-  private val useUnsafe = conf.getBoolean("spark.kryo.unsafe", false)
-  private val usePool = conf.getBoolean("spark.kryo.pool", true)
+  private val useUnsafe = conf.get(KRYO_USE_UNSAFE)
+  private val usePool = conf.get(KRYO_USE_POOL)
 
   def newKryoOutput(): KryoOutput =
     if (useUnsafe) {
@@ -129,7 +142,6 @@ class KryoSerializer(conf: SparkConf)
     val kryo = instantiator.newKryo()
     kryo.setRegistrationRequired(registrationRequired)
 
-    val oldClassLoader = Thread.currentThread.getContextClassLoader
     val classLoader = defaultClassLoader.getOrElse(Thread.currentThread.getContextClassLoader)
 
     // Allow disabling Kryo reference tracking if user knows their object graphs don't have loops.
@@ -152,27 +164,38 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(classOf[SerializableJobConf], new KryoJavaSerializer())
     kryo.register(classOf[PythonBroadcast], new KryoJavaSerializer())
 
-    kryo.register(classOf[GenericRecord], new GenericAvroSerializer(avroSchemas))
-    kryo.register(classOf[GenericData.Record], new GenericAvroSerializer(avroSchemas))
+    // Register serializers for Avro GenericContainer classes
+    // We do not handle SpecificRecordBase and SpecificFixed here. They are abstract classes and
+    // we will need to register serializers for their concrete implementations individually.
+    // Also, their serialization requires the use of SpecificDatum(Reader|Writer) instead of
+    // GenericDatum(Reader|Writer).
+    def registerAvro[T <: GenericContainer]()(implicit ct: ClassTag[T]): Unit =
+      kryo.register(ct.runtimeClass, new GenericAvroSerializer[T](avroSchemas))
+    registerAvro[GenericRecord]()
+    registerAvro[GenericData.Record]()
+    registerAvro[GenericData.Array[_]]()
+    registerAvro[GenericData.EnumSymbol]()
+    registerAvro[GenericData.Fixed]()
 
-    try {
-      // scalastyle:off classforname
-      // Use the default classloader when calling the user registrator.
-      Thread.currentThread.setContextClassLoader(classLoader)
-      // Register classes given through spark.kryo.classesToRegister.
-      classesToRegister
-        .foreach { className => kryo.register(Class.forName(className, true, classLoader)) }
-      // Allow the user to register their own classes by setting spark.kryo.registrator.
-      userRegistrators
-        .map(Class.forName(_, true, classLoader).getConstructor().
-          newInstance().asInstanceOf[KryoRegistrator])
-        .foreach { reg => reg.registerClasses(kryo) }
-      // scalastyle:on classforname
-    } catch {
-      case e: Exception =>
-        throw new SparkException(s"Failed to register classes with Kryo", e)
-    } finally {
-      Thread.currentThread.setContextClassLoader(oldClassLoader)
+    // Use the default classloader when calling the user registrator.
+    Utils.withContextClassLoader(classLoader) {
+      try {
+        // Register classes given through spark.kryo.classesToRegister.
+        classesToRegister.foreach { className =>
+          kryo.register(Utils.classForName(className, noSparkClassLoader = true))
+        }
+        // Allow the user to register their own classes by setting spark.kryo.registrator.
+        userRegistrators
+          .map(Utils.classForName[KryoRegistrator](_, noSparkClassLoader = true).
+            getConstructor().newInstance())
+          .foreach { reg => reg.registerClasses(kryo) }
+      } catch {
+        case e: Exception =>
+          throw new SparkException(
+            errorClass = "FAILED_REGISTER_CLASS_WITH_KRYO",
+            messageParameters = Map.empty,
+            cause = e)
+      }
     }
 
     // Register Chill's classes; we do this after our ranges and the user's own classes to let
@@ -206,44 +229,18 @@ class KryoSerializer(conf: SparkConf)
 
     // scalastyle:on
 
-    kryo.register(None.getClass)
-    kryo.register(Nil.getClass)
-    kryo.register(Utils.classForName("scala.collection.immutable.$colon$colon"))
+    kryo.register(Utils.classForName("scala.collection.immutable.ArraySeq$ofRef"))
     kryo.register(Utils.classForName("scala.collection.immutable.Map$EmptyMap$"))
+    kryo.register(Utils.classForName("scala.math.Ordering$Reverse"))
+    kryo.register(Utils.classForName("scala.reflect.ClassTag$GenericClassTag"))
     kryo.register(classOf[ArrayBuffer[Any]])
+    kryo.register(classOf[Array[Array[Byte]]])
+    kryo.register(classOf[UTF8String])
 
     // We can't load those class directly in order to avoid unnecessary jar dependencies.
     // We load them safely, ignore it if the class not found.
-    Seq(
-      "org.apache.spark.ml.attribute.Attribute",
-      "org.apache.spark.ml.attribute.AttributeGroup",
-      "org.apache.spark.ml.attribute.BinaryAttribute",
-      "org.apache.spark.ml.attribute.NominalAttribute",
-      "org.apache.spark.ml.attribute.NumericAttribute",
-
-      "org.apache.spark.ml.feature.Instance",
-      "org.apache.spark.ml.feature.LabeledPoint",
-      "org.apache.spark.ml.feature.OffsetInstance",
-      "org.apache.spark.ml.linalg.DenseMatrix",
-      "org.apache.spark.ml.linalg.DenseVector",
-      "org.apache.spark.ml.linalg.Matrix",
-      "org.apache.spark.ml.linalg.SparseMatrix",
-      "org.apache.spark.ml.linalg.SparseVector",
-      "org.apache.spark.ml.linalg.Vector",
-      "org.apache.spark.ml.stat.distribution.MultivariateGaussian",
-      "org.apache.spark.ml.tree.impl.TreePoint",
-      "org.apache.spark.mllib.clustering.VectorWithNorm",
-      "org.apache.spark.mllib.linalg.DenseMatrix",
-      "org.apache.spark.mllib.linalg.DenseVector",
-      "org.apache.spark.mllib.linalg.Matrix",
-      "org.apache.spark.mllib.linalg.SparseMatrix",
-      "org.apache.spark.mllib.linalg.SparseVector",
-      "org.apache.spark.mllib.linalg.Vector",
-      "org.apache.spark.mllib.regression.LabeledPoint",
-      "org.apache.spark.mllib.stat.distribution.MultivariateGaussian"
-    ).foreach { name =>
+    KryoSerializer.loadableSparkClasses.foreach { clazz =>
       try {
-        val clazz = Utils.classForName(name)
         kryo.register(clazz)
       } catch {
         case NonFatal(_) => // do nothing
@@ -289,14 +286,14 @@ class KryoSerializationStream(
     this
   }
 
-  override def flush() {
+  override def flush(): Unit = {
     if (output == null) {
       throw new IOException("Stream is closed")
     }
     output.flush()
   }
 
-  override def close() {
+  override def close(): Unit = {
     if (output != null) {
       try {
         output.close()
@@ -320,6 +317,16 @@ class KryoDeserializationStream(
 
   private[this] var kryo: Kryo = serInstance.borrowKryo()
 
+  private[this] def hasNext: Boolean = {
+    if (input == null) {
+      return false
+    }
+
+    val eof = input.eof()
+    if (eof) close()
+    !eof
+  }
+
   override def readObject[T: ClassTag](): T = {
     try {
       kryo.readClassAndObject(input).asInstanceOf[T]
@@ -331,7 +338,7 @@ class KryoDeserializationStream(
     }
   }
 
-  override def close() {
+  override def close(): Unit = {
     if (input != null) {
       try {
         // Kryo's Input automatically closes the input stream it is using.
@@ -341,6 +348,42 @@ class KryoDeserializationStream(
         kryo = null
         input = null
       }
+    }
+  }
+
+  final override def asIterator: Iterator[Any] = new NextIterator[Any] {
+    override protected def getNext(): Any = {
+      if (KryoDeserializationStream.this.hasNext) {
+        try {
+          return readObject[Any]()
+        } catch {
+          case eof: EOFException =>
+        }
+      }
+      finished = true
+      null
+    }
+
+    override protected def close(): Unit = {
+      KryoDeserializationStream.this.close()
+    }
+  }
+
+  final override def asKeyValueIterator: Iterator[(Any, Any)] = new NextIterator[(Any, Any)] {
+    override protected def getNext(): (Any, Any) = {
+      if (KryoDeserializationStream.this.hasNext) {
+        try {
+          return (readKey[Any](), readValue[Any]())
+        } catch {
+          case eof: EOFException =>
+        }
+      }
+      finished = true
+      null
+    }
+
+    override protected def close(): Unit = {
+      KryoDeserializationStream.this.close()
     }
   }
 }
@@ -406,8 +449,12 @@ private[spark] class KryoSerializerInstance(
       kryo.writeClassAndObject(output, t)
     } catch {
       case e: KryoException if e.getMessage.startsWith("Buffer overflow") =>
-        throw new SparkException(s"Kryo serialization failed: ${e.getMessage}. To avoid this, " +
-          "increase spark.kryoserializer.buffer.max value.", e)
+        throw new SparkException(
+          errorClass = "KRYO_BUFFER_OVERFLOW",
+          messageParameters = Map(
+            "exceptionMsg" -> e.getMessage,
+            "bufferSizeConfKey" -> KRYO_SERIALIZER_MAX_BUFFER_SIZE.key),
+          cause = e)
     } finally {
       releaseKryo(kryo)
     }
@@ -417,7 +464,12 @@ private[spark] class KryoSerializerInstance(
   override def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
     val kryo = borrowKryo()
     try {
-      input.setBuffer(bytes.array(), bytes.arrayOffset() + bytes.position(), bytes.remaining())
+      if (bytes.hasArray) {
+        input.setBuffer(bytes.array(), bytes.arrayOffset() + bytes.position(), bytes.remaining())
+      } else {
+        input.setBuffer(new Array[Byte](4096))
+        input.setInputStream(new ByteBufferInputStream(bytes))
+      }
       kryo.readClassAndObject(input).asInstanceOf[T]
     } finally {
       releaseKryo(kryo)
@@ -429,7 +481,12 @@ private[spark] class KryoSerializerInstance(
     val oldClassLoader = kryo.getClassLoader
     try {
       kryo.setClassLoader(loader)
-      input.setBuffer(bytes.array(), bytes.arrayOffset() + bytes.position(), bytes.remaining())
+      if (bytes.hasArray) {
+        input.setBuffer(bytes.array(), bytes.arrayOffset() + bytes.position(), bytes.remaining())
+      } else {
+        input.setBuffer(new Array[Byte](4096))
+        input.setInputStream(new ByteBufferInputStream(bytes))
+      }
       kryo.readClassAndObject(input).asInstanceOf[T]
     } finally {
       kryo.setClassLoader(oldClassLoader)
@@ -465,6 +522,7 @@ private[spark] class KryoSerializerInstance(
  * Interface implemented by clients to register their classes with Kryo when using Kryo
  * serialization.
  */
+@DeveloperApi
 trait KryoRegistrator {
   def registerClasses(kryo: Kryo): Unit
 }
@@ -473,9 +531,11 @@ private[serializer] object KryoSerializer {
   // Commonly used classes.
   private val toRegister: Seq[Class[_]] = Seq(
     ByteBuffer.allocate(1).getClass,
+    classOf[Array[ByteBuffer]],
     classOf[StorageLevel],
     classOf[CompressedMapStatus],
     classOf[HighlyCompressedMapStatus],
+    classOf[ChunkedByteBuffer],
     classOf[CompactBuffer[_]],
     classOf[BlockManagerId],
     classOf[Array[Boolean]],
@@ -489,7 +549,10 @@ private[serializer] object KryoSerializer {
     classOf[Array[String]],
     classOf[Array[Array[String]]],
     classOf[BoundedPriorityQueue[_]],
-    classOf[SparkConf]
+    classOf[SparkConf],
+    classOf[TaskCommitMessage],
+    classOf[SerializedLambda],
+    classOf[BitSet]
   )
 
   private val toRegisterSerializer = Map[Class[_], KryoClassSerializer[_]](
@@ -504,6 +567,92 @@ private[serializer] object KryoSerializer {
       }
     }
   )
+
+  // classForName() is expensive in case the class is not found, so we filter the list of
+  // SQL / ML / MLlib classes once and then re-use that filtered list in newInstance() calls.
+  private lazy val loadableSparkClasses: Seq[Class[_]] = {
+    Seq(
+      "org.apache.spark.sql.catalyst.expressions.BoundReference",
+      "org.apache.spark.sql.catalyst.expressions.SortOrder",
+      "[Lorg.apache.spark.sql.catalyst.expressions.SortOrder;",
+      "org.apache.spark.sql.catalyst.expressions.GenericInternalRow",
+      "org.apache.spark.sql.catalyst.InternalRow",
+      "org.apache.spark.sql.catalyst.InternalRow$",
+      "[Lorg.apache.spark.sql.catalyst.InternalRow;",
+      "org.apache.spark.sql.catalyst.expressions.UnsafeRow",
+      "org.apache.spark.sql.catalyst.expressions.UnsafeArrayData",
+      "org.apache.spark.sql.catalyst.expressions.UnsafeMapData",
+      "org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering",
+      "org.apache.spark.sql.catalyst.expressions.Ascending$",
+      "org.apache.spark.sql.catalyst.expressions.NullsFirst$",
+      "org.apache.spark.sql.catalyst.trees.Origin",
+      "org.apache.spark.sql.types.IntegerType",
+      "org.apache.spark.sql.types.IntegerType$",
+      "org.apache.spark.sql.types.LongType$",
+      "org.apache.spark.sql.types.DoubleType",
+      "org.apache.spark.sql.types.DoubleType$",
+      "org.apache.spark.sql.types.Metadata",
+      "org.apache.spark.sql.types.StringType$",
+      "org.apache.spark.sql.types.StructField",
+      "[Lorg.apache.spark.sql.types.StructField;",
+      "org.apache.spark.sql.types.StructType",
+      "[Lorg.apache.spark.sql.types.StructType;",
+      "org.apache.spark.sql.types.DateType$",
+      "org.apache.spark.sql.types.DecimalType",
+      "org.apache.spark.sql.types.Decimal$DecimalAsIfIntegral$",
+      "org.apache.spark.sql.types.Decimal$DecimalIsFractional$",
+      "org.apache.spark.sql.execution.command.PartitionStatistics",
+      "org.apache.spark.sql.execution.datasources.BasicWriteTaskStats",
+      "org.apache.spark.sql.execution.datasources.ExecutedWriteSummary",
+      "org.apache.spark.sql.execution.datasources.WriteTaskResult",
+      "org.apache.spark.sql.execution.datasources.v2.DataWritingSparkTaskResult",
+      "org.apache.spark.sql.execution.joins.EmptyHashedRelation$",
+      "org.apache.spark.sql.execution.joins.LongHashedRelation",
+      "org.apache.spark.sql.execution.joins.LongToUnsafeRowMap",
+      "org.apache.spark.sql.execution.joins.UnsafeHashedRelation",
+      "org.apache.spark.sql.columnar.CachedBatch",
+      "org.apache.spark.sql.columnar.SimpleMetricsCachedBatch",
+      "org.apache.spark.sql.execution.columnar.DefaultCachedBatch",
+      "org.apache.spark.sql.columnar.CachedBatchSerializer",
+      "org.apache.spark.sql.columnar.SimpleMetricsCachedBatchSerializer",
+      "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer",
+
+      "org.apache.spark.ml.attribute.Attribute",
+      "org.apache.spark.ml.attribute.AttributeGroup",
+      "org.apache.spark.ml.attribute.BinaryAttribute",
+      "org.apache.spark.ml.attribute.NominalAttribute",
+      "org.apache.spark.ml.attribute.NumericAttribute",
+
+      "org.apache.spark.ml.feature.Instance",
+      "org.apache.spark.ml.feature.InstanceBlock",
+      "org.apache.spark.ml.feature.LabeledPoint",
+      "org.apache.spark.ml.feature.OffsetInstance",
+      "org.apache.spark.ml.linalg.DenseMatrix",
+      "org.apache.spark.ml.linalg.DenseVector",
+      "org.apache.spark.ml.linalg.Matrix",
+      "org.apache.spark.ml.linalg.SparseMatrix",
+      "org.apache.spark.ml.linalg.SparseVector",
+      "org.apache.spark.ml.linalg.Vector",
+      "org.apache.spark.ml.stat.distribution.MultivariateGaussian",
+      "org.apache.spark.ml.tree.impl.TreePoint",
+      "org.apache.spark.mllib.clustering.VectorWithNorm",
+      "org.apache.spark.mllib.linalg.DenseMatrix",
+      "org.apache.spark.mllib.linalg.DenseVector",
+      "org.apache.spark.mllib.linalg.Matrix",
+      "org.apache.spark.mllib.linalg.SparseMatrix",
+      "org.apache.spark.mllib.linalg.SparseVector",
+      "org.apache.spark.mllib.linalg.Vector",
+      "org.apache.spark.mllib.regression.LabeledPoint",
+      "org.apache.spark.mllib.stat.distribution.MultivariateGaussian"
+    ).flatMap { name =>
+      try {
+        Some[Class[_]](Utils.classForName(name))
+      } catch {
+        case NonFatal(_) => None // do nothing
+        case _: NoClassDefFoundError if Utils.isTesting => None // See SPARK-23422.
+      }
+    }
+  }
 }
 
 /**
@@ -590,16 +739,16 @@ private class JavaIterableWrapperSerializer
 }
 
 private object JavaIterableWrapperSerializer extends Logging {
-  // The class returned by JavaConverters.asJava
+  // The class returned by CollectionConverters.asJava
   // (scala.collection.convert.Wrappers$IterableWrapper).
-  import scala.collection.JavaConverters._
+  import scala.jdk.CollectionConverters._
   val wrapperClass = Seq(1).asJava.getClass
 
   // Get the underlying method so we can use it to get the Scala collection for serialization.
   private val underlyingMethodOpt = {
     try Some(wrapperClass.getDeclaredMethod("underlying")) catch {
       case e: Exception =>
-        logError("Failed to find the underlying field in " + wrapperClass, e)
+        logError(log"Failed to find the underlying field in ${MDC(CLASS_NAME, wrapperClass)}", e)
         None
     }
   }

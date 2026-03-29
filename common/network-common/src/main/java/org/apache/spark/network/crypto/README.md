@@ -1,158 +1,116 @@
-Spark Auth Protocol and AES Encryption Support
+Forward Secure Auth Protocol v2.0
 ==============================================
 
-This file describes an auth protocol used by Spark as a more secure alternative to DIGEST-MD5. This
-protocol is built on symmetric key encryption, based on the assumption that the two endpoints being
-authenticated share a common secret, which is how Spark authentication currently works. The protocol
-provides mutual authentication, meaning that after the negotiation both parties know that the remote
-side knows the shared secret. The protocol is influenced by the ISO/IEC 9798 protocol, although it's
-not an implementation of it.
+Summary
+-------
 
-This protocol could be replaced with TLS PSK, except no PSK ciphers are available in the currently
-released JREs.
+This file describes a forward secure authentication protocol which may be used by Spark. This
+protocol is essentially ephemeral Diffie-Hellman key exchange using Curve25519, referred to as
+X25519.
 
-The protocol aims at solving the following shortcomings in Spark's current usage of DIGEST-MD5:
+Both client and server share a (possibly low-entropy) pre-shared secret that is used to derive a
+key-encrypting key using HKDF. This will mix in any preceding protocol transcript.
 
-- MD5 is an aging hash algorithm with known weaknesses, and a more secure alternative is desired.
-- DIGEST-MD5 has a pre-defined set of ciphers for which it can generate keys. The only
-  viable, supported cipher these days is 3DES, and a more modern alternative is desired.
-- Encrypting AES session keys with 3DES doesn't solve the issue, since the weakest link
-  in the negotiation would still be MD5 and 3DES.
-
-The protocol assumes that the shared secret is generated and distributed in a secure manner.
-
-The protocol always negotiates encryption keys. If encryption is not desired, the existing
-SASL-based authentication, or no authentication at all, can be chosen instead.
-
-When messages are described below, it's expected that the implementation should support
-arbitrary sizes for fields that don't have a fixed size.
+The key-encrypting key is used to encrypt an X25519 public key with AES-GCM. This is intended to
+authenticate the message exchange between the parties and there is no expectation of secrecy for
+the public key. This protocol utilizes GCM's associated authenticated data (AAD) field to include
+metadata and the prior protocol transcript, to bind each round with all preceding rounds.
 
 Client Challenge
 ----------------
 
-The auth negotiation is started by the client. The client starts by generating an encryption
-key based on the application's shared secret, and a nonce.
+The auth negotiation is started by the client. Given an application ID, the client starts by
+generating a random 16-byte salt value and deriving a key encryption key:
 
-    KEY = KDF(SECRET, SALT, KEY_LENGTH)
+    preSharedKey = lookupKey(appId)
+    nonSecretSalt = Random(16 bytes)
+    aadState = Concat(appId, nonSecretSalt)
+    keyEncryptingKey = HKDF(preSharedKey, nonSecretSalt, aadState)
 
-Where:
-- KDF(): a key derivation function that takes a secret, a salt, a configurable number of
-  iterations, and a configurable key length.
-- SALT: a byte sequence used to salt the key derivation function.
-- KEY_LENGTH: length of the encryption key to generate.
+This key encryption key is then used to encrypt an ephemeral X25519 public key.
 
+    clientKeyPair = X25519.generate()
+    randomIV = Random(16 bytes)
+    ciphertext = AES-GCM-Encrypt(
+      key = keyEncryptingKey,
+      iv = randomIV,
+      plaintext = clientKeyPair.publicKey(),
+      aad = aadState)
+    clientChallenge = (appId, nonSecretSalt, randomIV, ciphertext)
 
-The client generates a message with the following content:
+Note that the App ID and non-secret salt are bound to the ciphertext both through HKDF key
+derivation and AES-GCM AAD. We are not relying on keeping the client public key secret and could
+alternatively compute a MAC rather than encrypting with AES-GCM.
 
-    CLIENT_CHALLENGE = (
-        APP_ID,
-        KDF,
-        ITERATIONS,
-        CIPHER,
-        KEY_LENGTH,
-        ANONCE,
-        ENC(APP_ID || ANONCE || CHALLENGE))
-
-Where:
-
-- APP_ID: the application ID which the server uses to identify the shared secret.
-- KDF: the key derivation function described above.
-- ITERATIONS: number of iterations to run the KDF when generating keys.
-- CIPHER: the cipher used to encrypt data.
-- KEY_LENGTH: length of the encryption keys to generate, in bits.
-- ANONCE: the nonce used as the salt when generating the auth key.
-- ENC(): an encryption function that uses the cipher and the generated key. This function
-  will also be used in the definition of other messages below.
-- CHALLENGE: a byte sequence used as a challenge to the server.
-- ||: concatenation operator.
-
-When strings are used where byte arrays are expected, the UTF-8 representation of the string
-is assumed.
-
-To respond to the challenge, the server should consider the byte array as representing an
-arbitrary-length integer, and respond with the value of the integer plus one.
-
+The client sends this challenge to a server.
 
 Server Response And Challenge
 -----------------------------
 
-Once the client challenge is received, the server will generate the same auth key by
-using the same algorithm the client has used. It will then verify the client challenge:
-if the APP_ID and ANONCE fields match, the server knows that the client has the shared
-secret. The server then creates a response to the client challenge, to prove that it also
-has the secret key, and provides parameters to be used when creating the session key.
+Once the client challenge is received, the server will derive the same key encryption key and
+recover the client's public key:
 
-The following describes the response from the server:
+    assert(appId = clientChallenge.appId)
+    preSharedKey = lookupKey(appId)
+    aadState = Concat(appId, clientChallenge.nonSecretSalt)
+    keyEncryptingKey = HKDF(preSharedKey, nonSecretSalt, aadState)
+    clientPublicKey = AES-GCM-Decrypt(
+      key = keyEncryptingKey,
+      iv = clientChallenge.randomIV,
+      ciphertext = clientChallenge.ciphertext,
+      aad = aadState)
 
-    SERVER_CHALLENGE = (
-        ENC(APP_ID || ANONCE || RESPONSE),
-        ENC(SNONCE),
-        ENC(INIV),
-        ENC(OUTIV))
+The server can then send its own ephemeral public key to the client, encrypted under a key derived
+from the pre-shared key and the protocol transcript so far:
 
-Where:
+    preSharedKey = lookupKey(appId)
+    nonSecretSalt = Random(16 bytes)
+    aadState = Concat(appId, nonSecretSalt, clientChallenge)
+    keyEncryptingKey = HKDF(preSharedKey, nonSecretSalt, aadState)
+    randomIV = Random(16 bytes)
+    serverKeyPair = X25519.generate()
+    ciphertext = AES-GCM-Encrypt(
+      key = keyEncryptingKey,
+      iv = randomIV,
+      plaintext = serverKeyPair.publicKey(),
+      aad = aadState)
+    serverResponse = (appId, nonSecretSalt, randomIV, ciphertext)
 
-- RESPONSE: the server's response to the client challenge.
-- SNONCE: a nonce to be used as salt when generating the session key.
-- INIV: initialization vector used to initialize the input channel of the client.
-- OUTIV: initialization vector used to initialize the output channel of the client.
+Now that the server has the client's ephemeral public key, it can generate its own ephemeral
+keypair and compute a shared secret.
 
-At this point the server considers the client to be authenticated, and will try to
-decrypt any data further sent by the client using the session key.
+    sharedSecret = X25519.computeSharedSecret(clientPublicKey, serverKeyPair.privateKey())
+    derivedKey = HKDF(sharedSecret, salt=transcript, info="deriveKey")
 
+With the shared secret, the server will also generate two initialization vectors to be used for
+inbound and outbound streams. These IVs are not secret and will be bound to the preceding protocol
+transcript in order to be deterministic by both parties.
 
-Default Algorithms
-------------------
+    clientIv = HKDF(sharedSecret, salt=transcript, info="clientIv")
+    serverIv = HKDF(sharedSecret, salt=transcript, info="serverIv")
 
-Configuration options are available for the KDF and cipher algorithms to use.
+The server can then send its response to the client, who can decrypt the server's ephemeral public
+key, and reconstruct the same shared secret and IVs.
 
-The default KDF is "PBKDF2WithHmacSHA1". Users should be able to select any algorithm
-from those supported by the `javax.crypto.SecretKeyFactory` class, as long as they support
-PBEKeySpec when generating keys. The default number of iterations was chosen to take a
-reasonable amount of time on modern CPUs. See the documentation in TransportConf for more
-details.
-
-The default cipher algorithm is "AES/CTR/NoPadding". Users should be able to select any
-algorithm supported by the commons-crypto library. It should allow the cipher to operate
-in stream mode.
-
-The default key length is 128 (bits).
-
-
-Implementation Details
-----------------------
-
-The commons-crypto library currently only supports AES ciphers, and requires an initialization
-vector (IV). This first version of the protocol does not explicitly include the IV in the client
-challenge message. Instead, the IV should be derived from the nonce, including the needed bytes, and
-padding the IV with zeroes in case the nonce is not long enough.
-
-Future versions of the protocol might add support for new ciphers and explicitly include needed
-configuration parameters in the messages.
-
-
-Threat Assessment
+Security Comments
 -----------------
 
-The protocol is secure against different forms of attack:
+This protocol is essentially a [NNpsk0](http://www.noiseprotocol.org/noise.html#pattern-modifiers)
+pattern in the [Noise framework](http://www.noiseprotocol.org/) built around ECDHE using X25519 as
+the underlying curve. If the pre-shared key is compromised, it does not allow for recovery of past
+sessions. It would, however, allow impersonation of future sessions.
 
-* Eavesdropping: the protocol is built on the assumption that it's computationally infeasible
-  to calculate the original secret from the encrypted messages. Neither the secret nor any
-  encryption keys are transmitted on the wire, encrypted or not.
+In the event of a pre-shared key compromise, messages would still be confidential from a passive
+observer. Only active adversaries spoofing a session would be able to recover plaintext.
 
-* Man-in-the-middle: because the protocol performs mutual authentication, both ends need to
-  know the shared secret to be able to decrypt session data. Even if an attacker is able to insert a
-  malicious "proxy" between endpoints, the attacker won't be able to read any of the data exchanged
-  between client and server, nor insert arbitrary commands for the server to execute.
+Security Changes & Compatibility
+-------------
 
-* Replay attacks: the use of nonces when generating keys prevents an attacker from being able to
-  just replay messages sniffed from the communication channel.
+The original version of this protocol, retroactively called v1.0, did not apply an HKDF to `sharedSecret` to derive
+a key (i.e. `derivedKey`) and was directly using the encoded X coordinate as key material. This is atypical and
+standard practice is to pass that shared coordinate through an HKDF. The latest version adds this additional
+HKDF to derive `derivedKey`.
 
-An attacker may replay the client challenge and successfully "prove" to a server that it "knows" the
-shared secret. But the attacker won't be able to decrypt the server's response, and thus won't be
-able to generate a session key, which will make it hard to craft a valid, encrypted message that the
-server will be able to understand. This will cause the server to close the connection as soon as the
-attacker tries to send any command to the server. The attacker can just hold the channel open for
-some time, which will be closed when the server times out the channel. These issues could be
-separately mitigated by adding a shorter timeout for the first message after authentication, and
-potentially by adding host blacklists if a possible attack is detected from a particular host.
+Consequently, Apache Spark instances using v1.0 of this protocol will not negotiate the same key as
+instances using v2.0 and will be **unable to send encrypted RPCs** across incompatible versions. For this reason, v1.0
+remains the default to preserve backward-compatibility.

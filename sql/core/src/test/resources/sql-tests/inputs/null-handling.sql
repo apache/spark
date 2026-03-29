@@ -10,6 +10,8 @@ insert into t1 values(7,null,null);
 
 -- Adding anything to null gives null
 select a, b+c from t1;
+select b + 0 from t1 where a = 5;
+select -100 + b + 100 from t1 where a = 5;
 
 -- Multiplying null by zero gives null
 select a+10, b*0 from t1;
@@ -44,5 +46,8 @@ select a+120 from t1 where b<10 OR c=1;
 select a+130 from t1 where b<10 AND c=1;
 select a+140 from t1 where not (b<10 AND c=1);
 select a+150 from t1 where not (c=1 AND b<10);
+
+-- null-safe comparisons
+select b, c, equal_null(b, c), equal_null(c, b) from t1;
 
 drop table t1;

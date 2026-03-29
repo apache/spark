@@ -18,7 +18,8 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
-import org.apache.log4j.{Level, Logger}
+import org.apache.logging.log4j.Level
+import org.apache.logging.log4j.core.config.Configurator
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -62,7 +63,7 @@ object PowerIterationClusteringExample {
       maxIterations: Int = 15
     ) extends AbstractParams[Params]
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val defaultParams = Params()
 
     val parser = new OptionParser[Params]("PowerIterationClusteringExample") {
@@ -90,7 +91,7 @@ object PowerIterationClusteringExample {
       .setAppName(s"PowerIterationClustering with $params")
     val sc = new SparkContext(conf)
 
-    Logger.getRootLogger.setLevel(Level.WARN)
+    Configurator.setRootLevel(Level.WARN)
 
     // $example on$
     val circlesRdd = generateCirclesRdd(sc, params.k, params.numPoints)
@@ -100,7 +101,7 @@ object PowerIterationClusteringExample {
       .setInitializationMode("degree")
       .run(circlesRdd)
 
-    val clusters = model.assignments.collect().groupBy(_.cluster).mapValues(_.map(_.id))
+    val clusters = model.assignments.collect().groupBy(_.cluster).transform((_, v) => v.map(_.id))
     val assignments = clusters.toList.sortBy { case (k, v) => v.length }
     val assignmentsStr = assignments
       .map { case (k, v) =>

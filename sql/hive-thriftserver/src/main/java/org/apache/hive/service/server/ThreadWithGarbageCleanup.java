@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,10 +20,11 @@ package org.apache.hive.service.server;
 
 import java.util.Map;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.metastore.HiveMetaStore;
 import org.apache.hadoop.hive.metastore.RawStore;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 
 /**
  * A HiveServer2 thread used to construct new server threads.
@@ -32,7 +32,7 @@ import org.apache.hadoop.hive.metastore.RawStore;
  * when killed by its corresponding ExecutorService.
  */
 public class ThreadWithGarbageCleanup extends Thread {
-  private static final Log LOG = LogFactory.getLog(ThreadWithGarbageCleanup.class);
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(ThreadWithGarbageCleanup.class);
 
   Map<Long, RawStore> threadRawStoreMap =
       ThreadFactoryWithGarbageCleanup.getThreadRawStoreMap();

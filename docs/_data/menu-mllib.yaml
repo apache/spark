@@ -61,7 +61,7 @@
     - text: association rules
       url: mllib-frequent-pattern-mining.html#association-rules
     - text: PrefixSpan
-      url: mllib-frequent-pattern-mining.html#prefix-span
+      url: mllib-frequent-pattern-mining.html#prefixspan
 - text: Evaluation metrics
   url: mllib-evaluation-metrics.html
 - text: PMML model export

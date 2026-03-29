@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.internal.LogKeys._
 
 
 /**
@@ -100,7 +100,7 @@ private[spark] abstract class PeriodicCheckpointer[T](
       var canDelete = true
       while (checkpointQueue.size > 1 && canDelete) {
         // Delete the oldest checkpoint only if the next checkpoint exists.
-        if (isCheckpointed(checkpointQueue.head)) {
+        if (isCheckpointed(checkpointQueue(1))) {
           removeCheckpointFile()
         } else {
           canDelete = false
@@ -185,9 +185,9 @@ private[spark] object PeriodicCheckpointer extends Logging {
       val fs = path.getFileSystem(conf)
       fs.delete(path, true)
     } catch {
-      case e: Exception =>
-        logWarning("PeriodicCheckpointer could not remove old checkpoint file: " +
-          checkpointFile)
+      case _: Exception =>
+        logWarning(log"PeriodicCheckpointer could not remove old checkpoint file: " +
+          log"${MDC(FILE_NAME, checkpointFile)}")
     }
   }
 }

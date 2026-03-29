@@ -1,0 +1,2 @@
+Project [static_invoke(BitmapExpressionUtils.bitmapBitPosition(id#0L)) AS bitmap_bit_position(id)#0L]
++- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

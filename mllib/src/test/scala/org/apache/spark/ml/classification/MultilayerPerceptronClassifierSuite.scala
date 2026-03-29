@@ -17,8 +17,10 @@
 
 package org.apache.spark.ml.classification
 
+import scala.util.Random
+
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
@@ -59,6 +61,20 @@ class MultilayerPerceptronClassifierSuite extends MLTest with DefaultReadWriteTe
       mlpc.setLayers(Array[Int](1, 0))
     }
     mlpc.setLayers(Array[Int](1, 1))
+  }
+
+  test("MultilayerPerceptronClassifier validate input dataset") {
+    testInvalidClassificationLabels(
+      new MultilayerPerceptronClassifier().setLayers(Array[Int](2, 5, 2)).fit(_),
+      Some(2)
+    )
+    testInvalidClassificationLabels(
+      new MultilayerPerceptronClassifier().setLayers(Array[Int](2, 5, 3)).fit(_),
+      Some(3)
+    )
+    testInvalidVectors(
+      new MultilayerPerceptronClassifier().setLayers(Array[Int](2, 5, 2)).fit(_)
+    )
   }
 
   test("XOR function learning as binary classification problem with two outputs.") {
@@ -228,5 +244,77 @@ class MultilayerPerceptronClassifierSuite extends MLTest with DefaultReadWriteTe
         assert(expected.layers === actual.layers)
         assert(expected.weights === actual.weights)
       }
+  }
+
+  test("Load MultilayerPerceptronClassificationModel prior to Spark 3.0") {
+    val mlpPath = testFile("ml-models/mlp-2.4.4")
+    val model = MultilayerPerceptronClassificationModel.load(mlpPath)
+    val layers = model.getLayers
+    assert(layers(0) === 4)
+    assert(layers(1) === 5)
+    assert(layers(2) === 2)
+
+    val metadata = spark.read.json(s"$mlpPath/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr === "2.4.4")
+  }
+
+  test("summary and training summary") {
+    val mlp = new MultilayerPerceptronClassifier()
+    val model = mlp.setMaxIter(5).setLayers(Array(2, 3, 2)).fit(dataset)
+    val summary = model.evaluate(dataset)
+
+    assert(model.summary.truePositiveRateByLabel === summary.truePositiveRateByLabel)
+    assert(model.summary.falsePositiveRateByLabel === summary.falsePositiveRateByLabel)
+    assert(model.summary.precisionByLabel === summary.precisionByLabel)
+    assert(model.summary.recallByLabel === summary.recallByLabel)
+    assert(model.summary.fMeasureByLabel === summary.fMeasureByLabel)
+    assert(model.summary.accuracy === summary.accuracy)
+    assert(model.summary.weightedFalsePositiveRate === summary.weightedFalsePositiveRate)
+    assert(model.summary.weightedTruePositiveRate === summary.weightedTruePositiveRate)
+    assert(model.summary.weightedPrecision === summary.weightedPrecision)
+    assert(model.summary.weightedRecall === summary.weightedRecall)
+    assert(model.summary.weightedFMeasure === summary.weightedFMeasure)
+  }
+
+  test("MultilayerPerceptron training summary totalIterations") {
+    Seq(1, 5, 10, 20, 100).foreach { maxIter =>
+      val trainer = new MultilayerPerceptronClassifier()
+        .setMaxIter(maxIter)
+        .setLayers(Array(2, 3, 2))
+      val model = trainer.fit(dataset)
+      if (maxIter == 1) {
+        assert(model.summary.totalIterations === maxIter)
+      } else {
+        assert(model.summary.totalIterations <= maxIter)
+      }
+    }
+  }
+
+  test("model size estimation: multilayer perceptron") {
+    val rng = new Random(1)
+
+    Seq(10, 100, 1000, 10000, 100000).foreach { n =>
+      val df = Seq(
+        (Vectors.dense(Array.fill(n)(rng.nextDouble())), 0.0),
+        (Vectors.dense(Array.fill(n)(rng.nextDouble())), 1.0)
+      ).toDF("features", "label")
+
+      val mlp = new MultilayerPerceptronClassifier().setMaxIter(1).setLayers(Array(n, 3, 2))
+      val size1 = mlp.estimateModelSize(df)
+      val model = mlp.fit(df)
+      assert(model.weights.isInstanceOf[DenseVector]) // mlp model is always dense
+      val size2 = model.estimatedSize
+
+      // the model is dense, the estimation should be relatively accurate
+      //      (n, size1, size2)
+      //      (10,4964,4964) <- when the model is small, model.params matters
+      //      (100,7124,7124)
+      //      (1000,28724,28724)
+      //      (10000,244724,244724)
+      //      (100000,2404724,2404724)
+      val rel = (size1 - size2).toDouble / size2
+      assert(math.abs(rel) < 0.05, (n, size1, size2))
+    }
   }
 }

@@ -24,10 +24,9 @@ import scala.reflect.ClassTag
 import org.mockito.Mockito
 import org.mockito.Mockito.atLeastOnce
 import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
-import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
+import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{SparkConf, SparkFunSuite, TaskContext, TaskContextImpl}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext, TaskContextImpl}
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.serializer.{JavaSerializer, SerializationStream, SerializerManager}
 import org.apache.spark.storage.memory.{MemoryStore, PartiallySerializedBlock, RedirectableOutputStream}
@@ -36,7 +35,6 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
 
 class PartiallySerializedBlockSuite
     extends SparkFunSuite
-    with BeforeAndAfterEach
     with PrivateMethodTester {
 
   private val blockId = new TestBlockId("test")
@@ -44,9 +42,10 @@ class PartiallySerializedBlockSuite
   private val memoryStore = Mockito.mock(classOf[MemoryStore], Mockito.RETURNS_SMART_NULLS)
   private val serializerManager = new SerializerManager(new JavaSerializer(conf), conf)
 
-  private val getSerializationStream = PrivateMethod[SerializationStream]('serializationStream)
+  private val getSerializationStream =
+    PrivateMethod[SerializationStream](Symbol("serializationStream"))
   private val getRedirectableOutputStream =
-    PrivateMethod[RedirectableOutputStream]('redirectableOutputStream)
+    PrivateMethod[RedirectableOutputStream](Symbol("redirectableOutputStream"))
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
@@ -58,20 +57,22 @@ class PartiallySerializedBlockSuite
       numItemsToBuffer: Int): PartiallySerializedBlock[T] = {
 
     val bbos: ChunkedByteBufferOutputStream = {
-      val spy = Mockito.spy(new ChunkedByteBufferOutputStream(128, ByteBuffer.allocate))
-      Mockito.doAnswer(new Answer[ChunkedByteBuffer] {
-        override def answer(invocationOnMock: InvocationOnMock): ChunkedByteBuffer = {
-          Mockito.spy(invocationOnMock.callRealMethod().asInstanceOf[ChunkedByteBuffer])
-        }
-      }).when(spy).toChunkedByteBuffer
+      val spy = Mockito.spy[ChunkedByteBufferOutputStream](
+        new ChunkedByteBufferOutputStream(128, ByteBuffer.allocate))
+      Mockito.doAnswer { (invocationOnMock: InvocationOnMock) =>
+        Mockito.spy[ChunkedByteBuffer](
+          invocationOnMock.callRealMethod().asInstanceOf[ChunkedByteBuffer])
+      }.when(spy).toChunkedByteBuffer
       spy
     }
 
     val serializer = serializerManager
       .getSerializer(implicitly[ClassTag[T]], autoPick = true).newInstance()
-    val redirectableOutputStream = Mockito.spy(new RedirectableOutputStream)
+    val redirectableOutputStream = Mockito.spy[RedirectableOutputStream](
+      new RedirectableOutputStream)
     redirectableOutputStream.setOutputStream(bbos)
-    val serializationStream = Mockito.spy(serializer.serializeStream(redirectableOutputStream))
+    val serializationStream = Mockito.spy[SerializationStream](
+      serializer.serializeStream(redirectableOutputStream))
 
     (1 to numItemsToBuffer).foreach { _ =>
       assert(iter.hasNext)
@@ -95,10 +96,10 @@ class PartiallySerializedBlockSuite
   test("valuesIterator() and finishWritingToStream() cannot be called after discard() is called") {
     val partiallySerializedBlock = partiallyUnroll((1 to 10).iterator, 2)
     partiallySerializedBlock.discard()
-    intercept[IllegalStateException] {
+    intercept[SparkException] {
       partiallySerializedBlock.finishWritingToStream(null)
     }
-    intercept[IllegalStateException] {
+    intercept[SparkException] {
       partiallySerializedBlock.valuesIterator
     }
   }
@@ -112,7 +113,7 @@ class PartiallySerializedBlockSuite
   test("cannot call valuesIterator() more than once") {
     val partiallySerializedBlock = partiallyUnroll((1 to 10).iterator, 2)
     partiallySerializedBlock.valuesIterator
-    intercept[IllegalStateException] {
+    intercept[SparkException] {
       partiallySerializedBlock.valuesIterator
     }
   }
@@ -120,7 +121,7 @@ class PartiallySerializedBlockSuite
   test("cannot call finishWritingToStream() more than once") {
     val partiallySerializedBlock = partiallyUnroll((1 to 10).iterator, 2)
     partiallySerializedBlock.finishWritingToStream(new ByteBufferOutputStream())
-    intercept[IllegalStateException] {
+    intercept[SparkException] {
       partiallySerializedBlock.finishWritingToStream(new ByteBufferOutputStream())
     }
   }
@@ -128,7 +129,7 @@ class PartiallySerializedBlockSuite
   test("cannot call finishWritingToStream() after valuesIterator()") {
     val partiallySerializedBlock = partiallyUnroll((1 to 10).iterator, 2)
     partiallySerializedBlock.valuesIterator
-    intercept[IllegalStateException] {
+    intercept[SparkException] {
       partiallySerializedBlock.finishWritingToStream(new ByteBufferOutputStream())
     }
   }
@@ -136,7 +137,7 @@ class PartiallySerializedBlockSuite
   test("cannot call valuesIterator() after finishWritingToStream()") {
     val partiallySerializedBlock = partiallyUnroll((1 to 10).iterator, 2)
     partiallySerializedBlock.finishWritingToStream(new ByteBufferOutputStream())
-    intercept[IllegalStateException] {
+    intercept[SparkException] {
       partiallySerializedBlock.valuesIterator
     }
   }
@@ -172,7 +173,7 @@ class PartiallySerializedBlockSuite
 
     test(s"$testCaseName with finishWritingToStream() and numBuffered = $numItemsToBuffer") {
       val partiallySerializedBlock = partiallyUnroll(items.iterator, numItemsToBuffer)
-      val bbos = Mockito.spy(new ByteBufferOutputStream())
+      val bbos = Mockito.spy[ByteBufferOutputStream](new ByteBufferOutputStream())
       partiallySerializedBlock.finishWritingToStream(bbos)
 
       Mockito.verify(memoryStore).releaseUnrollMemoryForThisTask(

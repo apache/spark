@@ -1,21 +1,4 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-/*
  * Based on TimSort.java from the Android Open Source Project
  *
  *  Copyright (C) 2008 The Android Open Source Project
@@ -409,10 +392,14 @@ class TimSort<K, Buffer> {
        * large) stack lengths for smaller arrays.  The "magic numbers" in the
        * computation below must be changed if MIN_MERGE is decreased.  See
        * the MIN_MERGE declaration above for more information.
+       * The maximum value of 49 allows for an array up to length
+       * Integer.MAX_VALUE-4, if array is filled by the worst case stack size
+       * increasing scenario. More explanations are given in section 4 of:
+       * http://envisage-project.eu/wp-content/uploads/2015/02/sorting.pdf
        */
       int stackLen = (len <    120  ?  5 :
                       len <   1542  ? 10 :
-                      len < 119151  ? 19 : 40);
+                      len < 119151  ? 24 : 49);
       runBase = new int[stackLen];
       runLen = new int[stackLen];
     }
@@ -439,15 +426,20 @@ class TimSort<K, Buffer> {
      * This method is called each time a new run is pushed onto the stack,
      * so the invariants are guaranteed to hold for i < stackSize upon
      * entry to the method.
+     *
+     * Thanks to Stijn de Gouw, Jurriaan Rot, Frank S. de Boer,
+     * Richard Bubel and Reiner Hahnle, this is fixed with respect to
+     * the analysis in "On the Worst-Case Complexity of TimSort" by
+     * Nicolas Auger, Vincent Jug, Cyril Nicaud, and Carine Pivoteau.
      */
     private void mergeCollapse() {
       while (stackSize > 1) {
         int n = stackSize - 2;
-        if ( (n >= 1 && runLen[n-1] <= runLen[n] + runLen[n+1])
-          || (n >= 2 && runLen[n-2] <= runLen[n] + runLen[n-1])) {
+        if (n > 0 && runLen[n-1] <= runLen[n] + runLen[n+1] ||
+            n > 1 && runLen[n-2] <= runLen[n] + runLen[n-1]) {
           if (runLen[n - 1] < runLen[n + 1])
             n--;
-        } else if (runLen[n] > runLen[n + 1]) {
+        } else if (n < 0 || runLen[n] > runLen[n + 1]) {
           break; // Invariant is established
         }
         mergeAt(n);

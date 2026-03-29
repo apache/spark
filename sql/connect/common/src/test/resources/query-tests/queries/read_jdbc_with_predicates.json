@@ -1,0 +1,15 @@
+{
+  "common": {
+    "planId": "0"
+  },
+  "read": {
+    "dataSource": {
+      "format": "jdbc",
+      "options": {
+        "url": "jdbc:h2:mem:testdb0;user\u003dtestUser;password\u003dtestPass",
+        "dbtable": "TEST.PEOPLE"
+      },
+      "predicates": ["THEID \u003c 2", "THEID \u003e\u003d 2"]
+    }
+  }
+}

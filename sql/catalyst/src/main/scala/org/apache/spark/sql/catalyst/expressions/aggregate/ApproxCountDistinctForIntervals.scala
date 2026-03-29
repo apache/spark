@@ -21,9 +21,12 @@ import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, GenericInternalRow}
+import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.catalyst.types.PhysicalNumericType
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, HyperLogLogPlusPlusHelper}
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 
@@ -39,7 +42,8 @@ import org.apache.spark.unsafe.Platform
  *                            and its elements should be sorted into ascending order.
  *                            Duplicate endpoints are allowed, e.g. (1, 5, 5, 10), and ndv for
  *                            interval (5, 5] would be 1.
- * @param relativeSD The maximum estimation error allowed in the HyperLogLogPlusPlus algorithm.
+ * @param relativeSD The maximum relative standard deviation allowed
+ *                   in the HyperLogLogPlusPlus algorithm.
  */
 case class ApproxCountDistinctForIntervals(
     child: Expression,
@@ -47,7 +51,10 @@ case class ApproxCountDistinctForIntervals(
     relativeSD: Double = 0.05,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends TypedImperativeAggregate[Array[Long]] with ExpectsInputTypes {
+  extends TypedImperativeAggregate[Array[Long]]
+  with ExpectsInputTypes
+  with BinaryLike[Expression]
+  with QueryErrorsBase {
 
   def this(child: Expression, endpointsExpression: Expression, relativeSD: Expression) = {
     this(
@@ -59,7 +66,8 @@ case class ApproxCountDistinctForIntervals(
   }
 
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(TypeCollection(NumericType, TimestampType, DateType), ArrayType)
+    Seq(TypeCollection(NumericType, TimestampType, DateType, TimestampNTZType,
+      YearMonthIntervalType, DayTimeIntervalType), ArrayType)
   }
 
   // Mark as lazy so that endpointsExpression is not evaluated during tree transformation.
@@ -74,17 +82,32 @@ case class ApproxCountDistinctForIntervals(
     if (defaultCheck.isFailure) {
       defaultCheck
     } else if (!endpointsExpression.foldable) {
-      TypeCheckFailure("The endpoints provided must be constant literals")
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("endpointsExpression"),
+          "inputType" -> toSQLType(endpointsExpression.dataType)))
     } else {
       endpointsExpression.dataType match {
-        case ArrayType(_: NumericType | DateType | TimestampType, _) =>
+        case ArrayType(_: NumericType | DateType | TimestampType | TimestampNTZType |
+           _: AnsiIntervalType, _) =>
           if (endpoints.length < 2) {
-            TypeCheckFailure("The number of endpoints must be >= 2 to construct intervals")
+            DataTypeMismatch(
+              errorSubClass = "WRONG_NUM_ENDPOINTS",
+              messageParameters = Map("actualNumber" -> endpoints.length.toString))
           } else {
             TypeCheckSuccess
           }
-        case _ =>
-          TypeCheckFailure("Endpoints require (numeric or timestamp or date) type")
+        case inputType =>
+          val requiredElemTypes = toSQLType(TypeCollection(
+            NumericType, DateType, TimestampType, TimestampNTZType, AnsiIntervalType))
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> ordinalNumber(1),
+              "requiredType" -> s"ARRAY OF $requiredElemTypes",
+              "inputSql" -> toSQLExpr(endpointsExpression),
+              "inputType" -> toSQLType(inputType)))
       }
     }
   }
@@ -117,10 +140,11 @@ case class ApproxCountDistinctForIntervals(
       // convert the value into a double value for searching in the double array
       val doubleValue = child.dataType match {
         case n: NumericType =>
-          n.numeric.toDouble(value.asInstanceOf[n.InternalType])
-        case _: DateType =>
+          PhysicalNumericType.numeric(n)
+            .toDouble(value.asInstanceOf[PhysicalNumericType#InternalType])
+        case _: DateType | _: YearMonthIntervalType =>
           value.asInstanceOf[Int].toDouble
-        case _: TimestampType =>
+        case TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
           value.asInstanceOf[Long].toDouble
       }
 
@@ -212,7 +236,8 @@ case class ApproxCountDistinctForIntervals(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
   }
 
-  override def children: Seq[Expression] = Seq(child, endpointsExpression)
+  override def left: Expression = child
+  override def right: Expression = endpointsExpression
 
   override def nullable: Boolean = false
 
@@ -246,4 +271,8 @@ case class ApproxCountDistinctForIntervals(
     override def getLong(offset: Int): Long = array(offset)
     override def setLong(offset: Int, value: Long): Unit = { array(offset) = value }
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ApproxCountDistinctForIntervals =
+    copy(child = newLeft, endpointsExpression = newRight)
 }

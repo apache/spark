@@ -2,6 +2,21 @@
 layout: global
 title: Clustering
 displayTitle: Clustering
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 This page describes clustering algorithms in MLlib.
@@ -25,7 +40,7 @@ called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
 
 ### Input Columns
 
-<table class="table">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -46,7 +61,7 @@ called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
 
 ### Output Columns
 
-<table class="table">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -69,8 +84,14 @@ called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.clustering.KMeans.html) for more details.
+
+{% include_example python/ml/kmeans_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.clustering.KMeans) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/clustering/KMeans.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/KMeansExample.scala %}
 </div>
@@ -81,15 +102,9 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/clustering/KMeans.html
 {% include_example java/org/apache/spark/examples/ml/JavaKMeansExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.clustering.KMeans) for more details.
-
-{% include_example python/ml/kmeans_example.py %}
-</div>
-
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.kmeans.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.kmeans.html) for more details.
 
 {% include_example r/ml/kmeans.R %}
 </div>
@@ -106,9 +121,16 @@ and generates a `LDAModel` as the base model. Expert users may cast a `LDAModel`
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.clustering.LDA.html) for more details.
+
+{% include_example python/ml/lda_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.clustering.LDA) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/clustering/LDA.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/LDAExample.scala %}
 </div>
@@ -120,16 +142,9 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/clustering/LDA.html) f
 {% include_example java/org/apache/spark/examples/ml/JavaLDAExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.clustering.LDA) for more details.
-
-{% include_example python/ml/lda_example.py %}
-</div>
-
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.lda.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.lda.html) for more details.
 
 {% include_example r/ml/lda.R %}
 </div>
@@ -150,8 +165,14 @@ Bisecting K-means can often be much faster than regular K-means, but it will gen
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.clustering.BisectingKMeans.html) for more details.
+
+{% include_example python/ml/bisecting_k_means_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.clustering.BisectingKMeans) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/clustering/BisectingKMeans.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/BisectingKMeansExample.scala %}
 </div>
@@ -162,15 +183,9 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/clustering/BisectingKM
 {% include_example java/org/apache/spark/examples/ml/JavaBisectingKMeansExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.clustering.BisectingKMeans) for more details.
-
-{% include_example python/ml/bisecting_k_means_example.py %}
-</div>
-
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.bisectingKmeans.html) for more details. 
+Refer to the [R API docs](api/R/reference/spark.bisectingKmeans.html) for more details.
 
 {% include_example r/ml/bisectingKmeans.R %}
 </div>
@@ -189,7 +204,7 @@ model.
 
 ### Input Columns
 
-<table class="table">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -210,7 +225,7 @@ model.
 
 ### Output Columns
 
-<table class="table">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -239,8 +254,14 @@ model.
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.clustering.GaussianMixture.html) for more details.
+
+{% include_example python/ml/gaussian_mixture_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.clustering.GaussianMixture) for more details.
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/clustering/GaussianMixture.html) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/GaussianMixtureExample.scala %}
 </div>
@@ -251,17 +272,58 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/clustering/GaussianMix
 {% include_example java/org/apache/spark/examples/ml/JavaGaussianMixtureExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.clustering.GaussianMixture) for more details.
+<div data-lang="r" markdown="1">
 
-{% include_example python/ml/gaussian_mixture_example.py %}
+Refer to the [R API docs](api/R/reference/spark.gaussianMixture.html) for more details.
+
+{% include_example r/ml/gaussianMixture.R %}
+</div>
+
+</div>
+
+## Power Iteration Clustering (PIC)
+
+Power Iteration Clustering (PIC) is  a scalable graph clustering algorithm
+developed by [Lin and Cohen](http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf).
+From the abstract: PIC finds a very low-dimensional embedding of a dataset
+using truncated power iteration on a normalized pair-wise similarity matrix of the data.
+
+`spark.ml`'s PowerIterationClustering implementation takes the following parameters:
+
+* `k`: the number of clusters to create
+* `initMode`: param for the initialization algorithm
+* `maxIter`: param for maximum number of iterations
+* `srcCol`: param for the name of the input column for source vertex IDs
+* `dstCol`: name of the input column for destination vertex IDs
+* `weightCol`: Param for weight column name
+
+**Examples**
+
+<div class="codetabs">
+
+<div data-lang="python" markdown="1">
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.clustering.PowerIterationClustering.html) for more details.
+
+{% include_example python/ml/power_iteration_clustering_example.py %}
+</div>
+
+<div data-lang="scala" markdown="1">
+Refer to the [Scala API docs](api/scala/org/apache/spark/ml/clustering/PowerIterationClustering.html) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/PowerIterationClusteringExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+Refer to the [Java API docs](api/java/org/apache/spark/ml/clustering/PowerIterationClustering.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaPowerIterationClusteringExample.java %}
 </div>
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.gaussianMixture.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.powerIterationClustering.html) for more details.
 
-{% include_example r/ml/gaussianMixture.R %}
+{% include_example r/ml/powerIterationClustering.R %}
 </div>
 
 </div>

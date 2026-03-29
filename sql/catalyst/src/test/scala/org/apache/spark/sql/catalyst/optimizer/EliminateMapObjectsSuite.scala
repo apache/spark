@@ -37,25 +37,27 @@ class EliminateMapObjectsSuite extends PlanTest {
     }
   }
 
-  implicit private def intArrayEncoder = ExpressionEncoder[Array[Int]]()
-  implicit private def doubleArrayEncoder = ExpressionEncoder[Array[Double]]()
+  implicit private def intArrayEncoder: ExpressionEncoder[Array[Int]] =
+    ExpressionEncoder[Array[Int]]()
+  implicit private def doubleArrayEncoder: ExpressionEncoder[Array[Double]] =
+    ExpressionEncoder[Array[Double]]()
 
   test("SPARK-20254: Remove unnecessary data conversion for primitive array") {
     val intObjType = ObjectType(classOf[Array[Int]])
-    val intInput = LocalRelation('a.array(ArrayType(IntegerType, false)))
+    val intInput = LocalRelation($"a".array(ArrayType(IntegerType, false)))
     val intQuery = intInput.deserialize[Array[Int]].analyze
     val intOptimized = Optimize.execute(intQuery)
     val intExpected = DeserializeToObject(
-      Invoke(intInput.output(0), "toIntArray", intObjType, Nil, true, false),
+      Invoke(intInput.output(0), "toIntArray", intObjType, Nil, Nil, true, false),
       AttributeReference("obj", intObjType, true)(), intInput)
     comparePlans(intOptimized, intExpected)
 
     val doubleObjType = ObjectType(classOf[Array[Double]])
-    val doubleInput = LocalRelation('a.array(ArrayType(DoubleType, false)))
+    val doubleInput = LocalRelation($"a".array(ArrayType(DoubleType, false)))
     val doubleQuery = doubleInput.deserialize[Array[Double]].analyze
     val doubleOptimized = Optimize.execute(doubleQuery)
     val doubleExpected = DeserializeToObject(
-      Invoke(doubleInput.output(0), "toDoubleArray", doubleObjType, Nil, true, false),
+      Invoke(doubleInput.output(0), "toDoubleArray", doubleObjType, Nil, Nil, true, false),
       AttributeReference("obj", doubleObjType, true)(), doubleInput)
     comparePlans(doubleOptimized, doubleExpected)
   }

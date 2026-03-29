@@ -14,12 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from decimal import Decimal
 
+from pyspark.errors import IllegalArgumentException, PySparkTypeError
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-class ConfTests(ReusedSQLTestCase):
-
+class ConfTestsMixin:
     def test_conf(self):
         spark = self.spark
         spark.conf.set("bogo", "sipeo")
@@ -28,7 +29,7 @@ class ConfTests(ReusedSQLTestCase):
         self.assertEqual(spark.conf.get("bogo"), "ta")
         self.assertEqual(spark.conf.get("bogo", "not.read"), "ta")
         self.assertEqual(spark.conf.get("not.set", "ta"), "ta")
-        self.assertRaisesRegexp(Exception, "not.set", lambda: spark.conf.get("not.set"))
+        self.assertRaisesRegex(Exception, "not.set", lambda: spark.conf.get("not.set"))
         spark.conf.unset("bogo")
         self.assertEqual(spark.conf.get("bogo", "colombia"), "colombia")
 
@@ -43,14 +44,63 @@ class ConfTests(ReusedSQLTestCase):
         # `defaultValue` in `spark.conf.get` is set to None.
         self.assertEqual(spark.conf.get("spark.sql.sources.partitionOverwriteMode", None), None)
 
+        self.assertTrue(spark.conf.isModifiable("spark.sql.execution.arrow.maxRecordsPerBatch"))
+        self.assertFalse(spark.conf.isModifiable("spark.sql.warehouse.dir"))
+
+    def test_conf_with_python_objects(self):
+        spark = self.spark
+
+        try:
+            for value, expected in [(True, "true"), (False, "false")]:
+                spark.conf.set("foo", value)
+                self.assertEqual(spark.conf.get("foo"), expected)
+
+            spark.conf.set("foo", 1)
+            self.assertEqual(spark.conf.get("foo"), "1")
+
+            with self.assertRaises(IllegalArgumentException):
+                spark.conf.set("foo", None)
+
+            with self.assertRaises(Exception):
+                spark.conf.set("foo", Decimal(1))
+
+            with self.assertRaises(PySparkTypeError) as pe:
+                spark.conf.get(123)
+
+            self.check_error(
+                exception=pe.exception,
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "str",
+                    "arg_name": "key",
+                    "arg_type": "int",
+                },
+            )
+        finally:
+            spark.conf.unset("foo")
+
+    def test_get_all(self):
+        spark = self.spark
+        all_confs = spark.conf.getAll
+
+        self.assertTrue(len(all_confs) > 0)
+        self.assertNotIn("foo", all_confs)
+
+        try:
+            spark.conf.set("foo", "bar")
+            updated = spark.conf.getAll
+
+            self.assertEqual(len(updated), len(all_confs) + 1)
+            self.assertIn("foo", updated)
+        finally:
+            spark.conf.unset("foo")
+
+
+class ConfTests(ConfTestsMixin, ReusedSQLTestCase):
+    pass
+
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.test_conf import *
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

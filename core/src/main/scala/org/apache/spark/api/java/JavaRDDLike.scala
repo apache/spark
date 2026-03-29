@@ -21,7 +21,7 @@ import java.{lang => jl}
 import java.lang.{Iterable => JIterable}
 import java.util.{Comparator, Iterator => JIterator, List => JList, Map => JMap}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.io.compress.CompressionCodec
@@ -35,6 +35,7 @@ import org.apache.spark.api.java.function.{Function => JFunction, Function2 => J
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -58,7 +59,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def rdd: RDD[T]
 
   /** Set of partitions in this RDD. */
-  def partitions: JList[Partition] = rdd.partitions.toSeq.asJava
+  def partitions: JList[Partition] = rdd.partitions.toImmutableArraySeq.asJava
 
   /** Return the number of partitions in this RDD. */
   @Since("1.6.0")
@@ -78,7 +79,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   /**
    * Internal method to this RDD; will read from cache if applicable, or otherwise compute it.
-   * This should ''not'' be called by users directly, but is available for implementors of custom
+   * This should ''not'' be called by users directly, but is available for implementers of custom
    * subclasses of RDD.
    */
   def iterator(split: Partition, taskContext: TaskContext): JIterator[T] =
@@ -223,7 +224,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return an RDD created by coalescing all elements within each partition into an array.
    */
   def glom(): JavaRDD[JList[T]] =
-    new JavaRDD(rdd.glom().map(_.toSeq.asJava))
+    new JavaRDD(rdd.glom().map(_.toImmutableArraySeq.asJava))
 
   /**
    * Return the Cartesian product of this RDD and another one, that is, the RDD of all pairs of
@@ -265,14 +266,14 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return an RDD created by piping elements to a forked external process.
    */
   def pipe(command: JList[String]): JavaRDD[String] = {
-    rdd.pipe(command.asScala)
+    rdd.pipe(command.asScala.toSeq)
   }
 
   /**
    * Return an RDD created by piping elements to a forked external process.
    */
   def pipe(command: JList[String], env: JMap[String, String]): JavaRDD[String] = {
-    rdd.pipe(command.asScala, env.asScala)
+    rdd.pipe(command.asScala.toSeq, env.asScala)
   }
 
   /**
@@ -282,7 +283,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
            env: JMap[String, String],
            separateWorkingDir: Boolean,
            bufferSize: Int): JavaRDD[String] = {
-    rdd.pipe(command.asScala, env.asScala, null, null, separateWorkingDir, bufferSize)
+    rdd.pipe(command.asScala.toSeq, env.asScala, null, null, separateWorkingDir, bufferSize)
   }
 
   /**
@@ -293,7 +294,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
            separateWorkingDir: Boolean,
            bufferSize: Int,
            encoding: String): JavaRDD[String] = {
-    rdd.pipe(command.asScala, env.asScala, null, null, separateWorkingDir, bufferSize, encoding)
+    rdd.pipe(command.asScala.toSeq, env.asScala, null, null, separateWorkingDir, bufferSize,
+      encoding)
   }
 
   /**
@@ -347,7 +349,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Applies a function f to all elements of this RDD.
    */
-  def foreach(f: VoidFunction[T]) {
+  def foreach(f: VoidFunction[T]): Unit = {
     rdd.foreach(x => f.call(x))
   }
 
@@ -358,7 +360,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * all the data is loaded into the driver's memory.
    */
   def collect(): JList[T] =
-    rdd.collect().toSeq.asJava
+    rdd.collect().toImmutableArraySeq.asJava
 
   /**
    * Return an iterator that contains all of the elements in this RDD.
@@ -366,7 +368,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * The iterator will consume as much memory as the largest partition in this RDD.
    */
   def toLocalIterator(): JIterator[T] =
-     asJavaIteratorConverter(rdd.toLocalIterator).asJava
+     rdd.toLocalIterator.asJava
 
   /**
    * Return an array that contains all of the elements in a specific partition of this RDD.
@@ -374,8 +376,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def collectPartitions(partitionIds: Array[Int]): Array[JList[T]] = {
     // This is useful for implementing `take` from other language frontends
     // like Python where the data is serialized.
-    val res = context.runJob(rdd, (it: Iterator[T]) => it.toArray, partitionIds)
-    res.map(_.toSeq.asJava)
+    val res = context.runJob(rdd, (it: Iterator[T]) => it.toArray, partitionIds.toImmutableArraySeq)
+    res.map(_.toImmutableArraySeq.asJava)
   }
 
   /**
@@ -417,7 +419,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Aggregate the elements of each partition, and then the results for all the partitions, using
    * given combine functions and a neutral "zero value". This function can return a different result
    * type, U, than the type of this RDD, T. Thus, we need one operation for merging a T into an U
-   * and one operation for merging two U's, as in scala.TraversableOnce. Both of these functions are
+   * and one operation for merging two U's, as in scala.IterableOnce. Both of these functions are
    * allowed to modify and return their first argument instead of creating a new U to avoid memory
    * allocation.
    */
@@ -447,6 +449,19 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
       seqOp: JFunction2[U, T, U],
       combOp: JFunction2[U, U, U]): U = {
     treeAggregate(zeroValue, seqOp, combOp, 2)
+  }
+
+  /**
+   * `org.apache.spark.api.java.JavaRDDLike.treeAggregate` with a parameter to do the
+   * final aggregation on the executor.
+   */
+  def treeAggregate[U](
+      zeroValue: U,
+      seqOp: JFunction2[U, T, U],
+      combOp: JFunction2[U, U, U],
+      depth: Int,
+      finalAggregateOnExecutor: Boolean): U = {
+    rdd.treeAggregate(zeroValue, seqOp, combOp, depth, finalAggregateOnExecutor)(fakeClassTag[U])
   }
 
   /**
@@ -524,13 +539,13 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * all the data is loaded into the driver's memory.
    */
   def take(num: Int): JList[T] =
-    rdd.take(num).toSeq.asJava
+    rdd.take(num).toImmutableArraySeq.asJava
 
   def takeSample(withReplacement: Boolean, num: Int): JList[T] =
     takeSample(withReplacement, num, Utils.random.nextLong)
 
   def takeSample(withReplacement: Boolean, num: Int, seed: Long): JList[T] =
-    rdd.takeSample(withReplacement, num, seed).toSeq.asJava
+    rdd.takeSample(withReplacement, num, seed).toImmutableArraySeq.asJava
 
   /**
    * Return the first element in this RDD.
@@ -613,7 +628,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * @return an array of top elements
    */
   def top(num: Int, comp: Comparator[T]): JList[T] = {
-    rdd.top(num)(Ordering.comparatorToOrdering(comp)).toSeq.asJava
+    rdd.top(num)(Ordering.comparatorToOrdering(comp)).toImmutableArraySeq.asJava
   }
 
   /**
@@ -641,7 +656,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * @return an array of top elements
    */
   def takeOrdered(num: Int, comp: Comparator[T]): JList[T] = {
-    rdd.takeOrdered(num)(Ordering.comparatorToOrdering(comp)).toSeq.asJava
+    rdd.takeOrdered(num)(Ordering.comparatorToOrdering(comp)).toImmutableArraySeq.asJava
   }
 
   /**
@@ -685,7 +700,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   * <a href="https://doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
    *                   It must be greater than 0.000017.

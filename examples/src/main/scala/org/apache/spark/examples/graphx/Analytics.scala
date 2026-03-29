@@ -18,20 +18,19 @@
 // scalastyle:off println
 package org.apache.spark.examples.graphx
 
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 
 import org.apache.spark._
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.PartitionStrategy._
 import org.apache.spark.graphx.lib._
-import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
 
 
 /**
  * Driver program for running graph algorithms.
  */
-object Analytics extends Logging {
+object Analytics {
 
   def main(args: Array[String]): Unit = {
     if (args.length < 2) {
@@ -52,7 +51,7 @@ object Analytics extends Logging {
         case _ => throw new IllegalArgumentException(s"Invalid argument: $arg")
       }
     }
-    val options = mutable.Map(optionsList: _*)
+    val options = mutable.Map(immutable.ArraySeq.unsafeWrapArray(optionsList): _*)
 
     val conf = new SparkConf()
     GraphXUtils.registerKryoClasses(conf)
@@ -90,8 +89,8 @@ object Analytics extends Logging {
           vertexStorageLevel = vertexStorageLevel).cache()
         val graph = partitionStrategy.foldLeft(unpartitionedGraph)(_.partitionBy(_))
 
-        println(s"GRAPHX: Number of vertices ${graph.vertices.count}")
-        println(s"GRAPHX: Number of edges ${graph.edges.count}")
+        println(s"GRAPHX: Number of vertices ${graph.vertices.count()}")
+        println(s"GRAPHX: Number of edges ${graph.edges.count()}")
 
         val pr = (numIterOpt match {
           case Some(numIter) => PageRank.run(graph, numIter)
@@ -101,8 +100,8 @@ object Analytics extends Logging {
         println(s"GRAPHX: Total rank: ${pr.map(_._2).reduce(_ + _)}")
 
         if (!outFname.isEmpty) {
-          logWarning(s"Saving pageranks of pages to $outFname")
-          pr.map { case (id, r) => id + "\t" + r }.saveAsTextFile(outFname)
+          println(s"Saving pageranks of pages to $outFname")
+          pr.map { case (id, r) => s"$id\t$r" }.saveAsTextFile(outFname)
         }
 
         sc.stop()

@@ -17,56 +17,79 @@
 package org.apache.spark.deploy.k8s.features
 
 import java.io.File
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
-import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.{ConfigMapBuilder, ContainerBuilder, HasMetadata, PodBuilder}
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesRoleSpecificConf, SparkPod}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.util.DependencyUtils.downloadFile
+import org.apache.spark.util.Utils
 
-private[spark] class PodTemplateConfigMapStep(
-   conf: KubernetesConf[_ <: KubernetesRoleSpecificConf])
+private[spark] class PodTemplateConfigMapStep(conf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
-  def configurePod(pod: SparkPod): SparkPod = {
-    val podWithVolume = new PodBuilder(pod.pod)
-        .editSpec()
-          .addNewVolume()
-            .withName(POD_TEMPLATE_VOLUME)
-            .withNewConfigMap()
-              .withName(POD_TEMPLATE_CONFIGMAP)
-              .addNewItem()
-                .withKey(POD_TEMPLATE_KEY)
-                .withPath(EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME)
-              .endItem()
-            .endConfigMap()
-          .endVolume()
-        .endSpec()
-      .build()
 
-    val containerWithVolume = new ContainerBuilder(pod.container)
-        .addNewVolumeMount()
-          .withName(POD_TEMPLATE_VOLUME)
-          .withMountPath(EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH)
-        .endVolumeMount()
-      .build()
-    SparkPod(podWithVolume, containerWithVolume)
+  private val hasTemplate = conf.contains(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
+
+  private val configmapName = s"${conf.resourceNamePrefix}-$POD_TEMPLATE_CONFIGMAP"
+
+  def configurePod(pod: SparkPod): SparkPod = {
+    if (hasTemplate) {
+      val podWithVolume = new PodBuilder(pod.pod)
+          .editSpec()
+            .addNewVolume()
+              .withName(POD_TEMPLATE_VOLUME)
+              .withNewConfigMap()
+                .withName(configmapName)
+                .addNewItem()
+                  .withKey(POD_TEMPLATE_KEY)
+                  .withPath(EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME)
+                .endItem()
+              .endConfigMap()
+            .endVolume()
+          .endSpec()
+        .build()
+
+      val containerWithVolume = new ContainerBuilder(pod.container)
+          .addNewVolumeMount()
+            .withName(POD_TEMPLATE_VOLUME)
+            .withMountPath(EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH)
+          .endVolumeMount()
+        .build()
+      SparkPod(podWithVolume, containerWithVolume)
+    } else {
+      pod
+    }
   }
 
-  override def getAdditionalPodSystemProperties(): Map[String, String] = Map[String, String](
-    KUBERNETES_EXECUTOR_PODTEMPLATE_FILE.key ->
-      (EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH + "/" + EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME))
+  override def getAdditionalPodSystemProperties(): Map[String, String] = {
+    if (hasTemplate) {
+      Map[String, String](
+        KUBERNETES_EXECUTOR_PODTEMPLATE_FILE.key ->
+          (EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH + "/" + EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME))
+    } else {
+      Map.empty
+    }
+  }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
-    require(conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined)
-    val podTemplateFile = conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).get
-    val podTemplateString = Files.toString(new File(podTemplateFile), StandardCharsets.UTF_8)
-    Seq(new ConfigMapBuilder()
-        .withNewMetadata()
-          .withName(POD_TEMPLATE_CONFIGMAP)
-        .endMetadata()
-        .addToData(POD_TEMPLATE_KEY, podTemplateString)
-      .build())
+    if (hasTemplate) {
+      val podTemplateFile = conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).get
+      val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf.sparkConf)
+      val uri = downloadFile(podTemplateFile, Utils.createTempDir(), conf.sparkConf, hadoopConf)
+      val file = new java.net.URI(uri).getPath
+      val podTemplateString = Files.readString(new File(file).toPath)
+      Seq(new ConfigMapBuilder()
+          .withNewMetadata()
+            .withName(configmapName)
+          .endMetadata()
+          .withImmutable(true)
+          .addToData(POD_TEMPLATE_KEY, podTemplateString)
+        .build())
+    } else {
+      Nil
+    }
   }
 }

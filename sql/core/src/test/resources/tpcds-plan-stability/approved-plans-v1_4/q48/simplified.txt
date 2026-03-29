@@ -1,0 +1,50 @@
+WholeStageCodegen (6)
+  HashAggregate [sum] [sum(ss_quantity),sum(ss_quantity),sum]
+    InputAdapter
+      Exchange #1
+        WholeStageCodegen (5)
+          HashAggregate [ss_quantity] [sum,sum]
+            Project [ss_quantity]
+              BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                Project [ss_quantity,ss_sold_date_sk]
+                  BroadcastHashJoin [ss_addr_sk,ca_address_sk,ca_state,ss_net_profit]
+                    Project [ss_addr_sk,ss_quantity,ss_net_profit,ss_sold_date_sk]
+                      BroadcastHashJoin [ss_cdemo_sk,cd_demo_sk,cd_marital_status,cd_education_status,ss_sales_price]
+                        Project [ss_cdemo_sk,ss_addr_sk,ss_quantity,ss_sales_price,ss_net_profit,ss_sold_date_sk]
+                          BroadcastHashJoin [ss_store_sk,s_store_sk]
+                            Filter [ss_store_sk,ss_cdemo_sk,ss_addr_sk,ss_sales_price,ss_net_profit]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet spark_catalog.default.store_sales [ss_cdemo_sk,ss_addr_sk,ss_store_sk,ss_quantity,ss_sales_price,ss_net_profit,ss_sold_date_sk]
+                                    SubqueryBroadcast [d_date_sk] #1
+                                      BroadcastExchange #2
+                                        WholeStageCodegen (1)
+                                          Project [d_date_sk]
+                                            Filter [d_year,d_date_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year]
+                            InputAdapter
+                              BroadcastExchange #3
+                                WholeStageCodegen (1)
+                                  Filter [s_store_sk]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet spark_catalog.default.store [s_store_sk]
+                        InputAdapter
+                          BroadcastExchange #4
+                            WholeStageCodegen (2)
+                              Filter [cd_demo_sk,cd_marital_status,cd_education_status]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet spark_catalog.default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
+                    InputAdapter
+                      BroadcastExchange #5
+                        WholeStageCodegen (3)
+                          Project [ca_address_sk,ca_state]
+                            Filter [ca_country,ca_address_sk,ca_state]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state,ca_country]
+                InputAdapter
+                  ReusedExchange [d_date_sk] #2

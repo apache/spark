@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+/* global $ */
+
+import {formatTimeMillis, getTimeZone} from "./utils.js";
+
 $(document).ready(function() {
   if ($('#last-updated').length) {
     var lastUpdatedMillis = Number($('#last-updated').text());

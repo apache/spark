@@ -18,10 +18,11 @@
 package test.org.apache.spark.sql.streaming;
 
 import java.io.File;
+import java.util.concurrent.TimeoutException;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.api.java.function.VoidFunction2;
 import org.apache.spark.sql.Dataset;
@@ -35,13 +36,13 @@ public class JavaDataStreamReaderWriterSuite {
   private SparkSession spark;
   private String input;
 
-  @Before
+  @BeforeEach
   public void setUp() {
     spark = new TestSparkSession();
     input = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "input").toString();
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     try {
       Utils.deleteRecursively(new File(input));
@@ -52,21 +53,18 @@ public class JavaDataStreamReaderWriterSuite {
   }
 
   @Test
-  public void testForeachBatchAPI() {
+  public void testForeachBatchAPI() throws TimeoutException {
     StreamingQuery query = spark
       .readStream()
       .textFile(input)
       .writeStream()
-      .foreachBatch(new VoidFunction2<Dataset<String>, Long>() {
-        @Override
-        public void call(Dataset<String> v1, Long v2) throws Exception {}
-      })
+      .foreachBatch((VoidFunction2<Dataset<String>, Long>) (v1, v2) -> {})
       .start();
     query.stop();
   }
 
   @Test
-  public void testForeachAPI() {
+  public void testForeachAPI() throws TimeoutException {
     StreamingQuery query = spark
       .readStream()
       .textFile(input)

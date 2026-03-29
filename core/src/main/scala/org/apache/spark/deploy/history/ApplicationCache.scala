@@ -17,19 +17,19 @@
 
 package org.apache.spark.deploy.history
 
-import java.util.NoSuchElementException
-import java.util.concurrent.ExecutionException
-import javax.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, ServletException, ServletRequest, ServletResponse}
-import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
+import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, ExecutionException}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, RemovalListener, RemovalNotification}
 import com.google.common.util.concurrent.UncheckedExecutionException
-import org.eclipse.jetty.servlet.FilterHolder
+import jakarta.servlet.{DispatcherType, Filter, FilterChain, ServletException, ServletRequest, ServletResponse}
+import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
+import org.eclipse.jetty.ee10.servlet.FilterHolder
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Clock
@@ -49,11 +49,24 @@ private[history] class ApplicationCache(
     val retainedApplications: Int,
     val clock: Clock) extends Logging {
 
+  /**
+   * Keep track of SparkUIs in [[ApplicationCache#appCache]] and SparkUIs removed from
+   * [[ApplicationCache#appCache]] but not detached yet.
+   */
+  private val loadedApps = new ConcurrentHashMap[CacheKey, CountDownLatch]()
+
   private val appLoader = new CacheLoader[CacheKey, CacheEntry] {
 
     /** the cache key doesn't match a cached entry, or the entry is out-of-date, so load it. */
     override def load(key: CacheKey): CacheEntry = {
-      loadApplicationEntry(key.appId, key.attemptId)
+      // Ensure old SparkUI has been detached before loading new one.
+      val removalLatch = loadedApps.get(key)
+      if (removalLatch != null) {
+        removalLatch.await()
+      }
+      val entry = loadApplicationEntry(key.appId, key.attemptId)
+      loadedApps.put(key, new CountDownLatch(1))
+      entry
     }
 
   }
@@ -64,11 +77,13 @@ private[history] class ApplicationCache(
      * Removal event notifies the provider to detach the UI.
      * @param rm removal notification
      */
-    override def onRemoval(rm: RemovalNotification[CacheKey, CacheEntry]): Unit = {
+    override def onRemoval(rm: RemovalNotification[CacheKey, CacheEntry]): Unit = try {
       metrics.evictionCount.inc()
       val key = rm.getKey
       logDebug(s"Evicting entry ${key}")
       operations.detachSparkUI(key.appId, key.attemptId, rm.getValue().loadedUI.ui)
+    } finally {
+      loadedApps.remove(rm.getKey()).countDown()
     }
   }
 
@@ -156,18 +171,19 @@ private[history] class ApplicationCache(
    */
   @throws[NoSuchElementException]
   private def loadApplicationEntry(appId: String, attemptId: Option[String]): CacheEntry = {
-    logDebug(s"Loading application Entry $appId/$attemptId")
+    lazy val application = log"${MDC(APP_ID, appId)}/${MDC(APP_ATTEMPT_ID, attemptId.mkString)}"
+    logDebug(log"Loading application Entry " + application)
     metrics.loadCount.inc()
     val loadedUI = time(metrics.loadTimer) {
       metrics.lookupCount.inc()
       operations.getAppUI(appId, attemptId) match {
         case Some(loadedUI) =>
-          logDebug(s"Loaded application $appId/$attemptId")
+          logDebug(log"Loaded application " + application)
           loadedUI
         case None =>
           metrics.lookupFailureCount.inc()
           // guava's cache logs via java.util log, so is of limited use. Hence: our own message
-          logInfo(s"Failed to load application attempt $appId/$attemptId")
+          logInfo(log"Failed to load application attempt " + application)
           throw new NoSuchElementException(s"no application with application Id '$appId'" +
               attemptId.map { id => s" attemptId '$id'" }.getOrElse(" and no attempt Id"))
       }
@@ -182,7 +198,7 @@ private[history] class ApplicationCache(
       new CacheEntry(loadedUI, completed)
     } catch {
       case e: Exception =>
-        logWarning(s"Failed to initialize application UI for $appId/$attemptId", e)
+        logWarning(log"Failed to initialize application UI for ${MDC(APP_ID, application)}", e)
         operations.detachSparkUI(appId, attemptId, loadedUI.ui)
         throw e
     }
@@ -209,9 +225,8 @@ private[history] class ApplicationCache(
 
   /**
    * Register a filter for the web UI which checks for updates to the given app/attempt
-   * @param ui Spark UI to attach filters to
-   * @param appId application ID
-   * @param attemptId attempt ID
+   * @param key consisted of appId and attemptId
+   * @param loadedUI Spark UI to attach filters to
    */
   private def registerFilter(key: CacheKey, loadedUI: LoadedAppUI): Unit = {
     require(loadedUI != null)
@@ -231,7 +246,7 @@ private[history] class ApplicationCache(
 /**
  * An entry in the cache.
  *
- * @param ui Spark UI
+ * @param loadedUI Spark UI
  * @param completed Flag to indicated that the application has completed (and so
  *                 does not need refreshing).
  */
@@ -278,26 +293,12 @@ private[history] class CacheMetrics(prefix: String) extends Source {
     ("eviction.count", evictionCount),
     ("load.count", loadCount))
 
-  /** all metrics, including timers */
-  private val allMetrics = counters ++ Seq(
-    ("load.timer", loadTimer))
-
   /**
    * Name of metric source
    */
   override val sourceName = "ApplicationCache"
 
   override val metricRegistry: MetricRegistry = new MetricRegistry
-
-  /**
-   * Startup actions.
-   * This includes registering metrics with [[metricRegistry]]
-   */
-  private def init(): Unit = {
-    allMetrics.foreach { case (name, metric) =>
-      metricRegistry.register(MetricRegistry.name(prefix, name), metric)
-    }
-  }
 
   override def toString: String = {
     val sb = new StringBuilder()
@@ -395,7 +396,6 @@ private[history] class ApplicationCacheCheckFilter(
     val httpRequest = request.asInstanceOf[HttpServletRequest]
     val httpResponse = response.asInstanceOf[HttpServletResponse]
     val requestURI = httpRequest.getRequestURI
-    val operation = httpRequest.getMethod
 
     // if the request is for an attempt, check to see if it is in need of delete/refresh
     // and have the cache update the UI if so
@@ -414,9 +414,4 @@ private[history] class ApplicationCacheCheckFilter(
       httpResponse.sendRedirect(redirectUrl)
     }
   }
-
-  override def init(config: FilterConfig): Unit = { }
-
-  override def destroy(): Unit = { }
-
 }

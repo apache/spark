@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.api.r
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class SQLUtilsSuite extends SharedSQLContext {
+class SQLUtilsSuite extends SharedSparkSession {
 
   import testImplicits._
 
@@ -27,7 +27,7 @@ class SQLUtilsSuite extends SharedSQLContext {
     val df = Seq(
       (1, 2, 3),
       (4, 5, 6)
-    ).toDF
+    ).toDF()
     assert(SQLUtils.dfToCols(df) === Array(
       Array(1, 4),
       Array(2, 5),

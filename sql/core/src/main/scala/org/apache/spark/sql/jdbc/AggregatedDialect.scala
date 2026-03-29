@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.sql.SQLException
+
 import org.apache.spark.sql.types.{DataType, MetadataBuilder}
 
 /**
@@ -26,7 +28,8 @@ import org.apache.spark.sql.types.{DataType, MetadataBuilder}
  *
  * @param dialects List of dialects.
  */
-private class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect {
+private class AggregatedDialect(dialects: List[JdbcDialect])
+  extends JdbcDialect with NoLegacyJDBCError {
 
   require(dialects.nonEmpty)
 
@@ -54,6 +57,10 @@ private class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect
     dialects.head.getSchemaQuery(table)
   }
 
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    dialects.head.isSyntaxErrorBestEffort(exception)
+  }
+
   override def isCascadingTruncateTable(): Option[Boolean] = {
     // If any dialect claims cascading truncate, this dialect is also cascading truncate.
     // Otherwise, if any dialect has unknown cascading truncate, this dialect is also unknown.
@@ -73,7 +80,7 @@ private class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect
    */
   override def getTruncateQuery(
       table: String,
-      cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+      cascade: Option[Boolean] = isCascadingTruncateTable()): String = {
     dialects.head.getTruncateQuery(table, cascade)
   }
 }

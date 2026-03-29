@@ -20,7 +20,7 @@ package org.apache.spark.rpc
 import scala.concurrent.Future
 import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.RpcUtils
 
@@ -30,8 +30,6 @@ import org.apache.spark.util.RpcUtils
 private[spark] abstract class RpcEndpointRef(conf: SparkConf)
   extends Serializable with Logging {
 
-  private[this] val maxRetries = RpcUtils.numRetries(conf)
-  private[this] val retryWaitMs = RpcUtils.retryWaitMs(conf)
   private[this] val defaultAskTimeout = RpcUtils.askRpcTimeout(conf)
 
   /**
@@ -45,6 +43,17 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
    * Sends a one-way asynchronous message. Fire-and-forget semantics.
    */
   def send(message: Any): Unit
+
+  /**
+   * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a
+   * [[AbortableRpcFuture]] to receive the reply within the specified timeout.
+   * The [[AbortableRpcFuture]] instance wraps [[Future]] with additional `abort` method.
+   *
+   * This method only sends the message once and never retries.
+   */
+  def askAbortable[T: ClassTag](message: Any, timeout: RpcTimeout): AbortableRpcFuture[T] = {
+    throw new UnsupportedOperationException()
+  }
 
   /**
    * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a [[Future]] to
@@ -92,4 +101,13 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
     timeout.awaitResult(future)
   }
 
+}
+
+/**
+ * A wrapper for [[Future]] but add abort method.
+ * This is used in long run RPC and provide an approach to abort the RPC.
+ */
+private[spark]
+class AbortableRpcFuture[T: ClassTag](val future: Future[T], onAbort: Throwable => Unit) {
+  def abort(t: Throwable): Unit = onAbort(t)
 }

@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.clustering
 
-import scala.language.existentials
-
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.ml.linalg.{Vector, Vectors}
@@ -64,7 +62,7 @@ class LDASuite extends MLTest with DefaultReadWriteTest {
 
   val k: Int = 5
   val vocabSize: Int = 30
-  @transient var dataset: Dataset[_] = _
+  @transient var dataset: DataFrame = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -87,6 +85,10 @@ class LDASuite extends MLTest with DefaultReadWriteTest {
     assert(lda.getSubsamplingRate === 0.05)
     assert(lda.getOptimizeDocConcentration)
     assert(lda.getTopicDistributionCol === "topicDistribution")
+  }
+
+  test("LDA validate input dataset") {
+    testInvalidVectors(new LDA().fit(_))
   }
 
   test("set parameters") {
@@ -201,11 +203,11 @@ class LDASuite extends MLTest with DefaultReadWriteTest {
     assert(topics.count() === k)
     assert(topics.select("topic").rdd.map(_.getInt(0)).collect().toSet === Range(0, k).toSet)
     topics.select("termIndices").collect().foreach { case r: Row =>
-      val termIndices = r.getAs[Seq[Int]](0)
+      val termIndices = r.getSeq[Int](0)
       assert(termIndices.length === 3 && termIndices.toSet.size === 3)
     }
     topics.select("termWeights").collect().foreach { case r: Row =>
-      val termWeights = r.getAs[Seq[Double]](0)
+      val termWeights = r.getSeq[Double](0)
       assert(termWeights.length === 3 && termWeights.forall(w => w >= 0.0 && w <= 1.0))
     }
   }
@@ -329,8 +331,7 @@ class LDASuite extends MLTest with DefaultReadWriteTest {
       (model.logLikelihood(dataset), model.logPerplexity(dataset))
     }
 
-    val (newDataset, newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
-    val (ll, lp) = trainAndLogLikelihoodAndPerplexity(newDataset)
+    val (_, newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
     val (llD, lpD) = trainAndLogLikelihoodAndPerplexity(newDatasetD)
     val (llF, lpF) = trainAndLogLikelihoodAndPerplexity(newDatasetF)
     // TODO: need to compare the results once we fix the seed issue for LDA (SPARK-22210)

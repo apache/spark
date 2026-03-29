@@ -49,7 +49,8 @@ private[r] object KSTestWrapper {
       case Row(feature: Double) => feature
     }
 
-    val ksTestResult = kolmogorovSmirnovTest(rddData, distName, distParams : _*)
+    import org.apache.spark.util.ArrayImplicits._
+    val ksTestResult = kolmogorovSmirnovTest(rddData, distName, distParams.toImmutableArraySeq : _*)
 
     new KSTestWrapper(ksTestResult, distName, distParams)
   }

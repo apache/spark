@@ -20,14 +20,18 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.sql.Date;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnarArray;
@@ -35,6 +39,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.unsafe.types.VariantVal;
 
 /**
  * Utilities to help manipulate data associate with ColumnVectors. These should be used mostly
@@ -42,58 +47,55 @@ import org.apache.spark.unsafe.types.UTF8String;
  * These utilities are mostly used to convert ColumnVectors into other formats.
  */
 public class ColumnVectorUtils {
+
   /**
-   * Populates the entire `col` with `row[fieldIdx]`
+   * Populates the value of `row[fieldIdx]` into `ConstantColumnVector`.
    */
-  public static void populate(WritableColumnVector col, InternalRow row, int fieldIdx) {
-    int capacity = col.capacity;
+  public static void populate(ConstantColumnVector col, InternalRow row, int fieldIdx) {
     DataType t = col.dataType();
+    PhysicalDataType pdt = PhysicalDataType.apply(t);
 
     if (row.isNullAt(fieldIdx)) {
-      col.putNulls(0, capacity);
+      col.setNull();
     } else {
-      if (t == DataTypes.BooleanType) {
-        col.putBooleans(0, capacity, row.getBoolean(fieldIdx));
-      } else if (t == DataTypes.ByteType) {
-        col.putBytes(0, capacity, row.getByte(fieldIdx));
-      } else if (t == DataTypes.ShortType) {
-        col.putShorts(0, capacity, row.getShort(fieldIdx));
-      } else if (t == DataTypes.IntegerType) {
-        col.putInts(0, capacity, row.getInt(fieldIdx));
-      } else if (t == DataTypes.LongType) {
-        col.putLongs(0, capacity, row.getLong(fieldIdx));
-      } else if (t == DataTypes.FloatType) {
-        col.putFloats(0, capacity, row.getFloat(fieldIdx));
-      } else if (t == DataTypes.DoubleType) {
-        col.putDoubles(0, capacity, row.getDouble(fieldIdx));
-      } else if (t == DataTypes.StringType) {
+      if (pdt instanceof PhysicalBooleanType) {
+        col.setBoolean(row.getBoolean(fieldIdx));
+      } else if (pdt instanceof PhysicalBinaryType) {
+        col.setBinary(row.getBinary(fieldIdx));
+      } else if (pdt instanceof PhysicalByteType) {
+        col.setByte(row.getByte(fieldIdx));
+      } else if (pdt instanceof PhysicalShortType) {
+        col.setShort(row.getShort(fieldIdx));
+      } else if (pdt instanceof PhysicalIntegerType) {
+        col.setInt(row.getInt(fieldIdx));
+      } else if (pdt instanceof PhysicalLongType) {
+        col.setLong(row.getLong(fieldIdx));
+      } else if (pdt instanceof PhysicalFloatType) {
+        col.setFloat(row.getFloat(fieldIdx));
+      } else if (pdt instanceof PhysicalDoubleType) {
+        col.setDouble(row.getDouble(fieldIdx));
+      } else if (pdt instanceof PhysicalStringType) {
         UTF8String v = row.getUTF8String(fieldIdx);
-        byte[] bytes = v.getBytes();
-        for (int i = 0; i < capacity; i++) {
-          col.putByteArray(i, bytes);
-        }
-      } else if (t instanceof DecimalType) {
-        DecimalType dt = (DecimalType)t;
+        col.setUtf8String(v);
+      } else if (pdt instanceof PhysicalDecimalType dt) {
         Decimal d = row.getDecimal(fieldIdx, dt.precision(), dt.scale());
         if (dt.precision() <= Decimal.MAX_INT_DIGITS()) {
-          col.putInts(0, capacity, (int)d.toUnscaledLong());
+          col.setInt((int)d.toUnscaledLong());
         } else if (dt.precision() <= Decimal.MAX_LONG_DIGITS()) {
-          col.putLongs(0, capacity, d.toUnscaledLong());
+          col.setLong(d.toUnscaledLong());
         } else {
           final BigInteger integer = d.toJavaBigDecimal().unscaledValue();
           byte[] bytes = integer.toByteArray();
-          for (int i = 0; i < capacity; i++) {
-            col.putByteArray(i, bytes, 0, bytes.length);
-          }
+          col.setBinary(bytes);
         }
-      } else if (t instanceof CalendarIntervalType) {
-        CalendarInterval c = (CalendarInterval)row.get(fieldIdx, t);
-        col.getChild(0).putInts(0, capacity, c.months);
-        col.getChild(1).putLongs(0, capacity, c.microseconds);
-      } else if (t instanceof DateType) {
-        col.putInts(0, capacity, row.getInt(fieldIdx));
-      } else if (t instanceof TimestampType) {
-        col.putLongs(0, capacity, row.getLong(fieldIdx));
+      } else if (pdt instanceof PhysicalCalendarIntervalType) {
+        // The value of `numRows` is irrelevant.
+        col.setCalendarInterval((CalendarInterval) row.get(fieldIdx, t));
+      } else if (pdt instanceof PhysicalVariantType) {
+        col.setVariant((VariantVal)row.get(fieldIdx, t));
+      } else {
+        throw new RuntimeException(String.format("DataType %s is not supported" +
+            " in column vectorized reader.", t.sql()));
       }
     }
   }
@@ -126,7 +128,7 @@ public class ColumnVectorUtils {
 
   private static void appendValue(WritableColumnVector dst, DataType t, Object o) {
     if (o == null) {
-      if (t instanceof CalendarIntervalType) {
+      if (t instanceof CalendarIntervalType || t instanceof VariantType) {
         dst.appendStruct(true);
       } else {
         dst.appendNull();
@@ -149,8 +151,10 @@ public class ColumnVectorUtils {
       } else if (t == DataTypes.StringType) {
         byte[] b =((String)o).getBytes(StandardCharsets.UTF_8);
         dst.appendByteArray(b, 0, b.length);
-      } else if (t instanceof DecimalType) {
-        DecimalType dt = (DecimalType) t;
+      } else if (t == DataTypes.BinaryType) {
+        byte[] b = (byte[]) o;
+        dst.appendByteArray(b, 0, b.length);
+      } else if (t instanceof DecimalType dt) {
         Decimal d = Decimal.apply((BigDecimal) o, dt.precision(), dt.scale());
         if (dt.precision() <= Decimal.MAX_INT_DIGITS()) {
           dst.appendInt((int) d.toUnscaledLong());
@@ -165,18 +169,28 @@ public class ColumnVectorUtils {
         CalendarInterval c = (CalendarInterval)o;
         dst.appendStruct(false);
         dst.getChild(0).appendInt(c.months);
-        dst.getChild(1).appendLong(c.microseconds);
+        dst.getChild(1).appendInt(c.days);
+        dst.getChild(2).appendLong(c.microseconds);
+      } else if (t instanceof VariantType) {
+        VariantVal v = (VariantVal) o;
+        dst.appendStruct(false);
+        dst.getChild(0).appendByteArray(v.getValue(), 0, v.getValue().length);
+        dst.getChild(1).appendByteArray(v.getMetadata(), 0, v.getMetadata().length);
       } else if (t instanceof DateType) {
-        dst.appendInt(DateTimeUtils.fromJavaDate((Date)o));
+        dst.appendInt(DateTimeUtils.fromJavaDate((Date) o));
+      } else if (t instanceof TimestampType) {
+        dst.appendLong(DateTimeUtils.fromJavaTimestamp((Timestamp) o));
+      } else if (t instanceof TimestampNTZType) {
+        dst.appendLong(DateTimeUtils.localDateTimeToMicros((LocalDateTime) o));
       } else {
-        throw new UnsupportedOperationException("Type " + t);
+        throw new SparkUnsupportedOperationException(
+          "_LEGACY_ERROR_TEMP_3192", Map.of("dt", t.toString()));
       }
     }
   }
 
   private static void appendValue(WritableColumnVector dst, DataType t, Row src, int fieldIdx) {
-    if (t instanceof ArrayType) {
-      ArrayType at = (ArrayType)t;
+    if (t instanceof ArrayType at) {
       if (src.isNullAt(fieldIdx)) {
         dst.appendNull();
       } else {
@@ -186,8 +200,7 @@ public class ColumnVectorUtils {
           appendValue(dst.arrayData(), at.elementType(), o);
         }
       }
-    } else if (t instanceof StructType) {
-      StructType st = (StructType)t;
+    } else if (t instanceof StructType st) {
       if (src.isNullAt(fieldIdx)) {
         dst.appendStruct(true);
       } else {

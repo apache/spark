@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.columnar
 import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.types.{PhysicalArrayType, PhysicalDataType, PhysicalMapType, PhysicalStructType}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.columnar.ColumnBuilder._
 import org.apache.spark.sql.execution.columnar.compression.{AllCompressionSchemes, CompressibleColumnBuilder}
 import org.apache.spark.sql.types._
@@ -80,7 +82,7 @@ private[columnar] class BasicColumnBuilder[JvmType](
         .order(ByteOrder.nativeOrder())
         .put(buffer.array(), 0, buffer.position())
     }
-    buffer.flip().asInstanceOf[ByteBuffer]
+    buffer.flip()
   }
 }
 
@@ -94,7 +96,7 @@ private[columnar] abstract class ComplexColumnBuilder[JvmType](
   extends BasicColumnBuilder[JvmType](columnStats, columnType)
   with NullableColumnBuilder
 
-private[columnar] abstract class NativeColumnBuilder[T <: AtomicType](
+private[columnar] abstract class NativeColumnBuilder[T <: PhysicalDataType](
     override val columnStats: ColumnStats,
     override val columnType: NativeColumnType[T])
   extends BasicColumnBuilder[T#InternalType](columnStats, columnType)
@@ -120,10 +122,17 @@ private[columnar]
 class DoubleColumnBuilder extends NativeColumnBuilder(new DoubleColumnStats, DOUBLE)
 
 private[columnar]
-class StringColumnBuilder extends NativeColumnBuilder(new StringColumnStats, STRING)
+class StringColumnBuilder(dataType: StringType)
+  extends NativeColumnBuilder(new StringColumnStats(dataType), STRING(dataType))
 
 private[columnar]
 class BinaryColumnBuilder extends ComplexColumnBuilder(new BinaryColumnStats, BINARY)
+
+private[columnar]
+class IntervalColumnBuilder extends ComplexColumnBuilder(new IntervalColumnStats, CALENDAR_INTERVAL)
+
+private[columnar]
+class VariantColumnBuilder extends ComplexColumnBuilder(new VariantColumnStats, VARIANT)
 
 private[columnar] class CompactDecimalColumnBuilder(dataType: DecimalType)
   extends NativeColumnBuilder(new DecimalColumnStats(dataType), COMPACT_DECIMAL(dataType))
@@ -132,13 +141,18 @@ private[columnar] class DecimalColumnBuilder(dataType: DecimalType)
   extends ComplexColumnBuilder(new DecimalColumnStats(dataType), LARGE_DECIMAL(dataType))
 
 private[columnar] class StructColumnBuilder(dataType: StructType)
-  extends ComplexColumnBuilder(new ObjectColumnStats(dataType), STRUCT(dataType))
+  extends ComplexColumnBuilder(
+    new ObjectColumnStats(dataType), STRUCT(PhysicalStructType(dataType.fields)))
 
 private[columnar] class ArrayColumnBuilder(dataType: ArrayType)
-  extends ComplexColumnBuilder(new ObjectColumnStats(dataType), ARRAY(dataType))
+  extends ComplexColumnBuilder(
+    new ObjectColumnStats(dataType),
+    ARRAY(PhysicalArrayType(dataType.elementType, dataType.containsNull)))
 
 private[columnar] class MapColumnBuilder(dataType: MapType)
-  extends ComplexColumnBuilder(new ObjectColumnStats(dataType), MAP(dataType))
+  extends ComplexColumnBuilder(
+    new ObjectColumnStats(dataType),
+    MAP(PhysicalMapType(dataType.keyType, dataType.valueType, dataType.valueContainsNull)))
 
 private[columnar] object ColumnBuilder {
   val DEFAULT_INITIAL_BUFFER_SIZE = 128 * 1024
@@ -170,12 +184,15 @@ private[columnar] object ColumnBuilder {
       case BooleanType => new BooleanColumnBuilder
       case ByteType => new ByteColumnBuilder
       case ShortType => new ShortColumnBuilder
-      case IntegerType | DateType => new IntColumnBuilder
-      case LongType | TimestampType => new LongColumnBuilder
+      case IntegerType | DateType | _: YearMonthIntervalType => new IntColumnBuilder
+      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+        new LongColumnBuilder
       case FloatType => new FloatColumnBuilder
       case DoubleType => new DoubleColumnBuilder
-      case StringType => new StringColumnBuilder
+      case s: StringType => new StringColumnBuilder(s)
       case BinaryType => new BinaryColumnBuilder
+      case CalendarIntervalType => new IntervalColumnBuilder
+      case VariantType => new VariantColumnBuilder
       case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
         new CompactDecimalColumnBuilder(dt)
       case dt: DecimalType => new DecimalColumnBuilder(dt)
@@ -185,7 +202,7 @@ private[columnar] object ColumnBuilder {
       case udt: UserDefinedType[_] =>
         return apply(udt.sqlType, initialSize, columnName, useCompression)
       case other =>
-        throw new Exception(s"not supported type: $other")
+        throw QueryExecutionErrors.notSupportTypeError(other)
     }
 
     builder.initialize(initialSize, columnName, useCompression)

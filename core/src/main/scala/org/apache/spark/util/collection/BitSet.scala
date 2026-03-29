@@ -45,7 +45,7 @@ class BitSet(numBits: Int) extends Serializable {
   def setUntil(bitIndex: Int): Unit = {
     val wordIndex = bitIndex >> 6 // divide by 64
     Arrays.fill(words, 0, wordIndex, -1)
-    if(wordIndex < words.length) {
+    if (wordIndex < words.length) {
       // Set the remaining bits (note that the mask could still be zero)
       val mask = ~(-1L << (bitIndex & 0x3f))
       words(wordIndex) |= mask
@@ -58,7 +58,7 @@ class BitSet(numBits: Int) extends Serializable {
   def clearUntil(bitIndex: Int): Unit = {
     val wordIndex = bitIndex >> 6 // divide by 64
     Arrays.fill(words, 0, wordIndex, 0)
-    if(wordIndex < words.length) {
+    if (wordIndex < words.length) {
       // Clear the remaining bits
       val mask = -1L << (bitIndex & 0x3f)
       words(wordIndex) &= mask
@@ -75,7 +75,7 @@ class BitSet(numBits: Int) extends Serializable {
     assert(newBS.numWords >= numWords)
     assert(newBS.numWords >= other.numWords)
     var ind = 0
-    while( ind < smaller ) {
+    while (ind < smaller) {
       newBS.words(ind) = words(ind) & other.words(ind)
       ind += 1
     }
@@ -92,15 +92,15 @@ class BitSet(numBits: Int) extends Serializable {
     assert(newBS.numWords >= other.numWords)
     val smaller = math.min(numWords, other.numWords)
     var ind = 0
-    while( ind < smaller ) {
+    while (ind < smaller) {
       newBS.words(ind) = words(ind) | other.words(ind)
       ind += 1
     }
-    while( ind < numWords ) {
+    while (ind < numWords) {
       newBS.words(ind) = words(ind)
       ind += 1
     }
-    while( ind < other.numWords ) {
+    while (ind < other.numWords) {
       newBS.words(ind) = other.words(ind)
       ind += 1
     }
@@ -150,12 +150,12 @@ class BitSet(numBits: Int) extends Serializable {
    * Sets the bit at the specified index to true.
    * @param index the bit index
    */
-  def set(index: Int) {
+  def set(index: Int): Unit = {
     val bitmask = 1L << (index & 0x3f)  // mod 64 and shift
     words(index >> 6) |= bitmask        // div by 64 and mask
   }
 
-  def unset(index: Int) {
+  def unset(index: Int): Unit = {
     val bitmask = 1L << (index & 0x3f)  // mod 64 and shift
     words(index >> 6) &= ~bitmask        // div by 64 and mask
   }
@@ -236,6 +236,45 @@ class BitSet(numBits: Int) extends Serializable {
     -1
   }
 
+  /**
+   * Compute bit-wise union with another BitSet and overwrite bits in this BitSet with the result.
+   */
+  def union(other: BitSet): Unit = {
+    require(this.numWords <= other.numWords)
+    var ind = 0
+    while (ind < this.numWords) {
+      this.words(ind) = this.words(ind) | other.words(ind)
+      ind += 1
+    }
+  }
+
+  /**
+   * Returns true if the bitset intersects with the given other bitset.
+   *
+   * @param other -- the bitset, should have the same size in words as the current one.
+   * @return true if the intersection of two bitsets is non-empty.
+   */
+  def intersects(other: BitSet): Boolean = {
+    assert(numWords == other.numWords)
+    var ind = 0
+    while (ind < numWords) {
+      if ((words(ind) & other.words(ind)) != 0) {
+        return true
+      }
+      ind += 1
+    }
+    false
+  }
+
   /** Return the number of longs it would take to hold numBits. */
   private def bit2words(numBits: Int) = ((numBits - 1) >> 6) + 1
+
+  override def equals(other: Any): Boolean = other match {
+    case otherSet: BitSet => Arrays.equals(words, otherSet.words)
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    Arrays.hashCode(words)
+  }
 }

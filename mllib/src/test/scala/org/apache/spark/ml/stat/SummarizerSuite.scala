@@ -18,7 +18,7 @@
 package org.apache.spark.ml.stat
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, Statistics}
@@ -29,7 +29,6 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import testImplicits._
   import Summarizer._
-  import SummaryBuilderImpl._
 
   private case class ExpectedMetrics(
       mean: Vector,
@@ -83,6 +82,28 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
         Row(Row(summarizerWithoutWeight.mean), expWithoutWeight.mean))
     }
 
+    registerTest(s"$name - sum only") {
+      val (df, c, w) = wrappedInit()
+      val weightSum = summarizer.weightSum
+      val expected1 = summarizer.mean.asML.copy
+      BLAS.scal(weightSum, expected1)
+      val expected2 = exp.mean.copy
+      BLAS.scal(weightSum, expected2)
+      compareRow(df.select(metrics("sum").summary(c, w), sum(c, w)).first(),
+        Row(Row(expected1), expected2))
+    }
+
+    registerTest(s"$name - sum only w/o weight") {
+      val (df, c, _) = wrappedInit()
+      val weightSum = summarizerWithoutWeight.weightSum
+      val expected1 = summarizerWithoutWeight.mean.asML.copy
+      BLAS.scal(weightSum, expected1)
+      val expected2 = expWithoutWeight.mean.copy
+      BLAS.scal(weightSum, expected2)
+      compareRow(df.select(metrics("sum").summary(c), sum(c)).first(),
+        Row(Row(expected1), expected2))
+    }
+
     registerTest(s"$name - variance only") {
       val (df, c, w) = wrappedInit()
       compareRow(df.select(metrics("variance").summary(c, w), variance(c, w)).first(),
@@ -93,6 +114,22 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       val (df, c, _) = wrappedInit()
       compareRow(df.select(metrics("variance").summary(c), variance(c)).first(),
         Row(Row(summarizerWithoutWeight.variance), expWithoutWeight.variance))
+    }
+
+    registerTest(s"$name - std only") {
+      val (df, c, w) = wrappedInit()
+      val expected1 = Vectors.dense(summarizer.variance.toArray.map(math.sqrt))
+      val expected2 = Vectors.dense(exp.variance.toArray.map(math.sqrt))
+      compareRow(df.select(metrics("std").summary(c, w), std(c, w)).first(),
+        Row(Row(expected1), expected2))
+    }
+
+    registerTest(s"$name - std only w/o weight") {
+      val (df, c, _) = wrappedInit()
+      val expected1 = Vectors.dense(summarizerWithoutWeight.variance.toArray.map(math.sqrt))
+      val expected2 = Vectors.dense(expWithoutWeight.variance.toArray.map(math.sqrt))
+      compareRow(df.select(metrics("std").summary(c), std(c)).first(),
+        Row(Row(expected1), expected2))
     }
 
     registerTest(s"$name - count only") {
@@ -192,8 +229,12 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(v1 ~== v2 absTol 1e-4)
       case (v1: Vector, v2: OldVector) =>
         assert(v1 ~== v2.asML absTol 1e-4)
+      case (i1: Int, i2: Int) =>
+        assert(i1 === i2)
       case (l1: Long, l2: Long) =>
         assert(l1 === l2)
+      case (d1: Double, d2: Double) =>
+        assert(d1 ~== d2 absTol 1e-4)
       case (r1: Row, r2: Row) =>
         compareRow(r1, r2)
       case (x1: Any, x2: Any) =>
@@ -529,6 +570,30 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(summarizer2.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
     assert(summarizer3.max ~== Vectors.dense(10.0, 0.0) absTol 1e-14)
     assert(summarizer3.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
+  }
+
+  test("support new metrics: sum, std, numFeatures, sumL2, weightSum") {
+    val summarizer1 = new SummarizerBuffer()
+      .add(Vectors.dense(10.0, -10.0), 1e10)
+      .add(Vectors.dense(0.0, 0.0), 1e-7)
+
+    val summarizer2 = new SummarizerBuffer()
+    summarizer2.add(Vectors.dense(10.0, -10.0), 1e10)
+    for (i <- 1 to 100) {
+      summarizer2.add(Vectors.dense(0.0, 0.0), 1e-7)
+    }
+
+    val summarizer3 = new SummarizerBuffer()
+    for (i <- 1 to 100) {
+      summarizer3.add(Vectors.dense(0.0, 0.0), 1e-7)
+    }
+    summarizer3.add(Vectors.dense(10.0, -10.0), 1e10)
+
+    Seq(summarizer1, summarizer2, summarizer3).foreach { summarizer =>
+      val variance = summarizer.variance
+      val expectedStd = Vectors.dense(variance.toArray.map(math.sqrt))
+      assert(summarizer.std ~== expectedStd relTol 1e-14)
+    }
   }
 
   ignore("performance test") {

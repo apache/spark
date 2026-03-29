@@ -55,10 +55,10 @@ private[streaming] object MapWithStateRDDRecord {
     dataIterator.foreach { case (key, value) =>
       wrappedState.wrap(newStateMap.get(key))
       val returned = mappingFunction(batchTime, key, Some(value), wrappedState)
-      if (wrappedState.isRemoved) {
+      if (wrappedState.isRemoved()) {
         newStateMap.remove(key)
-      } else if (wrappedState.isUpdated
-          || (wrappedState.exists && timeoutThresholdTime.isDefined)) {
+      } else if (wrappedState.isUpdated()
+          || (wrappedState.exists() && timeoutThresholdTime.isDefined)) {
         newStateMap.put(key, wrappedState.get(), batchTime.milliseconds)
       }
       mappedData ++= returned
@@ -75,7 +75,7 @@ private[streaming] object MapWithStateRDDRecord {
       }
     }
 
-    MapWithStateRDDRecord(newStateMap, mappedData)
+    MapWithStateRDDRecord(newStateMap, mappedData.toSeq)
   }
 }
 

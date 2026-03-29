@@ -22,7 +22,7 @@ import java.lang.{Boolean => JBoolean}
 import java.util.{List => JList, Map => JMap}
 
 import scala.annotation.varargs
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
@@ -50,7 +50,13 @@ import org.apache.spark.streaming.scheduler.StreamingListener
  * computation can be started and stopped using `context.start()` and `context.stop()`,
  * respectively. `context.awaitTermination()` allows the current thread to wait for the
  * termination of a context by `stop()` or by an exception.
+ * @deprecated This is deprecated as of Spark 3.4.0.
+ *             There are no longer updates to DStream and it's a legacy project.
+ *             There is a newer and easier to use streaming engine
+ *             in Spark called Structured Streaming.
+ *             You should use Spark Structured Streaming for your streaming applications.
  */
+@deprecated("DStream is deprecated. Migrate to Structured Streaming.", "Spark 3.4.0")
 class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
 
   /**
@@ -67,7 +73,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * @param master Name of the Spark Master
    * @param appName Name to be used when registering with the scheduler
    * @param batchDuration The time interval at which streaming data will be divided into batches
-   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param sparkHome The SPARK_HOME directory on the worker nodes
    * @param jarFile JAR file containing job code, to ship to cluster. This can be a path on the
    *                local file system or an HDFS, HTTP, HTTPS, or FTP URL.
    */
@@ -84,7 +90,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * @param master Name of the Spark Master
    * @param appName Name to be used when registering with the scheduler
    * @param batchDuration The time interval at which streaming data will be divided into batches
-   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param sparkHome The SPARK_HOME directory on the worker nodes
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    */
@@ -101,7 +107,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * @param master Name of the Spark Master
    * @param appName Name to be used when registering with the scheduler
    * @param batchDuration The time interval at which streaming data will be divided into batches
-   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param sparkHome The SPARK_HOME directory on the worker nodes
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    * @param environment Environment variables to set on worker nodes
@@ -207,6 +213,8 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * as Text and input format as TextInputFormat). Files must be written to the
    * monitored directory by "moving" them from another location within the same
    * file system. File names starting with . are ignored.
+   * The text files must be encoded as UTF-8.
+   *
    * @param directory HDFS directory to monitor for new file
    */
   def textFileStream(directory: String): JavaDStream[String] = {
@@ -364,7 +372,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val sQueue = new scala.collection.mutable.Queue[RDD[T]]
-    sQueue.enqueue(queue.asScala.map(_.rdd).toSeq: _*)
+    sQueue ++= queue.asScala.map(_.rdd)
     ssc.queueStream(sQueue)
   }
 
@@ -388,7 +396,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val sQueue = new scala.collection.mutable.Queue[RDD[T]]
-    sQueue.enqueue(queue.asScala.map(_.rdd).toSeq: _*)
+    sQueue ++= queue.asScala.map(_.rdd)
     ssc.queueStream(sQueue, oneAtATime)
   }
 
@@ -413,13 +421,13 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val sQueue = new scala.collection.mutable.Queue[RDD[T]]
-    sQueue.enqueue(queue.asScala.map(_.rdd).toSeq: _*)
+    sQueue ++= queue.asScala.map(_.rdd)
     ssc.queueStream(sQueue, oneAtATime, defaultRDD.rdd)
   }
 
   /**
      * Create an input stream with any arbitrary user implemented receiver.
-     * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
+     * Find more details at: https://spark.apache.org/docs/latest/streaming-custom-receivers.html
      * @param receiver Custom implementation of Receiver
      */
   def receiverStream[T](receiver: Receiver[T]): JavaReceiverInputDStream[T] = {
@@ -503,7 +511,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * fault-tolerance. The graph will be checkpointed every batch interval.
    * @param directory HDFS-compatible directory where the checkpoint data will be reliably stored
    */
-  def checkpoint(directory: String) {
+  def checkpoint(directory: String): Unit = {
     ssc.checkpoint(directory)
   }
 
@@ -514,7 +522,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * if the developer wishes to query old data outside the DStream computation).
    * @param duration Minimum duration that each DStream should remember its RDDs
    */
-  def remember(duration: Duration) {
+  def remember(duration: Duration): Unit = {
     ssc.remember(duration)
   }
 
@@ -522,7 +530,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
    * receiving system events related to streaming.
    */
-  def addStreamingListener(streamingListener: StreamingListener) {
+  def addStreamingListener(streamingListener: StreamingListener): Unit = {
     ssc.addStreamingListener(streamingListener)
   }
 

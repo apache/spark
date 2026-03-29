@@ -1,0 +1,2 @@
+RepartitionByExpression [direct_shuffle_partition_id(cast(id#0L as int))], 10
++- LocalRelation <empty>, [id#0L, a#0, b#0]

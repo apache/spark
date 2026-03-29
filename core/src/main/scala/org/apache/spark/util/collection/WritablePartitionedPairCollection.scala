@@ -19,7 +19,6 @@ package org.apache.spark.util.collection
 
 import java.util.Comparator
 
-import org.apache.spark.storage.DiskBlockObjectWriter
 
 /**
  * A common interface for size-tracking collections of key-value pairs that
@@ -47,20 +46,9 @@ private[spark] trait WritablePartitionedPairCollection[K, V] {
    * This may destroy the underlying collection.
    */
   def destructiveSortedWritablePartitionedIterator(keyComparator: Option[Comparator[K]])
-    : WritablePartitionedIterator = {
+    : WritablePartitionedIterator[K, V] = {
     val it = partitionedDestructiveSortedIterator(keyComparator)
-    new WritablePartitionedIterator {
-      private[this] var cur = if (it.hasNext) it.next() else null
-
-      def writeNext(writer: DiskBlockObjectWriter): Unit = {
-        writer.write(cur._1._2, cur._2)
-        cur = if (it.hasNext) it.next() else null
-      }
-
-      def hasNext(): Boolean = cur != null
-
-      def nextPartition(): Int = cur._1._1
-    }
+    new WritablePartitionedIterator[K, V](it)
   }
 }
 
@@ -68,37 +56,35 @@ private[spark] object WritablePartitionedPairCollection {
   /**
    * A comparator for (Int, K) pairs that orders them by only their partition ID.
    */
-  def partitionComparator[K]: Comparator[(Int, K)] = new Comparator[(Int, K)] {
-    override def compare(a: (Int, K), b: (Int, K)): Int = {
-      a._1 - b._1
-    }
-  }
+  def partitionComparator[K]: Comparator[(Int, K)] = (a: (Int, K), b: (Int, K)) => a._1 - b._1
 
   /**
    * A comparator for (Int, K) pairs that orders them both by their partition ID and a key ordering.
    */
-  def partitionKeyComparator[K](keyComparator: Comparator[K]): Comparator[(Int, K)] = {
-    new Comparator[(Int, K)] {
-      override def compare(a: (Int, K), b: (Int, K)): Int = {
-        val partitionDiff = a._1 - b._1
-        if (partitionDiff != 0) {
-          partitionDiff
-        } else {
-          keyComparator.compare(a._2, b._2)
-        }
+  def partitionKeyComparator[K](keyComparator: Comparator[K]): Comparator[(Int, K)] =
+    (a: (Int, K), b: (Int, K)) => {
+      val partitionDiff = a._1 - b._1
+      if (partitionDiff != 0) {
+        partitionDiff
+      } else {
+        keyComparator.compare(a._2, b._2)
       }
     }
-  }
 }
 
 /**
  * Iterator that writes elements to a DiskBlockObjectWriter instead of returning them. Each element
  * has an associated partition.
  */
-private[spark] trait WritablePartitionedIterator {
-  def writeNext(writer: DiskBlockObjectWriter): Unit
+private[spark] class WritablePartitionedIterator[K, V](it: Iterator[((Int, K), V)]) {
+  private[this] var cur = if (it.hasNext) it.next() else null
 
-  def hasNext(): Boolean
+  def writeNext(writer: PairsWriter): Unit = {
+    writer.write(cur._1._2, cur._2)
+    cur = if (it.hasNext) it.next() else null
+  }
 
-  def nextPartition(): Int
+  def hasNext: Boolean = cur != null
+
+  def nextPartition(): Int = cur._1._1
 }

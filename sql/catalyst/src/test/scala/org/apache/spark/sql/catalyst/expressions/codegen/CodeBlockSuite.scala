@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.{BooleanType, IntegerType}
+import org.apache.spark.sql.types.IntegerType
 
 class CodeBlockSuite extends SparkFunSuite {
 
@@ -35,6 +35,18 @@ class CodeBlockSuite extends SparkFunSuite {
     val intLiteral = 1
     val code = code"int $value = $intLiteral;"
     assert(code.asInstanceOf[CodeBlock].blockInputs === Seq(value))
+  }
+
+  test("Code parts should be treated for escapes, but string inputs shouldn't be") {
+    val strlit = raw"\\"
+    val code = code"""String s = "foo\\bar" + "$strlit";"""
+
+    val builtin = s"""String s = "foo\\bar" + "$strlit";"""
+
+    val expected = raw"""String s = "foo\bar" + "\\";"""
+
+    assert(builtin == expected)
+    assert(code.asInstanceOf[CodeBlock].toString == expected)
   }
 
   test("Block.stripMargin") {
@@ -103,12 +115,15 @@ class CodeBlockSuite extends SparkFunSuite {
     assert(exprValues === Set(isNull1, value1, isNull2, value2, literal))
   }
 
-  test("Throws exception when interpolating unexcepted object in code block") {
+  test("Throws exception when interpolating unexpected object in code block") {
     val obj = Tuple2(1, 1)
-    val e = intercept[IllegalArgumentException] {
-      code"$obj"
-    }
-    assert(e.getMessage().contains(s"Can not interpolate ${obj.getClass.getName}"))
+    checkError(
+      exception = intercept[SparkException] {
+        code"$obj"
+      },
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" -> s"Can not interpolate ${obj.getClass.getName} into code block.")
+    )
   }
 
   test("transform expr in code block") {

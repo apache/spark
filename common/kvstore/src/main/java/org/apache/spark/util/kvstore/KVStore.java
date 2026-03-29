@@ -18,6 +18,7 @@
 package org.apache.spark.util.kvstore;
 
 import java.io.Closeable;
+import java.util.Collection;
 
 import org.apache.spark.annotation.Private;
 
@@ -28,7 +29,7 @@ import org.apache.spark.annotation.Private;
  * There are two main features provided by the implementations of this interface:
  * </p>
  *
- * <h3>Serialization</h3>
+ * <h2>Serialization</h2>
  *
  * <p>
  * If the underlying data store requires serialization, data will be serialized to and deserialized
@@ -41,7 +42,7 @@ import org.apache.spark.annotation.Private;
  * Data is also automatically compressed to save disk space.
  * </p>
  *
- * <h3>Automatic Key Management</h3>
+ * <h2>Automatic Key Management</h2>
  *
  * <p>
  * When using the built-in key management, the implementation will automatically create unique
@@ -126,4 +127,9 @@ public interface KVStore extends Closeable {
    */
   long count(Class<?> type, String index, Object indexedValue) throws Exception;
 
+  /**
+   * A cheaper way to remove multiple items from the KVStore
+   */
+  <T> boolean removeAllByIndexValues(Class<T> klass, String index, Collection<?> indexValues)
+      throws Exception;
 }

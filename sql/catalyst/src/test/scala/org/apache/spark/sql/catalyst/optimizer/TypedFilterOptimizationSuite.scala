@@ -37,9 +37,10 @@ class TypedFilterOptimizationSuite extends PlanTest {
         CombineTypedFilters) :: Nil
   }
 
-  implicit private def productEncoder[T <: Product : TypeTag] = ExpressionEncoder[T]()
+  implicit private def productEncoder[T <: Product : TypeTag]: ExpressionEncoder[T] =
+    ExpressionEncoder[T]()
 
-  val testRelation = LocalRelation('_1.int, '_2.int)
+  val testRelation = LocalRelation($"_1".int, $"_2".int)
 
   test("filter after serialize with the same object type") {
     val f = (i: (Int, Int)) => i._1 > 0
@@ -53,7 +54,7 @@ class TypedFilterOptimizationSuite extends PlanTest {
 
     val expected = testRelation
       .deserialize[(Int, Int)]
-      .where(callFunction(f, BooleanType, 'obj))
+      .where(callFunction(f, BooleanType, $"obj"))
       .serialize[(Int, Int)].analyze
 
     comparePlans(optimized, expected)
@@ -82,7 +83,7 @@ class TypedFilterOptimizationSuite extends PlanTest {
 
     val expected = testRelation
       .deserialize[(Int, Int)]
-      .where(callFunction(f, BooleanType, 'obj))
+      .where(callFunction(f, BooleanType, $"obj"))
       .serialize[(Int, Int)].analyze
 
     comparePlans(optimized, expected)

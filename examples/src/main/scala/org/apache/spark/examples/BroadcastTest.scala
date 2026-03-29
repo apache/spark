@@ -24,7 +24,7 @@ import org.apache.spark.sql.SparkSession
  * Usage: BroadcastTest [partitions] [numElem] [blockSize]
  */
 object BroadcastTest {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     val blockSize = if (args.length > 2) args(2) else "4096"
 

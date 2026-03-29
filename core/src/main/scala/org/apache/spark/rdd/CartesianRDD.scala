@@ -22,6 +22,7 @@ import java.io.{IOException, ObjectOutputStream}
 import scala.reflect.ClassTag
 
 import org.apache.spark._
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.util.Utils
 
 private[spark]
@@ -57,7 +58,11 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
 
   override def getPartitions: Array[Partition] = {
     // create the cross product split
-    val array = new Array[Partition](rdd1.partitions.length * rdd2.partitions.length)
+    val partitionNum: Long = numPartitionsInRdd2.toLong * rdd1.partitions.length
+    if (partitionNum > Int.MaxValue) {
+      throw SparkCoreErrors.tooManyArrayElementsError(partitionNum, Int.MaxValue)
+    }
+    val array = new Array[Partition](partitionNum.toInt)
     for (s1 <- rdd1.partitions; s2 <- rdd2.partitions) {
       val idx = s1.index * numPartitionsInRdd2 + s2.index
       array(idx) = new CartesianPartition(idx, rdd1, rdd2, s1.index, s2.index)
@@ -85,7 +90,7 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
     }
   )
 
-  override def clearDependencies() {
+  override def clearDependencies(): Unit = {
     super.clearDependencies()
     rdd1 = null
     rdd2 = null

@@ -22,6 +22,8 @@ import java.lang.management.ManagementFactory
 import scala.annotation.tailrec
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Worker._
 import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 
 /**
@@ -58,20 +60,16 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
 
   // This mutates the SparkConf, so all accesses to it must be made after this line
   propertiesFile = Utils.loadDefaultSparkProperties(conf, propertiesFile)
+  // Initialize logging system again after `spark.log.structuredLogging.enabled` takes effect
+  Utils.resetStructuredLogging(conf)
+  Logging.uninitialize()
 
-  if (conf.contains("spark.worker.ui.port")) {
-    webUiPort = conf.get("spark.worker.ui.port").toInt
-  }
+  conf.get(WORKER_UI_PORT).foreach { webUiPort = _ }
 
   checkWorkerMemory()
 
   @tailrec
   private def parse(args: List[String]): Unit = args match {
-    case ("--ip" | "-i") :: value :: tail =>
-      Utils.checkHost(value)
-      host = value
-      parse(tail)
-
     case ("--host" | "-h") :: value :: tail =>
       Utils.checkHost(value)
       host = value
@@ -123,7 +121,7 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
   /**
    * Print usage and exit JVM with the given exit code.
    */
-  def printUsageAndExit(exitCode: Int) {
+  def printUsageAndExit(exitCode: Int): Unit = {
     // scalastyle:off println
     System.err.println(
       "Usage: Worker [options] <master>\n" +
@@ -134,7 +132,6 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
       "  -c CORES, --cores CORES  Number of cores to use\n" +
       "  -m MEM, --memory MEM     Amount of memory to use (e.g. 1000M, 2G)\n" +
       "  -d DIR, --work-dir DIR   Directory to run apps in (default: SPARK_HOME/work)\n" +
-      "  -i HOST, --ip IP         Hostname to listen on (deprecated, please use --host or -h)\n" +
       "  -h HOST, --host HOST     Hostname to listen on\n" +
       "  -p PORT, --port PORT     Port to listen on (default: random)\n" +
       "  --webui-port PORT        Port for web UI (default: 8081)\n" +
@@ -149,20 +146,13 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
   }
 
   def inferDefaultMemory(): Int = {
-    val ibmVendor = System.getProperty("java.vendor").contains("IBM")
     var totalMb = 0
     try {
       // scalastyle:off classforname
       val bean = ManagementFactory.getOperatingSystemMXBean()
-      if (ibmVendor) {
-        val beanClass = Class.forName("com.ibm.lang.management.OperatingSystemMXBean")
-        val method = beanClass.getDeclaredMethod("getTotalPhysicalMemory")
-        totalMb = (method.invoke(bean).asInstanceOf[Long] / 1024 / 1024).toInt
-      } else {
-        val beanClass = Class.forName("com.sun.management.OperatingSystemMXBean")
-        val method = beanClass.getDeclaredMethod("getTotalPhysicalMemorySize")
-        totalMb = (method.invoke(bean).asInstanceOf[Long] / 1024 / 1024).toInt
-      }
+      val beanClass = Class.forName("com.sun.management.OperatingSystemMXBean")
+      val method = beanClass.getDeclaredMethod("getTotalMemorySize")
+      totalMb = (method.invoke(bean).asInstanceOf[Long] / 1024 / 1024).toInt
       // scalastyle:on classforname
     } catch {
       case e: Exception =>

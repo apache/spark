@@ -16,32 +16,46 @@
  */
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NormalizeableRelation}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
-import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.catalyst.plans.logical.{ExposesMetadataColumns, LeafNode, LogicalPlan, Statistics, StreamSourceAwareLogicalPlan}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
+import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.sources.BaseRelation
 
 /**
  * Used to link a [[BaseRelation]] in to a logical query plan.
+ *
+ * This class is widely used for pattern matching. We encourage developers to avoid using the
+ * default pattern if possible (except all parameters are needed). We provide convenient pattern
+ * objects to help avoiding the default pattern.
+ *
+ * Here's the list of pattern objects:
+ * - [[LogicalRelationWithTable]]
  */
 case class LogicalRelation(
     relation: BaseRelation,
     output: Seq[AttributeReference],
     catalogTable: Option[CatalogTable],
-    override val isStreaming: Boolean)
-  extends LeafNode with MultiInstanceRelation {
+    override val isStreaming: Boolean,
+    @transient stream: Option[SparkDataStream])
+  extends LeafNode
+  with StreamSourceAwareLogicalPlan
+  with MultiInstanceRelation
+  with ExposesMetadataColumns
+  with NormalizeableRelation {
 
   // Only care about relation when canonicalizing.
   override def doCanonicalize(): LogicalPlan = copy(
-    output = output.map(QueryPlan.normalizeExprId(_, output)),
+    output = output.map(QueryPlan.normalizeExpressions(_, output)),
     catalogTable = None)
 
   override def computeStats(): Statistics = {
     catalogTable
-      .flatMap(_.stats.map(_.toPlanStats(output, conf.cboEnabled)))
+      .flatMap(_.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled)))
       .getOrElse(Statistics(sizeInBytes = relation.sizeInBytes))
   }
 
@@ -63,13 +77,64 @@ case class LogicalRelation(
     case _ =>  // Do nothing.
   }
 
-  override def simpleString: String = s"Relation[${truncatedString(output, ",")}] $relation"
+  override def simpleString(maxFields: Int): String = {
+    s"Relation ${catalogTable.map(_.identifier.unquotedString).getOrElse("")}" +
+      s"[${truncatedString(output, ",", maxFields)}] $relation"
+  }
+
+  override lazy val metadataOutput: Seq[AttributeReference] = relation match {
+    case relation: HadoopFsRelation =>
+      metadataOutputWithOutConflicts(Seq(relation.fileFormat.createFileMetadataCol()))
+    case _ => Nil
+  }
+
+  override def withMetadataColumns(): LogicalRelation = {
+    val newMetadata = metadataOutput.filterNot(outputSet.contains)
+    if (newMetadata.nonEmpty) {
+      val newRelation = this.copy(output = output ++ newMetadata)
+      newRelation.copyTagsFrom(this)
+      newRelation
+    } else {
+      this
+    }
+  }
+
+  override def withStream(stream: SparkDataStream): LogicalRelation = copy(stream = Some(stream))
+
+  override def getStream: Option[SparkDataStream] = stream
+
+  /**
+   * Minimally normalizes this [[LogicalRelation]] to make it comparable in [[NormalizePlan]].
+   */
+  override def normalize(): LogicalPlan = {
+    copy(catalogTable = catalogTable.map(CatalogTable.normalize))
+  }
 }
 
 object LogicalRelation {
-  def apply(relation: BaseRelation, isStreaming: Boolean = false): LogicalRelation =
-    LogicalRelation(relation, relation.schema.toAttributes, None, isStreaming)
+  def apply(relation: BaseRelation, isStreaming: Boolean = false): LogicalRelation = {
+    // The v1 source may return schema containing char/varchar type. We replace char/varchar
+    // with "annotated" string type here as the query engine doesn't support char/varchar yet.
+    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(relation.schema)
+    LogicalRelation(relation, toAttributes(schema), None, isStreaming, None)
+  }
 
-  def apply(relation: BaseRelation, table: CatalogTable): LogicalRelation =
-    LogicalRelation(relation, relation.schema.toAttributes, Some(table), false)
+  def apply(relation: BaseRelation, table: CatalogTable): LogicalRelation = {
+    // The v1 source may return schema containing char/varchar type. We replace char/varchar
+    // with "annotated" string type here as the query engine doesn't support char/varchar yet.
+    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(relation.schema)
+    LogicalRelation(relation, toAttributes(schema), Some(table), false, None)
+  }
+}
+
+/**
+ * Extract the [[BaseRelation]] and [[CatalogTable]] from [[LogicalRelation]]. You can also
+ * retrieve the instance of LogicalRelation like following:
+ *
+ * case l @ LogicalRelationWithTable(relation, catalogTable) => ...
+ */
+object LogicalRelationWithTable {
+  def unapply(plan: LogicalRelation): Option[(BaseRelation, Option[CatalogTable])] = {
+    Some(plan.relation, plan.catalogTable)
+  }
 }

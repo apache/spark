@@ -33,13 +33,13 @@ class RateLimitedOutputStreamSuite extends SparkFunSuite {
 
   test("write") {
     val underlying = new ByteArrayOutputStream
-    val data = "X" * 41000
+    val data = "X".repeat(41000)
     val stream = new RateLimitedOutputStream(underlying, desiredBytesPerSec = 10000)
     val elapsedNs = benchmark { stream.write(data.getBytes(StandardCharsets.UTF_8)) }
 
     val seconds = SECONDS.convert(elapsedNs, NANOSECONDS)
     assert(seconds >= 4, s"Seconds value ($seconds) is less than 4.")
     assert(seconds <= 30, s"Took more than 30 seconds ($seconds) to write data.")
-    assert(underlying.toString("UTF-8") === data)
+    assert(underlying.toString(StandardCharsets.UTF_8.name()) === data)
   }
 }

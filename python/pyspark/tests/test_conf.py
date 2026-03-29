@@ -25,19 +25,14 @@ class ConfTests(unittest.TestCase):
         memoryList = ["1T", "1G", "1M", "1024K"]
         for memory in memoryList:
             sc = SparkContext(conf=SparkConf().set("spark.python.worker.memory", memory))
-            l = list(range(1024))
-            random.shuffle(l)
-            rdd = sc.parallelize(l, 4)
-            self.assertEqual(sorted(l), rdd.sortBy(lambda x: x).collect())
+            lst = list(range(1024))
+            random.shuffle(lst)
+            rdd = sc.parallelize(lst, 4)
+            self.assertEqual(sorted(lst), rdd.sortBy(lambda x: x).collect())
             sc.stop()
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_conf import *
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

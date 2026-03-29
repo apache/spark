@@ -24,7 +24,7 @@ import java.nio.charset.StandardCharsets
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.receiver.Receiver
@@ -54,9 +54,9 @@ class SocketReceiver[T: ClassTag](
 
   private var socket: Socket = _
 
-  def onStart() {
+  def onStart(): Unit = {
 
-    logInfo(s"Connecting to $host:$port")
+    logInfo(log"Connecting to ${MDC(LogKeys.HOST, host)}:${MDC(LogKeys.PORT, port)}")
     try {
       socket = new Socket(host, port)
     } catch {
@@ -64,31 +64,31 @@ class SocketReceiver[T: ClassTag](
         restart(s"Error connecting to $host:$port", e)
         return
     }
-    logInfo(s"Connected to $host:$port")
+    logInfo(log"Connected to ${MDC(LogKeys.HOST, host)}:${MDC(LogKeys.PORT, port)}")
 
     // Start the thread that receives data over a connection
     new Thread("Socket Receiver") {
       setDaemon(true)
-      override def run() { receive() }
+      override def run(): Unit = { receive() }
     }.start()
   }
 
-  def onStop() {
+  def onStop(): Unit = {
     // in case restart thread close it twice
     synchronized {
       if (socket != null) {
         socket.close()
         socket = null
-        logInfo(s"Closed socket to $host:$port")
+        logInfo(log"Closed socket to ${MDC(LogKeys.HOST, host)}:${MDC(LogKeys.PORT, port)}")
       }
     }
   }
 
   /** Create a socket connection and receive data until receiver is stopped */
-  def receive() {
+  def receive(): Unit = {
     try {
       val iterator = bytesToObjects(socket.getInputStream())
-      while(!isStopped && iterator.hasNext) {
+      while (!isStopped() && iterator.hasNext) {
         store(iterator.next())
       }
       if (!isStopped()) {
@@ -125,7 +125,7 @@ object SocketReceiver  {
         nextValue
       }
 
-      protected override def close() {
+      protected override def close(): Unit = {
         dataInputStream.close()
       }
     }

@@ -18,18 +18,19 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.io.IOException
 
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 /**
  * A suite of tests for the Parquet support through the data sources API.
  */
-class HiveParquetSourceSuite extends ParquetPartitioningTest {
+class HiveParquetSourceSuite extends ParquetPartitioningTest with ParquetTest {
   import testImplicits._
   import spark._
 
@@ -206,20 +207,192 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
     }
   }
 
-  test("Aggregation attribute names can't contain special chars \" ,;{}()\\n\\t=\"") {
-    withTempDir { tempDir =>
-      val filePath = new File(tempDir, "testParquet").getCanonicalPath
-      val filePath2 = new File(tempDir, "testParquet2").getCanonicalPath
+  test("SPARK-25993 CREATE EXTERNAL TABLE with subdirectories") {
+    Seq("true", "false").foreach { parquetConversion =>
+      withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> parquetConversion) {
+        withTempPath { path =>
+          withTable("parq_tbl1", "parq_tbl2", "parq_tbl3",
+            "tbl1", "tbl2", "tbl3", "tbl4", "tbl5", "tbl6") {
 
-      val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
-      val df2 = df.as('x).join(df.as('y), $"x.str" === $"y.str").groupBy("y.str").max("y.int")
-      intercept[Throwable](df2.write.parquet(filePath))
+            def checkErrorMsg(path: String): String = {
+              s"Path: ${path} is a directory, which is not supported by the record reader " +
+                s"when `mapreduce.input.fileinputformat.input.dir.recursive` is false."
+            }
 
-      val df3 = df2.toDF("str", "max_int")
-      df3.write.parquet(filePath2)
-      val df4 = read.parquet(filePath2)
-      checkAnswer(df4, Row("1", 1) :: Row("2", 2) :: Row("3", 3) :: Nil)
-      assert(df4.columns === Array("str", "max_int"))
+            val parquetTblStatement1 =
+              s"""
+                 |CREATE EXTERNAL TABLE parq_tbl1(
+                 |  c1 int,
+                 |  c2 int,
+                 |  c3 string)
+                 |STORED AS parquet
+                 |LOCATION '${s"${path.getCanonicalPath}/l1/"}'""".stripMargin
+            sql(parquetTblStatement1)
+
+            val parquetTblInsertL1 =
+              s"INSERT INTO TABLE parq_tbl1 VALUES (1, 1, 'parq1'), (2, 2, 'parq2')".stripMargin
+            sql(parquetTblInsertL1)
+
+            val parquetTblStatement2 =
+              s"""
+                 |CREATE EXTERNAL TABLE parq_tbl2(
+                 |  c1 int,
+                 |  c2 int,
+                 |  c3 string)
+                 |STORED AS parquet
+                 |LOCATION '${s"${path.getCanonicalPath}/l1/l2/"}'""".stripMargin
+            sql(parquetTblStatement2)
+
+            val parquetTblInsertL2 =
+              s"INSERT INTO TABLE parq_tbl2 VALUES (3, 3, 'parq3'), (4, 4, 'parq4')".stripMargin
+            sql(parquetTblInsertL2)
+
+            val parquetTblStatement3 =
+              s"""
+                 |CREATE EXTERNAL TABLE parq_tbl3(
+                 |  c1 int,
+                 |  c2 int,
+                 |  c3 string)
+                 |STORED AS parquet
+                 |LOCATION '${s"${path.getCanonicalPath}/l1/l2/l3/"}'""".stripMargin
+            sql(parquetTblStatement3)
+
+            val parquetTblInsertL3 =
+              s"INSERT INTO TABLE parq_tbl3 VALUES (5, 5, 'parq5'), (6, 6, 'parq6')".stripMargin
+            sql(parquetTblInsertL3)
+
+            val topDirStatement =
+              s"""
+                 |CREATE EXTERNAL TABLE tbl1(
+                 |  c1 int,
+                 |  c2 int,
+                 |  c3 string)
+                 |STORED AS parquet
+                 |LOCATION '${s"${path.getCanonicalPath}"}'""".stripMargin
+            sql(topDirStatement)
+            if (parquetConversion == "true") {
+              checkAnswer(sql("SELECT * FROM tbl1"), Nil)
+            } else {
+              val msg = intercept[IOException] {
+                sql("SELECT * FROM tbl1").show()
+              }.getMessage
+              assert(msg.contains(checkErrorMsg(s"$path/l1")))
+            }
+
+            val l1DirStatement =
+              s"""
+                 |CREATE EXTERNAL TABLE tbl2(
+                 |  c1 int,
+                 |  c2 int,
+                 |  c3 string)
+                 |STORED AS parquet
+                 |LOCATION '${s"${path.getCanonicalPath}/l1/"}'""".stripMargin
+            sql(l1DirStatement)
+            if (parquetConversion == "true") {
+              checkAnswer(sql("SELECT * FROM tbl2"), (1 to 2).map(i => Row(i, i, s"parq$i")))
+            } else {
+              val msg = intercept[IOException] {
+                sql("SELECT * FROM tbl2").show()
+              }.getMessage
+              assert(msg.contains(checkErrorMsg(s"$path/l1/l2")))
+            }
+
+            val l2DirStatement =
+              s"""
+                 |CREATE EXTERNAL TABLE tbl3(
+                 |  c1 int,
+                 |  c2 int,
+                 |  c3 string)
+                 |STORED AS parquet
+                 |LOCATION '${s"${path.getCanonicalPath}/l1/l2/"}'""".stripMargin
+            sql(l2DirStatement)
+            if (parquetConversion == "true") {
+              checkAnswer(sql("SELECT * FROM tbl3"), (3 to 4).map(i => Row(i, i, s"parq$i")))
+            } else {
+              val msg = intercept[IOException] {
+                sql("SELECT * FROM tbl3").show()
+              }.getMessage
+              assert(msg.contains(checkErrorMsg(s"$path/l1/l2/l3")))
+            }
+
+            val wildcardTopDirStatement =
+              s"""
+                 |CREATE EXTERNAL TABLE tbl4(
+                 |  c1 int,
+                 |  c2 int,
+                 |  c3 string)
+                 |STORED AS parquet
+                 |LOCATION '${new File(s"${path}/*").toURI}'""".stripMargin
+            sql(wildcardTopDirStatement)
+            if (parquetConversion == "true") {
+              checkAnswer(sql("SELECT * FROM tbl4"), (1 to 2).map(i => Row(i, i, s"parq$i")))
+            } else {
+              val msg = intercept[IOException] {
+                sql("SELECT * FROM tbl4").show()
+              }.getMessage
+              assert(msg.contains(checkErrorMsg(s"$path/l1/l2")))
+            }
+
+            val wildcardL1DirStatement =
+              s"""
+                 |CREATE EXTERNAL TABLE tbl5(
+                 |  c1 int,
+                 |  c2 int,
+                 |  c3 string)
+                 |STORED AS parquet
+                 |LOCATION '${new File(s"${path}/l1/*").toURI}'""".stripMargin
+            sql(wildcardL1DirStatement)
+            if (parquetConversion == "true") {
+              checkAnswer(sql("SELECT * FROM tbl5"), (1 to 4).map(i => Row(i, i, s"parq$i")))
+            } else {
+              val msg = intercept[IOException] {
+                sql("SELECT * FROM tbl5").show()
+              }.getMessage
+              assert(msg.contains(checkErrorMsg(s"$path/l1/l2/l3")))
+            }
+
+            val wildcardL2DirStatement =
+              s"""
+                 |CREATE EXTERNAL TABLE tbl6(
+                 |  c1 int,
+                 |  c2 int,
+                 |  c3 string)
+                 |STORED AS parquet
+                 |LOCATION '${new File(s"${path}/l1/l2/*").toURI}'""".stripMargin
+            sql(wildcardL2DirStatement)
+            checkAnswer(sql("SELECT * FROM tbl6"), (3 to 6).map(i => Row(i, i, s"parq$i")))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-36941: Save/load ANSI intervals to Hive Parquet table") {
+    val tableName = "tbl_ansi_intervals"
+    withTable(tableName) {
+      val (ym, dt) = (java.time.Period.ofMonths(10), java.time.Duration.ofDays(1))
+      val df = Seq((ym, dt)).toDF("ym", "dt")
+      df.write.mode(SaveMode.Overwrite).format("parquet").saveAsTable(tableName)
+      withAllParquetReaders {
+        checkAnswer(sql(s"select * from $tableName"), Row(ym, dt))
+      }
+    }
+  }
+
+  test("Create view with dashes in column type") {
+    withView("t") {
+      sql("CREATE VIEW t AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
+      checkAnswer(spark.table("t"), Row(Row("a", 1)))
+    }
+  }
+
+  test("Alter view with nested struct") {
+    withView("t", "t2") {
+      sql("CREATE OR REPLACE VIEW t AS SELECT " +
+        "struct(id AS `$col2`, struct(id AS `$col`) AS s1) AS s2 FROM RANGE(5)")
+      sql("ALTER VIEW t SET TBLPROPERTIES ('x' = 'y')")
+      sql("ALTER VIEW t RENAME TO t2")
+      checkAnswer(sql("show TBLPROPERTIES t2 (x)"), Row("x", "y"))
     }
   }
 }

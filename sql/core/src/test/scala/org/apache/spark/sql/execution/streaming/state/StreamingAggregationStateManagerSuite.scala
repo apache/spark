@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorsUtils, StatePartitionKeyExtractorFactory, StreamingAggregationStateManager}
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
@@ -31,7 +33,7 @@ class StreamingAggregationStateManagerSuite extends StreamTest {
   val testOutputSchema: StructType = StructType(
     testKeys.map(createIntegerField) ++ testValues.map(createIntegerField))
 
-  val testOutputAttributes: Seq[Attribute] = testOutputSchema.toAttributes
+  val testOutputAttributes: Seq[Attribute] = toAttributes(testOutputSchema)
   val testKeyAttributes: Seq[Attribute] = testOutputAttributes.filter { p =>
     testKeys.contains(p.name)
   }
@@ -122,5 +124,35 @@ class StreamingAggregationStateManagerSuite extends StreamTest {
 
     // state manager should return row which is same as input row regardless of format version
     assert(inputRow === stateManager.get(memoryStateStore, keyRow))
+  }
+
+  // ============================ Partition Key Extraction Tests ============================
+
+  Seq(1, 2).foreach { version =>
+    test(s"Partition key extraction - StateManager v$version") {
+      val stateManager = StreamingAggregationStateManager.createStateManager(testKeyAttributes,
+        testOutputAttributes, stateFormatVersion = version)
+
+      val keySchema = testKeyAttributes.toStructType
+
+      // Create extractor for aggregation operation
+      val extractor = StatePartitionKeyExtractorFactory.create(
+        StatefulOperatorsUtils.STATE_STORE_SAVE_EXEC_OP_NAME,
+        keySchema
+      )
+      assert(extractor.partitionKeySchema === keySchema,
+        "Partition key schema should match the aggregation key schema")
+
+      // Write input aggregation row via state manager
+      val memoryStateStore = new MemoryStateStore()
+      stateManager.put(memoryStateStore, testRow)
+      assert(stateManager.getKey(testRow) === expectedTestKeyRow)
+
+      // Verify the state key and partition key by reading via store
+      val pair = memoryStateStore.iterator().next()
+      assert(pair.key === expectedTestKeyRow)
+      assert(extractor.partitionKey(pair.key) === pair.key,
+        "Partition key should be the same as the state key")
+    }
   }
 }

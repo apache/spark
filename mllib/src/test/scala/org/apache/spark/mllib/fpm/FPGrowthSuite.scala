@@ -16,10 +16,9 @@
  */
 package org.apache.spark.mllib.fpm
 
-import scala.language.existentials
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
 
 class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -173,8 +172,8 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext {
       .generateAssociationRules(0.9)
       .collect()
 
-    assert(rules.size === 23)
-    assert(rules.count(rule => math.abs(rule.confidence - 1.0D) < 1e-6) == 23)
+    assert(rules.length === 23)
+    assert(rules.count(rule => rule.confidence ~= 1.0D absTol 1e-6) == 23)
   }
 
   test("FP-Growth using Int type") {
@@ -301,7 +300,7 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext {
     val path = tempDir.toURI.toString
     try {
       model3.save(sc, path)
-      val newModel = FPGrowthModel.load(sc, path)
+      val newModel = FPGrowthModel.load(sc, path).asInstanceOf[FPGrowthModel[String]]
       val newFreqItemsets = newModel.freqItemsets.collect().map { itemset =>
         (itemset.items.toSet, itemset.freq)
       }
@@ -335,7 +334,7 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext {
     val path = tempDir.toURI.toString
     try {
       model3.save(sc, path)
-      val newModel = FPGrowthModel.load(sc, path)
+      val newModel = FPGrowthModel.load(sc, path).asInstanceOf[FPGrowthModel[String]]
       val newFreqItemsets = newModel.freqItemsets.collect().map { itemset =>
         (itemset.items.toSet, itemset.freq)
       }

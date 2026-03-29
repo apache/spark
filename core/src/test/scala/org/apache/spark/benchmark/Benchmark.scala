@@ -25,7 +25,6 @@ import scala.concurrent.duration._
 import scala.util.Try
 
 import org.apache.commons.io.output.TeeOutputStream
-import org.apache.commons.lang3.SystemUtils
 
 import org.apache.spark.util.Utils
 
@@ -94,9 +93,11 @@ private[spark] class Benchmark(
   /**
    * Runs the benchmark and outputs the results to stdout. This should be copied and added as
    * a comment with the benchmark. Although the results vary from machine to machine, it should
-   * provide some baseline.
+   * provide some baseline. If `relativeTime` is set to `true`, the `Relative` column will be
+   * the relative time of each case relative to the first case (less is better). Otherwise, it
+   * will be the relative execution speed of each case relative to the first case (more is better).
    */
-  def run(): Unit = {
+  def run(relativeTime: Boolean = false): Unit = {
     require(benchmarks.nonEmpty)
     // scalastyle:off
     println("Running benchmark: " + name)
@@ -105,24 +106,29 @@ private[spark] class Benchmark(
       println("  Running case: " + c.name)
       measure(valuesPerIteration, c.numIters)(c.fn)
     }
-    println
+    println()
 
     val firstBest = results.head.bestMs
     // The results are going to be processor specific so it is useful to include that.
     out.println(Benchmark.getJVMOSInfo())
     out.println(Benchmark.getProcessorName())
-    out.printf("%-40s %16s %12s %13s %10s\n", name + ":", "Best/Avg Time(ms)", "Rate(M/s)",
-      "Per Row(ns)", "Relative")
-    out.println("-" * 96)
+    val nameLen = Math.max(40, Math.max(name.length, benchmarks.map(_.name.length).max))
+    val relativeHeader = if (relativeTime) "Relative time" else "Relative"
+    out.printf(s"%-${nameLen}s %14s %14s %11s %12s %13s %10s\n",
+      name + ":", "Best Time(ms)", "Avg Time(ms)", "Stdev(ms)", "Rate(M/s)", "Per Row(ns)", relativeHeader)
+    out.println("-" * (nameLen + 80))
     results.zip(benchmarks).foreach { case (result, benchmark) =>
-      out.printf("%-40s %16s %12s %13s %10s\n",
+      val relative = if (relativeTime) result.bestMs / firstBest else firstBest / result.bestMs
+      out.printf(s"%-${nameLen}s %14s %14s %11s %12s %13s %10s\n",
         benchmark.name,
-        "%5.0f / %4.0f" format (result.bestMs, result.avgMs),
+        "%5.0f" format result.bestMs,
+        "%4.0f" format result.avgMs,
+        "%5.0f" format result.stdevMs,
         "%10.1f" format result.bestRate,
         "%6.1f" format (1000 / result.bestRate),
-        "%3.1fX" format (firstBest / result.bestMs))
+        "%3.1fX" format relative)
     }
-    out.println
+    out.println()
     // scalastyle:on
   }
 
@@ -133,32 +139,38 @@ private[spark] class Benchmark(
   def measure(num: Long, overrideNumIters: Int)(f: Timer => Unit): Result = {
     System.gc()  // ensures garbage from previous cases don't impact this one
     val warmupDeadline = warmupTime.fromNow
-    while (!warmupDeadline.isOverdue) {
+    while (!warmupDeadline.isOverdue()) {
       f(new Benchmark.Timer(-1))
     }
     val minIters = if (overrideNumIters != 0) overrideNumIters else minNumIters
     val minDuration = if (overrideNumIters != 0) 0 else minTime.toNanos
     val runTimes = ArrayBuffer[Long]()
+    var totalTime = 0L
     var i = 0
-    while (i < minIters || runTimes.sum < minDuration) {
+    while (i < minIters || totalTime < minDuration) {
       val timer = new Benchmark.Timer(i)
       f(timer)
       val runTime = timer.totalTime()
       runTimes += runTime
+      totalTime += runTime
 
       if (outputPerIteration) {
         // scalastyle:off
-        println(s"Iteration $i took ${runTime / 1000} microseconds")
+        println(s"Iteration $i took ${NANOSECONDS.toMicros(runTime)} microseconds")
         // scalastyle:on
       }
       i += 1
     }
     // scalastyle:off
-    println(s"  Stopped after $i iterations, ${runTimes.sum / 1000000} ms")
+    println(s"  Stopped after $i iterations, ${NANOSECONDS.toMillis(runTimes.sum)} ms")
     // scalastyle:on
+    assert(runTimes.nonEmpty)
     val best = runTimes.min
-    val avg = runTimes.sum / runTimes.size
-    Result(avg / 1000000.0, num / (best / 1000.0), best / 1000000.0)
+    val avg = runTimes.sum.toDouble / runTimes.size
+    val stdev = if (runTimes.size > 1) {
+      math.sqrt(runTimes.map(time => (time - avg) * (time - avg)).sum / (runTimes.size - 1))
+    } else 0
+    Result(avg / 1000000.0, num / (best / 1000.0), best / 1000000.0, stdev / 1000000.0)
   }
 }
 
@@ -191,17 +203,17 @@ private[spark] object Benchmark {
   }
 
   case class Case(name: String, fn: Timer => Unit, numIters: Int)
-  case class Result(avgMs: Double, bestRate: Double, bestMs: Double)
+  case class Result(avgMs: Double, bestRate: Double, bestMs: Double, stdevMs: Double)
 
   /**
    * This should return a user helpful processor information. Getting at this depends on the OS.
    * This should return something like "Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz"
    */
   def getProcessorName(): String = {
-    val cpu = if (SystemUtils.IS_OS_MAC_OSX) {
+    val cpu = if (Utils.isMac) {
       Utils.executeAndGetOutput(Seq("/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string"))
         .stripLineEnd
-    } else if (SystemUtils.IS_OS_LINUX) {
+    } else if (Utils.isLinux) {
       Try {
         val grepPath = Utils.executeAndGetOutput(Seq("which", "grep")).stripLineEnd
         Utils.executeAndGetOutput(Seq(grepPath, "-m", "1", "model name", "/proc/cpuinfo"))
@@ -221,8 +233,6 @@ private[spark] object Benchmark {
   def getJVMOSInfo(): String = {
     val vmName = System.getProperty("java.vm.name")
     val runtimeVersion = System.getProperty("java.runtime.version")
-    val osName = System.getProperty("os.name")
-    val osVersion = System.getProperty("os.version")
-    s"${vmName} ${runtimeVersion} on ${osName} ${osVersion}"
+    s"${vmName} ${runtimeVersion} on ${Utils.osName} ${Utils.osVersion}"
   }
 }

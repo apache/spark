@@ -20,7 +20,6 @@ package org.apache.spark.ml.feature
 import java.util.NoSuchElementException
 
 import scala.collection.mutable
-import scala.language.existentials
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
@@ -33,6 +32,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A feature transformer that merges multiple columns into a vector column.
@@ -87,16 +87,17 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     // Schema transformation.
     val schema = dataset.schema
 
-    val vectorCols = $(inputCols).filter { c =>
-      schema(c).dataType match {
-        case _: VectorUDT => true
-        case _ => false
-      }
+    val inputColsWithField = $(inputCols).map { c =>
+      c -> SchemaUtils.getSchemaField(schema, c)
     }
-    val vectorColsLengths = VectorAssembler.getLengths(dataset, vectorCols, $(handleInvalid))
 
-    val featureAttributesMap = $(inputCols).map { c =>
-      val field = schema(c)
+    val vectorCols = inputColsWithField.collect {
+      case (c, field) if field.dataType.isInstanceOf[VectorUDT] => c
+    }
+    val vectorColsLengths = VectorAssembler.getLengths(
+      dataset, vectorCols.toImmutableArraySeq, $(handleInvalid))
+
+    val featureAttributesMap = inputColsWithField.map { case (c, field) =>
       field.dataType match {
         case DoubleType =>
           val attribute = Attribute.fromStructField(field)
@@ -112,7 +113,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
         case _: VectorUDT =>
           val attributeGroup = AttributeGroup.fromStructField(field)
           if (attributeGroup.attributes.isDefined) {
-            attributeGroup.attributes.get.zipWithIndex.toSeq.map { case (attr, i) =>
+            attributeGroup.attributes.get.zipWithIndex.toImmutableArraySeq.map { case (attr, i) =>
               if (attr.name.isDefined) {
                 // TODO: Define a rigorous naming scheme.
                 attr.withName(c + "_" + attr.name.get)
@@ -131,27 +132,28 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
           throw new SparkException(s"VectorAssembler does not support the $otherType type")
       }
     }
-    val featureAttributes = featureAttributesMap.flatten[Attribute].toArray
-    val lengths = featureAttributesMap.map(a => a.length).toArray
+    val featureAttributes = featureAttributesMap.flatten[Attribute]
+    val lengths = featureAttributesMap.map(a => a.length)
     val metadata = new AttributeGroup($(outputCol), featureAttributes).toMetadata()
-    val (filteredDataset, keepInvalid) = $(handleInvalid) match {
-      case VectorAssembler.SKIP_INVALID => (dataset.na.drop($(inputCols)), false)
-      case VectorAssembler.KEEP_INVALID => (dataset, true)
-      case VectorAssembler.ERROR_INVALID => (dataset, false)
+    val filteredDataset = $(handleInvalid) match {
+      case VectorAssembler.SKIP_INVALID => dataset.na.drop($(inputCols))
+      case VectorAssembler.KEEP_INVALID | VectorAssembler.ERROR_INVALID => dataset
     }
+    val keepInvalid = $(handleInvalid) == VectorAssembler.KEEP_INVALID
     // Data transformation.
     val assembleFunc = udf { r: Row =>
       VectorAssembler.assemble(lengths, keepInvalid)(r.toSeq: _*)
     }.asNondeterministic()
-    val args = $(inputCols).map { c =>
-      schema(c).dataType match {
+    val args = inputColsWithField.map { case (c, field) =>
+      field.dataType match {
         case DoubleType => dataset(c)
         case _: VectorUDT => dataset(c)
         case _: NumericType | BooleanType => dataset(c).cast(DoubleType).as(s"${c}_double_$uid")
       }
     }
-
-    filteredDataset.select(col("*"), assembleFunc(struct(args: _*)).as($(outputCol), metadata))
+    import org.apache.spark.util.ArrayImplicits._
+    filteredDataset.select(col("*"),
+      assembleFunc(struct(args.toImmutableArraySeq: _*)).as($(outputCol), metadata))
   }
 
   @Since("1.4.0")
@@ -159,7 +161,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val inputColNames = $(inputCols)
     val outputColName = $(outputCol)
     val incorrectColumns = inputColNames.flatMap { name =>
-      schema(name).dataType match {
+      SchemaUtils.getSchemaFieldType(schema, name) match {
         case _: NumericType | BooleanType => None
         case t if t.isInstanceOf[VectorUDT] => None
         case other => Some(s"Data type ${other.catalogString} of column $name is not supported.")
@@ -176,6 +178,12 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   @Since("1.4.1")
   override def copy(extra: ParamMap): VectorAssembler = defaultCopy(extra)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"VectorAssembler: uid=$uid, handleInvalid=${$(handleInvalid)}" +
+      get(inputCols).map(c => s", numInputCols=${c.length}").getOrElse("")
+  }
 }
 
 @Since("1.6.0")
@@ -218,7 +226,8 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
       columns: Seq[String],
       handleInvalid: String): Map[String, Int] = {
     val groupSizes = columns.map { c =>
-      c -> AttributeGroup.fromStructField(dataset.schema(c)).size
+      val field = SchemaUtils.getSchemaField(dataset.schema, c)
+      c -> AttributeGroup.fromStructField(field).size
     }.toMap
     val missingColumns = groupSizes.filter(_._2 == -1).keys.toSeq
     val firstSizes = (missingColumns.nonEmpty, handleInvalid) match {
@@ -228,7 +237,7 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
         getVectorLengthsFromFirstRow(dataset.na.drop(missingColumns), missingColumns)
       case (true, VectorAssembler.KEEP_INVALID) => throw new RuntimeException(
         s"""Can not infer column lengths with handleInvalid = "keep". Consider using VectorSizeHint
-           |to add metadata for columns: ${columns.mkString("[", ", ", "]")}."""
+           |to add metadata for columns: ${missingColumns.mkString("[", ", ", "]")}."""
           .stripMargin.replaceAll("\n", " "))
       case (_, _) => Map.empty
     }
@@ -266,18 +275,16 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
         inputColumnIndex += 1
         featureIndex += 1
       case vec: Vector =>
-        vec.foreachActive { case (i, v) =>
-          if (v != 0.0) {
-            indices += featureIndex + i
-            values += v
-          }
+        vec.foreachNonZero { case (i, v) =>
+          indices += featureIndex + i
+          values += v
         }
         inputColumnIndex += 1
         featureIndex += vec.size
       case null =>
         if (keepInvalid) {
-          val length: Int = lengths(inputColumnIndex)
-          Array.range(0, length).foreach { i =>
+          val length = lengths(inputColumnIndex)
+          Iterator.range(0, length).foreach { i =>
             indices += featureIndex + i
             values += Double.NaN
           }
@@ -285,13 +292,17 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
           featureIndex += length
         } else {
           throw new SparkException(
-            s"""Encountered null while assembling a row with handleInvalid = "keep". Consider
+            s"""Encountered null while assembling a row with handleInvalid = "error". Consider
                |removing nulls from dataset or using handleInvalid = "keep" or "skip"."""
               .stripMargin)
         }
       case o =>
         throw new SparkException(s"$o of type ${o.getClass.getName} is not supported.")
     }
-    Vectors.sparse(featureIndex, indices.result(), values.result()).compressed
+
+    val idxArray = indices.result()
+    val valArray = values.result()
+    Vectors.sparse(featureIndex, idxArray, valArray)
+      .compressedWithNNZ(idxArray.length)
   }
 }

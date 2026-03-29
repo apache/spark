@@ -1,0 +1,25 @@
+WholeStageCodegen (4)
+  Sort [o_orderpriority]
+    InputAdapter
+      Exchange [o_orderpriority] #1
+        WholeStageCodegen (3)
+          HashAggregate [o_orderpriority,count] [count(1),order_count,count]
+            InputAdapter
+              Exchange [o_orderpriority] #2
+                WholeStageCodegen (2)
+                  HashAggregate [o_orderpriority] [count,count]
+                    Project [o_orderpriority]
+                      BroadcastHashJoin [o_orderkey,l_orderkey]
+                        Project [o_orderkey,o_orderpriority]
+                          Filter [o_orderdate]
+                            ColumnarToRow
+                              InputAdapter
+                                Scan parquet spark_catalog.default.orders [o_orderkey,o_orderdate,o_orderpriority]
+                        InputAdapter
+                          BroadcastExchange #3
+                            WholeStageCodegen (1)
+                              Project [l_orderkey]
+                                Filter [l_commitdate,l_receiptdate]
+                                  ColumnarToRow
+                                    InputAdapter
+                                      Scan parquet spark_catalog.default.lineitem [l_orderkey,l_commitdate,l_receiptdate]

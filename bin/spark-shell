@@ -34,7 +34,7 @@ fi
 
 export _SPARK_CMD_USAGE="Usage: ./bin/spark-shell [options]
 
-Scala REPL options:
+Scala REPL options, Spark Classic only:
   -I <file>                   preload <file>, enforcing line-by-line interpretation"
 
 # SPARK-4161: scala does not assume use of the java classpath,
@@ -45,6 +45,9 @@ Scala REPL options:
 SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS -Dscala.usejavacp=true"
 
 function main() {
+  export SPARK_SCALA_SHELL=1
+  # In case of Spark Connect shell, the main class (and resource) is replaced in
+  # SparkSubmitCommandBuilder.
   if $cygwin; then
     # Workaround for issue involving JLine and Cygwin
     # (see http://sourceforge.net/p/jline/bugs/40/).

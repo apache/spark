@@ -17,8 +17,6 @@
 
 package org.apache.spark.examples.ml
 
-// scalastyle:off println
-
 // $example on$
 import org.apache.spark.ml.fpm.PrefixSpan
 // $example off$
@@ -35,7 +33,7 @@ object PrefixSpanExample {
 
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName(s"${this.getClass.getSimpleName}")
       .getOrCreate()
     import spark.implicits._
@@ -59,4 +57,3 @@ object PrefixSpanExample {
     spark.stop()
   }
 }
-// scalastyle:on println

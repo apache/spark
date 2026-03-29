@@ -23,9 +23,11 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.OPTIMIZER_METADATA_ONLY
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.SlowSQLTest
 
-class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSQLContext {
+@SlowSQLTest
+class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   override def beforeAll(): Unit = {
@@ -45,14 +47,14 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSQLContext {
 
   private def assertMetadataOnlyQuery(df: DataFrame): Unit = {
     val localRelations = df.queryExecution.optimizedPlan.collect {
-      case l @ LocalRelation(_, _, _) => l
+      case l: LocalRelation => l
     }
     assert(localRelations.size == 1)
   }
 
   private def assertNotMetadataOnlyQuery(df: DataFrame): Unit = {
     val localRelations = df.queryExecution.optimizedPlan.collect {
-      case l @ LocalRelation(_, _, _) => l
+      case l: LocalRelation => l
     }
     assert(localRelations.size == 0)
   }
@@ -103,6 +105,20 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSQLContext {
     "select partcol2, min(partcol1) from srcpart where partcol1 = 0 group by partcol2",
     "select max(c1) from (select partcol1 + 1 as c1 from srcpart where partcol1 = 0) t")
 
+  testMetadataOnly(
+    "SPARK-31590 Metadata-only queries should not include subquery in partition filters",
+    """
+      |SELECT partcol1, MAX(partcol2) AS partcol2
+      |FROM srcpart
+      |WHERE partcol1 = (
+      |  SELECT MAX(partcol1)
+      |  FROM srcpart
+      |)
+      |AND partcol2 = 'even'
+      |GROUP BY partcol1
+      |""".stripMargin
+  )
+
   testNotMetadataOnly(
     "Don't optimize metadata only query for non-partition columns",
     "select col1 from srcpart group by col1",
@@ -130,7 +146,10 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("Incorrect result caused by the rule OptimizeMetadataOnlyQuery") {
-    withSQLConf(OPTIMIZER_METADATA_ONLY.key -> "true") {
+    // This test case is only for file source V1. As the rule OptimizeMetadataOnlyQuery is disabled
+    // by default, we can skip testing file source v2 in current stage.
+    withSQLConf(OPTIMIZER_METADATA_ONLY.key -> "true",
+      SQLConf.USE_V1_SOURCE_LIST.key -> "json") {
       withTempPath { path =>
         val tablePath = new File(s"${path.getCanonicalPath}/cOl3=c/cOl1=a/cOl5=e")
         Seq(("a", "b", "c", "d", "e")).toDF("cOl1", "cOl2", "cOl3", "cOl4", "cOl5")

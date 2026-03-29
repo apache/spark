@@ -17,20 +17,21 @@
 
 package org.apache.spark.sql.execution
 
-import scala.language.implicitConversions
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{DataFrame, Row, SparkSession, SQLContext}
+import org.apache.spark.sql.{classic, DataFrame, Row, SparkSessionProvider, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.test.SQLTestUtils
 
 /**
  * Base class for writing tests for individual physical operators. For an example of how this
  * class's test helper methods can be used, see [[SortSuite]].
  */
-private[sql] abstract class SparkPlanTest extends SparkFunSuite {
-  protected def spark: SparkSession
+private[sql] abstract class SparkPlanTest extends SparkFunSuite with SparkSessionProvider {
+  override protected def spark: classic.SparkSession
 
   /**
    * Runs the plan and makes sure the answer matches the expected result.
@@ -237,7 +238,7 @@ object SparkPlanTest {
    * @param spark SqlContext used for execution of the plan
    */
   def executePlan(outputPlan: SparkPlan, spark: SQLContext): Seq[Row] = {
-    val execution = new QueryExecution(spark.sparkSession, null) {
+    val execution = new QueryExecution(spark.sparkSession, LocalRelation(Nil)) {
       override lazy val sparkPlan: SparkPlan = outputPlan transform {
         case plan: SparkPlan =>
           val inputMap = plan.children.flatMap(_.output).map(a => (a.name, a)).toMap

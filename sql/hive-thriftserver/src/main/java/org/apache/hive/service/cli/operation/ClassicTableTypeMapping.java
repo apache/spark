@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,10 +19,16 @@ package org.apache.hive.service.cli.operation;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import org.apache.hadoop.hive.metastore.TableType;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 /**
  * ClassicTableTypeMapping.
@@ -34,51 +39,59 @@ import org.apache.hadoop.hive.metastore.TableType;
  */
 public class ClassicTableTypeMapping implements TableTypeMapping {
 
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(ClassicTableTypeMapping.class);
+
   public enum ClassicTableTypes {
     TABLE,
     VIEW,
+    MATERIALIZED_VIEW,
   }
 
   private final Map<String, String> hiveToClientMap = new HashMap<String, String>();
-  private final Map<String, String> clientToHiveMap = new HashMap<String, String>();
+  private final Map<String, List<String>> clientToHiveMap = new HashMap<>();
 
   public ClassicTableTypeMapping() {
-    hiveToClientMap.put(TableType.MANAGED_TABLE.toString(),
-        ClassicTableTypes.TABLE.toString());
-    hiveToClientMap.put(TableType.EXTERNAL_TABLE.toString(),
-        ClassicTableTypes.TABLE.toString());
-    hiveToClientMap.put(TableType.VIRTUAL_VIEW.toString(),
-        ClassicTableTypes.VIEW.toString());
+    hiveToClientMap.put(TableType.MANAGED_TABLE.name(), ClassicTableTypes.TABLE.name());
+    hiveToClientMap.put(TableType.EXTERNAL_TABLE.name(), ClassicTableTypes.TABLE.name());
+    hiveToClientMap.put(TableType.VIRTUAL_VIEW.name(), ClassicTableTypes.VIEW.name());
+    hiveToClientMap.put(TableType.MATERIALIZED_VIEW.toString(),
+            ClassicTableTypes.MATERIALIZED_VIEW.toString());
 
-    clientToHiveMap.put(ClassicTableTypes.TABLE.toString(),
-        TableType.MANAGED_TABLE.toString());
-    clientToHiveMap.put(ClassicTableTypes.VIEW.toString(),
-        TableType.VIRTUAL_VIEW.toString());
+    clientToHiveMap.put(ClassicTableTypes.TABLE.name(),
+        List.of(TableType.MANAGED_TABLE.name(), TableType.EXTERNAL_TABLE.name()));
+    clientToHiveMap.put(ClassicTableTypes.VIEW.name(),
+        List.of(TableType.VIRTUAL_VIEW.name()));
+    clientToHiveMap.put(ClassicTableTypes.MATERIALIZED_VIEW.toString(),
+        List.of(TableType.MATERIALIZED_VIEW.toString()));
   }
 
   @Override
-  public String mapToHiveType(String clientTypeName) {
-    if (clientToHiveMap.containsKey(clientTypeName)) {
-      return clientToHiveMap.get(clientTypeName);
-    } else {
-      return clientTypeName;
+  public String[] mapToHiveType(String clientTypeName) {
+    List<String> hiveTableType = clientToHiveMap.get(clientTypeName.toUpperCase());
+    if (hiveTableType == null) {
+      LOG.warn("Not supported client table type {}",
+        MDC.of(LogKeys.TABLE_TYPE, clientTypeName));
+      return new String[] {clientTypeName};
     }
+    return hiveTableType.toArray(new String[0]);
   }
 
   @Override
   public String mapToClientType(String hiveTypeName) {
-    if (hiveToClientMap.containsKey(hiveTypeName)) {
-      return hiveToClientMap.get(hiveTypeName);
-    } else {
+    String clientTypeName = hiveToClientMap.get(hiveTypeName);
+    if (clientTypeName == null) {
+      LOG.warn("Invalid hive table type {}",
+        MDC.of(LogKeys.TABLE_TYPE, hiveTypeName));
       return hiveTypeName;
     }
+    return clientTypeName;
   }
 
   @Override
   public Set<String> getTableTypeNames() {
     Set<String> typeNameSet = new HashSet<String>();
     for (ClassicTableTypes typeNames : ClassicTableTypes.values()) {
-      typeNameSet.add(typeNames.toString());
+      typeNameSet.add(typeNames.name());
     }
     return typeNameSet;
   }

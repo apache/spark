@@ -18,7 +18,7 @@
 context("functions in sparkR.R")
 
 test_that("sparkCheckInstall", {
-  # "local, yarn-client, mesos-client" mode, SPARK_HOME was set correctly,
+  # "local, yarn-client" mode, SPARK_HOME was set correctly,
   # and the SparkR job was submitted by "spark-submit"
   sparkHome <- paste0(tempdir(), "/", "sparkHome")
   dir.create(sparkHome)
@@ -27,17 +27,17 @@ test_that("sparkCheckInstall", {
   expect_true(is.null(sparkCheckInstall(sparkHome, master, deployMode)))
   unlink(sparkHome, recursive = TRUE)
 
-  # "yarn-cluster, mesos-cluster" mode, SPARK_HOME was not set,
+  # "yarn-cluster" mode, SPARK_HOME was not set,
   # and the SparkR job was submitted by "spark-submit"
   sparkHome <- ""
   master <- ""
   deployMode <- ""
   expect_true(is.null(sparkCheckInstall(sparkHome, master, deployMode)))
 
-  # "yarn-client, mesos-client" mode, SPARK_HOME was not set
+  # "yarn-client" mode, SPARK_HOME was not set
   sparkHome <- ""
-  master <- "yarn-client"
-  deployMode <- ""
+  master <- "yarn"
+  deployMode <- "client"
   expect_error(sparkCheckInstall(sparkHome, master, deployMode))
   sparkHome <- ""
   master <- ""

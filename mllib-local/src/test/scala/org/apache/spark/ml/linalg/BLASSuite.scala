@@ -23,6 +23,12 @@ import org.apache.spark.ml.util.TestingUtils._
 
 class BLASSuite extends SparkMLFunSuite {
 
+  test("nativeL1Threshold") {
+    assert(getBLAS(128) == BLAS.javaBLAS)
+    assert(getBLAS(256) == BLAS.nativeBLAS)
+    assert(getBLAS(512) == BLAS.nativeBLAS)
+  }
+
   test("copy") {
     val sx = Vectors.sparse(4, Array(0, 2), Array(1.0, -2.0))
     val dx = Vectors.dense(1.0, 0.0, -2.0, 0.0)
@@ -261,7 +267,7 @@ class BLASSuite extends SparkMLFunSuite {
 
     val dATT = dATman.transpose
     val sATT = sATman.transpose
-    val BTT = BTman.transpose.asInstanceOf[DenseMatrix]
+    val BTT = BTman.transpose
 
     assert(dATT.multiply(B) ~== expected absTol 1e-15)
     assert(sATT.multiply(B) ~== expected absTol 1e-15)

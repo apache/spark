@@ -19,12 +19,13 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.UnaryTransformer
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.{DoubleParam, ParamValidators}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types._
 
 /**
  * Normalize a vector to have unit norm using the given p-norm.
@@ -59,7 +60,32 @@ class Normalizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     vector => normalizer.transform(OldVectors.fromML(vector)).asML
   }
 
+  override protected def validateInputType(inputType: DataType): Unit = {
+    require(inputType.isInstanceOf[VectorUDT],
+      s"Input type must be ${(new VectorUDT).catalogString} but got ${inputType.catalogString}.")
+  }
+
   override protected def outputDataType: DataType = new VectorUDT()
+
+  @Since("1.4.0")
+  override def transformSchema(schema: StructType): StructType = {
+    var outputSchema = super.transformSchema(schema)
+    if ($(inputCol).nonEmpty && $(outputCol).nonEmpty) {
+      val size = AttributeGroup.fromStructField(
+        SchemaUtils.getSchemaField(schema, $(inputCol))
+      ).size
+      if (size >= 0) {
+        outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+          $(outputCol), size)
+      }
+    }
+    outputSchema
+  }
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"Normalizer: uid=$uid, p=${$(p)}"
+  }
 }
 
 @Since("1.6.0")

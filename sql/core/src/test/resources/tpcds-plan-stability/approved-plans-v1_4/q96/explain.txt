@@ -1,0 +1,163 @@
+== Physical Plan ==
+* HashAggregate (28)
++- Exchange (27)
+   +- * HashAggregate (26)
+      +- * Project (25)
+         +- * BroadcastHashJoin Inner BuildRight (24)
+            :- * Project (18)
+            :  +- * BroadcastHashJoin Inner BuildRight (17)
+            :     :- * Project (11)
+            :     :  +- * BroadcastHashJoin Inner BuildRight (10)
+            :     :     :- * Project (4)
+            :     :     :  +- * Filter (3)
+            :     :     :     +- * ColumnarToRow (2)
+            :     :     :        +- Scan parquet spark_catalog.default.store_sales (1)
+            :     :     +- BroadcastExchange (9)
+            :     :        +- * Project (8)
+            :     :           +- * Filter (7)
+            :     :              +- * ColumnarToRow (6)
+            :     :                 +- Scan parquet spark_catalog.default.household_demographics (5)
+            :     +- BroadcastExchange (16)
+            :        +- * Project (15)
+            :           +- * Filter (14)
+            :              +- * ColumnarToRow (13)
+            :                 +- Scan parquet spark_catalog.default.time_dim (12)
+            +- BroadcastExchange (23)
+               +- * Project (22)
+                  +- * Filter (21)
+                     +- * ColumnarToRow (20)
+                        +- Scan parquet spark_catalog.default.store (19)
+
+
+(1) Scan parquet spark_catalog.default.store_sales
+Output [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_sold_date_sk#4]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store_sales]
+PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)]
+ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
+
+(2) ColumnarToRow [codegen id : 4]
+Input [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_sold_date_sk#4]
+
+(3) Filter [codegen id : 4]
+Input [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_sold_date_sk#4]
+Condition : ((isnotnull(ss_hdemo_sk#2) AND isnotnull(ss_sold_time_sk#1)) AND isnotnull(ss_store_sk#3))
+
+(4) Project [codegen id : 4]
+Output [3]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3]
+Input [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_sold_date_sk#4]
+
+(5) Scan parquet spark_catalog.default.household_demographics
+Output [2]: [hd_demo_sk#5, hd_dep_count#6]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/household_demographics]
+PushedFilters: [IsNotNull(hd_dep_count), EqualTo(hd_dep_count,7), IsNotNull(hd_demo_sk)]
+ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int>
+
+(6) ColumnarToRow [codegen id : 1]
+Input [2]: [hd_demo_sk#5, hd_dep_count#6]
+
+(7) Filter [codegen id : 1]
+Input [2]: [hd_demo_sk#5, hd_dep_count#6]
+Condition : ((isnotnull(hd_dep_count#6) AND (hd_dep_count#6 = 7)) AND isnotnull(hd_demo_sk#5))
+
+(8) Project [codegen id : 1]
+Output [1]: [hd_demo_sk#5]
+Input [2]: [hd_demo_sk#5, hd_dep_count#6]
+
+(9) BroadcastExchange
+Input [1]: [hd_demo_sk#5]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
+
+(10) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [ss_hdemo_sk#2]
+Right keys [1]: [hd_demo_sk#5]
+Join type: Inner
+Join condition: None
+
+(11) Project [codegen id : 4]
+Output [2]: [ss_sold_time_sk#1, ss_store_sk#3]
+Input [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, hd_demo_sk#5]
+
+(12) Scan parquet spark_catalog.default.time_dim
+Output [3]: [t_time_sk#7, t_hour#8, t_minute#9]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/time_dim]
+PushedFilters: [IsNotNull(t_hour), IsNotNull(t_minute), EqualTo(t_hour,20), GreaterThanOrEqual(t_minute,30), IsNotNull(t_time_sk)]
+ReadSchema: struct<t_time_sk:int,t_hour:int,t_minute:int>
+
+(13) ColumnarToRow [codegen id : 2]
+Input [3]: [t_time_sk#7, t_hour#8, t_minute#9]
+
+(14) Filter [codegen id : 2]
+Input [3]: [t_time_sk#7, t_hour#8, t_minute#9]
+Condition : ((((isnotnull(t_hour#8) AND isnotnull(t_minute#9)) AND (t_hour#8 = 20)) AND (t_minute#9 >= 30)) AND isnotnull(t_time_sk#7))
+
+(15) Project [codegen id : 2]
+Output [1]: [t_time_sk#7]
+Input [3]: [t_time_sk#7, t_hour#8, t_minute#9]
+
+(16) BroadcastExchange
+Input [1]: [t_time_sk#7]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
+
+(17) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [ss_sold_time_sk#1]
+Right keys [1]: [t_time_sk#7]
+Join type: Inner
+Join condition: None
+
+(18) Project [codegen id : 4]
+Output [1]: [ss_store_sk#3]
+Input [3]: [ss_sold_time_sk#1, ss_store_sk#3, t_time_sk#7]
+
+(19) Scan parquet spark_catalog.default.store
+Output [2]: [s_store_sk#10, s_store_name#11]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store]
+PushedFilters: [IsNotNull(s_store_name), EqualTo(s_store_name,ese), IsNotNull(s_store_sk)]
+ReadSchema: struct<s_store_sk:int,s_store_name:string>
+
+(20) ColumnarToRow [codegen id : 3]
+Input [2]: [s_store_sk#10, s_store_name#11]
+
+(21) Filter [codegen id : 3]
+Input [2]: [s_store_sk#10, s_store_name#11]
+Condition : ((isnotnull(s_store_name#11) AND (s_store_name#11 = ese)) AND isnotnull(s_store_sk#10))
+
+(22) Project [codegen id : 3]
+Output [1]: [s_store_sk#10]
+Input [2]: [s_store_sk#10, s_store_name#11]
+
+(23) BroadcastExchange
+Input [1]: [s_store_sk#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=3]
+
+(24) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [ss_store_sk#3]
+Right keys [1]: [s_store_sk#10]
+Join type: Inner
+Join condition: None
+
+(25) Project [codegen id : 4]
+Output: []
+Input [2]: [ss_store_sk#3, s_store_sk#10]
+
+(26) HashAggregate [codegen id : 4]
+Input: []
+Keys: []
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#12]
+Results [1]: [count#13]
+
+(27) Exchange
+Input [1]: [count#13]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=4]
+
+(28) HashAggregate [codegen id : 5]
+Input [1]: [count#13]
+Keys: []
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#14]
+Results [1]: [count(1)#14 AS count(1)#15]
+

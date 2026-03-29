@@ -17,48 +17,48 @@
 package org.apache.spark.sql.catalyst.parser
 
 import java.util
+import java.util.Locale
 
-import scala.collection.mutable.StringBuilder
+import scala.collection.{immutable, mutable}
+import scala.util.matching.Regex
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
-import org.antlr.v4.runtime.tree.TerminalNode
+import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode, TerminalNodeImpl}
 
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
+import org.apache.spark.sql.catalyst.parser.SqlBaseParser.{BeginLabelContext, EndLabelContext, StrictIdentifierContext}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, ErrorCondition}
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.util.SparkParserUtils
+import org.apache.spark.sql.catalyst.util.SparkParserUtils.withOrigin
+import org.apache.spark.sql.errors.{QueryParsingErrors, SqlScriptingErrors}
 
 /**
  * A collection of utility methods for use during the parsing process.
  */
-object ParserUtils {
-  /** Get the command which created the token. */
-  def command(ctx: ParserRuleContext): String = {
-    val stream = ctx.getStart.getInputStream
-    stream.getText(Interval.of(0, stream.size() - 1))
+object ParserUtils extends SparkParserUtils {
+  def operationNotAllowed(message: String, ctx: ParserRuleContext): Nothing = {
+    throw QueryParsingErrors.operationNotAllowedError(message, ctx)
   }
 
-  def operationNotAllowed(message: String, ctx: ParserRuleContext): Nothing = {
-    throw new ParseException(s"Operation not allowed: $message", ctx)
+  def invalidStatement(statement: String, ctx: ParserRuleContext): Nothing = {
+    throw QueryParsingErrors.invalidStatementError(statement, ctx)
   }
 
   def checkDuplicateClauses[T](
       nodes: util.List[T], clauseName: String, ctx: ParserRuleContext): Unit = {
     if (nodes.size() > 1) {
-      throw new ParseException(s"Found duplicate clauses: $clauseName", ctx)
+      throw QueryParsingErrors.duplicateClausesError(clauseName, ctx)
     }
   }
 
   /** Check if duplicate keys exist in a set of key-value pairs. */
   def checkDuplicateKeys[T](keyPairs: Seq[(String, T)], ctx: ParserRuleContext): Unit = {
     keyPairs.groupBy(_._1).filter(_._2.size > 1).foreach { case (key, _) =>
-      throw new ParseException(s"Found duplicate keys '$key'.", ctx)
+      throw QueryParsingErrors.duplicateKeysError(key, ctx)
     }
-  }
-
-  /** Get the code that creates the given node. */
-  def source(ctx: ParserRuleContext): String = {
-    val stream = ctx.getStart.getInputStream
-    stream.getText(Interval.of(ctx.getStart.getStartIndex, ctx.getStop.getStopIndex))
   }
 
   /** Get all the text which comes after the given rule. */
@@ -71,151 +71,427 @@ object ParserUtils {
     stream.getText(interval)
   }
 
-  /** Convert a string token into a string. */
-  def string(token: Token): String = unescapeSQLString(token.getText)
-
-  /** Convert a string node into a string. */
-  def string(node: TerminalNode): String = unescapeSQLString(node.getText)
-
-  /** Convert a string node into a string without unescaping. */
-  def stringWithoutUnescape(node: TerminalNode): String = {
-    // STRING parser rule forces that the input always has quotes at the starting and ending.
-    node.getText.slice(1, node.getText.size - 1)
+  /**
+   * Get all the text which between the given start and end tokens.
+   * When we need to extract everything between two tokens including all spaces we should use
+   * this method instead of defined a named Antlr4 rule for .*?,
+   * which somehow parse "a b" -> "ab" in some cases
+   */
+  def interval(start: Token, end: Token): String = {
+    val interval = Interval.of(start.getStopIndex + 1, end.getStartIndex - 1)
+    start.getInputStream.getText(interval)
   }
 
-  /** Get the origin (line and position) of the token. */
-  def position(token: Token): Origin = {
-    val opt = Option(token)
-    Origin(opt.map(_.getLine), opt.map(_.getCharPositionInLine))
+  /** Convert a string node into a string without unescaping. */
+  def stringWithoutUnescape(node: Token): String = {
+    // STRING parser rule forces that the input always has quotes at the starting and ending.
+    node.getText.slice(1, node.getText.length - 1)
+  }
+
+  /**
+   * Obtain the string literal provided as a dollar quoted string.
+   * A dollar quoted string is defined as {{{$[tag]$<string literal>$[tag]$}}},
+   * where the string literal is parsed as a list of body sections.
+   * This helper method concatenates all body sections and restores the string literal back.
+   */
+  def dollarQuotedString(sections: util.List[TerminalNode]): String = {
+    val sb = new StringBuilder()
+    sections forEach (body => sb.append(body.getText))
+    sb.toString()
+  }
+
+  /** Collect the entries if any. */
+  def entry(key: String, value: Token): Seq[(String, String)] = {
+    Option(value).toSeq.map(x => key -> string(x))
   }
 
   /** Validate the condition. If it doesn't throw a parse exception. */
   def validate(f: => Boolean, message: String, ctx: ParserRuleContext): Unit = {
     if (!f) {
-      throw new ParseException(message, ctx)
+      throw new ParseException(
+        errorClass = "_LEGACY_ERROR_TEMP_0064",
+        messageParameters = Map("msg" -> message),
+        ctx)
+    }
+  }
+
+  /** the column name pattern in quoted regex without qualifier */
+  val escapedIdentifier = "`((?s).+)`".r
+
+  /** the column name pattern in quoted regex with qualifier */
+  val qualifiedEscapedIdentifier = ("((?s).+)" + """.""" + "`((?s).+)`").r
+
+  /**
+   * Normalizes the expression parser tree to a SQL string which will be used to generate
+   * the expression alias. In particular, it concatenates terminal nodes of the tree and
+   * upper casts keywords and numeric literals.
+   */
+  def toExprAlias(ctx: ParseTree): String = {
+    val sb = new StringBuilder()
+    def concatTerms(ctx: ParseTree): Unit = {
+      for (i <- 0 until ctx.getChildCount) {
+        ctx.getChild(i) match {
+          case term: TerminalNodeImpl =>
+            val termText = term.getText
+            val tt = term.getSymbol.getType
+            val current = if ((SqlBaseParser.ADD <= tt && tt <= SqlBaseParser.ZONE) ||
+              (SqlBaseParser.BIGINT_LITERAL <= tt && tt <= SqlBaseParser.BIGDECIMAL_LITERAL)) {
+              termText.toUpperCase(Locale.ROOT)
+            } else {
+              termText
+            }
+            sb.append(current)
+          case child => concatTerms(child)
+        }
+      }
+    }
+    concatTerms(ctx)
+    sb.toString()
+  }
+}
+
+class CompoundBodyParsingContext {
+
+  object State extends Enumeration {
+    type State = Value
+    val INIT, VARIABLE, CONDITION, CURSOR, HANDLER, STATEMENT = Value
+  }
+
+  private var currentState: State.State = State.INIT
+
+  /** Transition to VARIABLE state. */
+  def variable(createVariable: CreateVariable, allowVarDeclare: Boolean): Unit = {
+    if (!allowVarDeclare) {
+      throw SqlScriptingErrors.variableDeclarationNotAllowedInScope(
+        createVariable.origin,
+        createVariable.names(0).asInstanceOf[UnresolvedIdentifier].nameParts)
+    }
+    transitionTo(State.VARIABLE, createVariable = Some(createVariable), None)
+  }
+
+  /** Transition to CONDITION state. */
+  def condition(errorCondition: ErrorCondition, allowConditionDeclare: Boolean): Unit = {
+    if (!allowConditionDeclare) {
+      throw SqlScriptingErrors.conditionDeclarationNotAtStartOfCompound(
+        errorCondition.origin, errorCondition.conditionName
+      )
+    }
+    transitionTo(State.CONDITION, None, errorCondition = Some(errorCondition))
+  }
+
+  /** Transition to CURSOR state. */
+  def cursor(): Unit = {
+    transitionTo(State.CURSOR)
+  }
+
+  /** Transition to HANDLER state. */
+  def handler(): Unit = {
+    transitionTo(State.HANDLER)
+  }
+
+  /** Transition to STATEMENT state. */
+  def statement(): Unit = {
+    transitionTo(State.STATEMENT)
+  }
+
+  /**
+   * Helper method to transition to a new state.
+   * Possible states are:
+   * 1a. VARIABLE (1)
+   * 1b. CONDITION (1)
+   * 2. CURSOR (2)
+   * 3. HANDLERS (3)
+   * 4. STATEMENTS (4)
+   * Transition is allowed from state with number n to state with number m,
+   * where m >= n.
+   *
+   * @param newState The new state to transition to.
+   */
+  private def transitionTo(
+      newState: State.State,
+      createVariable: Option[CreateVariable] = None,
+      errorCondition: Option[ErrorCondition] = None): Unit = {
+    (currentState, newState) match {
+      // VALID TRANSITIONS
+
+      case (State.INIT, _) => currentState = newState
+
+      // Transitions from VARIABLE to other states.
+      case (State.VARIABLE, State.VARIABLE) =>  // do nothing
+
+      case (State.VARIABLE, State.CONDITION) => currentState = State.CONDITION
+
+      case (State.VARIABLE, State.CURSOR) => currentState = State.CURSOR
+
+      case (State.VARIABLE, State.HANDLER) => currentState = State.HANDLER
+
+      case (State.VARIABLE, State.STATEMENT) => currentState = State.STATEMENT
+
+      // Transition from CONDITION to other states.
+      case (State.CONDITION, State.CONDITION) => // do nothing
+
+      case (State.CONDITION, State.VARIABLE) => currentState = State.VARIABLE
+
+      case (State.CONDITION, State.CURSOR) => currentState = State.CURSOR
+
+      case (State.CONDITION, State.HANDLER) => currentState = State.HANDLER
+
+      case (State.CONDITION, State.STATEMENT) => currentState = State.STATEMENT
+
+      // Transition from CURSOR to other states.
+      case (State.CURSOR, State.CURSOR) => // do nothing
+
+      case (State.CURSOR, State.HANDLER) => currentState = State.HANDLER
+
+      case (State.CURSOR, State.STATEMENT) => currentState = State.STATEMENT
+
+      // Transition from HANDLER to other states.
+      case (State.HANDLER, State.HANDLER) => // do nothing
+
+      case (State.HANDLER, State.STATEMENT) => currentState = State.STATEMENT
+
+      // Transition from STATEMENT to other states.
+      case (State.STATEMENT, State.STATEMENT) => // do nothing
+
+      // INVALID TRANSITIONS
+
+      // Invalid transitions to VARIABLE state.
+      case (State.CURSOR, State.VARIABLE) =>
+        throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
+          createVariable.get.origin,
+          createVariable.get.names(0).asInstanceOf[UnresolvedIdentifier].nameParts)
+
+      case (State.STATEMENT, State.VARIABLE) =>
+        throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
+          createVariable.get.origin,
+          createVariable.get.names(0).asInstanceOf[UnresolvedIdentifier].nameParts)
+
+      case (State.HANDLER, State.VARIABLE) =>
+        throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
+          createVariable.get.origin,
+          createVariable.get.names(0).asInstanceOf[UnresolvedIdentifier].nameParts)
+
+      // Invalid transitions to CONDITION state.
+      case (State.CURSOR, State.CONDITION) =>
+        throw SqlScriptingErrors.conditionDeclarationNotAtStartOfCompound(
+          CurrentOrigin.get,
+          errorCondition.get.conditionName)
+
+      case (State.STATEMENT, State.CONDITION) =>
+        throw SqlScriptingErrors.conditionDeclarationNotAtStartOfCompound(
+          CurrentOrigin.get,
+          errorCondition.get.conditionName)
+
+      case (State.HANDLER, State.CONDITION) =>
+        throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
+          createVariable.get.origin,
+          createVariable.get.names(0).asInstanceOf[UnresolvedIdentifier].nameParts)
+
+      // Invalid transitions to CURSOR state.
+      case (State.STATEMENT, State.CURSOR) =>
+        throw SqlScriptingErrors.cursorDeclarationNotAtStartOfCompound(CurrentOrigin.get)
+
+      case (State.HANDLER, State.CURSOR) =>
+        throw SqlScriptingErrors.cursorDeclarationNotAtStartOfCompound(CurrentOrigin.get)
+
+      // Invalid transitions to HANDLER state.
+      case (State.STATEMENT, State.HANDLER) =>
+        throw SqlScriptingErrors.handlerDeclarationInWrongPlace(CurrentOrigin.get)
+
+      // This should never happen.
+      case _ =>
+        throw SparkException.internalError(
+          s"Invalid state transition from $currentState to $newState")
+    }
+  }
+}
+
+class SqlScriptingParsingContext {
+  val labelContext: SqlScriptingLabelContext = new SqlScriptingLabelContext()
+  val conditionContext: SqlScriptingConditionContext = new SqlScriptingConditionContext()
+}
+
+class SqlScriptingLabelContext {
+  /** Set to keep track of labels seen so far */
+  private val seenLabels = mutable.Set[String]()
+
+  /**
+   * Check if the beginLabelCtx and endLabelCtx match.
+   * If the labels are defined, they must follow rules:
+   *  - If both labels exist, they must match.
+   *  - If label is qualified, it is invalid.
+   *  - Begin label must exist if end label exists.
+   *
+   * @param beginLabelCtx Begin label context.
+   * @param endLabelCtx The end label context.
+   */
+  /**
+   * Get label text from label context, handling IDENTIFIER() syntax.
+   */
+  private def getLabelText(ctx: ParserRuleContext): String = {
+    val astBuilder = new DataTypeAstBuilder {
+      override protected def parseMultipartIdentifier(identifier: String): Seq[String] = {
+        CatalystSqlParser.parseMultipartIdentifier(identifier)
+      }
+    }
+    val parts = astBuilder.extractIdentifierParts(ctx)
+    if (parts.size > 1) {
+      throw new ParseException(
+        errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+        messageParameters = Map("identifier" -> parts.map(part => s"`$part`").mkString("."),
+          "limit" -> "1"),
+        ctx)
+    }
+    parts.head
+  }
+
+  private def checkLabels(
+      beginLabelCtx: Option[BeginLabelContext],
+      endLabelCtx: Option[EndLabelContext]): Unit = {
+    // Check label matching and other constraints.
+    (beginLabelCtx, endLabelCtx) match {
+      // Throw an error if labels do not match.
+      case (Some(bl: BeginLabelContext), Some(el: EndLabelContext)) =>
+        val beginLabel = getLabelText(bl.strictIdentifier()).toLowerCase(Locale.ROOT)
+        val endLabel = getLabelText(el.strictIdentifier()).toLowerCase(Locale.ROOT)
+        if (beginLabel != endLabel) {
+          withOrigin(bl) {
+            throw SqlScriptingErrors.labelsMismatch(
+              CurrentOrigin.get,
+              getLabelText(bl.strictIdentifier()),
+              getLabelText(el.strictIdentifier()))
+          }
+        }
+      // Throw an error if end label exists without begin label.
+      case (None, Some(el: EndLabelContext)) =>
+        withOrigin(el) {
+          throw SqlScriptingErrors.endLabelWithoutBeginLabel(
+            CurrentOrigin.get,
+            getLabelText(el.strictIdentifier()))
+        }
+      case _ =>
+    }
+  }
+
+  /** Check if the label is defined. */
+  private def isLabelDefined(beginLabelCtx: Option[BeginLabelContext]): Boolean = {
+    beginLabelCtx.isDefined
+  }
+
+  /**
+   * Assert the identifier is not contained within seenLabels.
+   * If the identifier is contained within seenLabels, raise an exception.
+   */
+  private def assertIdentifierNotInSeenLabels(
+      identifierCtx: Option[StrictIdentifierContext]): Unit = {
+    identifierCtx.foreach { ctx =>
+      val identifierName = getLabelText(ctx).toLowerCase(Locale.ROOT)
+      if (seenLabels.contains(identifierName)) {
+        withOrigin(ctx) {
+          throw SqlScriptingErrors
+            .duplicateLabels(CurrentOrigin.get, identifierName)
+        }
+      }
     }
   }
 
   /**
-   * Register the origin of the context. Any TreeNode created in the closure will be assigned the
-   * registered origin. This method restores the previously set origin after completion of the
-   * closure.
+   * Enter a labeled scope and return the label text.
+   * If the label is defined, it will be returned and added to seenLabels.
+   * If the label is not defined, a random UUID will be returned.
    */
-  def withOrigin[T](ctx: ParserRuleContext)(f: => T): T = {
-    val current = CurrentOrigin.get
-    CurrentOrigin.set(position(ctx.getStart))
-    try {
-      f
-    } finally {
-      CurrentOrigin.set(current)
-    }
-  }
+  def enterLabeledScope(
+      beginLabelCtx: Option[BeginLabelContext],
+      endLabelCtx: Option[EndLabelContext]): String = {
 
-  /** Unescape baskslash-escaped string enclosed by quotes. */
-  def unescapeSQLString(b: String): String = {
-    var enclosure: Character = null
-    val sb = new StringBuilder(b.length())
+    // Check if this label already exists in parent scopes.
+    checkLabels(beginLabelCtx, endLabelCtx)
 
-    def appendEscapedChar(n: Char) {
-      n match {
-        case '0' => sb.append('\u0000')
-        case '\'' => sb.append('\'')
-        case '"' => sb.append('\"')
-        case 'b' => sb.append('\b')
-        case 'n' => sb.append('\n')
-        case 'r' => sb.append('\r')
-        case 't' => sb.append('\t')
-        case 'Z' => sb.append('\u001A')
-        case '\\' => sb.append('\\')
-        // The following 2 lines are exactly what MySQL does TODO: why do we do this?
-        case '%' => sb.append("\\%")
-        case '_' => sb.append("\\_")
-        case _ => sb.append(n)
-      }
-    }
-
-    var i = 0
-    val strLength = b.length
-    while (i < strLength) {
-      val currentChar = b.charAt(i)
-      if (enclosure == null) {
-        if (currentChar == '\'' || currentChar == '\"') {
-          enclosure = currentChar
+    // Get label text and add it to seenLabels.
+    val labelText = if (isLabelDefined(beginLabelCtx)) {
+      val txt = getLabelText(beginLabelCtx.get.strictIdentifier()).toLowerCase(Locale.ROOT)
+      if (seenLabels.contains(txt)) {
+        withOrigin(beginLabelCtx.get) {
+          throw SqlScriptingErrors.duplicateLabels(CurrentOrigin.get, txt)
         }
-      } else if (enclosure == currentChar) {
-        enclosure = null
-      } else if (currentChar == '\\') {
+      }
+      seenLabels.add(txt)
+      txt
+    } else {
+      // Do not add the label to the seenLabels set if it is not defined.
+      java.util.UUID.randomUUID.toString.toLowerCase(Locale.ROOT)
+    }
+    if (SqlScriptingLabelContext.isForbiddenLabelOrForVariableName(labelText)) {
+      withOrigin(beginLabelCtx.get) {
+        throw SqlScriptingErrors.labelOrForVariableNameForbidden(CurrentOrigin.get, labelText)
+      }
+    }
+    labelText
+  }
 
-        if ((i + 6 < strLength) && b.charAt(i + 1) == 'u') {
-          // \u0000 style character literals.
+  /**
+   * Exit a labeled scope.
+   * If the label is defined, it will be removed from seenLabels.
+   */
+  def exitLabeledScope(beginLabelCtx: Option[BeginLabelContext]): Unit = {
+    if (isLabelDefined(beginLabelCtx)) {
+      seenLabels.remove(getLabelText(beginLabelCtx.get.strictIdentifier()).toLowerCase(Locale.ROOT))
+    }
+  }
 
-          val base = i + 2
-          val code = (0 until 4).foldLeft(0) { (mid, j) =>
-            val digit = Character.digit(b.charAt(j + base), 16)
-            (mid << 4) + digit
-          }
-          sb.append(code.asInstanceOf[Char])
-          i += 5
-        } else if (i + 4 < strLength) {
-          // \000 style character literals.
+  /**
+   * Enter a for loop scope.
+   * If the for loop variable is defined, it will be asserted to not be inside seenLabels.
+   * Then, if the for loop variable is defined, it will be added to seenLabels.
+   */
+  def enterForScope(identifierCtx: Option[StrictIdentifierContext]): Unit = {
+    identifierCtx.foreach { ctx =>
+      val identifierName = getLabelText(ctx)
+      assertIdentifierNotInSeenLabels(identifierCtx)
+      seenLabels.add(identifierName.toLowerCase(Locale.ROOT))
 
-          val i1 = b.charAt(i + 1)
-          val i2 = b.charAt(i + 2)
-          val i3 = b.charAt(i + 3)
-
-          if ((i1 >= '0' && i1 <= '1') && (i2 >= '0' && i2 <= '7') && (i3 >= '0' && i3 <= '7')) {
-            val tmp = ((i3 - '0') + ((i2 - '0') << 3) + ((i1 - '0') << 6)).asInstanceOf[Char]
-            sb.append(tmp)
-            i += 3
-          } else {
-            appendEscapedChar(i1)
-            i += 1
-          }
-        } else if (i + 2 < strLength) {
-          // escaped character literals.
-          val n = b.charAt(i + 1)
-          appendEscapedChar(n)
-          i += 1
+      if (SqlScriptingLabelContext.isForbiddenLabelOrForVariableName(identifierName)) {
+        withOrigin(ctx) {
+          throw SqlScriptingErrors.labelOrForVariableNameForbidden(
+            CurrentOrigin.get,
+            identifierName.toLowerCase(Locale.ROOT))
         }
-      } else {
-        // non-escaped character literals.
-        sb.append(currentChar)
-      }
-      i += 1
-    }
-    sb.toString()
-  }
-
-  /** the column name pattern in quoted regex without qualifier */
-  val escapedIdentifier = "`(.+)`".r
-
-  /** the column name pattern in quoted regex with qualifier */
-  val qualifiedEscapedIdentifier = ("(.+)" + """.""" + "`(.+)`").r
-
-  /** Some syntactic sugar which makes it easier to work with optional clauses for LogicalPlans. */
-  implicit class EnhancedLogicalPlan(val plan: LogicalPlan) extends AnyVal {
-    /**
-     * Create a plan using the block of code when the given context exists. Otherwise return the
-     * original plan.
-     */
-    def optional(ctx: AnyRef)(f: => LogicalPlan): LogicalPlan = {
-      if (ctx != null) {
-        f
-      } else {
-        plan
-      }
-    }
-
-    /**
-     * Map a [[LogicalPlan]] to another [[LogicalPlan]] if the passed context exists using the
-     * passed function. The original plan is returned when the context does not exist.
-     */
-    def optionalMap[C](ctx: C)(f: (C, LogicalPlan) => LogicalPlan): LogicalPlan = {
-      if (ctx != null) {
-        f(ctx, plan)
-      } else {
-        plan
       }
     }
   }
+
+  /**
+   * Exit a for loop scope.
+   * If the for loop variable is defined, it will be removed from seenLabels.
+   */
+  def exitForScope(identifierCtx: Option[StrictIdentifierContext]): Unit = {
+    identifierCtx.foreach { ctx =>
+      val identifierName = getLabelText(ctx)
+      seenLabels.remove(identifierName.toLowerCase(Locale.ROOT))
+    }
+  }
+
+}
+
+object SqlScriptingLabelContext {
+  private val forbiddenLabelNames: immutable.Set[Regex] =
+    immutable.Set("builtin".r, "session".r, "sys.*".r)
+
+  def isForbiddenLabelOrForVariableName(labelName: String): Boolean = {
+    forbiddenLabelNames.exists(_.matches(labelName.toLowerCase(Locale.ROOT)))
+  }
+}
+
+class SqlScriptingConditionContext {
+  private val conditionNameToSqlStateMap = mutable.HashMap[String, String]()
+
+  def contains(conditionName: String): Boolean = conditionNameToSqlStateMap.contains(conditionName)
+
+  def getSqlStateForCondition(conditionName: String): Option[String] =
+    conditionNameToSqlStateMap.get(conditionName)
+
+  def add(condition: ErrorCondition): Unit =
+    conditionNameToSqlStateMap += condition.conditionName -> condition.sqlState
+
+  def remove(toRemove: Iterable[String]): Unit = conditionNameToSqlStateMap --= toRemove
 }

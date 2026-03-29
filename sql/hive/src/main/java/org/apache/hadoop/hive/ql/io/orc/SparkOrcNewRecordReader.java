@@ -24,7 +24,6 @@ import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 
 import java.io.IOException;
-import java.util.List;
 
 /**
  * This is based on hive-exec-1.2.1
@@ -42,8 +41,9 @@ public class SparkOrcNewRecordReader extends
 
   public SparkOrcNewRecordReader(Reader file, Configuration conf,
       long offset, long length) throws IOException {
-    List<OrcProto.Type> types = file.getTypes();
-    numColumns = (types.size() == 0) ? 0 : types.get(0).getSubtypesCount();
+    // TypeDescription.children is null in case of primitive types.
+    // However, it doesn't happen on Reader.getSchema()
+    numColumns = file.getSchema().getChildren().size();
     value = new OrcStruct(numColumns);
     this.reader = OrcInputFormat.createReaderFromFile(file, conf, offset,
         length);

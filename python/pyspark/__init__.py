@@ -42,81 +42,116 @@ Public classes:
       A :class:`TaskContext` that provides extra info and tooling for barrier execution.
   - :class:`BarrierTaskInfo`:
       Information about a barrier task.
+  - :class:`InheritableThread`:
+      A inheritable thread to use in Spark when the pinned thread mode is on.
 """
 
+import sys
 from functools import wraps
-import types
+from typing import cast, Any, Callable, TypeVar, Union
+
+from pyspark.util import is_remote_only
+
+if not is_remote_only():
+    from pyspark.core.rdd import RDD, RDDBarrier
+    from pyspark.core.files import SparkFiles
+    from pyspark.core.status import StatusTracker, SparkJobInfo, SparkStageInfo, SparkExecutorInfo
+    from pyspark.core.broadcast import Broadcast
+    from pyspark.core import rdd, files, status, broadcast
+
+    # for backward compatibility references.
+    sys.modules["pyspark.rdd"] = rdd
+    sys.modules["pyspark.files"] = files
+    sys.modules["pyspark.status"] = status
+    sys.modules["pyspark.broadcast"] = broadcast
 
 from pyspark.conf import SparkConf
-from pyspark.context import SparkContext
-from pyspark.rdd import RDD, RDDBarrier
-from pyspark.files import SparkFiles
+from pyspark.util import InheritableThread, inheritable_thread_target
 from pyspark.storagelevel import StorageLevel
 from pyspark.accumulators import Accumulator, AccumulatorParam
-from pyspark.broadcast import Broadcast
-from pyspark.serializers import MarshalSerializer, PickleSerializer
-from pyspark.status import *
+from pyspark.serializers import MarshalSerializer, CPickleSerializer
 from pyspark.taskcontext import TaskContext, BarrierTaskContext, BarrierTaskInfo
 from pyspark.profiler import Profiler, BasicProfiler
 from pyspark.version import __version__
-from pyspark._globals import _NoValue
+from pyspark._globals import _NoValue  # noqa: F401
+
+_F = TypeVar("_F", bound=Callable)
 
 
-def since(version):
+def since(version: Union[str, float]) -> Callable[[_F], _F]:
     """
     A decorator that annotates a function to append the version of Spark the function was added.
     """
     import re
-    indent_p = re.compile(r'\n( +)')
 
-    def deco(f):
+    indent_p = re.compile(r"\n( +)")
+
+    def deco(f: _F) -> _F:
+        assert f.__doc__ is not None
+
         indents = indent_p.findall(f.__doc__)
-        indent = ' ' * (min(len(m) for m in indents) if indents else 0)
+        indent = " " * (min(len(m) for m in indents) if indents else 0)
         f.__doc__ = f.__doc__.rstrip() + "\n\n%s.. versionadded:: %s" % (indent, version)
         return f
+
     return deco
 
 
-def copy_func(f, name=None, sinceversion=None, doc=None):
-    """
-    Returns a function with same code, globals, defaults, closure, and
-    name (or provide a new name).
-    """
-    # See
-    # http://stackoverflow.com/questions/6527633/how-can-i-make-a-deepcopy-of-a-function-in-python
-    fn = types.FunctionType(f.__code__, f.__globals__, name or f.__name__, f.__defaults__,
-                            f.__closure__)
-    # in case f was given attrs (note this dict is a shallow copy):
-    fn.__dict__.update(f.__dict__)
-    if doc is not None:
-        fn.__doc__ = doc
-    if sinceversion is not None:
-        fn = since(sinceversion)(fn)
-    return fn
-
-
-def keyword_only(func):
+def keyword_only(func: _F) -> _F:
     """
     A decorator that forces keyword arguments in the wrapped method
     and saves actual input keyword arguments in `_input_kwargs`.
 
-    .. note:: Should only be used to wrap a method where first arg is `self`
+    Notes
+    -----
+    Should only be used to wrap a method where first arg is `self`
     """
+
     @wraps(func)
-    def wrapper(self, *args, **kwargs):
+    def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
         if len(args) > 0:
             raise TypeError("Method %s forces keyword arguments." % func.__name__)
         self._input_kwargs = kwargs
         return func(self, **kwargs)
-    return wrapper
+
+    return cast(_F, wrapper)
 
 
-# for back compatibility
-from pyspark.sql import SQLContext, HiveContext, Row
+# To avoid circular dependencies
+if not is_remote_only():
+    from pyspark.core.context import SparkContext
+    from pyspark.core import context
+
+    # for backward compatibility references.
+    sys.modules["pyspark.context"] = context
+
+    # for back compatibility
+    from pyspark.sql import SQLContext, HiveContext  # noqa: F401
+
+from pyspark.sql import Row  # noqa: F401
 
 __all__ = [
-    "SparkConf", "SparkContext", "SparkFiles", "RDD", "StorageLevel", "Broadcast",
-    "Accumulator", "AccumulatorParam", "MarshalSerializer", "PickleSerializer",
-    "StatusTracker", "SparkJobInfo", "SparkStageInfo", "Profiler", "BasicProfiler", "TaskContext",
-    "RDDBarrier", "BarrierTaskContext", "BarrierTaskInfo",
+    "SparkConf",
+    "SparkContext",
+    "SparkFiles",
+    "RDD",
+    "StorageLevel",
+    "Broadcast",
+    "Accumulator",
+    "AccumulatorParam",
+    "MarshalSerializer",
+    "CPickleSerializer",
+    "StatusTracker",
+    "SparkJobInfo",
+    "SparkStageInfo",
+    "SparkExecutorInfo",
+    "Profiler",
+    "BasicProfiler",
+    "TaskContext",
+    "RDDBarrier",
+    "BarrierTaskContext",
+    "BarrierTaskInfo",
+    "InheritableThread",
+    "inheritable_thread_target",
+    "__version__",
 ]

@@ -17,21 +17,29 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 
 class BufferHolderSuite extends SparkFunSuite {
 
   test("SPARK-16071 Check the size limit to avoid integer overflow") {
-    assert(intercept[UnsupportedOperationException] {
-      new BufferHolder(new UnsafeRow(Int.MaxValue / 8))
-    }.getMessage.contains("too many fields"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        new BufferHolder(new UnsafeRow(Int.MaxValue / 8))
+      },
+      condition = "_LEGACY_ERROR_TEMP_3130",
+      parameters = Map("numFields" -> "268435455"))
 
     val holder = new BufferHolder(new UnsafeRow(1000))
     holder.reset()
     holder.grow(1000)
-    assert(intercept[IllegalArgumentException] {
-      holder.grow(Integer.MAX_VALUE)
-    }.getMessage.contains("exceeds size limitation"))
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        holder.grow(Integer.MAX_VALUE)
+      },
+      condition = "_LEGACY_ERROR_TEMP_3199",
+      parameters = Map("neededSize" -> "2147483647", "arrayMax" -> "2147483632")
+    )
   }
 }

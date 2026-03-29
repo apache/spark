@@ -20,7 +20,16 @@ import java.io.{ObjectInputStream, ObjectOutputStream}
 
 import org.apache.hadoop.conf.Configuration
 
-private[spark]
+import org.apache.spark.SparkContext
+import org.apache.spark.annotation.{DeveloperApi, Unstable}
+import org.apache.spark.broadcast.Broadcast
+
+/**
+ * Hadoop configuration but serializable. Use `value` to access the Hadoop configuration.
+ *
+ * @param value Hadoop configuration
+ */
+@DeveloperApi @Unstable
 class SerializableConfiguration(@transient var value: Configuration) extends Serializable {
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
     out.defaultWriteObject()
@@ -30,5 +39,15 @@ class SerializableConfiguration(@transient var value: Configuration) extends Ser
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     value = new Configuration(false)
     value.readFields(in)
+  }
+}
+
+private[spark] object SerializableConfiguration {
+  def broadcast(sc: SparkContext, conf: Configuration): Broadcast[SerializableConfiguration] = {
+    sc.broadcast(new SerializableConfiguration(conf))
+  }
+
+  def broadcast(sc: SparkContext): Broadcast[SerializableConfiguration] = {
+    broadcast(sc, sc.hadoopConfiguration)
   }
 }

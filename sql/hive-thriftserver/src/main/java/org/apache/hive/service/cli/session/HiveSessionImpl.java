@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,29 +22,26 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.common.cli.HiveFileProcessor;
 import org.apache.hadoop.hive.common.cli.IHiveFileProcessor;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
+import org.apache.hadoop.hive.conf.VariableSubstitution;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.MetaException;
-import org.apache.hadoop.hive.ql.exec.FetchFormatter;
-import org.apache.hadoop.hive.ql.exec.ListSinkOperator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.history.HiveHistory;
 import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.ql.parse.VariableSubstitution;
 import org.apache.hadoop.hive.ql.session.SessionState;
+import org.apache.hadoop.hive.serde2.SerDeUtils;
+import org.apache.hadoop.hive.serde2.thrift.ThriftFormatter;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hive.common.util.HiveVersionInfo;
 import org.apache.hive.service.auth.HiveAuthFactory;
@@ -55,21 +51,30 @@ import org.apache.hive.service.cli.GetInfoType;
 import org.apache.hive.service.cli.GetInfoValue;
 import org.apache.hive.service.cli.HiveSQLException;
 import org.apache.hive.service.cli.OperationHandle;
-import org.apache.hive.service.cli.RowSet;
 import org.apache.hive.service.cli.SessionHandle;
-import org.apache.hive.service.cli.TableSchema;
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation;
 import org.apache.hive.service.cli.operation.GetCatalogsOperation;
 import org.apache.hive.service.cli.operation.GetColumnsOperation;
+import org.apache.hive.service.cli.operation.GetCrossReferenceOperation;
 import org.apache.hive.service.cli.operation.GetFunctionsOperation;
+import org.apache.hive.service.cli.operation.GetPrimaryKeysOperation;
 import org.apache.hive.service.cli.operation.GetSchemasOperation;
 import org.apache.hive.service.cli.operation.GetTableTypesOperation;
 import org.apache.hive.service.cli.operation.GetTypeInfoOperation;
 import org.apache.hive.service.cli.operation.MetadataOperation;
 import org.apache.hive.service.cli.operation.Operation;
 import org.apache.hive.service.cli.operation.OperationManager;
-import org.apache.hive.service.cli.thrift.TProtocolVersion;
+import org.apache.hive.service.rpc.thrift.TProtocolVersion;
+import org.apache.hive.service.rpc.thrift.TRowSet;
+import org.apache.hive.service.rpc.thrift.TTableSchema;
 import org.apache.hive.service.server.ThreadWithGarbageCleanup;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
+import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.util.Utils;
 
 import static org.apache.hadoop.hive.conf.SystemVariables.ENV_PREFIX;
 import static org.apache.hadoop.hive.conf.SystemVariables.HIVECONF_PREFIX;
@@ -90,7 +95,7 @@ public class HiveSessionImpl implements HiveSession {
   private String ipAddress;
   private static final String FETCH_WORK_SERDE_CLASS =
       "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe";
-  private static final Log LOG = LogFactory.getLog(HiveSessionImpl.class);
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(HiveSessionImpl.class);
   private SessionManager sessionManager;
   private OperationManager operationManager;
   private final Set<OperationHandle> opHandleSet = new HashSet<OperationHandle>();
@@ -115,15 +120,14 @@ public class HiveSessionImpl implements HiveSession {
         ShimLoader.getHadoopShims().refreshDefaultQueue(hiveConf, username);
       }
     } catch (IOException e) {
-      LOG.warn("Error setting scheduler queue: " + e, e);
+      LOG.warn("Error setting scheduler queue: ", e);
     }
     // Set an explicit session name to control the download directory name
-    hiveConf.set(ConfVars.HIVESESSIONID.varname,
+    hiveConf.set("hive.session.id",
         sessionHandle.getHandleIdentifier().toString());
     // Use thrift transportable formatter
-    hiveConf.set(ListSinkOperator.OUTPUT_FORMATTER,
-        FetchFormatter.ThriftFormatter.class.getName());
-    hiveConf.setInt(ListSinkOperator.OUTPUT_PROTOCOL, protocol.getValue());
+    hiveConf.set(SerDeUtils.LIST_SINK_OUTPUT_FORMATTER, ThriftFormatter.class.getName());
+    hiveConf.setInt(SerDeUtils.LIST_SINK_OUTPUT_PROTOCOL, protocol.getValue());
   }
 
   @Override
@@ -140,12 +144,14 @@ public class HiveSessionImpl implements HiveSession {
     sessionState = new SessionState(hiveConf, username);
     sessionState.setUserIpAddress(ipAddress);
     sessionState.setIsHiveServerQuery(true);
-    SessionState.start(sessionState);
+    // Use setCurrentSessionState to avoid creating useless SessionDirs.
+    SessionState.setCurrentSessionState(sessionState);
     try {
-      sessionState.reloadAuxJars();
+      sessionState.loadAuxJars();
+      sessionState.loadReloadableAuxJars();
     } catch (IOException e) {
-      String msg = "Failed to load reloadable jar file path: " + e;
-      LOG.error(msg, e);
+      String msg = "Failed to load reloadable jar file path.";
+      LOG.error("{}", e, MDC.of(LogKeys.ERROR, msg));
       throw new HiveSQLException(msg, e);
     }
     // Process global init file: .hiverc
@@ -166,16 +172,16 @@ public class HiveSessionImpl implements HiveSession {
       FileInputStream initStream = null;
       BufferedReader bufferedReader = null;
       initStream = new FileInputStream(fileName);
-      bufferedReader = new BufferedReader(new InputStreamReader(initStream));
+      bufferedReader = new BufferedReader(new InputStreamReader(initStream, StandardCharsets.UTF_8));
       return bufferedReader;
     }
 
     @Override
     protected int processCmd(String cmd) {
       int rc = 0;
-      String cmd_trimed = cmd.trim();
+      String cmd_trimmed = cmd.trim();
       try {
-        executeStatementInternal(cmd_trimed, null, false);
+        executeStatementInternal(cmd_trimmed, null, false, 0);
       } catch (HiveSQLException e) {
         rc = -1;
         LOG.warn("Failed to execute HQL command in global .hiverc file.", e);
@@ -195,7 +201,8 @@ public class HiveSessionImpl implements HiveSession {
           hivercFile = new File(hivercFile, SessionManager.HIVERCFILE);
         }
         if (hivercFile.isFile()) {
-          LOG.info("Running global init file: " + hivercFile);
+          LOG.info("Running global init file: {}",
+            MDC.of(LogKeys.GLOBAL_INIT_FILE, hivercFile));
           int rc = processor.processFile(hivercFile.getAbsolutePath());
           if (rc != 0) {
             LOG.error("Failed on initializing global .hiverc file");
@@ -231,6 +238,7 @@ public class HiveSessionImpl implements HiveSession {
   // setConf(varname, propName, varvalue, true) when varname.startsWith(HIVECONF_PREFIX)
   public static int setVariable(String varname, String varvalue) throws Exception {
     SessionState ss = SessionState.get();
+    VariableSubstitution substitution = new VariableSubstitution(() -> ss.getHiveVariables());
     if (varvalue.contains("\n")){
       ss.err.println("Warning: Value had a \\n character in it.");
     }
@@ -240,19 +248,17 @@ public class HiveSessionImpl implements HiveSession {
       return 1;
     } else if (varname.startsWith(SYSTEM_PREFIX)){
       String propName = varname.substring(SYSTEM_PREFIX.length());
-      System.getProperties().setProperty(propName,
-              new VariableSubstitution().substitute(ss.getConf(),varvalue));
+      System.getProperties().setProperty(propName, substitution.substitute(ss.getConf(),varvalue));
     } else if (varname.startsWith(HIVECONF_PREFIX)){
       String propName = varname.substring(HIVECONF_PREFIX.length());
       setConf(varname, propName, varvalue, true);
     } else if (varname.startsWith(HIVEVAR_PREFIX)) {
       String propName = varname.substring(HIVEVAR_PREFIX.length());
-      ss.getHiveVariables().put(propName,
-              new VariableSubstitution().substitute(ss.getConf(),varvalue));
+      ss.getHiveVariables().put(propName, substitution.substitute(ss.getConf(),varvalue));
     } else if (varname.startsWith(METACONF_PREFIX)) {
       String propName = varname.substring(METACONF_PREFIX.length());
-      Hive hive = Hive.get(ss.getConf());
-      hive.setMetaConf(propName, new VariableSubstitution().substitute(ss.getConf(), varvalue));
+      Hive hive = Hive.getWithoutRegisterFns(ss.getConf());
+      hive.setMetaConf(propName, substitution.substitute(ss.getConf(), varvalue));
     } else {
       setConf(varname, varname, varvalue, true);
     }
@@ -262,8 +268,10 @@ public class HiveSessionImpl implements HiveSession {
   // returns non-null string for validation fail
   private static void setConf(String varname, String key, String varvalue, boolean register)
           throws IllegalArgumentException {
+    VariableSubstitution substitution =
+        new VariableSubstitution(() -> SessionState.get().getHiveVariables());
     HiveConf conf = SessionState.get().getConf();
-    String value = new VariableSubstitution().substitute(conf, varvalue);
+    String value = substitution.substitute(conf, varvalue);
     if (conf.getBoolVar(HiveConf.ConfVars.HIVECONFVALIDATION)) {
       HiveConf.ConfVars confVars = HiveConf.getConfVars(key);
       if (confVars != null) {
@@ -294,28 +302,29 @@ public class HiveSessionImpl implements HiveSession {
   @Override
   public void setOperationLogSessionDir(File operationLogRootDir) {
     if (!operationLogRootDir.exists()) {
-      LOG.warn("The operation log root directory is removed, recreating: " +
-          operationLogRootDir.getAbsolutePath());
-      if (!operationLogRootDir.mkdirs()) {
-        LOG.warn("Unable to create operation log root directory: " +
-            operationLogRootDir.getAbsolutePath());
+      LOG.warn("The operation log root directory is removed, recreating: {}",
+        MDC.of(LogKeys.PATH, operationLogRootDir.getAbsolutePath()));
+      if (!Utils.createDirectory(operationLogRootDir)) {
+        LOG.warn("Unable to create operation log root directory: {}",
+          MDC.of(LogKeys.PATH, operationLogRootDir.getAbsolutePath()));
       }
     }
     if (!operationLogRootDir.canWrite()) {
-      LOG.warn("The operation log root directory is not writable: " +
-          operationLogRootDir.getAbsolutePath());
+      LOG.warn("The operation log root directory is not writable: {}",
+        MDC.of(LogKeys.PATH, operationLogRootDir.getAbsolutePath()));
     }
     sessionLogDir = new File(operationLogRootDir, sessionHandle.getHandleIdentifier().toString());
     isOperationLogEnabled = true;
     if (!sessionLogDir.exists()) {
       if (!sessionLogDir.mkdir()) {
-        LOG.warn("Unable to create operation log session directory: " +
-            sessionLogDir.getAbsolutePath());
+        LOG.warn("Unable to create operation log session directory: {}",
+          MDC.of(LogKeys.PATH, sessionLogDir.getAbsolutePath()));
         isOperationLogEnabled = false;
       }
     }
     if (isOperationLogEnabled) {
-      LOG.info("Operation log session directory is created: " + sessionLogDir.getAbsolutePath());
+      LOG.info("Operation log session directory is created: {}",
+        MDC.of(LogKeys.PATH, sessionLogDir.getAbsolutePath()));
     }
   }
 
@@ -403,14 +412,14 @@ public class HiveSessionImpl implements HiveSession {
 
   @Override
   public HiveConf getHiveConf() {
-    hiveConf.setVar(HiveConf.ConfVars.HIVEFETCHOUTPUTSERDE, FETCH_WORK_SERDE_CLASS);
+    hiveConf.setVar(HiveConf.getConfVars("hive.fetch.output.serde"), FETCH_WORK_SERDE_CLASS);
     return hiveConf;
   }
 
   @Override
   public IMetaStoreClient getMetaStoreClient() throws HiveSQLException {
     try {
-      return Hive.get(getHiveConf()).getMSC();
+      return Hive.getWithoutRegisterFns(getHiveConf()).getMSC();
     } catch (HiveException e) {
       throw new HiveSQLException("Failed to get metastore connection", e);
     } catch (MetaException e) {
@@ -448,23 +457,34 @@ public class HiveSessionImpl implements HiveSession {
   @Override
   public OperationHandle executeStatement(String statement, Map<String, String> confOverlay)
       throws HiveSQLException {
-    return executeStatementInternal(statement, confOverlay, false);
+    return executeStatementInternal(statement, confOverlay, false, 0);
+  }
+
+  @Override
+  public OperationHandle executeStatement(String statement, Map<String, String> confOverlay,
+      long queryTimeout) throws HiveSQLException {
+    return executeStatementInternal(statement, confOverlay, false, queryTimeout);
   }
 
   @Override
   public OperationHandle executeStatementAsync(String statement, Map<String, String> confOverlay)
       throws HiveSQLException {
-    return executeStatementInternal(statement, confOverlay, true);
+    return executeStatementInternal(statement, confOverlay, true, 0);
   }
 
-  private OperationHandle executeStatementInternal(String statement, Map<String, String> confOverlay,
-      boolean runAsync)
-          throws HiveSQLException {
+  @Override
+  public OperationHandle executeStatementAsync(String statement, Map<String, String> confOverlay,
+      long queryTimeout) throws HiveSQLException {
+    return executeStatementInternal(statement, confOverlay, true, queryTimeout);
+  }
+
+  private OperationHandle executeStatementInternal(String statement,
+      Map<String, String> confOverlay, boolean runAsync, long queryTimeout) throws HiveSQLException {
     acquire(true);
 
     OperationManager operationManager = getOperationManager();
     ExecuteStatementOperation operation = operationManager
-        .newExecuteStatementOperation(getSession(), statement, confOverlay, runAsync);
+        .newExecuteStatementOperation(getSession(), statement, confOverlay, runAsync, queryTimeout);
     OperationHandle opHandle = operation.getHandle();
     try {
       operation.run();
@@ -589,7 +609,7 @@ public class HiveSessionImpl implements HiveSession {
       String tableName, String columnName)  throws HiveSQLException {
     acquire(true);
     String addedJars = Utilities.getResourceFiles(hiveConf, SessionState.ResourceType.JAR);
-    if (StringUtils.isNotBlank(addedJars)) {
+    if (Utils.isNotBlank(addedJars)) {
        IMetaStoreClient metastoreClient = getSession().getMetaStoreClient();
        metastoreClient.setHiveAddedJars(addedJars);
     }
@@ -636,7 +656,12 @@ public class HiveSessionImpl implements HiveSession {
       acquire(true);
       // Iterate through the opHandles and close their operations
       for (OperationHandle opHandle : opHandleSet) {
-        operationManager.closeOperation(opHandle);
+        try {
+          operationManager.closeOperation(opHandle);
+        } catch (Exception e) {
+          LOG.warn("Exception is thrown closing operation {}", e,
+            MDC.of(LogKeys.OPERATION_HANDLE, opHandle));
+        }
       }
       opHandleSet.clear();
       // Cleanup session log directory.
@@ -648,15 +673,23 @@ public class HiveSessionImpl implements HiveSession {
         hiveHist.closeStream();
       }
       try {
+        // Forcibly initialize thread local Hive so that
+        // SessionState#unCacheDataNucleusClassLoaders won't trigger
+        // Hive built-in UDFs initialization.
+        Hive.getWithoutRegisterFns(sessionState.getConf());
         sessionState.close();
       } finally {
         sessionState = null;
       }
-    } catch (IOException ioe) {
+    } catch (IOException | HiveException ioe) {
       throw new HiveSQLException("Failure to close", ioe);
     } finally {
       if (sessionState != null) {
         try {
+          // Forcibly initialize thread local Hive so that
+          // SessionState#unCacheDataNucleusClassLoaders won't trigger
+          // Hive built-in UDFs initialization.
+          Hive.getWithoutRegisterFns(sessionState.getConf());
           sessionState.close();
         } catch (Throwable t) {
           LOG.warn("Error closing session", t);
@@ -668,17 +701,22 @@ public class HiveSessionImpl implements HiveSession {
   }
 
   private void cleanupPipeoutFile() {
-    String lScratchDir = hiveConf.getVar(ConfVars.LOCALSCRATCHDIR);
-    String sessionID = hiveConf.getVar(ConfVars.HIVESESSIONID);
+    String lScratchDir = hiveConf.getVar(HiveConf.getConfVars("hive.exec.local.scratchdir"));
+    String sessionID = hiveConf.getVar(HiveConf.getConfVars("hive.session.id"));
 
     File[] fileAry = new File(lScratchDir).listFiles(
             (dir, name) -> name.startsWith(sessionID) && name.endsWith(".pipeout"));
 
-    for (File file : fileAry) {
-      try {
-        FileUtils.forceDelete(file);
-      } catch (Exception e) {
-        LOG.error("Failed to cleanup pipeout file: " + file, e);
+    if (fileAry == null) {
+      LOG.error("Unable to access pipeout files in {}",
+        MDC.of(LogKeys.LOCAL_SCRATCH_DIR, lScratchDir));
+    } else {
+      for (File file : fileAry) {
+        try {
+          JavaUtils.deleteRecursively(file);
+        } catch (Exception e) {
+          LOG.error("Failed to cleanup pipeout file: {}", e, MDC.of(LogKeys.PATH, file));
+        }
       }
     }
   }
@@ -686,9 +724,10 @@ public class HiveSessionImpl implements HiveSession {
   private void cleanupSessionLogDir() {
     if (isOperationLogEnabled) {
       try {
-        FileUtils.forceDelete(sessionLogDir);
+        JavaUtils.deleteRecursively(sessionLogDir);
       } catch (Exception e) {
-        LOG.error("Failed to cleanup session log dir: " + sessionHandle, e);
+        LOG.error("Failed to cleanup session log dir: {}", e,
+          MDC.of(LogKeys.SESSION_HANDLE, sessionHandle));
       }
     }
   }
@@ -737,7 +776,8 @@ public class HiveSessionImpl implements HiveSession {
         try {
           operation.close();
         } catch (Exception e) {
-          LOG.warn("Exception is thrown closing timed-out operation " + operation.getHandle(), e);
+          LOG.warn("Exception is thrown closing timed-out operation {}", e,
+            MDC.of(LogKeys.OPERATION_HANDLE, operation.getHandle()));
         }
       }
     } finally {
@@ -767,7 +807,7 @@ public class HiveSessionImpl implements HiveSession {
   }
 
   @Override
-  public TableSchema getResultSetMetadata(OperationHandle opHandle) throws HiveSQLException {
+  public TTableSchema getResultSetMetadata(OperationHandle opHandle) throws HiveSQLException {
     acquire(true);
     try {
       return sessionManager.getOperationManager().getOperationResultSetSchema(opHandle);
@@ -777,7 +817,7 @@ public class HiveSessionImpl implements HiveSession {
   }
 
   @Override
-  public RowSet fetchResults(OperationHandle opHandle, FetchOrientation orientation,
+  public TRowSet fetchResults(OperationHandle opHandle, FetchOrientation orientation,
       long maxRows, FetchType fetchType) throws HiveSQLException {
     acquire(true);
     try {
@@ -808,7 +848,7 @@ public class HiveSessionImpl implements HiveSession {
   public String getDelegationToken(HiveAuthFactory authFactory, String owner, String renewer)
       throws HiveSQLException {
     HiveAuthFactory.verifyProxyAccess(getUsername(), owner, getIpAddress(), getHiveConf());
-    return authFactory.getDelegationToken(owner, renewer);
+    return authFactory.getDelegationToken(owner, renewer, getIpAddress());
   }
 
   @Override
@@ -830,5 +870,50 @@ public class HiveSessionImpl implements HiveSession {
   // extract the real user from the given token string
   private String getUserFromToken(HiveAuthFactory authFactory, String tokenStr) throws HiveSQLException {
     return authFactory.getUserFromToken(tokenStr);
+  }
+
+  @Override
+  public OperationHandle getPrimaryKeys(String catalog, String schema,
+      String table) throws HiveSQLException {
+    acquire(true);
+
+    OperationManager operationManager = getOperationManager();
+    GetPrimaryKeysOperation operation = operationManager
+        .newGetPrimaryKeysOperation(getSession(), catalog, schema, table);
+    OperationHandle opHandle = operation.getHandle();
+    try {
+      operation.run();
+      opHandleSet.add(opHandle);
+      return opHandle;
+    } catch (HiveSQLException e) {
+      operationManager.closeOperation(opHandle);
+      throw e;
+    } finally {
+      release(true);
+    }
+  }
+
+  @Override
+  public OperationHandle getCrossReference(String primaryCatalog,
+      String primarySchema, String primaryTable, String foreignCatalog,
+      String foreignSchema, String foreignTable) throws HiveSQLException {
+    acquire(true);
+
+    OperationManager operationManager = getOperationManager();
+    GetCrossReferenceOperation operation = operationManager
+      .newGetCrossReferenceOperation(getSession(), primaryCatalog,
+         primarySchema, primaryTable, foreignCatalog,
+         foreignSchema, foreignTable);
+    OperationHandle opHandle = operation.getHandle();
+    try {
+      operation.run();
+      opHandleSet.add(opHandle);
+      return opHandle;
+    } catch (HiveSQLException e) {
+      operationManager.closeOperation(opHandle);
+      throw e;
+    } finally {
+      release(true);
+    }
   }
 }

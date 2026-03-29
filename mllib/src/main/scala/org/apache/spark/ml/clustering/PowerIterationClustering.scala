@@ -17,14 +17,15 @@
 
 package org.apache.spark.ml.clustering
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
+import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.mllib.clustering.{PowerIterationClustering => MLlibPowerIterationClustering}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
-import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
 
 /**
@@ -91,14 +92,13 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
   @Since("2.4.0")
   def getDstCol: String = $(dstCol)
 
-  setDefault(srcCol -> "src", dstCol -> "dst")
+  setDefault(srcCol -> "src", dstCol -> "dst", k -> 2, maxIter -> 20, initMode -> "random")
 }
 
 /**
- * :: Experimental ::
  * Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
- * <a href=http://www.icml2010.org/papers/387.pdf>Lin and Cohen</a>. From the abstract:
- * PIC finds a very low-dimensional embedding of a dataset using truncated power
+ * <a href=http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf>Lin and Cohen</a>. From
+ * the abstract: PIC finds a very low-dimensional embedding of a dataset using truncated power
  * iteration on a normalized pair-wise similarity matrix of the data.
  *
  * This class is not yet an Estimator/Transformer, use `assignClusters` method to run the
@@ -108,15 +108,9 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
  * Spectral clustering (Wikipedia)</a>
  */
 @Since("2.4.0")
-@Experimental
 class PowerIterationClustering private[clustering] (
     @Since("2.4.0") override val uid: String)
   extends PowerIterationClusteringParams with DefaultParamsWritable {
-
-  setDefault(
-    k -> 2,
-    maxIter -> 20,
-    initMode -> "random")
 
   @Since("2.4.0")
   def this() = this(Identifiable.randomUID("PowerIterationClustering"))
@@ -163,28 +157,29 @@ class PowerIterationClustering private[clustering] (
    */
   @Since("2.4.0")
   def assignClusters(dataset: Dataset[_]): DataFrame = {
-    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) {
-      lit(1.0)
-    } else {
-      col($(weightCol)).cast(DoubleType)
-    }
+    val spark = dataset.sparkSession
+    import spark.implicits._
 
     SchemaUtils.checkColumnTypes(dataset.schema, $(srcCol), Seq(IntegerType, LongType))
     SchemaUtils.checkColumnTypes(dataset.schema, $(dstCol), Seq(IntegerType, LongType))
-    val rdd: RDD[(Long, Long, Double)] = dataset.select(
+    get(weightCol) match {
+      case Some(w) if w.nonEmpty => SchemaUtils.checkNumericType(dataset.schema, w)
+      case _ =>
+    }
+
+    val rdd = dataset.select(
       col($(srcCol)).cast(LongType),
       col($(dstCol)).cast(LongType),
-      w).rdd.map {
-      case Row(src: Long, dst: Long, weight: Double) => (src, dst, weight)
-    }
+      checkNonNegativeWeights(get(weightCol))
+    ).as[(Long, Long, Double)].rdd
+
     val algorithm = new MLlibPowerIterationClustering()
       .setK($(k))
       .setInitializationMode($(initMode))
       .setMaxIterations($(maxIter))
     val model = algorithm.run(rdd)
 
-    import dataset.sparkSession.implicits._
-    model.assignments.toDF
+    model.assignments.toDF()
   }
 
   @Since("2.4.0")
@@ -196,4 +191,33 @@ object PowerIterationClustering extends DefaultParamsReadable[PowerIterationClus
 
   @Since("2.4.0")
   override def load(path: String): PowerIterationClustering = super.load(path)
+}
+
+private[spark] class PowerIterationClusteringWrapper(override val uid: String)
+  extends Transformer with PowerIterationClusteringParams with DefaultParamsWritable {
+
+  def this() = this(Identifiable.randomUID("PowerIterationClusteringWrapper"))
+
+  override def transform(dataset: Dataset[_]): DataFrame =
+    throw new UnsupportedOperationException("transform not supported")
+
+  override def transformSchema(schema: StructType): StructType =
+    throw new UnsupportedOperationException("transformSchema not supported")
+
+  override def copy(extra: ParamMap): PowerIterationClusteringWrapper = defaultCopy(extra)
+
+  override def write: MLWriter = new MLWriter {
+    override protected def saveImpl(path: String): Unit = {
+      new PowerIterationClustering(uid).copy(paramMap).save(path)
+    }
+  }
+}
+
+private[spark] object PowerIterationClusteringWrapper
+  extends DefaultParamsReadable[PowerIterationClusteringWrapper] {
+
+  override def load(path: String): PowerIterationClusteringWrapper = {
+    val pic = PowerIterationClustering.load(path)
+    new PowerIterationClusteringWrapper(pic.uid).copy(pic.paramMap)
+  }
 }

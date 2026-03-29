@@ -1,0 +1,113 @@
+{
+  "classpathEntries" : [ ],
+  "hadoopProperties" : [ ],
+  "metricsProperties" : [ ],
+  "resourceProfiles" : [ {
+    "executorResources" : {
+      "cores" : {
+        "amount" : 1,
+        "discoveryScript" : "",
+        "resourceName" : "cores",
+        "vendor" : ""
+      },
+      "gpu" : {
+        "amount" : 1,
+        "discoveryScript" : "/home/tgraves/getGpus",
+        "resourceName" : "gpu",
+        "vendor" : ""
+      },
+      "memory" : {
+        "amount" : 1024,
+        "discoveryScript" : "",
+        "resourceName" : "memory",
+        "vendor" : ""
+      }
+    },
+    "id" : 0,
+    "taskResources" : {
+      "cpus" : {
+        "amount" : 1.0,
+        "resourceName" : "cpus"
+      },
+      "gpu" : {
+        "amount" : 1.0,
+        "resourceName" : "gpu"
+      }
+    }
+  }, {
+    "executorResources" : {
+      "cores" : {
+        "amount" : 4,
+        "discoveryScript" : "",
+        "resourceName" : "cores",
+        "vendor" : ""
+      },
+      "gpu" : {
+        "amount" : 1,
+        "discoveryScript" : "./getGpus",
+        "resourceName" : "gpu",
+        "vendor" : ""
+      }
+    },
+    "id" : 1,
+    "taskResources" : {
+      "cpus" : {
+        "amount" : 1.0,
+        "resourceName" : "cpus"
+      },
+      "gpu" : {
+        "amount" : 1.0,
+        "resourceName" : "gpu"
+      }
+    }
+  }, {
+    "executorResources" : {
+      "cores" : {
+        "amount" : 2,
+        "discoveryScript" : "",
+        "resourceName" : "cores",
+        "vendor" : ""
+      }
+    },
+    "id" : 2,
+    "taskResources" : {
+      "cpus" : {
+        "amount" : 2.0,
+        "resourceName" : "cpus"
+      }
+    }
+  }, {
+    "executorResources" : {
+      "cores" : {
+        "amount" : 4,
+        "discoveryScript" : "",
+        "resourceName" : "cores",
+        "vendor" : ""
+      },
+      "gpu" : {
+        "amount" : 1,
+        "discoveryScript" : "./getGpus",
+        "resourceName" : "gpu",
+        "vendor" : ""
+      }
+    },
+    "id" : 3,
+    "taskResources" : {
+      "cpus" : {
+        "amount" : 2.0,
+        "resourceName" : "cpus"
+      },
+      "gpu" : {
+        "amount" : 1.0,
+        "resourceName" : "gpu"
+      }
+    }
+  } ],
+  "runtime" : {
+    "javaHome" : "/usr/lib/jvm/java-8-openjdk-amd64/jre",
+    "javaVersion" : "1.8.0_232 (Private Build)",
+    "scalaVersion" : "version 2.12.10"
+  },
+  "sparkProperties" : [ ],
+  "systemProperties" : [ ]
+}

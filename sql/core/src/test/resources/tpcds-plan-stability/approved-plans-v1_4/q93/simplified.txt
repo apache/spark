@@ -1,0 +1,40 @@
+TakeOrderedAndProject [sumsales,ss_customer_sk]
+  WholeStageCodegen (7)
+    HashAggregate [ss_customer_sk,sum,isEmpty] [sum(act_sales),sumsales,sum,isEmpty]
+      InputAdapter
+        Exchange [ss_customer_sk] #1
+          WholeStageCodegen (6)
+            HashAggregate [ss_customer_sk,act_sales] [sum,isEmpty,sum,isEmpty]
+              Project [ss_customer_sk,sr_return_quantity,ss_quantity,ss_sales_price]
+                BroadcastHashJoin [sr_reason_sk,r_reason_sk]
+                  Project [ss_customer_sk,ss_quantity,ss_sales_price,sr_reason_sk,sr_return_quantity]
+                    SortMergeJoin [ss_item_sk,ss_ticket_number,sr_item_sk,sr_ticket_number]
+                      InputAdapter
+                        WholeStageCodegen (2)
+                          Sort [ss_item_sk,ss_ticket_number]
+                            InputAdapter
+                              Exchange [ss_item_sk,ss_ticket_number] #2
+                                WholeStageCodegen (1)
+                                  Project [ss_item_sk,ss_customer_sk,ss_ticket_number,ss_quantity,ss_sales_price]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_customer_sk,ss_ticket_number,ss_quantity,ss_sales_price,ss_sold_date_sk]
+                      InputAdapter
+                        WholeStageCodegen (4)
+                          Sort [sr_item_sk,sr_ticket_number]
+                            InputAdapter
+                              Exchange [sr_item_sk,sr_ticket_number] #3
+                                WholeStageCodegen (3)
+                                  Project [sr_item_sk,sr_reason_sk,sr_ticket_number,sr_return_quantity]
+                                    Filter [sr_item_sk,sr_ticket_number,sr_reason_sk]
+                                      ColumnarToRow
+                                        InputAdapter
+                                          Scan parquet spark_catalog.default.store_returns [sr_item_sk,sr_reason_sk,sr_ticket_number,sr_return_quantity,sr_returned_date_sk]
+                  InputAdapter
+                    BroadcastExchange #4
+                      WholeStageCodegen (5)
+                        Project [r_reason_sk]
+                          Filter [r_reason_desc,r_reason_sk]
+                            ColumnarToRow
+                              InputAdapter
+                                Scan parquet spark_catalog.default.reason [r_reason_sk,r_reason_desc]

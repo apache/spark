@@ -29,12 +29,9 @@ class InboxSuite extends SparkFunSuite {
 
   test("post") {
     val endpoint = new TestRpcEndpoint
-    val endpointRef = mock(classOf[NettyRpcEndpointRef])
-    when(endpointRef.name).thenReturn("hello")
-
     val dispatcher = mock(classOf[Dispatcher])
 
-    val inbox = new Inbox(endpointRef, endpoint)
+    val inbox = new Inbox("name", endpoint)
     val message = OneWayMessage(null, "hi")
     inbox.post(message)
     inbox.process(dispatcher)
@@ -51,10 +48,9 @@ class InboxSuite extends SparkFunSuite {
 
   test("post: with reply") {
     val endpoint = new TestRpcEndpoint
-    val endpointRef = mock(classOf[NettyRpcEndpointRef])
     val dispatcher = mock(classOf[Dispatcher])
 
-    val inbox = new Inbox(endpointRef, endpoint)
+    val inbox = new Inbox("name", endpoint)
     val message = RpcMessage(null, "hi", null)
     inbox.post(message)
     inbox.process(dispatcher)
@@ -65,13 +61,10 @@ class InboxSuite extends SparkFunSuite {
 
   test("post: multiple threads") {
     val endpoint = new TestRpcEndpoint
-    val endpointRef = mock(classOf[NettyRpcEndpointRef])
-    when(endpointRef.name).thenReturn("hello")
-
     val dispatcher = mock(classOf[Dispatcher])
 
     val numDroppedMessages = new AtomicInteger(0)
-    val inbox = new Inbox(endpointRef, endpoint) {
+    val inbox = new Inbox("name", endpoint) {
       override def onDrop(message: InboxMessage): Unit = {
         numDroppedMessages.incrementAndGet()
       }
@@ -107,12 +100,10 @@ class InboxSuite extends SparkFunSuite {
 
   test("post: Associated") {
     val endpoint = new TestRpcEndpoint
-    val endpointRef = mock(classOf[NettyRpcEndpointRef])
     val dispatcher = mock(classOf[Dispatcher])
-
     val remoteAddress = RpcAddress("localhost", 11111)
 
-    val inbox = new Inbox(endpointRef, endpoint)
+    val inbox = new Inbox("name", endpoint)
     inbox.post(RemoteProcessConnected(remoteAddress))
     inbox.process(dispatcher)
 
@@ -121,12 +112,11 @@ class InboxSuite extends SparkFunSuite {
 
   test("post: Disassociated") {
     val endpoint = new TestRpcEndpoint
-    val endpointRef = mock(classOf[NettyRpcEndpointRef])
     val dispatcher = mock(classOf[Dispatcher])
 
     val remoteAddress = RpcAddress("localhost", 11111)
 
-    val inbox = new Inbox(endpointRef, endpoint)
+    val inbox = new Inbox("name", endpoint)
     inbox.post(RemoteProcessDisconnected(remoteAddress))
     inbox.process(dispatcher)
 
@@ -135,16 +125,28 @@ class InboxSuite extends SparkFunSuite {
 
   test("post: AssociationError") {
     val endpoint = new TestRpcEndpoint
-    val endpointRef = mock(classOf[NettyRpcEndpointRef])
     val dispatcher = mock(classOf[Dispatcher])
 
     val remoteAddress = RpcAddress("localhost", 11111)
     val cause = new RuntimeException("Oops")
 
-    val inbox = new Inbox(endpointRef, endpoint)
+    val inbox = new Inbox("name", endpoint)
     inbox.post(RemoteProcessConnectionError(cause, remoteAddress))
     inbox.process(dispatcher)
 
     endpoint.verifySingleOnNetworkErrorMessage(cause, remoteAddress)
+  }
+
+  test("SPARK-32738: should reduce the number of active threads when fatal error happens") {
+    val endpoint = mock(classOf[TestRpcEndpoint])
+    when(endpoint.receive).thenThrow(new OutOfMemoryError())
+
+    val dispatcher = mock(classOf[Dispatcher])
+    val inbox = new Inbox("name", endpoint)
+    inbox.post(OneWayMessage(null, "hi"))
+    intercept[OutOfMemoryError] {
+      inbox.process(dispatcher)
+    }
+    assert(inbox.getNumActiveThreads == 0)
   }
 }

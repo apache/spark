@@ -15,6 +15,10 @@
 -- This can be generalized to include more tests for more columns, but it covers the main cases
 -- when there is more than one column.
 
+--ONLY_IF spark
+--CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=true
+--CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=false
+
 CREATE TEMPORARY VIEW m AS SELECT * FROM VALUES
   (null, null),
   (null, 1.0),

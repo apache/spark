@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.orc.OrcConf.COMPRESS
@@ -85,8 +85,8 @@ class HiveOptions(@transient private val parameters: CaseInsensitiveMap[String])
       s"line delimiter, but given: $lineDelim.")
   }
 
-  def serdeProperties: Map[String, String] = parameters.filterKeys {
-    k => !lowerCasedOptionNames.contains(k.toLowerCase(Locale.ROOT))
+  def serdeProperties: Map[String, String] = parameters.filter {
+    case (k, _) => !lowerCasedOptionNames.contains(k.toLowerCase(Locale.ROOT))
   }.map { case (k, v) => delimiterOptions.getOrElse(k, k) -> v }
 }
 

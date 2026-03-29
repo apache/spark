@@ -20,8 +20,8 @@ package org.apache.spark.ml.feature;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.ml.linalg.Vector;
@@ -64,7 +64,7 @@ public class JavaHashingTFSuite extends SharedSparkSession {
     Dataset<Row> rescaledData = idfModel.transform(featurizedData);
     for (Row r : rescaledData.select("features", "label").takeAsList(3)) {
       Vector features = r.getAs(0);
-      Assert.assertEquals(features.size(), numFeatures);
+      Assertions.assertEquals(numFeatures, features.size());
     }
   }
 }

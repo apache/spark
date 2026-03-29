@@ -19,7 +19,9 @@ package org.apache.spark.sql.internal
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.catalog.CatalogStorageFormat
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogUtils}
+import org.apache.spark.sql.catalyst.plans.logical.SerdeInfo
 
 case class HiveSerDe(
   inputFormat: Option[String] = None,
@@ -64,6 +66,14 @@ object HiveSerDe {
         outputFormat = Option("org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat"),
         serde = Option("org.apache.hadoop.hive.serde2.avro.AvroSerDe")))
 
+  // `HiveSerDe` in `serdeMap` should be distinct.
+  val serdeInverseMap: Map[HiveSerDe, String] = serdeMap.flatMap {
+    case ("sequencefile", _) => None
+    case ("rcfile", _) => None
+    case ("textfile", serde) => Some((serde, "text"))
+    case pair => Some(pair.swap)
+  }
+
   /**
    * Get the Hive SerDe information from the data source abbreviation string or classname.
    *
@@ -74,8 +84,10 @@ object HiveSerDe {
   def sourceToSerDe(source: String): Option[HiveSerDe] = {
     val key = source.toLowerCase(Locale.ROOT) match {
       case s if s.startsWith("org.apache.spark.sql.parquet") => "parquet"
+      case s if s.startsWith("org.apache.spark.sql.execution.datasources.parquet") => "parquet"
       case s if s.startsWith("org.apache.spark.sql.orc") => "orc"
       case s if s.startsWith("org.apache.spark.sql.hive.orc") => "orc"
+      case s if s.startsWith("org.apache.spark.sql.execution.datasources.orc") => "orc"
       case s if s.equals("orcfile") => "orc"
       case s if s.equals("parquetfile") => "parquet"
       case s if s.equals("avrofile") => "avro"
@@ -85,8 +97,63 @@ object HiveSerDe {
     serdeMap.get(key)
   }
 
+  /**
+   * Get the Spark data source name from the Hive SerDe information.
+   *
+   * @param serde Hive SerDe information.
+   * @return Spark data source name associated with the specified Hive Serde.
+   */
+  def serdeToSource(serde: HiveSerDe): Option[String] = serdeInverseMap.get(serde)
+
+  /**
+   * Builds a [[CatalogStorageFormat]] from a user-specified location and optional serde info.
+   * Uses [[CatalogStorageFormat.empty]] as the base (no Hive defaults).
+   *
+   * @param location            optional LOCATION URI string
+   * @param maybeSerdeInfo      optional serde/format info from ROW FORMAT / STORED AS clauses
+   * @param invalidStoredAsError callback returning a [[Throwable]] when STORED AS names an
+   *                            unrecognized file format; the caller controls the error message
+   */
+  def buildStorageFormat(
+      location: Option[String],
+      maybeSerdeInfo: Option[SerdeInfo],
+      invalidStoredAsError: SerdeInfo => Throwable): CatalogStorageFormat = {
+    val locationUri = location.map(CatalogUtils.stringToURI)
+    maybeSerdeInfo match {
+      case None =>
+        CatalogStorageFormat.empty.copy(locationUri = locationUri)
+      case Some(si) if si.storedAs.isDefined =>
+        sourceToSerDe(si.storedAs.get) match {
+          case Some(hiveSerde) =>
+            CatalogStorageFormat.empty.copy(
+              locationUri = locationUri,
+              inputFormat = hiveSerde.inputFormat,
+              outputFormat = hiveSerde.outputFormat,
+              serde = si.serde.orElse(hiveSerde.serde),
+              properties = si.serdeProperties)
+          case _ => throw invalidStoredAsError(si)
+        }
+      case Some(si) =>
+        CatalogStorageFormat.empty.copy(
+          locationUri = locationUri,
+          inputFormat = si.formatClasses.map(_.input),
+          outputFormat = si.formatClasses.map(_.output),
+          serde = si.serde,
+          properties = si.serdeProperties)
+    }
+  }
+
   def getDefaultStorage(conf: SQLConf): CatalogStorageFormat = {
-    val defaultStorageType = conf.getConfString("hive.default.fileformat", "textfile")
+    // To respect hive-site.xml, it peeks Hadoop configuration from existing Spark session,
+    // as an easy workaround. See SPARK-27555.
+    val defaultFormatKey = "hive.default.fileformat"
+    val defaultValue = {
+      val defaultFormatValue = "textfile"
+      SparkSession.getActiveSession.map { session =>
+        session.sessionState.newHadoopConf().get(defaultFormatKey, defaultFormatValue)
+      }.getOrElse(defaultFormatValue)
+    }
+    val defaultStorageType = conf.getConfString("hive.default.fileformat", defaultValue)
     val defaultHiveSerde = sourceToSerDe(defaultStorageType)
     CatalogStorageFormat.empty.copy(
       inputFormat = defaultHiveSerde.flatMap(_.inputFormat)

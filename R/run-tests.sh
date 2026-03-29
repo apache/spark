@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -23,7 +23,18 @@ FAILED=0
 LOGFILE=$FWDIR/unit-tests.out
 rm -f $LOGFILE
 
-SPARK_TESTING=1 NOT_CRAN=true $FWDIR/../bin/spark-submit --driver-java-options "-Dlog4j.configuration=file:$FWDIR/log4j.properties" --conf spark.hadoop.fs.defaultFS="file:///" $FWDIR/pkg/tests/run-all.R 2>&1 | tee -a $LOGFILE
+SPARK_AVRO_JAR_PATH=$(find $FWDIR/../connector/avro/ -name "spark-avro*jar" -print | egrep -v "tests.jar|test-sources.jar|sources.jar|javadoc.jar")
+
+if [[ $(echo $SPARK_AVRO_JAR_PATH | wc -l) -eq 1 ]]; then
+  SPARK_JARS=$SPARK_AVRO_JAR_PATH
+fi
+
+if [ -z "$SPARK_JARS" ]; then
+  SPARKR_SUPPRESS_DEPRECATION_WARNING=1 SPARK_TESTING=1 NOT_CRAN=true $FWDIR/../bin/spark-submit --driver-java-options "-Dlog4j.configurationFile=file:$FWDIR/log4j2.properties" --conf spark.hadoop.fs.defaultFS="file:///" --conf spark.driver.extraJavaOptions="-Xss4M" --conf spark.executor.extraJavaOptions="-Xss4M" $FWDIR/pkg/tests/run-all.R 2>&1 | tee -a $LOGFILE
+else
+  SPARKR_SUPPRESS_DEPRECATION_WARNING=1 SPARK_TESTING=1 NOT_CRAN=true $FWDIR/../bin/spark-submit --jars $SPARK_JARS --driver-java-options "-Dlog4j.configurationFile=file:$FWDIR/log4j2.properties" --conf spark.hadoop.fs.defaultFS="file:///" --conf spark.driver.extraJavaOptions="-Xss4M" --conf spark.executor.extraJavaOptions="-Xss4M" $FWDIR/pkg/tests/run-all.R 2>&1 | tee -a $LOGFILE
+fi
+
 FAILED=$((PIPESTATUS[0]||$FAILED))
 
 NUM_TEST_WARNING="$(grep -c -e 'Warnings ----------------' $LOGFILE)"

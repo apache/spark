@@ -19,14 +19,14 @@ package org.apache.spark.util.collection
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.ref.WeakReference
 
-import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark._
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests.TEST_MEMORY
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.util.CompletionIterator
@@ -34,10 +34,9 @@ import org.apache.spark.util.CompletionIterator
 class ExternalAppendOnlyMapSuite extends SparkFunSuite
   with LocalSparkContext
   with Eventually
-  with Matchers{
+  with Matchers {
   import TestUtils.{assertNotSpilled, assertSpilled}
 
-  private val allCompressionCodecs = CompressionCodec.ALL_COMPRESSION_CODECS
   private def createCombiner[T](i: T) = ArrayBuffer[T](i)
   private def mergeValue[T](buffer: ArrayBuffer[T], i: T): ArrayBuffer[T] = buffer += i
   private def mergeCombiners[T](buf1: ArrayBuffer[T], buf2: ArrayBuffer[T]): ArrayBuffer[T] =
@@ -53,13 +52,13 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     val conf = new SparkConf(loadDefaults)
     // Make the Java serializer write a reset instruction (TC_RESET) after each object to test
     // for a bug we had with bytes written past the last object in a batch (SPARK-2792)
-    conf.set("spark.serializer.objectStreamReset", "1")
-    conf.set("spark.serializer", "org.apache.spark.serializer.JavaSerializer")
-    conf.set("spark.shuffle.spill.compress", codec.isDefined.toString)
-    conf.set("spark.shuffle.compress", codec.isDefined.toString)
-    codec.foreach { c => conf.set("spark.io.compression.codec", c) }
+    conf.set(SERIALIZER_OBJECT_STREAM_RESET, 1)
+    conf.set(SERIALIZER, "org.apache.spark.serializer.JavaSerializer")
+    conf.set(SHUFFLE_SPILL_COMPRESS, codec.isDefined)
+    conf.set(SHUFFLE_COMPRESS, codec.isDefined)
+    codec.foreach { c => conf.set(IO_COMPRESSION_CODEC, c) }
     // Ensure that we actually have multiple batches per spill file
-    conf.set("spark.shuffle.spill.batchSize", "10")
+    conf.set(SHUFFLE_SPILL_BATCH_SIZE, 10L)
     conf
   }
 
@@ -220,13 +219,13 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     testSimpleSpilling()
   }
 
-  test("spilling with compression") {
+  private def testSimpleSpillingForAllCodecs(encrypt: Boolean): Unit = {
     // Keep track of which compression codec we're using to report in test failure messages
     var lastCompressionCodec: Option[String] = None
     try {
-      allCompressionCodecs.foreach { c =>
+      CompressionCodec.ALL_COMPRESSION_CODECS.foreach { c =>
         lastCompressionCodec = Some(c)
-        testSimpleSpilling(Some(c))
+        testSimpleSpilling(Some(c), encrypt)
       }
     } catch {
       // Include compression codec used in test failure message
@@ -241,8 +240,12 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     }
   }
 
+  test("spilling with compression") {
+    testSimpleSpillingForAllCodecs(encrypt = false)
+  }
+
   test("spilling with compression and encryption") {
-    testSimpleSpilling(Some(CompressionCodec.DEFAULT_COMPRESSION_CODEC), encrypt = true)
+    testSimpleSpillingForAllCodecs(encrypt = true)
   }
 
   /**
@@ -252,7 +255,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
   private def testSimpleSpilling(codec: Option[String] = None, encrypt: Boolean = false): Unit = {
     val size = 1000
     val conf = createSparkConf(loadDefaults = true, codec)  // Load defaults for Spark home
-    conf.set("spark.shuffle.spill.numElementsForceSpillThreshold", (size / 4).toString)
+    conf.set(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD, size / 4)
     conf.set(IO_ENCRYPTION_ENABLED, encrypt)
     sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
 
@@ -296,7 +299,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
   test("ExternalAppendOnlyMap shouldn't fail when forced to spill before calling its iterator") {
     val size = 1000
     val conf = createSparkConf(loadDefaults = true)
-    conf.set("spark.shuffle.spill.numElementsForceSpillThreshold", (size / 2).toString)
+    conf.set(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD, size / 2)
     sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
     val map = createExternalMap[String]
     val consumer = createExternalMap[String]
@@ -307,7 +310,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
   test("spilling with hash collisions") {
     val size = 1000
     val conf = createSparkConf(loadDefaults = true)
-    conf.set("spark.shuffle.spill.numElementsForceSpillThreshold", (size / 2).toString)
+    conf.set(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD, size / 2)
     sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
     val map = createExternalMap[String]
 
@@ -358,7 +361,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
   test("spilling with many hash collisions") {
     val size = 1000
     val conf = createSparkConf(loadDefaults = true)
-    conf.set("spark.shuffle.spill.numElementsForceSpillThreshold", (size / 2).toString)
+    conf.set(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD, size / 2)
     sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
     val context = MemoryTestingUtils.fakeTaskContext(sc.env)
     val map =
@@ -387,7 +390,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
   test("spilling with hash collisions using the Int.MaxValue key") {
     val size = 1000
     val conf = createSparkConf(loadDefaults = true)
-    conf.set("spark.shuffle.spill.numElementsForceSpillThreshold", (size / 2).toString)
+    conf.set(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD, size / 2)
     sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
     val map = createExternalMap[Int]
 
@@ -406,7 +409,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
   test("spilling with null keys and values") {
     val size = 1000
     val conf = createSparkConf(loadDefaults = true)
-    conf.set("spark.shuffle.spill.numElementsForceSpillThreshold", (size / 2).toString)
+    conf.set(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD, size / 2)
     sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
     val map = createExternalMap[Int]
 
@@ -436,7 +439,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     val it = map.iterator
     assert(it.isInstanceOf[CompletionIterator[_, _]])
     // org.apache.spark.util.collection.AppendOnlyMap.destructiveSortedIterator returns
-    // an instance of an annonymous Iterator class.
+    // an instance of an anonymous Iterator class.
 
     val underlyingMapRef = WeakReference(map.currentMap)
 
@@ -447,9 +450,9 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     }
 
     val first50Keys = for ( _ <- 0 until 50) yield {
-      val (k, vs) = it.next
+      val (k, vs) = it.next()
       val sortedVs = vs.sorted
-      assert(sortedVs.seq == (0 until 10).map(10 * k + _))
+      assert(sortedVs == (0 until 10).map(10 * k + _))
       k
     }
     assert(map.numSpills == 0)
@@ -459,7 +462,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     // https://github.com/scala/scala/blob/2.13.x/test/junit/scala/tools/testing/AssertUtil.scala
     // (lines 69-89)
     // assert(map.currentMap == null)
-    eventually(timeout(5 seconds), interval(200 milliseconds)) {
+    eventually(timeout(5.seconds), interval(200.milliseconds)) {
       System.gc()
       // direct asserts introduced some macro generated code that held a reference to the map
       val tmpIsNull = null == underlyingMapRef.get.orNull
@@ -468,9 +471,9 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
 
 
     val next50Keys = for ( _ <- 0 until 50) yield {
-      val (k, vs) = it.next
+      val (k, vs) = it.next()
       val sortedVs = vs.sorted
-      assert(sortedVs.seq == (0 until 10).map(10 * k + _))
+      assert(sortedVs == (0 until 10).map(10 * k + _))
       k
     }
     assert(!it.hasNext)
@@ -502,7 +505,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     val keys = it.map{
       case (k, vs) =>
         val sortedVs = vs.sorted
-        assert(sortedVs.seq == (0 until 10).map(10 * k + _))
+        assert(sortedVs == (0 until 10).map(10 * k + _))
         k
     }
     .toList
@@ -532,7 +535,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
   test("SPARK-22713 external aggregation updates peak execution memory") {
     val spillThreshold = 1000
     val conf = createSparkConf(loadDefaults = false)
-      .set("spark.shuffle.spill.numElementsForceSpillThreshold", spillThreshold.toString)
+      .set(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD, spillThreshold)
     sc = new SparkContext("local", "test", conf)
     // No spilling
     AccumulatorSuite.verifyPeakExecutionMemorySet(sc, "external map without spilling") {
@@ -550,12 +553,11 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
 
   test("force to spill for external aggregation") {
     val conf = createSparkConf(loadDefaults = false)
-      .set("spark.shuffle.memoryFraction", "0.01")
-      .set("spark.memory.useLegacyMode", "true")
-      .set("spark.testing.memory", "100000000")
-      .set("spark.shuffle.sort.bypassMergeThreshold", "0")
+      .set(MEMORY_STORAGE_FRACTION, 0.999)
+      .set(TEST_MEMORY, 471859200L)
+      .set(SHUFFLE_SORT_BYPASS_MERGE_THRESHOLD, 0)
     sc = new SparkContext("local", "test", conf)
-    val N = 2e5.toInt
+    val N = 200000
     sc.parallelize(1 to N, 2)
       .map { i => (i, i) }
       .groupByKey()

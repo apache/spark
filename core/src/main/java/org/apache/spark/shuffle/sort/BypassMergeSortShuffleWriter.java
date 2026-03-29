@@ -19,8 +19,11 @@ package org.apache.spark.shuffle.sort;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.channels.FileChannel;
+import java.util.Optional;
+import java.util.zip.Checksum;
 import javax.annotation.Nullable;
 
 import scala.None$;
@@ -31,19 +34,28 @@ import scala.collection.Iterator;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Closeables;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.Partitioner;
 import org.apache.spark.ShuffleDependency;
 import org.apache.spark.SparkConf;
-import org.apache.spark.TaskContext;
-import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.SparkException;
+import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
+import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
+import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
+import org.apache.spark.shuffle.api.ShufflePartitionWriter;
+import org.apache.spark.shuffle.api.WritableByteChannelWrapper;
+import org.apache.spark.shuffle.checksum.ShuffleChecksumSupport;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.scheduler.MapStatus$;
 import org.apache.spark.serializer.Serializer;
 import org.apache.spark.serializer.SerializerInstance;
-import org.apache.spark.shuffle.IndexShuffleBlockResolver;
+import org.apache.spark.shuffle.checksum.RowBasedChecksum;
+import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.storage.*;
 import org.apache.spark.util.Utils;
@@ -59,9 +71,8 @@ import org.apache.spark.util.Utils;
  * simultaneously opens separate serializers and file streams for all partitions. As a result,
  * {@link SortShuffleManager} only selects this write path when
  * <ul>
- *    <li>no Ordering is specified,</li>
- *    <li>no Aggregator is specified, and</li>
- *    <li>the number of partitions is less than
+ *    <li>no map-side combine is specified, and</li>
+ *    <li>the number of partitions is less than or equal to
  *      <code>spark.shuffle.sort.bypassMergeThreshold</code>.</li>
  * </ul>
  *
@@ -70,26 +81,38 @@ import org.apache.spark.util.Utils;
  * <p>
  * There have been proposals to completely remove this code path; see SPARK-6026 for details.
  */
-final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
+final class BypassMergeSortShuffleWriter<K, V>
+  extends ShuffleWriter<K, V>
+  implements ShuffleChecksumSupport {
 
-  private static final Logger logger = LoggerFactory.getLogger(BypassMergeSortShuffleWriter.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(BypassMergeSortShuffleWriter.class);
 
   private final int fileBufferSize;
   private final boolean transferToEnabled;
   private final int numPartitions;
   private final BlockManager blockManager;
   private final Partitioner partitioner;
-  private final ShuffleWriteMetrics writeMetrics;
+  private final ShuffleWriteMetricsReporter writeMetrics;
   private final int shuffleId;
-  private final int mapId;
+  private final long mapId;
   private final Serializer serializer;
-  private final IndexShuffleBlockResolver shuffleBlockResolver;
+  private final ShuffleExecutorComponents shuffleExecutorComponents;
 
   /** Array of file writers, one for each partition */
   private DiskBlockObjectWriter[] partitionWriters;
   private FileSegment[] partitionWriterSegments;
   @Nullable private MapStatus mapStatus;
   private long[] partitionLengths;
+  /** Checksum calculator for each partition. Empty when shuffle checksum disabled. */
+  private final Checksum[] partitionChecksums;
+  /**
+   * Checksum calculator for each partition. Different from the above Checksum,
+   * RowBasedChecksum is independent of the input row order, which is used to
+   * detect whether different task attempts of the same partition produce different
+   * output data or not.
+   */
+  private final RowBasedChecksum[] rowBasedChecksums;
 
   /**
    * Are we in the process of stopping? Because map tasks can call stop() with success = true
@@ -100,79 +123,105 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   BypassMergeSortShuffleWriter(
       BlockManager blockManager,
-      IndexShuffleBlockResolver shuffleBlockResolver,
       BypassMergeSortShuffleHandle<K, V> handle,
-      int mapId,
-      TaskContext taskContext,
-      SparkConf conf) {
+      long mapId,
+      SparkConf conf,
+      ShuffleWriteMetricsReporter writeMetrics,
+      ShuffleExecutorComponents shuffleExecutorComponents) throws SparkException {
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
-    this.fileBufferSize = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
-    this.transferToEnabled = conf.getBoolean("spark.file.transferTo", true);
+    this.fileBufferSize = (int) (long) conf.get(package$.MODULE$.SHUFFLE_FILE_BUFFER_SIZE()) * 1024;
+    this.transferToEnabled = (boolean) conf.get(package$.MODULE$.SHUFFLE_MERGE_PREFER_NIO());
     this.blockManager = blockManager;
     final ShuffleDependency<K, V, V> dep = handle.dependency();
     this.mapId = mapId;
     this.shuffleId = dep.shuffleId();
     this.partitioner = dep.partitioner();
     this.numPartitions = partitioner.numPartitions();
-    this.writeMetrics = taskContext.taskMetrics().shuffleWriteMetrics();
+    this.writeMetrics = writeMetrics;
     this.serializer = dep.serializer();
-    this.shuffleBlockResolver = shuffleBlockResolver;
+    this.shuffleExecutorComponents = shuffleExecutorComponents;
+    this.partitionChecksums = createPartitionChecksums(numPartitions, conf);
+    this.rowBasedChecksums = dep.rowBasedChecksums();
   }
 
   @Override
   public void write(Iterator<Product2<K, V>> records) throws IOException {
     assert (partitionWriters == null);
-    if (!records.hasNext()) {
-      partitionLengths = new long[numPartitions];
-      shuffleBlockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, null);
-      mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
-      return;
-    }
-    final SerializerInstance serInstance = serializer.newInstance();
-    final long openStartTime = System.nanoTime();
-    partitionWriters = new DiskBlockObjectWriter[numPartitions];
-    partitionWriterSegments = new FileSegment[numPartitions];
-    for (int i = 0; i < numPartitions; i++) {
-      final Tuple2<TempShuffleBlockId, File> tempShuffleBlockIdPlusFile =
-        blockManager.diskBlockManager().createTempShuffleBlock();
-      final File file = tempShuffleBlockIdPlusFile._2();
-      final BlockId blockId = tempShuffleBlockIdPlusFile._1();
-      partitionWriters[i] =
-        blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, writeMetrics);
-    }
-    // Creating the file to write to and creating a disk writer both involve interacting with
-    // the disk, and can take a long time in aggregate when we open many files, so should be
-    // included in the shuffle write time.
-    writeMetrics.incWriteTime(System.nanoTime() - openStartTime);
-
-    while (records.hasNext()) {
-      final Product2<K, V> record = records.next();
-      final K key = record._1();
-      partitionWriters[partitioner.getPartition(key)].write(key, record._2());
-    }
-
-    for (int i = 0; i < numPartitions; i++) {
-      try (DiskBlockObjectWriter writer = partitionWriters[i]) {
-        partitionWriterSegments[i] = writer.commitAndGet();
-      }
-    }
-
-    File output = shuffleBlockResolver.getDataFile(shuffleId, mapId);
-    File tmp = Utils.tempFileWith(output);
+    ShuffleMapOutputWriter mapOutputWriter = shuffleExecutorComponents
+        .createMapOutputWriter(shuffleId, mapId, numPartitions);
     try {
-      partitionLengths = writePartitionedFile(tmp);
-      shuffleBlockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, tmp);
-    } finally {
-      if (tmp.exists() && !tmp.delete()) {
-        logger.error("Error while deleting temp file {}", tmp.getAbsolutePath());
+      if (!records.hasNext()) {
+        partitionLengths = mapOutputWriter.commitAllPartitions(
+          ShuffleChecksumHelper.EMPTY_CHECKSUM_VALUE).getPartitionLengths();
+        mapStatus = MapStatus$.MODULE$.apply(
+          blockManager.shuffleServerId(), partitionLengths, mapId, getAggregatedChecksumValue());
+        return;
       }
+      final SerializerInstance serInstance = serializer.newInstance();
+      final long openStartTime = System.nanoTime();
+      partitionWriters = new DiskBlockObjectWriter[numPartitions];
+      partitionWriterSegments = new FileSegment[numPartitions];
+      for (int i = 0; i < numPartitions; i++) {
+        final Tuple2<TempShuffleBlockId, File> tempShuffleBlockIdPlusFile =
+            blockManager.diskBlockManager().createTempShuffleBlock();
+        final File file = tempShuffleBlockIdPlusFile._2();
+        final BlockId blockId = tempShuffleBlockIdPlusFile._1();
+        DiskBlockObjectWriter writer =
+          blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, writeMetrics);
+        if (partitionChecksums.length > 0) {
+          writer.setChecksum(partitionChecksums[i]);
+        }
+        partitionWriters[i] = writer;
+      }
+      // Creating the file to write to and creating a disk writer both involve interacting with
+      // the disk, and can take a long time in aggregate when we open many files, so should be
+      // included in the shuffle write time.
+      writeMetrics.incWriteTime(System.nanoTime() - openStartTime);
+
+      while (records.hasNext()) {
+        final Product2<K, V> record = records.next();
+        final K key = record._1();
+        final int partitionId = partitioner.getPartition(key);
+        partitionWriters[partitionId].write(key, record._2());
+        if (rowBasedChecksums.length > 0) {
+          rowBasedChecksums[partitionId].update(key, record._2());
+        }
+      }
+
+      for (int i = 0; i < numPartitions; i++) {
+        try (DiskBlockObjectWriter writer = partitionWriters[i]) {
+          partitionWriterSegments[i] = writer.commitAndGet();
+        }
+      }
+
+      partitionLengths = writePartitionedData(mapOutputWriter);
+      mapStatus = MapStatus$.MODULE$.apply(
+        blockManager.shuffleServerId(), partitionLengths, mapId, getAggregatedChecksumValue());
+    } catch (Exception e) {
+      try {
+        mapOutputWriter.abort(e);
+      } catch (Exception e2) {
+        logger.error("Failed to abort the writer after failing to write map output.", e2);
+        e.addSuppressed(e2);
+      }
+      throw e;
     }
-    mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+  }
+
+  @Override
+  public long[] getPartitionLengths() {
+    return partitionLengths;
+  }
+
+  // For test only.
+  @VisibleForTesting
+  RowBasedChecksum[] getRowBasedChecksums() {
+    return rowBasedChecksums;
   }
 
   @VisibleForTesting
-  long[] getPartitionLengths() {
-    return partitionLengths;
+  long getAggregatedChecksumValue() {
+    return RowBasedChecksum.getAggregatedChecksumValue(rowBasedChecksums);
   }
 
   /**
@@ -180,41 +229,76 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    *
    * @return array of lengths, in bytes, of each partition of the file (used by map output tracker).
    */
-  private long[] writePartitionedFile(File outputFile) throws IOException {
+  private long[] writePartitionedData(ShuffleMapOutputWriter mapOutputWriter) throws IOException {
     // Track location of the partition starts in the output file
-    final long[] lengths = new long[numPartitions];
-    if (partitionWriters == null) {
-      // We were passed an empty iterator
-      return lengths;
-    }
-
-    final FileOutputStream out = new FileOutputStream(outputFile, true);
-    final long writeStartTime = System.nanoTime();
-    boolean threwException = true;
-    try {
-      for (int i = 0; i < numPartitions; i++) {
-        final File file = partitionWriterSegments[i].file();
-        if (file.exists()) {
-          final FileInputStream in = new FileInputStream(file);
-          boolean copyThrewException = true;
-          try {
-            lengths[i] = Utils.copyStream(in, out, false, transferToEnabled);
-            copyThrewException = false;
-          } finally {
-            Closeables.close(in, copyThrewException);
-          }
-          if (!file.delete()) {
-            logger.error("Unable to delete file for partition {}", i);
+    if (partitionWriters != null) {
+      final long writeStartTime = System.nanoTime();
+      try {
+        for (int i = 0; i < numPartitions; i++) {
+          final File file = partitionWriterSegments[i].file();
+          ShufflePartitionWriter writer = mapOutputWriter.getPartitionWriter(i);
+          if (file.exists()) {
+            if (transferToEnabled) {
+              // Using WritableByteChannelWrapper to make resource closing consistent between
+              // this implementation and UnsafeShuffleWriter.
+              Optional<WritableByteChannelWrapper> maybeOutputChannel = writer.openChannelWrapper();
+              if (maybeOutputChannel.isPresent()) {
+                writePartitionedDataWithChannel(file, maybeOutputChannel.get());
+              } else {
+                writePartitionedDataWithStream(file, writer);
+              }
+            } else {
+              writePartitionedDataWithStream(file, writer);
+            }
+            if (!file.delete()) {
+              logger.error("Unable to delete file for partition {}",
+                MDC.of(LogKeys.PARTITION_ID, i));
+            }
           }
         }
+      } finally {
+        writeMetrics.incWriteTime(System.nanoTime() - writeStartTime);
       }
-      threwException = false;
-    } finally {
-      Closeables.close(out, threwException);
-      writeMetrics.incWriteTime(System.nanoTime() - writeStartTime);
+      partitionWriters = null;
     }
-    partitionWriters = null;
-    return lengths;
+    return mapOutputWriter.commitAllPartitions(getChecksumValues(partitionChecksums))
+      .getPartitionLengths();
+  }
+
+  private void writePartitionedDataWithChannel(
+      File file,
+      WritableByteChannelWrapper outputChannel) throws IOException {
+    boolean copyThrewException = true;
+    try {
+      FileInputStream in = new FileInputStream(file);
+      try (FileChannel inputChannel = in.getChannel()) {
+        Utils.copyFileStreamNIO(
+            inputChannel, outputChannel.channel(), 0L, inputChannel.size());
+        copyThrewException = false;
+      } finally {
+        Closeables.close(in, copyThrewException);
+      }
+    } finally {
+      Closeables.close(outputChannel, copyThrewException);
+    }
+  }
+
+  private void writePartitionedDataWithStream(File file, ShufflePartitionWriter writer)
+      throws IOException {
+    boolean copyThrewException = true;
+    FileInputStream in = new FileInputStream(file);
+    OutputStream outputStream;
+    try {
+      outputStream = writer.openStream();
+      try {
+        Utils.copyStream(in, outputStream, false, false);
+        copyThrewException = false;
+      } finally {
+        Closeables.close(outputStream, copyThrewException);
+      }
+    } finally {
+      Closeables.close(in, copyThrewException);
+    }
   }
 
   @Override
@@ -234,10 +318,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           try {
             for (DiskBlockObjectWriter writer : partitionWriters) {
               // This method explicitly does _not_ throw exceptions:
-              File file = writer.revertPartialWritesAndClose();
-              if (!file.delete()) {
-                logger.error("Error while deleting file {}", file.getAbsolutePath());
-              }
+              writer.closeAndDelete();
             }
           } finally {
             partitionWriters = null;

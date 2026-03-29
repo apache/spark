@@ -46,9 +46,9 @@ convertJListToRList <- function(jList, flatten, logicalUpperBound = NULL,
                 res <- list(unserialize(keyBytes),
                   unserialize(valBytes))
               } else {
-                stop(paste("utils.R: convertJListToRList only supports",
-                  "RDD[Array[Byte]] and",
-                  "JavaPairRDD[Array[Byte], Array[Byte]] for now"))
+                stop("utils.R: convertJListToRList only supports ",
+                  "RDD[Array[Byte]] and ",
+                  "JavaPairRDD[Array[Byte], Array[Byte]] for now")
               }
             } else {
               if (inherits(obj, "raw")) {
@@ -115,6 +115,7 @@ isRDD <- function(name, env) {
 #' hashCode("1") # 49
 #'}
 #' @note hashCode since 1.4.0
+#' @keywords internal
 hashCode <- function(key) {
   if (class(key) == "integer") {
     as.integer(key[[1]])
@@ -131,13 +132,13 @@ hashCode <- function(key) {
     } else {
       asciiVals <- sapply(charToRaw(key), function(x) { strtoi(x, 16L) })
       hashC <- 0
-      for (k in 1:length(asciiVals)) {
+      for (k in seq_len(length(asciiVals))) {
         hashC <- mult31AndAdd(hashC, asciiVals[k])
       }
       as.integer(hashC)
     }
   } else {
-    warning(paste("Could not hash object, returning 0", sep = ""))
+    warning("Could not hash object, returning 0")
     as.integer(0)
   }
 }
@@ -354,8 +355,8 @@ varargsToStrEnv <- function(...) {
       } else {
         value <- pairs[[name]]
         if (!(is.logical(value) || is.numeric(value) || is.character(value) || is.null(value))) {
-          stop(paste0("Unsupported type for ", name, " : ", class(value),
-               ". Supported types are logical, numeric, character and NULL."), call. = FALSE)
+          stop("Unsupported type for ", name, " : ", toString(class(value)), ". ",
+               "Supported types are logical, numeric, character and NULL.", call. = FALSE)
         }
         if (is.logical(value)) {
           env[[name]] <- tolower(as.character(value))
@@ -369,14 +370,14 @@ varargsToStrEnv <- function(...) {
   }
 
   if (length(ignoredNames) != 0) {
-    warning(paste0("Unnamed arguments ignored: ", paste(ignoredNames, collapse = ", "), "."),
-            call. = FALSE)
+    warning("Unnamed arguments ignored: ", toString(ignoredNames), ".", call. = FALSE)
   }
   env
 }
 
 getStorageLevel <- function(newLevel = c("DISK_ONLY",
                                          "DISK_ONLY_2",
+                                         "DISK_ONLY_3",
                                          "MEMORY_AND_DISK",
                                          "MEMORY_AND_DISK_2",
                                          "MEMORY_AND_DISK_SER",
@@ -391,6 +392,7 @@ getStorageLevel <- function(newLevel = c("DISK_ONLY",
   storageLevel <- switch(newLevel,
                          "DISK_ONLY" = callJStatic(storageLevelClass, "DISK_ONLY"),
                          "DISK_ONLY_2" = callJStatic(storageLevelClass, "DISK_ONLY_2"),
+                         "DISK_ONLY_3" = callJStatic(storageLevelClass, "DISK_ONLY_3"),
                          "MEMORY_AND_DISK" = callJStatic(storageLevelClass, "MEMORY_AND_DISK"),
                          "MEMORY_AND_DISK_2" = callJStatic(storageLevelClass, "MEMORY_AND_DISK_2"),
                          "MEMORY_AND_DISK_SER" = callJStatic(storageLevelClass,
@@ -416,6 +418,8 @@ storageLevelToString <- function(levelObj) {
     "DISK_ONLY"
   } else if (useDisk && !useMemory && !useOffHeap && !deserialized && replication == 2) {
     "DISK_ONLY_2"
+  } else if (useDisk && !useMemory && !useOffHeap && !deserialized && replication == 3) {
+    "DISK_ONLY_3"
   } else if (!useDisk && useMemory && !useOffHeap && deserialized && replication == 1) {
     "MEMORY_ONLY"
   } else if (!useDisk && useMemory && !useOffHeap && deserialized && replication == 2) {
@@ -449,7 +453,7 @@ storageLevelToString <- function(levelObj) {
 # the user to type (for example) `5` instead of `5L` to avoid a confusing error message.
 numToInt <- function(num) {
   if (as.integer(num) != num) {
-    warning(paste("Coercing", as.list(sys.call())[[2]], "to integer."))
+    warning("Coercing ", as.list(sys.call())[[2L]], " to integer.")
   }
   as.integer(num)
 }
@@ -530,7 +534,10 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
         # Namespaces other than "SparkR" will not be searched.
         if (!isNamespace(func.env) ||
             (getNamespaceName(func.env) == "SparkR" &&
-               !(nodeChar %in% getNamespaceExports("SparkR")))) {
+               !(nodeChar %in% getNamespaceExports("SparkR")) &&
+                  # Note that generic S4 methods should not be set to the environment of
+                  # cleaned closure. It does not work with R 4.0.0+. See also SPARK-31918.
+                  nodeChar != "" && !methods::isGeneric(nodeChar, func.env))) {
           # Only include SparkR internals.
 
           # Set parameter 'inherits' to FALSE since we do not need to search in
@@ -543,10 +550,14 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
               funcList <- mget(nodeChar, envir = checkedFuncs, inherits = F,
                                ifnotfound = list(list(NULL)))[[1]]
               found <- sapply(funcList, function(func) {
-                ifelse(identical(func, obj), TRUE, FALSE)
+                ifelse(
+                  identical(func, obj) &&
+                    # Also check if the parent environment is identical to current parent
+                    identical(parent.env(environment(func)), func.env),
+                  TRUE, FALSE)
               })
               if (sum(found) > 0) {
-                # If function has been examined, ignore.
+                # If function has been examined ignore
                 break
               }
               # Function has not been examined, record it and recursively clean its closure.
@@ -646,8 +657,8 @@ mergePartitions <- function(rdd, zip) {
         # For zip operation, check if corresponding partitions
         # of both RDDs have the same number of elements.
         if (zip && lengthOfKeys != lengthOfValues) {
-          stop(paste("Can only zip RDDs with same number of elements",
-                     "in each pair of corresponding partitions."))
+          stop("Can only zip RDDs with same number of elements ",
+               "in each pair of corresponding partitions.")
         }
 
         if (lengthOfKeys > 1) {
@@ -724,7 +735,7 @@ assignNewEnv <- function(data) {
   stopifnot(length(cols) > 0)
 
   env <- new.env()
-  for (i in 1:length(cols)) {
+  for (i in seq_len(length(cols))) {
     assign(x = cols[i], value = data[, cols[i], drop = F], envir = env)
   }
   env
@@ -750,7 +761,7 @@ launchScript <- function(script, combinedArgs, wait = FALSE, stdout = "", stderr
   if (.Platform$OS.type == "windows") {
     scriptWithArgs <- paste(script, combinedArgs, sep = " ")
     # on Windows, intern = F seems to mean output to the console. (documentation on this is missing)
-    shell(scriptWithArgs, translate = TRUE, wait = wait, intern = wait) # nolint
+    shell(scriptWithArgs, translate = TRUE, wait = wait, intern = wait)
   } else {
     # http://stat.ethz.ch/R-manual/R-devel/library/base/html/system2.html
     # stdout = F means discard output
@@ -800,7 +811,7 @@ handledCallJMethod <- function(obj, method, ...) {
 
 captureJVMException <- function(e, method) {
   rawmsg <- as.character(e)
-  if (any(grep("^Error in .*?: ", rawmsg))) {
+  if (any(grepl("^Error in .*?: ", rawmsg))) {
     # If the exception message starts with "Error in ...", this is possibly
     # "Error in invokeJava(...)". Here, it replaces the characters to
     # `paste("Error in", method, ":")` in order to identify which function
@@ -814,54 +825,58 @@ captureJVMException <- function(e, method) {
   }
 
   # StreamingQueryException could wrap an IllegalArgumentException, so look for that first
-  if (any(grep("org.apache.spark.sql.streaming.StreamingQueryException: ", stacktrace))) {
+  if (any(grepl("org.apache.spark.sql.streaming.StreamingQueryException: ",
+                stacktrace, fixed = TRUE))) {
     msg <- strsplit(stacktrace, "org.apache.spark.sql.streaming.StreamingQueryException: ",
                     fixed = TRUE)[[1]]
     # Extract "Error in ..." message.
     rmsg <- msg[1]
     # Extract the first message of JVM exception.
     first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
-    stop(paste0(rmsg, "streaming query error - ", first), call. = FALSE)
-  } else if (any(grep("java.lang.IllegalArgumentException: ", stacktrace))) {
+    stop(rmsg, "streaming query error - ", first, call. = FALSE)
+  } else if (any(grepl("java.lang.IllegalArgumentException: ", stacktrace, fixed = TRUE))) {
     msg <- strsplit(stacktrace, "java.lang.IllegalArgumentException: ", fixed = TRUE)[[1]]
     # Extract "Error in ..." message.
     rmsg <- msg[1]
     # Extract the first message of JVM exception.
     first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
-    stop(paste0(rmsg, "illegal argument - ", first), call. = FALSE)
-  } else if (any(grep("org.apache.spark.sql.AnalysisException: ", stacktrace))) {
+    stop(rmsg, "illegal argument - ", first, call. = FALSE)
+  } else if (any(grepl("org.apache.spark.sql.AnalysisException: ", stacktrace, fixed = TRUE))) {
     msg <- strsplit(stacktrace, "org.apache.spark.sql.AnalysisException: ", fixed = TRUE)[[1]]
     # Extract "Error in ..." message.
     rmsg <- msg[1]
     # Extract the first message of JVM exception.
     first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
-    stop(paste0(rmsg, "analysis error - ", first), call. = FALSE)
+    stop(rmsg, "analysis error - ", first, call. = FALSE)
   } else
-    if (any(grep("org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException: ", stacktrace))) {
+    if (any(grepl("org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException: ",
+                  stacktrace, fixed = TRUE))) {
     msg <- strsplit(stacktrace, "org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException: ",
                     fixed = TRUE)[[1]]
     # Extract "Error in ..." message.
     rmsg <- msg[1]
     # Extract the first message of JVM exception.
     first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
-    stop(paste0(rmsg, "no such database - ", first), call. = FALSE)
+    stop(rmsg, "no such database - ", first, call. = FALSE)
   } else
-    if (any(grep("org.apache.spark.sql.catalyst.analysis.NoSuchTableException: ", stacktrace))) {
+    if (any(grepl("org.apache.spark.sql.catalyst.analysis.NoSuchTableException: ",
+                  stacktrace, fixed = TRUE))) {
     msg <- strsplit(stacktrace, "org.apache.spark.sql.catalyst.analysis.NoSuchTableException: ",
                     fixed = TRUE)[[1]]
     # Extract "Error in ..." message.
     rmsg <- msg[1]
     # Extract the first message of JVM exception.
     first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
-    stop(paste0(rmsg, "no such table - ", first), call. = FALSE)
-  } else if (any(grep("org.apache.spark.sql.catalyst.parser.ParseException: ", stacktrace))) {
+    stop(rmsg, "no such table - ", first, call. = FALSE)
+  } else if (any(grepl("org.apache.spark.sql.catalyst.parser.ParseException: ",
+                       stacktrace, fixed = TRUE))) {
     msg <- strsplit(stacktrace, "org.apache.spark.sql.catalyst.parser.ParseException: ",
                     fixed = TRUE)[[1]]
     # Extract "Error in ..." message.
     rmsg <- msg[1]
     # Extract the first message of JVM exception.
     first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
-    stop(paste0(rmsg, "parse error - ", first), call. = FALSE)
+    stop(rmsg, "parse error - ", first, call. = FALSE)
   } else {
     stop(stacktrace, call. = FALSE)
   }
@@ -916,7 +931,7 @@ getOne <- function(x, envir, inherits = TRUE, ifnotfound = NULL) {
 }
 
 # Returns a vector of parent directories, traversing up count times, starting with a full path
-# eg. traverseParentDirs("/Users/user/Library/Caches/spark/spark2.2", 1) should return
+# e.g. traverseParentDirs("/Users/user/Library/Caches/spark/spark2.2", 1) should return
 # this "/Users/user/Library/Caches/spark/spark2.2"
 # and  "/Users/user/Library/Caches/spark"
 traverseParentDirs <- function(x, count) {

@@ -1,6 +1,21 @@
 ---
 layout: global
 title: Cluster Mode Overview
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 This document gives a short overview of how Spark runs on clusters, to make it easier to understand
@@ -13,7 +28,7 @@ Spark applications run as independent sets of processes on a cluster, coordinate
 object in your main program (called the _driver program_).
 
 Specifically, to run on a cluster, the SparkContext can connect to several types of _cluster managers_
-(either Spark's own standalone cluster manager, Mesos or YARN), which allocate resources across
+(either Spark's own standalone cluster manager, YARN or Kubernetes), which allocate resources across
 applications. Once connected, Spark acquires *executors* on nodes in the cluster, which are
 processes that run computations and store data for your application.
 Next, it sends your application code (defined by JAR or Python files passed to SparkContext) to
@@ -33,7 +48,7 @@ There are several useful things to note about this architecture:
    writing it to an external storage system.
 2. Spark is agnostic to the underlying cluster manager. As long as it can acquire executor
    processes, and these communicate with each other, it is relatively easy to run it even on a
-   cluster manager that also supports other applications (e.g. Mesos/YARN).
+   cluster manager that also supports other applications (e.g. YARN/Kubernetes).
 3. The driver program must listen for and accept incoming connections from its executors throughout
    its lifetime (e.g., see [spark.driver.port in the network config
    section](configuration.html#networking)). As such, the driver program must be network
@@ -49,14 +64,9 @@ The system currently supports several cluster managers:
 
 * [Standalone](spark-standalone.html) -- a simple cluster manager included with Spark that makes it
   easy to set up a cluster.
-* [Apache Mesos](running-on-mesos.html) -- a general cluster manager that can also run Hadoop MapReduce
-  and service applications.
-* [Hadoop YARN](running-on-yarn.html) -- the resource manager in Hadoop 2.
+* [Hadoop YARN](running-on-yarn.html) -- the resource manager in Hadoop 3.
 * [Kubernetes](running-on-kubernetes.html) -- an open-source system for automating deployment, scaling,
   and management of containerized applications.
-
-A third-party project (not supported by the Spark project) exists to add support for
-[Nomad](https://github.com/hashicorp/nomad-spark) as a cluster manager.
 
 # Submitting Applications
 
@@ -79,7 +89,7 @@ The [job scheduling overview](job-scheduling.html) describes this in more detail
 
 The following table summarizes terms you'll see used to refer to cluster concepts:
 
-<table class="table">
+<table>
   <thead>
     <tr><th style="width: 130px;">Term</th><th>Meaning</th></tr>
   </thead>
@@ -102,7 +112,7 @@ The following table summarizes terms you'll see used to refer to cluster concept
     </tr>
     <tr>
       <td>Cluster manager</td>
-      <td>An external service for acquiring resources on the cluster (e.g. standalone manager, Mesos, YARN)</td>
+      <td>An external service for acquiring resources on the cluster (e.g. standalone manager, YARN, Kubernetes)</td>
     </tr>
     <tr>
       <td>Deploy mode</td>

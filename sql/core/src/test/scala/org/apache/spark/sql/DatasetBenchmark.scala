@@ -28,9 +28,11 @@ import org.apache.spark.sql.types.StringType
  * Benchmark for Dataset typed operations comparing with DataFrame and RDD versions.
  * To run this benchmark:
  * {{{
- *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *   1. without sbt:
+ *      bin/spark-submit --class <this class>
+ *        --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
+ *   2. build/sbt "sql/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/DatasetBenchmark-results.txt".
  * }}}
  */
@@ -55,7 +57,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.map(func)
         i += 1
       }
-      res.foreach(_ => Unit)
+      res.foreach(_ => ())
     }
 
     benchmark.addCase("DataFrame") { iter =>
@@ -65,7 +67,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.select($"l" + 1 as "l")
         i += 1
       }
-      res.queryExecution.toRdd.foreach(_ => Unit)
+      res.queryExecution.toRdd.foreach(_ => ())
     }
 
     benchmark.addCase("Dataset") { iter =>
@@ -75,7 +77,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.map(func)
         i += 1
       }
-      res.queryExecution.toRdd.foreach(_ => Unit)
+      res.queryExecution.toRdd.foreach(_ => ())
     }
 
     benchmark
@@ -96,7 +98,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.map(func)
         i += 1
       }
-      res.foreach(_ => Unit)
+      res.foreach(_ => ())
     }
 
     benchmark.addCase("DataFrame") { iter =>
@@ -106,7 +108,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.select($"l" + 1 as "l", $"s")
         i += 1
       }
-      res.queryExecution.toRdd.foreach(_ => Unit)
+      res.queryExecution.toRdd.foreach(_ => ())
     }
 
     benchmark.addCase("Dataset") { iter =>
@@ -116,7 +118,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.map(func)
         i += 1
       }
-      res.queryExecution.toRdd.foreach(_ => Unit)
+      res.queryExecution.toRdd.foreach(_ => ())
     }
 
     benchmark
@@ -139,7 +141,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.filter(func)
         i += 1
       }
-      res.foreach(_ => Unit)
+      res.foreach(_ => ())
     }
 
     benchmark.addCase("DataFrame") { iter =>
@@ -149,7 +151,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.filter($"l" % 2L === 0L)
         i += 1
       }
-      res.queryExecution.toRdd.foreach(_ => Unit)
+      res.queryExecution.toRdd.foreach(_ => ())
     }
 
     benchmark.addCase("Dataset") { iter =>
@@ -159,7 +161,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.filter(func)
         i += 1
       }
-      res.queryExecution.toRdd.foreach(_ => Unit)
+      res.queryExecution.toRdd.foreach(_ => ())
     }
 
     benchmark
@@ -183,7 +185,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.filter(funcs(i))
         i += 1
       }
-      res.foreach(_ => Unit)
+      res.foreach(_ => ())
     }
 
     benchmark.addCase("DataFrame") { iter =>
@@ -193,7 +195,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.filter($"l" % (100L + i) === 0L)
         i += 1
       }
-      res.queryExecution.toRdd.foreach(_ => Unit)
+      res.queryExecution.toRdd.foreach(_ => ())
     }
 
     benchmark.addCase("Dataset") { iter =>
@@ -203,7 +205,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
         res = res.filter(funcs(i))
         i += 1
       }
-      res.queryExecution.toRdd.foreach(_ => Unit)
+      res.queryExecution.toRdd.foreach(_ => ())
     }
 
     benchmark
@@ -235,22 +237,22 @@ object DatasetBenchmark extends SqlBasedBenchmark {
     }
 
     benchmark.addCase("DataFrame sum") { iter =>
-      df.select(sum($"l")).queryExecution.toRdd.foreach(_ => Unit)
+      df.select(sum($"l")).queryExecution.toRdd.foreach(_ => ())
     }
 
     benchmark.addCase("Dataset sum using Aggregator") { iter =>
-      df.as[Data].select(typed.sumLong((d: Data) => d.l)).queryExecution.toRdd.foreach(_ => Unit)
+      df.as[Data].select(typed.sumLong((d: Data) => d.l)).queryExecution.toRdd.foreach(_ => ())
     }
 
     benchmark.addCase("Dataset complex Aggregator") { iter =>
-      df.as[Data].select(ComplexAggregator.toColumn).queryExecution.toRdd.foreach(_ => Unit)
+      df.as[Data].select(ComplexAggregator.toColumn).queryExecution.toRdd.foreach(_ => ())
     }
 
     benchmark
   }
 
   override def getSparkSession: SparkSession = {
-    SparkSession.builder
+    SparkSession.builder()
       .master("local[*]")
       .appName("Dataset benchmark")
       .getOrCreate()

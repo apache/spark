@@ -2,6 +2,21 @@
 layout: global
 title: Collaborative Filtering - RDD-based API
 displayTitle: Collaborative Filtering - RDD-based API
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -37,7 +52,7 @@ for example, users giving ratings to movies.
 
 It is common in many real-world use cases to only have access to *implicit feedback* (e.g. views,
 clicks, purchases, likes, shares etc.). The approach used in `spark.mllib` to deal with such data is taken
-from [Collaborative Filtering for Implicit Feedback Datasets](http://dx.doi.org/10.1109/ICDM.2008.22).
+from [Collaborative Filtering for Implicit Feedback Datasets](https://doi.org/10.1109/ICDM.2008.22).
 Essentially, instead of trying to model the matrix of ratings directly, this approach treats the data
 as numbers representing the *strength* in observations of user actions (such as the number of clicks,
 or the cumulative duration someone spent viewing a movie). Those numbers are then related to the level of
@@ -51,7 +66,7 @@ Since v1.1, we scale the regularization parameter `lambda` in solving each least
 the number of ratings the user generated in updating user factors,
 or the number of ratings the product received in updating product factors.
 This approach is named "ALS-WR" and discussed in the paper
-"[Large-Scale Parallel Collaborative Filtering for the Netflix Prize](http://dx.doi.org/10.1007/978-3-540-68880-8_32)".
+"[Large-Scale Parallel Collaborative Filtering for the Netflix Prize](https://doi.org/10.1007/978-3-540-68880-8_32)".
 It makes `lambda` less dependent on the scale of the dataset, so we can apply the
 best parameter learned from a sampled subset to the full dataset and expect similar performance.
 
@@ -59,13 +74,31 @@ best parameter learned from a sampled subset to the full dataset and expect simi
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+In the following example we load rating data. Each row consists of a user, a product and a rating.
+We use the default ALS.train() method which assumes ratings are explicit. We evaluate the
+recommendation by measuring the Mean Squared Error of rating prediction.
+
+Refer to the [`ALS` Python docs](api/python/reference/api/pyspark.mllib.recommendation.ALS.html) for more details on the API.
+
+{% include_example python/mllib/recommendation_example.py %}
+
+If the rating matrix is derived from other source of information (i.e. it is inferred from other
+signals), you can use the trainImplicit method to get better results.
+
+{% highlight python %}
+# Build the recommendation model using Alternating Least Squares based on implicit ratings
+model = ALS.trainImplicit(ratings, rank, numIterations, alpha=0.01)
+{% endhighlight %}
+</div>
+
 <div data-lang="scala" markdown="1">
 In the following example, we load rating data. Each row consists of a user, a product and a rating.
-We use the default [ALS.train()](api/scala/index.html#org.apache.spark.mllib.recommendation.ALS$) 
+We use the default [ALS.train()](api/scala/org/apache/spark/mllib/recommendation/ALS$.html)
 method which assumes ratings are explicit. We evaluate the
 recommendation model by measuring the Mean Squared Error of rating prediction.
 
-Refer to the [`ALS` Scala docs](api/scala/index.html#org.apache.spark.mllib.recommendation.ALS) for more details on the API.
+Refer to the [`ALS` Scala docs](api/scala/org/apache/spark/mllib/recommendation/ALS.html) for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/RecommendationExample.scala %}
 
@@ -89,24 +122,6 @@ that is equivalent to the provided example in Scala is given below:
 Refer to the [`ALS` Java docs](api/java/org/apache/spark/mllib/recommendation/ALS.html) for more details on the API.
 
 {% include_example java/org/apache/spark/examples/mllib/JavaRecommendationExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-In the following example we load rating data. Each row consists of a user, a product and a rating.
-We use the default ALS.train() method which assumes ratings are explicit. We evaluate the
-recommendation by measuring the Mean Squared Error of rating prediction.
-
-Refer to the [`ALS` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.recommendation.ALS) for more details on the API.
-
-{% include_example python/mllib/recommendation_example.py %}
-
-If the rating matrix is derived from other source of information (i.e. it is inferred from other
-signals), you can use the trainImplicit method to get better results.
-
-{% highlight python %}
-# Build the recommendation model using Alternating Least Squares based on implicit ratings
-model = ALS.trainImplicit(ratings, rank, numIterations, alpha=0.01)
-{% endhighlight %}
 </div>
 
 </div>

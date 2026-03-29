@@ -43,6 +43,10 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
   private val jars = new ConcurrentHashMap[String, File]()
   private val dirs = new ConcurrentHashMap[String, File]()
 
+  override def removeFile(key: String): Unit = files.remove(key)
+
+  override def removeJar(key: String): Unit = jars.remove(key)
+
   override def getChunk(streamId: Long, chunkIndex: Int): ManagedBuffer = {
     throw new UnsupportedOperationException()
   }
@@ -66,16 +70,18 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
   }
 
   override def addFile(file: File): String = {
-    val existingPath = files.putIfAbsent(file.getName, file)
-    require(existingPath == null || existingPath == file,
+    val canonicalFile = file.getCanonicalFile
+    val existingPath = files.putIfAbsent(file.getName, canonicalFile)
+    require(existingPath == null || existingPath == canonicalFile,
       s"File ${file.getName} was already registered with a different path " +
         s"(old path = $existingPath, new path = $file")
     s"${rpcEnv.address.toSparkURL}/files/${Utils.encodeFileNameToURIRawPath(file.getName())}"
   }
 
   override def addJar(file: File): String = {
-    val existingPath = jars.putIfAbsent(file.getName, file)
-    require(existingPath == null || existingPath == file,
+    val canonicalFile = file.getCanonicalFile
+    val existingPath = jars.putIfAbsent(file.getName, canonicalFile)
+    require(existingPath == null || existingPath == canonicalFile,
       s"File ${file.getName} was already registered with a different path " +
         s"(old path = $existingPath, new path = $file")
     s"${rpcEnv.address.toSparkURL}/jars/${Utils.encodeFileNameToURIRawPath(file.getName())}"
@@ -83,9 +89,14 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
 
   override def addDirectory(baseUri: String, path: File): String = {
     val fixedBaseUri = validateDirectoryUri(baseUri)
-    require(dirs.putIfAbsent(fixedBaseUri.stripPrefix("/"), path) == null,
+    require(dirs.putIfAbsent(fixedBaseUri.stripPrefix("/"), path.getCanonicalFile) == null,
       s"URI '$fixedBaseUri' already registered.")
     s"${rpcEnv.address.toSparkURL}$fixedBaseUri"
   }
 
+  override def addDirectoryIfAbsent(baseUri: String, path: File): String = {
+    val fixedBaseUri = validateDirectoryUri(baseUri)
+    dirs.putIfAbsent(fixedBaseUri.stripPrefix("/"), path.getCanonicalFile)
+    s"${rpcEnv.address.toSparkURL}$fixedBaseUri"
+  }
 }

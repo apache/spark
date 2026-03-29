@@ -18,9 +18,12 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
+import org.apache.spark.sql.catalyst.trees.QuaternaryLike
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.sketch.CountMinSketch
@@ -37,13 +40,6 @@ import org.apache.spark.util.sketch.CountMinSketch
  * @param confidenceExpression confidence, must be positive and less than 1.0
  * @param seedExpression random seed
  */
-@ExpressionDescription(
-  usage = """
-    _FUNC_(col, eps, confidence, seed) - Returns a count-min sketch of a column with the given esp,
-      confidence and seed. The result is an array of bytes, which can be deserialized to a
-      `CountMinSketch` before usage. Count-min sketch is a probabilistic data structure used for
-      cardinality estimation using sub-linear space.
-  """)
 case class CountMinSketchAgg(
     child: Expression,
     epsExpression: Expression,
@@ -51,7 +47,10 @@ case class CountMinSketchAgg(
     seedExpression: Expression,
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
-  extends TypedImperativeAggregate[CountMinSketch] with ExpectsInputTypes {
+  extends TypedImperativeAggregate[CountMinSketch]
+  with ExpectsInputTypes
+  with QuaternaryLike[Expression]
+  with QueryErrorsBase {
 
   def this(
       child: Expression,
@@ -64,23 +63,69 @@ case class CountMinSketchAgg(
   // Mark as lazy so that they are not evaluated during tree transformation.
   private lazy val eps: Double = epsExpression.eval().asInstanceOf[Double]
   private lazy val confidence: Double = confidenceExpression.eval().asInstanceOf[Double]
-  private lazy val seed: Int = seedExpression.eval().asInstanceOf[Int]
+  private lazy val seed: Int = seedExpression.eval() match {
+    case i: Int => i
+    case l: Long => l.toInt
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
       defaultCheck
-    } else if (!epsExpression.foldable || !confidenceExpression.foldable ||
-      !seedExpression.foldable) {
-      TypeCheckFailure(
-        "The eps, confidence or seed provided must be a literal or foldable")
-    } else if (epsExpression.eval() == null || confidenceExpression.eval() == null ||
-      seedExpression.eval() == null) {
-      TypeCheckFailure("The eps, confidence or seed provided should not be null")
+    } else if (!epsExpression.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("eps"),
+          "inputType" -> toSQLType(epsExpression.dataType),
+          "inputExpr" -> toSQLExpr(epsExpression))
+      )
+    } else if (!confidenceExpression.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("confidence"),
+          "inputType" -> toSQLType(confidenceExpression.dataType),
+          "inputExpr" -> toSQLExpr(confidenceExpression))
+      )
+    } else if (!seedExpression.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("seed"),
+          "inputType" -> toSQLType(seedExpression.dataType),
+          "inputExpr" -> toSQLExpr(seedExpression))
+      )
+    } else if (epsExpression.eval() == null) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "eps"))
+    } else if (confidenceExpression.eval() == null) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "confidence"))
+    } else if (seedExpression.eval() == null) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "seed"))
     } else if (eps <= 0.0) {
-      TypeCheckFailure(s"Relative error must be positive (current value = $eps)")
+      DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "eps",
+          "valueRange" -> s"(${0.toDouble}, ${Double.MaxValue}]",
+          "currentValue" -> toSQLValue(eps, DoubleType)
+        )
+      )
     } else if (confidence <= 0.0 || confidence >= 1.0) {
-      TypeCheckFailure(s"Confidence must be within range (0.0, 1.0) (current value = $confidence)")
+      DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "confidence",
+          "valueRange" -> s"(${0.toDouble}, ${1.toDouble}]",
+          "currentValue" -> toSQLValue(confidence, DoubleType)
+        )
+      )
     } else {
       TypeCheckSuccess
     }
@@ -126,15 +171,59 @@ case class CountMinSketchAgg(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(TypeCollection(IntegralType, StringType, BinaryType), DoubleType, DoubleType, IntegerType)
+    Seq(TypeCollection(IntegralType, StringType, BinaryType), DoubleType, DoubleType,
+      TypeCollection(IntegerType, LongType))
   }
 
   override def nullable: Boolean = false
 
   override def dataType: DataType = BinaryType
 
-  override def children: Seq[Expression] =
-    Seq(child, epsExpression, confidenceExpression, seedExpression)
+  override def defaultResult: Option[Literal] =
+    Option(Literal.create(eval(createAggregationBuffer()), dataType))
 
   override def prettyName: String = "count_min_sketch"
+
+  override def first: Expression = child
+  override def second: Expression = epsExpression
+  override def third: Expression = confidenceExpression
+  override def fourth: Expression = seedExpression
+
+  override protected def withNewChildrenInternal(first: Expression, second: Expression,
+      third: Expression, fourth: Expression): CountMinSketchAgg =
+    copy(
+      child = first,
+      epsExpression = second,
+      confidenceExpression = third,
+      seedExpression = fourth)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(col, eps, confidence, seed) - Returns a count-min sketch of a column with the given esp,
+      confidence and seed. The result is an array of bytes, which can be deserialized to a
+      `CountMinSketch` before usage. Count-min sketch is a probabilistic data structure used for
+      cardinality estimation using sub-linear space.
+  """,
+  examples = """
+    Examples:
+      > SELECT hex(_FUNC_(col, 0.5d, 0.5d, 1)) FROM VALUES (1), (2), (1) AS tab(col);
+       0000000100000000000000030000000100000004000000005D8D6AB90000000000000000000000000000000200000000000000010000000000000000
+  """,
+  group = "agg_funcs",
+  since = "2.2.0")
+// scalastyle:on line.size.limit
+object CountMinSketchAggExpressionBuilder extends ExpressionBuilder {
+  final val defaultFunctionSignature = FunctionSignature(Seq(
+    InputParameter("column"),
+    InputParameter("epsilon"),
+    InputParameter("confidence"),
+    InputParameter("seed")
+  ))
+  override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    assert(expressions.size == 4)
+    new CountMinSketchAgg(expressions(0), expressions(1), expressions(2), expressions(3))
+  }
 }

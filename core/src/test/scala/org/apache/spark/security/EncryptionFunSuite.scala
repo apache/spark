@@ -27,7 +27,7 @@ trait EncryptionFunSuite {
    * Runs a test twice, initializing a SparkConf object with encryption off, then on. It's ok
    * for the test to modify the provided SparkConf.
    */
-  final protected def encryptionTest(name: String)(fn: SparkConf => Unit) {
+  final protected def encryptionTest(name: String)(fn: SparkConf => Unit): Unit = {
     encryptionTestHelper(name) { case (name, conf) =>
       test(name)(fn(conf))
     }

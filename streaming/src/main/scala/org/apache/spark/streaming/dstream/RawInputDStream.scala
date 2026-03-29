@@ -25,7 +25,7 @@ import java.util.concurrent.ArrayBlockingQueue
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.receiver.Receiver
@@ -55,19 +55,19 @@ class RawNetworkReceiver(host: String, port: Int, storageLevel: StorageLevel)
 
   var blockPushingThread: Thread = null
 
-  def onStart() {
+  def onStart(): Unit = {
     // Open a socket to the target address and keep reading from it
-    logInfo("Connecting to " + host + ":" + port)
+    logInfo(log"Connecting to ${MDC(LogKeys.HOST, host)}:${MDC(LogKeys.PORT, port)}")
     val channel = SocketChannel.open()
     channel.configureBlocking(true)
     channel.connect(new InetSocketAddress(host, port))
-    logInfo("Connected to " + host + ":" + port)
+    logInfo(log"Connected to ${MDC(LogKeys.HOST, host)}:${MDC(LogKeys.PORT, port)}")
 
     val queue = new ArrayBlockingQueue[ByteBuffer](2)
 
     blockPushingThread = new Thread {
       setDaemon(true)
-      override def run() {
+      override def run(): Unit = {
         var nextBlockNumber = 0
         while (true) {
           val buffer = queue.take()
@@ -87,17 +87,17 @@ class RawNetworkReceiver(host: String, port: Int, storageLevel: StorageLevel)
       val dataBuffer = ByteBuffer.allocate(length)
       readFully(channel, dataBuffer)
       dataBuffer.flip()
-      logInfo("Read a block with " + length + " bytes")
+      logInfo(log"Read a block with ${MDC(LogKeys.BYTE_SIZE, length)} bytes")
       queue.put(dataBuffer)
     }
   }
 
-  def onStop() {
+  def onStop(): Unit = {
     if (blockPushingThread != null) blockPushingThread.interrupt()
   }
 
   /** Read a buffer fully from a given Channel */
-  private def readFully(channel: ReadableByteChannel, dest: ByteBuffer) {
+  private def readFully(channel: ReadableByteChannel, dest: ByteBuffer): Unit = {
     while (dest.position() < dest.limit()) {
       if (channel.read(dest) == -1) {
         throw new EOFException("End of channel")

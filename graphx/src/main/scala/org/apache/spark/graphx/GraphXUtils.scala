@@ -30,11 +30,13 @@ object GraphXUtils {
   /**
    * Registers classes that GraphX uses with Kryo.
    */
-  def registerKryoClasses(conf: SparkConf) {
+  def registerKryoClasses(conf: SparkConf): Unit = {
     conf.registerKryoClasses(Array(
       classOf[Edge[Object]],
       classOf[(VertexId, Object)],
       classOf[EdgePartition[Object, Object]],
+      classOf[ShippableVertexPartition[Object]],
+      classOf[RoutingTablePartition],
       classOf[BitSet],
       classOf[VertexIdToIndexMap],
       classOf[VertexAttributeBlock[Object]],
@@ -54,7 +56,7 @@ object GraphXUtils {
       mapFunc: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       reduceFunc: (A, A) => A,
       activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None): VertexRDD[A] = {
-    def sendMsg(ctx: EdgeContext[VD, ED, A]) {
+    def sendMsg(ctx: EdgeContext[VD, ED, A]): Unit = {
       mapFunc(ctx.toEdgeTriplet).foreach { kv =>
         val id = kv._1
         val msg = kv._2

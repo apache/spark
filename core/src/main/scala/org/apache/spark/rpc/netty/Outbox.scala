@@ -46,7 +46,7 @@ private[netty] case class OneWayOutboxMessage(content: ByteBuffer) extends Outbo
   override def onFailure(e: Throwable): Unit = {
     e match {
       case e1: RpcEnvStoppedException => logDebug(e1.getMessage)
-      case e1: Throwable => logWarning(s"Failed to send one-way RPC.", e1)
+      case e1: Throwable => logWarning(log"Failed to send one-way RPC.", e1)
     }
   }
 
@@ -66,12 +66,20 @@ private[netty] case class RpcOutboxMessage(
     this.requestId = client.sendRpc(content, this)
   }
 
-  def onTimeout(): Unit = {
+  private[netty] def removeRpcRequest(): Unit = {
     if (client != null) {
       client.removeRpcRequest(requestId)
     } else {
-      logError("Ask timeout before connecting successfully")
+      logError("Ask terminated before connecting successfully")
     }
+  }
+
+  def onTimeout(): Unit = {
+    removeRpcRequest()
+  }
+
+  def onAbort(): Unit = {
+    removeRpcRequest()
   }
 
   override def onFailure(e: Throwable): Unit = {
@@ -166,7 +174,7 @@ private[netty] class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
         if (_client != null) {
           message.sendWith(_client)
         } else {
-          assert(stopped == true)
+          assert(stopped)
         }
       } catch {
         case NonFatal(e) =>

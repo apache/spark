@@ -24,17 +24,15 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import com.google.common.io.Files;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
@@ -44,6 +42,7 @@ import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportServer;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
@@ -51,6 +50,7 @@ public class StreamSuite {
   private static final String[] STREAMS = StreamTestHelper.STREAMS;
   private static StreamTestHelper testData;
 
+  private static TransportContext context;
   private static TransportServer server;
   private static TransportClientFactory clientFactory;
 
@@ -63,7 +63,7 @@ public class StreamSuite {
     return buf;
   }
 
-  @BeforeClass
+  @BeforeAll
   public static void setUp() throws Exception {
     testData = new StreamTestHelper();
 
@@ -93,63 +93,58 @@ public class StreamSuite {
         return streamManager;
       }
     };
-    TransportContext context = new TransportContext(conf, handler);
+    context = new TransportContext(conf, handler);
     server = context.createServer();
     clientFactory = context.createClientFactory();
   }
 
-  @AfterClass
+  @AfterAll
   public static void tearDown() {
     server.close();
     clientFactory.close();
     testData.cleanup();
+    context.close();
   }
 
   @Test
   public void testZeroLengthStream() throws Throwable {
-    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
-    try {
+    try (TransportClient client =
+        clientFactory.createClient(TestUtils.getLocalHost(), server.getPort())) {
       StreamTask task = new StreamTask(client, "emptyBuffer", TimeUnit.SECONDS.toMillis(5));
       task.run();
       task.check();
-    } finally {
-      client.close();
     }
   }
 
   @Test
   public void testSingleStream() throws Throwable {
-    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
-    try {
+    try (TransportClient client =
+        clientFactory.createClient(TestUtils.getLocalHost(), server.getPort())) {
       StreamTask task = new StreamTask(client, "largeBuffer", TimeUnit.SECONDS.toMillis(5));
       task.run();
       task.check();
-    } finally {
-      client.close();
     }
   }
 
   @Test
   public void testMultipleStreams() throws Throwable {
-    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
-    try {
+    try (TransportClient client =
+        clientFactory.createClient(TestUtils.getLocalHost(), server.getPort())) {
       for (int i = 0; i < 20; i++) {
         StreamTask task = new StreamTask(client, STREAMS[i % STREAMS.length],
           TimeUnit.SECONDS.toMillis(5));
         task.run();
         task.check();
       }
-    } finally {
-      client.close();
     }
   }
 
   @Test
   public void testConcurrentStreams() throws Throwable {
     ExecutorService executor = Executors.newFixedThreadPool(20);
-    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
 
-    try {
+    try (TransportClient client =
+        clientFactory.createClient(TestUtils.getLocalHost(), server.getPort())) {
       List<StreamTask> tasks = new ArrayList<>();
       for (int i = 0; i < 20; i++) {
         StreamTask task = new StreamTask(client, STREAMS[i % STREAMS.length],
@@ -159,13 +154,12 @@ public class StreamSuite {
       }
 
       executor.shutdown();
-      assertTrue("Timed out waiting for tasks.", executor.awaitTermination(30, TimeUnit.SECONDS));
+      assertTrue(executor.awaitTermination(30, TimeUnit.SECONDS), "Timed out waiting for tasks.");
       for (StreamTask task : tasks) {
         task.check();
       }
     } finally {
       executor.shutdownNow();
-      client.close();
     }
   }
 
@@ -191,27 +185,26 @@ public class StreamSuite {
         ByteArrayOutputStream baos = null;
 
         switch (streamId) {
-          case "largeBuffer":
+          case "largeBuffer" -> {
             baos = new ByteArrayOutputStream();
             out = baos;
             srcBuffer = testData.largeBuffer;
-            break;
-          case "smallBuffer":
+          }
+          case "smallBuffer" -> {
             baos = new ByteArrayOutputStream();
             out = baos;
             srcBuffer = testData.smallBuffer;
-            break;
-          case "file":
+          }
+          case "file" -> {
             outFile = File.createTempFile("data", ".tmp", testData.tempDir);
             out = new FileOutputStream(outFile);
-            break;
-          case "emptyBuffer":
+          }
+          case "emptyBuffer" -> {
             baos = new ByteArrayOutputStream();
             out = baos;
             srcBuffer = testData.emptyBuffer;
-            break;
-          default:
-            throw new IllegalArgumentException(streamId);
+          }
+          default -> throw new IllegalArgumentException(streamId);
         }
 
         TestCallback callback = new TestCallback(out);
@@ -219,7 +212,8 @@ public class StreamSuite {
         callback.waitForCompletion(timeoutMs);
 
         if (srcBuffer == null) {
-          assertTrue("File stream did not match.", Files.equal(testData.testFile, outFile));
+          assertTrue(JavaUtils.contentEquals(testData.testFile, outFile),
+            "File stream did not match.");
         } else {
           ByteBuffer base;
           synchronized (srcBuffer) {
@@ -229,7 +223,7 @@ public class StreamSuite {
           byte[] expected = new byte[base.remaining()];
           base.get(expected);
           assertEquals(expected.length, result.length);
-          assertTrue("buffers don't match", Arrays.equals(expected, result));
+          assertArrayEquals(expected, result, "buffers don't match");
         }
       } catch (Throwable t) {
         error = t;
@@ -303,7 +297,7 @@ public class StreamSuite {
           now = System.currentTimeMillis();
         }
       }
-      assertTrue("Timed out waiting for stream.", completed);
+      assertTrue(completed, "Timed out waiting for stream.");
       assertNull(error);
     }
   }

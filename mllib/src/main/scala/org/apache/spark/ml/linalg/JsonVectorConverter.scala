@@ -17,9 +17,11 @@
 
 package org.apache.spark.ml.linalg
 
-import org.json4s.DefaultFormats
+import org.json4s.{DefaultFormats, Formats}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
+
+import org.apache.spark.util.ArrayImplicits._
 
 private[ml] object JsonVectorConverter {
 
@@ -27,7 +29,7 @@ private[ml] object JsonVectorConverter {
    * Parses the JSON representation of a vector into a [[Vector]].
    */
   def fromJson(json: String): Vector = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     val jValue = parseJson(json)
     (jValue \ "type").extract[Int] match {
       case 0 => // sparse
@@ -51,12 +53,14 @@ private[ml] object JsonVectorConverter {
       case SparseVector(size, indices, values) =>
         val jValue = ("type" -> 0) ~
           ("size" -> size) ~
-          ("indices" -> indices.toSeq) ~
-          ("values" -> values.toSeq)
+          ("indices" -> indices.toImmutableArraySeq) ~
+          ("values" -> values.toImmutableArraySeq)
         compact(render(jValue))
       case DenseVector(values) =>
-        val jValue = ("type" -> 1) ~ ("values" -> values.toSeq)
+        val jValue = ("type" -> 1) ~ ("values" -> values.toImmutableArraySeq)
         compact(render(jValue))
+      case _ =>
+        throw new IllegalArgumentException(s"Unknown vector type ${v.getClass}.")
     }
   }
 }

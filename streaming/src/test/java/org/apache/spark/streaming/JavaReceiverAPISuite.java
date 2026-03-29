@@ -24,10 +24,10 @@ import org.apache.spark.streaming.api.java.JavaReceiverInputDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
 
 import com.google.common.io.Closeables;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.receiver.Receiver;
@@ -39,16 +39,17 @@ import java.io.Serializable;
 import java.net.ConnectException;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class JavaReceiverAPISuite implements Serializable {
 
-  @Before
+  @BeforeEach
   public void setUp() {
     System.clearProperty("spark.streaming.clock");
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     System.clearProperty("spark.streaming.clock");
   }
@@ -71,19 +72,19 @@ public class JavaReceiverAPISuite implements Serializable {
       });
 
       ssc.start();
-      long startTime = System.currentTimeMillis();
-      long timeout = 10000;
+      long startTimeNs = System.nanoTime();
+      long timeout = TimeUnit.SECONDS.toNanos(10);
 
       Thread.sleep(200);
       for (int i = 0; i < 6; i++) {
         server.send(i + "\n"); // \n to make sure these are separate lines
         Thread.sleep(100);
       }
-      while (dataCounter.get() == 0 && System.currentTimeMillis() - startTime < timeout) {
+      while (dataCounter.get() == 0 && System.nanoTime() - startTimeNs < timeout) {
         Thread.sleep(100);
       }
       ssc.stop();
-      Assert.assertTrue(dataCounter.get() > 0);
+      Assertions.assertTrue(dataCounter.get() > 0);
     } finally {
       server.stop();
     }

@@ -25,8 +25,10 @@ import scala.collection.mutable
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{CLUSTER_LEVEL, COST, DIVISIBLE_CLUSTER_INDICES_SIZE, FEATURE_DIMENSION, MIN_POINT_PER_CLUSTER, NUM_POINT}
 import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.BLAS.axpy
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -152,34 +154,40 @@ class BisectingKMeans private (
     this
   }
 
-
-  private[spark] def run(
-      input: RDD[Vector],
+  private[spark] def runWithWeight(
+      instances: RDD[(Vector, Double)],
+      handlePersistence: Boolean,
       instr: Option[Instrumentation]): BisectingKMeansModel = {
-    if (input.getStorageLevel == StorageLevel.NONE) {
-      logWarning(s"The input RDD ${input.id} is not directly cached, which may hurt performance if"
-        + " its parent RDDs are also not cached.")
-    }
-    val d = input.map(_.size).first()
-    logInfo(s"Feature dimension: $d.")
+    val d = instances.map(_._1.size).first()
+    logInfo(log"Feature dimension: ${MDC(FEATURE_DIMENSION, d)}.")
 
-    val dMeasure: DistanceMeasure = DistanceMeasure.decodeFromString(this.distanceMeasure)
-    // Compute and cache vector norms for fast distance computation.
-    val norms = input.map(v => Vectors.norm(v, 2.0)).persist(StorageLevel.MEMORY_AND_DISK)
-    val vectors = input.zip(norms).map { case (x, norm) => new VectorWithNorm(x, norm) }
+    val dMeasure = DistanceMeasure.decodeFromString(this.distanceMeasure)
+    val norms = instances.map(d => Vectors.norm(d._1, 2.0))
+    val vectors = instances.zip(norms)
+      .map { case ((x, weight), norm) => new VectorWithNorm(x, norm, weight) }
+
+    if (handlePersistence) {
+      vectors.persist(StorageLevel.MEMORY_AND_DISK)
+    } else {
+      // Compute and cache vector norms for fast distance computation.
+      norms.persist(StorageLevel.MEMORY_AND_DISK)
+    }
+
     var assignments = vectors.map(v => (ROOT_INDEX, v))
     var activeClusters = summarize(d, assignments, dMeasure)
     instr.foreach(_.logNumExamples(activeClusters.values.map(_.size).sum))
+    instr.foreach(_.logSumOfWeights(activeClusters.values.map(_.weightSum).sum))
     val rootSummary = activeClusters(ROOT_INDEX)
     val n = rootSummary.size
-    logInfo(s"Number of points: $n.")
-    logInfo(s"Initial cost: ${rootSummary.cost}.")
+    logInfo(log"Number of points: ${MDC(NUM_POINT, n)}.")
+    logInfo(log"Initial cost: ${MDC(COST, rootSummary.cost)}.")
     val minSize = if (minDivisibleClusterSize >= 1.0) {
       math.ceil(minDivisibleClusterSize).toLong
     } else {
       math.ceil(minDivisibleClusterSize * n).toLong
     }
-    logInfo(s"The minimum number of points of a divisible cluster is $minSize.")
+    logInfo(log"The minimum number of points of a divisible cluster is " +
+      log"${MDC(MIN_POINT_PER_CLUSTER, minSize)}.")
     var inactiveClusters = mutable.Seq.empty[(Long, ClusterSummary)]
     val random = new Random(seed)
     var numLeafClustersNeeded = k - 1
@@ -200,7 +208,8 @@ class BisectingKMeans private (
       }
       if (divisibleClusters.nonEmpty) {
         val divisibleIndices = divisibleClusters.keys.toSet
-        logInfo(s"Dividing ${divisibleIndices.size} clusters on level $level.")
+        logInfo(log"Dividing ${MDC(DIVISIBLE_CLUSTER_INDICES_SIZE, divisibleIndices.size)}" +
+          log" clusters on level ${MDC(CLUSTER_LEVEL, level)}.")
         var newClusterCenters = divisibleClusters.flatMap { case (index, summary) =>
           val (left, right) = splitCenter(summary.center, random, dMeasure)
           Iterator((leftChildIndex(index), left), (rightChildIndex(index), right))
@@ -214,10 +223,10 @@ class BisectingKMeans private (
             divisibleIndices.contains(parentIndex(index))
           }
           newClusters = summarize(d, newAssignments, dMeasure)
-          newClusterCenters = newClusters.mapValues(_.center).map(identity)
+          newClusterCenters = newClusters.transform((_, v) => v.center).map(identity)
         }
         if (preIndices != null) {
-          preIndices.unpersist(false)
+          preIndices.unpersist()
         }
         preIndices = indices
         indices = updateAssignments(assignments, divisibleIndices, newClusterCenters, dMeasure).keys
@@ -227,22 +236,22 @@ class BisectingKMeans private (
         activeClusters = newClusters
         numLeafClustersNeeded -= divisibleClusters.size
       } else {
-        logInfo(s"None active and divisible clusters left on level $level. Stop iterations.")
+        logInfo(log"None active and divisible clusters left " +
+          log"on level ${MDC(CLUSTER_LEVEL, level)}. Stop iterations.")
         inactiveClusters ++= activeClusters
         activeClusters = Map.empty
       }
       level += 1
     }
-    if (preIndices != null) {
-      preIndices.unpersist(false)
-    }
-    if (indices != null) {
-      indices.unpersist(false)
-    }
-    norms.unpersist(false)
+
+    if (preIndices != null) { preIndices.unpersist() }
+    if (indices != null) { indices.unpersist() }
+    if (handlePersistence) { vectors.unpersist() } else { norms.unpersist() }
+
     val clusters = activeClusters ++ inactiveClusters
     val root = buildTree(clusters, dMeasure)
-    new BisectingKMeansModel(root, this.distanceMeasure)
+    val totalCost = root.leafNodes.map(_.cost).sum
+    new BisectingKMeansModel(root, this.distanceMeasure, totalCost)
   }
 
   /**
@@ -252,7 +261,9 @@ class BisectingKMeans private (
    */
   @Since("1.6.0")
   def run(input: RDD[Vector]): BisectingKMeansModel = {
-    run(input, None)
+    val instances = input.map(point => (point, 1.0))
+    val handlePersistence = input.getStorageLevel == StorageLevel.NONE
+    runWithWeight(instances, handlePersistence, None)
   }
 
   /**
@@ -311,14 +322,16 @@ private object BisectingKMeans extends Serializable {
   private class ClusterSummaryAggregator(val d: Int, val distanceMeasure: DistanceMeasure)
       extends Serializable {
     private var n: Long = 0L
+    private var weightSum: Double = 0.0
     private val sum: Vector = Vectors.zeros(d)
     private var sumSq: Double = 0.0
 
     /** Adds a point. */
     def add(v: VectorWithNorm): this.type = {
       n += 1L
+      weightSum += v.weight
       // TODO: use a numerically stable approach to estimate cost
-      sumSq += v.norm * v.norm
+      sumSq += v.norm * v.norm  * v.weight
       distanceMeasure.updateClusterSum(v, sum)
       this
     }
@@ -326,16 +339,18 @@ private object BisectingKMeans extends Serializable {
     /** Merges another aggregator. */
     def merge(other: ClusterSummaryAggregator): this.type = {
       n += other.n
+      weightSum += other.weightSum
       sumSq += other.sumSq
-      distanceMeasure.updateClusterSum(new VectorWithNorm(other.sum), sum)
+      axpy(1.0, other.sum, sum)
       this
     }
 
     /** Returns the summary. */
     def summary: ClusterSummary = {
-      val center = distanceMeasure.centroid(sum.copy, n)
-      val cost = distanceMeasure.clusterCost(center, new VectorWithNorm(sum), n, sumSq)
-      ClusterSummary(n, center, cost)
+      val center = distanceMeasure.centroid(sum.copy, weightSum)
+      val cost = distanceMeasure.clusterCost(center, new VectorWithNorm(sum), weightSum,
+        sumSq)
+      ClusterSummary(n, weightSum, center, cost)
     }
   }
 
@@ -436,10 +451,15 @@ private object BisectingKMeans extends Serializable {
    * Summary of a cluster.
    *
    * @param size the number of points within this cluster
+   * @param weightSum the weightSum within this cluster
    * @param center the center of the points within this cluster
    * @param cost the sum of squared distances to the center
    */
-  private case class ClusterSummary(size: Long, center: VectorWithNorm, cost: Double)
+  private case class ClusterSummary(
+      size: Long,
+      weightSum: Double,
+      center: VectorWithNorm,
+      cost: Double)
 }
 
 /**

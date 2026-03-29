@@ -17,6 +17,8 @@
 package org.apache.spark.scheduler.cluster
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 
 /**
  * :: DeveloperApi ::
@@ -24,9 +26,44 @@ import org.apache.spark.annotation.DeveloperApi
  */
 @DeveloperApi
 class ExecutorInfo(
-   val executorHost: String,
-   val totalCores: Int,
-   val logUrlMap: Map[String, String]) {
+    val executorHost: String,
+    val totalCores: Int,
+    val logUrlMap: Map[String, String],
+    val attributes: Map[String, String],
+    val resourcesInfo: Map[String, ResourceInformation],
+    val resourceProfileId: Int,
+    val registrationTime: Option[Long],
+    val requestTime: Option[Long]) {
+
+  def this(executorHost: String, totalCores: Int, logUrlMap: Map[String, String],
+      attributes: Map[String, String], resourcesInfo: Map[String, ResourceInformation],
+      resourceProfileId: Int) = {
+    this(executorHost, totalCores, logUrlMap, attributes, resourcesInfo, resourceProfileId,
+      None, None)
+  }
+  def this(executorHost: String, totalCores: Int, logUrlMap: Map[String, String]) = {
+    this(executorHost, totalCores, logUrlMap, Map.empty, Map.empty, DEFAULT_RESOURCE_PROFILE_ID,
+      None, None)
+  }
+
+  def this(
+      executorHost: String,
+      totalCores: Int,
+      logUrlMap: Map[String, String],
+      attributes: Map[String, String]) = {
+    this(executorHost, totalCores, logUrlMap, attributes, Map.empty, DEFAULT_RESOURCE_PROFILE_ID,
+      None, None)
+  }
+
+  def this(
+      executorHost: String,
+      totalCores: Int,
+      logUrlMap: Map[String, String],
+      attributes: Map[String, String],
+      resourcesInfo: Map[String, ResourceInformation]) = {
+    this(executorHost, totalCores, logUrlMap, attributes, resourcesInfo,
+      DEFAULT_RESOURCE_PROFILE_ID, None, None)
+  }
 
   def canEqual(other: Any): Boolean = other.isInstanceOf[ExecutorInfo]
 
@@ -35,12 +72,16 @@ class ExecutorInfo(
       (that canEqual this) &&
         executorHost == that.executorHost &&
         totalCores == that.totalCores &&
-        logUrlMap == that.logUrlMap
+        logUrlMap == that.logUrlMap &&
+        attributes == that.attributes &&
+        resourcesInfo == that.resourcesInfo &&
+        resourceProfileId == that.resourceProfileId
     case _ => false
   }
 
   override def hashCode(): Int = {
-    val state = Seq(executorHost, totalCores, logUrlMap)
-    state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
+    val state = Seq(executorHost, totalCores, logUrlMap, attributes, resourcesInfo,
+      resourceProfileId)
+    state.filter(_ != null).map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
   }
 }

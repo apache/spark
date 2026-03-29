@@ -17,19 +17,62 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import java.io.FileNotFoundException
+import java.net.URI
+import java.time.{Duration, LocalTime, Period}
 
-import org.apache.spark.SparkException
-import org.apache.spark.sql.QueryTest
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
+
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types._
+import org.apache.spark.util.HadoopFSUtils
 
-class ParquetFileFormatSuite extends QueryTest with ParquetTest with SharedSQLContext {
+abstract class ParquetFileFormatSuite
+  extends QueryTest
+  with ParquetTest
+  with SharedSparkSession
+  with CommonFileDataSourceSuite {
+
+  import testImplicits._
+
+  override protected def dataSourceFormat = "parquet"
+
+  private def checkCannotReadFooterError(body: => Unit): Unit = {
+    checkErrorMatchPVals(
+      exception = intercept[SparkException] { body }.getCause.asInstanceOf[SparkException],
+      condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+      parameters = Map("path" -> "file:.*")
+    )
+  }
+
+  // Traverses the cause chain to find a SparkException with the given condition. Used when the
+  // error is thrown inside a Spark job and gets wrapped in a job-level SparkException.
+  private def findSparkExceptionWithCondition(
+      t: Throwable, condition: String): Option[SparkException] = {
+    if (t == null) None
+    else t match {
+      case se: SparkException if se.getCondition == condition => Some(se)
+      case _ => findSparkExceptionWithCondition(t.getCause, condition)
+    }
+  }
+
+  private def listFileStatuses(basePath: String, hadoopConf: Configuration): Seq[FileStatus] =
+    HadoopFSUtils.listFiles(
+      new Path(basePath),
+      hadoopConf,
+      (path: Path) => path.getName != "_SUCCESS").flatMap(_._2)
+
+  private def deleteFile(hadoopConf: Configuration, status: FileStatus): Unit =
+    status.getPath.getFileSystem(hadoopConf).delete(status.getPath, false)
 
   test("read parquet footers in parallel") {
     def testReadFooters(ignoreCorruptFiles: Boolean): Unit = {
       withTempDir { dir =>
-        val fs = FileSystem.get(spark.sessionState.newHadoopConf())
         val basePath = dir.getCanonicalPath
 
         val path1 = new Path(basePath, "first")
@@ -40,20 +83,209 @@ class ParquetFileFormatSuite extends QueryTest with ParquetTest with SharedSQLCo
         spark.range(1, 2).toDF("a").coalesce(1).write.parquet(path2.toString)
         spark.range(2, 3).toDF("a").coalesce(1).write.json(path3.toString)
 
-        val fileStatuses =
-          Seq(fs.listStatus(path1), fs.listStatus(path2), fs.listStatus(path3)).flatten
+        val hadoopConf = spark.sessionState.newHadoopConf()
+        val fileStatuses = HadoopFSUtils.listFiles(
+          new Path(basePath),
+          hadoopConf,
+          (path: Path) => path.getName != "_SUCCESS").flatMap(_._2)
 
         val footers = ParquetFileFormat.readParquetFootersInParallel(
-          spark.sessionState.newHadoopConf(), fileStatuses, ignoreCorruptFiles)
+          hadoopConf, fileStatuses, ignoreCorruptFiles)
 
         assert(footers.size == 2)
       }
     }
 
     testReadFooters(true)
-    val exception = intercept[SparkException] {
-      testReadFooters(false)
-    }.getCause
-    assert(exception.getMessage().contains("Could not read footer for file"))
+    checkErrorMatchPVals(
+      exception = intercept[SparkException] {
+        testReadFooters(false)
+      }.getCause.asInstanceOf[SparkException],
+      condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+      parameters = Map("path" -> "file:.*")
+    )
   }
+
+  test("SPARK-55857: read parquet footers in parallel - ignoreMissingFiles") {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      val hadoopConf = spark.sessionState.newHadoopConf()
+      spark.range(0, 1).toDF("a").coalesce(1).write.parquet(new Path(basePath, "p1").toString)
+      spark.range(1, 2).toDF("a").coalesce(1).write.parquet(new Path(basePath, "p2").toString)
+      val fileStatuses = listFileStatuses(basePath, hadoopConf)
+      assert(fileStatuses.size == 2)
+      deleteFile(hadoopConf, fileStatuses.head)
+
+      assert(ParquetFileFormat.readParquetFootersInParallel(
+        hadoopConf, fileStatuses, ignoreCorruptFiles = false, ignoreMissingFiles = true).size == 1)
+
+      checkCannotReadFooterError {
+        ParquetFileFormat.readParquetFootersInParallel(
+          hadoopConf, fileStatuses, ignoreCorruptFiles = false, ignoreMissingFiles = false)
+      }
+    }
+  }
+
+  test("SPARK-55857: read parquet footers in parallel - ignoreMissingFiles via RuntimeException") {
+    // Simulates cloud storage (e.g., S3) where a missing-file error surfaces as a RuntimeException
+    // with FileNotFoundException in the cause chain rather than as a direct FileNotFoundException.
+    val conf = new Configuration()
+    conf.set(s"fs.${WrappingFNFLocalFileSystem.scheme}.impl",
+      classOf[WrappingFNFLocalFileSystem].getName)
+    conf.set(s"fs.${WrappingFNFLocalFileSystem.scheme}.impl.disable.cache", "true")
+    val fakeStatus = new FileStatus(0L, false, 0, 0L, 0L,
+      new Path(s"${WrappingFNFLocalFileSystem.scheme}://localhost/fake/file.parquet"))
+
+    assert(ParquetFileFormat.readParquetFootersInParallel(
+      conf, Seq(fakeStatus), ignoreCorruptFiles = false, ignoreMissingFiles = true).isEmpty)
+
+    checkErrorMatchPVals(
+      exception = intercept[SparkException] {
+        ParquetFileFormat.readParquetFootersInParallel(
+          conf, Seq(fakeStatus), ignoreCorruptFiles = false, ignoreMissingFiles = false)
+      }.getCause.asInstanceOf[SparkException],
+      condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+      parameters = Map("path" -> s"${WrappingFNFLocalFileSystem.scheme}:.*")
+    )
+  }
+
+  test("SPARK-55857: mergeSchemasInParallel ignoreMissingFiles") {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      val hadoopConf = spark.sessionState.newHadoopConf()
+      spark.range(0, 1).toDF("a").coalesce(1).write.parquet(new Path(basePath, "p1").toString)
+      spark.range(1, 2).toDF("a").coalesce(1).write.parquet(new Path(basePath, "p2").toString)
+      spark.range(2, 3).toDF("a").coalesce(1).write.parquet(new Path(basePath, "p3").toString)
+      val fileStatuses = listFileStatuses(basePath, hadoopConf)
+      assert(fileStatuses.size == 3)
+      deleteFile(hadoopConf, fileStatuses.head)
+
+      val schema = ParquetFileFormat.mergeSchemasInParallel(
+        Map("ignoreMissingFiles" -> "true"), fileStatuses, spark)
+      assert(schema.isDefined)
+      assert(schema.get.fieldNames.sameElements(Array("a")))
+
+      // mergeSchemasInParallel runs via a Spark job, so the error is wrapped in a job-level
+      // SparkException. Traverse the cause chain to find the specific footer error.
+      val ex = intercept[SparkException] {
+        ParquetFileFormat.mergeSchemasInParallel(
+          Map("ignoreMissingFiles" -> "false"), fileStatuses, spark)
+      }
+      checkErrorMatchPVals(
+        exception = findSparkExceptionWithCondition(
+          ex, "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER")
+          .getOrElse(fail(s"Expected FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER in: $ex")),
+        condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+        parameters = Map("path" -> "file:.*")
+      )
+    }
+  }
+
+  test("SPARK-36825, SPARK-36854: year-month/day-time intervals written and read as INT32/INT64") {
+    Seq(false, true).foreach { offHeapEnabled =>
+      withSQLConf(SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapEnabled.toString) {
+        Seq(
+          YearMonthIntervalType() -> ((i: Int) => Period.of(i, i, 0)),
+          DayTimeIntervalType() -> ((i: Int) => Duration.ofDays(i).plusSeconds(i))
+        ).foreach { case (it, f) =>
+          val data = (1 to 10).map(i => Row(i, f(i)))
+          val schema = StructType(Array(StructField("d", IntegerType, false),
+            StructField("i", it, false)))
+          withTempPath { file =>
+            val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+            df.write.parquet(file.getCanonicalPath)
+            withAllParquetReaders {
+              val df2 = spark.read.parquet(file.getCanonicalPath)
+              checkAnswer(df2, df.collect().toSeq)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("support batch reads for schema") {
+    val testUDT = new TestUDT.MyDenseVectorUDT
+    Seq(true, false).foreach { enabled =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> enabled.toString) {
+        Seq(
+          Seq(StructField("f1", IntegerType), StructField("f2", BooleanType)) -> true,
+          Seq(StructField("f1", IntegerType), StructField("f2", ArrayType(IntegerType))) -> enabled,
+          Seq(StructField("f1", BooleanType), StructField("f2", testUDT)) -> enabled
+        ).foreach { case (schema, expected) =>
+          assert(ParquetUtils.isBatchReadSupportedForSchema(conf, StructType(schema)) == expected)
+        }
+      }
+    }
+  }
+
+  test("support batch reads for data type") {
+    val testUDT = new TestUDT.MyDenseVectorUDT
+    Seq(true, false).foreach { enabled =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> enabled.toString) {
+        Seq(
+          IntegerType -> true,
+          BooleanType -> true,
+          ArrayType(TimestampType) -> enabled,
+          StructType(Seq(StructField("f1", DecimalType.SYSTEM_DEFAULT),
+            StructField("f2", StringType))) -> enabled,
+          MapType(keyType = LongType, valueType = DateType) -> enabled,
+          testUDT -> enabled,
+          ArrayType(testUDT) -> enabled,
+          StructType(Seq(StructField("f1", ByteType), StructField("f2", testUDT))) -> enabled,
+          MapType(keyType = testUDT, valueType = BinaryType) -> enabled
+        ).foreach { case (dt, expected) =>
+          assert(ParquetUtils.isBatchReadSupported(conf, dt) == expected)
+        }
+      }
+    }
+  }
+
+  test("Write and read back TIME values") {
+    Seq(false, true).foreach { offHeapEnabled =>
+      withSQLConf(SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapEnabled.toString) {
+        val data = Seq(LocalTime.parse("01:12:30.999999")).toDF("col")
+        withNestedDataFrame(data).foreach { case (newDF, colName, _) =>
+          withTempPath { dir =>
+            newDF.write.parquet(dir.getCanonicalPath)
+            Seq(false, true).foreach { vectorizedReaderEnabled =>
+              readParquetFile(dir.getCanonicalPath, vectorizedReaderEnabled) { df =>
+                checkAnswer(df, newDF)
+                assert(df(colName).expr.dataType == TimeType())
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+class ParquetFileFormatV1Suite extends ParquetFileFormatSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
+}
+
+class ParquetFileFormatV2Suite extends ParquetFileFormatSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
+}
+
+/**
+ * A local filesystem that wraps FileNotFoundException in RuntimeException, simulating cloud
+ * storage (e.g., S3) where missing-file errors surface through the cause chain rather than as
+ * direct FileNotFoundExceptions.
+ */
+class WrappingFNFLocalFileSystem extends RawLocalFileSystem {
+  override def getUri: URI = URI.create(s"${WrappingFNFLocalFileSystem.scheme}:///")
+  override def open(f: Path, bufferSize: Int): org.apache.hadoop.fs.FSDataInputStream =
+    throw new RuntimeException(new FileNotFoundException("Simulated missing file: " + f))
+}
+
+object WrappingFNFLocalFileSystem {
+  val scheme = "fnfwrap"
 }

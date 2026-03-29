@@ -22,6 +22,7 @@ import scala.collection.mutable
 
 import org.apache.spark.scheduler.{ExecutorCacheTaskLocation, TaskLocation}
 import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.util.collection.Utils
 
 /**
  * A class that tries to schedule receivers with evenly distributed. There are two phases for
@@ -92,7 +93,7 @@ private[streaming] class ReceiverSchedulingPolicy {
 
     // Firstly, we need to respect "preferredLocation". So if a receiver has "preferredLocation",
     // we need to make sure the "preferredLocation" is in the candidate scheduled executor list.
-    for (i <- 0 until receivers.length) {
+    for (i <- receivers.indices) {
       // Note: preferredLocation is host but executors are host_executorId
       receivers(i).preferredLocation.foreach { host =>
         hostToExecutors.get(host) match {
@@ -128,14 +129,14 @@ private[streaming] class ReceiverSchedulingPolicy {
     }
 
     // Assign idle executors to receivers that have less executors
-    val idleExecutors = numReceiversOnExecutor.filter(_._2 == 0).map(_._1)
+    val idleExecutors = numReceiversOnExecutor.filter(_._2 == 0).keys
     for (executor <- idleExecutors) {
       // Assign an idle executor to the receiver that has least candidate executors.
       val leastScheduledExecutors = scheduledLocations.minBy(_.size)
       leastScheduledExecutors += executor
     }
 
-    receivers.map(_.streamId).zip(scheduledLocations).toMap
+    Utils.toMap(receivers.map(_.streamId), scheduledLocations.map(_.toSeq))
   }
 
   /**
@@ -183,7 +184,7 @@ private[streaming] class ReceiverSchedulingPolicy {
 
     val executorWeights: Map[ExecutorCacheTaskLocation, Double] = {
       receiverTrackingInfoMap.values.flatMap(convertReceiverTrackingInfoToExecutorWeights)
-        .groupBy(_._1).mapValues(_.map(_._2).sum) // Sum weights for each executor
+        .groupBy(_._1).transform((_, v) => v.map(_._2).sum) // Sum weights for each executor
     }
 
     val idleExecutors = executors.toSet -- executorWeights.keys

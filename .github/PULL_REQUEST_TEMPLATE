@@ -1,10 +1,59 @@
-## What changes were proposed in this pull request?
+<!--
+Thanks for sending a pull request!  Here are some tips for you:
+  1. If this is your first time, please read our contributor guidelines: https://spark.apache.org/contributing.html
+  2. Ensure you have added or run the appropriate tests for your PR: https://spark.apache.org/developer-tools.html
+  3. If the PR is unfinished, add '[WIP]' in your PR title, e.g., '[WIP][SPARK-XXXX] Your PR title ...'.
+  4. Be sure to keep the PR description updated to reflect all changes.
+  5. Please write your PR title to summarize what this PR proposes.
+  6. If possible, provide a concise example to reproduce the issue for a faster review.
+  7. If you want to add a new configuration, please read the guideline first for naming configurations in
+     'core/src/main/scala/org/apache/spark/internal/config/ConfigEntry.scala'.
+  8. If you want to add or modify an error type or message, please read the guideline first in
+     'common/utils/src/main/resources/error/README.md'.
+-->
 
-(Please fill in changes proposed in this fix)
+### What changes were proposed in this pull request?
+<!--
+Please clarify what changes you are proposing. The purpose of this section is to outline the changes and how this PR fixes the issue. 
+If possible, please consider writing useful notes for better and faster reviews in your PR. See the examples below.
+  1. If you refactor some codes with changing classes, showing the class hierarchy will help reviewers.
+  2. If you fix some SQL features, you can provide some references of other DBMSes.
+  3. If there is design documentation, please add the link.
+  4. If there is a discussion in the mailing list, please add the link.
+-->
 
-## How was this patch tested?
 
-(Please explain how this patch was tested. E.g. unit tests, integration tests, manual tests)
-(If this patch involves UI changes, please attach a screenshot; otherwise, remove this)
+### Why are the changes needed?
+<!--
+Please clarify why the changes are needed. For instance,
+  1. If you propose a new API, clarify the use case for a new API.
+  2. If you fix a bug, you can clarify why it is a bug.
+-->
 
-Please review http://spark.apache.org/contributing.html before opening a pull request.
+
+### Does this PR introduce _any_ user-facing change?
+<!--
+Note that it means *any* user-facing change including all aspects such as new features, bug fixes, or other behavior changes. Documentation-only updates are not considered user-facing changes.
+
+If yes, please clarify the previous behavior and the change this PR proposes - provide the console output, description and/or an example to show the behavior difference if possible.
+If possible, please also clarify if this is a user-facing change compared to the released Spark versions or within the unreleased branches such as master.
+If no, write 'No'.
+-->
+
+
+### How was this patch tested?
+<!--
+If tests were added, say they were added here. Please make sure to add some test cases that check the changes thoroughly including negative and positive cases if possible.
+If it was tested in a way different from regular unit tests, please clarify how you tested step by step, ideally copy and paste-able, so that other reviewers can test and check, and descendants can verify in the future.
+If tests were not added, please describe why they were not added and/or why it was difficult to add.
+If benchmark tests were added, please run the benchmarks in GitHub Actions for the consistent environment, and the instructions could accord to: https://spark.apache.org/developer-tools.html#github-workflow-benchmarks.
+-->
+
+
+### Was this patch authored or co-authored using generative AI tooling?
+<!--
+If generative AI tooling has been used in the process of authoring this patch, please include the
+phrase: 'Generated-by: ' followed by the name of the tool and its version.
+If no, write 'No'.
+Please refer to the [ASF Generative Tooling Guidance](https://www.apache.org/legal/generative-tooling.html) for details.
+-->

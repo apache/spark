@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,6 +18,7 @@
 package org.apache.hive.service.cli.operation;
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType;
+import org.apache.hadoop.hive.serde2.thrift.Type;
 import org.apache.hive.service.cli.FetchOrientation;
 import org.apache.hive.service.cli.HiveSQLException;
 import org.apache.hive.service.cli.OperationState;
@@ -26,8 +26,9 @@ import org.apache.hive.service.cli.OperationType;
 import org.apache.hive.service.cli.RowSet;
 import org.apache.hive.service.cli.RowSetFactory;
 import org.apache.hive.service.cli.TableSchema;
-import org.apache.hive.service.cli.Type;
 import org.apache.hive.service.cli.session.HiveSession;
+import org.apache.hive.service.rpc.thrift.TRowSet;
+import org.apache.hive.service.rpc.thrift.TTableSchema;
 
 /**
  * GetTypeInfoOperation.
@@ -73,11 +74,11 @@ public class GetTypeInfoOperation extends MetadataOperation {
   .addPrimitiveColumn("NUM_PREC_RADIX", Type.INT_TYPE,
       "Usually 2 or 10");
 
-  private final RowSet rowSet;
+  protected final RowSet rowSet;
 
   protected GetTypeInfoOperation(HiveSession parentSession) {
     super(parentSession, OperationType.GET_TYPE_INFO);
-    rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion());
+    rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion(), false);
   }
 
   @Override
@@ -122,21 +123,21 @@ public class GetTypeInfoOperation extends MetadataOperation {
    * @see org.apache.hive.service.cli.Operation#getResultSetSchema()
    */
   @Override
-  public TableSchema getResultSetSchema() throws HiveSQLException {
+  public TTableSchema getResultSetSchema() throws HiveSQLException {
     assertState(OperationState.FINISHED);
-    return RESULT_SET_SCHEMA;
+    return RESULT_SET_SCHEMA.toTTableSchema();
   }
 
   /* (non-Javadoc)
    * @see org.apache.hive.service.cli.Operation#getNextRowSet(org.apache.hive.service.cli.FetchOrientation, long)
    */
   @Override
-  public RowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException {
+  public TRowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException {
     assertState(OperationState.FINISHED);
     validateDefaultFetchOrientation(orientation);
     if (orientation.equals(FetchOrientation.FETCH_FIRST)) {
       rowSet.setStartOffset(0);
     }
-    return rowSet.extractSubset((int)maxRows);
+    return rowSet.extractSubset((int)maxRows).toTRowSet();
   }
 }

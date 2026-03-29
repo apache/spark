@@ -38,7 +38,7 @@ object SparkKMeans {
     var bestIndex = 0
     var closest = Double.PositiveInfinity
 
-    for (i <- 0 until centers.length) {
+    for (i <- centers.indices) {
       val tempDist = squaredDistance(p, centers(i))
       if (tempDist < closest) {
         closest = tempDist
@@ -49,7 +49,7 @@ object SparkKMeans {
     bestIndex
   }
 
-  def showWarning() {
+  def showWarning(): Unit = {
     System.err.println(
       """WARN: This is a naive implementation of KMeans Clustering and is given as an example!
         |Please use org.apache.spark.ml.clustering.KMeans
@@ -57,7 +57,7 @@ object SparkKMeans {
       """.stripMargin)
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     if (args.length < 3) {
       System.err.println("Usage: SparkKMeans <file> <k> <convergeDist>")
@@ -67,7 +67,7 @@ object SparkKMeans {
     showWarning()
 
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("SparkKMeans")
       .getOrCreate()
 
@@ -79,10 +79,10 @@ object SparkKMeans {
     val kPoints = data.takeSample(withReplacement = false, K, 42)
     var tempDist = 1.0
 
-    while(tempDist > convergeDist) {
+    while (tempDist > convergeDist) {
       val closest = data.map (p => (closestPoint(p, kPoints), (p, 1)))
 
-      val pointStats = closest.reduceByKey{case ((p1, c1), (p2, c2)) => (p1 + p2, c1 + c2)}
+      val pointStats = closest.reduceByKey(mergeResults)
 
       val newPoints = pointStats.map {pair =>
         (pair._1, pair._2._1 * (1.0 / pair._2._2))}.collectAsMap()
@@ -101,6 +101,12 @@ object SparkKMeans {
     println("Final centers:")
     kPoints.foreach(println)
     spark.stop()
+  }
+
+  private def mergeResults(
+      a: (Vector[Double], Int),
+      b: (Vector[Double], Int)): (Vector[Double], Int) = {
+    (a._1 + b._1, a._2 + b._2)
   }
 }
 // scalastyle:on println

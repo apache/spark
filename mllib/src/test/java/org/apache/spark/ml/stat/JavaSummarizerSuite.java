@@ -21,9 +21,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.junit.Test;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertArrayEquals;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.sql.Row;
@@ -38,9 +39,10 @@ public class JavaSummarizerSuite extends SharedSparkSession {
   private transient Dataset<Row> dataset;
 
   @Override
+  @BeforeEach
   public void setUp() throws IOException {
     super.setUp();
-    List<LabeledPoint> points = new ArrayList<LabeledPoint>();
+    List<LabeledPoint> points = new ArrayList<>();
     points.add(new LabeledPoint(0.0, Vectors.dense(1.0, 2.0)));
     points.add(new LabeledPoint(0.0, Vectors.dense(3.0, 4.0)));
 

@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 /**
@@ -27,7 +27,7 @@ import org.apache.spark.sql.types._
  * This is here for now so I can make sure Tungsten project is tested without refactoring existing
  * end-to-end test infra. In the long run this should just go away.
  */
-class DataFrameTungstenSuite extends QueryTest with SharedSQLContext {
+class DataFrameTungstenSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("test simple types") {
@@ -84,19 +84,19 @@ class DataFrameTungstenSuite extends QueryTest with SharedSQLContext {
     }
     val rdd = sparkContext.makeRDD(Seq(Row.fromSeq(data)))
     val df = spark.createDataFrame(rdd, StructType(schemas))
-    val row = df.persist.take(1).apply(0)
+    val row = df.persist().take(1).apply(0)
     checkAnswer(df, row)
   }
 
   test("access cache multiple times") {
-    val df0 = sparkContext.parallelize(Seq(1, 2, 3), 1).toDF("x").cache
-    df0.count
+    val df0 = sparkContext.parallelize(Seq(1, 2, 3), 1).toDF("x").cache()
+    df0.count()
     val df1 = df0.filter("x > 1")
     checkAnswer(df1, Seq(Row(2), Row(3)))
     val df2 = df0.filter("x > 2")
     checkAnswer(df2, Row(3))
 
-    val df10 = sparkContext.parallelize(Seq(3, 4, 5, 6), 1).toDF("x").cache
+    val df10 = sparkContext.parallelize(Seq(3, 4, 5, 6), 1).toDF("x").cache()
     for (_ <- 0 to 2) {
       val df11 = df10.filter("x > 5")
       checkAnswer(df11, Row(6))
@@ -105,8 +105,8 @@ class DataFrameTungstenSuite extends QueryTest with SharedSQLContext {
 
   test("access only some column of the all of columns") {
     val df = spark.range(1, 10).map(i => (i, (i + 1).toDouble)).toDF("l", "d")
-    df.cache
-    df.count
-    assert(df.filter("d < 3").count == 1)
+    df.cache()
+    df.count()
+    assert(df.filter("d < 3").count() == 1)
   }
 }

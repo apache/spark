@@ -18,9 +18,11 @@
 package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
-import javax.servlet.http.HttpServletRequest
+import java.nio.charset.StandardCharsets
 
 import scala.xml.Node
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.scheduler.Schedulable
 import org.apache.spark.status.PoolData
@@ -30,14 +32,22 @@ import org.apache.spark.ui.UIUtils
 private[ui] class PoolTable(pools: Map[Schedulable, PoolData], parent: StagesTab) {
 
   def toNodeSeq(request: HttpServletRequest): Seq[Node] = {
-    <table class="table table-bordered table-striped table-condensed sortable table-fixed">
+    <table class="table table-bordered table-striped table-sm sortable table-fixed">
       <thead>
-        <th>Pool Name</th>
-        <th>Minimum Share</th>
-        <th>Pool Weight</th>
-        <th>Active Stages</th>
-        <th>Running Tasks</th>
-        <th>SchedulingMode</th>
+        <tr>
+          <th>Pool Name</th>
+          <th>
+            {UIUtils.tooltipSpan(<xml:group>Minimum Share</xml:group>,
+              "Pool's minimum share of CPU cores")}
+          </th>
+          <th>
+            {UIUtils.tooltipSpan(<xml:group>Pool Weight</xml:group>,
+              "Pool's share of cluster resources relative to others")}
+          </th>
+          <th>Active Stages</th>
+          <th>Running Tasks</th>
+          <th>SchedulingMode</th>
+        </tr>
       </thead>
       <tbody>
         {pools.map { case (s, p) => poolRow(request, s, p) }}
@@ -48,7 +58,8 @@ private[ui] class PoolTable(pools: Map[Schedulable, PoolData], parent: StagesTab
   private def poolRow(request: HttpServletRequest, s: Schedulable, p: PoolData): Seq[Node] = {
     val activeStages = p.stageIds.size
     val href = "%s/stages/pool?poolname=%s"
-      .format(UIUtils.prependBaseUri(request, parent.basePath), URLEncoder.encode(p.name, "UTF-8"))
+      .format(UIUtils.prependBaseUri(request, parent.basePath),
+        URLEncoder.encode(p.name, StandardCharsets.UTF_8.name()))
     <tr>
       <td>
         <a href={href}>{p.name}</a>

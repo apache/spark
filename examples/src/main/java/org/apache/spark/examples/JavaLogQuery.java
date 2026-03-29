@@ -69,6 +69,7 @@ public final class JavaLogQuery {
       return new Stats(count + other.count, numBytes + other.numBytes);
     }
 
+    @Override
     public String toString() {
       return String.format("bytes=%s\tn=%s", numBytes, count);
     }

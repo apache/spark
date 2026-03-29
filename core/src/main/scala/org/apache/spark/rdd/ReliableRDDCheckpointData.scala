@@ -22,7 +22,10 @@ import scala.reflect.ClassTag
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{NEW_RDD_ID, RDD_CHECKPOINT_DIR, RDD_ID}
+import org.apache.spark.internal.config.CLEANER_REFERENCE_TRACKING_CLEAN_CHECKPOINTS
 
 /**
  * An implementation of checkpointing that writes the RDD data to reliable storage.
@@ -36,7 +39,7 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient private v
   private val cpDir: String =
     ReliableRDDCheckpointData.checkpointPath(rdd.context, rdd.id)
       .map(_.toString)
-      .getOrElse { throw new SparkException("Checkpoint dir must be specified.") }
+      .getOrElse { throw SparkCoreErrors.mustSpecifyCheckpointDirError() }
 
   /**
    * Return the directory to which this RDD was checkpointed.
@@ -44,7 +47,7 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient private v
    */
   def getCheckpointDir: Option[String] = RDDCheckpointData.synchronized {
     if (isCheckpointed) {
-      Some(cpDir.toString)
+      Some(cpDir)
     } else {
       None
     }
@@ -58,13 +61,14 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient private v
     val newRDD = ReliableCheckpointRDD.writeRDDToCheckpointDirectory(rdd, cpDir)
 
     // Optionally clean our checkpoint files if the reference is out of scope
-    if (rdd.conf.getBoolean("spark.cleaner.referenceTracking.cleanCheckpoints", false)) {
+    if (rdd.conf.get(CLEANER_REFERENCE_TRACKING_CLEAN_CHECKPOINTS)) {
       rdd.context.cleaner.foreach { cleaner =>
         cleaner.registerRDDCheckpointDataForCleanup(newRDD, rdd.id)
       }
     }
 
-    logInfo(s"Done checkpointing RDD ${rdd.id} to $cpDir, new parent is RDD ${newRDD.id}")
+    logInfo(log"Done checkpointing RDD ${MDC(RDD_ID, rdd.id)}" +
+      log" to ${MDC(RDD_CHECKPOINT_DIR, cpDir)}, new parent is RDD ${MDC(NEW_RDD_ID, newRDD.id)}")
     newRDD
   }
 

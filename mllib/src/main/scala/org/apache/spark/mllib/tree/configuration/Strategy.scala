@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.tree.configuration
 
 import scala.beans.BeanProperty
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.tree.configuration.Algo._
@@ -80,7 +80,9 @@ class Strategy @Since("1.3.0") (
     @Since("1.0.0") @BeanProperty var maxMemoryInMB: Int = 256,
     @Since("1.2.0") @BeanProperty var subsamplingRate: Double = 1,
     @Since("1.2.0") @BeanProperty var useNodeIdCache: Boolean = false,
-    @Since("1.2.0") @BeanProperty var checkpointInterval: Int = 10) extends Serializable {
+    @Since("1.2.0") @BeanProperty var checkpointInterval: Int = 10,
+    @Since("3.0.0") @BeanProperty var minWeightFractionPerNode: Double = 0.0,
+    @BeanProperty private[spark] var bootstrap: Boolean = false) extends Serializable {
 
   /**
    */
@@ -96,6 +98,31 @@ class Strategy @Since("1.3.0") (
     isMulticlassClassification && (categoricalFeaturesInfo.size > 0)
   }
 
+  // scalastyle:off argcount
+  /**
+   * Backwards compatible constructor for [[org.apache.spark.mllib.tree.configuration.Strategy]]
+   */
+  @Since("1.0.0")
+  def this(
+      algo: Algo,
+      impurity: Impurity,
+      maxDepth: Int,
+      numClasses: Int,
+      maxBins: Int,
+      quantileCalculationStrategy: QuantileStrategy,
+      categoricalFeaturesInfo: Map[Int, Int],
+      minInstancesPerNode: Int,
+      minInfoGain: Double,
+      maxMemoryInMB: Int,
+      subsamplingRate: Double,
+      useNodeIdCache: Boolean,
+      checkpointInterval: Int) = {
+    this(algo, impurity, maxDepth, numClasses, maxBins, quantileCalculationStrategy,
+      categoricalFeaturesInfo, minInstancesPerNode, minInfoGain, maxMemoryInMB,
+      subsamplingRate, useNodeIdCache, checkpointInterval, 0.0)
+  }
+  // scalastyle:on argcount
+
   /**
    * Java-friendly constructor for [[org.apache.spark.mllib.tree.configuration.Strategy]]
    */
@@ -106,9 +133,10 @@ class Strategy @Since("1.3.0") (
       maxDepth: Int,
       numClasses: Int,
       maxBins: Int,
-      categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer]) {
+      categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer]) = {
     this(algo, impurity, maxDepth, numClasses, maxBins, Sort,
-      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap)
+      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
+      minWeightFractionPerNode = 0.0)
   }
 
   /**
@@ -171,8 +199,9 @@ class Strategy @Since("1.3.0") (
   @Since("1.2.0")
   def copy: Strategy = {
     new Strategy(algo, impurity, maxDepth, numClasses, maxBins,
-      quantileCalculationStrategy, categoricalFeaturesInfo, minInstancesPerNode, minInfoGain,
-      maxMemoryInMB, subsamplingRate, useNodeIdCache, checkpointInterval)
+      quantileCalculationStrategy, categoricalFeaturesInfo, minInstancesPerNode,
+      minInfoGain, maxMemoryInMB, subsamplingRate, useNodeIdCache,
+      checkpointInterval, minWeightFractionPerNode)
   }
 }
 

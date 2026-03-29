@@ -18,8 +18,6 @@
 """
 Decision Tree Regression Example.
 """
-from __future__ import print_function
-
 # $example on$
 from pyspark.ml import Pipeline
 from pyspark.ml.regression import DecisionTreeRegressor

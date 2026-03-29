@@ -37,7 +37,11 @@ object AttributeSet {
   val empty = apply(Iterable.empty)
 
   /** Constructs a new [[AttributeSet]] that contains a single [[Attribute]]. */
-  def apply(a: Attribute): AttributeSet = new AttributeSet(Set(new AttributeEquals(a)))
+  def apply(a: Attribute): AttributeSet = {
+    val baseSet = new mutable.LinkedHashSet[AttributeEquals]
+    baseSet += new AttributeEquals(a)
+    new AttributeSet(baseSet)
+  }
 
   /** Constructs a new [[AttributeSet]] given a sequence of [[Expression Expressions]]. */
   def apply(baseSet: Iterable[Expression]): AttributeSet = {
@@ -47,7 +51,7 @@ object AttributeSet {
   /** Constructs a new [[AttributeSet]] given a sequence of [[AttributeSet]]s. */
   def fromAttributeSets(sets: Iterable[AttributeSet]): AttributeSet = {
     val baseSet = sets.foldLeft(new mutable.LinkedHashSet[AttributeEquals]())( _ ++= _.baseSet)
-    new AttributeSet(baseSet.toSet)
+    new AttributeSet(baseSet)
   }
 }
 
@@ -62,8 +66,8 @@ object AttributeSet {
  * and also makes doing transformations hard (we always try keep older trees instead of new ones
  * when the transformation was a no-op).
  */
-class AttributeSet private (val baseSet: Set[AttributeEquals])
-  extends Traversable[Attribute] with Serializable {
+class AttributeSet private (private val baseSet: mutable.LinkedHashSet[AttributeEquals])
+  extends Iterable[Attribute] with Serializable {
 
   override def hashCode: Int = baseSet.hashCode()
 
@@ -80,11 +84,11 @@ class AttributeSet private (val baseSet: Set[AttributeEquals])
 
   /** Returns a new [[AttributeSet]] that contains `elem` in addition to the current elements. */
   def +(elem: Attribute): AttributeSet =  // scalastyle:ignore
-    new AttributeSet(baseSet + new AttributeEquals(elem))
+    new AttributeSet(baseSet.union(Set(new AttributeEquals(elem))))
 
   /** Returns a new [[AttributeSet]] that does not contain `elem`. */
   def -(elem: Attribute): AttributeSet =
-    new AttributeSet(baseSet - new AttributeEquals(elem))
+    new AttributeSet(baseSet.diff(Set(new AttributeEquals(elem))))
 
   /** Returns an iterator containing all of the attributes in the set. */
   def iterator: Iterator[Attribute] = baseSet.map(_.a).iterator
@@ -99,12 +103,20 @@ class AttributeSet private (val baseSet: Set[AttributeEquals])
    * Returns a new [[AttributeSet]] that does not contain any of the [[Attribute Attributes]] found
    * in `other`.
    */
-  def --(other: Traversable[NamedExpression]): AttributeSet = {
-    other match {
-      case otherSet: AttributeSet =>
-        new AttributeSet(baseSet -- otherSet.baseSet)
-      case _ =>
-        new AttributeSet(baseSet -- other.map(a => new AttributeEquals(a.toAttribute)))
+  def --(other: Iterable[NamedExpression]): AttributeSet = {
+    if (isEmpty) {
+      AttributeSet.empty
+    } else if (other.isEmpty) {
+      this
+    } else {
+      other match {
+        // SPARK-32755: `--` method behave differently under scala 2.12 and 2.13,
+        // use a Scala 2.12 based code to maintains the insertion order in Scala 2.13
+        case otherSet: AttributeSet =>
+          new AttributeSet(baseSet.clone() --= otherSet.baseSet)
+        case _ =>
+          new AttributeSet(baseSet.clone() --= other.map(a => new AttributeEquals(a.toAttribute)))
+      }
     }
   }
 

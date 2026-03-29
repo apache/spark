@@ -17,19 +17,27 @@
 
 package org.apache.spark.deploy
 
+import java.util.concurrent.TimeUnit
+
 import scala.collection.mutable.HashSet
 import scala.concurrent.ExecutionContext
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success}
 
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.LogManager
+import org.apache.logging.log4j.core.Logger
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
-import org.apache.spark.internal.Logging
+import org.apache.spark.deploy.master.DriverState.DriverState
+import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.config.Network.RPC_ASK_TIMEOUT
+import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.util.{SparkExitCode, ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Proxy that relays messages to the driver.
@@ -53,12 +61,21 @@ private class ClientEndpoint(
       t => t match {
         case ie: InterruptedException => // Exit normally
         case e: Throwable =>
-          logError(e.getMessage, e)
+          logError(log"${MDC(ERROR, e.getMessage)}", e)
           System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
       })
 
    private val lostMasters = new HashSet[RpcAddress]
    private var activeMasterEndpoint: RpcEndpointRef = null
+   private val waitAppCompletion = conf.get(config.STANDALONE_SUBMIT_WAIT_APP_COMPLETION)
+   private val REPORT_DRIVER_STATUS_INTERVAL = 10000
+   private var submittedDriverID = ""
+   private var driverStatusReported = false
+
+
+  private def getProperty(key: String, conf: SparkConf): Option[String] = {
+    sys.props.get(key).orElse(conf.getOption(key))
+  }
 
   override def onStart(): Unit = {
     driverArgs.cmd match {
@@ -68,38 +85,46 @@ private class ClientEndpoint(
         //       people call `addJar` assuming the jar is in the same directory.
         val mainClass = "org.apache.spark.deploy.worker.DriverWrapper"
 
-        val classPathConf = "spark.driver.extraClassPath"
-        val classPathEntries = sys.props.get(classPathConf).toSeq.flatMap { cp =>
+        val classPathConf = config.DRIVER_CLASS_PATH.key
+        val classPathEntries = getProperty(classPathConf, conf).toSeq.flatMap { cp =>
           cp.split(java.io.File.pathSeparator)
         }
 
-        val libraryPathConf = "spark.driver.extraLibraryPath"
-        val libraryPathEntries = sys.props.get(libraryPathConf).toSeq.flatMap { cp =>
+        val libraryPathConf = config.DRIVER_LIBRARY_PATH.key
+        val libraryPathEntries = getProperty(libraryPathConf, conf).toSeq.flatMap { cp =>
           cp.split(java.io.File.pathSeparator)
         }
 
-        val extraJavaOptsConf = "spark.driver.extraJavaOptions"
-        val extraJavaOpts = sys.props.get(extraJavaOptsConf)
+        val extraJavaOptsConf = config.DRIVER_JAVA_OPTIONS.key
+        val extraJavaOpts = getProperty(extraJavaOptsConf, conf)
           .map(Utils.splitCommandString).getOrElse(Seq.empty)
+
         val sparkJavaOpts = Utils.sparkJavaOpts(conf)
         val javaOpts = sparkJavaOpts ++ extraJavaOpts
         val command = new Command(mainClass,
           Seq("{{WORKER_URL}}", "{{USER_JAR}}", driverArgs.mainClass) ++ driverArgs.driverOptions,
           sys.env, classPathEntries, libraryPathEntries, javaOpts)
-
+        val driverResourceReqs = ResourceUtils.parseResourceRequirements(conf,
+          config.SPARK_DRIVER_PREFIX)
         val driverDescription = new DriverDescription(
           driverArgs.jarUrl,
           driverArgs.memory,
           driverArgs.cores,
           driverArgs.supervise,
-          command)
+          command,
+          driverResourceReqs)
         asyncSendToMasterAndForwardReply[SubmitDriverResponse](
           RequestSubmitDriver(driverDescription))
 
       case "kill" =>
         val driverId = driverArgs.driverId
+        submittedDriverID = driverId
         asyncSendToMasterAndForwardReply[KillDriverResponse](RequestKillDriver(driverId))
     }
+    logInfo("... waiting before polling master for driver state")
+    forwardMessageThread.scheduleAtFixedRate(() => Utils.tryLogNonFatalError {
+      monitorDriverStatus()
+    }, 5000, REPORT_DRIVER_STATUS_INTERVAL, TimeUnit.MILLISECONDS)
   }
 
   /**
@@ -110,68 +135,101 @@ private class ClientEndpoint(
       masterEndpoint.ask[T](message).onComplete {
         case Success(v) => self.send(v)
         case Failure(e) =>
-          logWarning(s"Error sending messages to master $masterEndpoint", e)
+          logWarning(log"Error sending messages to master " +
+            log"${MDC(MASTER_URL, masterEndpoint)}", e)
       }(forwardMessageExecutionContext)
     }
   }
 
-  /* Find out driver status then exit the JVM */
-  def pollAndReportStatus(driverId: String): Unit = {
-    // Since ClientEndpoint is the only RpcEndpoint in the process, blocking the event loop thread
-    // is fine.
-    logInfo("... waiting before polling master for driver state")
-    Thread.sleep(5000)
-    logInfo("... polling master for driver state")
-    val statusResponse =
-      activeMasterEndpoint.askSync[DriverStatusResponse](RequestDriverStatus(driverId))
-    if (statusResponse.found) {
-      logInfo(s"State of $driverId is ${statusResponse.state.get}")
-      // Worker node, if present
-      (statusResponse.workerId, statusResponse.workerHostPort, statusResponse.state) match {
-        case (Some(id), Some(hostPort), Some(DriverState.RUNNING)) =>
-          logInfo(s"Driver running on $hostPort ($id)")
-        case _ =>
-      }
-      // Exception, if present
-      statusResponse.exception match {
-        case Some(e) =>
-          logError(s"Exception from cluster was: $e")
-          e.printStackTrace()
-          System.exit(-1)
-        case _ =>
-          System.exit(0)
-      }
-    } else {
-      logError(s"ERROR: Cluster master did not recognize $driverId")
-      System.exit(-1)
+  private def monitorDriverStatus(): Unit = {
+    if (submittedDriverID != "") {
+      asyncSendToMasterAndForwardReply[DriverStatusResponse](RequestDriverStatus(submittedDriverID))
     }
   }
 
+  /**
+   * Processes and reports the driver status then exit the JVM if the
+   * waitAppCompletion is set to false, else reports the driver status
+   * if debug logs are enabled.
+   */
+
+  def reportDriverStatus(
+      found: Boolean,
+      state: Option[DriverState],
+      workerId: Option[String],
+      workerHostPort: Option[String],
+      exception: Option[Exception]): Unit = {
+    if (found) {
+      // Using driverStatusReported to avoid writing following
+      // logs again when waitAppCompletion is set to true
+      if (!driverStatusReported) {
+        driverStatusReported = true
+        logInfo(log"State of ${MDC(DRIVER_ID, submittedDriverID)}" +
+          log" is ${MDC(DRIVER_STATE, state.get)}")
+        // Worker node, if present
+        (workerId, workerHostPort, state) match {
+          case (Some(id), Some(hostPort), Some(DriverState.RUNNING)) =>
+            logInfo(log"Driver running on ${MDC(HOST, hostPort)} (${MDC(WORKER_ID, id)})")
+          case _ =>
+        }
+      }
+      // Exception, if present
+      exception match {
+        case Some(e) =>
+          logError("Exception from cluster", e)
+          System.exit(-1)
+        case _ =>
+          state.get match {
+            case DriverState.FINISHED | DriverState.FAILED |
+                 DriverState.ERROR | DriverState.KILLED =>
+              logInfo(log"State of driver ${MDC(DRIVER_ID, submittedDriverID)}" +
+                log" is ${MDC(DRIVER_STATE, state.get)}, exiting spark-submit JVM.")
+              System.exit(0)
+            case _ =>
+              if (!waitAppCompletion) {
+                logInfo("spark-submit not configured to wait for completion, " +
+                  " exiting spark-submit JVM.")
+                System.exit(0)
+              } else {
+                logDebug(log"State of driver ${MDC(DRIVER_ID, submittedDriverID)}" +
+                  log" is ${MDC(DRIVER_STATE, state.get)}, " +
+                  log"continue monitoring driver status.")
+              }
+          }
+      }
+    } else if (exception.exists(e => Utils.responseFromBackup(e.getMessage))) {
+      logDebug(s"The status response is reported from a backup spark instance. So, ignored.")
+    } else {
+        logError(log"ERROR: Cluster master did not recognize ${MDC(DRIVER_ID, submittedDriverID)}")
+        System.exit(-1)
+    }
+  }
   override def receive: PartialFunction[Any, Unit] = {
 
     case SubmitDriverResponse(master, success, driverId, message) =>
       logInfo(message)
       if (success) {
         activeMasterEndpoint = master
-        pollAndReportStatus(driverId.get)
+        submittedDriverID = driverId.get
       } else if (!Utils.responseFromBackup(message)) {
         System.exit(-1)
       }
-
 
     case KillDriverResponse(master, driverId, success, message) =>
       logInfo(message)
       if (success) {
         activeMasterEndpoint = master
-        pollAndReportStatus(driverId)
       } else if (!Utils.responseFromBackup(message)) {
         System.exit(-1)
       }
+
+    case DriverStatusResponse(found, state, workerId, workerHostPort, exception) =>
+      reportDriverStatus(found, state, workerId, workerHostPort, exception)
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
     if (!lostMasters.contains(remoteAddress)) {
-      logError(s"Error connecting to master $remoteAddress.")
+      logError(log"Error connecting to master ${MDC(HOST_PORT, remoteAddress)}.")
       lostMasters += remoteAddress
       // Note that this heuristic does not account for the fact that a Master can recover within
       // the lifetime of this client. Thus, once a Master is lost it is lost to us forever. This
@@ -185,8 +243,7 @@ private class ClientEndpoint(
 
   override def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
     if (!lostMasters.contains(remoteAddress)) {
-      logError(s"Error connecting to master ($remoteAddress).")
-      logError(s"Cause was: $cause")
+      logError(log"Error connecting to master (${MDC(HOST_PORT, remoteAddress)}).", cause)
       lostMasters += remoteAddress
       if (lostMasters.size >= masterEndpoints.size) {
         logError("No master is available, exiting.")
@@ -196,8 +253,7 @@ private class ClientEndpoint(
   }
 
   override def onError(cause: Throwable): Unit = {
-    logError(s"Error processing messages, exiting.")
-    cause.printStackTrace()
+    logError("Error processing messages, exiting.", cause)
     System.exit(-1)
   }
 
@@ -210,7 +266,7 @@ private class ClientEndpoint(
  * Executable utility for starting and terminating drivers inside of a standalone cluster.
  */
 object Client {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     // scalastyle:off println
     if (!sys.props.contains("SPARK_SUBMIT")) {
       println("WARNING: This client is deprecated and will be removed in a future version of Spark")
@@ -226,17 +282,18 @@ private[spark] class ClientApp extends SparkApplication {
   override def start(args: Array[String], conf: SparkConf): Unit = {
     val driverArgs = new ClientArguments(args)
 
-    if (!conf.contains("spark.rpc.askTimeout")) {
-      conf.set("spark.rpc.askTimeout", "10s")
+    if (!conf.contains(RPC_ASK_TIMEOUT)) {
+      conf.set(RPC_ASK_TIMEOUT, "10s")
     }
-    Logger.getRootLogger.setLevel(driverArgs.logLevel)
+    LogManager.getRootLogger.asInstanceOf[Logger].setLevel(driverArgs.logLevel)
 
     val rpcEnv =
       RpcEnv.create("driverClient", Utils.localHostName(), 0, conf, new SecurityManager(conf))
 
     val masterEndpoints = driverArgs.masters.map(RpcAddress.fromSparkURL).
       map(rpcEnv.setupEndpointRef(_, Master.ENDPOINT_NAME))
-    rpcEnv.setupEndpoint("client", new ClientEndpoint(rpcEnv, driverArgs, masterEndpoints, conf))
+    rpcEnv.setupEndpoint("client",
+      new ClientEndpoint(rpcEnv, driverArgs, masterEndpoints.toImmutableArraySeq, conf))
 
     rpcEnv.awaitTermination()
   }

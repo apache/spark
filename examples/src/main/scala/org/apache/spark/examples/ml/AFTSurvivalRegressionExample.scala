@@ -35,7 +35,7 @@ object AFTSurvivalRegressionExample {
 
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("AFTSurvivalRegressionExample")
       .getOrCreate()
 

@@ -19,29 +19,23 @@ package org.apache.spark.input
 
 import java.io.{DataOutputStream, File, FileOutputStream}
 
-import scala.collection.immutable.IndexedSeq
-
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
-import org.apache.spark.internal.Logging
-import org.apache.spark.util.Utils
 
 /**
  * Tests the correctness of
  * [[org.apache.spark.input.WholeTextFileInputFormat WholeTextFileInputFormat]]. A temporary
  * directory containing files is created as fake input which is deleted in the end.
  */
-class WholeTextFileInputFormatSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
+class WholeTextFileInputFormatSuite extends SparkFunSuite {
   private var sc: SparkContext = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     val conf = new SparkConf()
     sc = new SparkContext("local", "test", conf)
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       sc.stop()
     } finally {
@@ -59,9 +53,7 @@ class WholeTextFileInputFormatSuite extends SparkFunSuite with BeforeAndAfterAll
 
   test("for small files minimum split size per node and per rack should be less than or equal to " +
     "maximum split size.") {
-    var dir : File = null;
-    try {
-      dir = Utils.createTempDir()
+    withTempDir { dir =>
       logInfo(s"Local disk address is ${dir.toString}.")
 
       // Set the minsize per node and rack to be larger than the size of the input file.
@@ -74,9 +66,7 @@ class WholeTextFileInputFormatSuite extends SparkFunSuite with BeforeAndAfterAll
         createNativeFile(dir, filename, contents, false)
       }
       // ensure spark job runs successfully without exceptions from the CombineFileInputFormat
-      assert(sc.wholeTextFiles(dir.toString).count == 3)
-    } finally {
-      Utils.deleteRecursively(dir)
+      assert(sc.wholeTextFiles(dir.toString).count() == 3)
     }
   }
 }
@@ -91,6 +81,6 @@ object WholeTextFileInputFormatSuite {
   private val fileLengths = Array(10, 100, 1000)
 
   private val files = fileLengths.zip(fileNames).map { case (upperBound, filename) =>
-    filename -> Stream.continually(testWords.toList.toStream).flatten.take(upperBound).toArray
+    filename -> LazyList.continually(testWords.toList.to(LazyList)).flatten.take(upperBound).toArray
   }.toMap
 }

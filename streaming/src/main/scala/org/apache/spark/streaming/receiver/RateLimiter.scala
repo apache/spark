@@ -21,6 +21,7 @@ import com.google.common.util.concurrent.{RateLimiter => GuavaRateLimiter}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
+import org.apache.spark.streaming.StreamingConf.{BACKPRESSURE_INITIAL_RATE, RECEIVER_MAX_RATE}
 
 /**
  * Provides waitToPush() method to limit the rate at which receivers consume data.
@@ -37,10 +38,10 @@ import org.apache.spark.internal.Logging
 private[receiver] abstract class RateLimiter(conf: SparkConf) extends Logging {
 
   // treated as an upper limit
-  private val maxRateLimit = conf.getLong("spark.streaming.receiver.maxRate", Long.MaxValue)
+  private val maxRateLimit = conf.get(RECEIVER_MAX_RATE)
   private lazy val rateLimiter = GuavaRateLimiter.create(getInitialRateLimit().toDouble)
 
-  def waitToPush() {
+  def waitToPush(): Unit = {
     rateLimiter.acquire()
   }
 
@@ -58,9 +59,9 @@ private[receiver] abstract class RateLimiter(conf: SparkConf) extends Logging {
   private[receiver] def updateRate(newRate: Long): Unit =
     if (newRate > 0) {
       if (maxRateLimit > 0) {
-        rateLimiter.setRate(newRate.min(maxRateLimit))
+        rateLimiter.setRate(newRate.min(maxRateLimit).toDouble)
       } else {
-        rateLimiter.setRate(newRate)
+        rateLimiter.setRate(newRate.toDouble)
       }
     }
 
@@ -68,6 +69,6 @@ private[receiver] abstract class RateLimiter(conf: SparkConf) extends Logging {
    * Get the initial rateLimit to initial rateLimiter
    */
   private def getInitialRateLimit(): Long = {
-    math.min(conf.getLong("spark.streaming.backpressure.initialRate", maxRateLimit), maxRateLimit)
+    math.min(conf.get(BACKPRESSURE_INITIAL_RATE), maxRateLimit)
   }
 }

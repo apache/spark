@@ -21,4 +21,10 @@
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
 
-exec python -u ./python/run-tests.py "$@"
+PYTHON_VERSION_CHECK=$(python3 -c 'import sys; print(sys.version_info < (3, 10, 0))')
+if [[ "$PYTHON_VERSION_CHECK" == "True" ]]; then
+  echo "Python versions prior to 3.10 are not supported."
+  exit -1
+fi
+
+exec python3 -u ./python/run-tests.py "$@"

@@ -15,71 +15,63 @@
 # limitations under the License.
 #
 
-# Image for building Spark releases. Based on Ubuntu 16.04.
-#
-# Includes:
-# * Java 8
-# * Ivy
-# * Python/PyPandoc (2.7.12/3.5.2)
-# * R-base/R-base-dev (3.3.2+)
-# * Ruby 2.3 build utilities
+# Spark master (4.2-SNAPSHOT) release image
+# Extends the base image with:
+# - Java 17
+# - Python 3.10 with required packages
 
-FROM ubuntu:16.04
+FROM spark-rm-base:latest
 
-# These arguments are just for reuse and not really meant to be customized.
-ARG APT_INSTALL="apt-get install --no-install-recommends -y"
+# Install Java 17 for Spark 4.x
+RUN apt-get update && apt-get install -y \
+    openjdk-17-jdk-headless \
+    && rm -rf /var/lib/apt/lists/*
 
-ARG BASE_PIP_PKGS="setuptools wheel virtualenv"
-ARG PIP_PKGS="pyopenssl pypandoc numpy pygments sphinx"
+# Install Python 3.10
+RUN apt-get update && apt-get install -y \
+    python3.10 \
+    python3.10-dev \
+    python3-psutil \
+    libpython3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install extra needed repos and refresh.
-# - CRAN repo
-# - Ruby repo (for doc generation)
-#
-# This is all in a single "RUN" command so that if anything changes, "apt update" is run to fetch
-# the most current package versions (instead of potentially using old versions cached by docker).
-RUN echo 'deb http://cran.cnr.Berkeley.edu/bin/linux/ubuntu xenial/' >> /etc/apt/sources.list && \
-  gpg --keyserver keyserver.ubuntu.com --recv-key E084DAB9 && \
-  gpg -a --export E084DAB9 | apt-key add - && \
-  apt-get clean && \
-  rm -rf /var/lib/apt/lists/* && \
-  apt-get clean && \
-  apt-get update && \
-  $APT_INSTALL software-properties-common && \
-  apt-add-repository -y ppa:brightbox/ruby-ng && \
-  apt-get update && \
-  # Install openjdk 8.
-  $APT_INSTALL openjdk-8-jdk && \
-  update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java && \
-  # Install build / source control tools
-  $APT_INSTALL curl wget git maven ivy subversion make gcc lsof libffi-dev \
-    pandoc pandoc-citeproc libssl-dev libcurl4-openssl-dev libxml2-dev && \
-  ln -s -T /usr/share/java/ivy.jar /usr/share/ant/lib/ivy.jar && \
-  curl -sL https://deb.nodesource.com/setup_4.x | bash && \
-  $APT_INSTALL nodejs && \
-  # Install needed python packages. Use pip for installing packages (for consistency).
-  $APT_INSTALL libpython2.7-dev libpython3-dev python-pip python3-pip && \
-  pip install $BASE_PIP_PKGS && \
-  pip install $PIP_PKGS && \
-  cd && \
-  virtualenv -p python3 /opt/p35 && \
-  . /opt/p35/bin/activate && \
-  pip install $BASE_PIP_PKGS && \
-  pip install $PIP_PKGS && \
-  # Install R packages and dependencies used when building.
-  # R depends on pandoc*, libssl (which are installed above).
-  $APT_INSTALL r-base r-base-dev && \
-  $APT_INSTALL texlive-latex-base texlive texlive-fonts-extra texinfo qpdf && \
-  Rscript -e "install.packages(c('curl', 'xml2', 'httr', 'devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2', 'e1071', 'survival'), repos='http://cran.us.r-project.org/')" && \
-  Rscript -e "devtools::install_github('jimhester/lintr')" && \
-  # Install tools needed to build the documentation.
-  $APT_INSTALL ruby2.3 ruby2.3-dev mkdocs && \
-  gem install jekyll --no-rdoc --no-ri && \
-  gem install jekyll-redirect-from && \
-  gem install pygments.rb
+# Install pip for Python 3.10
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
 
-WORKDIR /opt/spark-rm/output
+# Basic Python packages for master
+ARG BASIC_PIP_PKGS="numpy pyarrow>=18.0.0 six==1.16.0 pandas==2.3.3 scipy plotly<6.0.0 \
+    mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2 twine==3.4.1"
 
+# Python deps for Spark Connect
+ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.5 \
+    googleapis-common-protos==1.71.0 graphviz==0.20.3"
+
+# Install Python 3.10 packages
+RUN python3.10 -m pip install --ignore-installed 'blinker>=1.6.2' && \
+    python3.10 -m pip install --ignore-installed 'six==1.16.0' && \
+    python3.10 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
+    python3.10 -m pip install 'torch<2.6.0' torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.10 -m pip install deepspeed torcheval && \
+    python3.10 -m pip cache purge
+
+# Sphinx and documentation packages
+# Should unpin 'sphinxcontrib-*' after upgrading sphinx>5
+# See 'ipython_genutils' in SPARK-38517, 'docutils<0.18.0' in SPARK-39421
+RUN python3.10 -m pip install 'sphinx==4.5.0' mkdocs 'pydata_sphinx_theme>=0.13' \
+    sphinx-copybutton nbsphinx numpydoc jinja2 markupsafe 'pyzmq<24.0.0' \
+    ipython ipython_genutils sphinx_plotly_directive 'numpy>=1.22' pyarrow pandas \
+    'plotly>=4.8' 'docutils<0.18.0' 'flake8==3.9.0' 'mypy==1.19.1' 'pytest==7.1.3' \
+    'pytest-mypy-plugins==1.9.3' 'ruff==0.14.8' 'pandas-stubs==1.2.0.53' \
+    'grpcio==1.76.0' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0' \
+    'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' \
+    'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' \
+    'sphinxcontrib-serializinghtml==1.1.5'
+
+# Set Python 3.10 as the default
+RUN ln -sf "$(which python3.10)" "/usr/local/bin/python" && \
+    ln -sf "$(which python3.10)" "/usr/local/bin/python3"
+
+# Create user for release manager
 ARG UID
 RUN useradd -m -s /bin/bash -p spark-rm -u $UID spark-rm
 USER spark-rm:spark-rm

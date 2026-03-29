@@ -19,15 +19,16 @@ package org.apache.spark.network.sasl;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.concurrent.TimeoutException;
 import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.util.JavaUtils;
@@ -38,7 +39,7 @@ import org.apache.spark.network.util.TransportConf;
  * server should be setup with a {@link SaslRpcHandler} with matching keys for the given appId.
  */
 public class SaslClientBootstrap implements TransportClientBootstrap {
-  private static final Logger logger = LoggerFactory.getLogger(SaslClientBootstrap.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(SaslClientBootstrap.class);
 
   private final TransportConf conf;
   private final String appId;
@@ -65,9 +66,18 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
         SaslMessage msg = new SaslMessage(appId, payload);
         ByteBuf buf = Unpooled.buffer(msg.encodedLength() + (int) msg.body().size());
         msg.encode(buf);
+        ByteBuffer response;
         buf.writeBytes(msg.body().nioByteBuffer());
-
-        ByteBuffer response = client.sendRpcSync(buf.nioBuffer(), conf.authRTTimeoutMs());
+        try {
+          response = client.sendRpcSync(buf.nioBuffer(), conf.authRTTimeoutMs());
+        } catch (RuntimeException ex) {
+          // We know it is a Sasl timeout here if it is a TimeoutException.
+          if (ex.getCause() instanceof TimeoutException te) {
+            throw new SaslTimeoutException(te);
+          } else {
+            throw ex;
+          }
+        }
         payload = saslClient.response(JavaUtils.bufferToArray(response));
       }
 

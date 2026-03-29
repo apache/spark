@@ -19,13 +19,14 @@ package org.apache.spark.repl
 
 import java.io.File
 import java.net.URI
-import java.util.Locale
 
 import scala.tools.nsc.GenericRunnerSettings
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.classic.SparkSession.hiveClassesArePresent
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.util.Utils
 
@@ -35,7 +36,8 @@ object Main extends Logging {
   Signaling.cancelOnInterrupt()
 
   val conf = new SparkConf()
-  val rootDir = conf.getOption("spark.repl.classdir").getOrElse(Utils.getLocalDir(conf))
+  val rootDir =
+    conf.getOption("spark.repl.classdir").getOrElse(Utils.getLocalDir(conf))
   val outputDir = Utils.createTempDir(root = rootDir, namePrefix = "repl")
 
   var sparkContext: SparkContext = _
@@ -53,30 +55,37 @@ object Main extends Logging {
     // scalastyle:on println
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     isShellSession = true
-    doMain(args, new SparkILoop)
+    val settings = new GenericRunnerSettings(scalaOptionError)
+    settings.processArguments(args.toList, true)
+    doMain(args, new SparkILoop(settings))
   }
 
   // Visible for testing
   private[repl] def doMain(args: Array[String], _interp: SparkILoop): Unit = {
     interp = _interp
-    val jars = Utils.getLocalUserJarsForShell(conf)
+    val jars = Utils
+      .getLocalUserJarsForShell(conf)
       // Remove file:///, file:// or file:/ scheme if exists for each jar
-      .map { x => if (x.startsWith("file:")) new File(new URI(x)).getPath else x }
+      .map { x =>
+        if (x.startsWith("file:")) new File(new URI(x)).getPath else x
+      }
       .mkString(File.pathSeparator)
     val interpArguments = List(
       "-Yrepl-class-based",
-      "-Yrepl-outdir", s"${outputDir.getAbsolutePath}",
-      "-classpath", jars
+      "-Yrepl-outdir",
+      s"${outputDir.getAbsolutePath}",
+      "-classpath",
+      jars
     ) ++ args.toList
 
     val settings = new GenericRunnerSettings(scalaOptionError)
     settings.processArguments(interpArguments, true)
 
     if (!hasErrors) {
-      interp.process(settings) // Repl starts and goes in loop of R.E.P.L
-      Option(sparkContext).foreach(_.stop)
+      interp.run(settings) // Repl starts and goes in loop of R.E.P.L
+      Option(sparkContext).foreach(_.stop())
     }
   }
 
@@ -90,6 +99,9 @@ object Main extends Logging {
       // initialization in certain cases, there's an initialization order issue that prevents
       // this from being set after SparkContext is instantiated.
       conf.set("spark.repl.class.outputDir", outputDir.getAbsolutePath())
+      // Disable isolation for REPL, to avoid having in-line classes stored in a isolated directory,
+      // prevent the REPL classloader from finding it.
+      conf.set(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED, false)
       if (execUri != null) {
         conf.set("spark.executor.uri", execUri)
       }
@@ -97,9 +109,9 @@ object Main extends Logging {
         conf.setSparkHome(System.getenv("SPARK_HOME"))
       }
 
-      val builder = SparkSession.builder.config(conf)
-      if (conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase(Locale.ROOT) == "hive") {
-        if (SparkSession.hiveClassesArePresent) {
+      val builder = SparkSession.builder().config(conf)
+      if (conf.get(CATALOG_IMPLEMENTATION.key, "hive") == "hive") {
+        if (hiveClassesArePresent) {
           // In the case that the property is not set at all, builder's config
           // does not have this value set to 'hive' yet. The original default
           // behavior is that when there are hive classes, we use hive catalog.

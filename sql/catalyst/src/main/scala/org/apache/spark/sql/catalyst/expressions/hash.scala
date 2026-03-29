@@ -18,22 +18,31 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal, RoundingMode}
-import java.security.{MessageDigest, NoSuchAlgorithmException}
+import java.util.concurrent.TimeUnit._
 import java.util.zip.CRC32
 
 import scala.annotation.tailrec
 
 import org.apache.commons.codec.digest.DigestUtils
+import org.apache.commons.codec.digest.MessageDigestAlgorithms
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.util.ArrayImplicits._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines all the expressions for hashing.
@@ -49,20 +58,28 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
     Examples:
       > SELECT _FUNC_('Spark');
        8cde774d6f7333752ed72cacddb05126
-  """)
-case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-
-  override def dataType: DataType = StringType
+  """,
+  since = "1.5.0",
+  group = "hash_funcs")
+case class Md5(child: Expression)
+  extends UnaryExpression
+  with ImplicitCastInputTypes
+  with DefaultStringProducingExpression {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.fromString(DigestUtils.md5Hex(input.asInstanceOf[Array[Byte]]))
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c =>
-      s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.md5Hex($c))")
+      s"UTF8String.fromString(${classOf[DigestUtils].getName}.md5Hex($c))")
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Md5 = copy(child = newChild)
 }
 
 /**
@@ -83,30 +100,30 @@ case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInput
     Examples:
       > SELECT _FUNC_('Spark', 256);
        529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b
-  """)
+  """,
+  since = "1.5.0",
+  group = "hash_funcs")
 // scalastyle:on line.size.limit
 case class Sha2(left: Expression, right: Expression)
-  extends BinaryExpression with Serializable with ImplicitCastInputTypes {
+  extends BinaryExpression
+  with ImplicitCastInputTypes
+  with Serializable
+  with DefaultStringProducingExpression {
+  override def nullIntolerant: Boolean = true
 
-  override def dataType: DataType = StringType
   override def nullable: Boolean = true
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType, IntegerType)
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val bitLength = input2.asInstanceOf[Int]
     val input = input1.asInstanceOf[Array[Byte]]
     bitLength match {
       case 224 =>
-        // DigestUtils doesn't support SHA-224 now
-        try {
-          val md = MessageDigest.getInstance("SHA-224")
-          md.update(input)
-          UTF8String.fromBytes(md.digest())
-        } catch {
-          // SHA-224 is not supported on the system, return null
-          case noa: NoSuchAlgorithmException => null
-        }
+        UTF8String.fromString(
+          new DigestUtils(MessageDigestAlgorithms.SHA_224).digestAsHex(input))
       case 256 | 0 =>
         UTF8String.fromString(DigestUtils.sha256Hex(input))
       case 384 =>
@@ -118,17 +135,13 @@ case class Sha2(left: Expression, right: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val digestUtils = "org.apache.commons.codec.digest.DigestUtils"
+    val digestUtils = classOf[DigestUtils].getName
+    val messageDigestAlgorithms = classOf[MessageDigestAlgorithms].getName
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
         if ($eval2 == 224) {
-          try {
-            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-224");
-            md.update($eval1);
-            ${ev.value} = UTF8String.fromBytes(md.digest());
-          } catch (java.security.NoSuchAlgorithmException e) {
-            ${ev.isNull} = true;
-          }
+          ${ev.value} = UTF8String.fromString(
+                          new $digestUtils($messageDigestAlgorithms.SHA_224).digestAsHex($eval1));
         } else if ($eval2 == 256 || $eval2 == 0) {
           ${ev.value} =
             UTF8String.fromString($digestUtils.sha256Hex($eval1));
@@ -144,6 +157,9 @@ case class Sha2(left: Expression, right: Expression)
       """
     })
   }
+
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Sha2 =
+    copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -156,21 +172,29 @@ case class Sha2(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_('Spark');
        85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c
-  """)
-case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-
-  override def dataType: DataType = StringType
+  """,
+  since = "1.5.0",
+  group = "hash_funcs")
+case class Sha1(child: Expression)
+  extends UnaryExpression
+  with ImplicitCastInputTypes
+  with DefaultStringProducingExpression {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.fromString(DigestUtils.sha1Hex(input.asInstanceOf[Array[Byte]]))
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c =>
-      s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.sha1Hex($c))"
+      s"UTF8String.fromString(${classOf[DigestUtils].getName}.sha1Hex($c))"
     )
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Sha1 = copy(child = newChild)
 }
 
 /**
@@ -183,12 +207,18 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
     Examples:
       > SELECT _FUNC_('Spark');
        1557323817
-  """)
-case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  """,
+  since = "1.5.0",
+  group = "hash_funcs")
+case class Crc32(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def dataType: DataType = LongType
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected override def nullSafeEval(input: Any): Any = {
     val checksum = new CRC32
@@ -207,6 +237,8 @@ case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInp
       """
     })
   }
+
+  override protected def withNewChildInternal(newChild: Expression): Crc32 = copy(child = newChild)
 }
 
 
@@ -215,27 +247,32 @@ case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInp
  * is not exposed to users and should only be set inside spark SQL.
  *
  * The hash value for an expression depends on its type and seed:
- *  - null:               seed
- *  - boolean:            turn boolean into int, 1 for true, 0 for false, and then use murmur3 to
- *                        hash this int with seed.
- *  - byte, short, int:   use murmur3 to hash the input as int with seed.
- *  - long:               use murmur3 to hash the long input with seed.
- *  - float:              turn it into int: java.lang.Float.floatToIntBits(input), and hash it.
- *  - double:             turn it into long: java.lang.Double.doubleToLongBits(input), and hash it.
- *  - decimal:            if it's a small decimal, i.e. precision <= 18, turn it into long and hash
- *                        it. Else, turn it into bytes and hash it.
- *  - calendar interval:  hash `microseconds` first, and use the result as seed to hash `months`.
- *  - binary:             use murmur3 to hash the bytes with seed.
- *  - string:             get the bytes of string and hash it.
- *  - array:              The `result` starts with seed, then use `result` as seed, recursively
- *                        calculate hash value for each element, and assign the element hash value
- *                        to `result`.
- *  - map:                The `result` starts with seed, then use `result` as seed, recursively
- *                        calculate hash value for each key-value, and assign the key-value hash
- *                        value to `result`.
- *  - struct:             The `result` starts with seed, then use `result` as seed, recursively
- *                        calculate hash value for each field, and assign the field hash value to
- *                        `result`.
+ *  - null:                    seed
+ *  - boolean:                 turn boolean into int, 1 for true, 0 for false,
+ *                             and then use murmur3 to hash this int with seed.
+ *  - byte, short, int:        use murmur3 to hash the input as int with seed.
+ *  - long:                    use murmur3 to hash the long input with seed.
+ *  - float:                   turn it into int: java.lang.Float.floatToIntBits(input), and hash it.
+ *  - double:                  turn it into long: java.lang.Double.doubleToLongBits(input),
+ *                             and hash it.
+ *  - decimal:                 if it's a small decimal, i.e. precision <= 18, turn it into long
+ *                             and hash it. Else, turn it into bytes and hash it.
+ *  - calendar interval:       hash `microseconds` first, and use the result as seed
+ *                             to hash `months`.
+ *  - interval day to second:  it store long value of `microseconds`, use murmur3 to hash the long
+ *                             input with seed.
+ *  - interval year to month:  it store int value of `months`, use murmur3 to hash the int
+ *                             input with seed.
+ *  - binary:                  use murmur3 to hash the bytes with seed.
+ *  - string:                  get the bytes of string and hash it.
+ *  - time:                    it stores long value of `microseconds` since the midnight, use
+ *                             murmur3 to hash the long input with seed.
+ *  - array:                   The `result` starts with seed, then use `result` as seed, recursively
+ *                             calculate hash value for each element, and assign the element hash
+ *                             value to `result`.
+ *  - struct:                  The `result` starts with seed, then use `result` as seed, recursively
+ *                             calculate hash value for each field, and assign the field hash value
+ *                             to `result`.
  *
  * Finally we aggregate the hash values for each expression by the same way of struct.
  */
@@ -245,12 +282,37 @@ abstract class HashExpression[E] extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
+
   override def nullable: Boolean = false
+
+  protected def isCollationAware: Boolean
+
+  protected lazy val legacyCollationAwareHashing: Boolean =
+    SQLConf.get.getConf(SQLConf.COLLATION_AWARE_HASHING_ENABLED)
+
+  private def hasMapType(dt: DataType): Boolean = {
+    dt.existsRecursively(_.isInstanceOf[MapType])
+  }
+
+  private def hasVariantType(dt: DataType): Boolean = {
+    dt.existsRecursively(_.isInstanceOf[VariantType])
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length < 1) {
-      TypeCheckResult.TypeCheckFailure(
-        s"input to function $prettyName requires at least one argument")
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("> 0"), children.length
+      )
+    } else if (children.exists(child => hasMapType(child.dataType)) &&
+        !SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_HASH_ON_MAPTYPE)) {
+      DataTypeMismatch(
+        errorSubClass = "HASH_MAP_TYPE",
+        messageParameters = Map("functionName" -> toSQLId(prettyName)))
+    } else if (children.exists(child => hasVariantType(child.dataType))) {
+      DataTypeMismatch(
+        errorSubClass = "HASH_VARIANT_TYPE",
+        messageParameters = Map("functionName" -> toSQLId(prettyName)))
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -274,12 +336,13 @@ abstract class HashExpression[E] extends Expression {
 
     val childrenHash = children.map { child =>
       val childGen = child.genCode(ctx)
-      childGen.code + ctx.nullSafeExec(child.nullable, childGen.isNull) {
+      childGen.code.toString + ctx.nullSafeExec(child.nullable, childGen.isNull) {
         computeHash(childGen.value, child.dataType, ev.value, ctx)
       }
     }
 
     val hashResultType = CodeGenerator.javaType(dataType)
+    val typedSeed = if (DataTypeUtils.sameType(dataType, LongType)) s"${seed}L" else s"$seed"
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = childrenHash,
       funcName = "computeHash",
@@ -294,7 +357,7 @@ abstract class HashExpression[E] extends Expression {
 
     ev.copy(code =
       code"""
-         |$hashResultType ${ev.value} = $seed;
+         |$hashResultType ${ev.value} = $typedSeed;
          |$codes
        """.stripMargin)
   }
@@ -331,11 +394,25 @@ abstract class HashExpression[E] extends Expression {
   protected def genHashBoolean(input: String, result: String): String =
     genHashInt(s"$input ? 1 : 0", result)
 
-  protected def genHashFloat(input: String, result: String): String =
-    genHashInt(s"Float.floatToIntBits($input)", result)
+  protected def genHashFloat(input: String, result: String): String = {
+    s"""
+       |if($input == -0.0f) {
+       |  ${genHashInt("0", result)}
+       |} else {
+       |  ${genHashInt(s"Float.floatToIntBits($input)", result)}
+       |}
+     """.stripMargin
+  }
 
-  protected def genHashDouble(input: String, result: String): String =
-    genHashLong(s"Double.doubleToLongBits($input)", result)
+  protected def genHashDouble(input: String, result: String): String = {
+    s"""
+      |if($input == -0.0d) {
+      |  ${genHashLong("0L", result)}
+      |} else {
+      |  ${genHashLong(s"Double.doubleToLongBits($input)", result)}
+      |}
+     """.stripMargin
+  }
 
   protected def genHashDecimal(
       ctx: CodegenContext,
@@ -360,11 +437,51 @@ abstract class HashExpression[E] extends Expression {
     s"$result = $hasherClassName.hashInt($input.months, $microsecondsHash);"
   }
 
-  protected def genHashString(input: String, result: String): String = {
-    val baseObject = s"$input.getBaseObject()"
-    val baseOffset = s"$input.getBaseOffset()"
-    val numBytes = s"$input.numBytes()"
-    s"$result = $hasherClassName.hashUnsafeBytes($baseObject, $baseOffset, $numBytes, $result);"
+  protected def genHashString(
+      ctx: CodegenContext, stringType: StringType, input: String, result: String): String = {
+    if (stringType.supportsBinaryEquality) {
+      val baseObject = s"$input.getBaseObject()"
+      val baseOffset = s"$input.getBaseOffset()"
+      val numBytes = s"$input.numBytes()"
+      s"$result = $hasherClassName.hashUnsafeBytes($baseObject, $baseOffset, $numBytes, $result);"
+    } else {
+      if (isCollationAware) {
+        val key = ctx.freshName("key")
+        val offset = "Platform.BYTE_ARRAY_OFFSET"
+        s"""
+          byte[] $key = (byte[]) CollationFactory.fetchCollation(${stringType.collationId})
+            .sortKeyFunction.apply($input);
+          $result = $hasherClassName.hashUnsafeBytes($key, $offset, $key.length, $result);
+        """
+      } else if (legacyCollationAwareHashing) {
+        val collation = CollationFactory.fetchCollation(stringType.collationId)
+        val stringHash = ctx.freshName("stringHash")
+        if (collation.isUtf8BinaryType || collation.isUtf8LcaseType) {
+          s"""
+            long $stringHash = UTF8String.fromBytes((byte[]) CollationFactory
+              .fetchCollation(${stringType.collationId}).sortKeyFunction.apply($input)).hashCode();
+            $result = $hasherClassName.hashLong($stringHash, $result);
+          """
+        } else if (collation.supportsSpaceTrimming) {
+          s"""
+            long $stringHash = CollationFactory.fetchCollation(${stringType.collationId})
+              .getCollator().getCollationKey($input.trimRight().toValidString()).hashCode();
+            $result = $hasherClassName.hashLong($stringHash, $result);
+          """
+        } else {
+          s"""
+            long $stringHash = CollationFactory.fetchCollation(${stringType.collationId})
+              .getCollator().getCollationKey($input.toValidString()).hashCode();
+            $result = $hasherClassName.hashLong($stringHash, $result);
+          """
+        }
+      } else {
+        val baseObject = s"$input.getBaseObject()"
+        val baseOffset = s"$input.getBaseOffset()"
+        val numBytes = s"$input.numBytes()"
+        s"$result = $hasherClassName.hashUnsafeBytes($baseObject, $baseOffset, $numBytes, $result);"
+      }
+    }
   }
 
   protected def genHashForMap(
@@ -412,7 +529,7 @@ abstract class HashExpression[E] extends Expression {
     }
     val hashResultType = CodeGenerator.javaType(dataType)
     val code = ctx.splitExpressions(
-      expressions = fieldsHash,
+      expressions = fieldsHash.toImmutableArraySeq,
       funcName = "computeHashForStruct",
       arguments = Seq("InternalRow" -> tmpInput, hashResultType -> result),
       returnType = hashResultType,
@@ -437,14 +554,16 @@ abstract class HashExpression[E] extends Expression {
     case NullType => ""
     case BooleanType => genHashBoolean(input, result)
     case ByteType | ShortType | IntegerType | DateType => genHashInt(input, result)
-    case LongType => genHashLong(input, result)
-    case TimestampType => genHashTimestamp(input, result)
+    case LongType | _: TimeType => genHashLong(input, result)
+    case TimestampType | TimestampNTZType => genHashTimestamp(input, result)
     case FloatType => genHashFloat(input, result)
     case DoubleType => genHashDouble(input, result)
     case d: DecimalType => genHashDecimal(ctx, d, input, result)
     case CalendarIntervalType => genHashCalendarInterval(input, result)
+    case _: DayTimeIntervalType => genHashLong(input, result)
+    case _: YearMonthIntervalType => genHashInt(input, result)
     case BinaryType => genHashBytes(input, result)
-    case StringType => genHashString(input, result)
+    case st: StringType => genHashString(ctx, st, input, result)
     case ArrayType(et, containsNull) => genHashForArray(ctx, input, result, et, containsNull)
     case MapType(kt, vt, valueContainsNull) =>
       genHashForMap(ctx, input, result, kt, vt, valueContainsNull)
@@ -472,10 +591,38 @@ abstract class InterpretedHashFunction {
   protected def hashUnsafeBytes(base: AnyRef, offset: Long, length: Int, seed: Long): Long
 
   /**
-   * Computes hash of a given `value` of type `dataType`. The caller needs to check the validity
-   * of input `value`.
+   * This method is intended for callers using the old hash API and preserves compatibility for
+   * supported data types. It must only be used for data types that do not include collated strings
+   * or complex types (e.g., structs, arrays, maps) that may contain collated strings.
+   *
+   * The caller is responsible for ensuring that `dataType` does not involve collation-aware fields.
+   * This is validated via an internal assertion.
+   *
+   * @throws IllegalArgumentException if `dataType` contains non-UTF8 binary collation.
    */
   def hash(value: Any, dataType: DataType, seed: Long): Long = {
+    require(!SchemaUtils.hasNonUTF8BinaryCollation(dataType))
+    // For UTF8_BINARY, hashing behavior is the same regardless of the isCollationAware flag.
+    hash(
+      value = value,
+      dataType = dataType,
+      seed = seed,
+      isCollationAware = false,
+      legacyCollationAwareHashing = false)
+  }
+
+  /**
+   * Computes hash of a given `value` of type `dataType`. The caller needs to check the validity
+   * of input `value`. The `isCollationAware` boolean flag indicates whether hashing should take
+   * a string's collation into account. If not, the bytes of the string are hashed, otherwise the
+   * collation key of the string is hashed.
+   */
+  def hash(
+      value: Any,
+      dataType: DataType,
+      seed: Long,
+      isCollationAware: Boolean,
+      legacyCollationAwareHashing: Boolean): Long = {
     value match {
       case null => seed
       case b: Boolean => hashInt(if (b) 1 else 0, seed)
@@ -483,7 +630,9 @@ abstract class InterpretedHashFunction {
       case s: Short => hashInt(s, seed)
       case i: Int => hashInt(i, seed)
       case l: Long => hashLong(l, seed)
+      case f: Float if (f == -0.0f) => hashInt(0, seed)
       case f: Float => hashInt(java.lang.Float.floatToIntBits(f), seed)
+      case d: Double if (d == -0.0d) => hashLong(0L, seed)
       case d: Double => hashLong(java.lang.Double.doubleToLongBits(d), seed)
       case d: Decimal =>
         val precision = dataType.asInstanceOf[DecimalType].precision
@@ -493,11 +642,32 @@ abstract class InterpretedHashFunction {
           val bytes = d.toJavaBigDecimal.unscaledValue().toByteArray
           hashUnsafeBytes(bytes, Platform.BYTE_ARRAY_OFFSET, bytes.length, seed)
         }
-      case c: CalendarInterval => hashInt(c.months, hashLong(c.microseconds, seed))
+      case c: CalendarInterval => hashInt(c.months, hashInt(c.days, hashLong(c.microseconds, seed)))
       case a: Array[Byte] =>
         hashUnsafeBytes(a, Platform.BYTE_ARRAY_OFFSET, a.length, seed)
       case s: UTF8String =>
-        hashUnsafeBytes(s.getBaseObject, s.getBaseOffset, s.numBytes(), seed)
+        val st = dataType.asInstanceOf[StringType]
+        if (st.supportsBinaryEquality) {
+          hashUnsafeBytes(s.getBaseObject, s.getBaseOffset, s.numBytes, seed)
+        } else {
+          if (isCollationAware) {
+            val key = CollationFactory.fetchCollation(st.collationId).sortKeyFunction.apply(s)
+              .asInstanceOf[Array[Byte]]
+            hashUnsafeBytes(key, Platform.BYTE_ARRAY_OFFSET, key.length, seed)
+          } else if (legacyCollationAwareHashing) {
+            val collation = CollationFactory.fetchCollation(st.collationId)
+            val stringHash = if (collation.isUtf8BinaryType || collation.isUtf8LcaseType) {
+              UTF8String.fromBytes(collation.sortKeyFunction.apply(s)).hashCode
+            } else if (collation.supportsSpaceTrimming) {
+              collation.getCollator.getCollationKey(s.trimRight.toValidString).hashCode
+            } else {
+              collation.getCollator.getCollationKey(s.toValidString).hashCode
+            }
+            hashLong(stringHash, seed)
+          } else {
+            hashUnsafeBytes(s.getBaseObject, s.getBaseOffset, s.numBytes, seed)
+          }
+        }
 
       case array: ArrayData =>
         val elementType = dataType match {
@@ -507,7 +677,12 @@ abstract class InterpretedHashFunction {
         var result = seed
         var i = 0
         while (i < array.numElements()) {
-          result = hash(array.get(i, elementType), elementType, result)
+          result = hash(
+            array.get(i, elementType),
+            elementType,
+            result,
+            isCollationAware,
+            legacyCollationAwareHashing)
           i += 1
         }
         result
@@ -524,8 +699,18 @@ abstract class InterpretedHashFunction {
         var result = seed
         var i = 0
         while (i < map.numElements()) {
-          result = hash(keys.get(i, kt), kt, result)
-          result = hash(values.get(i, vt), vt, result)
+          result = hash(
+            keys.get(i, kt),
+            kt,
+            result,
+            isCollationAware,
+            legacyCollationAwareHashing)
+          result = hash(
+            values.get(i, vt),
+            vt,
+            result,
+            isCollationAware,
+            legacyCollationAwareHashing)
           i += 1
         }
         result
@@ -540,7 +725,12 @@ abstract class InterpretedHashFunction {
         var i = 0
         val len = struct.numFields
         while (i < len) {
-          result = hash(struct.get(i, types(i)), types(i), result)
+          result = hash(
+            struct.get(i, types(i)),
+            types(i),
+            result,
+            isCollationAware,
+            legacyCollationAwareHashing)
           i += 1
         }
         result
@@ -560,7 +750,9 @@ abstract class InterpretedHashFunction {
     Examples:
       > SELECT _FUNC_('Spark', array(123), 2);
        -1321691492
-  """)
+  """,
+  since = "2.0.0",
+  group = "hash_funcs")
 case class Murmur3Hash(children: Seq[Expression], seed: Int) extends HashExpression[Int] {
   def this(arguments: Seq[Expression]) = this(arguments, 42)
 
@@ -570,9 +762,16 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends HashExpress
 
   override protected def hasherClassName: String = classOf[Murmur3_x86_32].getName
 
+  override protected def isCollationAware: Boolean = false
+
   override protected def computeHash(value: Any, dataType: DataType, seed: Int): Int = {
-    Murmur3HashFunction.hash(value, dataType, seed).toInt
+    Murmur3HashFunction.hash(
+      value, dataType, seed, isCollationAware, legacyCollationAwareHashing
+    ).toInt
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Murmur3Hash =
+    copy(children = newChildren)
 }
 
 object Murmur3HashFunction extends InterpretedHashFunction {
@@ -589,21 +788,59 @@ object Murmur3HashFunction extends InterpretedHashFunction {
   }
 }
 
+case class CollationAwareMurmur3Hash(children: Seq[Expression], seed: Int)
+  extends HashExpression[Int]
+{
+  def this(arguments: Seq[Expression]) = this(arguments, 42)
+
+  override def dataType: DataType = IntegerType
+
+  override def prettyName: String = "collation_aware_hash"
+
+  override protected def hasherClassName: String = classOf[Murmur3_x86_32].getName
+
+  override protected def isCollationAware: Boolean = true
+
+  override protected def computeHash(value: Any, dataType: DataType, seed: Int): Int = {
+    Murmur3HashFunction.hash(
+      value, dataType, seed, isCollationAware, legacyCollationAwareHashing
+    ).toInt
+  }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]):
+    CollationAwareMurmur3Hash = copy(children = newChildren)
+}
+
 /**
  * A xxHash64 64-bit hash expression.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(expr1, expr2, ...) - Returns a 64-bit hash value of the arguments. " +
+    "Hash seed is 42.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark', array(123), 2);
+       5602566077635097486
+  """,
+  since = "3.0.0",
+  group = "hash_funcs")
 case class XxHash64(children: Seq[Expression], seed: Long) extends HashExpression[Long] {
   def this(arguments: Seq[Expression]) = this(arguments, 42L)
 
   override def dataType: DataType = LongType
 
-  override def prettyName: String = "xxHash"
+  override def prettyName: String = "xxhash64"
 
   override protected def hasherClassName: String = classOf[XXH64].getName
 
+  override protected def isCollationAware: Boolean = false
+
   override protected def computeHash(value: Any, dataType: DataType, seed: Long): Long = {
-    XxHash64Function.hash(value, dataType, seed)
+    XxHash64Function.hash(value, dataType, seed, isCollationAware, legacyCollationAwareHashing)
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): XxHash64 =
+    copy(children = newChildren)
 }
 
 object XxHash64Function extends InterpretedHashFunction {
@@ -616,6 +853,28 @@ object XxHash64Function extends InterpretedHashFunction {
   }
 }
 
+case class CollationAwareXxHash64(children: Seq[Expression], seed: Long)
+  extends HashExpression[Long]
+{
+  def this(arguments: Seq[Expression]) = this(arguments, 42L)
+
+  override def dataType: DataType = LongType
+
+  override def prettyName: String = "collation_aware_xxhash64"
+
+  override protected def hasherClassName: String = classOf[XXH64].getName
+
+  override protected def isCollationAware: Boolean = true
+
+  override protected def computeHash(value: Any, dataType: DataType, seed: Long): Long = {
+    XxHash64Function.hash(
+      value, dataType, seed, isCollationAware, legacyCollationAwareHashing)
+  }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]):
+    CollationAwareXxHash64 = copy(children = newChildren)
+}
+
 /**
  * Simulates Hive's hashing function from Hive v1.2.1 at
  * org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils#hashcode()
@@ -624,7 +883,9 @@ object XxHash64Function extends InterpretedHashFunction {
  * we can guarantee shuffle and bucketing have same data distribution
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2, ...) - Returns a hash value of the arguments.")
+  usage = "_FUNC_(expr1, expr2, ...) - Returns a hash value of the arguments.",
+  since = "2.2.0",
+  group = "hash_funcs")
 case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
   override val seed = 0
 
@@ -634,8 +895,12 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
 
   override protected def hasherClassName: String = classOf[HiveHasher].getName
 
+  override protected def isCollationAware: Boolean = true
+
   override protected def computeHash(value: Any, dataType: DataType, seed: Int): Int = {
-    HiveHashFunction.hash(value, dataType, this.seed).toInt
+    HiveHashFunction.hash(
+      value, dataType, this.seed, isCollationAware, legacyCollationAwareHashing
+    ).toInt
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -719,11 +984,22 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
       $result = (int) ${HiveHashFunction.getClass.getName.stripSuffix("$")}.hashTimestamp($input);
      """
 
-  override protected def genHashString(input: String, result: String): String = {
-    val baseObject = s"$input.getBaseObject()"
-    val baseOffset = s"$input.getBaseOffset()"
-    val numBytes = s"$input.numBytes()"
-    s"$result = $hasherClassName.hashUnsafeBytes($baseObject, $baseOffset, $numBytes);"
+  override protected def genHashString(
+      ctx: CodegenContext, stringType: StringType, input: String, result: String): String = {
+    if (stringType.supportsBinaryEquality || !isCollationAware) {
+      val baseObject = s"$input.getBaseObject()"
+      val baseOffset = s"$input.getBaseOffset()"
+      val numBytes = s"$input.numBytes()"
+      s"$result = $hasherClassName.hashUnsafeBytes($baseObject, $baseOffset, $numBytes);"
+    } else {
+      val key = ctx.freshName("key")
+      val offset = Platform.BYTE_ARRAY_OFFSET
+      s"""
+        byte[] $key = (byte[]) CollationFactory.fetchCollation(${stringType.collationId})
+          .sortKeyFunction.apply($input);
+        $result = $hasherClassName.hashUnsafeBytes($key, $offset, $key.length, $result);
+      """
+    }
   }
 
   override protected def genHashForArray(
@@ -789,7 +1065,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
     }
 
     val code = ctx.splitExpressions(
-      expressions = fieldsHash,
+      expressions = fieldsHash.toImmutableArraySeq,
       funcName = "computeHashForStruct",
       arguments = Seq("InternalRow" -> tmpInput, CodeGenerator.JAVA_INT -> result),
       returnType = CodeGenerator.JAVA_INT,
@@ -806,6 +1082,9 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
        |$code
      """.stripMargin
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): HiveHash =
+    copy(children = newChildren)
 }
 
 object HiveHashFunction extends InterpretedHashFunction {
@@ -863,8 +1142,8 @@ object HiveHashFunction extends InterpretedHashFunction {
    * Mimics TimestampWritable.hashCode() in Hive
    */
   def hashTimestamp(timestamp: Long): Long = {
-    val timestampInSeconds = timestamp / 1000000
-    val nanoSecondsPortion = (timestamp % 1000000) * 1000
+    val timestampInSeconds = MICROSECONDS.toSeconds(timestamp)
+    val nanoSecondsPortion = (timestamp % MICROS_PER_SECOND) * NANOS_PER_MICROS
 
     var result = timestampInSeconds
     result <<= 30 // the nanosecond part fits in 30 bits
@@ -878,7 +1157,7 @@ object HiveHashFunction extends InterpretedHashFunction {
    * - year, month (stored as HiveIntervalYearMonth)
    * - day, hour, minute, second, nanosecond (stored as HiveIntervalDayTime)
    *
-   * eg. (INTERVAL '30' YEAR + INTERVAL '-23' DAY) fails in Hive
+   * e.g. (INTERVAL '30' YEAR + INTERVAL '-23' DAY) fails in Hive
    *
    * This method mimics HiveIntervalDayTime.hashCode() in Hive.
    *
@@ -890,19 +1169,23 @@ object HiveHashFunction extends InterpretedHashFunction {
    *
    * - Spark's [[CalendarInterval]] has precision upto microseconds but Hive's
    *   HiveIntervalDayTime can store data with precision upto nanoseconds. So, any input intervals
-   *   with nanosecond values will lead to wrong output hashes (ie. non adherent with Hive output)
+   *   with nanosecond values will lead to wrong output hashes (i.e. non adherent with Hive output)
    */
   def hashCalendarInterval(calendarInterval: CalendarInterval): Long = {
-    val totalSeconds = calendarInterval.microseconds / CalendarInterval.MICROS_PER_SECOND.toInt
+    val totalMicroSeconds = calendarInterval.days * MICROS_PER_DAY + calendarInterval.microseconds
+    val totalSeconds = totalMicroSeconds / MICROS_PER_SECOND.toInt
     val result: Int = (17 * 37) + (totalSeconds ^ totalSeconds >> 32).toInt
 
-    val nanoSeconds =
-      (calendarInterval.microseconds -
-        (totalSeconds * CalendarInterval.MICROS_PER_SECOND.toInt)).toInt * 1000
+    val nanoSeconds = (totalMicroSeconds - (totalSeconds * MICROS_PER_SECOND.toInt)).toInt * 1000
      (result * 37) + nanoSeconds
   }
 
-  override def hash(value: Any, dataType: DataType, seed: Long): Long = {
+  override def hash(
+      value: Any,
+      dataType: DataType,
+      seed: Long,
+      isCollationAware: Boolean,
+      legacyCollationAwareHashing: Boolean): Long = {
     value match {
       case null => 0
       case array: ArrayData =>
@@ -915,7 +1198,9 @@ object HiveHashFunction extends InterpretedHashFunction {
         var i = 0
         val length = array.numElements()
         while (i < length) {
-          result = (31 * result) + hash(array.get(i, elementType), elementType, 0).toInt
+          result = (31 * result) + hash(
+            array.get(i, elementType), elementType, 0, isCollationAware, legacyCollationAwareHashing
+          ).toInt
           i += 1
         }
         result
@@ -934,7 +1219,11 @@ object HiveHashFunction extends InterpretedHashFunction {
         var i = 0
         val length = map.numElements()
         while (i < length) {
-          result += hash(keys.get(i, kt), kt, 0).toInt ^ hash(values.get(i, vt), vt, 0).toInt
+          result += hash(
+            keys.get(i, kt), kt, 0, isCollationAware, legacyCollationAwareHashing
+          ).toInt ^ hash(
+            values.get(i, vt), vt, 0, isCollationAware, legacyCollationAwareHashing
+          ).toInt
           i += 1
         }
         result
@@ -950,7 +1239,10 @@ object HiveHashFunction extends InterpretedHashFunction {
         var i = 0
         val length = struct.numFields
         while (i < length) {
-          result = (31 * result) + hash(struct.get(i, types(i)), types(i), 0).toInt
+          result = (31 * result) +
+            hash(
+              struct.get(i, types(i)), types(i), 0, isCollationAware, legacyCollationAwareHashing
+            ).toInt
           i += 1
         }
         result
@@ -958,7 +1250,7 @@ object HiveHashFunction extends InterpretedHashFunction {
       case d: Decimal => normalizeDecimal(d.toJavaBigDecimal).hashCode()
       case timestamp: Long if dataType.isInstanceOf[TimestampType] => hashTimestamp(timestamp)
       case calendarInterval: CalendarInterval => hashCalendarInterval(calendarInterval)
-      case _ => super.hash(value, dataType, 0)
+      case _ => super.hash(value, dataType, 0, isCollationAware, legacyCollationAwareHashing)
     }
   }
 }

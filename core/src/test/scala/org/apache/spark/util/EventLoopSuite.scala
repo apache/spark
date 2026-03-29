@@ -19,9 +19,8 @@ package org.apache.spark.util
 
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch}
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
-import scala.language.postfixOps
+import scala.jdk.CollectionConverters._
 
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
@@ -45,7 +44,7 @@ class EventLoopSuite extends SparkFunSuite with TimeLimits {
     }
     eventLoop.start()
     (1 to 100).foreach(eventLoop.post)
-    eventually(timeout(5 seconds), interval(5 millis)) {
+    eventually(timeout(5.seconds), interval(5.milliseconds)) {
       assert((1 to 100) === buffer.asScala.toSeq)
     }
     eventLoop.stop()
@@ -80,7 +79,7 @@ class EventLoopSuite extends SparkFunSuite with TimeLimits {
     }
     eventLoop.start()
     eventLoop.post(1)
-    eventually(timeout(5 seconds), interval(5 millis)) {
+    eventually(timeout(5.seconds), interval(5.milliseconds)) {
       assert(e === receivedError)
     }
     eventLoop.stop()
@@ -102,7 +101,7 @@ class EventLoopSuite extends SparkFunSuite with TimeLimits {
     }
     eventLoop.start()
     eventLoop.post(1)
-    eventually(timeout(5 seconds), interval(5 millis)) {
+    eventually(timeout(5.seconds), interval(5.milliseconds)) {
       assert(e === receivedError)
       assert(eventLoop.isActive)
     }
@@ -157,7 +156,7 @@ class EventLoopSuite extends SparkFunSuite with TimeLimits {
       }.start()
     }
 
-    eventually(timeout(5 seconds), interval(5 millis)) {
+    eventually(timeout(5.seconds), interval(5.milliseconds)) {
       assert(threadNum * eventsFromEachThread === receivedEventsCount)
     }
     eventLoop.stop()
@@ -182,7 +181,7 @@ class EventLoopSuite extends SparkFunSuite with TimeLimits {
     }
     eventLoop.start()
     eventLoop.post(1)
-    failAfter(5 seconds) {
+    failAfter(5.seconds) {
       // Wait until we enter `onReceive`
       onReceiveLatch.await()
       eventLoop.stop()
@@ -203,7 +202,7 @@ class EventLoopSuite extends SparkFunSuite with TimeLimits {
     }
     eventLoop.start()
     eventLoop.post(1)
-    eventually(timeout(5 seconds), interval(5 millis)) {
+    eventually(timeout(5.seconds), interval(5.milliseconds)) {
       assert(!eventLoop.isActive)
     }
   }
@@ -227,7 +226,7 @@ class EventLoopSuite extends SparkFunSuite with TimeLimits {
       }
     }
     eventLoop.start()
-    eventually(timeout(5 seconds), interval(5 millis)) {
+    eventually(timeout(5.seconds), interval(5.milliseconds)) {
       assert(!eventLoop.isActive)
     }
     assert(onStopCalled)
@@ -250,7 +249,7 @@ class EventLoopSuite extends SparkFunSuite with TimeLimits {
     }
     eventLoop.start()
     eventLoop.post(1)
-    eventually(timeout(5 seconds), interval(5 millis)) {
+    eventually(timeout(5.seconds), interval(5.milliseconds)) {
       assert(!eventLoop.isActive)
     }
     assert(onStopCalled)
@@ -274,7 +273,7 @@ class EventLoopSuite extends SparkFunSuite with TimeLimits {
     }
     eventLoop.start()
     eventLoop.post(1)
-    eventually(timeout(5 seconds), interval(5 millis)) {
+    eventually(timeout(5.seconds), interval(5.milliseconds)) {
       assert(!eventLoop.isActive)
     }
     assert(onStopCalled)

@@ -21,21 +21,21 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.12</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.13</artifactId>
+    <version>4.2.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-network-yarn_2.12</artifactId>
+  <artifactId>spark-network-yarn_2.13</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project YARN Shuffle Service</name>
-  <url>http://spark.apache.org/</url>
+  <url>https://spark.apache.org/</url>
   <properties>
     <sbt.project.name>network-yarn</sbt.project.name>
     <!-- Make sure all Hadoop dependencies are provided to avoid repackaging. -->
     <hadoop.deps.scope>provided</hadoop.deps.scope>
     <shuffle.jar>${project.build.directory}/scala-${scala.binary.version}/spark-${project.version}-yarn-shuffle.jar</shuffle.jar>
-    <shade>org/spark_project/</shade>
+    <shade>org/sparkproject/</shade>
   </properties>
 
   <dependencies>
@@ -48,7 +48,7 @@
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
-      <scope>test</scope>
+      <scope>provided</scope>
     </dependency>
 
     <!--
@@ -65,7 +65,18 @@
     <!-- Provided dependencies -->
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-client</artifactId>
+      <artifactId>hadoop-client-api</artifactId>
+      <version>${hadoop.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-client-runtime</artifactId>
+      <version>${hadoop.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.slf4j</groupId>
@@ -88,9 +99,6 @@
             <includes>
               <include>*:*</include>
             </includes>
-            <excludes>
-              <exclude>org.scala-lang:scala-library</exclude>
-            </excludes>
           </artifactSet>
           <filters>
             <filter>
@@ -99,6 +107,7 @@
                 <exclude>META-INF/*.SF</exclude>
                 <exclude>META-INF/*.DSA</exclude>
                 <exclude>META-INF/*.RSA</exclude>
+                <exclude>META-INF/LICENSE</exclude>
               </excludes>
             </filter>
           </filters>
@@ -125,15 +134,72 @@
             <goals>
               <goal>shade</goal>
             </goals>
+            <configuration>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+              </transformers>
+            </configuration>
           </execution>
         </executions>
       </plugin>
-
-      <!-- probes to validate that those dependencies which must be shaded are  -->
+      <!-- shade the native netty libs as well -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>regex-property</id>
+            <goals>
+              <goal>regex-property</goal>
+            </goals>
+            <configuration>
+              <name>spark.shade.native.packageName</name>
+              <value>${spark.shade.packageName}</value>
+              <regex>\.</regex>
+              <replacement>_</replacement>
+              <failIfNoMatch>true</failIfNoMatch>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-antrun-plugin</artifactId>
         <executions>
+          <execution>
+            <id>unpack</id>
+            <phase>package</phase>
+            <configuration>
+              <target>
+                <!-- Follow https://github.com/netty/netty/blob/netty-4.2.7.Final/testsuite-shading/pom.xml to skip processing MS Windows DLLs -->
+                <echo message="Shade netty native libraries to ${spark.shade.native.packageName}" />
+                <unzip src="${shuffle.jar}" dest="${project.build.directory}/exploded/" />
+                <move file="${project.build.directory}/exploded/META-INF/native/libnetty_transport_native_epoll_x86_64.so"
+                  tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_transport_native_epoll_x86_64.so" />
+                <move file="${project.build.directory}/exploded/META-INF/native/libnetty_transport_native_kqueue_x86_64.jnilib"
+                  tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_transport_native_kqueue_x86_64.jnilib" />
+                <move file="${project.build.directory}/exploded/META-INF/native/libnetty_transport_native_epoll_aarch_64.so"
+                  tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_transport_native_epoll_aarch_64.so" />
+                <move file="${project.build.directory}/exploded/META-INF/native/libnetty_transport_native_kqueue_aarch_64.jnilib"
+                  tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_transport_native_kqueue_aarch_64.jnilib" />
+                <move file="${project.build.directory}/exploded/META-INF/native/libnetty_transport_native_epoll_riscv64.so"
+                  tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_transport_native_epoll_riscv64.so" />
+                <move file="${project.build.directory}/exploded/META-INF/native/libnetty_tcnative_linux_x86_64.so"
+                  tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_tcnative_linux_x86_64.so" />
+                <move file="${project.build.directory}/exploded/META-INF/native/libnetty_tcnative_linux_aarch_64.so"
+                  tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_tcnative_linux_aarch_64.so" />
+                <move file="${project.build.directory}/exploded/META-INF/native/libnetty_tcnative_osx_x86_64.jnilib"
+                  tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_tcnative_osx_x86_64.jnilib" />
+                <move file="${project.build.directory}/exploded/META-INF/native/libnetty_tcnative_osx_aarch_64.jnilib"
+                  tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_tcnative_osx_aarch_64.jnilib" />
+                <jar destfile="${shuffle.jar}" basedir="${project.build.directory}/exploded" />
+              </target>
+            </configuration>
+            <goals>
+              <goal>run</goal>
+            </goals>
+          </execution>
+          <!-- probes to validate that those dependencies which must be shaded are  -->
           <execution>
             <phase>verify</phase>
             <goals>

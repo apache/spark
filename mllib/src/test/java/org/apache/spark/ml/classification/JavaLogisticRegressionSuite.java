@@ -20,8 +20,9 @@ package org.apache.spark.ml.classification;
 import java.io.IOException;
 import java.util.List;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
@@ -39,6 +40,7 @@ public class JavaLogisticRegressionSuite extends SharedSparkSession {
   private double eps = 1e-5;
 
   @Override
+  @BeforeEach
   public void setUp() throws IOException {
     super.setUp();
     List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
@@ -50,16 +52,16 @@ public class JavaLogisticRegressionSuite extends SharedSparkSession {
   @Test
   public void logisticRegressionDefaultParams() {
     LogisticRegression lr = new LogisticRegression();
-    Assert.assertEquals(lr.getLabelCol(), "label");
+    Assertions.assertEquals("label", lr.getLabelCol());
     LogisticRegressionModel model = lr.fit(dataset);
     model.transform(dataset).createOrReplaceTempView("prediction");
     Dataset<Row> predictions = spark.sql("SELECT label, probability, prediction FROM prediction");
     predictions.collectAsList();
     // Check defaults
-    Assert.assertEquals(0.5, model.getThreshold(), eps);
-    Assert.assertEquals("features", model.getFeaturesCol());
-    Assert.assertEquals("prediction", model.getPredictionCol());
-    Assert.assertEquals("probability", model.getProbabilityCol());
+    Assertions.assertEquals(0.5, model.getThreshold(), eps);
+    Assertions.assertEquals("features", model.getFeaturesCol());
+    Assertions.assertEquals("prediction", model.getPredictionCol());
+    Assertions.assertEquals("probability", model.getProbabilityCol());
   }
 
   @Test
@@ -72,19 +74,19 @@ public class JavaLogisticRegressionSuite extends SharedSparkSession {
       .setProbabilityCol("myProbability");
     LogisticRegressionModel model = lr.fit(dataset);
     LogisticRegression parent = (LogisticRegression) model.parent();
-    Assert.assertEquals(10, parent.getMaxIter());
-    Assert.assertEquals(1.0, parent.getRegParam(), eps);
-    Assert.assertEquals(0.4, parent.getThresholds()[0], eps);
-    Assert.assertEquals(0.6, parent.getThresholds()[1], eps);
-    Assert.assertEquals(0.6, parent.getThreshold(), eps);
-    Assert.assertEquals(0.6, model.getThreshold(), eps);
+    Assertions.assertEquals(10, parent.getMaxIter());
+    Assertions.assertEquals(1.0, parent.getRegParam(), eps);
+    Assertions.assertEquals(0.4, parent.getThresholds()[0], eps);
+    Assertions.assertEquals(0.6, parent.getThresholds()[1], eps);
+    Assertions.assertEquals(0.6, parent.getThreshold(), eps);
+    Assertions.assertEquals(0.6, model.getThreshold(), eps);
 
     // Modify model params, and check that the params worked.
     model.setThreshold(1.0);
     model.transform(dataset).createOrReplaceTempView("predAllZero");
     Dataset<Row> predAllZero = spark.sql("SELECT prediction, myProbability FROM predAllZero");
     for (Row r : predAllZero.collectAsList()) {
-      Assert.assertEquals(0.0, r.getDouble(0), eps);
+      Assertions.assertEquals(0.0, r.getDouble(0), eps);
     }
     // Call transform with params, and check that the params worked.
     model.transform(dataset, model.threshold().w(0.0), model.probabilityCol().w("myProb"))
@@ -94,36 +96,35 @@ public class JavaLogisticRegressionSuite extends SharedSparkSession {
     for (Row r : predNotAllZero.collectAsList()) {
       if (r.getDouble(0) != 0.0) foundNonZero = true;
     }
-    Assert.assertTrue(foundNonZero);
+    Assertions.assertTrue(foundNonZero);
 
     // Call fit() with new params, and check as many params as we can.
     LogisticRegressionModel model2 = lr.fit(dataset, lr.maxIter().w(5), lr.regParam().w(0.1),
       lr.threshold().w(0.4), lr.probabilityCol().w("theProb"));
     LogisticRegression parent2 = (LogisticRegression) model2.parent();
-    Assert.assertEquals(5, parent2.getMaxIter());
-    Assert.assertEquals(0.1, parent2.getRegParam(), eps);
-    Assert.assertEquals(0.4, parent2.getThreshold(), eps);
-    Assert.assertEquals(0.4, model2.getThreshold(), eps);
-    Assert.assertEquals("theProb", model2.getProbabilityCol());
+    Assertions.assertEquals(5, parent2.getMaxIter());
+    Assertions.assertEquals(0.1, parent2.getRegParam(), eps);
+    Assertions.assertEquals(0.4, parent2.getThreshold(), eps);
+    Assertions.assertEquals(0.4, model2.getThreshold(), eps);
+    Assertions.assertEquals("theProb", model2.getProbabilityCol());
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void logisticRegressionPredictorClassifierMethods() {
     LogisticRegression lr = new LogisticRegression();
     LogisticRegressionModel model = lr.fit(dataset);
-    Assert.assertEquals(2, model.numClasses());
+    Assertions.assertEquals(2, model.numClasses());
 
     model.transform(dataset).createOrReplaceTempView("transformed");
     Dataset<Row> trans1 = spark.sql("SELECT rawPrediction, probability FROM transformed");
     for (Row row : trans1.collectAsList()) {
       Vector raw = (Vector) row.get(0);
       Vector prob = (Vector) row.get(1);
-      Assert.assertEquals(raw.size(), 2);
-      Assert.assertEquals(prob.size(), 2);
+      Assertions.assertEquals(2, raw.size());
+      Assertions.assertEquals(2, prob.size());
       double probFromRaw1 = 1.0 / (1.0 + Math.exp(-raw.apply(1)));
-      Assert.assertEquals(0, Math.abs(prob.apply(1) - probFromRaw1), eps);
-      Assert.assertEquals(0, Math.abs(prob.apply(0) - (1.0 - probFromRaw1)), eps);
+      Assertions.assertEquals(0, Math.abs(prob.apply(1) - probFromRaw1), eps);
+      Assertions.assertEquals(0, Math.abs(prob.apply(0) - (1.0 - probFromRaw1)), eps);
     }
 
     Dataset<Row> trans2 = spark.sql("SELECT prediction, probability FROM transformed");
@@ -132,7 +133,7 @@ public class JavaLogisticRegressionSuite extends SharedSparkSession {
       Vector prob = (Vector) row.get(1);
       double probOfPred = prob.apply((int) pred);
       for (int i = 0; i < prob.size(); ++i) {
-        Assert.assertTrue(probOfPred >= prob.apply(i));
+        Assertions.assertTrue(probOfPred >= prob.apply(i));
       }
     }
   }
@@ -143,6 +144,6 @@ public class JavaLogisticRegressionSuite extends SharedSparkSession {
     LogisticRegressionModel model = lr.fit(dataset);
 
     LogisticRegressionTrainingSummary summary = model.summary();
-    Assert.assertEquals(summary.totalIterations(), summary.objectiveHistory().length);
+    Assertions.assertEquals(summary.totalIterations(), summary.objectiveHistory().length - 1);
   }
 }

@@ -127,7 +127,8 @@ class RowBasedHashMapGenerator(
         case t: DecimalType =>
           s"agg_rowWriter.write(${ordinal}, ${key.name}, ${t.precision}, ${t.scale})"
         case t: DataType =>
-          if (!t.isInstanceOf[StringType] && !CodeGenerator.isPrimitiveType(t)) {
+          if (!t.isInstanceOf[StringType] && !t.isInstanceOf[CalendarIntervalType] &&
+            !CodeGenerator.isPrimitiveType(t)) {
             throw new IllegalArgumentException(s"cannot generate code for unsupported type: $t")
           }
           s"agg_rowWriter.write(${ordinal}, ${key.name})"
@@ -184,7 +185,7 @@ class RowBasedHashMapGenerator(
   }
 
   protected def generateRowIterator(): String = {
-    s"""
+    """
        |public org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow> rowIterator() {
        |  return batch.rowIterator();
        |}

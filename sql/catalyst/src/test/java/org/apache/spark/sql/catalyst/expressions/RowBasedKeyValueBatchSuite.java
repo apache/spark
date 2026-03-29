@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.memory.TaskMemoryManager;
@@ -29,6 +29,7 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.internal.config.package$;
 
 import java.util.Random;
 
@@ -47,7 +48,7 @@ public class RowBasedKeyValueBatchSuite {
   private int DEFAULT_CAPACITY = 1 << 16;
 
   private String getRandomString(int length) {
-    Assert.assertTrue(length >= 0);
+    Assertions.assertTrue(length >= 0);
     final byte[] bytes = new byte[length];
     rand.nextBytes(bytes);
     return new String(bytes);
@@ -101,22 +102,22 @@ public class RowBasedKeyValueBatchSuite {
     return (row.getLong(0) == v1) && (row.getLong(1) == v2);
   }
 
-  @Before
+  @BeforeEach
   public void setup() {
     memoryManager = new TestMemoryManager(new SparkConf()
-            .set("spark.memory.offHeap.enabled", "false")
-            .set("spark.shuffle.spill.compress", "false")
-            .set("spark.shuffle.compress", "false"));
+            .set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)
+            .set(package$.MODULE$.SHUFFLE_SPILL_COMPRESS(), false)
+            .set(package$.MODULE$.SHUFFLE_COMPRESS(), false));
     taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     if (taskMemoryManager != null) {
-      Assert.assertEquals(0L, taskMemoryManager.cleanUpAllAllocatedMemory());
+      Assertions.assertEquals(0L, taskMemoryManager.cleanUpAllAllocatedMemory());
       long leakedMemory = taskMemoryManager.getMemoryConsumptionForThisTask();
       taskMemoryManager = null;
-      Assert.assertEquals(0L, leakedMemory);
+      Assertions.assertEquals(0L, leakedMemory);
     }
   }
 
@@ -125,32 +126,12 @@ public class RowBasedKeyValueBatchSuite {
   public void emptyBatch() throws Exception {
     try (RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
         valueSchema, taskMemoryManager, DEFAULT_CAPACITY)) {
-      Assert.assertEquals(0, batch.numRows());
-      try {
-        batch.getKeyRow(-1);
-        Assert.fail("Should not be able to get row -1");
-      } catch (AssertionError e) {
-        // Expected exception; do nothing.
-      }
-      try {
-        batch.getValueRow(-1);
-        Assert.fail("Should not be able to get row -1");
-      } catch (AssertionError e) {
-        // Expected exception; do nothing.
-      }
-      try {
-        batch.getKeyRow(0);
-        Assert.fail("Should not be able to get row 0 when batch is empty");
-      } catch (AssertionError e) {
-        // Expected exception; do nothing.
-      }
-      try {
-        batch.getValueRow(0);
-        Assert.fail("Should not be able to get row 0 when batch is empty");
-      } catch (AssertionError e) {
-        // Expected exception; do nothing.
-      }
-      Assert.assertFalse(batch.rowIterator().next());
+      Assertions.assertEquals(0, batch.numRows());
+      Assertions.assertThrows(AssertionError.class, () -> batch.getKeyRow(-1));
+      Assertions.assertThrows(AssertionError.class, () -> batch.getValueRow(-1));
+      Assertions.assertThrows(AssertionError.class, () -> batch.getKeyRow(0));
+      Assertions.assertThrows(AssertionError.class, () -> batch.getValueRow(0));
+      Assertions.assertFalse(batch.rowIterator().next());
     }
   }
 
@@ -160,8 +141,8 @@ public class RowBasedKeyValueBatchSuite {
         valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
          RowBasedKeyValueBatch batch2 = RowBasedKeyValueBatch.allocate(fixedKeySchema,
         valueSchema, taskMemoryManager, DEFAULT_CAPACITY)) {
-      Assert.assertEquals(batch1.getClass(), VariableLengthRowBasedKeyValueBatch.class);
-      Assert.assertEquals(batch2.getClass(), FixedLengthRowBasedKeyValueBatch.class);
+      Assertions.assertEquals(VariableLengthRowBasedKeyValueBatch.class, batch1.getClass());
+      Assertions.assertEquals(FixedLengthRowBasedKeyValueBatch.class, batch2.getClass());
     }
   }
 
@@ -170,32 +151,23 @@ public class RowBasedKeyValueBatchSuite {
     try (RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
         valueSchema, taskMemoryManager, DEFAULT_CAPACITY)) {
       UnsafeRow ret1 = appendRow(batch, makeKeyRow(1, "A"), makeValueRow(1, 1));
-      Assert.assertTrue(checkValue(ret1, 1, 1));
+      Assertions.assertTrue(checkValue(ret1, 1, 1));
       UnsafeRow ret2 = appendRow(batch, makeKeyRow(2, "B"), makeValueRow(2, 2));
-      Assert.assertTrue(checkValue(ret2, 2, 2));
+      Assertions.assertTrue(checkValue(ret2, 2, 2));
       UnsafeRow ret3 = appendRow(batch, makeKeyRow(3, "C"), makeValueRow(3, 3));
-      Assert.assertTrue(checkValue(ret3, 3, 3));
-      Assert.assertEquals(3, batch.numRows());
+      Assertions.assertTrue(checkValue(ret3, 3, 3));
+      Assertions.assertEquals(3, batch.numRows());
       UnsafeRow retrievedKey1 = batch.getKeyRow(0);
-      Assert.assertTrue(checkKey(retrievedKey1, 1, "A"));
+      Assertions.assertTrue(checkKey(retrievedKey1, 1, "A"));
       UnsafeRow retrievedKey2 = batch.getKeyRow(1);
-      Assert.assertTrue(checkKey(retrievedKey2, 2, "B"));
+      Assertions.assertTrue(checkKey(retrievedKey2, 2, "B"));
       UnsafeRow retrievedValue1 = batch.getValueRow(1);
-      Assert.assertTrue(checkValue(retrievedValue1, 2, 2));
+      Assertions.assertTrue(checkValue(retrievedValue1, 2, 2));
       UnsafeRow retrievedValue2 = batch.getValueRow(2);
-      Assert.assertTrue(checkValue(retrievedValue2, 3, 3));
-      try {
-        batch.getKeyRow(3);
-        Assert.fail("Should not be able to get row 3");
-      } catch (AssertionError e) {
-        // Expected exception; do nothing.
-      }
-      try {
-        batch.getValueRow(3);
-        Assert.fail("Should not be able to get row 3");
-      } catch (AssertionError e) {
-        // Expected exception; do nothing.
-      }
+      Assertions.assertTrue(checkValue(retrievedValue2, 3, 3));
+
+      Assertions.assertThrows(AssertionError.class, () -> batch.getKeyRow(3));
+      Assertions.assertThrows(AssertionError.class, () -> batch.getValueRow(3));
     }
   }
 
@@ -204,11 +176,11 @@ public class RowBasedKeyValueBatchSuite {
     try (RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
         valueSchema, taskMemoryManager, DEFAULT_CAPACITY)) {
       appendRow(batch, makeKeyRow(1, "A"), makeValueRow(1, 1));
-      Assert.assertEquals(1, batch.numRows());
+      Assertions.assertEquals(1, batch.numRows());
       UnsafeRow retrievedValue = batch.getValueRow(0);
       updateValueRow(retrievedValue, 2, 2);
       UnsafeRow retrievedValue2 = batch.getValueRow(0);
-      Assert.assertTrue(checkValue(retrievedValue2, 2, 2));
+      Assertions.assertTrue(checkValue(retrievedValue2, 2, 2));
     }
   }
 
@@ -220,25 +192,25 @@ public class RowBasedKeyValueBatchSuite {
       appendRow(batch, makeKeyRow(1, "A"), makeValueRow(1, 1));
       appendRow(batch, makeKeyRow(2, "B"), makeValueRow(2, 2));
       appendRow(batch, makeKeyRow(3, "C"), makeValueRow(3, 3));
-      Assert.assertEquals(3, batch.numRows());
+      Assertions.assertEquals(3, batch.numRows());
       org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow> iterator
               = batch.rowIterator();
-      Assert.assertTrue(iterator.next());
+      Assertions.assertTrue(iterator.next());
       UnsafeRow key1 = iterator.getKey();
       UnsafeRow value1 = iterator.getValue();
-      Assert.assertTrue(checkKey(key1, 1, "A"));
-      Assert.assertTrue(checkValue(value1, 1, 1));
-      Assert.assertTrue(iterator.next());
+      Assertions.assertTrue(checkKey(key1, 1, "A"));
+      Assertions.assertTrue(checkValue(value1, 1, 1));
+      Assertions.assertTrue(iterator.next());
       UnsafeRow key2 = iterator.getKey();
       UnsafeRow value2 = iterator.getValue();
-      Assert.assertTrue(checkKey(key2, 2, "B"));
-      Assert.assertTrue(checkValue(value2, 2, 2));
-      Assert.assertTrue(iterator.next());
+      Assertions.assertTrue(checkKey(key2, 2, "B"));
+      Assertions.assertTrue(checkValue(value2, 2, 2));
+      Assertions.assertTrue(iterator.next());
       UnsafeRow key3 = iterator.getKey();
       UnsafeRow value3 = iterator.getValue();
-      Assert.assertTrue(checkKey(key3, 3, "C"));
-      Assert.assertTrue(checkValue(value3, 3, 3));
-      Assert.assertFalse(iterator.next());
+      Assertions.assertTrue(checkKey(key3, 3, "C"));
+      Assertions.assertTrue(checkValue(value3, 3, 3));
+      Assertions.assertFalse(iterator.next());
     }
   }
 
@@ -250,32 +222,32 @@ public class RowBasedKeyValueBatchSuite {
       appendRow(batch, makeKeyRow(22, 22), makeValueRow(2, 2));
       appendRow(batch, makeKeyRow(33, 33), makeValueRow(3, 3));
       UnsafeRow retrievedKey1 = batch.getKeyRow(0);
-      Assert.assertTrue(checkKey(retrievedKey1, 11, 11));
+      Assertions.assertTrue(checkKey(retrievedKey1, 11, 11));
       UnsafeRow retrievedKey2 = batch.getKeyRow(1);
-      Assert.assertTrue(checkKey(retrievedKey2, 22, 22));
+      Assertions.assertTrue(checkKey(retrievedKey2, 22, 22));
       UnsafeRow retrievedValue1 = batch.getValueRow(1);
-      Assert.assertTrue(checkValue(retrievedValue1, 2, 2));
+      Assertions.assertTrue(checkValue(retrievedValue1, 2, 2));
       UnsafeRow retrievedValue2 = batch.getValueRow(2);
-      Assert.assertTrue(checkValue(retrievedValue2, 3, 3));
-      Assert.assertEquals(3, batch.numRows());
+      Assertions.assertTrue(checkValue(retrievedValue2, 3, 3));
+      Assertions.assertEquals(3, batch.numRows());
       org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow> iterator
               = batch.rowIterator();
-      Assert.assertTrue(iterator.next());
+      Assertions.assertTrue(iterator.next());
       UnsafeRow key1 = iterator.getKey();
       UnsafeRow value1 = iterator.getValue();
-      Assert.assertTrue(checkKey(key1, 11, 11));
-      Assert.assertTrue(checkValue(value1, 1, 1));
-      Assert.assertTrue(iterator.next());
+      Assertions.assertTrue(checkKey(key1, 11, 11));
+      Assertions.assertTrue(checkValue(value1, 1, 1));
+      Assertions.assertTrue(iterator.next());
       UnsafeRow key2 = iterator.getKey();
       UnsafeRow value2 = iterator.getValue();
-      Assert.assertTrue(checkKey(key2, 22, 22));
-      Assert.assertTrue(checkValue(value2, 2, 2));
-      Assert.assertTrue(iterator.next());
+      Assertions.assertTrue(checkKey(key2, 22, 22));
+      Assertions.assertTrue(checkValue(value2, 2, 2));
+      Assertions.assertTrue(iterator.next());
       UnsafeRow key3 = iterator.getKey();
       UnsafeRow value3 = iterator.getValue();
-      Assert.assertTrue(checkKey(key3, 33, 33));
-      Assert.assertTrue(checkValue(value3, 3, 3));
-      Assert.assertFalse(iterator.next());
+      Assertions.assertTrue(checkKey(key3, 33, 33));
+      Assertions.assertTrue(checkValue(value3, 3, 3));
+      Assertions.assertFalse(iterator.next());
     }
   }
 
@@ -289,18 +261,18 @@ public class RowBasedKeyValueBatchSuite {
         appendRow(batch, key, value);
       }
       UnsafeRow ret = appendRow(batch, key, value);
-      Assert.assertEquals(batch.numRows(), 10);
-      Assert.assertNull(ret);
+      Assertions.assertEquals(10, batch.numRows());
+      Assertions.assertNull(ret);
       org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow> iterator
               = batch.rowIterator();
       for (int i = 0; i < 10; i++) {
-        Assert.assertTrue(iterator.next());
+        Assertions.assertTrue(iterator.next());
         UnsafeRow key1 = iterator.getKey();
         UnsafeRow value1 = iterator.getValue();
-        Assert.assertTrue(checkKey(key1, 1, "A"));
-        Assert.assertTrue(checkValue(value1, 1, 1));
+        Assertions.assertTrue(checkKey(key1, 1, "A"));
+        Assertions.assertTrue(checkValue(value1, 1, 1));
       }
-      Assert.assertFalse(iterator.next());
+      Assertions.assertFalse(iterator.next());
     }
   }
 
@@ -321,18 +293,18 @@ public class RowBasedKeyValueBatchSuite {
         numRows++;
       }
       UnsafeRow ret = appendRow(batch, key, value);
-      Assert.assertEquals(batch.numRows(), numRows);
-      Assert.assertNull(ret);
+      Assertions.assertEquals(numRows, batch.numRows());
+      Assertions.assertNull(ret);
       org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow> iterator
               = batch.rowIterator();
       for (int i = 0; i < numRows; i++) {
-        Assert.assertTrue(iterator.next());
+        Assertions.assertTrue(iterator.next());
         UnsafeRow key1 = iterator.getKey();
         UnsafeRow value1 = iterator.getValue();
-        Assert.assertTrue(checkKey(key1, 1, "A"));
-        Assert.assertTrue(checkValue(value1, 1, 1));
+        Assertions.assertTrue(checkKey(key1, 1, "A"));
+        Assertions.assertTrue(checkValue(value1, 1, 1));
       }
-      Assert.assertFalse(iterator.next());
+      Assertions.assertFalse(iterator.next());
     }
   }
 
@@ -344,8 +316,8 @@ public class RowBasedKeyValueBatchSuite {
       UnsafeRow key = makeKeyRow(1, "A");
       UnsafeRow value = makeValueRow(11, 11);
       UnsafeRow ret = appendRow(batch, key, value);
-      Assert.assertNull(ret);
-      Assert.assertFalse(batch.rowIterator().next());
+      Assertions.assertNull(ret);
+      Assertions.assertFalse(batch.rowIterator().next());
     }
   }
 
@@ -375,11 +347,11 @@ public class RowBasedKeyValueBatchSuite {
         int rowId = rand.nextInt(numEntry);
         if (rand.nextBoolean()) {
           UnsafeRow key = batch.getKeyRow(rowId);
-          Assert.assertTrue(checkKey(key, expectedK1[rowId], expectedK2[rowId]));
+          Assertions.assertTrue(checkKey(key, expectedK1[rowId], expectedK2[rowId]));
         }
         if (rand.nextBoolean()) {
           UnsafeRow value = batch.getValueRow(rowId);
-          Assert.assertTrue(checkValue(value, expectedV1[rowId], expectedV2[rowId]));
+          Assertions.assertTrue(checkValue(value, expectedV1[rowId], expectedV2[rowId]));
         }
       }
     }

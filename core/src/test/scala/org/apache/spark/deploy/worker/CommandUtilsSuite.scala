@@ -17,10 +17,13 @@
 
 package org.apache.spark.deploy.worker
 
-import org.scalatest.{Matchers, PrivateMethodTester}
+import org.scalatest.PrivateMethodTester
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite, SSLOptions}
 import org.apache.spark.deploy.Command
+import org.apache.spark.network.ssl.SslSampleConfigs
 import org.apache.spark.util.Utils
 
 class CommandUtilsSuite extends SparkFunSuite with Matchers with PrivateMethodTester {
@@ -38,7 +41,7 @@ class CommandUtilsSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   }
 
   test("auth secret shouldn't appear in java opts") {
-    val buildLocalCommand = PrivateMethod[Command]('buildLocalCommand)
+    val buildLocalCommand = PrivateMethod[Command](Symbol("buildLocalCommand"))
     val conf = new SparkConf
     val secret = "This is the secret sauce"
     // set auth secret
@@ -65,5 +68,30 @@ class CommandUtilsSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       command, new SecurityManager(conf), (t: String) => t, Seq(), Map())
     assert(!cmd.javaOpts.exists(_.startsWith("-D" + SecurityManager.SPARK_AUTH_SECRET_CONF)))
     assert(cmd.environment(SecurityManager.ENV_AUTH_SECRET) === secret)
+  }
+
+  test("SSL RPC passwords shouldn't appear in java opts") {
+    val buildLocalCommand = PrivateMethod[Command](Symbol("buildLocalCommand"))
+    val conf = new SparkConf
+    conf.set("spark.ssl.rpc.enabled", "true")
+
+    // This sets passwords
+    val updatedConfigs = SslSampleConfigs.createDefaultConfigMapForRpcNamespace()
+    updatedConfigs.entrySet().forEach(entry => conf.set(entry.getKey, entry.getValue))
+
+    val secret = "This is the secret sauce"
+    val command = Command("mainClass", Seq(), Map(), Seq(), Seq("lib"),
+      SSLOptions.SPARK_RPC_SSL_PASSWORD_FIELDS.map(
+        field => "-D" + field + "=" + secret
+      ))
+
+    val cmd = CommandUtils invokePrivate buildLocalCommand(
+      command, new SecurityManager(conf), (t: String) => t, Seq(), Map())
+    SSLOptions.SPARK_RPC_SSL_PASSWORD_FIELDS.foreach(
+      field => assert(!cmd.javaOpts.exists(_.startsWith("-D" + field)))
+    )
+    SSLOptions.SPARK_RPC_SSL_PASSWORD_ENVS.foreach(
+      env => assert(cmd.environment(env) === "password")
+    )
   }
 }

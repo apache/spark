@@ -23,7 +23,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.DataSourceScanExec
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelationWithTable}
 import org.apache.spark.sql.hive.execution.HiveTableScanExec
 
 /**
@@ -155,7 +155,7 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
     (1 to 10).map(i => Tuple1(Seq(Integer.valueOf(i), null))).toDF("a")
       .createOrReplaceTempView("jt_array")
 
-    assert(spark.sqlContext.getConf(HiveUtils.CONVERT_METASTORE_PARQUET.key) == "true")
+    assert(spark.conf.get(HiveUtils.CONVERT_METASTORE_PARQUET.key) == "true")
   }
 
   override def afterAll(): Unit = {
@@ -267,7 +267,7 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
       )
 
       table("test_parquet_ctas").queryExecution.optimizedPlan match {
-        case LogicalRelation(_: HadoopFsRelation, _, _, _) => // OK
+        case LogicalRelationWithTable(_: HadoopFsRelation, _) => // OK
         case _ => fail(
           "test_parquet_ctas should be converted to " +
             s"${classOf[HadoopFsRelation ].getCanonicalName }")
@@ -352,7 +352,7 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
 
       assertResult(2) {
         analyzed.collect {
-          case r @ LogicalRelation(_: HadoopFsRelation, _, _, _) => r
+          case r @ LogicalRelationWithTable(_: HadoopFsRelation, _) => r
         }.size
       }
     }
@@ -361,7 +361,7 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
   def collectHadoopFsRelation(df: DataFrame): HadoopFsRelation = {
     val plan = df.queryExecution.analyzed
     plan.collectFirst {
-      case LogicalRelation(r: HadoopFsRelation, _, _, _) => r
+      case LogicalRelationWithTable(r: HadoopFsRelation, _) => r
     }.getOrElse {
       fail(s"Expecting a HadoopFsRelation 2, but got:\n$plan")
     }
@@ -440,8 +440,8 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
     def checkCached(tableIdentifier: TableIdentifier): Unit = {
       // Converted test_parquet should be cached.
       getCachedDataSourceTable(tableIdentifier) match {
-        case null => fail("Converted test_parquet should be cached in the cache.")
-        case LogicalRelation(_: HadoopFsRelation, _, _, _) => // OK
+        case null => fail(s"Converted ${tableIdentifier.table} should be cached in the cache.")
+        case LogicalRelationWithTable(_: HadoopFsRelation, _) => // OK
         case other =>
           fail(
             "The cached test_parquet should be a Parquet Relation. " +
@@ -473,20 +473,20 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
     checkCached(tableIdentifier)
     // For insert into non-partitioned table, we will do the conversion,
     // so the converted test_insert_parquet should be cached.
-    sessionState.refreshTable("test_insert_parquet")
+    spark.catalog.refreshTable("test_insert_parquet")
     assert(getCachedDataSourceTable(tableIdentifier) === null)
     sql(
       """
         |INSERT INTO TABLE test_insert_parquet
         |select a, b from jt
       """.stripMargin)
-    checkCached(tableIdentifier)
+    assert(getCachedDataSourceTable(tableIdentifier) === null)
     // Make sure we can read the data.
     checkAnswer(
       sql("select * from test_insert_parquet"),
       sql("select a, b from jt").collect())
     // Invalidate the cache.
-    sessionState.refreshTable("test_insert_parquet")
+    spark.catalog.refreshTable("test_insert_parquet")
     assert(getCachedDataSourceTable(tableIdentifier) === null)
 
     // Create a partitioned table.
@@ -512,7 +512,7 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
         |PARTITION (`date`='2015-04-01')
         |select a, b from jt
       """.stripMargin)
-    // Right now, insert into a partitioned Parquet is not supported in data source Parquet.
+    // Right now, insert into a partitioned data source Parquet table. We refreshed the table.
     // So, we expect it is not cached.
     assert(getCachedDataSourceTable(tableIdentifier) === null)
     sql(
@@ -536,7 +536,7 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
           |select b, '2015-04-02', a FROM jt
         """.stripMargin).collect())
 
-    sessionState.refreshTable("test_parquet_partitioned_cache_test")
+    spark.catalog.refreshTable("test_parquet_partitioned_cache_test")
     assert(getCachedDataSourceTable(tableIdentifier) === null)
 
     dropTables("test_insert_parquet", "test_parquet_partitioned_cache_test")

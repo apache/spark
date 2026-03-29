@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.optim
 
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{NUM_ITERATIONS, RELATIVE_TOLERANCE}
 import org.apache.spark.ml.feature.{Instance, OffsetInstance}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.util.OptionalInstrumentation
@@ -61,12 +63,13 @@ private[ml] class IterativelyReweightedLeastSquares(
     val fitIntercept: Boolean,
     val regParam: Double,
     val maxIter: Int,
-    val tol: Double) extends Serializable {
+    val tol: Double) extends Serializable with Logging {
 
   def fit(
       instances: RDD[OffsetInstance],
       instr: OptionalInstrumentation = OptionalInstrumentation.create(
-        classOf[IterativelyReweightedLeastSquares])): IterativelyReweightedLeastSquaresModel = {
+        classOf[IterativelyReweightedLeastSquares]),
+      depth: Int = 2): IterativelyReweightedLeastSquaresModel = {
 
     var converged = false
     var iter = 0
@@ -87,7 +90,7 @@ private[ml] class IterativelyReweightedLeastSquares(
       // Estimate new model
       model = new WeightedLeastSquares(fitIntercept, regParam, elasticNetParam = 0.0,
         standardizeFeatures = false, standardizeLabel = false)
-        .fit(newInstances, instr = instr)
+        .fit(newInstances, instr = instr, depth = depth)
 
       // Check convergence
       val oldCoefficients = oldModel.coefficients
@@ -100,14 +103,15 @@ private[ml] class IterativelyReweightedLeastSquares(
 
       if (maxTol < tol) {
         converged = true
-        instr.logInfo(s"IRLS converged in $iter iterations.")
+        instr.logInfo(log"IRLS converged in ${MDC(NUM_ITERATIONS, iter)} iterations.")
       }
 
-      instr.logInfo(s"Iteration $iter : relative tolerance = $maxTol")
+      instr.logInfo(log"Iteration ${MDC(NUM_ITERATIONS, iter)}: " +
+        log"relative tolerance = ${MDC(RELATIVE_TOLERANCE, maxTol)}")
       iter = iter + 1
 
       if (iter == maxIter) {
-        instr.logInfo(s"IRLS reached the max number of iterations: $maxIter.")
+        instr.logInfo(log"IRLS reached the max number of iterations: ${MDC(NUM_ITERATIONS, iter)}.")
       }
 
     }

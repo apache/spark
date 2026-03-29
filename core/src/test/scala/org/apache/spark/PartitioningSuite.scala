@@ -22,7 +22,9 @@ import scala.math.abs
 
 import org.scalatest.PrivateMethodTester
 
+import org.apache.spark.internal.config._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.StatCounter
 
 class PartitioningSuite extends SparkFunSuite with SharedSparkContext with PrivateMethodTester {
@@ -70,13 +72,13 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
     // 1000 partitions.
     val partitionSizes = List(1, 2, 10, 100, 500, 1000, 1500)
     val partitioners = partitionSizes.map(p => (p, new RangePartitioner(p, rdd)))
-    val decoratedRangeBounds = PrivateMethod[Array[Int]]('rangeBounds)
+    val decoratedRangeBounds = PrivateMethod[Array[Int]](Symbol("rangeBounds"))
     partitioners.foreach { case (numPartitions, partitioner) =>
       val rangeBounds = partitioner.invokePrivate(decoratedRangeBounds())
       for (element <- 1 to 1000) {
         val partition = partitioner.getPartition(element)
         if (numPartitions > 1) {
-          if (partition < rangeBounds.size) {
+          if (partition < rangeBounds.length) {
             assert(element <= rangeBounds(partition))
           }
           if (partition > 0) {
@@ -110,7 +112,7 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
     assert(count === rdd.count())
     sketched.foreach { case (idx, n, sample) =>
       assert(n === idx)
-      assert(sample.size === math.min(n, sampleSizePerPartition))
+      assert(sample.length === math.min(n, sampleSizePerPartition))
     }
   }
 
@@ -208,9 +210,10 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
   }
 
   test("partitioning Java arrays should fail") {
-    val arrs: RDD[Array[Int]] = sc.parallelize(Array(1, 2, 3, 4), 2).map(x => Array(x))
+    val arrs: RDD[Array[Int]] =
+      sc.parallelize(Array(1, 2, 3, 4).toImmutableArraySeq, 2).map(x => Array(x))
     val arrPairs: RDD[(Array[Int], Int)] =
-      sc.parallelize(Array(1, 2, 3, 4), 2).map(x => (Array(x), x))
+      sc.parallelize(Array(1, 2, 3, 4).toImmutableArraySeq, 2).map(x => (Array(x), x))
 
     def verify(testFun: => Unit): Unit = {
       intercept[SparkException](testFun).getMessage.contains("array")
@@ -235,19 +238,19 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
   test("zero-length partitions should be correctly handled") {
     // Create RDD with some consecutive empty partitions (including the "first" one)
     val rdd: RDD[Double] = sc
-        .parallelize(Array(-1.0, -1.0, -1.0, -1.0, 2.0, 4.0, -1.0, -1.0), 8)
+        .parallelize(Array(-1.0, -1.0, -1.0, -1.0, 2.0, 4.0, -1.0, -1.0).toImmutableArraySeq, 8)
         .filter(_ >= 0.0)
 
     // Run the partitions, including the consecutive empty ones, through StatCounter
     val stats: StatCounter = rdd.stats()
     assert(abs(6.0 - stats.sum) < 0.01)
-    assert(abs(6.0/2 - rdd.mean) < 0.01)
-    assert(abs(1.0 - rdd.variance) < 0.01)
-    assert(abs(1.0 - rdd.stdev) < 0.01)
-    assert(abs(rdd.variance - rdd.popVariance) < 1e-14)
-    assert(abs(rdd.stdev - rdd.popStdev) < 1e-14)
-    assert(abs(2.0 - rdd.sampleVariance) < 1e-14)
-    assert(abs(Math.sqrt(2.0) - rdd.sampleStdev) < 1e-14)
+    assert(abs(6.0/2 - rdd.mean()) < 0.01)
+    assert(abs(1.0 - rdd.variance()) < 0.01)
+    assert(abs(1.0 - rdd.stdev()) < 0.01)
+    assert(abs(rdd.variance() - rdd.popVariance()) < 1e-14)
+    assert(abs(rdd.stdev() - rdd.popStdev()) < 1e-14)
+    assert(abs(2.0 - rdd.sampleVariance()) < 1e-14)
+    assert(abs(Math.sqrt(2.0) - rdd.sampleStdev()) < 1e-14)
     assert(stats.max === 4.0)
     assert(stats.min === 2.0)
 
@@ -262,11 +265,11 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
 
   test("defaultPartitioner") {
     val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 150)
-    val rdd2 = sc.parallelize(Array((1, 2), (2, 3), (2, 4), (3, 4)))
+    val rdd2 = sc.parallelize(Seq((1, 2), (2, 3), (2, 4), (3, 4)))
       .partitionBy(new HashPartitioner(10))
-    val rdd3 = sc.parallelize(Array((1, 6), (7, 8), (3, 10), (5, 12), (13, 14)))
+    val rdd3 = sc.parallelize(Seq((1, 6), (7, 8), (3, 10), (5, 12), (13, 14)))
       .partitionBy(new HashPartitioner(100))
-    val rdd4 = sc.parallelize(Array((1, 2), (2, 3), (2, 4), (3, 4)))
+    val rdd4 = sc.parallelize(Seq((1, 2), (2, 3), (2, 4), (3, 4)))
       .partitionBy(new HashPartitioner(9))
     val rdd5 = sc.parallelize((1 to 10).map(x => (x, x)), 11)
 
@@ -284,19 +287,19 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
   }
 
   test("defaultPartitioner when defaultParallelism is set") {
-    assert(!sc.conf.contains("spark.default.parallelism"))
+    assert(!sc.conf.contains(DEFAULT_PARALLELISM.key))
     try {
-      sc.conf.set("spark.default.parallelism", "4")
+      sc.conf.set(DEFAULT_PARALLELISM.key, "4")
 
       val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 150)
-      val rdd2 = sc.parallelize(Array((1, 2), (2, 3), (2, 4), (3, 4)))
+      val rdd2 = sc.parallelize(Seq((1, 2), (2, 3), (2, 4), (3, 4)))
         .partitionBy(new HashPartitioner(10))
-      val rdd3 = sc.parallelize(Array((1, 6), (7, 8), (3, 10), (5, 12), (13, 14)))
+      val rdd3 = sc.parallelize(Seq((1, 6), (7, 8), (3, 10), (5, 12), (13, 14)))
         .partitionBy(new HashPartitioner(100))
-      val rdd4 = sc.parallelize(Array((1, 2), (2, 3), (2, 4), (3, 4)))
+      val rdd4 = sc.parallelize(Seq((1, 2), (2, 3), (2, 4), (3, 4)))
         .partitionBy(new HashPartitioner(9))
       val rdd5 = sc.parallelize((1 to 10).map(x => (x, x)), 11)
-      val rdd6 = sc.parallelize(Array((1, 2), (2, 3), (2, 4), (3, 4)))
+      val rdd6 = sc.parallelize(Seq((1, 2), (2, 3), (2, 4), (3, 4)))
         .partitionBy(new HashPartitioner(3))
 
       val partitioner1 = Partitioner.defaultPartitioner(rdd1, rdd2)
@@ -315,7 +318,7 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
       assert(partitioner6.numPartitions == sc.defaultParallelism)
       assert(partitioner7.numPartitions == sc.defaultParallelism)
     } finally {
-      sc.conf.remove("spark.default.parallelism")
+      sc.conf.remove(DEFAULT_PARALLELISM.key)
     }
   }
 }

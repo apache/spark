@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,9 +22,12 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 /**
  * CompositeService.
@@ -33,7 +35,7 @@ import org.apache.hadoop.hive.conf.HiveConf;
  */
 public class CompositeService extends AbstractService {
 
-  private static final Log LOG = LogFactory.getLog(CompositeService.class);
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(CompositeService.class);
 
   private final List<Service> serviceList = new ArrayList<Service>();
 
@@ -71,7 +73,7 @@ public class CompositeService extends AbstractService {
       }
       super.start();
     } catch (Throwable e) {
-      LOG.error("Error starting services " + getName(), e);
+      LOG.error("Error starting services {}", e, MDC.of(LogKeys.SERVICE_NAME, getName()));
       // Note that the state of the failed service is still INITED and not
       // STARTED. Even though the last service is not started completely, still
       // call stop() on all services including failed service to make sure cleanup
@@ -101,7 +103,7 @@ public class CompositeService extends AbstractService {
       try {
         service.stop();
       } catch (Throwable t) {
-        LOG.info("Error stopping " + service.getName(), t);
+        LOG.info("Error stopping {}", t, MDC.of(LogKeys.SERVICE_NAME, service.getName()));
       }
     }
   }
@@ -124,7 +126,8 @@ public class CompositeService extends AbstractService {
         // Stop the Composite Service
         compositeService.stop();
       } catch (Throwable t) {
-        LOG.info("Error stopping " + compositeService.getName(), t);
+        LOG.info("Error stopping {}", t,
+          MDC.of(LogKeys.SERVICE_NAME, compositeService.getName()));
       }
     }
   }

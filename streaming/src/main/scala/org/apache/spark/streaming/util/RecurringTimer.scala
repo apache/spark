@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.util
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.util.{Clock, SystemClock}
 
 private[streaming]
@@ -26,7 +26,7 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
 
   private val thread = new Thread("RecurringTimer - " + name) {
     setDaemon(true)
-    override def run() { loop }
+    override def run(): Unit = { loop() }
   }
 
   @volatile private var prevTime = -1L
@@ -59,7 +59,8 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
   def start(startTime: Long): Long = synchronized {
     nextTime = startTime
     thread.start()
-    logInfo("Started timer for " + name + " at time " + nextTime)
+    logInfo(log"Started timer for ${MDC(LogKeys.NAME, name)} at time " +
+      log"${MDC(LogKeys.TIME, nextTime)}")
     nextTime
   }
 
@@ -84,7 +85,8 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
         thread.interrupt()
       }
       thread.join()
-      logInfo("Stopped timer for " + name + " after time " + prevTime)
+      logInfo(log"Stopped timer for " + log"${MDC(LogKeys.TIMER, name)} " +
+        log"after time ${MDC(LogKeys.TIME, prevTime)}")
     }
     prevTime
   }
@@ -100,7 +102,7 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
   /**
    * Repeatedly call the callback every interval.
    */
-  private def loop() {
+  private def loop(): Unit = {
     try {
       while (!stopped) {
         triggerActionForNextInterval()
@@ -115,13 +117,14 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
 private[streaming]
 object RecurringTimer extends Logging {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     var lastRecurTime = 0L
     val period = 1000
 
-    def onRecur(time: Long) {
+    def onRecur(time: Long): Unit = {
       val currentTime = System.currentTimeMillis()
-      logInfo("" + currentTime + ": " + (currentTime - lastRecurTime))
+      logInfo(log"${MDC(LogKeys.CURRENT_TIME, currentTime)}: " +
+        log"${MDC(LogKeys.TIME, currentTime - lastRecurTime)}")
       lastRecurTime = currentTime
     }
     val timer = new  RecurringTimer(new SystemClock(), period, onRecur, "Test")

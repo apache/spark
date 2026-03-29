@@ -17,69 +17,120 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.spark.util.Utils
+
 /** Support for interacting with different versions of the HiveMetastoreClient */
 package object client {
   private[hive] sealed abstract class HiveVersion(
       val fullVersion: String,
       val extraDeps: Seq[String] = Nil,
-      val exclusions: Seq[String] = Nil)
+      val exclusions: Seq[String] = Nil) extends Ordered[HiveVersion] {
+    override def compare(that: HiveVersion): Int = {
+      val thisVersionParts = fullVersion.split('.').map(_.toInt)
+      val thatVersionParts = that.fullVersion.split('.').map(_.toInt)
+      assert(thisVersionParts.length == thatVersionParts.length)
+      thisVersionParts.zip(thatVersionParts).foreach { case (l, r) =>
+        val candidate = l - r
+        if (candidate != 0) {
+          return candidate
+        }
+      }
+      0
+    }
+  }
 
   // scalastyle:off
   private[hive] object hive {
-    case object v12 extends HiveVersion("0.12.0")
-    case object v13 extends HiveVersion("0.13.1")
-
-    // Hive 0.14 depends on calcite 0.9.2-incubating-SNAPSHOT which does not exist in
-    // maven central anymore, so override those with a version that exists.
-    //
-    // The other excluded dependencies are also nowhere to be found, so exclude them explicitly. If
-    // they're needed by the metastore client, users will have to dig them out of somewhere and use
-    // configuration to point Spark at the correct jars.
-    case object v14 extends HiveVersion("0.14.0",
-      extraDeps = Seq("org.apache.calcite:calcite-core:1.3.0-incubating",
-        "org.apache.calcite:calcite-avatica:1.3.0-incubating"),
-      exclusions = Seq("org.pentaho:pentaho-aggdesigner-algorithm"))
-
-    case object v1_0 extends HiveVersion("1.0.0",
-      exclusions = Seq("eigenbase:eigenbase-properties",
-        "org.pentaho:pentaho-aggdesigner-algorithm",
-        "net.hydromatic:linq4j",
-        "net.hydromatic:quidem"))
-
-    // The curator dependency was added to the exclusions here because it seems to confuse the ivy
-    // library. org.apache.curator:curator is a pom dependency but ivy tries to find the jar for it,
-    // and fails.
-    case object v1_1 extends HiveVersion("1.1.0",
-      exclusions = Seq("eigenbase:eigenbase-properties",
-        "org.apache.curator:*",
-        "org.pentaho:pentaho-aggdesigner-algorithm",
-        "net.hydromatic:linq4j",
-        "net.hydromatic:quidem"))
-
-    case object v1_2 extends HiveVersion("1.2.2",
-      exclusions = Seq("eigenbase:eigenbase-properties",
-        "org.apache.curator:*",
-        "org.pentaho:pentaho-aggdesigner-algorithm",
-        "net.hydromatic:linq4j",
-        "net.hydromatic:quidem"))
-
     case object v2_0 extends HiveVersion("2.0.1",
-      exclusions = Seq("org.apache.curator:*",
+      exclusions = Seq("org.apache.calcite:calcite-core",
+        "org.apache.calcite:calcite-avatica",
+        "org.apache.curator:*",
         "org.pentaho:pentaho-aggdesigner-algorithm"))
 
     case object v2_1 extends HiveVersion("2.1.1",
-      exclusions = Seq("org.apache.curator:*",
+      exclusions = Seq("org.apache.calcite:calcite-core",
+        "org.apache.calcite:calcite-avatica",
+        "org.apache.curator:*",
         "org.pentaho:pentaho-aggdesigner-algorithm"))
 
     case object v2_2 extends HiveVersion("2.2.0",
-      exclusions = Seq("org.apache.curator:*",
+      exclusions = Seq("org.apache.calcite:calcite-core",
+        "org.apache.calcite:calcite-druid",
+        "org.apache.calcite.avatica:avatica",
+        "org.apache.curator:*",
         "org.pentaho:pentaho-aggdesigner-algorithm"))
 
-    case object v2_3 extends HiveVersion("2.3.4",
-      exclusions = Seq("org.apache.curator:*",
-        "org.pentaho:pentaho-aggdesigner-algorithm"))
+    // Since HIVE-23980, calcite-core included in Hive package jar.
+    case object v2_3 extends HiveVersion("2.3.10",
+      exclusions = Seq("org.apache.calcite:calcite-core",
+        "org.apache.calcite:calcite-druid",
+        "org.apache.calcite.avatica:avatica",
+        "org.apache.curator:*",
+        "net.hydromatic:aggdesigner-algorithm",
+        "org.apache.hive:hive-vector-code-gen"))
 
-    val allSupportedHiveVersions = Set(v12, v13, v14, v1_0, v1_1, v1_2, v2_0, v2_1, v2_2, v2_3)
+    // Since Hive 3.0, HookUtils uses org.apache.logging.log4j.util.Strings
+    // Since HIVE-14496, Hive.java uses calcite-core
+    case object v3_0 extends HiveVersion("3.0.0",
+      extraDeps = Seq("org.apache.logging.log4j:log4j-api:2.10.0",
+        "org.apache.derby:derby:10.14.1.0"),
+      exclusions = Seq("org.apache.calcite:calcite-druid",
+        "org.apache.curator:*",
+        "org.pentaho:pentaho-aggdesigner-algorithm",
+        "org.apache.hive:hive-vector-code-gen"))
+
+    // Since Hive 3.0, HookUtils uses org.apache.logging.log4j.util.Strings
+    // Since HIVE-14496, Hive.java uses calcite-core
+    case object v3_1 extends HiveVersion("3.1.3",
+      extraDeps = Seq("org.apache.logging.log4j:log4j-api:2.10.0",
+        "org.apache.derby:derby:10.14.1.0"),
+      exclusions = Seq("org.apache.calcite:calcite-druid",
+        "org.apache.curator:*",
+        "org.pentaho:pentaho-aggdesigner-algorithm",
+        "org.apache.hive:hive-vector-code-gen"))
+
+    case object v4_0 extends HiveVersion("4.0.1",
+      extraDeps = Seq("org.apache.hadoop:hadoop-hdfs:3.3.6",
+        "org.datanucleus:datanucleus-api-jdo:5.2.8",
+        "org.datanucleus:datanucleus-rdbms:5.2.10",
+        "org.datanucleus:javax.jdo:3.2.0-release",
+        "org.springframework:spring-core:5.3.21",
+        "org.springframework:spring-jdbc:5.3.21",
+        "org.antlr:antlr4-runtime:4.9.3",
+        "org.apache.derby:derby:10.14.2.0"),
+      exclusions = Seq("org.apache.calcite:calcite-druid",
+        "org.apache.curator:*",
+        "org.pentaho:pentaho-aggdesigner-algorithm",
+        "org.apache.hive:hive-vector-code-gen"))
+
+    case object v4_1 extends HiveVersion("4.1.0",
+      extraDeps =
+        "org.antlr:antlr4-runtime:4.9.3" ::
+        "org.apache.derby:derby:10.14.1.0" ::
+        "org.apache.hadoop:hadoop-hdfs:3.4.1" ::
+        "org.datanucleus:datanucleus-api-jdo:6.0.5" ::
+        "org.datanucleus:datanucleus-core:6.0.11" ::
+        "org.datanucleus:datanucleus-rdbms:6.0.10" ::
+        "org.datanucleus:javax.jdo:3.2.1" ::
+        "org.springframework:spring-core:5.3.39" ::
+        "org.springframework:spring-jdbc:5.3.39" :: Nil,
+      exclusions =
+        "org.apache.curator:*" ::
+        "org.apache.hive:hive-service-rpc" ::
+        "org.apache.zookeeper:zookeeper" :: Nil ++
+        {
+          if (!Utils.isTesting) {
+            // HiveClientImpl#runHive which is used for testing refers
+            // `org.apache.hadoop.hive.ql.DriverContext` indirectly and `DriverContext` refers
+            // Tez APIs.
+            Seq("org.apache.tez:tez-api")
+          } else {
+            Seq.empty
+          }
+        })
+
+    val allSupportedHiveVersions: Set[HiveVersion] =
+      Set(v2_0, v2_1, v2_2, v2_3, v3_0, v3_1, v4_0, v4_1)
   }
   // scalastyle:on
 

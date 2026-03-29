@@ -20,32 +20,33 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, GreaterThan, GreaterThanOrEqual, If, Literal, ReplicateRows}
+import org.apache.spark.sql.catalyst.expressions.{And, GreaterThan, GreaterThanOrEqual, If, Literal, Rand, ReplicateRows}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.types.BooleanType
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{BooleanType, DecimalType}
 
 class SetOperationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
-      Batch("Union Pushdown", Once,
+      Batch("Union Pushdown", FixedPoint(5),
         CombineUnions,
         PushProjectionThroughUnion,
-        PushDownPredicate,
+        PushPredicateThroughNonJoin,
         PruneFilters) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
-  val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
-  val testRelation3 = LocalRelation('g.int, 'h.int, 'i.int)
+  val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
+  val testRelation2 = LocalRelation($"d".int, $"e".int, $"f".int)
+  val testRelation3 = LocalRelation($"g".int, $"h".int, $"i".int)
   val testUnion = Union(testRelation :: testRelation2 :: testRelation3 :: Nil)
 
   test("union: combine unions into one unions") {
-    val unionQuery1 = Union(Union(testRelation, testRelation2), testRelation)
-    val unionQuery2 = Union(testRelation, Union(testRelation2, testRelation))
+    val unionQuery1 = Union(Union(testRelation, testRelation2), testRelation3)
+    val unionQuery2 = Union(testRelation, Union(testRelation2, testRelation3))
     val unionOptimized1 = Optimize.execute(unionQuery1.analyze)
     val unionOptimized2 = Optimize.execute(unionQuery2.analyze)
 
@@ -59,33 +60,33 @@ class SetOperationSuite extends PlanTest {
   }
 
   test("union: filter to each side") {
-    val unionQuery = testUnion.where('a === 1)
+    val unionQuery = testUnion.where($"a" === 1)
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
-      Union(testRelation.where('a === 1) ::
-        testRelation2.where('d === 1) ::
-        testRelation3.where('g === 1) :: Nil).analyze
+      Union(testRelation.where($"a" === 1) ::
+        testRelation2.where($"d" === 1) ::
+        testRelation3.where($"g" === 1) :: Nil).analyze
 
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
   test("union: project to each side") {
-    val unionQuery = testUnion.select('a)
+    val unionQuery = testUnion.select($"a")
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
-      Union(testRelation.select('a) ::
-        testRelation2.select('d) ::
-        testRelation3.select('g) :: Nil).analyze
+      Union(testRelation.select($"a") ::
+        testRelation2.select($"d") ::
+        testRelation3.select($"g") :: Nil).analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
   test("Remove unnecessary distincts in multiple unions") {
     val query1 = OneRowRelation()
-      .select(Literal(1).as('a))
+      .select(Literal(1).as("a"))
     val query2 = OneRowRelation()
-      .select(Literal(2).as('b))
+      .select(Literal(2).as("b"))
     val query3 = OneRowRelation()
-      .select(Literal(3).as('c))
+      .select(Literal(3).as("c"))
 
     // D - U - D - U - query1
     //     |       |
@@ -93,7 +94,7 @@ class SetOperationSuite extends PlanTest {
     val unionQuery1 = Distinct(Union(Distinct(Union(query1, query2)), query3)).analyze
     val optimized1 = Optimize.execute(unionQuery1)
     val distinctUnionCorrectAnswer1 =
-      Distinct(Union(query1 :: query2 :: query3 :: Nil)).analyze
+      Distinct(Union(query1 :: query2 :: query3 :: Nil))
     comparePlans(distinctUnionCorrectAnswer1, optimized1)
 
     //         query1
@@ -107,19 +108,19 @@ class SetOperationSuite extends PlanTest {
       Distinct(Union(query2, query3)))).analyze
     val optimized2 = Optimize.execute(unionQuery2)
     val distinctUnionCorrectAnswer2 =
-      Distinct(Union(query1 :: query2 :: query2 :: query3 :: Nil)).analyze
+      Distinct(Union(query1 :: query2 :: query2 :: query3 :: Nil))
     comparePlans(distinctUnionCorrectAnswer2, optimized2)
   }
 
   test("Keep necessary distincts in multiple unions") {
     val query1 = OneRowRelation()
-      .select(Literal(1).as('a))
+      .select(Literal(1).as("a"))
     val query2 = OneRowRelation()
-      .select(Literal(2).as('b))
+      .select(Literal(2).as("b"))
     val query3 = OneRowRelation()
-      .select(Literal(3).as('c))
+      .select(Literal(3).as("c"))
     val query4 = OneRowRelation()
-      .select(Literal(4).as('d))
+      .select(Literal(4).as("d"))
 
     // U - D - U - query1
     // |       |
@@ -146,19 +147,107 @@ class SetOperationSuite extends PlanTest {
     comparePlans(distinctUnionCorrectAnswer2, optimized2)
   }
 
+  test("SPARK-34283: Remove unnecessary deduplicate in multiple unions") {
+    val query1 = OneRowRelation()
+      .select(Literal(1).as("a"))
+    val query2 = OneRowRelation()
+      .select(Literal(2).as("b"))
+    val query3 = OneRowRelation()
+      .select(Literal(3).as("c"))
+
+    // D - U - D - U - query1
+    //     |       |
+    //     query3  query2
+    val unionQuery1 = Deduplicate(query1.output, Union(
+      Deduplicate(query1.output, Union(query1, query2)), query3)).analyze
+    val optimized1 = Optimize.execute(unionQuery1)
+    val deduplicateUnionCorrectAnswer1 = Deduplicate(query1.output,
+      Union(query1 :: query2 :: query3 :: Nil))
+    comparePlans(deduplicateUnionCorrectAnswer1, optimized1)
+
+    //         query1
+    //         |
+    // D - U - U - query2
+    //     |
+    //     D - U - query2
+    //         |
+    //         query3
+    val unionQuery2 = Deduplicate(query1.output, Union(Union(query1, query2),
+      Deduplicate(query2.output, Union(query2, query3)))).analyze
+    val optimized2 = Optimize.execute(unionQuery2)
+    val deduplicateUnionCorrectAnswer2 =
+      Deduplicate(query1.output, Union(query1 :: query2 :: query2 :: query3 :: Nil))
+    comparePlans(deduplicateUnionCorrectAnswer2, optimized2)
+
+    // D  -  U  -  D  -  U  -  testRelation
+    //       |           |
+    //  testRelation  testRelation
+    // Union with the same value of 'byName' and 'allowMissingCol'
+    val unionQuery3 = Deduplicate(testRelation.output,
+      Union(Deduplicate(testRelation.output,
+        Union(testRelation :: testRelation :: Nil, true, false)) :: testRelation :: Nil,
+        true, false))
+    val optimized3 = Optimize.execute(unionQuery3)
+    val deduplicateUnionCorrectAnswer3 =
+      Deduplicate(testRelation.output,
+        Union(testRelation :: testRelation :: testRelation :: Nil, true, false))
+    comparePlans(deduplicateUnionCorrectAnswer3, optimized3, false)
+  }
+
+  test("SPARK-34283: Keep necessary deduplicate in multiple unions") {
+    val query1 = OneRowRelation()
+      .select(Literal(1).as("a"))
+    val query2 = OneRowRelation()
+      .select(Literal(2).as("b"))
+    val query3 = OneRowRelation()
+      .select(Literal(3).as("c"))
+    val query4 = OneRowRelation()
+      .select(Literal(4).as("d"))
+
+    // U - D - U - query1
+    // |       |
+    // query3  query2
+    val unionQuery1 = Union(Deduplicate(query1.output, Union(query1, query2)), query3).analyze
+    val optimized1 = Optimize.execute(unionQuery1)
+    comparePlans(unionQuery1, optimized1)
+
+    //         query1
+    //         |
+    // U - D - U - query2
+    // |
+    // D - U - query3
+    //     |
+    //     query4
+    val unionQuery2 = Union(Deduplicate(query1.output, Union(query1, query2)),
+      Deduplicate(query3.output, Union(query3, query4))).analyze
+    val optimized2 = Optimize.execute(unionQuery2)
+    comparePlans(unionQuery2, optimized2)
+
+    // D  -  U  -  D  -  U  -  testRelation
+    //       |           |
+    //  testRelation  testRelation
+    // Union with different value of 'byName' and 'allowMissingCol'
+    val unionQuery3 = Deduplicate(testRelation.output,
+      Union(Deduplicate(testRelation.output,
+        Union(testRelation :: testRelation :: Nil, true, false)) :: testRelation :: Nil,
+        true, true))
+    val optimized3 = Optimize.execute(unionQuery3)
+    comparePlans(unionQuery3, optimized3, false)
+  }
+
   test("EXCEPT ALL rewrite") {
     val input = Except(testRelation, testRelation2, isAll = true)
     val rewrittenPlan = RewriteExceptAll(input)
 
-    val planFragment = testRelation.select(Literal(1L).as("vcol"), 'a, 'b, 'c)
-      .union(testRelation2.select(Literal(-1L).as("vcol"), 'd, 'e, 'f))
-      .groupBy('a, 'b, 'c)('a, 'b, 'c, sum('vcol).as("sum"))
-      .where(GreaterThan('sum, Literal(0L))).analyze
-    val multiplerAttr = planFragment.output.last
+    val planFragment = testRelation.select(Literal(1L).as("vcol"), $"a", $"b", $"c")
+      .union(testRelation2.select(Literal(-1L).as("vcol"), $"d", $"e", $"f"))
+      .groupBy($"a", $"b", $"c")($"a", $"b", $"c", sum($"vcol").as("sum"))
+      .where(GreaterThan($"sum", Literal(0L))).analyze
+    val multiplierAttr = planFragment.output.last
     val output = planFragment.output.dropRight(1)
     val expectedPlan = Project(output,
       Generate(
-        ReplicateRows(Seq(multiplerAttr) ++ output),
+        ReplicateRows(Seq(multiplierAttr) ++ output),
         Nil,
         false,
         None,
@@ -172,22 +261,23 @@ class SetOperationSuite extends PlanTest {
     val input = Intersect(testRelation, testRelation2, isAll = true)
     val rewrittenPlan = RewriteIntersectAll(input)
     val leftRelation = testRelation
-      .select(Literal(true).as("vcol1"), Literal(null, BooleanType).as("vcol2"), 'a, 'b, 'c)
+      .select(Literal(true).as("vcol1"), Literal(null, BooleanType).as("vcol2"), $"a", $"b", $"c")
     val rightRelation = testRelation2
-      .select(Literal(null, BooleanType).as("vcol1"), Literal(true).as("vcol2"), 'd, 'e, 'f)
+      .select(Literal(null, BooleanType).as("vcol1"), Literal(true).as("vcol2"), $"d", $"e", $"f")
     val planFragment = leftRelation.union(rightRelation)
-      .groupBy('a, 'b, 'c)(count('vcol1).as("vcol1_count"),
-        count('vcol2).as("vcol2_count"), 'a, 'b, 'c)
-      .where(And(GreaterThanOrEqual('vcol1_count, Literal(1L)),
-        GreaterThanOrEqual('vcol2_count, Literal(1L))))
-      .select('a, 'b, 'c,
-        If(GreaterThan('vcol1_count, 'vcol2_count), 'vcol2_count, 'vcol1_count).as("min_count"))
+      .groupBy($"a", $"b", $"c")(count($"vcol1").as("vcol1_count"),
+        count($"vcol2").as("vcol2_count"), $"a", $"b", $"c")
+      .where(And(GreaterThanOrEqual($"vcol1_count", Literal(1L)),
+        GreaterThanOrEqual($"vcol2_count", Literal(1L))))
+      .select($"a", $"b", $"c",
+        If(GreaterThan($"vcol1_count", $"vcol2_count"), $"vcol2_count", $"vcol1_count")
+          .as("min_count"))
       .analyze
-    val multiplerAttr = planFragment.output.last
+    val multiplierAttr = planFragment.output.last
     val output = planFragment.output.dropRight(1)
     val expectedPlan = Project(output,
       Generate(
-        ReplicateRows(Seq(multiplerAttr) ++ output),
+        ReplicateRows(Seq(multiplierAttr) ++ output),
         Nil,
         false,
         None,
@@ -195,5 +285,285 @@ class SetOperationSuite extends PlanTest {
         planFragment
       ))
     comparePlans(expectedPlan, rewrittenPlan)
+  }
+
+  test("SPARK-23356 union: expressions with literal in project list are pushed down") {
+    val unionQuery = testUnion.select(($"a" + 1).as("aa"))
+    val unionOptimized = Optimize.execute(unionQuery.analyze)
+    val unionCorrectAnswer =
+      Union(testRelation.select(($"a" + 1).as("aa")) ::
+        testRelation2.select(($"d" + 1).as("aa")) ::
+        testRelation3.select(($"g" + 1).as("aa")) :: Nil).analyze
+    comparePlans(unionOptimized, unionCorrectAnswer)
+  }
+
+  test("SPARK-23356 union: expressions in project list are pushed down") {
+    val unionQuery = testUnion.select(($"a" + $"b").as("ab"))
+    val unionOptimized = Optimize.execute(unionQuery.analyze)
+    val unionCorrectAnswer =
+      Union(testRelation.select(($"a" + $"b").as("ab")) ::
+        testRelation2.select(($"d" + $"e").as("ab")) ::
+        testRelation3.select(($"g" + $"h").as("ab")) :: Nil).analyze
+    comparePlans(unionOptimized, unionCorrectAnswer)
+  }
+
+  test("SPARK-23356 union: no pushdown for non-deterministic expression") {
+    val unionQuery = testUnion.select($"a", Rand(10).as("rnd"))
+    val unionOptimized = Optimize.execute(unionQuery.analyze)
+    val unionCorrectAnswer = unionQuery.analyze
+    comparePlans(unionOptimized, unionCorrectAnswer)
+  }
+
+  test("SPARK-52686: no pushdown if project has duplicate expression IDs") {
+    val unionQuery = testUnion.select($"a", $"a")
+    val unionCorrectAnswerWithConfOn = unionQuery.analyze
+    val unionCorrectAnswerWithConfOff = Union(
+      testRelation.select($"a", $"a").analyze ::
+      testRelation2.select($"d", $"d").analyze ::
+      testRelation3.select($"g", $"g").analyze ::
+      Nil
+    )
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "true") {
+      val unionOptimized = Optimize.execute(unionQuery.analyze)
+      comparePlans(unionOptimized, unionCorrectAnswerWithConfOn)
+    }
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "false") {
+      val unionOptimized = Optimize.execute(unionQuery.analyze)
+      comparePlans(unionOptimized, unionCorrectAnswerWithConfOff)
+    }
+  }
+
+  test("CombineUnions only flatten the unions with same byName and allowMissingCol") {
+    val union1 = Union(testRelation :: testRelation :: Nil, true, false)
+    val union2 = Union(testRelation :: testRelation :: Nil, true, true)
+    val union3 = Union(testRelation :: testRelation2 :: Nil, false, false)
+
+    val union4 = Union(union1 :: union2 :: union3 :: Nil)
+    val unionOptimized1 = Optimize.execute(union4)
+    val unionCorrectAnswer1 = Union(union1 :: union2 :: testRelation :: testRelation2 :: Nil)
+    comparePlans(unionOptimized1, unionCorrectAnswer1, false)
+
+    val union5 = Union(union1 :: union1 :: Nil, true, false)
+    val unionOptimized2 = Optimize.execute(union5)
+    val unionCorrectAnswer2 =
+      Union(testRelation :: testRelation :: testRelation :: testRelation :: Nil, true, false)
+    comparePlans(unionOptimized2, unionCorrectAnswer2, false)
+  }
+
+  test("SPARK-37915: combine unions if there is a project between them") {
+    val relation1 = LocalRelation($"a".decimal(18, 1), $"b".int)
+    val relation2 = LocalRelation($"a".decimal(18, 2), $"b".int)
+    val relation3 = LocalRelation($"a".decimal(18, 3), $"b".int)
+    val relation4 = LocalRelation($"a".decimal(18, 4), $"b".int)
+    val relation5 = LocalRelation($"a".decimal(18, 5), $"b".int)
+
+    val optimizedRelation1 = relation1.select($"a".cast(DecimalType(19, 2)).cast(DecimalType(20, 3))
+      .cast(DecimalType(21, 4)).cast(DecimalType(22, 5)).as("a"), $"b")
+    val optimizedRelation2 = relation2.select($"a".cast(DecimalType(19, 2)).cast(DecimalType(20, 3))
+      .cast(DecimalType(21, 4)).cast(DecimalType(22, 5)).as("a"), $"b")
+    val optimizedRelation3 = relation3.select($"a".cast(DecimalType(20, 3))
+      .cast(DecimalType(21, 4)).cast(DecimalType(22, 5)).as("a"), $"b")
+    val optimizedRelation4 = relation4
+      .select($"a".cast(DecimalType(21, 4)).cast(DecimalType(22, 5)).as("a"), $"b")
+    val optimizedRelation5 = relation5.select($"a".cast(DecimalType(22, 5)).as("a"), $"b")
+
+    // SQL UNION ALL
+    comparePlans(
+      Optimize.execute(relation1.union(relation2)
+        .union(relation3).union(relation4).union(relation5).analyze),
+      Union(Seq(optimizedRelation1, optimizedRelation2, optimizedRelation3,
+        optimizedRelation4, optimizedRelation5)).analyze)
+
+    // SQL UNION
+    comparePlans(
+      Optimize.execute(Distinct(Distinct(Distinct(Distinct(relation1.union(relation2))
+        .union(relation3)).union(relation4)).union(relation5)).analyze),
+      Distinct(Union(Seq(optimizedRelation1, optimizedRelation2, optimizedRelation3,
+        optimizedRelation4, optimizedRelation5))).analyze)
+
+    // Deduplicate
+    comparePlans(
+      Optimize.execute(relation1.union(relation2).deduplicate($"a", $"b").union(relation3)
+        .deduplicate($"a", $"b").union(relation4).deduplicate($"a", $"b").union(relation5)
+        .deduplicate($"a", $"b").analyze),
+      Deduplicate(
+        Seq($"a", $"b"),
+        Union(Seq(optimizedRelation1, optimizedRelation2, optimizedRelation3,
+          optimizedRelation4, optimizedRelation5))).analyze)
+
+    // Other cases
+    comparePlans(
+      Optimize.execute(Distinct(Distinct(Distinct(Distinct(relation1.union(relation2))
+        .union(relation3)).union(relation4)).union(relation5)).select($"a" % 2).analyze),
+      Distinct(Union(Seq(optimizedRelation1, optimizedRelation2, optimizedRelation3,
+        optimizedRelation4, optimizedRelation5))).select($"a" % 2).analyze)
+
+    comparePlans(
+      Optimize.execute(Distinct(Distinct(Distinct(Distinct(relation1.union(relation2))
+        .union(relation3)).union(relation4)).union(relation5)).select($"a" + $"b").analyze),
+      Distinct(Union(Seq(optimizedRelation1, optimizedRelation2, optimizedRelation3,
+        optimizedRelation4, optimizedRelation5))).select($"a" + $"b").analyze)
+
+    comparePlans(
+      Optimize.execute(Distinct(Distinct(Distinct(Distinct(relation1.union(relation2))
+        .union(relation3)).union(relation4)).union(relation5)).select($"a").analyze),
+      Distinct(Union(Seq(optimizedRelation1, optimizedRelation2, optimizedRelation3,
+        optimizedRelation4, optimizedRelation5))).select($"a").analyze)
+
+  }
+
+  // SequentialStreamingUnion optimizer tests verify that CombineUnions correctly flattens
+  // nested SequentialStreamingUnions and applies other union optimizations while preserving
+  // child ordering. Flattening is an optimization, not a strict requirement - these tests
+  // verify the optimizer's expected behavior.
+
+  test("SequentialStreamingUnion: combine nested unions into one") {
+    // Mark relations as streaming for SequentialStreamingUnion
+    val streamRel1 = testRelation.copy(isStreaming = true)
+    val streamRel2 = testRelation2.copy(isStreaming = true)
+    val streamRel3 = testRelation3.copy(isStreaming = true)
+
+    val seqUnion1 = SequentialStreamingUnion(
+      SequentialStreamingUnion(streamRel1, streamRel2), streamRel3)
+    val seqUnion2 = SequentialStreamingUnion(
+      streamRel1, SequentialStreamingUnion(streamRel2, streamRel3))
+    val optimized1 = Optimize.execute(seqUnion1.analyze)
+    val optimized2 = Optimize.execute(seqUnion2.analyze)
+
+    // Both should flatten to the same 3-child SequentialStreamingUnion
+    val expected = SequentialStreamingUnion(
+      Seq(streamRel1, streamRel2, streamRel3), byName = false, allowMissingCol = false)
+    comparePlans(optimized1, expected.analyze)
+    comparePlans(optimized2, expected.analyze)
+  }
+
+  test("SequentialStreamingUnion: flatten nested unions under Distinct") {
+    val streamRel1 = testRelation.copy(isStreaming = true)
+    val streamRel2 = testRelation2.copy(isStreaming = true)
+    val streamRel3 = testRelation3.copy(isStreaming = true)
+
+    val seqUnion = SequentialStreamingUnion(
+      SequentialStreamingUnion(streamRel1, streamRel2), streamRel3)
+    val distinctSeqUnion = Distinct(seqUnion)
+    val optimized = Optimize.execute(distinctSeqUnion.analyze)
+
+    val expected = Distinct(SequentialStreamingUnion(
+      Seq(streamRel1, streamRel2, streamRel3), byName = false, allowMissingCol = false))
+    comparePlans(optimized, expected.analyze)
+  }
+
+  test("SequentialStreamingUnion: flatten nested unions under Deduplicate") {
+    val streamRel1 = testRelation.copy(isStreaming = true)
+    val streamRel2 = testRelation2.copy(isStreaming = true)
+    val streamRel3 = testRelation3.copy(isStreaming = true)
+
+    val seqUnion = SequentialStreamingUnion(
+      SequentialStreamingUnion(streamRel1, streamRel2), streamRel3)
+    val deduped = seqUnion.deduplicate($"a", $"b", $"c")
+    val optimized = Optimize.execute(deduped.analyze)
+
+    val expected = Deduplicate(
+      Seq($"a", $"b", $"c"),
+      SequentialStreamingUnion(
+        Seq(streamRel1, streamRel2, streamRel3), byName = false, allowMissingCol = false))
+    comparePlans(optimized, expected.analyze)
+  }
+
+  test("SequentialStreamingUnion: project to each side") {
+    val streamRel1 = testRelation.copy(isStreaming = true)
+    val streamRel2 = testRelation.copy(isStreaming = true)
+    val streamRel3 = testRelation.copy(isStreaming = true)
+
+    // Create union first, then project on top (like Union test at line 73)
+    val seqUnion = SequentialStreamingUnion(
+      Seq(streamRel1, streamRel2, streamRel3), byName = false, allowMissingCol = false)
+    val seqUnionQuery = seqUnion.select($"a")
+    val seqUnionOptimized = Optimize.execute(seqUnionQuery.analyze)
+
+    // Should push projection down to each child
+    val seqUnionCorrectAnswer =
+      SequentialStreamingUnion(
+        streamRel1.select($"a") ::
+        streamRel2.select($"a") ::
+        streamRel3.select($"a") :: Nil,
+        byName = false, allowMissingCol = false).analyze
+    comparePlans(seqUnionOptimized, seqUnionCorrectAnswer)
+  }
+
+  test("SequentialStreamingUnion: expressions in project list are pushed down") {
+    val streamRel1 = testRelation.copy(isStreaming = true)
+    val streamRel2 = testRelation.copy(isStreaming = true)
+
+    val seqUnion = SequentialStreamingUnion(streamRel1, streamRel2)
+    val seqUnionQuery = seqUnion.select(($"a" + $"b").as("ab"))
+    val seqUnionOptimized = Optimize.execute(seqUnionQuery.analyze)
+
+    val seqUnionCorrectAnswer =
+      SequentialStreamingUnion(
+        streamRel1.select(($"a" + $"b").as("ab")) ::
+        streamRel2.select(($"a" + $"b").as("ab")) :: Nil,
+        byName = false, allowMissingCol = false).analyze
+    comparePlans(seqUnionOptimized, seqUnionCorrectAnswer)
+  }
+
+  test("SequentialStreamingUnion: do not merge with regular Union") {
+    // Use the same base relation but mark instances as streaming or non-streaming
+    val streamRel1 = testRelation.copy(isStreaming = true)
+    val streamRel2 = testRelation.copy(isStreaming = true)
+    val batchRel1 = testRelation.copy(isStreaming = false)
+    val batchRel2 = testRelation.copy(isStreaming = false)
+
+    // Ensure SequentialStreamingUnion and regular Union don't flatten into each other
+    val seqUnion = SequentialStreamingUnion(streamRel1, streamRel2)
+    val batchUnion = Union(batchRel1, batchRel2)
+
+    // Create a query with both types of unions - they should remain separate
+    val combined = seqUnion.select($"a").union(batchUnion.select($"a"))
+    val optimized = Optimize.execute(combined.analyze)
+
+    // The SequentialStreamingUnion should push projections to its children
+    // and stay as a SequentialStreamingUnion. The regular Union's children
+    // will be flattened into the outer Union, but importantly, the
+    // SequentialStreamingUnion children should NOT be merged with batch children
+    val expectedSeqUnion = SequentialStreamingUnion(
+      streamRel1.select($"a") :: streamRel2.select($"a") :: Nil,
+      byName = false, allowMissingCol = false)
+    // The batch union gets flattened - its children become direct children of outer Union
+    // The optimizer adds aliases to maintain proper attribute references
+    val expected = Union(
+      expectedSeqUnion ::
+      batchRel1.select($"a".as("a")) ::
+      batchRel2.select($"a".as("a")) :: Nil,
+      byName = false, allowMissingCol = false)
+
+    comparePlans(optimized, expected.analyze)
+  }
+
+  test("SequentialStreamingUnion: optimizer preserves child ordering") {
+    // Create distinct streaming relations with different outputs to verify ordering
+    val streamRel1 = LocalRelation($"a".int, $"b".int).copy(isStreaming = true)
+    val streamRel2 = LocalRelation($"c".int, $"d".int).copy(isStreaming = true)
+    val streamRel3 = LocalRelation($"e".int, $"f".int).copy(isStreaming = true)
+
+    // Create SequentialStreamingUnion with a specific order
+    val seqUnion = SequentialStreamingUnion(
+      Seq(streamRel1, streamRel2, streamRel3), byName = false, allowMissingCol = false)
+
+    // Apply various optimizer rules by running full optimization
+    val optimized = Optimize.execute(seqUnion.analyze)
+
+    // Extract the children from the optimized plan
+    val optimizedUnion = optimized.asInstanceOf[SequentialStreamingUnion]
+
+    // Verify the children are in the exact same order
+    assert(optimizedUnion.children.length == 3, "Should have 3 children")
+    assert(optimizedUnion.children(0).output.map(_.name) == Seq("a", "b"),
+      "First child should be streamRel1 with columns a, b")
+    assert(optimizedUnion.children(1).output.map(_.name) == Seq("c", "d"),
+      "Second child should be streamRel2 with columns c, d")
+    assert(optimizedUnion.children(2).output.map(_.name) == Seq("e", "f"),
+      "Third child should be streamRel3 with columns e, f")
   }
 }

@@ -17,42 +17,31 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.{InputStream, OutputStream}
 import java.rmi.server.UID
+import java.util.Objects
 
-import scala.collection.JavaConverters._
-import scala.language.implicitConversions
-import scala.reflect.ClassTag
+import scala.jdk.CollectionConverters._
 
-import com.google.common.base.Objects
 import org.apache.avro.Schema
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.ql.exec.{UDF, Utilities}
-import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
+import org.apache.hadoop.hive.ql.exec.SerializationUtilities
+import org.apache.hadoop.hive.ql.exec.UDF
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFMacro
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
 import org.apache.hadoop.hive.serde2.avro.{AvroGenericRecordWritable, AvroSerdeUtils}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.HiveDecimalObjectInspector
 import org.apache.hadoop.io.Writable
-import org.apache.hive.com.esotericsoftware.kryo.Kryo
-import org.apache.hive.com.esotericsoftware.kryo.io.{Input, Output}
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.util.Utils
 
 private[hive] object HiveShim {
-  // Precision and scale to pass for unlimited decimals; these are the same as the precision and
-  // scale Hive 0.13 infers for BigDecimals from sources that don't specify them (e.g. UDFs)
-  val UNLIMITED_DECIMAL_PRECISION = 38
-  val UNLIMITED_DECIMAL_SCALE = 18
   val HIVE_GENERIC_UDF_MACRO_CLS = "org.apache.hadoop.hive.ql.udf.generic.GenericUDFMacro"
 
   /*
    * This function in hive-0.13 become private, but we have to do this to work around hive bug
    */
-  private def appendReadColumnNames(conf: Configuration, cols: Seq[String]) {
+  private def appendReadColumnNames(conf: Configuration, cols: Seq[String]): Unit = {
     val old: String = conf.get(ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR, "")
     val result: StringBuilder = new StringBuilder(old)
     var first: Boolean = old.isEmpty
@@ -71,7 +60,7 @@ private[hive] object HiveShim {
   /*
    * Cannot use ColumnProjectionUtils.appendReadColumns directly, if ids is null
    */
-  def appendReadColumns(conf: Configuration, ids: Seq[Integer], names: Seq[String]) {
+  def appendReadColumns(conf: Configuration, ids: Seq[Integer], names: Seq[String]): Unit = {
     if (ids != null) {
       ColumnProjectionUtils.appendReadColumns(conf, ids.asJava)
     }
@@ -104,10 +93,19 @@ private[hive] object HiveShim {
 
   def toCatalystDecimal(hdoi: HiveDecimalObjectInspector, data: Any): Decimal = {
     if (hdoi.preferWritable()) {
-      Decimal(hdoi.getPrimitiveWritableObject(data).getHiveDecimal().bigDecimalValue,
-        hdoi.precision(), hdoi.scale())
+      val value = hdoi.getPrimitiveWritableObject(data)
+      if (value == null) {
+        null
+      } else {
+        Decimal(value.getHiveDecimal().bigDecimalValue, hdoi.precision(), hdoi.scale())
+      }
     } else {
-      Decimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue(), hdoi.precision(), hdoi.scale())
+      val value = hdoi.getPrimitiveJavaObject(data)
+      if (value == null) {
+        null
+      } else {
+        Decimal(value.bigDecimalValue(), hdoi.precision(), hdoi.scale())
+      }
     }
   }
 
@@ -119,16 +117,19 @@ private[hive] object HiveShim {
    *
    * @param functionClassName UDF class name
    * @param instance optional UDF instance which contains additional information (for macro)
+   * @param clazz optional class instance to create UDF instance
    */
-  private[hive] case class HiveFunctionWrapper(var functionClassName: String,
-    private var instance: AnyRef = null) extends java.io.Externalizable {
+  private[hive] case class HiveFunctionWrapper(
+      var functionClassName: String,
+      private var instance: AnyRef = null,
+      private var clazz: Class[_ <: AnyRef] = null) extends java.io.Externalizable {
 
     // for Serialization
     def this() = this(null)
 
     override def hashCode(): Int = {
       if (functionClassName == HIVE_GENERIC_UDF_MACRO_CLS) {
-        Objects.hashCode(functionClassName, instance.asInstanceOf[GenericUDFMacro].getBody())
+        Objects.hash(functionClassName, instance.asInstanceOf[GenericUDFMacro].getBody())
       } else {
         functionClassName.hashCode()
       }
@@ -146,37 +147,15 @@ private[hive] object HiveShim {
       case _ => false
     }
 
-    @transient
-    def deserializeObjectByKryo[T: ClassTag](
-        kryo: Kryo,
-        in: InputStream,
-        clazz: Class[_]): T = {
-      val inp = new Input(in)
-      val t: T = kryo.readObject(inp, clazz).asInstanceOf[T]
-      inp.close()
-      t
-    }
-
-    @transient
-    def serializeObjectByKryo(
-        kryo: Kryo,
-        plan: Object,
-        out: OutputStream) {
-      val output: Output = new Output(out)
-      kryo.writeObject(output, plan)
-      output.close()
-    }
-
     def deserializePlan[UDFType](is: java.io.InputStream, clazz: Class[_]): UDFType = {
-      deserializeObjectByKryo(Utilities.runtimeSerializationKryo.get(), is, clazz)
-        .asInstanceOf[UDFType]
+      SerializationUtilities.deserializePlan(is, clazz).asInstanceOf[UDFType]
     }
 
     def serializePlan(function: AnyRef, out: java.io.OutputStream): Unit = {
-      serializeObjectByKryo(Utilities.runtimeSerializationKryo.get(), function, out)
+      SerializationUtilities.serializePlan(function, out)
     }
 
-    def writeExternal(out: java.io.ObjectOutput) {
+    def writeExternal(out: java.io.ObjectOutput): Unit = {
       // output the function name
       out.writeUTF(functionClassName)
 
@@ -195,7 +174,7 @@ private[hive] object HiveShim {
       }
     }
 
-    def readExternal(in: java.io.ObjectInput) {
+    def readExternal(in: java.io.ObjectInput): Unit = {
       // read the function name
       functionClassName = in.readUTF()
 
@@ -207,8 +186,10 @@ private[hive] object HiveShim {
         in.readFully(functionInBytes)
 
         // deserialize the function object via Hive Utilities
+        clazz = Utils.getContextOrSparkClassLoader.loadClass(functionClassName)
+          .asInstanceOf[Class[_ <: AnyRef]]
         instance = deserializePlan[AnyRef](new java.io.ByteArrayInputStream(functionInBytes),
-          Utils.getContextOrSparkClassLoader.loadClass(functionClassName))
+          clazz)
       }
     }
 
@@ -216,8 +197,11 @@ private[hive] object HiveShim {
       if (instance != null) {
         instance.asInstanceOf[UDFType]
       } else {
-        val func = Utils.getContextOrSparkClassLoader
-          .loadClass(functionClassName).getConstructor().newInstance().asInstanceOf[UDFType]
+        if (clazz == null) {
+          clazz = Utils.getContextOrSparkClassLoader.loadClass(functionClassName)
+            .asInstanceOf[Class[_ <: AnyRef]]
+        }
+        val func = clazz.getConstructor().newInstance().asInstanceOf[UDFType]
         if (!func.isInstanceOf[UDF]) {
           // We cache the function if it's no the Simple UDF,
           // as we always have to create new instance for Simple UDF
@@ -225,55 +209,6 @@ private[hive] object HiveShim {
         }
         func
       }
-    }
-  }
-
-  /*
-   * Bug introduced in hive-0.13. FileSinkDesc is serializable, but its member path is not.
-   * Fix it through wrapper.
-   */
-  implicit def wrapperToFileSinkDesc(w: ShimFileSinkDesc): FileSinkDesc = {
-    val f = new FileSinkDesc(new Path(w.dir), w.tableInfo, w.compressed)
-    f.setCompressCodec(w.compressCodec)
-    f.setCompressType(w.compressType)
-    f.setTableInfo(w.tableInfo)
-    f.setDestTableId(w.destTableId)
-    f
-  }
-
-  /*
-   * Bug introduced in hive-0.13. FileSinkDesc is serializable, but its member path is not.
-   * Fix it through wrapper.
-   */
-  private[hive] class ShimFileSinkDesc(
-      var dir: String,
-      var tableInfo: TableDesc,
-      var compressed: Boolean)
-    extends Serializable with Logging {
-    var compressCodec: String = _
-    var compressType: String = _
-    var destTableId: Int = _
-
-    def setCompressed(compressed: Boolean) {
-      this.compressed = compressed
-    }
-
-    def getDirName(): String = dir
-
-    def setDestTableId(destTableId: Int) {
-      this.destTableId = destTableId
-    }
-
-    def setTableInfo(tableInfo: TableDesc) {
-      this.tableInfo = tableInfo
-    }
-
-    def setCompressCodec(intermediateCompressorCodec: String) {
-      compressCodec = intermediateCompressorCodec
-    }
-
-    def setCompressType(intermediateCompressType: String) {
-      compressType = intermediateCompressType
     }
   }
 }

@@ -26,7 +26,7 @@ import static org.apache.spark.launcher.CommandBuilderUtils.*;
 /**
  * Base class for launcher implementations.
  *
- * @since Spark 2.3.0
+ * @since 2.3.0
  */
 public abstract class AbstractLauncher<T extends AbstractLauncher<T>> {
 
@@ -86,6 +86,19 @@ public abstract class AbstractLauncher<T extends AbstractLauncher<T>> {
     builder.master = master;
     return self();
   }
+
+  /**
+   * Set the Spark master for the application.
+   *
+   * @param remote Spark remote url.
+   * @return This launcher.
+   */
+  public T setRemote(String remote) {
+    checkNotNull(remote, "remote");
+    builder.remote = remote;
+    return self();
+  }
+
 
   /**
    * Set the deploy mode for the application.
@@ -163,6 +176,8 @@ public abstract class AbstractLauncher<T extends AbstractLauncher<T>> {
     SparkSubmitOptionParser validator = new ArgumentValidator(true);
     if (validator.MASTER.equals(name)) {
       setMaster(value);
+    } else if (validator.REMOTE.equals(name)) {
+      setRemote(value);
     } else if (validator.PROPERTIES_FILE.equals(name)) {
       setPropertiesFile(value);
     } else if (validator.CONF.equals(name)) {
@@ -298,6 +313,7 @@ public abstract class AbstractLauncher<T extends AbstractLauncher<T>> {
       return true;
     }
 
+    @Override
     protected void handleExtraArgs(List<String> extra) {
       // No op.
     }

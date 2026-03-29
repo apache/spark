@@ -24,9 +24,10 @@ import org.apache.spark.benchmark.Benchmark
  * To run this benchmark:
  * {{{
  *   1. without sbt:
- *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark sql test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      bin/spark-submit --class <this class>
+ *        --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
+ *   2. build/sbt "sql/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/RangeBenchmark-results.txt".
  * }}}
  */
@@ -40,15 +41,15 @@ object RangeBenchmark extends SqlBasedBenchmark {
       val benchmark = new Benchmark("range", N, output = output)
 
       benchmark.addCase("full scan", numIters = 4) { _ =>
-        spark.range(N).queryExecution.toRdd.foreach(_ => ())
+        spark.range(N).noop()
       }
 
       benchmark.addCase("limit after range", numIters = 4) { _ =>
-        spark.range(N).limit(100).queryExecution.toRdd.foreach(_ => ())
+        spark.range(N).limit(100).noop()
       }
 
       benchmark.addCase("filter after range", numIters = 4) { _ =>
-        spark.range(N).filter('id % 100 === 0).queryExecution.toRdd.foreach(_ => ())
+        spark.range(N).filter($"id" % 100 === 0).noop()
       }
 
       benchmark.addCase("count after range", numIters = 4) { _ =>

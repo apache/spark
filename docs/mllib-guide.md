@@ -2,6 +2,21 @@
 layout: global
 title: "MLlib: RDD-based API"
 displayTitle: "MLlib: RDD-based API"
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 This page documents sections of the MLlib guide for the RDD-based API (the `spark.mllib` package).
@@ -29,7 +44,7 @@ which is now the primary API for MLlib.
   * [Gaussian mixture](mllib-clustering.html#gaussian-mixture)
   * [power iteration clustering (PIC)](mllib-clustering.html#power-iteration-clustering-pic)
   * [latent Dirichlet allocation (LDA)](mllib-clustering.html#latent-dirichlet-allocation-lda)
-  * [bisecting k-means](mllib-clustering.html#bisecting-kmeans)
+  * [bisecting k-means](mllib-clustering.html#bisecting-k-means)
   * [streaming k-means](mllib-clustering.html#streaming-k-means)
 * [Dimensionality reduction](mllib-dimensionality-reduction.html)
   * [singular value decomposition (SVD)](mllib-dimensionality-reduction.html#singular-value-decomposition-svd)
@@ -38,10 +53,9 @@ which is now the primary API for MLlib.
 * [Frequent pattern mining](mllib-frequent-pattern-mining.html)
   * [FP-growth](mllib-frequent-pattern-mining.html#fp-growth)
   * [association rules](mllib-frequent-pattern-mining.html#association-rules)
-  * [PrefixSpan](mllib-frequent-pattern-mining.html#prefix-span)
+  * [PrefixSpan](mllib-frequent-pattern-mining.html#prefixspan)
 * [Evaluation metrics](mllib-evaluation-metrics.html)
 * [PMML model export](mllib-pmml-model-export.html)
 * [Optimization (developer)](mllib-optimization.html)
   * [stochastic gradient descent](mllib-optimization.html#stochastic-gradient-descent-sgd)
   * [limited-memory BFGS (L-BFGS)](mllib-optimization.html#limited-memory-bfgs-l-bfgs)
-

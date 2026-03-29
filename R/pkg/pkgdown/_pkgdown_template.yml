@@ -1,0 +1,321 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+url: https://spark.apache.org/docs/{SPARK_VERSION}/api/R/
+
+template:
+  package: preferably
+  bootstrap: 5
+  params:
+    toggle: manual
+  includes:
+    before_title: |
+      <a class="navbar-brand" href="https://spark.apache.org/">
+        <img src="https://spark.apache.org/images/spark-logo-rev.svg" alt="" max-height="100%">
+      </a>
+
+authors:
+  " The Apache Software Foundation":
+    href: "https://www.apache.org/"
+
+
+reference:
+
+- title: "Distributed Data Frame"
+- contents:
+  - SparkDataFrame-class
+  - GroupedData-class
+  - agg
+  - arrange
+  - approxQuantile
+  - as.data.frame
+  - attach,SparkDataFrame-method
+  - broadcast
+  - cache
+  - cacheTable
+  - checkpoint
+  - collect
+  - coltypes
+  - colnames
+  - count
+  - createDataFrame
+  - createExternalTable
+  - createOrReplaceTempView
+  - createTable
+  - crossJoin
+  - crosstab
+  - cube
+  - describe
+  - distinct
+  - dim
+  - drop
+  - dropDuplicates
+  - dropna
+  - dtypes
+  - except
+  - exceptAll
+  - explain
+  - filter
+  - getNumPartitions
+  - group_by
+  - head
+  - hint
+  - histogram
+  - insertInto
+  - intersect
+  - intersectAll
+  - isLocal
+  - isStreaming
+  - join
+  - limit
+  - localCheckpoint
+  - merge
+  - mutate
+  - ncol
+  - nrow
+  - orderBy
+  - persist
+  - pivot
+  - printSchema
+  - randomSplit
+  - rbind
+  - rename
+  - registerTempTable
+  - repartition
+  - repartitionByRange
+  - rollup
+  - sample
+  - sampleBy
+  - saveAsTable
+  - schema
+  - select
+  - selectExpr
+  - show
+  - showDF
+  - str
+  - storageLevel
+  - subset
+  - summary
+  - take
+  - tableToDF
+  - toJSON
+  - union
+  - unionAll
+  - unionByName
+  - unpersist
+  - unpivot
+  - with
+  - withColumn
+
+- title: "Data import and export"
+- contents:
+  - read.df
+  - read.jdbc
+  - read.json
+  - read.orc
+  - read.parquet
+  - read.text
+  - write.df
+  - write.jdbc
+  - write.json
+  - write.orc
+  - write.parquet
+  - write.text
+
+- title: "Column functions"
+- contents:
+  - column_aggregate_functions
+  - column_avro_functions
+  - column_collection_functions
+  - column_datetime_diff_functions
+  - column_math_functions
+  - column_misc_functions
+  - column_ml_functions
+  - column_nonaggregate_functions
+  - column_string_functions
+  - column_window_functions
+  - alias
+  - asc
+  - avg
+  - between
+  - cast
+  - column
+  - coalesce
+  - corr
+  - cov
+  - dropFields
+  - endsWith
+  - first
+  - last
+  - not
+  - otherwise
+  - startsWith
+  - substr
+  - timestamp_seconds
+  - withField
+  - over
+  - predict
+  - partitionBy
+  - rangeBetween
+  - rowsBetween
+  - windowOrderBy
+  - windowPartitionBy
+  - WindowSpec-class
+  - "%in%"
+  - "%<=>%"
+
+- title: "Schema Definitions"
+- contents:
+  - structField
+  - structType
+
+- title: "Structured Streaming"
+- contents:
+  - StreamingQuery-class
+  - awaitTermination
+  - isActive
+  - queryName
+  - lastProgress
+  - read.stream
+  - status
+  - stopQuery
+  - withWatermark
+  - write.stream
+
+- title: "Spark MLlib"
+  desc: "MLlib is Spark’s machine learning (ML) library"
+- contents:
+  - AFTSurvivalRegressionModel-class
+  - ALSModel-class
+  - BisectingKMeansModel-class
+  - DecisionTreeClassificationModel-class
+  - DecisionTreeRegressionModel-class
+  - FMClassificationModel-class
+  - FMRegressionModel-class
+  - FPGrowthModel-class
+  - GBTClassificationModel-class
+  - GBTRegressionModel-class
+  - GaussianMixtureModel-class
+  - GeneralizedLinearRegressionModel-class
+  - glm,formula,ANY,SparkDataFrame-method
+  - IsotonicRegressionModel-class
+  - KMeansModel-class
+  - KSTest-class
+  - LDAModel-class
+  - LinearRegressionModel-class
+  - LinearSVCModel-class
+  - LogisticRegressionModel-class
+  - MultilayerPerceptronClassificationModel-class
+  - NaiveBayesModel-class
+  - PowerIterationClustering-class
+  - PrefixSpan-class
+  - RandomForestClassificationModel-class
+  - RandomForestRegressionModel-class
+  - fitted
+  - freqItems
+  - spark.als
+  - spark.bisectingKmeans
+  - spark.decisionTree
+  - spark.fmClassifier
+  - spark.fmRegressor
+  - spark.fpGrowth
+  - spark.gaussianMixture
+  - spark.gbt
+  - spark.glm
+  - spark.isoreg
+  - spark.kmeans
+  - spark.kstest
+  - spark.lda
+  - spark.lm
+  - spark.logit
+  - spark.mlp
+  - spark.naiveBayes
+  - spark.assignClusters
+  - spark.findFrequentSequentialPatterns
+  - spark.randomForest
+  - spark.survreg
+  - spark.svmLinear
+  - read.ml
+  - write.ml
+
+- title: "Distributed R"
+- contents:
+  - dapply
+  - dapplyCollect
+  - gapply
+  - gapplyCollect
+  - spark.lapply
+
+- title: "SQL Catalog"
+- contents:
+  - currentCatalog
+  - currentDatabase
+  - databaseExists
+  - dropTempTable
+  - dropTempView
+  - functionExists
+  - getDatabase
+  - getFunc
+  - getTable
+  - listCatalogs
+  - listColumns
+  - listDatabases
+  - listFunctions
+  - listTables
+  - refreshByPath
+  - refreshTable
+  - recoverPartitions
+  - setCurrentCatalog
+  - setCurrentDatabase
+  - tableExists
+  - tableNames
+  - tables
+  - uncacheTable
+
+- title: "Spark Session and Context"
+- contents:
+  - cancelJobGroup
+  - cancelJobsWithTag
+  - clearCache
+  - clearJobGroup
+  - getLocalProperty
+  - install.spark
+  - setCheckpointDir
+  - setJobDescription
+  - setInterruptOnCancel
+  - setJobGroup
+  - addJobTag
+  - removeJobTag
+  - getJobTags
+  - clearJobTags
+  - setLocalProperty
+  - setLogLevel
+  - spark.addFile
+  - spark.getSparkFiles
+  - spark.getSparkFilesRootDirectory
+  - sparkR.conf
+  - sparkR.callJMethod
+  - sparkR.callJStatic
+  - sparkR.init
+  - sparkR.newJObject
+  - sparkR.session
+  - sparkR.session.stop
+  - sparkR.uiWebUrl
+  - sparkR.version
+  - sparkRHive.init
+  - sparkRSQL.init
+  - sql

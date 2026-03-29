@@ -16,10 +16,9 @@
  */
 package org.apache.spark.mllib.fpm
 
-import scala.language.existentials
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -45,7 +44,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       Array(0, 3, 0, 4, 0, 4, 0, 3, 0),
       Array(0, 6, 0, 5, 0, 3, 0))
 
-    val rdd = sc.parallelize(sequences, 2).cache()
+    val rdd = sc.parallelize(sequences.toImmutableArraySeq, 2).cache()
 
     val result1 = PrefixSpan.genFreqPatterns(
       rdd, minCount = 2L, maxPatternLength = 50, maxLocalProjDBSize = 16L)
@@ -110,7 +109,7 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       Array(0, 1, 4, 0, 3, 0, 2, 3, 0, 1, 5, 0),
       Array(0, 5, 6, 0, 1, 2, 0, 4, 6, 0, 3, 0, 2, 0),
       Array(0, 5, 0, 7, 0, 1, 6, 0, 3, 0, 2, 0, 3, 0))
-    val rdd = sc.parallelize(sequences, 2).cache()
+    val rdd = sc.parallelize(sequences.toImmutableArraySeq, 2).cache()
     val result = PrefixSpan.genFreqPatterns(
       rdd, minCount = 2, maxPatternLength = 5, maxLocalProjDBSize = 128L)
 
@@ -420,7 +419,9 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
     val path = tempDir.toURI.toString
     try {
       model.save(sc, path)
-      val newModel = PrefixSpanModel.load(sc, path)
+      // Save/loading this model results in item type "Object" even if in this case
+      // the objects are Integers -- not Int as in the original saved model.
+      val newModel = PrefixSpanModel.load(sc, path).asInstanceOf[PrefixSpanModel[AnyRef]]
       val originalSet = model.freqSequences.collect().map { x =>
         (x.sequence.map(_.toSet).toSeq, x.freq)
       }.toSet

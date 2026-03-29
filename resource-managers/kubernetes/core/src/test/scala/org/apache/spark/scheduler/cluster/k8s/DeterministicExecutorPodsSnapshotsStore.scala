@@ -16,10 +16,19 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import io.fabric8.kubernetes.api.model.Pod
 import scala.collection.mutable
 
+import io.fabric8.kubernetes.api.model.Pod
+
+import org.apache.spark.deploy.k8s.Constants.DEFAULT_EXECUTOR_CONTAINER_NAME
+import org.apache.spark.util.ManualClock
+
 class DeterministicExecutorPodsSnapshotsStore extends ExecutorPodsSnapshotsStore {
+
+  ExecutorPodsSnapshot.setShouldCheckAllContainers(false)
+  ExecutorPodsSnapshot.setSparkContainerName(DEFAULT_EXECUTOR_CONTAINER_NAME)
+
+  val clock = new ManualClock()
 
   private val snapshotsBuffer = mutable.Buffer.empty[ExecutorPodsSnapshot]
   private val subscribers = mutable.Buffer.empty[Seq[ExecutorPodsSnapshot] => Unit]
@@ -34,8 +43,8 @@ class DeterministicExecutorPodsSnapshotsStore extends ExecutorPodsSnapshotsStore
 
   override def stop(): Unit = {}
 
-  def notifySubscribers(): Unit = {
-    subscribers.foreach(_(snapshotsBuffer))
+  override def notifySubscribers(): Unit = {
+    subscribers.foreach(_(snapshotsBuffer.toSeq))
     snapshotsBuffer.clear()
   }
 
@@ -45,7 +54,16 @@ class DeterministicExecutorPodsSnapshotsStore extends ExecutorPodsSnapshotsStore
   }
 
   override def replaceSnapshot(newSnapshot: Seq[Pod]): Unit = {
-    currentSnapshot = ExecutorPodsSnapshot(newSnapshot)
+    currentSnapshot = ExecutorPodsSnapshot(newSnapshot, clock.getTimeMillis())
+    snapshotsBuffer += currentSnapshot
+  }
+
+  def removeDeletedExecutors(): Unit = {
+    val nonDeleted = currentSnapshot.executorPods.filter {
+      case (_, PodDeleted(_)) => false
+      case _ => true
+    }
+    currentSnapshot = ExecutorPodsSnapshot(nonDeleted, clock.getTimeMillis())
     snapshotsBuffer += currentSnapshot
   }
 }

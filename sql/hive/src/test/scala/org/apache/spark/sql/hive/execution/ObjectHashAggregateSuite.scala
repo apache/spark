@@ -20,25 +20,27 @@ package org.apache.spark.sql.hive.execution
 import scala.util.Random
 
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFMax
-import org.scalatest.Matchers._
+import org.scalatest.matchers.must.Matchers._
 
-import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.UnresolvedFunction
-import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal}
-import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
+import org.apache.spark.sql.{Column, QueryTest, RandomDataGenerator, Row}
+import org.apache.spark.sql.catalyst.expressions.ExpressionEvalHelper
+import org.apache.spark.sql.classic.DataFrame
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions.{col, count_distinct, first, lit, max, percentile_approx => pa}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowHiveTest
 
+@SlowHiveTest
 class ObjectHashAggregateSuite
   extends QueryTest
   with SQLTestUtils
   with TestHiveSingleton
-  with ExpressionEvalHelper {
+  with ExpressionEvalHelper
+  with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 
@@ -124,7 +126,7 @@ class ObjectHashAggregateSuite
         .add("f2", ArrayType(BooleanType), nullable = true),
 
       // UDT
-      new UDT.MyDenseVectorUDT(),
+      new TestUDT.MyDenseVectorUDT(),
 
       // Others
       StringType,
@@ -150,13 +152,15 @@ class ObjectHashAggregateSuite
       val df = spark.createDataFrame(spark.sparkContext.parallelize(data, 1), schema)
       val aggFunctions = schema.fieldNames.map(f => typed_count(col(f)))
 
+      import org.apache.spark.util.ArrayImplicits._
       checkAnswer(
-        df.agg(aggFunctions.head, aggFunctions.tail: _*),
+        df.agg(aggFunctions.head, aggFunctions.tail.toImmutableArraySeq: _*),
         Row.fromSeq(data.map(_.toSeq).transpose.map(_.count(_ != null): Long))
       )
 
       checkAnswer(
-        df.groupBy($"id" % 4 as 'mod).agg(aggFunctions.head, aggFunctions.tail: _*),
+        df.groupBy($"id" % 4 as "mod")
+          .agg(aggFunctions.head, aggFunctions.tail.toImmutableArraySeq: _*),
         data.groupBy(_.getInt(0) % 4).map { case (key, value) =>
           key -> Row.fromSeq(value.map(_.toSeq).transpose.map(_.count(_ != null): Long))
         }.toSeq.map {
@@ -166,21 +170,18 @@ class ObjectHashAggregateSuite
 
       withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "5") {
         checkAnswer(
-          df.agg(aggFunctions.head, aggFunctions.tail: _*),
+          df.agg(aggFunctions.head, aggFunctions.tail.toImmutableArraySeq: _*),
           Row.fromSeq(data.map(_.toSeq).transpose.map(_.count(_ != null): Long))
         )
       }
     }
   }
 
-  private def percentile_approx(
-      column: Column, percentage: Double, isDistinct: Boolean = false): Column = {
-    val approxPercentile = new ApproximatePercentile(column.expr, Literal(percentage))
-    Column(approxPercentile.toAggregateExpression(isDistinct))
+  private def percentile_approx(column: Column, percentage: Double): Column = {
+    pa(column, lit(percentage), lit(10000))
   }
 
-  private def typed_count(column: Column): Column =
-    Column(TestingTypedCount(column.expr).toAggregateExpression())
+  private def typed_count(column: Column): Column = Column(TestingTypedCount(column.expr))
 
   // Generates 50 random rows for a given schema.
   private def generateRandomRows(schemaForGenerator: StructType): Seq[Row] = {
@@ -219,7 +220,7 @@ class ObjectHashAggregateSuite
     val withPartialSafe = max($"c2")
 
     // A Spark SQL native distinct aggregate function
-    val withDistinct = countDistinct($"c3")
+    val withDistinct = count_distinct($"c3")
 
     val allAggs = Seq(
       "typed" -> typed,
@@ -259,7 +260,7 @@ class ObjectHashAggregateSuite
       StringType, BinaryType, NullType, BooleanType
     )
 
-    val udt = new UDT.MyDenseVectorUDT()
+    val udt = new TestUDT.MyDenseVectorUDT()
 
     val fixedLengthTypes = builtinNumericTypes ++ Seq(BooleanType, NullType)
 
@@ -394,19 +395,19 @@ class ObjectHashAggregateSuite
   }
 
   private def containsSortAggregateExec(df: DataFrame): Boolean = {
-    df.queryExecution.executedPlan.collectFirst {
+    collectFirst(df.queryExecution.executedPlan) {
       case _: SortAggregateExec => ()
     }.nonEmpty
   }
 
   private def containsObjectHashAggregateExec(df: DataFrame): Boolean = {
-    df.queryExecution.executedPlan.collectFirst {
+    collectFirst(df.queryExecution.executedPlan) {
       case _: ObjectHashAggregateExec => ()
     }.nonEmpty
   }
 
   private def containsHashAggregateExec(df: DataFrame): Boolean = {
-    df.queryExecution.executedPlan.collectFirst {
+    collectFirst(df.queryExecution.executedPlan) {
       case _: HashAggregateExec => ()
     }.nonEmpty
   }

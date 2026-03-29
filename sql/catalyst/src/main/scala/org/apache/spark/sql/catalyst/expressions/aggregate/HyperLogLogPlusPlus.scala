@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.HyperLogLogPlusPlusHelper
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
 // scalastyle:off
@@ -41,20 +43,26 @@ import org.apache.spark.sql.types._
  * https://docs.google.com/document/d/1gyjfMHy43U9OWBXxfaeG-3MjGzejW1dlpyMwEYAAWEI/view?fullscreen#
  *
  * @param child to estimate the cardinality of.
- * @param relativeSD the maximum estimation error allowed.
+ * @param relativeSD the maximum relative standard deviation allowed.
  */
 // scalastyle:on
 @ExpressionDescription(
   usage = """
     _FUNC_(expr[, relativeSD]) - Returns the estimated cardinality by HyperLogLog++.
-      `relativeSD` defines the maximum estimation error allowed.
-  """)
+      `relativeSD` defines the maximum relative standard deviation allowed.""",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col1) FROM VALUES (1), (1), (2), (2), (3) tab(col1);
+       3
+  """,
+  group = "agg_funcs",
+  since = "1.6.0")
 case class HyperLogLogPlusPlus(
     child: Expression,
     relativeSD: Double = 0.05,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends ImperativeAggregate {
+  extends ImperativeAggregate with UnaryLike[Expression] {
 
   def this(child: Expression) = {
     this(child = child, relativeSD = 0.05, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
@@ -76,13 +84,13 @@ case class HyperLogLogPlusPlus(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override def children: Seq[Expression] = Seq(child)
-
   override def nullable: Boolean = false
 
   override def dataType: DataType = LongType
 
-  override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+  override def aggBufferSchema: StructType = DataTypeUtils.fromAttributes(aggBufferAttributes)
+
+  override def defaultResult: Option[Literal] = Option(Literal.create(0L, dataType))
 
   val hllppHelper = new HyperLogLogPlusPlusHelper(relativeSD)
 
@@ -131,6 +139,9 @@ case class HyperLogLogPlusPlus(
   override def eval(buffer: InternalRow): Any = {
     hllppHelper.query(buffer, mutableAggBufferOffset)
   }
+
+  override protected def withNewChildInternal(newChild: Expression): HyperLogLogPlusPlus =
+    copy(child = newChild)
 }
 
 object HyperLogLogPlusPlus {
@@ -138,6 +149,6 @@ object HyperLogLogPlusPlus {
     case Literal(d: Double, DoubleType) => d
     case Literal(dec: Decimal, _) => dec.toDouble
     case _ =>
-      throw new AnalysisException("The second argument should be a double literal.")
+      throw QueryCompilationErrors.secondArgumentNotDoubleLiteralError()
   }
 }

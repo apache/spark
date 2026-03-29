@@ -23,8 +23,6 @@
 # grep -o -E '\w+(\W+\w+){0,15}' text8 > text8_lines
 # This was done so that the example can be run in local mode
 
-from __future__ import print_function
-
 import sys
 
 from pyspark import SparkContext

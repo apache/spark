@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
+import org.apache.spark.sql.types.StringType
 
 class ColumnStatsSuite extends SparkFunSuite {
   testColumnStats(classOf[BooleanColumnStats], BOOLEAN, Array(true, false, 0))
@@ -28,10 +29,11 @@ class ColumnStatsSuite extends SparkFunSuite {
   testColumnStats(classOf[LongColumnStats], LONG, Array(Long.MaxValue, Long.MinValue, 0))
   testColumnStats(classOf[FloatColumnStats], FLOAT, Array(Float.MaxValue, Float.MinValue, 0))
   testColumnStats(classOf[DoubleColumnStats], DOUBLE, Array(Double.MaxValue, Double.MinValue, 0))
-  testColumnStats(classOf[StringColumnStats], STRING, Array(null, null, 0))
   testDecimalColumnStats(Array(null, null, 0))
+  testIntervalColumnStats(Array(null, null, 0))
+  testStringColumnStats(Array(null, null, 0))
 
-  def testColumnStats[T <: AtomicType, U <: ColumnStats](
+  def testColumnStats[T <: PhysicalDataType, U <: ColumnStats](
       columnStatsClass: Class[U],
       columnType: NativeColumnType[T],
       initialStatistics: Array[Any]): Unit = {
@@ -52,8 +54,11 @@ class ColumnStatsSuite extends SparkFunSuite {
       val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
       rows.foreach(columnStats.gatherStats(_, 0))
 
-      val values = rows.take(10).map(_.get(0, columnType.dataType).asInstanceOf[T#InternalType])
-      val ordering = columnType.dataType.ordering.asInstanceOf[Ordering[T#InternalType]]
+      val values = rows.take(10).map(_.get(
+        0, ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
+        .asInstanceOf[T#InternalType])
+      val ordering = PhysicalDataType.ordering(
+        ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
       val stats = columnStats.collectedStatistics
 
       assertResult(values.min(ordering), "Wrong lower bound")(stats(0))
@@ -68,7 +73,7 @@ class ColumnStatsSuite extends SparkFunSuite {
     }
   }
 
-  def testDecimalColumnStats[T <: AtomicType, U <: ColumnStats](
+  def testDecimalColumnStats[T <: PhysicalDataType, U <: ColumnStats](
       initialStatistics: Array[Any]): Unit = {
 
     val columnStatsName = classOf[DecimalColumnStats].getSimpleName
@@ -88,8 +93,10 @@ class ColumnStatsSuite extends SparkFunSuite {
       val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
       rows.foreach(columnStats.gatherStats(_, 0))
 
-      val values = rows.take(10).map(_.get(0, columnType.dataType).asInstanceOf[T#InternalType])
-      val ordering = columnType.dataType.ordering.asInstanceOf[Ordering[T#InternalType]]
+      val values = rows.take(10).map(_.get(0,
+        ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType)))
+      val ordering = PhysicalDataType.ordering(
+        ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
       val stats = columnStats.collectedStatistics
 
       assertResult(values.min(ordering), "Wrong lower bound")(stats(0))
@@ -101,6 +108,94 @@ class ColumnStatsSuite extends SparkFunSuite {
           if (row.isNullAt(0)) 4 else columnType.actualSize(row, 0)
         }.sum
       }
+    }
+  }
+
+  def testIntervalColumnStats[T <: PhysicalDataType, U <: ColumnStats](
+      initialStatistics: Array[Any]): Unit = {
+
+    val columnStatsName = classOf[IntervalColumnStats].getSimpleName
+    val columnType = CALENDAR_INTERVAL
+
+    test(s"$columnStatsName: empty") {
+      val columnStats = new IntervalColumnStats
+      columnStats.collectedStatistics.zip(initialStatistics).foreach {
+        case (actual, expected) => assert(actual === expected)
+      }
+    }
+
+    test(s"$columnStatsName: non-empty") {
+      import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
+
+      val columnStats = new IntervalColumnStats
+      val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
+      rows.foreach(columnStats.gatherStats(_, 0))
+
+      val stats = columnStats.collectedStatistics
+
+      assertResult(10, "Wrong null count")(stats(2))
+      assertResult(20, "Wrong row count")(stats(3))
+      assertResult(stats(4), "Wrong size in bytes") {
+        rows.map { row =>
+          if (row.isNullAt(0)) 4 else columnType.actualSize(row, 0)
+        }.sum
+      }
+    }
+  }
+
+  def testStringColumnStats[T <: PhysicalDataType, U <: ColumnStats](
+      initialStatistics: Array[Any]): Unit = {
+
+    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach(collation => {
+      val columnType = STRING(StringType(collation))
+
+      test(s"STRING($collation): empty") {
+        val columnStats = new StringColumnStats(StringType(collation).collationId)
+        columnStats.collectedStatistics.zip(initialStatistics).foreach {
+          case (actual, expected) => assert(actual === expected)
+        }
+      }
+
+      test(s"STRING($collation): non-empty") {
+        import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
+
+        val columnStats = new StringColumnStats(StringType(collation).collationId)
+        val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
+        rows.foreach(columnStats.gatherStats(_, 0))
+
+        val values = rows.take(10).map(_.get(0,
+          ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType)))
+        val ordering = PhysicalDataType.ordering(
+          ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
+        val stats = columnStats.collectedStatistics
+
+        assertResult(values.min(ordering), "Wrong lower bound")(stats(0))
+        assertResult(values.max(ordering), "Wrong upper bound")(stats(1))
+        assertResult(10, "Wrong null count")(stats(2))
+        assertResult(20, "Wrong row count")(stats(3))
+        assertResult(stats(4), "Wrong size in bytes") {
+          rows.map { row =>
+            if (row.isNullAt(0)) 4 else columnType.actualSize(row, 0)
+          }.sum
+        }
+      }
+    })
+
+    test("STRING(UTF8_LCASE): collation-defined ordering") {
+      import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+      import org.apache.spark.unsafe.types.UTF8String
+
+      val columnStats = new StringColumnStats(StringType("UTF8_LCASE").collationId)
+      val rows = Seq("b", "a", "C", "A").map(str => {
+        val row = new GenericInternalRow(1)
+        row(0) = UTF8String.fromString(str)
+        row
+      })
+      rows.foreach(columnStats.gatherStats(_, 0))
+
+      val stats = columnStats.collectedStatistics
+      assertResult(UTF8String.fromString("a"), "Wrong lower bound")(stats(0))
+      assertResult(UTF8String.fromString("C"), "Wrong upper bound")(stats(1))
     }
   }
 }

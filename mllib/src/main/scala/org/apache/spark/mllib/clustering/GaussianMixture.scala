@@ -17,8 +17,6 @@
 
 package org.apache.spark.mllib.clustering
 
-import scala.collection.mutable.IndexedSeq
-
 import breeze.linalg.{diag, DenseMatrix => BreezeMatrix, DenseVector => BDV, Vector => BV}
 
 import org.apache.spark.annotation.Since
@@ -189,8 +187,8 @@ class GaussianMixture private (
       case None =>
         val samples = breezeData.takeSample(withReplacement = true, k * nSamples, seed)
         (Array.fill(k)(1.0 / k), Array.tabulate(k) { i =>
-          val slice = samples.view(i * nSamples, (i + 1) * nSamples)
-          new MultivariateGaussian(vectorMean(slice), initCovariance(slice))
+          val slice = samples.slice(i * nSamples, (i + 1) * nSamples)
+          new MultivariateGaussian(vectorMean(slice.toSeq), initCovariance(slice.toSeq))
         })
     }
 
@@ -203,7 +201,12 @@ class GaussianMixture private (
       val compute = sc.broadcast(ExpectationSum.add(weights, gaussians)_)
 
       // aggregate the cluster contribution for all sample points
-      val sums = breezeData.treeAggregate(ExpectationSum.zero(k, d))(compute.value, _ += _)
+      val sums = breezeData.treeAggregate[ExpectationSum](
+        zeroValue = ExpectationSum.zero(k, d),
+        seqOp = (agg: ExpectationSum, v: BV[Double]) => compute.value(agg, v),
+        combOp = (agg1: ExpectationSum, agg2: ExpectationSum) => agg1 += agg2,
+        depth = 2,
+        finalAggregateOnExecutor = true)
 
       // Create new distributions based on the partial assignments
       // (often referred to as the "M" step in literature)
@@ -232,8 +235,9 @@ class GaussianMixture private (
       llhp = llh // current becomes previous
       llh = sums.logLikelihood // this is the freshly computed log-likelihood
       iter += 1
-      compute.destroy(blocking = false)
+      compute.destroy()
     }
+    breezeData.unpersist()
 
     new GaussianMixtureModel(weights, gaussians)
   }
@@ -258,7 +262,7 @@ class GaussianMixture private (
   }
 
   /** Average of dense breeze vectors */
-  private def vectorMean(x: IndexedSeq[BV[Double]]): BDV[Double] = {
+  private def vectorMean(x: Seq[BV[Double]]): BDV[Double] = {
     val v = BDV.zeros[Double](x(0).length)
     x.foreach(xi => v += xi)
     v / x.length.toDouble
@@ -268,10 +272,13 @@ class GaussianMixture private (
    * Construct matrix where diagonal entries are element-wise
    * variance of input vectors (computes biased variance)
    */
-  private def initCovariance(x: IndexedSeq[BV[Double]]): BreezeMatrix[Double] = {
+  private def initCovariance(x: Seq[BV[Double]]): BreezeMatrix[Double] = {
     val mu = vectorMean(x)
     val ss = BDV.zeros[Double](x(0).length)
-    x.foreach(xi => ss += (xi - mu) ^:^ 2.0)
+    x.foreach { xi =>
+      val d: BV[Double] = xi - mu
+      ss += d ^:^ 2.0
+    }
     diag(ss / x.length.toDouble)
   }
 }

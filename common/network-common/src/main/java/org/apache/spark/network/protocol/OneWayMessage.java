@@ -17,7 +17,8 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
+
 import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -63,8 +64,7 @@ public final class OneWayMessage extends AbstractMessage implements RequestMessa
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof OneWayMessage) {
-      OneWayMessage o = (OneWayMessage) other;
+    if (other instanceof OneWayMessage o) {
       return super.equals(o);
     }
     return false;
@@ -72,8 +72,6 @@ public final class OneWayMessage extends AbstractMessage implements RequestMessa
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("body", body())
-      .toString();
+    return "OneWayMessage[body=" + body() + "]";
   }
 }

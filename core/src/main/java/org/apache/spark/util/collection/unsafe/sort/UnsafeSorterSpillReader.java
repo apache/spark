@@ -17,17 +17,19 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
-import com.google.common.io.ByteStreams;
 import com.google.common.io.Closeables;
 import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
+import org.apache.spark.internal.config.package$;
+import org.apache.spark.internal.config.ConfigEntry;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.io.NioBufferedFileInputStream;
 import org.apache.spark.io.ReadAheadInputStream;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.unsafe.Platform;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.*;
 
@@ -36,9 +38,9 @@ import java.io.*;
  * of the file format).
  */
 public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implements Closeable {
-  private static final Logger logger = LoggerFactory.getLogger(UnsafeSorterSpillReader.class);
-  private static final int DEFAULT_BUFFER_SIZE_BYTES = 1024 * 1024; // 1 MB
-  private static final int MAX_BUFFER_SIZE_BYTES = 16777216; // 16 mb
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(UnsafeSorterSpillReader.class);
+  public static final int MAX_BUFFER_SIZE_BYTES = 16777216; // 16 mb
 
   private InputStream in;
   private DataInputStream din;
@@ -51,7 +53,6 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
 
   private byte[] arr = new byte[1024 * 1024];
   private Object baseObject = arr;
-  private final long baseOffset = Platform.BYTE_ARRAY_OFFSET;
   private final TaskContext taskContext = TaskContext.get();
 
   public UnsafeSorterSpillReader(
@@ -59,28 +60,23 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
       File file,
       BlockId blockId) throws IOException {
     assert (file.length() > 0);
-    long bufferSizeBytes =
-        SparkEnv.get() == null ?
-            DEFAULT_BUFFER_SIZE_BYTES:
-            SparkEnv.get().conf().getSizeAsBytes("spark.unsafe.sorter.spill.reader.buffer.size",
-                                                 DEFAULT_BUFFER_SIZE_BYTES);
-    if (bufferSizeBytes > MAX_BUFFER_SIZE_BYTES || bufferSizeBytes < DEFAULT_BUFFER_SIZE_BYTES) {
-      // fall back to a sane default value
-      logger.warn("Value of config \"spark.unsafe.sorter.spill.reader.buffer.size\" = {} not in " +
-        "allowed range [{}, {}). Falling back to default value : {} bytes", bufferSizeBytes,
-        DEFAULT_BUFFER_SIZE_BYTES, MAX_BUFFER_SIZE_BYTES, DEFAULT_BUFFER_SIZE_BYTES);
-      bufferSizeBytes = DEFAULT_BUFFER_SIZE_BYTES;
-    }
+    final ConfigEntry<Object> bufferSizeConfigEntry =
+        package$.MODULE$.UNSAFE_SORTER_SPILL_READER_BUFFER_SIZE();
+    // This value must be less than or equal to MAX_BUFFER_SIZE_BYTES. Cast to int is always safe.
+    final int DEFAULT_BUFFER_SIZE_BYTES =
+        ((Long) bufferSizeConfigEntry.defaultValue().get()).intValue();
+    int bufferSizeBytes = SparkEnv.get() == null ? DEFAULT_BUFFER_SIZE_BYTES :
+        ((Long) SparkEnv.get().conf().get(bufferSizeConfigEntry)).intValue();
 
-    final boolean readAheadEnabled = SparkEnv.get() != null &&
-        SparkEnv.get().conf().getBoolean("spark.unsafe.sorter.spill.read.ahead.enabled", true);
+    final boolean readAheadEnabled = SparkEnv.get() != null && (boolean)SparkEnv.get().conf().get(
+        package$.MODULE$.UNSAFE_SORTER_SPILL_READ_AHEAD_ENABLED());
 
     final InputStream bs =
-        new NioBufferedFileInputStream(file, (int) bufferSizeBytes);
+        new NioBufferedFileInputStream(file, bufferSizeBytes);
     try {
       if (readAheadEnabled) {
         this.in = new ReadAheadInputStream(serializerManager.wrapStream(blockId, bs),
-                (int) bufferSizeBytes);
+                bufferSizeBytes);
       } else {
         this.in = serializerManager.wrapStream(blockId, bs);
       }
@@ -90,11 +86,25 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
       Closeables.close(bs, /* swallowIOException = */ true);
       throw e;
     }
+    if (taskContext != null) {
+      taskContext.addTaskCompletionListener(context -> {
+        try {
+          close();
+        } catch (IOException e) {
+          logger.info("error while closing UnsafeSorterSpillReader", e);
+        }
+      });
+    }
   }
 
   @Override
   public int getNumRecords() {
     return numRecords;
+  }
+
+  @Override
+  public long getCurrentPageNumber() {
+    throw new UnsupportedOperationException();
   }
 
   @Override
@@ -118,7 +128,7 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
       arr = new byte[recordLength];
       baseObject = arr;
     }
-    ByteStreams.readFully(in, arr, 0, recordLength);
+    JavaUtils.readFully(in, arr, 0, recordLength);
     numRecordsRemaining--;
     if (numRecordsRemaining == 0) {
       close();
@@ -132,7 +142,7 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
 
   @Override
   public long getBaseOffset() {
-    return baseOffset;
+    return Platform.BYTE_ARRAY_OFFSET;
   }
 
   @Override

@@ -19,19 +19,20 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class ParquetCompressionCodecPrecedenceSuite extends ParquetTest with SharedSQLContext {
+class ParquetCompressionCodecPrecedenceSuite extends ParquetTest with SharedSparkSession {
   test("Test `spark.sql.parquet.compression.codec` config") {
-    Seq("NONE", "UNCOMPRESSED", "SNAPPY", "GZIP", "LZO", "LZ4", "BROTLI", "ZSTD").foreach { c =>
-      withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> c) {
-        val expected = if (c == "NONE") "UNCOMPRESSED" else c
+    ParquetCompressionCodec.values().foreach { codec =>
+      withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> codec.name()) {
+        val expected = codec.getCompressionCodec.name()
         val option = new ParquetOptions(Map.empty[String, String], spark.sessionState.conf)
         assert(option.compressionCodecClassName == expected)
       }
@@ -40,25 +41,31 @@ class ParquetCompressionCodecPrecedenceSuite extends ParquetTest with SharedSQLC
 
   test("[SPARK-21786] Test Acquiring 'compressionCodecClassName' for parquet in right order.") {
     // When "compression" is configured, it should be the first choice.
-    withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "snappy") {
-      val props = Map("compression" -> "uncompressed", ParquetOutputFormat.COMPRESSION -> "gzip")
+    withSQLConf(
+      SQLConf.PARQUET_COMPRESSION.key -> ParquetCompressionCodec.SNAPPY.lowerCaseName()) {
+      val props = Map(
+        "compression" -> ParquetCompressionCodec.UNCOMPRESSED.lowerCaseName(),
+        ParquetOutputFormat.COMPRESSION -> ParquetCompressionCodec.GZIP.lowerCaseName())
       val option = new ParquetOptions(props, spark.sessionState.conf)
-      assert(option.compressionCodecClassName == "UNCOMPRESSED")
+      assert(option.compressionCodecClassName == ParquetCompressionCodec.UNCOMPRESSED.name)
     }
 
     // When "compression" is not configured, "parquet.compression" should be the preferred choice.
-    withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "snappy") {
-      val props = Map(ParquetOutputFormat.COMPRESSION -> "gzip")
+    withSQLConf(
+      SQLConf.PARQUET_COMPRESSION.key -> ParquetCompressionCodec.SNAPPY.lowerCaseName()) {
+      val props =
+        Map(ParquetOutputFormat.COMPRESSION -> ParquetCompressionCodec.GZIP.lowerCaseName())
       val option = new ParquetOptions(props, spark.sessionState.conf)
-      assert(option.compressionCodecClassName == "GZIP")
+      assert(option.compressionCodecClassName == ParquetCompressionCodec.GZIP.name)
     }
 
     // When both "compression" and "parquet.compression" are not configured,
     // spark.sql.parquet.compression.codec should be the right choice.
-    withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "snappy") {
+    withSQLConf(
+      SQLConf.PARQUET_COMPRESSION.key -> ParquetCompressionCodec.SNAPPY.lowerCaseName()) {
       val props = Map.empty[String, String]
       val option = new ParquetOptions(props, spark.sessionState.conf)
-      assert(option.compressionCodecClassName == "SNAPPY")
+      assert(option.compressionCodecClassName == ParquetCompressionCodec.SNAPPY.name)
     }
   }
 
@@ -104,8 +111,9 @@ class ParquetCompressionCodecPrecedenceSuite extends ParquetTest with SharedSQLC
   }
 
   test("Create parquet table with compression") {
+    val codecs = ParquetCompressionCodec.availableCodecs.asScala.map(_.name())
     Seq(true, false).foreach { isPartitioned =>
-      Seq("UNCOMPRESSED", "SNAPPY", "GZIP").foreach { compressionCodec =>
+      codecs.foreach { compressionCodec =>
         checkCompressionCodec(compressionCodec, isPartitioned)
       }
     }
@@ -113,10 +121,15 @@ class ParquetCompressionCodecPrecedenceSuite extends ParquetTest with SharedSQLC
 
   test("Create table with unknown compression") {
     Seq(true, false).foreach { isPartitioned =>
-      val exception = intercept[IllegalArgumentException] {
-        checkCompressionCodec("aa", isPartitioned)
-      }
-      assert(exception.getMessage.contains("Codec [aa] is not available"))
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          checkCompressionCodec("aa", isPartitioned)
+        },
+        condition = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+        parameters = Map(
+          "codecName" -> "aa",
+          "availableCodecs" -> ("brotli, uncompressed, lzo, snappy, " +
+            "lz4_raw, none, zstd, lz4, gzip")))
     }
   }
 }

@@ -18,25 +18,26 @@
 package org.apache.spark.deploy.master.ui
 
 import java.io.DataOutputStream
-import java.net.{HttpURLConnection, URL}
+import java.net.{HttpURLConnection, URI}
 import java.nio.charset.StandardCharsets
 import java.util.Date
 
 import scala.collection.mutable.HashMap
 
 import org.mockito.Mockito.{mock, times, verify, when}
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.DeployMessages.{KillDriverResponse, RequestKillDriver}
+import org.apache.spark.deploy.DeployMessages.{DecommissionWorkersOnHosts, KillDriverResponse, RequestKillDriver}
 import org.apache.spark.deploy.DeployTestUtils._
 import org.apache.spark.deploy.master._
+import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
+import org.apache.spark.util.Utils
 
+class MasterWebUISuite extends SparkFunSuite {
+  import MasterWebUISuite._
 
-class MasterWebUISuite extends SparkFunSuite with BeforeAndAfterAll {
-
-  val conf = new SparkConf
+  val conf = new SparkConf().set(DECOMMISSION_ENABLED, true)
   val securityMgr = new SecurityManager(conf)
   val rpcEnv = mock(classOf[RpcEnv])
   val master = mock(classOf[Master])
@@ -47,12 +48,12 @@ class MasterWebUISuite extends SparkFunSuite with BeforeAndAfterAll {
   when(master.self).thenReturn(masterEndpointRef)
   val masterWebUI = new MasterWebUI(master, 0)
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     masterWebUI.bind()
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       masterWebUI.stop()
     } finally {
@@ -68,7 +69,7 @@ class MasterWebUISuite extends SparkFunSuite with BeforeAndAfterAll {
 
     when(master.idToApp).thenReturn(HashMap[String, ApplicationInfo]((activeApp.id, activeApp)))
 
-    val url = s"http://localhost:${masterWebUI.boundPort}/app/kill/"
+    val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/app/kill/"
     val body = convPostDataToString(Map(("id", activeApp.id), ("terminate", "true")))
     val conn = sendHttpRequest(url, "POST", body)
     conn.getResponseCode
@@ -79,7 +80,7 @@ class MasterWebUISuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("kill driver") {
     val activeDriverId = "driver-0"
-    val url = s"http://localhost:${masterWebUI.boundPort}/driver/kill/"
+    val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/driver/kill/"
     val body = convPostDataToString(Map(("id", activeDriverId), ("terminate", "true")))
     val conn = sendHttpRequest(url, "POST", body)
     conn.getResponseCode
@@ -88,19 +89,43 @@ class MasterWebUISuite extends SparkFunSuite with BeforeAndAfterAll {
     verify(masterEndpointRef, times(1)).ask[KillDriverResponse](RequestKillDriver(activeDriverId))
   }
 
-  private def convPostDataToString(data: Map[String, String]): String = {
+  private def testKillWorkers(hostnames: Seq[String]): Unit = {
+    val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/workers/kill/"
+    val body = convPostDataToString(hostnames.map(("host", _)))
+    val conn = sendHttpRequest(url, "POST", body)
+    // The master is mocked here, so cannot assert on the response code
+    conn.getResponseCode
+    // Verify that master was asked to kill driver with the correct id
+    verify(masterEndpointRef).askSync[Integer](DecommissionWorkersOnHosts(hostnames))
+  }
+
+  test("Kill one host") {
+    testKillWorkers(Seq(s"${Utils.localHostNameForURI()}"))
+  }
+
+  test("Kill multiple hosts") {
+    testKillWorkers(Seq("noSuchHost", "LocalHost"))
+  }
+}
+
+object MasterWebUISuite {
+  private[ui] def convPostDataToString(data: Seq[(String, String)]): String = {
     (for ((name, value) <- data) yield s"$name=$value").mkString("&")
+  }
+
+  private[ui] def convPostDataToString(data: Map[String, String]): String = {
+    convPostDataToString(data.toSeq)
   }
 
   /**
    * Send an HTTP request to the given URL using the method and the body specified.
    * Return the connection object.
    */
-  private def sendHttpRequest(
+  private[ui] def sendHttpRequest(
       url: String,
       method: String,
       body: String = ""): HttpURLConnection = {
-    val conn = new URL(url).openConnection().asInstanceOf[HttpURLConnection]
+    val conn = new URI(url).toURL.openConnection().asInstanceOf[HttpURLConnection]
     conn.setRequestMethod(method)
     if (body.nonEmpty) {
       conn.setDoOutput(true)

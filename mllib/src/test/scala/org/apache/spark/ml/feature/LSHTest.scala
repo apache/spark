@@ -17,15 +17,18 @@
 
 package org.apache.spark.ml.feature
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.util.{MLTestingUtils, SchemaUtils}
 import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DataTypes
 
 private[ml] object LSHTest {
   /**
-   * For any locality sensitive function h in a metric space, we meed to verify whether
+   * For any locality sensitive function h in a metric space, we need to verify whether
    * the following property is satisfied.
    *
    * There exist dist1, dist2, p1, p2, so that for any two elements e1 and e2,
@@ -69,14 +72,14 @@ private[ml] object LSHTest {
       transformedData.schema, model.getOutputCol, DataTypes.createArrayType(new VectorUDT))
 
     // Check output column dimensions
-    val headHashValue = transformedData.select(outputCol).head().get(0).asInstanceOf[Seq[Vector]]
+    val headHashValue =
+      transformedData.select(outputCol).head().get(0).asInstanceOf[scala.collection.Seq[Vector]]
     assert(headHashValue.length == model.getNumHashTables)
 
     // Perform a cross join and label each pair of same_bucket and distance
     val pairs = transformedData.as("a").crossJoin(transformedData.as("b"))
-    val distUDF = udf((x: Vector, y: Vector) => model.keyDistance(x, y), DataTypes.DoubleType)
-    val sameBucket = udf((x: Seq[Vector], y: Seq[Vector]) => model.hashDistance(x, y) == 0.0,
-      DataTypes.BooleanType)
+    val distUDF = udf((x: Vector, y: Vector) => model.keyDistance(x, y))
+    val sameBucket = udf((x: Array[Vector], y: Array[Vector]) => model.hashDistance(x, y) == 0.0)
     val result = pairs
       .withColumn("same_bucket", sameBucket(col(s"a.$outputCol"), col(s"b.$outputCol")))
       .withColumn("distance", distUDF(col(s"a.$inputCol"), col(s"b.$inputCol")))
@@ -108,13 +111,13 @@ private[ml] object LSHTest {
     val model = lsh.fit(dataset)
 
     // Compute expected
-    val distUDF = udf((x: Vector) => model.keyDistance(x, key), DataTypes.DoubleType)
+    val distUDF = udf((x: Vector) => model.keyDistance(x, key))
     val expected = dataset.sort(distUDF(col(model.getInputCol))).limit(k)
 
     // Compute actual
     val actual = model.approxNearestNeighbors(dataset, key, k, singleProbe, "distCol")
 
-    assert(actual.schema.sameType(model
+    assert(DataTypeUtils.sameType(actual.schema, model
       .transformSchema(dataset.schema)
       .add("distCol", DataTypes.DoubleType))
     )
@@ -146,7 +149,7 @@ private[ml] object LSHTest {
     val inputCol = model.getInputCol
 
     // Compute expected
-    val distUDF = udf((x: Vector, y: Vector) => model.keyDistance(x, y), DataTypes.DoubleType)
+    val distUDF = udf((x: Vector, y: Vector) => model.keyDistance(x, y))
     val expected = datasetA.as("a").crossJoin(datasetB.as("b"))
       .filter(distUDF(col(s"a.$inputCol"), col(s"b.$inputCol")) < threshold)
 
@@ -154,10 +157,10 @@ private[ml] object LSHTest {
     val actual = model.approxSimilarityJoin(datasetA, datasetB, threshold)
 
     SchemaUtils.checkColumnType(actual.schema, "distCol", DataTypes.DoubleType)
-    assert(actual.schema.apply("datasetA").dataType
-      .sameType(model.transformSchema(datasetA.schema)))
-    assert(actual.schema.apply("datasetB").dataType
-      .sameType(model.transformSchema(datasetB.schema)))
+    assert(DataTypeUtils.sameType(actual.schema.apply("datasetA").dataType,
+      model.transformSchema(datasetA.schema)))
+    assert(DataTypeUtils.sameType(actual.schema.apply("datasetB").dataType,
+      model.transformSchema(datasetB.schema)))
 
     // Compute precision and recall
     val correctCount = actual.filter(col("distCol") < threshold).count().toDouble

@@ -20,11 +20,11 @@
 SELF=$(cd $(dirname $0) && pwd)
 . "$SELF/release-util.sh"
 
-while getopts "bn" opt; do
+while getopts ":b:n" opt; do
   case $opt in
     b) GIT_BRANCH=$OPTARG ;;
     n) DRY_RUN=1 ;;
-    ?) error "Invalid option: $OPTARG" ;;
+    \?) error "Invalid option: $OPTARG" ;;
   esac
 done
 
@@ -52,9 +52,13 @@ function should_build {
 if should_build "tag" && [ $SKIP_TAG = 0 ]; then
   run_silent "Creating release tag $RELEASE_TAG..." "tag.log" \
     "$SELF/release-tag.sh"
-  echo "It may take some time for the tag to be synchronized to github."
-  echo "Press enter when you've verified that the new tag ($RELEASE_TAG) is available."
-  read
+  if [ -z "$ANSWER" ]; then
+    echo "It may take some time for the tag to be synchronized to github."
+    echo "Press enter when you've verified that the new tag ($RELEASE_TAG) is available."
+    read
+  else
+    sleep 10
+  fi
 else
   echo "Skipping tag creation for $RELEASE_TAG."
 fi
@@ -78,4 +82,9 @@ if should_build "publish"; then
     "$SELF/release-build.sh" publish-release
 else
   echo "Skipping publish step."
+fi
+
+if [ ! -z "$RELEASE_STEP" ] && [ "$RELEASE_STEP" = "finalize" ]; then
+  run_silent "Finalizing release" "finalize.log" \
+    "$SELF/release-build.sh" finalize
 fi

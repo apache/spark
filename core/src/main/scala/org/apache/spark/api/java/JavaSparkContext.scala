@@ -22,7 +22,7 @@ import java.util
 import java.util.{Map => JMap}
 
 import scala.annotation.varargs
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
@@ -35,13 +35,15 @@ import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD}
+import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A Java-friendly version of [[org.apache.spark.SparkContext]] that returns
  * [[org.apache.spark.api.java.JavaRDD]]s and works with Java collections instead of Scala ones.
  *
- * Only one SparkContext may be active per JVM.  You must `stop()` the active SparkContext before
- * creating a new one.  This limitation may eventually be removed; see SPARK-2243 for more details.
+ * @note Only one `SparkContext` should be active per JVM. You must `stop()` the
+ *   active `SparkContext` before creating a new one.
  */
 class JavaSparkContext(val sc: SparkContext) extends Closeable {
 
@@ -57,13 +59,13 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   def this(conf: SparkConf) = this(new SparkContext(conf))
 
   /**
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param master Cluster URL to connect to (e.g. spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI
    */
   def this(master: String, appName: String) = this(new SparkContext(master, appName))
 
   /**
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param master Cluster URL to connect to (e.g. spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI
    * @param conf a [[org.apache.spark.SparkConf]] object specifying other Spark parameters
    */
@@ -71,9 +73,9 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
     this(conf.setMaster(master).setAppName(appName))
 
   /**
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param master Cluster URL to connect to (e.g. spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI
-   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param sparkHome The SPARK_HOME directory on the worker nodes
    * @param jarFile JAR file to send to the cluster. This can be a path on the local file system
    *                or an HDFS, HTTP, HTTPS, or FTP URL.
    */
@@ -81,26 +83,27 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
     this(new SparkContext(master, appName, sparkHome, Seq(jarFile)))
 
   /**
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param master Cluster URL to connect to (e.g. spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI
-   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param sparkHome The SPARK_HOME directory on the worker nodes
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    */
   def this(master: String, appName: String, sparkHome: String, jars: Array[String]) =
-    this(new SparkContext(master, appName, sparkHome, jars.toSeq))
+    this(new SparkContext(master, appName, sparkHome, jars.toImmutableArraySeq))
 
   /**
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param master Cluster URL to connect to (e.g. spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI
-   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param sparkHome The SPARK_HOME directory on the worker nodes
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    * @param environment Environment variables to set on worker nodes
    */
   def this(master: String, appName: String, sparkHome: String, jars: Array[String],
       environment: JMap[String, String]) =
-    this(new SparkContext(master, appName, sparkHome, jars.toSeq, environment.asScala))
+    this(
+      new SparkContext(master, appName, sparkHome, jars.toImmutableArraySeq, environment.asScala))
 
   private[spark] val env = sc.env
 
@@ -113,6 +116,8 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   def master: String = sc.master
 
   def appName: String = sc.appName
+
+  def resources: JMap[String, ResourceInformation] = sc.resources.asJava
 
   def jars: util.List[String] = sc.jars.asJava
 
@@ -130,7 +135,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T](list: java.util.List[T], numSlices: Int): JavaRDD[T] = {
     implicit val ctag: ClassTag[T] = fakeClassTag
-    sc.parallelize(list.asScala, numSlices)
+    sc.parallelize(list.asScala.toSeq, numSlices)
   }
 
   /** Get an RDD that has no partitions or elements. */
@@ -149,7 +154,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   : JavaPairRDD[K, V] = {
     implicit val ctagK: ClassTag[K] = fakeClassTag
     implicit val ctagV: ClassTag[V] = fakeClassTag
-    JavaPairRDD.fromRDD(sc.parallelize(list.asScala, numSlices))
+    JavaPairRDD.fromRDD(sc.parallelize(list.asScala.toSeq, numSlices))
   }
 
   /** Distribute a local Scala collection to form an RDD. */
@@ -158,7 +163,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelizeDoubles(list: java.util.List[java.lang.Double], numSlices: Int): JavaDoubleRDD =
-    JavaDoubleRDD.fromRDD(sc.parallelize(list.asScala.map(_.doubleValue()), numSlices))
+    JavaDoubleRDD.fromRDD(sc.parallelize(list.asScala.map(_.doubleValue()).toSeq, numSlices))
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelizeDoubles(list: java.util.List[java.lang.Double]): JavaDoubleRDD =
@@ -167,12 +172,14 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   /**
    * Read a text file from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
+   * The text files must be encoded as UTF-8.
    */
   def textFile(path: String): JavaRDD[String] = sc.textFile(path)
 
   /**
    * Read a text file from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
+   * The text files must be encoded as UTF-8.
    */
   def textFile(path: String, minPartitions: Int): JavaRDD[String] =
     sc.textFile(path, minPartitions)
@@ -183,6 +190,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI. Each file is read as a single record and returned in a
    * key-value pair, where the key is the path of each file, the value is the content of each file.
+   * The text files must be encoded as UTF-8.
    *
    * <p> For example, if you have the following files:
    * {{{
@@ -216,6 +224,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI. Each file is read as a single record and returned in a
    * key-value pair, where the key is the path of each file, the value is the content of each file.
+   * The text files must be encoded as UTF-8.
    *
    * @see `wholeTextFiles(path: String, minPartitions: Int)`.
    */
@@ -539,8 +548,23 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   def broadcast[T](value: T): Broadcast[T] = sc.broadcast(value)(fakeClassTag)
 
   /** Shut down the SparkContext. */
-  def stop() {
+  def stop(): Unit = {
     sc.stop()
+  }
+
+  /**
+   * Shut down the SparkContext with exit code that will passed to scheduler backend.
+   * In client mode, client side may call `SparkContext.stop()` to clean up but exit with
+   * code not equal to 0. This behavior cause resource scheduler such as `ApplicationMaster`
+   * exit with success status but client side exited with failed status. Spark can call
+   * this method to stop SparkContext and pass client side correct exit code to scheduler backend.
+   * Then scheduler backend should send the exit code to corresponding resource scheduler
+   * to keep consistent.
+   *
+   * @param exitCode Specified exit code that will passed to scheduler backend in client mode.
+   */
+  def stop(exitCode: Int): Unit = {
+    sc.stop(exitCode)
   }
 
   override def close(): Unit = stop()
@@ -560,7 +584,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    *
    * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
-  def addFile(path: String) {
+  def addFile(path: String): Unit = {
     sc.addFile(path)
   }
 
@@ -586,7 +610,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    *
    * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
-  def addJar(path: String) {
+  def addJar(path: String): Unit = {
     sc.addJar(path)
   }
 
@@ -602,9 +626,9 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
 
   /**
    * Set the directory under which RDDs are going to be checkpointed. The directory must
-   * be a HDFS path if running on a cluster.
+   * be an HDFS path if running on a cluster.
    */
-  def setCheckpointDir(dir: String) {
+  def setCheckpointDir(dir: String): Unit = {
     sc.setCheckpointDir(dir)
   }
 
@@ -621,17 +645,20 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    */
   def getConf: SparkConf = sc.getConf
 
+  /** Return a read-only version of the spark conf. */
+  def getReadOnlyConf: ReadOnlySparkConf = sc.getReadOnlyConf
+
   /**
    * Pass-through to SparkContext.setCallSite.  For API support only.
    */
-  def setCallSite(site: String) {
+  def setCallSite(site: String): Unit = {
     sc.setCallSite(site)
   }
 
   /**
    * Pass-through to SparkContext.setCallSite.  For API support only.
    */
-  def clearCallSite() {
+  def clearCallSite(): Unit = {
     sc.clearCallSite()
   }
 
@@ -662,7 +689,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * @param logLevel The desired log level as a string.
    * Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
    */
-  def setLogLevel(logLevel: String) {
+  def setLogLevel(logLevel: String): Unit = {
     sc.setLogLevel(logLevel)
   }
 
@@ -706,10 +733,88 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   def clearJobGroup(): Unit = sc.clearJobGroup()
 
   /**
+   * Set the behavior of job cancellation from jobs started in this thread.
+   *
+   * @param interruptOnCancel If true, then job cancellation will result in `Thread.interrupt()`
+   * being called on the job's executor threads. This is useful to help ensure that the tasks
+   * are actually stopped in a timely manner, but is off by default due to HDFS-1208, where HDFS
+   * may respond to Thread.interrupt() by marking nodes as dead.
+   *
+   * @since 3.5.0
+   */
+  def setInterruptOnCancel(interruptOnCancel: Boolean): Unit =
+    sc.setInterruptOnCancel(interruptOnCancel)
+
+  /**
+   * Add a tag to be assigned to all the jobs started by this thread.
+   *
+   * @param tag The tag to be added. Cannot contain ',' (comma) character.
+   *
+   * @since 3.5.0
+   */
+  def addJobTag(tag: String): Unit = sc.addJobTag(tag)
+
+  /**
+   * Remove a tag previously added to be assigned to all the jobs started by this thread.
+   * Noop if such a tag was not added earlier.
+   *
+   * @param tag The tag to be removed. Cannot contain ',' (comma) character.
+   *
+   * @since 3.5.0
+   */
+  def removeJobTag(tag: String): Unit = sc.removeJobTag(tag)
+
+  /**
+   * Get the tags that are currently set to be assigned to all the jobs started by this thread.
+   *
+   * @since 3.5.0
+   */
+  def getJobTags(): util.Set[String] = sc.getJobTags().asJava
+
+  /**
+   * Clear the current thread's job tags.
+   *
+   * @since 3.5.0
+   */
+  def clearJobTags(): Unit = sc.clearJobTags()
+
+  /**
    * Cancel active jobs for the specified group. See
    * `org.apache.spark.api.java.JavaSparkContext.setJobGroup` for more information.
+   *
+   * @param groupId the group ID to cancel
+   * @param reason reason for cancellation
+   *
+   * @since 4.0.0
+   */
+  def cancelJobGroup(groupId: String, reason: String): Unit = sc.cancelJobGroup(groupId, reason)
+
+  /**
+   * Cancel active jobs for the specified group. See
+   * `org.apache.spark.api.java.JavaSparkContext.setJobGroup` for more information.
+   *
+   * @param groupId the group ID to cancel
    */
   def cancelJobGroup(groupId: String): Unit = sc.cancelJobGroup(groupId)
+
+  /**
+   * Cancel active jobs that have the specified tag. See `org.apache.spark.SparkContext.addJobTag`.
+   *
+   * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
+   * @param reason reason for cancellation
+   *
+   * @since 4.0.0
+   */
+  def cancelJobsWithTag(tag: String, reason: String): Unit = sc.cancelJobsWithTag(tag, reason)
+
+  /**
+   * Cancel active jobs that have the specified tag. See `org.apache.spark.SparkContext.addJobTag`.
+   *
+   * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
+   *
+   * @since 3.5.0
+   */
+  def cancelJobsWithTag(tag: String): Unit = sc.cancelJobsWithTag(tag)
 
   /** Cancel all jobs that have been scheduled or are running. */
   def cancelAllJobs(): Unit = sc.cancelAllJobs()
@@ -720,7 +825,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * @note This does not necessarily mean the caching or computation was successful.
    */
   def getPersistentRDDs: JMap[java.lang.Integer, JavaRDD[_]] = {
-    sc.getPersistentRDDs.mapValues(s => JavaRDD.fromRDD(s))
+    sc.getPersistentRDDs.toMap.transform((_, s) => JavaRDD.fromRDD(s))
       .asJava.asInstanceOf[JMap[java.lang.Integer, JavaRDD[_]]]
   }
 

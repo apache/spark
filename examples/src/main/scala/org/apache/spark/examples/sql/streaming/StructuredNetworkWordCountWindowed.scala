@@ -48,7 +48,7 @@ import org.apache.spark.sql.functions._
  */
 object StructuredNetworkWordCountWindowed {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 3) {
       System.err.println("Usage: StructuredNetworkWordCountWindowed <hostname> <port>" +
         " <window duration in seconds> [<slide duration in seconds>]")
@@ -66,7 +66,7 @@ object StructuredNetworkWordCountWindowed {
     val slideDuration = s"$slideSize seconds"
 
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("StructuredNetworkWordCountWindowed")
       .getOrCreate()
 

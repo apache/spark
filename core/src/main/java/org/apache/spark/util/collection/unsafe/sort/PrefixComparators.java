@@ -69,6 +69,8 @@ public class PrefixComparators {
      * details see http://stereopsis.com/radix.html.
      */
     public static long computePrefix(double value) {
+      // normalize -0.0 to 0.0, as they should be equal
+      value = value == -0.0 ? 0.0 : value;
       // Java's doubleToLongBits already canonicalizes all NaN values to the smallest possible
       // positive NaN, so there's nothing special we need to do for NaNs.
       long bits = Double.doubleToLongBits(value);
@@ -102,6 +104,7 @@ public class PrefixComparators {
     @Override public boolean sortDescending() { return false; }
     @Override public boolean sortSigned() { return false; }
     @Override public boolean nullsFirst() { return true; }
+    @Override
     public int compare(long aPrefix, long bPrefix) {
       return UnsignedLongs.compare(aPrefix, bPrefix);
     }
@@ -111,6 +114,7 @@ public class PrefixComparators {
     @Override public boolean sortDescending() { return false; }
     @Override public boolean sortSigned() { return false; }
     @Override public boolean nullsFirst() { return false; }
+    @Override
     public int compare(long aPrefix, long bPrefix) {
       return UnsignedLongs.compare(aPrefix, bPrefix);
     }
@@ -120,6 +124,7 @@ public class PrefixComparators {
     @Override public boolean sortDescending() { return true; }
     @Override public boolean sortSigned() { return false; }
     @Override public boolean nullsFirst() { return true; }
+    @Override
     public int compare(long bPrefix, long aPrefix) {
       return UnsignedLongs.compare(aPrefix, bPrefix);
     }
@@ -129,6 +134,7 @@ public class PrefixComparators {
     @Override public boolean sortDescending() { return true; }
     @Override public boolean sortSigned() { return false; }
     @Override public boolean nullsFirst() { return false; }
+    @Override
     public int compare(long bPrefix, long aPrefix) {
       return UnsignedLongs.compare(aPrefix, bPrefix);
     }
@@ -138,8 +144,9 @@ public class PrefixComparators {
     @Override public boolean sortDescending() { return false; }
     @Override public boolean sortSigned() { return true; }
     @Override public boolean nullsFirst() { return true; }
+    @Override
     public int compare(long a, long b) {
-      return (a < b) ? -1 : (a > b) ? 1 : 0;
+      return Long.compare(a, b);
     }
   }
 
@@ -147,8 +154,9 @@ public class PrefixComparators {
     @Override public boolean sortDescending() { return false; }
     @Override public boolean sortSigned() { return true; }
     @Override public boolean nullsFirst() { return false; }
+    @Override
     public int compare(long a, long b) {
-      return (a < b) ? -1 : (a > b) ? 1 : 0;
+      return Long.compare(a, b);
     }
   }
 
@@ -156,8 +164,9 @@ public class PrefixComparators {
     @Override public boolean sortDescending() { return true; }
     @Override public boolean sortSigned() { return true; }
     @Override public boolean nullsFirst() { return true; }
+    @Override
     public int compare(long b, long a) {
-      return (a < b) ? -1 : (a > b) ? 1 : 0;
+      return Long.compare(a, b);
     }
   }
 
@@ -165,8 +174,9 @@ public class PrefixComparators {
     @Override public boolean sortDescending() { return true; }
     @Override public boolean sortSigned() { return true; }
     @Override public boolean nullsFirst() { return false; }
+    @Override
     public int compare(long b, long a) {
-      return (a < b) ? -1 : (a > b) ? 1 : 0;
+      return Long.compare(a, b);
     }
   }
 }

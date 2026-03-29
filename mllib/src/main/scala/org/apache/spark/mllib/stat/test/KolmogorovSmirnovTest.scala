@@ -91,7 +91,7 @@ private[stat] object KolmogorovSmirnovTest extends Logging {
    * @param partData `Iterator[Double]` 1 partition of a sorted RDD
    * @param n `Double` the total size of the RDD
    * @param cdf `Double => Double` a function the calculates the theoretical CDF of a value
-   * @return `Iterator[(Double, Double)] `Unadjusted (ie. off by a constant) potential extrema
+   * @return `Iterator[(Double, Double)] `Unadjusted (i.e. off by a constant) potential extrema
    *        in a partition. The first element corresponds to the (empirical CDF - 1/N) - CDF,
    *        the second element corresponds to empirical CDF - CDF.  We can then search the resulting
    *        iterator for the minimum of the first and the maximum of the second element, and provide

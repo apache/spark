@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.clustering
 
 import breeze.linalg.{DenseVector => BreezeVector}
-import org.json4s.DefaultFormats
+import org.json4s.{DefaultFormats, Formats}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
@@ -30,6 +30,7 @@ import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.{Loader, MLUtils, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Multivariate Gaussian Mixture Model (GMM) consisting of k Gaussians, where points
@@ -47,8 +48,6 @@ class GaussianMixtureModel @Since("1.3.0") (
   @Since("1.3.0") val gaussians: Array[MultivariateGaussian]) extends Serializable with Saveable {
 
   require(weights.length == gaussians.length, "Length of weight and Gaussian arrays must match")
-
-  override protected def formatVersion = "1.0"
 
   @Since("1.4.0")
   override def save(sc: SparkContext, path: String): Unit = {
@@ -148,13 +147,14 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
       // Create JSON metadata.
       val metadata = compact(render
         (("class" -> classNameV1_0) ~ ("version" -> formatVersionV1_0) ~ ("k" -> weights.length)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(Loader.metadataPath(path))
 
       // Create Parquet data.
       val dataArray = Array.tabulate(weights.length) { i =>
         Data(weights(i), gaussians(i).mu, gaussians(i).sigma)
       }
-      spark.createDataFrame(sc.makeRDD(dataArray, 1)).write.parquet(Loader.dataPath(path))
+      spark.createDataFrame(sc.makeRDD(dataArray.toImmutableArraySeq, 1))
+        .write.parquet(Loader.dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): GaussianMixtureModel = {
@@ -170,14 +170,14 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
           (weight, new MultivariateGaussian(mu, sigma))
       }.unzip
 
-      new GaussianMixtureModel(weights.toArray, gaussians.toArray)
+      new GaussianMixtureModel(weights, gaussians)
     }
   }
 
   @Since("1.4.0")
   override def load(sc: SparkContext, path: String): GaussianMixtureModel = {
     val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     val k = (metadata \ "k").extract[Int]
     val classNameV1_0 = SaveLoadV1_0.classNameV1_0
     (loadedClassName, version) match {

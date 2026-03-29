@@ -21,17 +21,17 @@ import java.io.*;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.Map;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
+import org.apache.spark.SparkIllegalArgumentException;
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -39,17 +39,18 @@ import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.unsafe.types.VariantVal;
+import org.apache.spark.unsafe.types.GeographyVal;
+import org.apache.spark.unsafe.types.GeometryVal;
 
-import static org.apache.spark.sql.types.DataTypes.*;
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 
 /**
  * An Unsafe implementation of Row which is backed by raw memory instead of Java objects.
  *
- * Each tuple has three parts: [null bit set] [values] [variable length portion]
+ * Each tuple has three parts: [null-tracking bit set] [values] [variable length portion]
  *
- * The bit set is used for null tracking and is aligned to 8-byte word boundaries.  It stores
- * one bit per field.
+ * The null-tracking bit set is aligned to 8-byte word boundaries. It stores one bit per field.
  *
  * In the `values` region, we store one 8-byte word per field. For fields that hold fixed-length
  * primitive types, such as long, double, or int, we store the value directly in the word. For
@@ -72,38 +73,30 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   }
 
   /**
-   * Field types that can be updated in place in UnsafeRows (e.g. we support set() for these types)
+   * Field types that hold fixed-length, store the value directly in an 8-byte word
    */
-  public static final Set<DataType> mutableFieldTypes;
-
-  // DecimalType is also mutable
-  static {
-    mutableFieldTypes = Collections.unmodifiableSet(
-      new HashSet<>(
-        Arrays.asList(new DataType[] {
-          NullType,
-          BooleanType,
-          ByteType,
-          ShortType,
-          IntegerType,
-          LongType,
-          FloatType,
-          DoubleType,
-          DateType,
-          TimestampType
-        })));
-  }
-
   public static boolean isFixedLength(DataType dt) {
-    if (dt instanceof DecimalType) {
+    if (dt instanceof UserDefinedType udt) {
+      return isFixedLength(udt.sqlType());
+    }
+    PhysicalDataType pdt = PhysicalDataType.apply(dt);
+    if (pdt instanceof PhysicalDecimalType) {
       return ((DecimalType) dt).precision() <= Decimal.MAX_LONG_DIGITS();
     } else {
-      return mutableFieldTypes.contains(dt);
+      return pdt instanceof PhysicalPrimitiveType;
     }
   }
 
+  /**
+   * Field types that can be updated in place in UnsafeRows (e.g. we support set() for these types)
+   */
   public static boolean isMutable(DataType dt) {
-    return mutableFieldTypes.contains(dt) || dt instanceof DecimalType;
+    if (dt instanceof UserDefinedType udt) {
+      return isMutable(udt.sqlType());
+    }
+    PhysicalDataType pdt = PhysicalDataType.apply(dt);
+    return pdt instanceof PhysicalPrimitiveType || pdt instanceof PhysicalDecimalType ||
+      pdt instanceof PhysicalCalendarIntervalType;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -166,6 +159,17 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   public void pointTo(Object baseObject, long baseOffset, int sizeInBytes) {
     assert numFields >= 0 : "numFields (" + numFields + ") should >= 0";
     assert sizeInBytes % 8 == 0 : "sizeInBytes (" + sizeInBytes + ") should be a multiple of 8";
+    if (baseObject instanceof byte[] bytes) {
+      int offsetInByteArray = (int) (baseOffset - Platform.BYTE_ARRAY_OFFSET);
+      if (offsetInByteArray < 0 || sizeInBytes < 0 ||
+          bytes.length < offsetInByteArray + sizeInBytes) {
+        throw new SparkIllegalArgumentException(
+          "INTERNAL_ERROR",
+          Map.of("message", "Invalid byte array backed UnsafeRow: byte array length=" +
+            bytes.length + ", offset=" + offsetInByteArray + ", byte size=" + sizeInBytes)
+        );
+      }
+    }
     this.baseObject = baseObject;
     this.baseOffset = baseOffset;
     this.sizeInBytes = sizeInBytes;
@@ -203,7 +207,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   @Override
   public void update(int ordinal, Object value) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
@@ -224,9 +228,6 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   public void setDouble(int ordinal, double value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
-    if (Double.isNaN(value)) {
-      value = Double.NaN;
-    }
     Platform.putDouble(baseObject, getFieldOffset(ordinal), value);
   }
 
@@ -255,9 +256,6 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   public void setFloat(int ordinal, float value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
-    if (Float.isNaN(value)) {
-      value = Float.NaN;
-    }
     Platform.putFloat(baseObject, getFieldOffset(ordinal), value);
   }
 
@@ -285,7 +283,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       Platform.putLong(baseObject, baseOffset + cursor, 0L);
       Platform.putLong(baseObject, baseOffset + cursor + 8, 0L);
 
-      if (value == null) {
+      if (value == null || !value.changePrecision(precision, value.scale())) {
         setNullAt(ordinal);
         // keep the offset for future update
         Platform.putLong(baseObject, getFieldOffset(ordinal), cursor << 32);
@@ -304,47 +302,29 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   }
 
   @Override
-  public Object get(int ordinal, DataType dataType) {
-    if (isNullAt(ordinal) || dataType instanceof NullType) {
-      return null;
-    } else if (dataType instanceof BooleanType) {
-      return getBoolean(ordinal);
-    } else if (dataType instanceof ByteType) {
-      return getByte(ordinal);
-    } else if (dataType instanceof ShortType) {
-      return getShort(ordinal);
-    } else if (dataType instanceof IntegerType) {
-      return getInt(ordinal);
-    } else if (dataType instanceof LongType) {
-      return getLong(ordinal);
-    } else if (dataType instanceof FloatType) {
-      return getFloat(ordinal);
-    } else if (dataType instanceof DoubleType) {
-      return getDouble(ordinal);
-    } else if (dataType instanceof DecimalType) {
-      DecimalType dt = (DecimalType) dataType;
-      return getDecimal(ordinal, dt.precision(), dt.scale());
-    } else if (dataType instanceof DateType) {
-      return getInt(ordinal);
-    } else if (dataType instanceof TimestampType) {
-      return getLong(ordinal);
-    } else if (dataType instanceof BinaryType) {
-      return getBinary(ordinal);
-    } else if (dataType instanceof StringType) {
-      return getUTF8String(ordinal);
-    } else if (dataType instanceof CalendarIntervalType) {
-      return getInterval(ordinal);
-    } else if (dataType instanceof StructType) {
-      return getStruct(ordinal, ((StructType) dataType).size());
-    } else if (dataType instanceof ArrayType) {
-      return getArray(ordinal);
-    } else if (dataType instanceof MapType) {
-      return getMap(ordinal);
-    } else if (dataType instanceof UserDefinedType) {
-      return get(ordinal, ((UserDefinedType)dataType).sqlType());
+  public void setInterval(int ordinal, CalendarInterval value) {
+    assertIndexIsValid(ordinal);
+    long cursor = getLong(ordinal) >>> 32;
+    assert cursor > 0 : "invalid cursor " + cursor;
+    if (value == null) {
+      setNullAt(ordinal);
+      // zero-out the bytes
+      Platform.putLong(baseObject, baseOffset + cursor, 0L);
+      Platform.putLong(baseObject, baseOffset + cursor + 8, 0L);
+      // keep the offset for future update
+      Platform.putLong(baseObject, getFieldOffset(ordinal), (cursor << 32) | 16L);
     } else {
-      throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
+      long longVal =
+        ((long) value.months & 0xFFFFFFFFL) | (((long) value.days << 32) & 0xFFFFFFFF00000000L);
+      Platform.putLong(baseObject, baseOffset + cursor, longVal);
+      Platform.putLong(baseObject, baseOffset + cursor + 8, value.microseconds);
+      setLong(ordinal, (cursor << 32) | 16L);
     }
+  }
+
+  @Override
+  public Object get(int ordinal, DataType dataType) {
+    return SpecializedGettersReader.read(this, ordinal, dataType, true, true);
   }
 
   @Override
@@ -440,16 +420,36 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   }
 
   @Override
+  public GeographyVal getGeography(int ordinal) {
+    byte[] bytes = getBinary(ordinal);
+    return (bytes == null) ? null : GeographyVal.fromBytes(bytes);
+  }
+
+  @Override
+  public GeometryVal getGeometry(int ordinal) {
+    byte[] bytes = getBinary(ordinal);
+    return (bytes == null) ? null : GeometryVal.fromBytes(bytes);
+  }
+
+  @Override
   public CalendarInterval getInterval(int ordinal) {
     if (isNullAt(ordinal)) {
       return null;
     } else {
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
-      final int months = (int) Platform.getLong(baseObject, baseOffset + offset);
+      final long monthAndDays = Platform.getLong(baseObject, baseOffset + offset);
+      final int months = (int) (0xFFFFFFFFL & monthAndDays);
+      final int days = (int) ((0xFFFFFFFF00000000L & monthAndDays) >> 32);
       final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
-      return new CalendarInterval(months, microseconds);
+      return new CalendarInterval(months, days, microseconds);
     }
+  }
+
+  @Override
+  public VariantVal getVariant(int ordinal) {
+    if (isNullAt(ordinal)) return null;
+    return VariantVal.readFromUnsafeRow(getLong(ordinal), baseObject, baseOffset);
   }
 
   @Override
@@ -549,9 +549,9 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
    *                    buffer will not be used and may be null.
    */
   public void writeToStream(OutputStream out, byte[] writeBuffer) throws IOException {
-    if (baseObject instanceof byte[]) {
+    if (baseObject instanceof byte[] bytes) {
       int offsetInByteArray = (int) (baseOffset - Platform.BYTE_ARRAY_OFFSET);
-      out.write((byte[]) baseObject, offsetInByteArray, sizeInBytes);
+      out.write(bytes, offsetInByteArray, sizeInBytes);
     } else {
       int dataRemaining = sizeInBytes;
       long rowReadPosition = baseOffset;
@@ -573,8 +573,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof UnsafeRow) {
-      UnsafeRow o = (UnsafeRow) other;
+    if (other instanceof UnsafeRow o) {
       return (sizeInBytes == o.sizeInBytes) &&
         ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
           sizeInBytes);
@@ -586,14 +585,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
    * Returns the underlying bytes for this UnsafeRow.
    */
   public byte[] getBytes() {
-    if (baseObject instanceof byte[] && baseOffset == Platform.BYTE_ARRAY_OFFSET
-      && (((byte[]) baseObject).length == sizeInBytes)) {
-      return (byte[]) baseObject;
-    } else {
-      byte[] bytes = new byte[sizeInBytes];
-      Platform.copyMemory(baseObject, baseOffset, bytes, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
-      return bytes;
-    }
+    return UnsafeDataUtils.getBytes(baseObject, baseOffset, sizeInBytes);
   }
 
   // This is for debugging

@@ -21,7 +21,7 @@ import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 
 import io.netty.channel.Channel
-import org.mockito.Matchers._
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 
 import org.apache.spark.SparkFunSuite

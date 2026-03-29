@@ -1,5 +1,6 @@
 -- The test file contains negative test cases
 -- of invalid queries where error messages are expected.
+--ONLY_IF spark
 
 CREATE TEMPORARY VIEW t1 AS SELECT * FROM VALUES
   (1, 2, 3)
@@ -18,7 +19,7 @@ CREATE TEMPORARY VIEW t4 AS SELECT * FROM VALUES
 AS t1(t4a, t4b, t4c);
 
 CREATE TEMPORARY VIEW t5 AS SELECT * FROM VALUES
-  (CAST(1 AS DECIMAL(18, 0)), CAST(2 AS STRING), CAST(3 AS BIGINT))
+  (CAST('2011-01-01 01:01:01' AS TIMESTAMP), CAST(2 AS STRING), CAST(3 AS BIGINT))
 AS t1(t5a, t5b, t5c);
 
 -- TC 01.01

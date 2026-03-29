@@ -20,6 +20,8 @@ package org.apache.spark
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.{Millis, Span}
 
+import org.apache.spark.util.ArrayImplicits._
+
 class UnpersistSuite extends SparkFunSuite with LocalSparkContext with TimeLimits {
 
   // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
@@ -27,11 +29,11 @@ class UnpersistSuite extends SparkFunSuite with LocalSparkContext with TimeLimit
 
   test("unpersist RDD") {
     sc = new SparkContext("local", "test")
-    val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2).cache()
-    rdd.count
-    assert(sc.persistentRdds.isEmpty === false)
-    rdd.unpersist()
-    assert(sc.persistentRdds.isEmpty === true)
+    val rdd = sc.makeRDD(Array(1, 2, 3, 4).toImmutableArraySeq, 2).cache()
+    rdd.count()
+    assert(sc.persistentRdds.nonEmpty)
+    rdd.unpersist(blocking = true)
+    assert(sc.persistentRdds.isEmpty)
 
     failAfter(Span(3000, Millis)) {
       try {
@@ -44,6 +46,6 @@ class UnpersistSuite extends SparkFunSuite with LocalSparkContext with TimeLimit
           // is racing this thread to remove entries from the driver.
       }
     }
-    assert(sc.getRDDStorageInfo.isEmpty === true)
+    assert(sc.getRDDStorageInfo.isEmpty)
   }
 }

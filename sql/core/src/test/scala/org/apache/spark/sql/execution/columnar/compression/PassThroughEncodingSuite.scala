@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution.columnar.compression
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
-import org.apache.spark.sql.types.AtomicType
 
 class PassThroughSuite extends SparkFunSuite {
   val nullValue = -1
@@ -33,20 +33,20 @@ class PassThroughSuite extends SparkFunSuite {
   testPassThrough(new FloatColumnStats, FLOAT)
   testPassThrough(new DoubleColumnStats, DOUBLE)
 
-  def testPassThrough[T <: AtomicType](
+  def testPassThrough[T <: PhysicalDataType](
       columnStats: ColumnStats,
-      columnType: NativeColumnType[T]) {
+      columnType: NativeColumnType[T]): Unit = {
 
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
 
-    def skeleton(input: Seq[T#InternalType]) {
+    def skeleton(input: Seq[T#InternalType]): Unit = {
       // -------------
       // Tests encoder
       // -------------
 
       val builder = TestCompressibleColumnBuilder(columnStats, columnType, PassThrough)
 
-      input.map { value =>
+      input.foreach { value =>
         val row = new GenericInternalRow(1)
         columnType.setField(row, 0, value)
         builder.appendFrom(row, 0)
@@ -93,12 +93,12 @@ class PassThroughSuite extends SparkFunSuite {
       assert(!decoder.hasNext)
     }
 
-    def skeletonForDecompress(input: Seq[T#InternalType]) {
+    def skeletonForDecompress(input: Seq[T#InternalType]): Unit = {
       val builder = TestCompressibleColumnBuilder(columnStats, columnType, PassThrough)
       val row = new GenericInternalRow(1)
       val nullRow = new GenericInternalRow(1)
       nullRow.setNullAt(0)
-      input.map { value =>
+      input.foreach { value =>
         if (value == nullValue) {
           builder.appendFrom(nullRow, 0)
         } else {
@@ -117,7 +117,8 @@ class PassThroughSuite extends SparkFunSuite {
       assertResult(PassThrough.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
       val decoder = PassThrough.decoder(buffer, columnType)
-      val columnVector = new OnHeapColumnVector(input.length, columnType.dataType)
+      val columnVector = new OnHeapColumnVector(input.length,
+        ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
       decoder.decompress(columnVector, input.length)
 
       if (input.nonEmpty) {
@@ -160,8 +161,7 @@ class PassThroughSuite extends SparkFunSuite {
     }
 
     test(s"$PassThrough with $typeName: long random series") {
-      val input = Array.fill[Any](10000)(makeRandomValue(columnType))
-      skeleton(input.map(_.asInstanceOf[T#InternalType]))
+      skeleton(Seq.fill[T#InternalType](10000)(makeRandomValue(columnType)))
     }
 
     test(s"$PassThrough with $typeName: empty column for decompress()") {
@@ -169,8 +169,7 @@ class PassThroughSuite extends SparkFunSuite {
     }
 
     test(s"$PassThrough with $typeName: long random series for decompress()") {
-      val input = Array.fill[Any](10000)(makeRandomValue(columnType))
-      skeletonForDecompress(input.map(_.asInstanceOf[T#InternalType]))
+      skeletonForDecompress(Seq.fill[T#InternalType](10000)(makeRandomValue(columnType)))
     }
 
     test(s"$PassThrough with $typeName: simple case with null for decompress()") {
@@ -179,7 +178,7 @@ class PassThroughSuite extends SparkFunSuite {
         case SHORT => Seq(2: Short, 1: Short, 2: Short, nullValue.toShort: Short, 5: Short)
         case INT => Seq(2: Int, 1: Int, 2: Int, nullValue: Int, 5: Int)
         case LONG => Seq(2: Long, 1: Long, 2: Long, nullValue: Long, 5: Long)
-        case FLOAT => Seq(2: Float, 1: Float, 2: Float, nullValue: Float, 5: Float)
+        case FLOAT => Seq(2: Float, 1: Float, 2: Float, nullValue.toFloat: Float, 5: Float)
         case DOUBLE => Seq(2: Double, 1: Double, 2: Double, nullValue: Double, 5: Double)
       }
 

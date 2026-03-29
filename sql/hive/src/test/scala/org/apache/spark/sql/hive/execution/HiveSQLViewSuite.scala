@@ -17,16 +17,21 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, HiveTableRelation}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.SQLViewSuite
-import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.types.{NullType, StructType}
+import org.apache.spark.tags.SlowHiveTest
 
 /**
  * A test suite for Hive view related functionality.
  */
+@SlowHiveTest
 class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
   import testImplicits._
 
@@ -48,10 +53,10 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
               s"""
                  |CREATE $viewMode view1
                  |AS SELECT
-                 |$permanentFuncName(str),
-                 |$builtInFuncNameInLowerCase(id),
-                 |$builtInFuncNameInMixedCase(id) as aBs,
-                 |$hiveFuncName(id, 5) over()
+                 |$permanentFuncName(str) as myUpper,
+                 |$builtInFuncNameInLowerCase(id) as abs_lower,
+                 |$builtInFuncNameInMixedCase(id) as abs_mixed,
+                 |$hiveFuncName(id, 5) over() as func
                  |FROM tab1
                """.stripMargin)
             checkAnswer(sql("select count(*) FROM view1"), Row(10))
@@ -79,9 +84,15 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
             // permanent view
             val e = intercept[AnalysisException] {
               sql(s"CREATE VIEW view1 AS SELECT $tempFunctionName(id) from tab1")
-            }.getMessage
-            assert(e.contains("Not allowed to create a permanent view `view1` by referencing " +
-              s"a temporary function `$tempFunctionName`"))
+            }
+            checkError(
+              exception = e,
+              condition = "INVALID_TEMP_OBJ_REFERENCE",
+              parameters = Map(
+                "obj" -> "VIEW",
+                "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`",
+                "tempObj" -> "FUNCTION",
+                "tempObjName" -> s"`$tempFunctionName`"))
           }
         }
       }
@@ -133,8 +144,99 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
         // Check the output rows.
         checkAnswer(df, Row(1, 2))
         // Check the output schema.
-        assert(df.schema.sameType(view.schema))
+        assert(DataTypeUtils.sameType(df.schema, view.schema))
       }
     }
+  }
+
+  test("SPARK-20680: Add HiveVoidType to compatible with Hive void type") {
+    withView("v1") {
+      sql("create view v1 as select null as c")
+      val df = sql("select * from v1")
+      assert(df.schema.fields.head.dataType == NullType)
+      checkAnswer(
+        df,
+        Row(null)
+      )
+
+      sql("alter view v1 as select null as c1, 1 as c2")
+      val df2 = sql("select * from v1")
+      assert(df2.schema.fields.head.dataType == NullType)
+      checkAnswer(
+        df2,
+        Row(null, 1)
+      )
+    }
+  }
+
+  test("SPARK-35792: ignore optimization configs used in RelationConversions") {
+    withTable("t_orc") {
+      withView("v_orc") {
+        withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
+          spark.sql("create table t_orc stored as orc as select 1 as a, 2 as b")
+          spark.sql("create view v_orc as select * from t_orc")
+        }
+        withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "false") {
+          val relationInTable = sql("select * from t_orc").queryExecution.analyzed.collect {
+            case r: HiveTableRelation => r
+          }.headOption
+          val relationInView = sql("select * from v_orc").queryExecution.analyzed.collect {
+            case r: HiveTableRelation => r
+          }.headOption
+          assert(relationInTable.isDefined)
+          assert(relationInView.isDefined)
+        }
+      }
+    }
+  }
+
+  test("hive partitioned view is not supported") {
+    withTable("test") {
+      withView("v1") {
+        sql(
+          s"""
+             |CREATE TABLE test (c1 INT, c2 STRING)
+             |PARTITIONED BY (
+             |  p1 BIGINT COMMENT 'bla',
+             |  p2 STRING )
+           """.stripMargin)
+
+        createRawHiveTable(
+          s"""
+             |CREATE VIEW v1
+             |PARTITIONED ON (p1, p2)
+             |AS SELECT * from test
+           """.stripMargin
+        )
+
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("SHOW CREATE TABLE v1")
+          },
+          condition = "UNSUPPORTED_SHOW_CREATE_TABLE.WITH_UNSUPPORTED_FEATURE",
+          sqlState = "0A000",
+          parameters = Map(
+            "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
+            "unsupportedFeatures" -> " - partitioned view"
+          )
+        )
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("SHOW CREATE TABLE v1 AS SERDE")
+          },
+          condition = "UNSUPPORTED_SHOW_CREATE_TABLE.WITH_UNSUPPORTED_FEATURE",
+          sqlState = "0A000",
+          parameters = Map(
+            "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
+            "unsupportedFeatures" -> " - partitioned view"
+          )
+        )
+      }
+    }
+  }
+
+  private def createRawHiveTable(ddl: String): Unit = {
+    hiveContext.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
+      .client.runSqlHive(ddl)
   }
 }

@@ -39,7 +39,7 @@ import org.apache.spark.sql.SparkSession
  */
 object SparkPageRank {
 
-  def showWarning() {
+  def showWarning(): Unit = {
     System.err.println(
       """WARN: This is a naive implementation of PageRank and is given as an example!
         |Please use the PageRank implementation found in org.apache.spark.graphx.lib.PageRank
@@ -47,7 +47,7 @@ object SparkPageRank {
       """.stripMargin)
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 1) {
       System.err.println("Usage: SparkPageRank <file> <iter>")
       System.exit(1)
@@ -56,7 +56,7 @@ object SparkPageRank {
     showWarning()
 
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("SparkPageRank")
       .getOrCreate()
 

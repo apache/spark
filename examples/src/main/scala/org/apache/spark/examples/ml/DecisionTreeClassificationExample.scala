@@ -30,7 +30,7 @@ import org.apache.spark.sql.SparkSession
 object DecisionTreeClassificationExample {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("DecisionTreeClassificationExample")
       .getOrCreate()
     // $example on$
@@ -62,7 +62,7 @@ object DecisionTreeClassificationExample {
     val labelConverter = new IndexToString()
       .setInputCol("prediction")
       .setOutputCol("predictedLabel")
-      .setLabels(labelIndexer.labels)
+      .setLabels(labelIndexer.labelsArray(0))
 
     // Chain indexers and tree in a Pipeline.
     val pipeline = new Pipeline()

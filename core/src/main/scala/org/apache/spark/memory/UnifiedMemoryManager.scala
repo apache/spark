@@ -17,8 +17,19 @@
 
 package org.apache.spark.memory
 
-import org.apache.spark.SparkConf
+import java.util.concurrent.{ConcurrentHashMap, ScheduledExecutorService, TimeUnit}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
+
+import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
+
+import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
+import org.apache.spark.internal.{config, Logging, LogKeys}
+import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.config.Tests._
+import org.apache.spark.internal.config.UNMANAGED_MEMORY_POLLING_INTERVAL
 import org.apache.spark.storage.BlockId
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * A [[MemoryManager]] that enforces a soft boundary between execution and storage such that
@@ -44,7 +55,7 @@ import org.apache.spark.storage.BlockId
  *                          it if necessary. Cached blocks can be evicted only if actual
  *                          storage memory usage exceeds this region.
  */
-private[spark] class UnifiedMemoryManager private[memory] (
+private[spark] class UnifiedMemoryManager(
     conf: SparkConf,
     val maxHeapMemory: Long,
     onHeapStorageRegionSize: Long,
@@ -53,7 +64,47 @@ private[spark] class UnifiedMemoryManager private[memory] (
     conf,
     numCores,
     onHeapStorageRegionSize,
-    maxHeapMemory - onHeapStorageRegionSize) {
+    maxHeapMemory - onHeapStorageRegionSize) with Logging  {
+
+  /**
+   * Unmanaged memory tracking infrastructure.
+   *
+   * Unmanaged memory refers to memory consumed by components that manage their own memory
+   * outside of Spark's unified memory management system. Examples include:
+   * - RocksDB state stores used in structured streaming
+   * - Native libraries with their own memory management
+   * - Off-heap caches managed by unmanaged systems
+   *
+   * We track this memory to:
+   * 1. Provide visibility into total memory usage on executors
+   * 2. Prevent OOM errors by accounting for it in memory allocation decisions
+   * 3. Enable better debugging and monitoring of memory-intensive applications
+   *
+   * The polling mechanism periodically queries registered unmanaged memory consumers
+   * to detect inactive consumers and handle cleanup.
+   */
+  // Configuration for polling interval (in milliseconds)
+  private val unmanagedMemoryPollingIntervalMs = conf.get(UNMANAGED_MEMORY_POLLING_INTERVAL)
+  // Initialize background polling if enabled
+  if (unmanagedMemoryPollingIntervalMs > 0) {
+    UnifiedMemoryManager.startPollingIfNeeded(unmanagedMemoryPollingIntervalMs)
+  }
+
+  /**
+   * Get the current unmanaged memory usage in bytes for a specific memory mode.
+   * @param memoryMode The memory mode (ON_HEAP or OFF_HEAP) to get usage for
+   * @return The current unmanaged memory usage in bytes
+   */
+  private def getUnmanagedMemoryUsed(memoryMode: MemoryMode): Long = {
+    // Only consider unmanaged memory if polling is enabled
+    if (unmanagedMemoryPollingIntervalMs <= 0) {
+      return 0L
+    }
+    memoryMode match {
+      case MemoryMode.ON_HEAP => UnifiedMemoryManager.unmanagedOnHeapUsed.get()
+      case MemoryMode.OFF_HEAP => UnifiedMemoryManager.unmanagedOffHeapUsed.get()
+    }
+  }
 
   private def assertInvariants(): Unit = {
     assert(onHeapExecutionMemoryPool.poolSize + onHeapStorageMemoryPool.poolSize == maxHeapMemory)
@@ -137,13 +188,19 @@ private[spark] class UnifiedMemoryManager private[memory] (
      * in execution memory allocation across tasks, Otherwise, a task may occupy more than
      * its fair share of execution memory, mistakenly thinking that other tasks can acquire
      * the portion of storage memory that cannot be evicted.
+     *
+     * This also factors in unmanaged memory usage to ensure we don't over-allocate memory
+     * when unmanaged components are consuming significant memory.
      */
     def computeMaxExecutionPoolSize(): Long = {
-      maxMemory - math.min(storagePool.memoryUsed, storageRegionSize)
+      val unmanagedMemory = getUnmanagedMemoryUsed(memoryMode)
+      val availableMemory = maxMemory - math.min(storagePool.memoryUsed, storageRegionSize)
+      // Reduce available memory by unmanaged memory usage to prevent over-allocation
+      math.max(0L, availableMemory - unmanagedMemory)
     }
 
     executionPool.acquireMemory(
-      numBytes, taskAttemptId, maybeGrowExecutionPool, () => computeMaxExecutionPoolSize)
+      numBytes, taskAttemptId, maybeGrowExecutionPool, () => computeMaxExecutionPoolSize())
   }
 
   override def acquireStorageMemory(
@@ -162,10 +219,21 @@ private[spark] class UnifiedMemoryManager private[memory] (
         offHeapStorageMemoryPool,
         maxOffHeapStorageMemory)
     }
-    if (numBytes > maxMemory) {
+
+    // Factor in unmanaged memory usage for the specific memory mode
+    val unmanagedMemory = getUnmanagedMemoryUsed(memoryMode)
+    val effectiveMaxMemory = math.max(0L, maxMemory - unmanagedMemory)
+
+    if (numBytes > effectiveMaxMemory) {
       // Fail fast if the block simply won't fit
-      logInfo(s"Will not store $blockId as the required space ($numBytes bytes) exceeds our " +
-        s"memory limit ($maxMemory bytes)")
+      logInfo(log"Will not store ${MDC(BLOCK_ID, blockId)} as the required space" +
+        log" (${MDC(NUM_BYTES, numBytes)} bytes) exceeds our" +
+        log" memory limit (${MDC(NUM_BYTES_MAX, effectiveMaxMemory)} bytes)" +
+        (if (unmanagedMemory > 0) {
+          log" (unmanaged memory usage: ${MDC(NUM_BYTES, unmanagedMemory)} bytes)"
+        } else {
+          log""
+        }))
       return false
     }
     if (numBytes > storagePool.memoryFree) {
@@ -187,7 +255,7 @@ private[spark] class UnifiedMemoryManager private[memory] (
   }
 }
 
-object UnifiedMemoryManager {
+object UnifiedMemoryManager extends Logging {
 
   // Set aside a fixed amount of memory for non-storage, non-execution purposes.
   // This serves a function similar to `spark.memory.fraction`, but guarantees that we reserve
@@ -195,13 +263,196 @@ object UnifiedMemoryManager {
   // the memory used for execution and storage will be (1024 - 300) * 0.6 = 434MB by default.
   private val RESERVED_SYSTEM_MEMORY_BYTES = 300 * 1024 * 1024
 
+  private val unmanagedMemoryConsumers =
+    new ConcurrentHashMap[UnmanagedMemoryConsumerId, UnmanagedMemoryConsumer]
+
+  // Cached unmanaged memory usage values updated by polling
+  private val unmanagedOnHeapUsed = new AtomicLong(0L)
+  private val unmanagedOffHeapUsed = new AtomicLong(0L)
+
+  // Atomic flag to ensure polling is only started once per JVM
+  private val pollingStarted = new AtomicBoolean(false)
+
+  /**
+   * Returns the total unmanaged memory in bytes, including both
+   * on-heap unmanaged memory and off-heap unmanaged memory.
+   */
+  private[spark] def getUnmanagedMemoryUsed: Long = {
+    UnifiedMemoryManager.unmanagedOnHeapUsed.get() + UnifiedMemoryManager.unmanagedOffHeapUsed.get()
+  }
+
+  /**
+   * Register an unmanaged memory consumer to track its memory usage.
+   *
+   * Unmanaged memory consumers are components that manage their own memory outside
+   * of Spark's unified memory management system. By registering, their memory usage
+   * will be periodically polled and factored into Spark's memory allocation decisions.
+   *
+   * @param unmanagedMemoryConsumer The consumer to register for memory tracking
+   */
+  def registerUnmanagedMemoryConsumer(
+      unmanagedMemoryConsumer: UnmanagedMemoryConsumer): Unit = {
+    val id = unmanagedMemoryConsumer.unmanagedMemoryConsumerId
+    unmanagedMemoryConsumers.put(id, unmanagedMemoryConsumer)
+  }
+
+  /**
+   * Unregister an unmanaged memory consumer.
+   * This should be called when a component is shutting down to prevent memory leaks
+   * and ensure accurate memory tracking.
+   *
+   * @param unmanagedMemoryConsumer The consumer to unregister. Only used in tests
+   */
+  private[spark] def unregisterUnmanagedMemoryConsumer(
+      unmanagedMemoryConsumer: UnmanagedMemoryConsumer): Unit = {
+    val id = unmanagedMemoryConsumer.unmanagedMemoryConsumerId
+    unmanagedMemoryConsumers.remove(id)
+  }
+
+
+  /**
+   * Get the current memory usage in bytes for a specific component type.
+   * @param componentType The type of component to filter by (e.g., "RocksDB")
+   * @return Total memory usage in bytes for the specified component type
+   */
+  def getMemoryByComponentType(componentType: String): Long = {
+    unmanagedMemoryConsumers.asScala.values.toSeq
+      .filter(_.unmanagedMemoryConsumerId.componentType == componentType)
+      .map { memoryUser =>
+        try {
+          memoryUser.getMemBytesUsed
+        } catch {
+          case e: Exception =>
+            0L
+        }
+      }
+      .sum
+  }
+
+  /**
+   * Clear all unmanaged memory users.
+   * This is useful during executor shutdown or cleanup.
+   * Since each executor runs in its own JVM, this clears all users for this executor.
+   */
+  def clearUnmanagedMemoryUsers(): Unit = {
+    unmanagedMemoryConsumers.clear()
+    // Reset cached values when clearing consumers
+    unmanagedOnHeapUsed.set(0L)
+    unmanagedOffHeapUsed.set(0L)
+  }
+
+  // Shared polling infrastructure - only one polling thread per JVM
+  @volatile private var unmanagedMemoryPoller: ScheduledExecutorService = _
+
+  /**
+   * Start unmanaged memory polling if not already started.
+   * This ensures only one polling thread is created per JVM, regardless of how many
+   * UnifiedMemoryManager instances are created.
+   */
+  private[memory] def startPollingIfNeeded(pollingIntervalMs: Long): Unit = {
+    if (pollingStarted.compareAndSet(false, true)) {
+      unmanagedMemoryPoller = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
+        "unmanaged-memory-poller")
+
+      val pollingTask = new Runnable {
+        override def run(): Unit = Utils.tryLogNonFatalError {
+          pollUnmanagedMemoryUsers()
+        }
+      }
+
+      unmanagedMemoryPoller.scheduleAtFixedRate(
+        pollingTask,
+        0L, // initial delay
+        pollingIntervalMs,
+        TimeUnit.MILLISECONDS)
+
+      logInfo(log"Unmanaged memory polling started with interval " +
+        log"${MDC(LogKeys.TIME, pollingIntervalMs)}ms")
+    }
+  }
+
+  private def pollUnmanagedMemoryUsers(): Unit = {
+    val consumers = unmanagedMemoryConsumers.asScala.toMap
+
+    // Get memory usage for each consumer, handling failures gracefully
+    val memoryUsages = consumers.map { case (userId, memoryUser) =>
+      try {
+        val memoryUsed = memoryUser.getMemBytesUsed
+        if (memoryUsed == -1L) {
+          logDebug(log"Unmanaged memory consumer ${MDC(LogKeys.OBJECT_ID, userId.toString)} " +
+            log"is no longer active, marking for removal")
+          (userId, memoryUser, None) // Mark for removal
+        } else if (memoryUsed < 0L) {
+          logWarning(log"Invalid memory usage value ${MDC(LogKeys.NUM_BYTES, memoryUsed)} " +
+            log"from unmanaged memory user ${MDC(LogKeys.OBJECT_ID, userId.toString)}")
+          (userId, memoryUser, Some(0L)) // Treat as 0
+        } else {
+          (userId, memoryUser, Some(memoryUsed))
+        }
+      } catch {
+        case NonFatal(e) =>
+          logWarning(log"Failed to get memory usage for unmanaged memory user " +
+            log"${MDC(LogKeys.OBJECT_ID, userId.toString)} ${MDC(LogKeys.EXCEPTION, e)}")
+          (userId, memoryUser, Some(0L)) // Treat as 0 on error
+      }
+    }
+
+    // Remove inactive consumers
+    memoryUsages.filter(_._3.isEmpty).foreach { case (userId, _, _) =>
+      unmanagedMemoryConsumers.remove(userId)
+      logInfo(log"Removed inactive unmanaged memory consumer " +
+        log"${MDC(LogKeys.OBJECT_ID, userId.toString)}")
+    }
+    // Calculate total memory usage by mode
+    val activeUsages = memoryUsages.filter(_._3.isDefined)
+    val onHeapTotal = activeUsages
+      .filter(_._2.memoryMode == MemoryMode.ON_HEAP)
+      .map(_._3.get)
+      .sum
+    val offHeapTotal = activeUsages
+      .filter(_._2.memoryMode == MemoryMode.OFF_HEAP)
+      .map(_._3.get)
+      .sum
+    // Update cached values atomically
+    unmanagedOnHeapUsed.set(onHeapTotal)
+    unmanagedOffHeapUsed.set(offHeapTotal)
+    // Log polling results for monitoring
+    val totalMemoryUsed = onHeapTotal + offHeapTotal
+    val numConsumers = activeUsages.size
+    logDebug(s"Unmanaged memory polling completed: $numConsumers consumers, " +
+      s"total memory used: ${totalMemoryUsed} bytes " +
+      s"(on-heap: ${onHeapTotal}, off-heap: ${offHeapTotal})")
+  }
+
+  /**
+   * Shutdown the unmanaged memory polling thread. Only used in tests
+   */
+  private[spark] def shutdownUnmanagedMemoryPoller(): Unit = {
+    synchronized {
+      if (unmanagedMemoryPoller != null) {
+        unmanagedMemoryPoller.shutdown()
+        try {
+          if (!unmanagedMemoryPoller.awaitTermination(5, TimeUnit.SECONDS)) {
+            unmanagedMemoryPoller.shutdownNow()
+          }
+        } catch {
+          case _: InterruptedException =>
+            Thread.currentThread().interrupt()
+        }
+        unmanagedMemoryPoller = null
+        pollingStarted.set(false)
+        logInfo(log"Unmanaged memory poller shutdown complete")
+      }
+    }
+  }
+
   def apply(conf: SparkConf, numCores: Int): UnifiedMemoryManager = {
     val maxMemory = getMaxMemory(conf)
     new UnifiedMemoryManager(
       conf,
       maxHeapMemory = maxMemory,
       onHeapStorageRegionSize =
-        (maxMemory * conf.getDouble("spark.memory.storageFraction", 0.5)).toLong,
+        (maxMemory * conf.get(config.MEMORY_STORAGE_FRACTION)).toLong,
       numCores = numCores)
   }
 
@@ -209,26 +460,32 @@ object UnifiedMemoryManager {
    * Return the total amount of memory shared between execution and storage, in bytes.
    */
   private def getMaxMemory(conf: SparkConf): Long = {
-    val systemMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime.maxMemory)
-    val reservedMemory = conf.getLong("spark.testing.reservedMemory",
-      if (conf.contains("spark.testing")) 0 else RESERVED_SYSTEM_MEMORY_BYTES)
+    val systemMemory = conf.get(TEST_MEMORY)
+    val reservedMemory = conf.getLong(TEST_RESERVED_MEMORY.key,
+      if (conf.contains(IS_TESTING)) 0 else RESERVED_SYSTEM_MEMORY_BYTES)
     val minSystemMemory = (reservedMemory * 1.5).ceil.toLong
     if (systemMemory < minSystemMemory) {
-      throw new IllegalArgumentException(s"System memory $systemMemory must " +
-        s"be at least $minSystemMemory. Please increase heap size using the --driver-memory " +
-        s"option or spark.driver.memory in Spark configuration.")
+      throw new SparkIllegalArgumentException(
+        errorClass = "INVALID_DRIVER_MEMORY",
+        messageParameters = Map(
+          "systemMemory" -> systemMemory.toString,
+          "minSystemMemory" -> minSystemMemory.toString,
+          "config" -> config.DRIVER_MEMORY.key))
     }
     // SPARK-12759 Check executor memory to fail fast if memory is insufficient
-    if (conf.contains("spark.executor.memory")) {
-      val executorMemory = conf.getSizeAsBytes("spark.executor.memory")
+    if (conf.contains(config.EXECUTOR_MEMORY)) {
+      val executorMemory = conf.getSizeAsBytes(config.EXECUTOR_MEMORY.key)
       if (executorMemory < minSystemMemory) {
-        throw new IllegalArgumentException(s"Executor memory $executorMemory must be at least " +
-          s"$minSystemMemory. Please increase executor memory using the " +
-          s"--executor-memory option or spark.executor.memory in Spark configuration.")
+        throw new SparkIllegalArgumentException(
+          errorClass = "INVALID_EXECUTOR_MEMORY",
+          messageParameters = Map(
+            "executorMemory" -> executorMemory.toString,
+            "minSystemMemory" -> minSystemMemory.toString,
+            "config" -> config.EXECUTOR_MEMORY.key))
       }
     }
     val usableMemory = systemMemory - reservedMemory
-    val memoryFraction = conf.getDouble("spark.memory.fraction", 0.6)
+    val memoryFraction = conf.get(config.MEMORY_FRACTION)
     (usableMemory * memoryFraction).toLong
   }
 }

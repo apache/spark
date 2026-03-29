@@ -15,62 +15,65 @@
 # limitations under the License.
 #
 
-import sys
-if sys.version >= '3':
-    long = int
-    unicode = str
+from typing import Any, Callable, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pyspark.mllib._typing import C, JavaObjectOrPickleDump
 
 import py4j.protocol
 from py4j.protocol import Py4JJavaError
 from py4j.java_gateway import JavaObject
 from py4j.java_collections import JavaArray, JavaList
 
+import pyspark.core.context
 from pyspark import RDD, SparkContext
-from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
-from pyspark.sql import DataFrame, SQLContext
+from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
+from pyspark.sql import DataFrame, SparkSession
 
 # Hack for support float('inf') in Py4j
 _old_smart_decode = py4j.protocol.smart_decode
 
 _float_str_mapping = {
-    'nan': 'NaN',
-    'inf': 'Infinity',
-    '-inf': '-Infinity',
+    "nan": "NaN",
+    "inf": "Infinity",
+    "-inf": "-Infinity",
 }
 
 
-def _new_smart_decode(obj):
+def _new_smart_decode(obj: Any) -> str:
     if isinstance(obj, float):
         s = str(obj)
         return _float_str_mapping.get(s, s)
     return _old_smart_decode(obj)
 
+
 py4j.protocol.smart_decode = _new_smart_decode
 
 
 _picklable_classes = [
-    'LinkedList',
-    'SparseVector',
-    'DenseVector',
-    'DenseMatrix',
-    'Rating',
-    'LabeledPoint',
+    "LinkedList",
+    "SparseVector",
+    "DenseVector",
+    "DenseMatrix",
+    "Rating",
+    "LabeledPoint",
 ]
 
 
 # this will call the MLlib version of pythonToJava()
-def _to_java_object_rdd(rdd):
-    """ Return a JavaRDD of Object by unpickling
+def _to_java_object_rdd(rdd: RDD) -> JavaObject:
+    """Return a JavaRDD of Object by unpickling
 
-    It will convert each Python object into Java object by Pyrolite, whenever the
+    It will convert each Python object into Java object by Pickle, whenever the
     RDD is serialized in batch or not.
     """
-    rdd = rdd._reserialize(AutoBatchedSerializer(PickleSerializer()))
+    rdd = rdd._reserialize(AutoBatchedSerializer(CPickleSerializer()))
+    assert rdd.ctx._jvm is not None
     return rdd.ctx._jvm.org.apache.spark.mllib.api.python.SerDe.pythonToJava(rdd._jrdd, True)
 
 
-def _py2java(sc, obj):
-    """ Convert Python object into Java """
+def _py2java(sc: SparkContext, obj: Any) -> JavaObject:
+    """Convert Python object into Java"""
     if isinstance(obj, RDD):
         obj = _to_java_object_rdd(obj)
     elif isinstance(obj, DataFrame):
@@ -81,28 +84,31 @@ def _py2java(sc, obj):
         obj = [_py2java(sc, x) for x in obj]
     elif isinstance(obj, JavaObject):
         pass
-    elif isinstance(obj, (int, long, float, bool, bytes, unicode)):
+    elif isinstance(obj, (int, float, bool, bytes, str)):
         pass
     else:
-        data = bytearray(PickleSerializer().dumps(obj))
+        data = bytearray(CPickleSerializer().dumps(obj))
+        assert sc._jvm is not None
         obj = sc._jvm.org.apache.spark.mllib.api.python.SerDe.loads(data)
     return obj
 
 
-def _java2py(sc, r, encoding="bytes"):
+def _java2py(sc: SparkContext, r: "JavaObjectOrPickleDump", encoding: str = "bytes") -> Any:
     if isinstance(r, JavaObject):
         clsName = r.getClass().getSimpleName()
         # convert RDD into JavaRDD
-        if clsName != 'JavaRDD' and clsName.endswith("RDD"):
+        if clsName != "JavaRDD" and clsName.endswith("RDD"):
             r = r.toJavaRDD()
-            clsName = 'JavaRDD'
+            clsName = "JavaRDD"
 
-        if clsName == 'JavaRDD':
+        assert sc._jvm is not None
+
+        if clsName == "JavaRDD":
             jrdd = sc._jvm.org.apache.spark.mllib.api.python.SerDe.javaToPython(r)
             return RDD(jrdd, sc)
 
-        if clsName == 'Dataset':
-            return DataFrame(r, SQLContext.getOrCreate(sc))
+        if clsName == "Dataset":
+            return DataFrame(r, SparkSession._getActiveSessionOrCreate())
 
         if clsName in _picklable_classes:
             r = sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(r)
@@ -113,40 +119,45 @@ def _java2py(sc, r, encoding="bytes"):
                 pass  # not pickable
 
     if isinstance(r, (bytearray, bytes)):
-        r = PickleSerializer().loads(bytes(r), encoding=encoding)
+        r = CPickleSerializer().loads(bytes(r), encoding=encoding)
     return r
 
 
-def callJavaFunc(sc, func, *args):
-    """ Call Java Function """
-    args = [_py2java(sc, a) for a in args]
-    return _java2py(sc, func(*args))
+def callJavaFunc(
+    sc: pyspark.core.context.SparkContext, func: Callable[..., "JavaObjectOrPickleDump"], *args: Any
+) -> Any:
+    """Call Java Function"""
+    java_args = [_py2java(sc, a) for a in args]
+    return _java2py(sc, func(*java_args))
 
 
-def callMLlibFunc(name, *args):
-    """ Call API in PythonMLLibAPI """
+def callMLlibFunc(name: str, *args: Any) -> Any:
+    """Call API in PythonMLLibAPI"""
     sc = SparkContext.getOrCreate()
+    assert sc._jvm is not None
     api = getattr(sc._jvm.PythonMLLibAPI(), name)
     return callJavaFunc(sc, api, *args)
 
 
-class JavaModelWrapper(object):
+class JavaModelWrapper:
     """
     Wrapper for the model in JVM
     """
-    def __init__(self, java_model):
+
+    def __init__(self, java_model: JavaObject):
         self._sc = SparkContext.getOrCreate()
         self._java_model = java_model
 
-    def __del__(self):
+    def __del__(self) -> None:
+        assert self._sc._gateway is not None
         self._sc._gateway.detach(self._java_model)
 
-    def call(self, name, *a):
+    def call(self, name: str, *a: Any) -> Any:
         """Call method of java_model"""
         return callJavaFunc(self._sc, getattr(self._java_model, name), *a)
 
 
-def inherit_doc(cls):
+def inherit_doc(cls: "C") -> "C":
     """
     A decorator that makes a class inherit documentation from its parents.
     """

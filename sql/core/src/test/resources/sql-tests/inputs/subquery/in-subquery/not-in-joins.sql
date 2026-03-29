@@ -1,9 +1,9 @@
 -- A test suite for not-in-joins in parent side, subquery, and both predicate subquery
 -- It includes correlated cases.
--- List of configuration the test suite is run against:
---SET spark.sql.autoBroadcastJoinThreshold=10485760
---SET spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=true
---SET spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=false
+--ONLY_IF spark
+
+--CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=true
+--CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=false
 
 create temporary view t1 as select * from values
   ("val1a", 6S, 8, 10L, float(15.0), 20D, 20E2, timestamp '2014-04-04 01:00:00.000', date '2014-04-04'),
@@ -128,7 +128,7 @@ GROUP  BY t1b,
 HAVING t1d NOT IN (SELECT t2d
                    FROM   t2
                    WHERE  t1d = t2d)
-ORDER BY t1b DESC;
+ORDER BY t1b DESC, t1d ASC;
 
 -- TC 01.05
 SELECT   COUNT(DISTINCT(t1a)),

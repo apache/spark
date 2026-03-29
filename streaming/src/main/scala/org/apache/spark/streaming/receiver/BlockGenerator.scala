@@ -22,8 +22,10 @@ import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.storage.StreamBlockId
+import org.apache.spark.streaming.StreamingConf.BLOCK_INTERVAL
 import org.apache.spark.streaming.util.RecurringTimer
 import org.apache.spark.util.{Clock, SystemClock}
 
@@ -100,14 +102,15 @@ private[streaming] class BlockGenerator(
   }
   import GeneratorState._
 
-  private val blockIntervalMs = conf.getTimeAsMs("spark.streaming.blockInterval", "200ms")
-  require(blockIntervalMs > 0, s"'spark.streaming.blockInterval' should be a positive value")
+  private val blockIntervalMs = conf.get(BLOCK_INTERVAL)
+  require(blockIntervalMs > 0, s"'${BLOCK_INTERVAL.key}' should be a positive value")
 
   private val blockIntervalTimer =
     new RecurringTimer(clock, blockIntervalMs, updateCurrentBuffer, "BlockGenerator")
   private val blockQueueSize = conf.getInt("spark.streaming.blockQueueSize", 10)
   private val blocksForPushing = new ArrayBlockingQueue[Block](blockQueueSize)
-  private val blockPushingThread = new Thread() { override def run() { keepPushingBlocks() } }
+  private val blockPushingThread =
+    new Thread() { override def run(): Unit = keepPushingBlocks() }
 
   @volatile private var currentBuffer = new ArrayBuffer[Any]
   @volatile private var state = Initialized
@@ -138,7 +141,8 @@ private[streaming] class BlockGenerator(
       if (state == Active) {
         state = StoppedAddingData
       } else {
-        logWarning(s"Cannot stop BlockGenerator as its not in the Active state [state = $state]")
+        logWarning(log"Cannot stop BlockGenerator as its not in the Active state " +
+          log"[state = ${MDC(BLOCK_GENERATOR_STATUS, state)}]")
         return
       }
     }
@@ -255,7 +259,7 @@ private[streaming] class BlockGenerator(
   }
 
   /** Keep pushing blocks to the BlockManager. */
-  private def keepPushingBlocks() {
+  private def keepPushingBlocks(): Unit = {
     logInfo("Started block pushing thread")
 
     def areBlocksBeingGenerated: Boolean = synchronized {
@@ -272,12 +276,13 @@ private[streaming] class BlockGenerator(
       }
 
       // At this point, state is StoppedGeneratingBlock. So drain the queue of to-be-pushed blocks.
-      logInfo("Pushing out the last " + blocksForPushing.size() + " blocks")
+      logInfo(log"Pushing out the last " +
+        log"${MDC(LogKeys.NUM_BLOCK_IDS, blocksForPushing.size())} blocks")
       while (!blocksForPushing.isEmpty) {
         val block = blocksForPushing.take()
         logDebug(s"Pushing block $block")
         pushBlock(block)
-        logInfo("Blocks left to push " + blocksForPushing.size())
+        logInfo(log"Blocks left to push ${MDC(LogKeys.NUM_BLOCK_IDS, blocksForPushing.size())}")
       }
       logInfo("Stopped block pushing thread")
     } catch {
@@ -288,13 +293,13 @@ private[streaming] class BlockGenerator(
     }
   }
 
-  private def reportError(message: String, t: Throwable) {
+  private def reportError(message: String, t: Throwable): Unit = {
     logError(message, t)
     listener.onError(message, t)
   }
 
-  private def pushBlock(block: Block) {
+  private def pushBlock(block: Block): Unit = {
     listener.onPushBlock(block.id, block.buffer)
-    logInfo("Pushed block " + block.id)
+    logInfo(log"Pushed block ${MDC(LogKeys.BLOCK_ID, block.id)}")
   }
 }

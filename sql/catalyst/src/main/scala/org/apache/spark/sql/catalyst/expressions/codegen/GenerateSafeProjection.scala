@@ -21,13 +21,14 @@ import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 
 /**
- * Java can not access Projection (in package object)
+ * Java cannot access Projection (in package object)
  */
 abstract class BaseProjection extends Projection {}
 
@@ -41,7 +42,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     in.map(ExpressionCanonicalizer.execute)
 
   protected def bind(in: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] =
-    in.map(BindReferences.bindReference(_, inputSchema))
+    bindReferences(in, inputSchema)
 
   private def createCodeForStruct(
       ctx: CodegenContext,
@@ -154,7 +155,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       case (e, i) =>
         val evaluationCode = e.genCode(ctx)
         val converter = convertToSafe(ctx, evaluationCode.value, e.dataType)
-        evaluationCode.code +
+        evaluationCode.code.toString +
           s"""
             if (${evaluationCode.isNull}) {
               mutableRow.setNullAt($i);

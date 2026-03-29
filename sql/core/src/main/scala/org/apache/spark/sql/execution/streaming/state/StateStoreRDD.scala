@@ -23,11 +23,104 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.execution.streaming.StreamExecution
-import org.apache.spark.sql.execution.streaming.continuous.EpochTracker
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
+
+/**
+ * Thread local storage for sharing StateStore instances between RDDs.
+ * This allows a ReadStateStore to be reused by a subsequent StateStore operation.
+ */
+object StateStoreThreadLocalTracker {
+  /** Case class to hold both the store and its usage state */
+
+  private val storeInfo: ThreadLocal[ReadStateStore] = new ThreadLocal[ReadStateStore]
+
+  def setStore(store: ReadStateStore): Unit = {
+    storeInfo.set(store)
+  }
+
+  def getStore: Option[ReadStateStore] = {
+    Option(storeInfo.get())
+  }
+
+  def clearStore(): Unit = {
+    storeInfo.remove()
+  }
+}
+
+abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
+    dataRDD: RDD[T],
+    checkpointLocation: String,
+    queryRunId: UUID,
+    operatorId: Long,
+    sessionState: SessionState,
+    @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
+    extraOptions: Map[String, String] = Map.empty) extends RDD[U](dataRDD) {
+
+  protected val storeConf = new StateStoreConf(sessionState.conf, extraOptions)
+
+  // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
+  protected val hadoopConfBroadcast =
+    SerializableConfiguration.broadcast(dataRDD.context, sessionState.newHadoopConf())
+
+  /**
+   * Set the preferred location of each partition using the executor that has the related
+   * [[StateStoreProvider]] already loaded.
+   *
+   * Implementations can simply call this method in getPreferredLocations.
+   */
+  override def getPreferredLocations(partition: Partition): Seq[String] = {
+    val stateStoreProviderId = getStateProviderId(partition)
+    storeCoordinator.flatMap(_.getLocation(stateStoreProviderId)).toSeq
+  }
+
+  protected def getStateProviderId(partition: Partition): StateStoreProviderId = {
+    StateStoreProviderId(
+      StateStoreId(checkpointLocation, operatorId, partition.index),
+      queryRunId)
+  }
+}
+
+/**
+ * An RDD that allows computations to be executed against [[ReadStateStore]]s. It
+ * uses the [[StateStoreCoordinator]] to get the locations of loaded state stores
+ * and use that as the preferred locations.
+ */
+class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
+    dataRDD: RDD[T],
+    storeReadFunction: (ReadStateStore, Iterator[T]) => Iterator[U],
+    checkpointLocation: String,
+    queryRunId: UUID,
+    operatorId: Long,
+    storeVersion: Long,
+    stateStoreCkptIds: Option[Array[Array[String]]],
+    stateSchemaBroadcast: Option[StateSchemaBroadcast],
+    keySchema: StructType,
+    valueSchema: StructType,
+    keyStateEncoderSpec: KeyStateEncoderSpec,
+    sessionState: SessionState,
+    @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
+    useColumnFamilies: Boolean = false,
+    extraOptions: Map[String, String] = Map.empty)
+  extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,
+    sessionState, storeCoordinator, extraOptions) {
+
+  override protected def getPartitions: Array[Partition] = dataRDD.partitions
+
+  override def compute(partition: Partition, ctxt: TaskContext): Iterator[U] = {
+    val storeProviderId = getStateProviderId(partition)
+
+    val inputIter = dataRDD.iterator(partition, ctxt)
+    val store = StateStore.getReadOnly(
+      storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
+      stateStoreCkptIds.map(_.apply(partition.index).head),
+      stateSchemaBroadcast,
+      useColumnFamilies, storeConf, hadoopConfBroadcast.value.value)
+    StateStoreThreadLocalTracker.setStore(store)
+    storeReadFunction(store, inputIter)
+  }
+}
 
 /**
  * An RDD that allows computations to be executed against [[StateStore]]s. It
@@ -41,54 +134,48 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     queryRunId: UUID,
     operatorId: Long,
     storeVersion: Long,
+    uniqueId: Option[Array[Array[String]]],
+    stateSchemaBroadcast: Option[StateSchemaBroadcast],
     keySchema: StructType,
     valueSchema: StructType,
-    indexOrdinal: Option[Int],
+    keyStateEncoderSpec: KeyStateEncoderSpec,
     sessionState: SessionState,
-    @transient private val storeCoordinator: Option[StateStoreCoordinatorRef])
-  extends RDD[U](dataRDD) {
-
-  private val storeConf = new StateStoreConf(sessionState.conf)
-
-  // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
-  private val hadoopConfBroadcast = dataRDD.context.broadcast(
-    new SerializableConfiguration(sessionState.newHadoopConf()))
+    @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
+    useColumnFamilies: Boolean = false,
+    extraOptions: Map[String, String] = Map.empty,
+    useMultipleValuesPerKey: Boolean = false)
+  extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,
+    sessionState, storeCoordinator, extraOptions) {
 
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
 
-  /**
-   * Set the preferred location of each partition using the executor that has the related
-   * [[StateStoreProvider]] already loaded.
-   */
-  override def getPreferredLocations(partition: Partition): Seq[String] = {
-    val stateStoreProviderId = StateStoreProviderId(
-      StateStoreId(checkpointLocation, operatorId, partition.index),
-      queryRunId)
-    storeCoordinator.flatMap(_.getLocation(stateStoreProviderId)).toSeq
-  }
-
   override def compute(partition: Partition, ctxt: TaskContext): Iterator[U] = {
-    var store: StateStore = null
-    val storeProviderId = StateStoreProviderId(
-      StateStoreId(checkpointLocation, operatorId, partition.index),
-      queryRunId)
+    val storeProviderId = getStateProviderId(partition)
 
-    // If we're in continuous processing mode, we should get the store version for the current
-    // epoch rather than the one at planning time.
-    val isContinuous = Option(ctxt.getLocalProperty(StreamExecution.IS_CONTINUOUS_PROCESSING))
-      .map(_.toBoolean).getOrElse(false)
-    val currentVersion = if (isContinuous) {
-      val epoch = EpochTracker.getCurrentEpoch
-      assert(epoch.isDefined, "Current epoch must be defined for continuous processing streams.")
-      epoch.get
-    } else {
-      storeVersion
+    val inputIter = dataRDD.iterator(partition, ctxt)
+    val store = StateStoreThreadLocalTracker.getStore match {
+      case Some(readStateStore: ReadStateStore) =>
+        StateStore.getWriteStore(readStateStore, storeProviderId,
+          keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
+          uniqueId.map(_.apply(partition.index).head),
+          stateSchemaBroadcast,
+          useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
+          useMultipleValuesPerKey)
+      case None =>
+        StateStore.get(
+          storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
+          uniqueId.map(_.apply(partition.index).head),
+          stateSchemaBroadcast,
+          useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
+          useMultipleValuesPerKey)
     }
 
-    store = StateStore.get(
-      storeProviderId, keySchema, valueSchema, indexOrdinal, currentVersion,
-      storeConf, hadoopConfBroadcast.value.value)
-    val inputIter = dataRDD.iterator(partition, ctxt)
+    if (storeConf.unloadOnCommit) {
+      ctxt.addTaskCompletionListener[Unit](_ => {
+        StateStore.doMaintenanceAndUnload(storeProviderId)
+      })
+    }
+
     storeUpdateFunction(store, inputIter)
   }
 }

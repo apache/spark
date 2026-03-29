@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class ParquetProtobufCompatibilitySuite extends ParquetCompatibilityTest with SharedSQLContext {
+class ParquetProtobufCompatibilitySuite extends ParquetCompatibilityTest with SharedSparkSession {
   test("unannotated array of primitive type") {
     checkAnswer(readResourceParquetFile("test-data/old-repeated-int.parquet"), Row(Seq(1, 2, 3)))
   }

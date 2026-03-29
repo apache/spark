@@ -20,14 +20,11 @@ package org.apache.spark.mllib.rdd
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 
 /**
- * :: DeveloperApi ::
  * Machine learning specific RDD functions.
  */
-@DeveloperApi
 class RDDFunctions[T: ClassTag](self: RDD[T]) extends Serializable {
 
   /**
@@ -54,10 +51,7 @@ class RDDFunctions[T: ClassTag](self: RDD[T]) extends Serializable {
 
 }
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
+
 object RDDFunctions {
 
   /** Implicit conversion from an RDD to RDDFunctions. */

@@ -17,7 +17,8 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
+
 import io.netty.buffer.ByteBuf;
 
 /**
@@ -54,13 +55,12 @@ public final class StreamFailure extends AbstractMessage implements ResponseMess
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(streamId, error);
+    return Objects.hash(streamId, error);
   }
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof StreamFailure) {
-      StreamFailure o = (StreamFailure) other;
+    if (other instanceof StreamFailure o) {
       return streamId.equals(o.streamId) && error.equals(o.error);
     }
     return false;
@@ -68,10 +68,7 @@ public final class StreamFailure extends AbstractMessage implements ResponseMess
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("streamId", streamId)
-      .add("error", error)
-      .toString();
+    return "StreamFailure[streamId=" + streamId + ",error=" + error + "]";
   }
 
 }

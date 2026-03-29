@@ -15,149 +15,61 @@
 # limitations under the License.
 #
 
-import datetime
+import glob
+import math
 import os
 import shutil
 import tempfile
 from contextlib import contextmanager
 
 from pyspark.sql import SparkSession
-from pyspark.sql.types import ArrayType, DoubleType, UserDefinedType, Row
-from pyspark.testing.utils import ReusedPySparkTestCase
-from pyspark.util import _exception_message
+from pyspark.sql.types import Row
+from pyspark.testing.utils import (
+    ReusedPySparkTestCase,
+    PySparkErrorTestUtils,
+)
+from pyspark.find_spark_home import _find_spark_home
+
+SPARK_HOME = _find_spark_home()
 
 
-pandas_requirement_message = None
-try:
-    from pyspark.sql.utils import require_minimum_pandas_version
-    require_minimum_pandas_version()
-except ImportError as e:
-    # If Pandas version requirement is not satisfied, skip related tests.
-    pandas_requirement_message = _exception_message(e)
+def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
+    # Note that 'sbt_jar_name_prefix' and 'mvn_jar_name_prefix' are used since the prefix can
+    # vary for SBT or Maven specifically. See also SPARK-26856
+    project_full_path = os.path.join(SPARK_HOME, project_relative_path)
 
-pyarrow_requirement_message = None
-try:
-    from pyspark.sql.utils import require_minimum_pyarrow_version
-    require_minimum_pyarrow_version()
-except ImportError as e:
-    # If Arrow version requirement is not satisfied, skip related tests.
-    pyarrow_requirement_message = _exception_message(e)
+    # We should ignore the following jars
+    ignored_jar_suffixes = ("javadoc.jar", "sources.jar", "test-sources.jar", "tests.jar")
 
-test_not_compiled_message = None
+    # Search jar in the project dir using the jar name_prefix for both sbt build and maven
+    # build because the artifact jars are in different directories.
+    sbt_build = glob.glob(
+        os.path.join(project_full_path, "target/scala-*/%s*.jar" % sbt_jar_name_prefix)
+    )
+    maven_build = glob.glob(os.path.join(project_full_path, "target/%s*.jar" % mvn_jar_name_prefix))
+    jar_paths = sbt_build + maven_build
+    jars = [jar for jar in jar_paths if not jar.endswith(ignored_jar_suffixes)]
+
+    if not jars:
+        return None
+    elif len(jars) > 1:
+        raise RuntimeError("Found multiple JARs: %s; please remove all but one" % (", ".join(jars)))
+    else:
+        return jars[0]
+
+
+test_not_compiled_message = ""
 try:
     from pyspark.sql.utils import require_test_compiled
+
     require_test_compiled()
 except Exception as e:
-    test_not_compiled_message = _exception_message(e)
+    test_not_compiled_message = str(e)
 
-have_pandas = pandas_requirement_message is None
-have_pyarrow = pyarrow_requirement_message is None
-test_compiled = test_not_compiled_message is None
+test_compiled = not test_not_compiled_message
 
 
-class UTCOffsetTimezone(datetime.tzinfo):
-    """
-    Specifies timezone in UTC offset
-    """
-
-    def __init__(self, offset=0):
-        self.ZERO = datetime.timedelta(hours=offset)
-
-    def utcoffset(self, dt):
-        return self.ZERO
-
-    def dst(self, dt):
-        return self.ZERO
-
-
-class ExamplePointUDT(UserDefinedType):
-    """
-    User-defined type (UDT) for ExamplePoint.
-    """
-
-    @classmethod
-    def sqlType(self):
-        return ArrayType(DoubleType(), False)
-
-    @classmethod
-    def module(cls):
-        return 'pyspark.sql.tests'
-
-    @classmethod
-    def scalaUDT(cls):
-        return 'org.apache.spark.sql.test.ExamplePointUDT'
-
-    def serialize(self, obj):
-        return [obj.x, obj.y]
-
-    def deserialize(self, datum):
-        return ExamplePoint(datum[0], datum[1])
-
-
-class ExamplePoint:
-    """
-    An example class to demonstrate UDT in Scala, Java, and Python.
-    """
-
-    __UDT__ = ExamplePointUDT()
-
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-
-    def __repr__(self):
-        return "ExamplePoint(%s,%s)" % (self.x, self.y)
-
-    def __str__(self):
-        return "(%s,%s)" % (self.x, self.y)
-
-    def __eq__(self, other):
-        return isinstance(other, self.__class__) and \
-            other.x == self.x and other.y == self.y
-
-
-class PythonOnlyUDT(UserDefinedType):
-    """
-    User-defined type (UDT) for ExamplePoint.
-    """
-
-    @classmethod
-    def sqlType(self):
-        return ArrayType(DoubleType(), False)
-
-    @classmethod
-    def module(cls):
-        return '__main__'
-
-    def serialize(self, obj):
-        return [obj.x, obj.y]
-
-    def deserialize(self, datum):
-        return PythonOnlyPoint(datum[0], datum[1])
-
-    @staticmethod
-    def foo():
-        pass
-
-    @property
-    def props(self):
-        return {}
-
-
-class PythonOnlyPoint(ExamplePoint):
-    """
-    An example class to demonstrate UDT in only Python
-    """
-    __UDT__ = PythonOnlyUDT()
-
-
-class MyObject(object):
-    def __init__(self, key, value):
-        self.key = key
-        self.value = value
-
-
-class SQLTestUtils(object):
+class SQLTestUtils:
     """
     This util assumes the instance of this to have 'spark' attribute, having a spark session.
     It is usually used with 'ReusedSQLTestCase' class but can be used if you feel sure the
@@ -217,7 +129,21 @@ class SQLTestUtils(object):
                 self.spark.sql("DROP TABLE IF EXISTS %s" % t)
 
     @contextmanager
-    def tempView(self, *views):
+    def view(self, *views):
+        """
+        A convenient context manager for persistent (catalog) views. On exit, runs
+        ``DROP VIEW IF EXISTS`` for each name. For temporary views, use :meth:`temp_view`.
+        """
+        assert hasattr(self, "spark"), "it should have 'spark' attribute, having a spark session."
+
+        try:
+            yield
+        finally:
+            for v in views:
+                self.spark.sql("DROP VIEW IF EXISTS %s" % v)
+
+    @contextmanager
+    def temp_view(self, *views):
         """
         A convenient context manager to test with some specific views. This drops the given views
         if it exists.
@@ -229,6 +155,20 @@ class SQLTestUtils(object):
         finally:
             for v in views:
                 self.spark.catalog.dropTempView(v)
+
+    @contextmanager
+    def temp_func(self, *functions):
+        """
+        A convenient context manager to test with some specific temporary functions.
+        This drops the temporary functions if it exists.
+        """
+        assert hasattr(self, "spark"), "it should have 'spark' attribute, having a spark session."
+
+        try:
+            yield
+        finally:
+            for f in functions:
+                self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS %s" % f)
 
     @contextmanager
     def function(self, *functions):
@@ -244,11 +184,42 @@ class SQLTestUtils(object):
             for f in functions:
                 self.spark.sql("DROP FUNCTION IF EXISTS %s" % f)
 
+    @contextmanager
+    def temp_env(self, pairs):
+        assert isinstance(pairs, dict), "pairs should be a dictionary."
 
-class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils):
+        keys = pairs.keys()
+        new_values = pairs.values()
+        old_values = [os.environ.get(key, None) for key in keys]
+        for key, new_value in zip(keys, new_values):
+            if new_value is None:
+                if key in os.environ:
+                    del os.environ[key]
+            else:
+                os.environ[key] = new_value
+        try:
+            yield
+        finally:
+            for key, old_value in zip(keys, old_values):
+                if old_value is None:
+                    if key in os.environ:
+                        del os.environ[key]
+                else:
+                    os.environ[key] = old_value
+
+    @staticmethod
+    def assert_close(a, b):
+        c = [j[0] for j in b]
+        diff = [abs(v - c[k]) < 1e-6 if math.isfinite(v) else v == c[k] for k, v in enumerate(a)]
+        assert sum(diff) == len(a), f"sum: {sum(diff)}, len: {len(a)}"
+
+
+class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils, PySparkErrorTestUtils):
     @classmethod
     def setUpClass(cls):
-        super(ReusedSQLTestCase, cls).setUpClass()
+        super().setUpClass()
+
+        cls._legacy_sc = cls.sc
         cls.spark = SparkSession(cls.sc)
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(cls.tempdir.name)
@@ -257,12 +228,14 @@ class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils):
 
     @classmethod
     def tearDownClass(cls):
-        super(ReusedSQLTestCase, cls).tearDownClass()
-        cls.spark.stop()
-        shutil.rmtree(cls.tempdir.name, ignore_errors=True)
+        try:
+            cls.spark.stop()
+            shutil.rmtree(cls.tempdir.name, ignore_errors=True)
+        finally:
+            super().tearDownClass()
 
-    def assertPandasEqual(self, expected, result):
-        msg = ("DataFrames are not equal: " +
-               "\n\nExpected:\n%s\n%s" % (expected, expected.dtypes) +
-               "\n\nResult:\n%s\n%s" % (result, result.dtypes))
-        self.assertTrue(expected.equals(result), msg=msg)
+    def tearDown(self):
+        try:
+            self.spark._jsparkSession.cleanupPythonWorkerLogs()
+        finally:
+            super().tearDown()

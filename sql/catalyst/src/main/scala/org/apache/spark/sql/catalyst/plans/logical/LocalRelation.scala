@@ -22,23 +22,31 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, TreePattern}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.util.Utils
 
 object LocalRelation {
   def apply(output: Attribute*): LocalRelation = new LocalRelation(output)
 
   def apply(output1: StructField, output: StructField*): LocalRelation = {
-    new LocalRelation(StructType(output1 +: output).toAttributes)
+    apply(StructType(output1 +: output))
+  }
+
+  def apply(schema: StructType): LocalRelation = {
+    new LocalRelation(DataTypeUtils.toAttributes(schema))
   }
 
   def fromExternalRows(output: Seq[Attribute], data: Seq[Row]): LocalRelation = {
-    val schema = StructType.fromAttributes(output)
+    val schema = DataTypeUtils.fromAttributes(output)
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
     LocalRelation(output, data.map(converter(_).asInstanceOf[InternalRow]))
   }
 
   def fromProduct(output: Seq[Attribute], data: Seq[Product]): LocalRelation = {
-    val schema = StructType.fromAttributes(output)
+    val schema = DataTypeUtils.fromAttributes(output)
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
     LocalRelation(output, data.map(converter(_).asInstanceOf[InternalRow]))
   }
@@ -54,11 +62,20 @@ case class LocalRelation(
     output: Seq[Attribute],
     data: Seq[InternalRow] = Nil,
     // Indicates whether this relation has data from a streaming source.
-    override val isStreaming: Boolean = false)
-  extends LeafNode with analysis.MultiInstanceRelation {
+    override val isStreaming: Boolean = false,
+    @transient stream: Option[SparkDataStream] = None)
+  extends LeafNode
+  with StreamSourceAwareLogicalPlan
+  with analysis.MultiInstanceRelation {
 
   // A local relation must have resolved output.
   require(output.forall(_.resolved), "Unresolved attributes found when constructing LocalRelation.")
+
+  override def withStream(stream: SparkDataStream): LocalRelation = {
+    copy(stream = Some(stream))
+  }
+
+  override def getStream: Option[SparkDataStream] = stream
 
   /**
    * Returns an identical copy of this relation with new exprIds for all attributes.  Different
@@ -66,7 +83,7 @@ case class LocalRelation(
    * query.
    */
   override final def newInstance(): this.type = {
-    LocalRelation(output.map(_.newInstance()), data, isStreaming).asInstanceOf[this.type]
+    LocalRelation(output.map(_.newInstance()), data, isStreaming, stream).asInstanceOf[this.type]
   }
 
   override protected def stringArgs: Iterator[Any] = {
@@ -77,8 +94,18 @@ case class LocalRelation(
     }
   }
 
-  override def computeStats(): Statistics =
-    Statistics(sizeInBytes = EstimationUtils.getSizePerRow(output) * data.length)
+  override def computeStats(): Statistics = {
+    val rowCount: Option[BigInt] = if (Utils.isTesting &&
+      conf.getConfString("spark.sql.test.localRelationRowCount", "false") != "true") {
+      // LocalRelation is heavily used in tests and we should not report row count by default in
+      // tests to keep the test coverage, in case the plan is overly optimized.
+      None
+    } else {
+      Some(data.length)
+    }
+    Statistics(
+      sizeInBytes = EstimationUtils.getSizePerRow(output) * data.length, rowCount = rowCount)
+  }
 
   def toSQL(inlineTableName: String): String = {
     require(data.nonEmpty)
@@ -91,4 +118,8 @@ case class LocalRelation(
       " AS " + inlineTableName +
       output.map(_.name).mkString("(", ", ", ")")
   }
+
+  override def maxRows: Option[Long] = Some(data.length.toLong)
+
+  override val nodePatterns: Seq[TreePattern] = Seq(LOCAL_RELATION)
 }

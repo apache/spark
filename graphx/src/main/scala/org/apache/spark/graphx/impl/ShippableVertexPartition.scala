@@ -28,7 +28,7 @@ private[graphx]
 class VertexAttributeBlock[VD: ClassTag](val vids: Array[VertexId], val attrs: Array[VD])
   extends Serializable {
   def iterator: Iterator[(VertexId, VD)] =
-    (0 until vids.length).iterator.map { i => (vids(i), attrs(i)) }
+    vids.indices.iterator.map { i => (vids(i), attrs(i)) }
 }
 
 private[graphx]
@@ -117,13 +117,11 @@ class ShippableVertexPartition[VD: ClassTag](
       val initialSize = if (shipSrc && shipDst) routingTable.partitionSize(pid) else 64
       val vids = new PrimitiveVector[VertexId](initialSize)
       val attrs = new PrimitiveVector[VD](initialSize)
-      var i = 0
       routingTable.foreachWithinEdgePartition(pid, shipSrc, shipDst) { vid =>
         if (isDefined(vid)) {
           vids += vid
           attrs += this(vid)
         }
-        i += 1
       }
       (pid, new VertexAttributeBlock(vids.trim().array, attrs.trim().array))
     }
@@ -137,12 +135,10 @@ class ShippableVertexPartition[VD: ClassTag](
   def shipVertexIds(): Iterator[(PartitionID, Array[VertexId])] = {
     Iterator.tabulate(routingTable.numEdgePartitions) { pid =>
       val vids = new PrimitiveVector[VertexId](routingTable.partitionSize(pid))
-      var i = 0
       routingTable.foreachWithinEdgePartition(pid, true, true) { vid =>
         if (isDefined(vid)) {
           vids += vid
         }
-        i += 1
       }
       (pid, vids.trim().array)
     }

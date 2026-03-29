@@ -24,11 +24,15 @@ from pyspark.serializers import read_int
 
 class DaemonTests(unittest.TestCase):
     def connect(self, port):
-        from socket import socket, AF_INET, SOCK_STREAM
-        sock = socket(AF_INET, SOCK_STREAM)
-        sock.connect(('127.0.0.1', port))
+        from socket import socket, AF_INET, AF_INET6, SOCK_STREAM
+
+        family, host = AF_INET, "127.0.0.1"
+        if os.environ.get("SPARK_PREFER_IPV6", "false").lower() == "true":
+            family, host = AF_INET6, "::1"
+        sock = socket(family, SOCK_STREAM)
+        sock.connect((host, port))
         # send a split index of -1 to shutdown the worker
-        sock.send(b"\xFF\xFF\xFF\xFF")
+        sock.send(b"\xff\xff\xff\xff")
         sock.close()
         return True
 
@@ -46,6 +50,9 @@ class DaemonTests(unittest.TestCase):
 
         # daemon should accept connections
         self.assertTrue(self.connect(port))
+
+        # wait worker process spawned from daemon exit.
+        time.sleep(1)
 
         # request shutdown
         terminator(daemon)
@@ -66,15 +73,11 @@ class DaemonTests(unittest.TestCase):
     def test_termination_sigterm(self):
         """Ensure that daemon and workers terminate on SIGTERM."""
         from signal import SIGTERM
+
         self.do_termination_test(lambda daemon: os.kill(daemon.pid, SIGTERM))
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_daemon import *
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

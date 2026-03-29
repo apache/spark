@@ -17,7 +17,8 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
+
 import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -64,13 +65,12 @@ public final class RpcRequest extends AbstractMessage implements RequestMessage 
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(requestId, body());
+    return Objects.hash(requestId, body());
   }
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof RpcRequest) {
-      RpcRequest o = (RpcRequest) other;
+    if (other instanceof RpcRequest o) {
       return requestId == o.requestId && super.equals(o);
     }
     return false;
@@ -78,9 +78,6 @@ public final class RpcRequest extends AbstractMessage implements RequestMessage 
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("requestId", requestId)
-      .add("body", body())
-      .toString();
+    return "RpcRequest[requestId=" + requestId  + ",body=" + body() + "]";
   }
 }

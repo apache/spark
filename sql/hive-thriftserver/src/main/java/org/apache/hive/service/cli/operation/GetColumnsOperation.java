@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,16 +21,24 @@ import java.sql.DatabaseMetaData;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.regex.Pattern;
 
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
+import org.apache.hadoop.hive.metastore.api.PrimaryKeysRequest;
+import org.apache.hadoop.hive.metastore.api.SQLPrimaryKey;
 import org.apache.hadoop.hive.metastore.api.Table;
+import org.apache.hadoop.hive.ql.metadata.TableIterable;
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType;
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject;
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType;
+import org.apache.hadoop.hive.ql.session.SessionState;
+import org.apache.hadoop.hive.serde2.thrift.Type;
 import org.apache.hive.service.cli.ColumnDescriptor;
 import org.apache.hive.service.cli.FetchOrientation;
 import org.apache.hive.service.cli.HiveSQLException;
@@ -40,8 +47,9 @@ import org.apache.hive.service.cli.OperationType;
 import org.apache.hive.service.cli.RowSet;
 import org.apache.hive.service.cli.RowSetFactory;
 import org.apache.hive.service.cli.TableSchema;
-import org.apache.hive.service.cli.Type;
 import org.apache.hive.service.cli.session.HiveSession;
+import org.apache.hive.service.rpc.thrift.TRowSet;
+import org.apache.hive.service.rpc.thrift.TTableSchema;
 
 /**
  * GetColumnsOperation.
@@ -49,7 +57,7 @@ import org.apache.hive.service.cli.session.HiveSession;
  */
 public class GetColumnsOperation extends MetadataOperation {
 
-  private static final TableSchema RESULT_SET_SCHEMA = new TableSchema()
+  protected static final TableSchema RESULT_SET_SCHEMA = new TableSchema()
   .addPrimitiveColumn("TABLE_CAT", Type.STRING_TYPE,
       "Catalog name. NULL if not applicable")
   .addPrimitiveColumn("TABLE_SCHEM", Type.STRING_TYPE,
@@ -96,7 +104,7 @@ public class GetColumnsOperation extends MetadataOperation {
       "Schema of table that is the scope of a reference attribute "
       + "(null if the DATA_TYPE isn't REF)")
   .addPrimitiveColumn("SCOPE_TABLE", Type.STRING_TYPE,
-      "Table name that this the scope of a reference attribure "
+      "Table name that this the scope of a reference attribute "
       + "(null if the DATA_TYPE isn't REF)")
   .addPrimitiveColumn("SOURCE_DATA_TYPE", Type.SMALLINT_TYPE,
       "Source type of a distinct type or user-generated Ref type, "
@@ -109,7 +117,7 @@ public class GetColumnsOperation extends MetadataOperation {
   private final String tableName;
   private final String columnName;
 
-  private final RowSet rowSet;
+  protected final RowSet rowSet;
 
   protected GetColumnsOperation(HiveSession parentSession, String catalogName, String schemaName,
       String tableName, String columnName) {
@@ -118,7 +126,7 @@ public class GetColumnsOperation extends MetadataOperation {
     this.schemaName = schemaName;
     this.tableName = tableName;
     this.columnName = columnName;
-    this.rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion());
+    this.rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion(), false);
   }
 
   @Override
@@ -151,11 +159,20 @@ public class GetColumnsOperation extends MetadataOperation {
         authorizeMetaGets(HiveOperationType.GET_COLUMNS, privObjs, cmdStr);
       }
 
+      int maxBatchSize = SessionState.get().getConf().getIntVar(ConfVars.METASTORE_BATCH_RETRIEVE_MAX);
       for (Entry<String, List<String>> dbTabs : db2Tabs.entrySet()) {
         String dbName = dbTabs.getKey();
         List<String> tableNames = dbTabs.getValue();
-        for (Table table : metastoreClient.getTableObjectsByName(dbName, tableNames)) {
-          TableSchema schema = new TableSchema(metastoreClient.getSchema(dbName, table.getTableName()));
+
+        for (Table table : new TableIterable(metastoreClient, dbName, tableNames, maxBatchSize)) {
+
+          TableSchema schema = new TableSchema(metastoreClient.getSchema(dbName,
+              table.getTableName()));
+          List<SQLPrimaryKey> primaryKeys = metastoreClient.getPrimaryKeys(new PrimaryKeysRequest(dbName, table.getTableName()));
+          Set<String> pkColNames = new HashSet<>();
+          for(SQLPrimaryKey key : primaryKeys) {
+            pkColNames.add(key.getColumn_name().toLowerCase());
+          }
           for (ColumnDescriptor column : schema.getColumnDescriptors()) {
             if (columnPattern != null && !columnPattern.matcher(column.getName()).matches()) {
               continue;
@@ -171,14 +188,15 @@ public class GetColumnsOperation extends MetadataOperation {
                 null, // BUFFER_LENGTH, unused
                 column.getTypeDescriptor().getDecimalDigits(), // DECIMAL_DIGITS
                 column.getType().getNumPrecRadix(), // NUM_PREC_RADIX
-                DatabaseMetaData.columnNullable, // NULLABLE
+                pkColNames.contains(column.getName().toLowerCase()) ? DatabaseMetaData.columnNoNulls
+                    : DatabaseMetaData.columnNullable, // NULLABLE
                 column.getComment(), // REMARKS
                 null, // COLUMN_DEF
                 null, // SQL_DATA_TYPE
                 null, // SQL_DATETIME_SUB
                 null, // CHAR_OCTET_LENGTH
                 column.getOrdinalPosition(), // ORDINAL_POSITION
-                "YES", // IS_NULLABLE
+                pkColNames.contains(column.getName().toLowerCase()) ? "NO" : "YES", // IS_NULLABLE
                 null, // SCOPE_CATALOG
                 null, // SCOPE_SCHEMA
                 null, // SCOPE_TABLE
@@ -213,22 +231,22 @@ public class GetColumnsOperation extends MetadataOperation {
    * @see org.apache.hive.service.cli.Operation#getResultSetSchema()
    */
   @Override
-  public TableSchema getResultSetSchema() throws HiveSQLException {
+  public TTableSchema getResultSetSchema() throws HiveSQLException {
     assertState(OperationState.FINISHED);
-    return RESULT_SET_SCHEMA;
+    return RESULT_SET_SCHEMA.toTTableSchema();
   }
 
   /* (non-Javadoc)
    * @see org.apache.hive.service.cli.Operation#getNextRowSet(org.apache.hive.service.cli.FetchOrientation, long)
    */
   @Override
-  public RowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException {
+  public TRowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException {
     assertState(OperationState.FINISHED);
     validateDefaultFetchOrientation(orientation);
     if (orientation.equals(FetchOrientation.FETCH_FIRST)) {
       rowSet.setStartOffset(0);
     }
-    return rowSet.extractSubset((int)maxRows);
+    return rowSet.extractSubset((int)maxRows).toTRowSet();
   }
 
 }

@@ -42,7 +42,8 @@ object SortPrefixUtils {
     sortOrder.dataType match {
       case StringType => stringPrefixComparator(sortOrder)
       case BinaryType => binaryPrefixComparator(sortOrder)
-      case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType | TimestampType =>
+      case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType | TimestampType |
+          TimestampNTZType | _: TimeType |_: AnsiIntervalType =>
         longPrefixComparator(sortOrder)
       case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
         longPrefixComparator(sortOrder)
@@ -112,9 +113,7 @@ object SortPrefixUtils {
       val field = schema.head
       getPrefixComparator(SortOrder(BoundReference(0, field.dataType, field.nullable), Ascending))
     } else {
-      new PrefixComparator {
-        override def compare(prefix1: Long, prefix2: Long): Int = 0
-      }
+      (_: Long, _: Long) => 0
     }
   }
 
@@ -124,7 +123,8 @@ object SortPrefixUtils {
   def canSortFullyWithPrefix(sortOrder: SortOrder): Boolean = {
     sortOrder.dataType match {
       case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType |
-           TimestampType | FloatType | DoubleType =>
+           TimestampType | TimestampNTZType | _: TimeType | FloatType | DoubleType |
+           _: AnsiIntervalType =>
         true
       case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
         true
@@ -164,12 +164,7 @@ object SortPrefixUtils {
         }
       }
     } else {
-      new UnsafeExternalRowSorter.PrefixComputer {
-        override def computePrefix(row: InternalRow):
-            UnsafeExternalRowSorter.PrefixComputer.Prefix = {
-          emptyPrefix
-        }
-      }
+      _: InternalRow => emptyPrefix
     }
   }
 }

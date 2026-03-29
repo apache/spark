@@ -1,0 +1,3 @@
+Project [c0#0, c1#0, c2#0]
++- Generate json_tuple(g#0, a, b, id), false, [c0#0, c1#0, c2#0]
+   +- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

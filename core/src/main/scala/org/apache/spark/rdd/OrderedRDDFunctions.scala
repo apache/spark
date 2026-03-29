@@ -19,9 +19,10 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Partitioner, RangePartitioner}
+import org.apache.spark.{InterruptibleIterator, Partitioner, RangePartitioner, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.collection.ExternalSorter
 
 /**
  * Extra functions available on RDDs of (key, value) pairs where the key is sortable through
@@ -73,7 +74,16 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
    * because it can push the sorting down into the shuffle machinery.
    */
   def repartitionAndSortWithinPartitions(partitioner: Partitioner): RDD[(K, V)] = self.withScope {
-    new ShuffledRDD[K, V, V](self, partitioner).setKeyOrdering(ordering)
+    if (self.partitioner == Some(partitioner)) {
+      self.mapPartitions(iter => {
+        val context = TaskContext.get()
+        val sorter = new ExternalSorter[K, V, V](context, None, None, Some(ordering))
+        new InterruptibleIterator(context,
+          sorter.insertAllAndUpdateMetrics(iter).asInstanceOf[Iterator[(K, V)]])
+      }, preservesPartitioning = true)
+    } else {
+      new ShuffledRDD[K, V, V](self, partitioner).setKeyOrdering(ordering)
+    }
   }
 
   /**
@@ -87,11 +97,11 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
     def inRange(k: K): Boolean = ordering.gteq(k, lower) && ordering.lteq(k, upper)
 
     val rddToFilter: RDD[P] = self.partitioner match {
-      case Some(rp: RangePartitioner[K, V]) =>
-        val partitionIndicies = (rp.getPartition(lower), rp.getPartition(upper)) match {
+      case Some(rp: RangePartitioner[_, _]) =>
+        val partitionIndices = (rp.getPartition(lower), rp.getPartition(upper)) match {
           case (l, u) => Math.min(l, u) to Math.max(l, u)
         }
-        PartitionPruningRDD.create(self, partitionIndicies.contains)
+        PartitionPruningRDD.create(self, partitionIndices.contains)
       case _ =>
         self
     }

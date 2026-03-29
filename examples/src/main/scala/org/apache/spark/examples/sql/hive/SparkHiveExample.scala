@@ -28,7 +28,7 @@ object SparkHiveExample {
   case class Record(key: Int, value: String)
   // $example off:spark_hive$
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     // When working with Hive, one must instantiate `SparkSession` with Hive support, including
     // connectivity to a persistent Hive metastore, support for Hive serdes, and Hive user-defined
     // functions. Users who do not have an existing Hive deployment can still enable Hive support.
@@ -122,20 +122,20 @@ object SparkHiveExample {
     val dataDir = "/tmp/parquet_data"
     spark.range(10).write.parquet(dataDir)
     // Create a Hive external Parquet table
-    sql(s"CREATE EXTERNAL TABLE hive_ints(key int) STORED AS PARQUET LOCATION '$dataDir'")
+    sql(s"CREATE EXTERNAL TABLE hive_bigints(id bigint) STORED AS PARQUET LOCATION '$dataDir'")
     // The Hive external table should already have data
-    sql("SELECT * FROM hive_ints").show()
+    sql("SELECT * FROM hive_bigints").show()
     // +---+
-    // |key|
+    // | id|
     // +---+
     // |  0|
     // |  1|
     // |  2|
-    // ...
+    // ... Order may vary, as spark processes the partitions in parallel.
 
     // Turn on flag for Hive Dynamic Partitioning
-    spark.sqlContext.setConf("hive.exec.dynamic.partition", "true")
-    spark.sqlContext.setConf("hive.exec.dynamic.partition.mode", "nonstrict")
+    spark.conf.set("hive.exec.dynamic.partition", "true")
+    spark.conf.set("hive.exec.dynamic.partition.mode", "nonstrict")
     // Create a Hive partitioned table using DataFrame API
     df.write.partitionBy("key").format("hive").saveAsTable("hive_part_tbl")
     // Partitioned column `key` will be moved to the end of the schema.

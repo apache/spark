@@ -19,7 +19,7 @@ package org.apache.spark.mllib.optimization
 
 import scala.util.Random
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
@@ -71,7 +71,7 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
     // Since the cost function is convex, the loss is guaranteed to be monotonically decreasing
     // with L-BFGS optimizer.
     // (SGD doesn't guarantee this, and the loss will be fluctuating in the optimization process.)
-    assert((loss, loss.tail).zipped.forall(_ > _), "loss should be monotonically decreasing.")
+    assert(loss.lazyZip(loss.tail).forall(_ > _), "loss should be monotonically decreasing.")
 
     val stepSize = 1.0
     // Well, GD converges slower, so it requires more iterations!
@@ -258,7 +258,7 @@ class LBFGSClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
     val n = 200000
     val examples = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
       val random = new Random(idx)
-      iter.map(i => (1.0, Vectors.dense(Array.fill(n)(random.nextDouble))))
+      iter.map(i => (1.0, Vectors.dense(Array.fill(n)(random.nextDouble()))))
     }.cache()
     val lbfgs = new LBFGS(new LogisticGradient, new SquaredL2Updater)
       .setNumCorrections(1)
@@ -268,6 +268,6 @@ class LBFGSClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
     val random = new Random(0)
     // If we serialize data directly in the task closure, the size of the serialized task would be
     // greater than 1MB and hence Spark would throw an error.
-    val weights = lbfgs.optimize(examples, Vectors.dense(Array.fill(n)(random.nextDouble)))
+    val weights = lbfgs.optimize(examples, Vectors.dense(Array.fill(n)(random.nextDouble())))
   }
 }

@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkRuntimeException}
+import org.apache.spark.sql.catalyst.expressions.Cast._
+import org.apache.spark.sql.catalyst.expressions.IsNotNull
+import org.apache.spark.sql.execution.{FilterExec, FormattedMode, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 
-
-class StringFunctionsSuite extends QueryTest with SharedSQLContext {
+class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("string concat") {
@@ -48,13 +52,74 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("a||b"))
   }
 
+  test("SPARK-31993: concat_ws in agg function with plenty of string/array types columns") {
+    withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1024",
+      SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") {
+
+      val (df, genColNames, genColValues) = prepareTestConcatWsColumns()
+      val groupedCols = Seq($"a") ++ genColNames.map(col)
+      val concatCols = Seq(collect_list($"b"), collect_list($"c")) ++ genColNames.map(col)
+      val df2 = df
+        .groupBy(groupedCols: _*)
+        .agg(concat_ws(",", concatCols: _*).as("con"))
+        .select("con")
+
+      val expected = Seq(
+        Row((Seq("b1", "b2") ++ genColValues).mkString(",")),
+        Row((Seq("b3", "b4") ++ genColValues).mkString(","))
+      )
+
+      checkAnswer(df2, expected)
+    }
+  }
+
+  // This test doesn't fail without SPARK-31993, but still be useful for regression test.
+  test("SPARK-31993: concat_ws in agg function with plenty of string types columns") {
+    withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1024",
+      SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") {
+
+      val (df, genColNames, genColValues) = prepareTestConcatWsColumns()
+      val groupedCols = Seq($"a") ++ genColNames.map(col)
+      val concatCols = groupedCols
+      val df2 = df
+        .groupBy(groupedCols: _*)
+        .agg(concat_ws(",", concatCols: _*).as("con"))
+        .select("con")
+
+      val expected = Seq(
+        Row((Seq("a") ++ genColValues).mkString(",")),
+        Row((Seq("b") ++ genColValues).mkString(","))
+      )
+
+      checkAnswer(df2, expected)
+    }
+  }
+
+  private def prepareTestConcatWsColumns(): (DataFrame, Seq[String], Seq[String]) = {
+    val genColNames = (1 to 30).map { idx => s"col_$idx" }
+    val genColValues = (1 to 30).map { _.toString }
+    val genCols = genColValues.map(lit)
+
+    val df = Seq[(String, String, String)](
+      ("a", "b1", null),
+      ("a", "b2", null),
+      ("b", "b3", null),
+      ("b", "b4", null))
+      .toDF("a", "b", "c")
+      .withColumns(genColNames, genCols)
+
+    (df, genColNames, genColValues)
+  }
+
   test("string elt") {
     val df = Seq[(String, String, String, Int)](("hello", "world", null, 15))
       .toDF("a", "b", "c", "d")
 
-    checkAnswer(
-      df.selectExpr("elt(0, a, b, c)", "elt(1, a, b, c)", "elt(4, a, b, c)"),
-      Row(null, "hello", null))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkAnswer(
+        df.selectExpr("elt(0, a, b, c)", "elt(1, a, b, c)", "elt(4, a, b, c)"),
+        Row(null, "hello", null))
+    }
 
     // check implicit type cast
     checkAnswer(
@@ -66,6 +131,51 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     val df = Seq(("kitten", "sitting"), ("frog", "fog")).toDF("l", "r")
     checkAnswer(df.select(levenshtein($"l", $"r")), Seq(Row(3), Row(1)))
     checkAnswer(df.selectExpr("levenshtein(l, r)"), Seq(Row(3), Row(1)))
+    checkAnswer(df.select(levenshtein($"l", lit(null))), Seq(Row(null), Row(null)))
+    checkAnswer(df.selectExpr("levenshtein(l, null)"), Seq(Row(null), Row(null)))
+
+    checkAnswer(df.select(levenshtein($"l", $"r", 3)), Seq(Row(3), Row(1)))
+    checkAnswer(df.selectExpr("levenshtein(l, r, 3)"), Seq(Row(3), Row(1)))
+    checkAnswer(df.select(levenshtein(lit(null), $"r", 3)), Seq(Row(null), Row(null)))
+    checkAnswer(df.selectExpr("levenshtein(null, r, 3)"), Seq(Row(null), Row(null)))
+
+    checkAnswer(df.select(levenshtein($"l", $"r", 0)), Seq(Row(-1), Row(-1)))
+    checkAnswer(df.selectExpr("levenshtein(l, r, 0)"), Seq(Row(-1), Row(-1)))
+    checkAnswer(df.select(levenshtein($"l", lit(null), 0)), Seq(Row(null), Row(null)))
+    checkAnswer(df.selectExpr("levenshtein(l, null, 0)"), Seq(Row(null), Row(null)))
+  }
+
+  test("string rlike / regexp / regexp_like") {
+    val df = Seq(
+      ("1a 2b 14m", "\\d+b"),
+      ("1a 2b 14m", "[a-z]+b")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(
+        rlike($"a", $"b"),
+        regexp($"a", $"b"),
+        regexp_like($"a", $"b")),
+      Row(false, false, false) :: Row(true, true, true) :: Nil)
+    checkAnswer(
+      df.selectExpr(
+        "rlike(a, b)",
+        "regexp(a, b)",
+        "regexp_like(a, b)"),
+      Row(false, false, false) :: Row(true, true, true) :: Nil)
+  }
+
+  test("string regexp_count") {
+    val df = Seq(
+      ("1a 2b 14m", "\\d+"),
+      ("1a 2b 14m", "mmm")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(regexp_count($"a", $"b")),
+      Row(0) :: Row(3) :: Nil)
+
+    checkAnswer(
+      df.selectExpr("regexp_count(a, b)"),
+      Row(0) :: Row(3) :: Nil)
   }
 
   test("string regex_replace / regex_extract") {
@@ -96,6 +206,7 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("non-matching optional group") {
     val df = Seq(Tuple1("aaaac")).toDF("s")
+
     checkAnswer(
       df.select(regexp_extract($"s", "(foo)", 1)),
       Row("")
@@ -104,6 +215,58 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(regexp_extract($"s", "(a+)(b)?(c)", 2)),
       Row("")
     )
+  }
+
+  test("string regexp_extract_all") {
+    val df = Seq(("1a 2b 14m", "(\\d+)([a-z]+)")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(
+        regexp_extract_all($"a", $"b", lit(0)),
+        regexp_extract_all($"a", $"b"),
+        regexp_extract_all($"a", $"b", lit(2))),
+      Row(Seq("1a", "2b", "14m"), Seq("1", "2", "14"), Seq("a", "b", "m")) :: Nil)
+    checkAnswer(
+      df.selectExpr(
+        "regexp_extract_all(a, b, 0)",
+        "regexp_extract_all(a, b)",
+        "regexp_extract_all(a, b, 2)"),
+      Row(Seq("1a", "2b", "14m"), Seq("1", "2", "14"), Seq("a", "b", "m")) :: Nil)
+  }
+
+  test("string regexp_substr") {
+    val df = Seq(
+      ("1a 2b 14m", "\\d+"),
+      ("1a 2b 14m", "\\d+ "),
+      ("1a 2b 14m", "\\d+(a|b|m)"),
+      ("1a 2b 14m", "\\d{2}(a|b|m)"),
+      ("1a 2b 14m", "")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(regexp_substr($"a", $"b")),
+      Row("14m") :: Row("1") :: Row("1a") :: Row(null) :: Row(null) :: Nil)
+    checkAnswer(
+      df.selectExpr("regexp_substr(a, b)"),
+      Row("14m") :: Row("1") :: Row("1a") :: Row(null) :: Row(null) :: Nil)
+  }
+
+  test("string regexp_instr") {
+    val df = Seq(
+      ("1a 2b 14m", "\\d+(a|b|m)"),
+      ("1a 2b 14m", "\\d{2}(a|b|m)")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(
+        regexp_instr($"a", $"b"),
+        regexp_instr($"a", $"b", lit(1)),
+        regexp_instr($"a", $"b", lit(2))),
+      Row(1, 1, 1) :: Row(7, 7, 7) :: Nil)
+    checkAnswer(
+      df.selectExpr(
+        "regexp_instr(a, b)",
+        "regexp_instr(a, b, 1)",
+        "regexp_instr(a, b, 2)"),
+      Row(1, 1, 1) :: Row(7, 7, 7) :: Nil)
   }
 
   test("string ascii function") {
@@ -129,6 +292,37 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("AQIDBA==", bytes))
   }
 
+  test("string overlay function") {
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    val df = Seq(("Spark SQL", "Spark的SQL", "_", "CORE", "ANSI ", "tructured", 6, 7, 0, 2, 4)).
+      toDF("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k")
+    checkAnswer(df.select(overlay($"a", $"c", $"g")), Row("Spark_SQL"))
+    checkAnswer(df.select(overlay($"a", $"d", $"h")), Row("Spark CORE"))
+    checkAnswer(df.select(overlay($"a", $"e", $"h", $"i")), Row("Spark ANSI SQL"))
+    checkAnswer(df.select(overlay($"a", $"f", $"j", $"k")), Row("Structured SQL"))
+    checkAnswer(df.select(overlay($"b", $"c", $"g")), Row("Spark_SQL"))
+    // scalastyle:on
+  }
+
+  test("binary overlay function") {
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    val df = Seq((
+      Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9),
+      Array[Byte](-1),
+      Array[Byte](-1, -1, -1, -1),
+      Array[Byte](-1, -1),
+      Array[Byte](-1, -1, -1, -1, -1),
+      6, 7, 0, 2, 4)).toDF("a", "b", "c", "d", "e", "f", "g", "h", "i", "j")
+    checkAnswer(df.select(overlay($"a", $"b", $"f")), Row(Array[Byte](1, 2, 3, 4, 5, -1, 7, 8, 9)))
+    checkAnswer(df.select(overlay($"a", $"c", $"g")),
+      Row(Array[Byte](1, 2, 3, 4, 5, 6, -1, -1, -1, -1)))
+    checkAnswer(df.select(overlay($"a", $"d", $"g", $"h")),
+      Row(Array[Byte](1, 2, 3, 4, 5, 6, -1, -1, 7, 8, 9)))
+    checkAnswer(df.select(overlay($"a", $"e", $"i", $"j")),
+      Row(Array[Byte](1, -1, -1, -1, -1, -1, 6, 7, 8, 9)))
+  }
+
   test("string / binary substring function") {
     // scalastyle:off
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
@@ -137,6 +331,11 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.select(substring($"b", 2, 2)), Row(Array[Byte](2,3)))
     checkAnswer(df.selectExpr("substring(a, 1, 2)"), Row("1世"))
     // scalastyle:on
+  }
+
+  test("string substring function using columns") {
+    val df = Seq(("Spark", 2, 3)).toDF("a", "b", "c")
+    checkAnswer(df.select(substring($"a", $"b", $"c")), Row("par"))
   }
 
   test("string encode/decode function") {
@@ -151,6 +350,44 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("encode(a, 'utf-8')", "decode(c, 'utf-8')"),
       Row(bytes, "大千世界"))
+    // scalastyle:on
+  }
+
+  test("UTF-8 string is valid") {
+    // scalastyle:off
+    checkAnswer(Seq("大千世界").toDF("a").select(is_valid_utf8($"a")), Row(true))
+    checkAnswer(Seq(("abc", null)).toDF("a", "b").select(is_valid_utf8($"b")), Row(null))
+    checkAnswer(Seq(Array[Byte](-1)).toDF("a").select(is_valid_utf8($"a")), Row(false))
+    // scalastyle:on
+  }
+
+  test("UTF-8 string make valid") {
+    // scalastyle:off
+    checkAnswer(Seq("大千世界").toDF("a").select(make_valid_utf8($"a")), Row("大千世界"))
+    checkAnswer(Seq(("abc", null)).toDF("a", "b").select(make_valid_utf8($"b")), Row(null))
+    checkAnswer(Seq(Array[Byte](-1)).toDF("a").select(make_valid_utf8($"a")), Row("\uFFFD"))
+    // scalastyle:on
+  }
+
+  test("UTF-8 string validate") {
+    // scalastyle:off
+    checkAnswer(Seq("大千世界").toDF("a").select(validate_utf8($"a")), Row("大千世界"))
+    checkAnswer(Seq(("abc", null)).toDF("a", "b").select(validate_utf8($"b")), Row(null))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        Seq(Array[Byte](-1)).toDF("a").select(validate_utf8($"a")).collect()
+      },
+      condition = "INVALID_UTF8_STRING",
+      parameters = Map("str" -> "\\xFF")
+    )
+    // scalastyle:on
+  }
+
+  test("UTF-8 string try validate") {
+    // scalastyle:off
+    checkAnswer(Seq("大千世界").toDF("a").select(try_validate_utf8($"a")), Row("大千世界"))
+    checkAnswer(Seq(("abc", null)).toDF("a", "b").select(try_validate_utf8($"b")), Row(null))
+    checkAnswer(Seq(Array[Byte](-1)).toDF("a").select(try_validate_utf8($"a")), Row(null))
     // scalastyle:on
   }
 
@@ -226,6 +463,17 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("substring_index(a, '.', 2)"),
       Row("www.apache")
     )
+
+    // TODO SPARK-48779 Move E2E SQL tests with column input to collations-basic.sql golden file.
+    val testTable = "test_substring_index"
+    withTable(testTable) {
+      sql(s"CREATE TABLE $testTable (num int) USING parquet")
+      sql(s"INSERT INTO $testTable VALUES (1), (2), (3), (NULL)")
+      Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach(collation => {
+        val query = s"SELECT num, SUBSTRING_INDEX('a_a_a', '_', num) as sub_str FROM $testTable"
+        checkAnswer(sql(query), Seq(Row(1, "a"), Row(2, "a_a"), Row(3, "a_a_a"), Row(null, null)))
+      })
+    }
   }
 
   test("string locate function") {
@@ -250,51 +498,6 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("lpad(a, b, c)", "rpad(a, b, c)", "lpad(a, 1, c)", "rpad(a, 1, c)"),
       Row("???hi", "hi???", "h", "h"))
-  }
-
-  test("string parse_url function") {
-
-    def testUrl(url: String, expected: Row) {
-      checkAnswer(Seq[String]((url)).toDF("url").selectExpr(
-        "parse_url(url, 'HOST')", "parse_url(url, 'PATH')",
-        "parse_url(url, 'QUERY')", "parse_url(url, 'REF')",
-        "parse_url(url, 'PROTOCOL')", "parse_url(url, 'FILE')",
-        "parse_url(url, 'AUTHORITY')", "parse_url(url, 'USERINFO')",
-        "parse_url(url, 'QUERY', 'query')"), expected)
-    }
-
-    testUrl(
-      "http://userinfo@spark.apache.org/path?query=1#Ref",
-      Row("spark.apache.org", "/path", "query=1", "Ref",
-        "http", "/path?query=1", "userinfo@spark.apache.org", "userinfo", "1"))
-
-    testUrl(
-      "https://use%20r:pas%20s@example.com/dir%20/pa%20th.HTML?query=x%20y&q2=2#Ref%20two",
-      Row("example.com", "/dir%20/pa%20th.HTML", "query=x%20y&q2=2", "Ref%20two",
-        "https", "/dir%20/pa%20th.HTML?query=x%20y&q2=2", "use%20r:pas%20s@example.com",
-        "use%20r:pas%20s", "x%20y"))
-
-    testUrl(
-      "http://user:pass@host",
-      Row("host", "", null, null, "http", "", "user:pass@host", "user:pass", null))
-
-    testUrl(
-      "http://user:pass@host/",
-      Row("host", "/", null, null, "http", "/", "user:pass@host", "user:pass", null))
-
-    testUrl(
-      "http://user:pass@host/?#",
-      Row("host", "/", "", "", "http", "/?", "user:pass@host", "user:pass", null))
-
-    testUrl(
-      "http://user:pass@host/file;param?query;p2",
-      Row("host", "/file;param", "query;p2", null, "http", "/file;param?query;p2",
-        "user:pass@host", "user:pass", null))
-
-    testUrl(
-      "inva lid://user:pass@host/file;param?query;p2",
-      Row(null, null, null, null, null, null, null, null, null))
-
   }
 
   test("string repeat function") {
@@ -377,6 +580,33 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Seq("aa", "bb", "cc", "")))
   }
 
+  test("SPARK-47845: string split function with column types") {
+    val df = Seq(
+      ("aa2bb3cc4", "[1-9]+", 0),
+      ("aa2bb3cc4", "[1-9]+", 2),
+      ("aa2bb3cc4", "[1-9]+", -2)).toDF("a", "b", "c")
+
+    // without limit
+    val expectedNoLimit = Seq(
+      Row(Seq("aa", "bb", "cc", "")),
+      Row(Seq("aa", "bb", "cc", "")),
+      Row(Seq("aa", "bb", "cc", "")))
+
+    checkAnswer(df.select(split($"a", $"b")), expectedNoLimit)
+
+    checkAnswer(df.selectExpr("split(a, b)"), expectedNoLimit)
+
+    // with limit
+    val expectedWithLimit = Seq(
+      Row(Seq("aa", "bb", "cc", "")),
+      Row(Seq("aa", "bb3cc4")),
+      Row(Seq("aa", "bb", "cc", "")))
+
+    checkAnswer(df.select(split($"a", $"b", $"c")), expectedWithLimit)
+
+    checkAnswer(df.selectExpr("split(a, b, c)"), expectedWithLimit)
+  }
+
   test("string / binary length function") {
     val df = Seq(("123", Array[Byte](1, 2, 3, 4), 123, 2.0f, 3.015))
       .toDF("a", "b", "c", "d", "e")
@@ -385,13 +615,65 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(3, 4))
 
     checkAnswer(
-      df.selectExpr("length(a)", "length(b)"),
+      df.select(len($"a"), len($"b")),
       Row(3, 4))
 
+    Seq("length", "len").foreach { len =>
+      checkAnswer(df.selectExpr(s"$len(a)", s"$len(b)"), Row(3, 4))
+      checkAnswer(df.selectExpr(s"$len(c)", s"$len(d)", s"$len(e)"), Row(3, 3, 5))
+    }
+  }
+
+  test("SPARK-36751: add octet length api for scala") {
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    val df = Seq(("123", Array[Byte](1, 2, 3, 4), 123, 2.0f, 3.015, "\ud83d\udc08"))
+      .toDF("a", "b", "c", "d", "e", "f")
+    // string and binary input
     checkAnswer(
-      df.selectExpr("length(c)", "length(d)", "length(e)"),
+      df.select(octet_length($"a"), octet_length($"b")),
+      Row(3, 4))
+    // string and binary input
+    checkAnswer(
+      df.selectExpr("octet_length(a)", "octet_length(b)"),
+      Row(3, 4))
+    // integer, float and double input
+    checkAnswer(
+      df.selectExpr("octet_length(c)", "octet_length(d)", "octet_length(e)"),
       Row(3, 3, 5)
     )
+    // multi-byte character input
+    checkAnswer(
+      df.selectExpr("octet_length(f)"),
+      Row(4)
+    )
+    // scalastyle:on
+  }
+
+  test("SPARK-36751: add bit length api for scala") {
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    val df = Seq(("123", Array[Byte](1, 2, 3, 4), 123, 2.0f, 3.015, "\ud83d\udc08"))
+      .toDF("a", "b", "c", "d", "e", "f")
+    // string and binary input
+    checkAnswer(
+      df.select(bit_length($"a"), bit_length($"b")),
+      Row(24, 32))
+    // string and binary input
+    checkAnswer(
+      df.selectExpr("bit_length(a)", "bit_length(b)"),
+      Row(24, 32))
+    // integer, float and double input
+    checkAnswer(
+      df.selectExpr("bit_length(c)", "bit_length(d)", "bit_length(e)"),
+      Row(24, 24, 40)
+    )
+    // multi-byte character input
+    checkAnswer(
+      df.selectExpr("bit_length(f)"),
+      Row(32)
+    )
+    // scalastyle:on
   }
 
   test("initcap function") {
@@ -465,16 +747,63 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("sentences(str, language, country)"),
       Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
 
+    checkAnswer(
+      df.select(sentences($"str", $"language", $"country")),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
+    checkAnswer(
+      df.selectExpr("sentences(str, language)"),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
+    checkAnswer(
+      df.select(sentences($"str", $"language")),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
+    checkAnswer(
+      df.selectExpr("sentences(str)"),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
+    checkAnswer(
+      df.select(sentences($"str")),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
+    checkAnswer(
+      df.selectExpr("sentences(str, null, null)"),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
+    checkAnswer(
+      df.selectExpr("sentences(str, '', null)"),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
+    checkAnswer(
+      df.selectExpr("sentences(str, null)"),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
     // Type coercion
     checkAnswer(
       df.selectExpr("sentences(null)", "sentences(10)", "sentences(3.14)"),
       Row(null, Seq(Seq("10")), Seq(Seq("3.14"))))
 
+    checkAnswer(df.select(sentences(lit(null)), sentences(lit(10)), sentences(lit(3.14))),
+      Row(null, Seq(Seq("10")), Seq(Seq("3.14"))))
+
     // Argument number exception
-    val m = intercept[AnalysisException] {
-      df.selectExpr("sentences()")
-    }.getMessage
-    assert(m.contains("Invalid number of arguments for function sentences"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("sentences()")
+      },
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> toSQLId("sentences"),
+        "expectedNum" -> "[1, 2, 3]",
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT
+      ),
+      context = ExpectedContext(
+        fragment = "sentences()",
+        start = 0,
+        stop = 10)
+    )
   }
 
   test("str_to_map function") {
@@ -490,6 +819,13 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(Map("a" -> "1", "b" -> "2", "c" -> "3"))
       )
     )
+    checkAnswer(
+      df1.select(str_to_map(col("a"), lit(","), lit("="))),
+      Seq(
+        Row(Map("a" -> "1", "b" -> "2")),
+        Row(Map("a" -> "1", "b" -> "2", "c" -> "3"))
+      )
+    )
 
     val df2 = Seq(("a:1,b:2,c:3", "y")).toDF("a", "b")
 
@@ -497,6 +833,656 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       df2.selectExpr("str_to_map(a)"),
       Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
     )
+    checkAnswer(
+      df2.select(str_to_map(col("a"))),
+      Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
+    )
 
+    checkAnswer(
+      df2.selectExpr("str_to_map(a, ',')"),
+      Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
+    )
+    checkAnswer(
+      df2.select(str_to_map(col("a"), lit(","))),
+      Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
+    )
+
+    val df3 = Seq(
+      ("a=1&b=2", "&", "="),
+      ("k#2%v#3", "%", "#")
+    ).toDF("str", "delim1", "delim2")
+
+    checkAnswer(
+      df3.selectExpr("str_to_map(str, delim1, delim2)"),
+      Seq(
+        Row(Map("a" -> "1", "b" -> "2")),
+        Row(Map("k" -> "2", "v" -> "3"))
+      )
+    )
+    checkAnswer(
+      df3.select(str_to_map(col("str"), col("delim1"), col("delim2"))),
+      Seq(
+        Row(Map("a" -> "1", "b" -> "2")),
+        Row(Map("k" -> "2", "v" -> "3"))
+      )
+    )
+
+    val df4 = Seq(
+      ("a:1&b:2", "&"),
+      ("k:2%v:3", "%")
+    ).toDF("str", "delim1")
+
+    checkAnswer(
+      df4.selectExpr("str_to_map(str, delim1)"),
+      Seq(
+        Row(Map("a" -> "1", "b" -> "2")),
+        Row(Map("k" -> "2", "v" -> "3"))
+      )
+    )
+    checkAnswer(
+      df4.select(str_to_map(col("str"), col("delim1"))),
+      Seq(
+        Row(Map("a" -> "1", "b" -> "2")),
+        Row(Map("k" -> "2", "v" -> "3"))
+      )
+    )
+  }
+
+  test("SPARK-36148: check input data types of regexp_replace") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select regexp_replace(collect_list(1), '1', '2')")
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      sqlState = None,
+      parameters = Map(
+        "sqlExpr" -> "\"regexp_replace(collect_list(1), 1, 2, 1)\"",
+        "paramIndex" -> "first",
+        "inputSql" -> "\"collect_list(1)\"",
+        "inputType" -> "\"ARRAY<INT>\"",
+        "requiredType" -> "\"STRING\""),
+      context = ExpectedContext(
+        fragment = "regexp_replace(collect_list(1), '1', '2')",
+        start = 7,
+        stop = 47))
+  }
+
+  test("SPARK-41780: INVALID_PARAMETER_VALUE.PATTERN - " +
+    "invalid parameters `regexp` in regexp_replace & regexp_extract") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("select regexp_replace('', '[a\\\\d]{0, 2}', 'x')").collect()
+      },
+      condition = "INVALID_PARAMETER_VALUE.PATTERN",
+      parameters = Map(
+        "parameter" -> toSQLId("regexp"),
+        "functionName" -> toSQLId("regexp_replace"),
+        "value" -> "'[a\\\\d]{0, 2}'"
+      )
+    )
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("select regexp_extract('', '[a\\\\d]{0, 2}', 1)").collect()
+      },
+      condition = "INVALID_PARAMETER_VALUE.PATTERN",
+      parameters = Map(
+        "parameter" -> toSQLId("regexp"),
+        "functionName" -> toSQLId("regexp_extract"),
+        "value" -> "'[a\\\\d]{0, 2}'"
+      )
+    )
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("select rlike('', '[a\\\\d]{0, 2}')").collect()
+      },
+      condition = "INVALID_PARAMETER_VALUE.PATTERN",
+      parameters = Map(
+        "parameter" -> toSQLId("regexp"),
+        "functionName" -> toSQLId("rlike"),
+        "value" -> "'[a\\\\d]{0, 2}'"
+      )
+    )
+  }
+
+  test("SPARK-42384: mask with null input") {
+    val df = Seq(
+      ("AbCD123-@$#"),
+      (null)
+    ).toDF("a")
+
+    checkAnswer(
+      df.selectExpr("mask(a,'Q','q','d','o')"),
+      Row("QqQQdddoooo") :: Row(null) :: Nil
+    )
+  }
+
+  test("to_binary") {
+    val df = Seq("abc").toDF("a")
+    checkAnswer(
+      df.selectExpr("to_binary(a, 'utf-8')"),
+      df.select(to_binary(col("a"), lit("utf-8")))
+    )
+  }
+
+  test("to_char/to_varchar") {
+    Seq(
+      "to_char" -> ((e: Column, fmt: Column) => to_char(e, fmt)),
+      "to_varchar" -> ((e: Column, fmt: Column) => to_varchar(e, fmt))
+    ).foreach { case (funcName, func) =>
+      val df = Seq(78.12).toDF("a")
+      checkAnswer(df.selectExpr(s"$funcName(a, '$$99.99')"), Seq(Row("$78.12")))
+      checkAnswer(df.select(func(col("a"), lit("$99.99"))), Seq(Row("$78.12")))
+
+      val df2 = Seq((Array(100.toByte), "base64")).toDF("input", "format")
+      checkAnswer(df2.selectExpr(s"$funcName(input, 'hex')"), Seq(Row("64")))
+      checkAnswer(df2.select(func(col("input"), lit("hex"))), Seq(Row("64")))
+      checkAnswer(df2.selectExpr(s"$funcName(input, 'base64')"), Seq(Row("ZA==")))
+      checkAnswer(df2.select(func(col("input"), lit("base64"))), Seq(Row("ZA==")))
+      checkAnswer(df2.selectExpr(s"$funcName(input, 'utf-8')"), Seq(Row("d")))
+      checkAnswer(df2.select(func(col("input"), lit("utf-8"))), Seq(Row("d")))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          df2.select(func(col("input"), col("format"))).collect()
+        },
+        condition = "NON_FOLDABLE_ARGUMENT",
+        parameters = Map(
+          "funcName" -> s"`$funcName`",
+          "paramName" -> "`format`",
+          "paramType" -> "\"STRING\""),
+        context = ExpectedContext(
+          fragment = funcName,
+          callSitePattern = getCurrentClassCallSitePattern))
+      checkError(
+        exception = intercept[AnalysisException] {
+          df2.select(func(col("input"), lit("invalid_format"))).collect()
+        },
+        condition = "INVALID_PARAMETER_VALUE.BINARY_FORMAT",
+        parameters = Map(
+          "parameter" -> "`format`",
+          "functionName" -> s"`$funcName`",
+          "invalidFormat" -> "'invalid_format'"),
+        context = ExpectedContext(
+          fragment = funcName,
+          callSitePattern = getCurrentClassCallSitePattern))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"select $funcName('a', 'b', 'c')")
+        },
+        condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+        parameters = Map(
+          "functionName" -> s"`$funcName`",
+          "expectedNum" -> "2",
+          "actualNum" -> "3",
+          "docroot" -> SPARK_DOC_ROOT),
+        context = ExpectedContext("", "", 7, 21 + funcName.length, s"$funcName('a', 'b', 'c')"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"select $funcName(x'537061726b2053514c', CAST(NULL AS STRING))")
+        },
+        condition = "INVALID_PARAMETER_VALUE.NULL",
+        parameters = Map(
+          "functionName" -> s"`$funcName`",
+          "parameter" -> "`format`"),
+        context = ExpectedContext(
+          "",
+          "",
+          7,
+          51 + funcName.length,
+          s"$funcName(x'537061726b2053514c', CAST(NULL AS STRING))"))
+    }
+  }
+
+  test("to_number") {
+    val df = Seq("$78.12").toDF("a")
+    checkAnswer(
+      df.selectExpr("to_number(a, '$99.99')"),
+      Seq(Row(78.12))
+    )
+    checkAnswer(
+      df.select(to_number(col("a"), lit("$99.99"))),
+      Seq(Row(78.12))
+    )
+  }
+
+  test("char & chr function") {
+    val df = Seq(65).toDF("a")
+    checkAnswer(df.selectExpr("char(a)"), Seq(Row("A")))
+    checkAnswer(df.select(char(col("a"))), Seq(Row("A")))
+
+    checkAnswer(df.selectExpr("chr(a)"), Seq(Row("A")))
+    checkAnswer(df.select(chr(col("a"))), Seq(Row("A")))
+  }
+
+  test("btrim function") {
+    val df = Seq(("SSparkSQLS", "SL")).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("btrim(a)"), Seq(Row("SSparkSQLS")))
+    checkAnswer(df.select(btrim(col("a"))), Seq(Row("SSparkSQLS")))
+
+    checkAnswer(df.selectExpr("btrim(a, b)"), Seq(Row("parkSQ")))
+    checkAnswer(df.select(btrim(col("a"), col("b"))), Seq(Row("parkSQ")))
+  }
+
+  test("char_length & character_length function") {
+    val df = Seq("SSparkSQLS").toDF("a")
+    checkAnswer(df.selectExpr("char_length(a)"), Seq(Row(10)))
+    checkAnswer(df.select(char_length(col("a"))), Seq(Row(10)))
+
+    checkAnswer(df.selectExpr("character_length(a)"), Seq(Row(10)))
+    checkAnswer(df.select(character_length(col("a"))), Seq(Row(10)))
+  }
+
+  test("contains function") {
+    val df = Seq(("Spark SQL", "Spark", Array[Byte](1, 2, 3, 4), Array[Byte](1, 2))).
+      toDF("a", "b", "c", "d")
+
+    checkAnswer(df.selectExpr("contains(a, b)"), Seq(Row(true)))
+    checkAnswer(df.select(contains(col("a"), col("b"))), Seq(Row(true)))
+
+    // test binary
+    checkAnswer(df.selectExpr("contains(c, d)"), Seq(Row(true)))
+    checkAnswer(df.select(contains(col("c"), col("d"))), Seq(Row(true)))
+  }
+
+  test("elt function") {
+    val df = Seq((1, "scala", "java")).toDF("a", "b", "c")
+    checkAnswer(df.selectExpr("elt(a, b, c)"), Seq(Row("scala")))
+    checkAnswer(df.select(elt(col("a"), col("b"), col("c"))), Seq(Row("scala")))
+  }
+
+  test("find_in_set function") {
+    val df = Seq(("ab", "abc,b,ab,c,def")).toDF("a", "b")
+    checkAnswer(df.selectExpr("find_in_set(a, b)"), Seq(Row(3)))
+    checkAnswer(df.select(find_in_set(col("a"), col("b"))), Seq(Row(3)))
+  }
+
+  test("like & ilike function") {
+    val df = Seq(("Spark", "_park")).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("a like b"), Seq(Row(true)))
+    checkAnswer(df.select(like(col("a"), col("b"))), Seq(Row(true)))
+
+    checkAnswer(df.selectExpr("a ilike b"), Seq(Row(true)))
+    checkAnswer(df.select(ilike(col("a"), col("b"))), Seq(Row(true)))
+
+    val df1 = Seq(("%SystemDrive%/Users/John", "/%SystemDrive/%//Users%")).toDF("a", "b")
+
+    checkAnswer(df1.selectExpr("a like b escape '/'"), Seq(Row(true)))
+    checkAnswer(df1.select(like(col("a"), col("b"), lit('/'))), Seq(Row(true)))
+
+    checkAnswer(df.selectExpr("a ilike b escape '/'"), Seq(Row(true)))
+    checkAnswer(df.select(ilike(col("a"), col("b"), lit('/'))), Seq(Row(true)))
+
+    val df2 = Seq(("""abc\""", """%\\""")).toDF("i", "p")
+    checkAnswer(df2.select(like(col("i"), col("p"))), Seq(Row(true)))
+    val df3 = Seq(("""\abc""", """\\abc""")).toDF("i", "p")
+    checkAnswer(df3.select(like(col("i"), col("p"))), Seq(Row(true)))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.select(like(col("a"), col("b"), lit(618))).collect()
+      },
+      condition = "INVALID_ESCAPE_CHAR",
+      parameters = Map("sqlExpr" -> "\"618\""),
+      context = ExpectedContext("like", getCurrentClassCallSitePattern)
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.select(ilike(col("a"), col("b"), lit(618))).collect()
+      },
+      condition = "INVALID_ESCAPE_CHAR",
+      parameters = Map("sqlExpr" -> "\"618\""),
+      context = ExpectedContext("ilike", getCurrentClassCallSitePattern)
+    )
+
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.select(like(col("a"), col("b"), lit("中国"))).collect()
+      },
+      condition = "INVALID_ESCAPE_CHAR",
+      parameters = Map("sqlExpr" -> "\"中国\""),
+      context = ExpectedContext("like", getCurrentClassCallSitePattern)
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.select(ilike(col("a"), col("b"), lit("中国"))).collect()
+      },
+      condition = "INVALID_ESCAPE_CHAR",
+      parameters = Map("sqlExpr" -> "\"中国\""),
+      context = ExpectedContext("ilike", getCurrentClassCallSitePattern)
+    )
+    // scalastyle:on
+  }
+
+  test("lcase & ucase function") {
+    val df = Seq("Spark").toDF("a")
+
+    checkAnswer(df.selectExpr("lcase(a)"), Seq(Row("spark")))
+    checkAnswer(df.select(lcase(col("a"))), Seq(Row("spark")))
+
+    checkAnswer(df.selectExpr("ucase(a)"), Seq(Row("SPARK")))
+    checkAnswer(df.select(ucase(col("a"))), Seq(Row("SPARK")))
+  }
+
+  test("left & right function") {
+    val df = Seq(("Spark SQL", 3)).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("left(a, b)"), Seq(Row("Spa")))
+    checkAnswer(df.select(left(col("a"), col("b"))), Seq(Row("Spa")))
+
+    checkAnswer(df.selectExpr("right(a, b)"), Seq(Row("SQL")))
+    checkAnswer(df.select(right(col("a"), col("b"))), Seq(Row("SQL")))
+  }
+
+  test("replace") {
+    val df = Seq(("ABCabc", "abc", "DEF")).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.selectExpr("replace(a, b, c)"),
+      Seq(Row("ABCDEF"))
+    )
+    checkAnswer(
+      df.select(replace(col("a"), col("b"), col("c"))),
+      Seq(Row("ABCDEF"))
+    )
+
+    checkAnswer(
+      df.selectExpr("replace(a, b)"),
+      Seq(Row("ABC"))
+    )
+    checkAnswer(
+      df.select(replace(col("a"), col("b"))),
+      Seq(Row("ABC"))
+    )
+  }
+
+  test("split_part") {
+    val df = Seq(("11.12.13", ".", 3)).toDF("a", "b", "c")
+    checkAnswer(
+      df.selectExpr("split_part(a, b, c)"),
+      Seq(Row("13"))
+    )
+    checkAnswer(
+      df.select(split_part(col("a"), col("b"), col("c"))),
+      Seq(Row("13"))
+    )
+  }
+
+  test("substr") {
+    val df = Seq(("Spark SQL", 5, 1)).toDF("a", "b", "c")
+    checkAnswer(
+      df.selectExpr("substr(a, b, c)"),
+      Seq(Row("k"))
+    )
+    checkAnswer(
+      df.select(substr(col("a"), col("b"), col("c"))),
+      Seq(Row("k"))
+    )
+
+    checkAnswer(
+      df.selectExpr("substr(a, b)"),
+      Seq(Row("k SQL"))
+    )
+    checkAnswer(
+      df.select(substr(col("a"), col("b"))),
+      Seq(Row("k SQL"))
+    )
+  }
+
+  test("parse_url") {
+    val df = Seq(("http://spark.apache.org/path?query=1", "QUERY", "query")).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.selectExpr("parse_url(a, b, c)"),
+      Seq(Row("1"))
+    )
+    checkAnswer(
+      df.select(parse_url(col("a"), col("b"), col("c"))),
+      Seq(Row("1"))
+    )
+
+    checkAnswer(
+      df.selectExpr("parse_url(a, b)"),
+      Seq(Row("query=1"))
+    )
+    checkAnswer(
+      df.select(parse_url(col("a"), col("b"))),
+      Seq(Row("query=1"))
+    )
+  }
+
+  test("printf") {
+    val df = Seq(("aa%d%s", 123, "cc")).toDF("a", "b", "c")
+    checkAnswer(
+      df.selectExpr("printf(a, b, c)"),
+      Row("aa123cc"))
+    checkAnswer(
+      df.select(printf(col("a"), col("b"), col("c"))),
+      Row("aa123cc"))
+  }
+
+  test("url_decode") {
+    val df = Seq("https%3A%2F%2Fspark.apache.org").toDF("a")
+    checkAnswer(
+      df.selectExpr("url_decode(a)"),
+      Row("https://spark.apache.org"))
+    checkAnswer(
+      df.select(url_decode(col("a"))),
+      Row("https://spark.apache.org"))
+  }
+
+  test("url_encode") {
+    val df = Seq("https://spark.apache.org").toDF("a")
+    checkAnswer(
+      df.selectExpr("url_encode(a)"),
+      Row("https%3A%2F%2Fspark.apache.org"))
+    checkAnswer(
+      df.select(url_encode(col("a"))),
+      Row("https%3A%2F%2Fspark.apache.org"))
+  }
+
+  test("position") {
+    val df = Seq(("bar", "foobarbar", 5)).toDF("a", "b", "c")
+
+    checkAnswer(df.selectExpr("position(a, b)"), Row(4))
+    checkAnswer(df.select(position(col("a"), col("b"))), Row(4))
+
+    checkAnswer(df.selectExpr("position(a, b, c)"), Row(7))
+    checkAnswer(df.select(position(col("a"), col("b"), col("c"))), Row(7))
+  }
+
+  test("endswith") {
+    val df = Seq(("Spark SQL", "Spark", Array[Byte](1, 2, 3, 4), Array[Byte](3, 4)))
+      .toDF("a", "b", "c", "d")
+
+    checkAnswer(df.selectExpr("endswith(a, b)"), Row(false))
+    checkAnswer(df.select(endswith(col("a"), col("b"))), Row(false))
+
+    // test binary
+    checkAnswer(df.selectExpr("endswith(c, d)"), Row(true))
+    checkAnswer(df.select(endswith(col("c"), col("d"))), Row(true))
+  }
+
+  test("startswith") {
+    val df = Seq(("Spark SQL", "Spark", Array[Byte](1, 2, 3, 4), Array[Byte](1, 2)))
+      .toDF("a", "b", "c", "d")
+
+    checkAnswer(df.selectExpr("startswith(a, b)"), Row(true))
+    checkAnswer(df.select(startswith(col("a"), col("b"))), Row(true))
+
+    // test binary
+    checkAnswer(df.selectExpr("startswith(c, d)"), Row(true))
+    checkAnswer(df.select(startswith(col("c"), col("d"))), Row(true))
+  }
+
+  test("try_to_binary") {
+    val df = Seq("abc").toDF("a")
+
+    checkAnswer(df.selectExpr("try_to_binary(a, 'utf-8')"),
+      df.select(try_to_binary(col("a"), lit("utf-8"))))
+
+    checkAnswer(df.selectExpr("try_to_binary(a)"),
+      df.select(try_to_binary(col("a"))))
+  }
+
+  test("try_to_number") {
+    val df = Seq("$78.12").toDF("a")
+
+    checkAnswer(df.selectExpr("try_to_number(a, '$99.99')"), Seq(Row(78.12)))
+    checkAnswer(df.select(try_to_number(col("a"), lit("$99.99"))), Seq(Row(78.12)))
+  }
+
+  test("SPARK-47646: try_to_number should return NULL for malformed input") {
+    val df = spark.createDataset(spark.sparkContext.parallelize(Seq("11")))
+    checkAnswer(df.select(try_to_number($"value", lit("$99.99"))), Seq(Row(null)))
+  }
+
+  test("try_to_number with whitespace-only input should return NULL") {
+    // Empty string
+    checkAnswer(sql("select try_to_number('', '99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number('', '999')"), Seq(Row(null)))
+
+    // Spaces only
+    checkAnswer(sql("select try_to_number('   ', '99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number(' ', '9')"), Seq(Row(null)))
+
+    // Different whitespace characters (tabs, newlines)
+    checkAnswer(sql("select try_to_number('\t\t', '99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number('\n\n', '99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number(' \t\n ', '99')"), Seq(Row(null)))
+
+    // With format strings containing decimal points, dollar signs, etc.
+    checkAnswer(sql("select try_to_number('   ', '$99.99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number('', '999.99')"), Seq(Row(null)))
+    checkAnswer(sql("select try_to_number('\t', '9,999')"), Seq(Row(null)))
+  }
+
+  test("SPARK-44905: stateful lastRegex causes NullPointerException on eval for regexp_replace") {
+    val df = sql("select regexp_replace('', '[a\\\\d]{0, 2}', 'x')")
+    intercept[SparkRuntimeException](df.queryExecution.optimizedPlan)
+    checkError(
+      exception = intercept[SparkRuntimeException](df.queryExecution.explainString(FormattedMode)),
+      condition = "INVALID_PARAMETER_VALUE.PATTERN",
+      parameters = Map(
+        "parameter" -> toSQLId("regexp"),
+        "functionName" -> toSQLId("regexp_replace"),
+        "value" -> "'[a\\\\d]{0, 2}'"
+      )
+    )
+  }
+
+  test("SPARK-48806: url_decode exception") {
+    val e = intercept[SparkIllegalArgumentException] {
+      sql("select url_decode('https%3A%2F%2spark.apache.org')").collect()
+    }
+    assert(e.getCause.isInstanceOf[IllegalArgumentException] &&
+      e.getCause.getMessage
+        .startsWith("URLDecoder: Illegal hex characters in escape (%) pattern - "))
+  }
+
+  test("SPARK-49188: concat_ws called on array of arrays of string - invalid cast") {
+    for (enableANSI <- Seq(false, true)) {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> enableANSI.toString) {
+        val testTable = "invalidCastTestTable"
+        withTable(testTable) {
+          sql(s"create table $testTable(dat array<string>) using parquet")
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"select concat_ws(',', collect_list(dat)) FROM $testTable")
+            },
+            condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+            parameters = Map(
+              "sqlExpr" -> """"concat_ws(,, collect_list(dat))"""",
+              "paramIndex" -> "second",
+              "inputSql" -> """"collect_list(dat)"""",
+              "inputType" -> """"ARRAY<ARRAY<STRING>>"""",
+              "requiredType" -> """("ARRAY<STRING>" or "STRING")"""
+            ),
+            context = ExpectedContext(
+              fragment = """concat_ws(',', collect_list(dat))""",
+              start = 7,
+              stop = 39
+            )
+          )
+        }
+      }
+    }
+  }
+
+  test("RegExpReplace throws the right exception when replace fails on a particular row") {
+    val tableName = "regexpReplaceException"
+    withTable(tableName) {
+      sql(s"CREATE TABLE IF NOT EXISTS $tableName(s STRING)")
+      sql(s"INSERT INTO $tableName VALUES('first last')")
+      Seq("NO_CODEGEN", "CODEGEN_ONLY").foreach { codegenMode =>
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+          val query = s"SELECT regexp_replace(s, '(?<first>[a-zA-Z]+) (?<last>[a-zA-Z]+)', " +
+            s"'$$3 $$1') FROM $tableName"
+          val df = sql(query)
+          val plan = df.queryExecution.executedPlan
+          assert(plan.isInstanceOf[WholeStageCodegenExec] == (codegenMode == "CODEGEN_ONLY"))
+          val exception = intercept[SparkRuntimeException] {
+            df.collect()
+          }
+          checkError(
+            exception = exception,
+            condition = "INVALID_REGEXP_REPLACE",
+            parameters = Map(
+              "source" -> "first last",
+              "pattern" -> "(?<first>[a-zA-Z]+) (?<last>[a-zA-Z]+)",
+              "replacement" -> "$3 $1",
+              "position" -> "1")
+          )
+          assert(exception.getCause.getMessage.contains("No group 3"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-50224: The replacement of validate utf8 functions should be NullIntolerant") {
+    def check(df: DataFrame, expected: Seq[Row]): Unit = {
+      val filter = df.queryExecution
+        .sparkPlan
+        .find(_.isInstanceOf[FilterExec])
+        .get.asInstanceOf[FilterExec]
+      assert(filter.condition.find(_.isInstanceOf[IsNotNull]).nonEmpty)
+      checkAnswer(df, expected)
+    }
+    withTable("test_table") {
+      sql("CREATE TABLE test_table" +
+        " AS SELECT * FROM VALUES ('abc', 'def'), ('ghi', 'jkl'), ('mno', NULL) T(a, b)")
+      check(
+        sql("SELECT * FROM test_table WHERE is_valid_utf8(b)"),
+        Seq(Row("abc", "def"), Row("ghi", "jkl")))
+      check(
+        sql("SELECT * FROM test_table WHERE make_valid_utf8(b) = 'def'"),
+        Seq(Row("abc", "def")))
+      check(
+        sql("SELECT * FROM test_table WHERE validate_utf8(b) = 'jkl'"),
+        Seq(Row("ghi", "jkl")))
+      check(
+        sql("SELECT * FROM test_table WHERE try_validate_utf8(b) = 'def'"),
+        Seq(Row("abc", "def")))
+    }
+  }
+
+  test("SPARK-55747: GetArrayItem NPE on null array from split() with ANSI enabled") {
+    // GetArrayItem.nullable was incorrectly computed as false when the array type has
+    // containsNull=false (e.g., from StringSplit) but the array itself can be null.
+    // This caused codegen to skip null checks, leading to NPE when calling
+    // array.numElements() on a null array during bounds checking.
+    withTable("t") {
+      sql("CREATE TABLE t (s STRING) USING parquet")
+      sql("INSERT INTO t VALUES ('a-b'), (null)")
+      checkAnswer(
+        sql("SELECT split(s, '-')[size(split(s, '-')) - 1] FROM t"),
+        Seq(Row("b"), Row(null))
+      )
+    }
   }
 }

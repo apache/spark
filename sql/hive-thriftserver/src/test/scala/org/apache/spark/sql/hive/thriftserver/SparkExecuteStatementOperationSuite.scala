@@ -17,29 +17,128 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.{IntegerType, NullType, StringType, StructField, StructType}
+import java.util
+import java.util.concurrent.Semaphore
 
-class SparkExecuteStatementOperationSuite extends SparkFunSuite {
+import scala.concurrent.duration._
+
+import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hive.service.cli.OperationState
+import org.apache.hive.service.cli.session.{HiveSession, HiveSessionImpl}
+import org.apache.hive.service.rpc.thrift.{TProtocolVersion, TTypeId}
+import org.mockito.Mockito.{doReturn, mock, spy, when, RETURNS_DEEP_STUBS}
+import org.mockito.invocation.InvocationOnMock
+
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.classic.{DataFrame, SparkSession}
+import org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2EventManager
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{GeographyType, GeometryType, IntegerType, NullType, StringType, StructField, StructType}
+
+class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSparkSession {
+
   test("SPARK-17112 `select null` via JDBC triggers IllegalArgumentException in ThriftServer") {
     val field1 = StructField("NULL", NullType)
     val field2 = StructField("(IF(true, NULL, NULL))", NullType)
     val tableSchema = StructType(Seq(field1, field2))
-    val columns = SparkExecuteStatementOperation.getTableSchema(tableSchema).getColumnDescriptors()
-    assert(columns.size() == 2)
-    assert(columns.get(0).getType() == org.apache.hive.service.cli.Type.NULL_TYPE)
-    assert(columns.get(1).getType() == org.apache.hive.service.cli.Type.NULL_TYPE)
+    val columns = SparkExecuteStatementOperation.toTTableSchema(tableSchema)
+    assert(columns.getColumnsSize == 2)
+    assert(columns.getColumns.get(0).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
+      === TTypeId.NULL_TYPE)
+    assert(columns.getColumns.get(1).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
+      === TTypeId.NULL_TYPE)
   }
 
   test("SPARK-20146 Comment should be preserved") {
     val field1 = StructField("column1", StringType).withComment("comment 1")
     val field2 = StructField("column2", IntegerType)
     val tableSchema = StructType(Seq(field1, field2))
-    val columns = SparkExecuteStatementOperation.getTableSchema(tableSchema).getColumnDescriptors()
-    assert(columns.size() == 2)
-    assert(columns.get(0).getType() == org.apache.hive.service.cli.Type.STRING_TYPE)
-    assert(columns.get(0).getComment() == "comment 1")
-    assert(columns.get(1).getType() == org.apache.hive.service.cli.Type.INT_TYPE)
-    assert(columns.get(1).getComment() == "")
+    val columns = SparkExecuteStatementOperation.toTTableSchema(tableSchema)
+    assert(columns.getColumnsSize == 2)
+    assert(columns.getColumns.get(0).getColumnName == "column1")
+    assert(columns.getColumns.get(0).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
+      === TTypeId.STRING_TYPE)
+    assert(columns.getColumns.get(0).getComment == "comment 1")
+    assert(columns.getColumns.get(1).getColumnName == "column2")
+    assert(columns.getColumns.get(1).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
+      === TTypeId.INT_TYPE)
+    assert(columns.getColumns.get(1).getComment == "")
+  }
+
+  test("GeometryType and GeographyType are mapped to STRING_TYPE in ThriftServer") {
+    val field1 = StructField("geom", GeometryType(4326))
+    val field2 = StructField("geog", GeographyType(4326))
+    val tableSchema = StructType(Seq(field1, field2))
+    val columns = SparkExecuteStatementOperation.toTTableSchema(tableSchema)
+    assert(columns.getColumnsSize == 2)
+    val geomType = columns.getColumns.get(0).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
+    assert(geomType === TTypeId.STRING_TYPE)
+    val geogType = columns.getColumns.get(1).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
+    assert(geogType === TTypeId.STRING_TYPE)
+  }
+
+  Seq(
+    (OperationState.CANCELED, (_: SparkExecuteStatementOperation).cancel()),
+    (OperationState.TIMEDOUT, (_: SparkExecuteStatementOperation).timeoutCancel()),
+    (OperationState.CLOSED, (_: SparkExecuteStatementOperation).close())
+  ).foreach { case (finalState, transition) =>
+    test("SPARK-32057 SparkExecuteStatementOperation should not transiently become ERROR " +
+      s"before being set to $finalState") {
+      val hiveSession = new HiveSessionImpl(TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V1,
+      "username", "password", new HiveConf, "ip address")
+      hiveSession.open(new util.HashMap)
+
+      HiveThriftServer2.eventManager = mock(classOf[HiveThriftServer2EventManager])
+
+      val spySparkSession = spy[SparkSession](spark)
+
+      // When cancel() is called on the operation, cleanup causes an exception to be thrown inside
+      // of execute(). This should not cause the state to become ERROR. The exception here will be
+      // triggered in our custom cleanup().
+      val signal = new Semaphore(0)
+      val dataFrame = mock(classOf[DataFrame], RETURNS_DEEP_STUBS)
+      when(dataFrame.collect()).thenAnswer((_: InvocationOnMock) => {
+        signal.acquire()
+        throw new RuntimeException("Operation was cancelled by test cleanup.")
+      })
+      val statement = "stmt"
+      doReturn(dataFrame, Nil: _*).when(spySparkSession).sql(statement)
+
+      val executeStatementOperation = new MySparkExecuteStatementOperation(spySparkSession,
+        hiveSession, statement, signal, finalState)
+
+      val run = new Thread() {
+        override def run(): Unit = executeStatementOperation.runInternal()
+      }
+      assert(executeStatementOperation.getStatus.getState === OperationState.INITIALIZED)
+      run.start()
+      eventually(timeout(5.seconds)) {
+        assert(executeStatementOperation.getStatus.getState === OperationState.RUNNING)
+      }
+      transition(executeStatementOperation)
+      run.join()
+      assert(executeStatementOperation.getStatus.getState === finalState)
+    }
+  }
+
+  private class MySparkExecuteStatementOperation(
+      session: SparkSession,
+      hiveSession: HiveSession,
+      statement: String,
+      signal: Semaphore,
+      finalState: OperationState)
+    extends SparkExecuteStatementOperation(session, hiveSession, statement,
+      new util.HashMap, false, 0) {
+
+    override def cleanup(): Unit = {
+      super.cleanup()
+      signal.release()
+      // At this point, operation should already be in finalState (set by either close() or
+      // cancel()). We want to check if it stays in finalState after the exception thrown by
+      // releasing the semaphore propagates. We hence need to sleep for a short while.
+      Thread.sleep(1000)
+      // State should not be ERROR
+      assert(getStatus.getState === finalState)
+    }
   }
 }

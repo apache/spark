@@ -18,8 +18,9 @@
 package org.apache.spark.ui
 
 import scala.xml.{Node, Text}
+import scala.xml.Utility.trim
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{ErrorMessageFormat, SparkException, SparkFunSuite, SparkThrowableHelper}
 
 class UIUtilsSuite extends SparkFunSuite {
   import UIUtils._
@@ -58,6 +59,20 @@ class UIUtilsSuite extends SparkFunSuite {
       <span class="description-input">test <a href="base/link"> text </a></span>,
       baseUrl = "base",
       errorMsg = "Base URL should be prepended to html links",
+      plainText = false
+    )
+
+    verify(
+      """<a onclick="alert('oops');"></a>""",
+      <span class="description-input">{"""<a onclick="alert('oops');"></a>"""}</span>,
+      "Non href attributes should make the description be treated as a string instead of HTML",
+      plainText = false
+    )
+
+    verify(
+      """<a onmouseover="alert('oops');"></a>""",
+      <span class="description-input">{"""<a onmouseover="alert('oops');"></a>"""}</span>,
+      "Non href attributes should make the description be treated as a string instead of HTML",
       plainText = false
     )
   }
@@ -111,10 +126,17 @@ class UIUtilsSuite extends SparkFunSuite {
 
   test("SPARK-11906: Progress bar should not overflow because of speculative tasks") {
     val generated = makeProgressBar(2, 3, 0, 0, Map.empty, 4).head.child.filter(_.label == "div")
+    // BS5 progress-stacked: each segment is a .progress wrapper with a .progress-bar
+    // scalastyle:off line.size.limit
     val expected = Seq(
-      <div class="bar bar-completed" style="width: 75.0%"></div>,
-      <div class="bar bar-running" style="width: 25.0%"></div>
+      <div class="progress" role="progressbar" aria-label="Completed" aria-valuenow="75" aria-valuemin="0" aria-valuemax="100" style="width: 75.0%">
+        <div class="progress-bar progress-completed"></div>
+      </div>,
+      <div class="progress" role="progressbar" aria-label="Running" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100" style="width: 25.0%">
+        <div class="progress-bar progress-started"></div>
+      </div>
     )
+    // scalastyle:on line.size.limit
     assert(generated.sameElements(expected),
       s"\nRunning progress bar should round down\n\nExpected:\n$expected\nGenerated:\n$generated")
   }
@@ -122,54 +144,64 @@ class UIUtilsSuite extends SparkFunSuite {
   test("decodeURLParameter (SPARK-12708: Sorting task error in Stages Page when yarn mode.)") {
     val encoded1 = "%252F"
     val decoded1 = "/"
-    val encoded2 = "%253Cdriver%253E"
-    val decoded2 = "<driver>"
 
     assert(decoded1 === decodeURLParameter(encoded1))
-    assert(decoded2 === decodeURLParameter(encoded2))
 
     // verify that no affect to decoded URL.
     assert(decoded1 === decodeURLParameter(decoded1))
-    assert(decoded2 === decodeURLParameter(decoded2))
   }
 
-  test("SPARK-20393: Prevent newline characters in parameters.") {
-    val encoding = "Encoding:base64%0d%0a%0d%0aPGh0bWw%2bjcmlwdD48L2h0bWw%2b"
-    val stripEncoding = "Encoding:base64PGh0bWw%2bjcmlwdD48L2h0bWw%2b"
+  test("listingTable with tooltips") {
 
-    assert(stripEncoding === stripXSS(encoding))
+    def generateDataRowValue: String => Seq[Node] = row => <a>{row}</a>
+    val header = Seq("Header1", "Header2")
+    val data = Seq("Data1", "Data2")
+    val tooltip = Seq(None, Some("tooltip"))
+
+    val generated = listingTable(header, generateDataRowValue, data, tooltipHeaders = tooltip)
+
+    val expected: Node =
+      <div class="table-responsive">
+      <table class="table table-bordered table-hover table-sm table-striped sortable">
+        <thead>
+          <th width="" class="">{header(0)}</th>
+          <th width="" class="">
+              <span data-bs-toggle="tooltip" title="tooltip">
+                {header(1)}
+              </span>
+          </th>
+        </thead>
+      <tbody>
+        {data.map(generateDataRowValue)}
+      </tbody>
+    </table>
+      </div>
+
+    assert(trim(generated(0)) == trim(expected))
   }
 
-  test("SPARK-20393: Prevent script from parameters running on page.") {
-    val scriptAlert = """>"'><script>alert(401)<%2Fscript>"""
-    val stripScriptAlert = "&gt;&quot;&gt;&lt;script&gt;alert(401)&lt;%2Fscript&gt;"
+  test("listingTable without tooltips") {
 
-    assert(stripScriptAlert === stripXSS(scriptAlert))
-  }
+    def generateDataRowValue: String => Seq[Node] = row => <a>{row}</a>
+    val header = Seq("Header1", "Header2")
+    val data = Seq("Data1", "Data2")
 
-  test("SPARK-20393: Prevent javascript from parameters running on page.") {
-    val javascriptAlert =
-      """app-20161208133404-0002<iframe+src%3Djavascript%3Aalert(1705)>"""
-    val stripJavascriptAlert =
-      "app-20161208133404-0002&lt;iframe+src%3Djavascript%3Aalert(1705)&gt;"
+    val generated = listingTable(header, generateDataRowValue, data)
 
-    assert(stripJavascriptAlert === stripXSS(javascriptAlert))
-  }
+    val expected =
+      <div class="table-responsive">
+      <table class="table table-bordered table-hover table-sm table-striped sortable">
+        <thead>
+          <th width="" class="">{header(0)}</th>
+          <th width="" class="">{header(1)}</th>
+        </thead>
+        <tbody>
+          {data.map(generateDataRowValue)}
+        </tbody>
+      </table>
+      </div>
 
-  test("SPARK-20393: Prevent links from parameters on page.") {
-    val link =
-      """stdout'"><iframe+id%3D1131+src%3Dhttp%3A%2F%2Fdemo.test.net%2Fphishing.html>"""
-    val stripLink =
-      "stdout&quot;&gt;&lt;iframe+id%3D1131+src%3Dhttp%3A%2F%2Fdemo.test.net%2Fphishing.html&gt;"
-
-    assert(stripLink === stripXSS(link))
-  }
-
-  test("SPARK-20393: Prevent popups from parameters on page.") {
-    val popup = """stdout'%2Balert(60)%2B'"""
-    val stripPopup = "stdout%2Balert(60)%2B"
-
-    assert(stripPopup === stripXSS(popup))
+    assert(trim(generated(0)) == trim(expected))
   }
 
   private def verify(
@@ -181,5 +213,35 @@ class UIUtilsSuite extends SparkFunSuite {
     val generated = makeDescription(desc, baseUrl, plainText)
     assert(generated.sameElements(expected),
       s"\n$errorMsg\n\nExpected:\n$expected\nGenerated:\n$generated")
+  }
+
+  // scalastyle:off line.size.limit
+  test("SPARK-44367: Extract errorClass from errorMsg with errorMessageCell") {
+    val e1 = "Job aborted due to stage failure: Task 0 in stage 1.0 failed 1 times, most recent failure: Lost task 0.0 in stage 1.0 (TID 1) (10.221.98.22 executor driver): org.apache.spark.SparkArithmeticException: [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error.\n== SQL (line 1, position 8) ==\nselect a/b from src\n       ^^^\n\n\tat org.apache.spark.sql.errors.QueryExecutionErrors$.divideByZeroError(QueryExecutionErrors.scala:226)\n\tat org.apache.spark.sql.errors.QueryExecutionErrors.divideByZeroError(QueryExecutionErrors.scala)\n\tat org.apache.spark.sql.catalyst.expressions.GeneratedClass$GeneratedIteratorForCodegenStage1.processNext(generated.java:54)\n\tat org.apache.spark.sql.execution.BufferedRowIterator.hasNext(BufferedRowIterator.java:43)\n\tat org.apache.spark.sql.execution.WholeStageCodegenEvaluatorFactory$WholeStageCodegenPartitionEvaluator$$anon$1.hasNext(WholeStageCodegenEvaluatorFactory.scala:43)\n\tat org.apache.spark.sql.execution.SparkPlan.$anonfun$getByteArrayRdd$1(SparkPlan.scala:388)\n\tat org.apache.spark.rdd.RDD.$anonfun$mapPartitionsInternal$2(RDD.scala:890)\n\tat org.apache.spark.rdd.RDD.$anonfun$mapPartitionsInternal$2$adapted(RDD.scala:890)\n\tat org.apache.spark.rdd.MapPartitionsRDD.compute(MapPartitionsRDD.scala:52)\n\tat org.apache.spark.rdd.RDD.computeOrReadCheckpoint(RDD.scala:364)\n\tat org.apache.spark.rdd.RDD.iterator(RDD.scala:328)\n\tat org.apache.spark.scheduler.ResultTask.runTask(ResultTask.scala:93)\n\tat org.apache.spark.TaskContext.runTaskWithListeners(TaskContext.scala:161)\n\tat org.apache.spark.scheduler.Task.run(Task.scala:141)\n\tat org.apache.spark.executor.Executor$TaskRunner.$anonfun$run$4(Executor.scala:592)\n\tat org.apache.spark.util.Utils$.tryWithSafeFinally(Utils.scala:1474)\n\tat org.apache.spark.executor.Executor$TaskRunner.run(Executor.scala:595)\n\tat java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)\n\tat java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)\n\tat java.lang.Thread.run(Thread.java:750)\n\nDriver stacktrace:"
+    val cell1 = UIUtils.errorMessageCell(e1)
+    assert(cell1 === <td>{"DIVIDE_BY_ZERO"}{UIUtils.detailsUINode(isMultiline = true, e1)}</td>)
+
+    val e2 = SparkException.internalError("test")
+    val cell2 = UIUtils.errorMessageCell(e2.getMessage)
+    assert(cell2 === <td>{"INTERNAL_ERROR"}{UIUtils.detailsUINode(isMultiline = true, e2.getMessage)}</td>)
+
+    val e3 = new SparkException(
+      errorClass = "CANNOT_CAST_DATATYPE",
+      messageParameters = Map("sourceType" -> "long", "targetType" -> "int"), cause = null)
+    val cell3 = UIUtils.errorMessageCell(SparkThrowableHelper.getMessage(e3, ErrorMessageFormat.PRETTY))
+    assert(cell3 === <td>{"CANNOT_CAST_DATATYPE"}{UIUtils.detailsUINode(isMultiline = true, e3.getMessage)}</td>)
+
+    val e4 = "java.lang.RuntimeException: random text"
+    val cell4 = UIUtils.errorMessageCell(e4)
+    assert(cell4 === <td>{"java.lang.RuntimeException"}{UIUtils.detailsUINode(isMultiline = true, e4)}</td>)
+  }
+  // scalastyle:on line.size.limit
+
+  test("detailsUINode uses data-toggle-details instead of onclick") {
+    val result = UIUtils.detailsUINode(isMultiline = true, "error\nmessage")
+    val html = result.toString
+    assert(!html.contains("onclick"), "detailsUINode should not contain inline onclick handler")
+    assert(html.contains("data-toggle-details"), "detailsUINode should use data-toggle-details")
+    assert(html.contains("stacktrace-details"), "detailsUINode should contain stacktrace-details")
   }
 }

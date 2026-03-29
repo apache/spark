@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.recommendation
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.math.abs
 import scala.util.Random
 
@@ -26,6 +26,7 @@ import breeze.linalg.{DenseMatrix => BDM}
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 
 object ALSSuite {
 
@@ -174,7 +175,7 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext {
     val model = ALS.train(ratings, 5, 15)
 
     val pairs = Array.tabulate(50, 50)((u, p) => (u - 25, p - 25)).flatten
-    val ans = model.predict(sc.parallelize(pairs)).collect()
+    val ans = model.predict(sc.parallelize(pairs.toImmutableArraySeq)).collect()
     ans.foreach { r =>
       val u = r.user + 25
       val p = r.product + 25
@@ -189,7 +190,7 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("SPARK-18268: ALS with empty RDD should fail with better message") {
-    val ratings = sc.parallelize(Array.empty[Rating])
+    val ratings = sc.parallelize(Array.empty[Rating].toImmutableArraySeq)
     intercept[IllegalArgumentException] {
       new ALS().run(ratings)
     }
@@ -224,7 +225,7 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext {
       negativeWeights: Boolean = false,
       numUserBlocks: Int = -1,
       numProductBlocks: Int = -1,
-      negativeFactors: Boolean = true) {
+      negativeFactors: Boolean = true): Unit = {
     // scalastyle:on
 
     val (sampledRatings, trueRatings, truePrefs) = ALSSuite.generateRatings(users, products,

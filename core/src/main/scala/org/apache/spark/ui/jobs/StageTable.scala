@@ -18,13 +18,12 @@
 package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Date
-import javax.servlet.http.HttpServletRequest
 
-import scala.collection.JavaConverters._
 import scala.xml._
 
-import org.apache.commons.lang3.StringEscapeUtils
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
@@ -42,27 +41,8 @@ private[ui] class StageTableBase(
     isFairScheduler: Boolean,
     killEnabled: Boolean,
     isFailedStage: Boolean) {
-  // stripXSS is called to remove suspicious characters used in XSS attacks
-  val allParameters = request.getParameterMap.asScala.toMap.map { case (k, v) =>
-    UIUtils.stripXSS(k) -> v.map(UIUtils.stripXSS).toSeq
-  }
-  val parameterOtherTable = allParameters.filterNot(_._1.startsWith(stageTag))
-    .map(para => para._1 + "=" + para._2(0))
 
-  val parameterStagePage = UIUtils.stripXSS(request.getParameter(stageTag + ".page"))
-  val parameterStageSortColumn = UIUtils.stripXSS(request.getParameter(stageTag + ".sort"))
-  val parameterStageSortDesc = UIUtils.stripXSS(request.getParameter(stageTag + ".desc"))
-  val parameterStagePageSize = UIUtils.stripXSS(request.getParameter(stageTag + ".pageSize"))
-
-  val stagePage = Option(parameterStagePage).map(_.toInt).getOrElse(1)
-  val stageSortColumn = Option(parameterStageSortColumn).map { sortColumn =>
-    UIUtils.decodeURLParameter(sortColumn)
-  }.getOrElse("Stage Id")
-  val stageSortDesc = Option(parameterStageSortDesc).map(_.toBoolean).getOrElse(
-    // New stages should be shown above old jobs by default.
-    stageSortColumn == "Stage Id"
-  )
-  val stagePageSize = Option(parameterStagePageSize).map(_.toInt).getOrElse(100)
+  val stagePage = Option(request.getParameter(stageTag + ".page")).map(_.toInt).getOrElse(1)
 
   val currentTime = System.currentTimeMillis()
 
@@ -77,16 +57,12 @@ private[ui] class StageTableBase(
       isFairScheduler,
       killEnabled,
       currentTime,
-      stagePageSize,
-      stageSortColumn,
-      stageSortDesc,
       isFailedStage,
-      parameterOtherTable,
       request
     ).table(stagePage)
   } catch {
     case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
-      <div class="alert alert-error">
+      <div class="alert alert-danger">
         <p>Error while rendering stage table:</p>
         <pre>
           {Utils.exceptionString(e)}
@@ -115,13 +91,6 @@ private[ui] class StageTableRowData(
     val shuffleWrite: Long,
     val shuffleWriteWithUnit: String)
 
-private[ui] class MissingStageTableRowData(
-    stageInfo: v1.StageData,
-    stageId: Int,
-    attemptId: Int) extends StageTableRowData(
-  stageInfo, None, stageId, attemptId, "", None, new Date(0), "", -1, "", 0, "", 0, "", 0, "", 0,
-    "")
-
 /** Page showing list of all ongoing and recently finished stages */
 private[ui] class StagePagedTable(
     store: AppStatusStore,
@@ -133,25 +102,24 @@ private[ui] class StagePagedTable(
     isFairScheduler: Boolean,
     killEnabled: Boolean,
     currentTime: Long,
-    pageSize: Int,
-    sortColumn: String,
-    desc: Boolean,
     isFailedStage: Boolean,
-    parameterOtherTable: Iterable[String],
     request: HttpServletRequest) extends PagedTable[StageTableRowData] {
 
   override def tableId: String = stageTag + "-table"
 
   override def tableCssClass: String =
-    "table table-bordered table-condensed table-striped " +
-      "table-head-clickable table-cell-width-limited"
+    "table table-bordered table-sm table-striped table-head-clickable table-cell-width-limited"
 
   override def pageSizeFormField: String = stageTag + ".pageSize"
 
   override def pageNumberFormField: String = stageTag + ".page"
 
-  val parameterPath = UIUtils.prependBaseUri(request, basePath) + s"/$subPath/?" +
-    parameterOtherTable.mkString("&")
+  private val (sortColumn, desc, pageSize) = getTableParameters(request, stageTag, "Stage Id")
+
+  private val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
+
+  private val parameterPath = UIUtils.prependBaseUri(request, basePath) + s"/$subPath/?" +
+    getParameterOtherTable(request, stageTag)
 
   override val dataSource = new StageDataSource(
     store,
@@ -163,7 +131,6 @@ private[ui] class StagePagedTable(
   )
 
   override def pageLink(page: Int): String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
     parameterPath +
       s"&$pageNumberFormField=$page" +
       s"&$stageTag.sort=$encodedSortColumn" +
@@ -172,89 +139,31 @@ private[ui] class StagePagedTable(
       s"#$tableHeaderId"
   }
 
-  override def goButtonFormPath: String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+  override def goButtonFormPath: String =
     s"$parameterPath&$stageTag.sort=$encodedSortColumn&$stageTag.desc=$desc#$tableHeaderId"
-  }
 
   override def headers: Seq[Node] = {
-    // stageHeadersAndCssClasses has three parts: header title, tooltip information, and sortable.
+    // stageHeadersAndCssClasses has three parts: header title, sortable and tooltip information.
     // The tooltip information could be None, which indicates it does not have a tooltip.
-    // Otherwise, it has two parts: tooltip text, and position (true for left, false for default).
-    val stageHeadersAndCssClasses: Seq[(String, Option[(String, Boolean)], Boolean)] =
-      Seq(("Stage Id", None, true)) ++
-      {if (isFairScheduler) {Seq(("Pool Name", None, true))} else Seq.empty} ++
+    val stageHeadersAndCssClasses: Seq[(String, Boolean, Option[String])] =
+      Seq(("Stage Id", true, None)) ++
+      {if (isFairScheduler) {Seq(("Pool Name", true, None))} else Seq.empty} ++
       Seq(
-        ("Description", None, true), ("Submitted", None, true), ("Duration", None, true),
-        ("Tasks: Succeeded/Total", None, false),
-        ("Input", Some((ToolTips.INPUT, false)), true),
-        ("Output", Some((ToolTips.OUTPUT, false)), true),
-        ("Shuffle Read", Some((ToolTips.SHUFFLE_READ, false)), true),
-        ("Shuffle Write", Some((ToolTips.SHUFFLE_WRITE, true)), true)
+        ("Description", true, None),
+        ("Submitted", true, None),
+        ("Duration", true, Some(ToolTips.DURATION)),
+        ("Tasks: Succeeded/Total", false, None),
+        ("Input", true, Some(ToolTips.INPUT)),
+        ("Output", true, Some(ToolTips.OUTPUT)),
+        ("Shuffle Read", true, Some(ToolTips.SHUFFLE_READ)),
+        ("Shuffle Write", true, Some(ToolTips.SHUFFLE_WRITE))
       ) ++
-      {if (isFailedStage) {Seq(("Failure Reason", None, false))} else Seq.empty}
+      {if (isFailedStage) {Seq(("Failure Reason", false, None))} else Seq.empty}
 
-    if (!stageHeadersAndCssClasses.filter(_._3).map(_._1).contains(sortColumn)) {
-      throw new IllegalArgumentException(s"Unknown column: $sortColumn")
-    }
+    isSortColumnValid(stageHeadersAndCssClasses, sortColumn)
 
-    val headerRow: Seq[Node] = {
-      stageHeadersAndCssClasses.map { case (header, tooltip, sortable) =>
-        val headerSpan = tooltip.map { case (title, left) =>
-          if (left) {
-            /* Place the shuffle write tooltip on the left (rather than the default position
-            of on top) because the shuffle write column is the last column on the right side and
-            the tooltip is wider than the column, so it doesn't fit on top. */
-            <span data-toggle="tooltip" data-placement="left" title={title}>
-              {header}
-            </span>
-          } else {
-            <span data-toggle="tooltip" title={title}>
-              {header}
-            </span>
-          }
-        }.getOrElse(
-          {header}
-        )
-
-        if (header == sortColumn) {
-          val headerLink = Unparsed(
-            parameterPath +
-              s"&$stageTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
-              s"&$stageTag.desc=${!desc}" +
-              s"&$stageTag.pageSize=$pageSize") +
-              s"#$tableHeaderId"
-          val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
-
-          <th>
-            <a href={headerLink}>
-              {headerSpan}<span>
-              &nbsp;{Unparsed(arrow)}
-            </span>
-            </a>
-          </th>
-        } else {
-          if (sortable) {
-            val headerLink = Unparsed(
-              parameterPath +
-                s"&$stageTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
-                s"&$stageTag.pageSize=$pageSize") +
-                s"#$tableHeaderId"
-
-            <th>
-              <a href={headerLink}>
-                {headerSpan}
-              </a>
-            </th>
-          } else {
-            <th>
-              {headerSpan}
-            </th>
-          }
-        }
-      }
-    }
-    <thead>{headerRow}</thead>
+    headerRow(stageHeadersAndCssClasses, desc, pageSize, sortColumn, parameterPath,
+      stageTag, tableHeaderId)
   }
 
   override def row(data: StageTableRowData): Seq[Node] = {
@@ -300,7 +209,7 @@ private[ui] class StagePagedTable(
         <td>{data.shuffleWriteWithUnit}</td> ++
         {
           if (isFailedStage) {
-            failureReasonHtml(info)
+            UIUtils.errorMessageCell(info.failureReason.getOrElse(""))
           } else {
             Seq.empty
           }
@@ -308,49 +217,15 @@ private[ui] class StagePagedTable(
     }
   }
 
-  private def failureReasonHtml(s: v1.StageData): Seq[Node] = {
-    val failureReason = s.failureReason.getOrElse("")
-    val isMultiline = failureReason.indexOf('\n') >= 0
-    // Display the first line by default
-    val failureReasonSummary = StringEscapeUtils.escapeHtml4(
-      if (isMultiline) {
-        failureReason.substring(0, failureReason.indexOf('\n'))
-      } else {
-        failureReason
-      })
-    val details = if (isMultiline) {
-      // scalastyle:off
-      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
-            class="expand-details">
-        +details
-      </span> ++
-        <div class="stacktrace-details collapsed">
-          <pre>{failureReason}</pre>
-        </div>
-      // scalastyle:on
-    } else {
-      ""
-    }
-    <td valign="middle">{failureReasonSummary}{details}</td>
-  }
-
   private def makeDescription(s: v1.StageData, descriptionOption: Option[String]): Seq[Node] = {
     val basePathUri = UIUtils.prependBaseUri(request, basePath)
 
     val killLink = if (killEnabled) {
-      val confirm =
-        s"if (window.confirm('Are you sure you want to kill stage ${s.stageId} ?')) " +
-        "{ this.parentNode.submit(); return true; } else { return false; }"
       // SPARK-6846 this should be POST-only but YARN AM won't proxy POST
-      /*
-      val killLinkUri = s"$basePathUri/stages/stage/kill/"
-      <form action={killLinkUri} method="POST" style="display:inline">
-        <input type="hidden" name="id" value={s.stageId.toString}/>
-        <a href="#" onclick={confirm} class="kill-link">(kill)</a>
-      </form>
-       */
       val killLinkUri = s"$basePathUri/stages/stage/kill/?id=${s.stageId}"
-      <a href={killLinkUri} onclick={confirm} class="kill-link">(kill)</a>
+      <a href={killLinkUri}
+         data-kill-message={s"Are you sure you want to kill stage ${s.stageId} ?"}
+         class="kill-link float-end">(kill)</a>
     } else {
       Seq.empty
     }
@@ -360,15 +235,15 @@ private[ui] class StagePagedTable(
 
     val cachedRddInfos = store.rddList().filter { rdd => s.rddIds.contains(rdd.id) }
     val details = if (s.details != null && s.details.nonEmpty) {
-      <span onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')"
-            class="expand-details">
+      <span data-toggle-details=".stage-details"
+            class="expand-details float-end">
         +details
       </span> ++
       <div class="stage-details collapsed">
         {if (cachedRddInfos.nonEmpty) {
           Text("RDD: ") ++
           cachedRddInfos.map { i =>
-            <a href={s"$basePathUri/storage/rdd?id=${i.id}"}>{i.name}</a>
+            <a href={s"$basePathUri/storage/rdd/?id=${i.id}"}>{i.name}</a>
           }
         }}
         <pre>{s.details}</pre>
@@ -404,19 +279,11 @@ private[ui] class StageDataSource(
   // table so that we can avoid creating duplicate contents during sorting the data
   private val data = stages.map(stageRow).sorted(ordering(sortColumn, desc))
 
-  private var _slicedStageIds: Set[Int] = _
-
   override def dataSize: Int = data.size
 
-  override def sliceData(from: Int, to: Int): Seq[StageTableRowData] = {
-    val r = data.slice(from, to)
-    _slicedStageIds = r.map(_.stageId).toSet
-    r
-  }
+  override def sliceData(from: Int, to: Int): Seq[StageTableRowData] = data.slice(from, to)
 
   private def stageRow(stageData: v1.StageData): StageTableRowData = {
-    val description = stageData.description.getOrElse("")
-
     val formattedSubmissionTime = stageData.submissionTime match {
       case Some(t) => UIUtils.formatDate(t)
       case None => "Unknown"
@@ -444,7 +311,6 @@ private[ui] class StageDataSource(
     val shuffleReadWithUnit = if (shuffleRead > 0) Utils.bytesToString(shuffleRead) else ""
     val shuffleWrite = stageData.shuffleWriteBytes
     val shuffleWriteWithUnit = if (shuffleWrite > 0) Utils.bytesToString(shuffleWrite) else ""
-
 
     new StageTableRowData(
       stageData,

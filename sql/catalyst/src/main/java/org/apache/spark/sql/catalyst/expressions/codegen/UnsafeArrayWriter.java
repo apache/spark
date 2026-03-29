@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen;
 
+import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
+import org.apache.spark.unsafe.types.CalendarInterval;
 
 import static org.apache.spark.sql.catalyst.expressions.UnsafeArrayData.calculateHeaderPortionInBytes;
 
@@ -55,10 +57,19 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
 
     this.startingOffset = cursor();
 
+    long fixedPartInBytesLong =
+      ByteArrayMethods.roundNumberOfBytesToNearestWord((long) elementSize * numElements);
+    long totalInitialSize = headerInBytes + fixedPartInBytesLong;
+
+    if (totalInitialSize > Integer.MAX_VALUE) {
+      throw QueryExecutionErrors.tooManyArrayElementsError(
+        fixedPartInBytesLong,  Integer.MAX_VALUE);
+    }
+
+    // it's now safe to cast fixedPartInBytesLong and totalInitialSize to int
+    int fixedPartInBytes = (int) fixedPartInBytesLong;
     // Grows the global buffer ahead for header and fixed size data.
-    int fixedPartInBytes =
-      ByteArrayMethods.roundNumberOfBytesToNearestWord(elementSize * numElements);
-    holder.grow(headerInBytes + fixedPartInBytes);
+    holder.grow((int)totalInitialSize);
 
     // Write numElements and clear out null bits to header
     Platform.putLong(getBuffer(), startingOffset, numElements);
@@ -74,7 +85,7 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
   }
 
   private long getElementOffset(int ordinal) {
-    return startingOffset + headerInBytes + ordinal * elementSize;
+    return startingOffset + headerInBytes + ordinal * (long) elementSize;
   }
 
   private void setNullBit(int ordinal) {
@@ -82,24 +93,28 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
     BitSetMethods.set(getBuffer(), startingOffset + 8, ordinal);
   }
 
+  @Override
   public void setNull1Bytes(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
     writeByte(getElementOffset(ordinal), (byte)0);
   }
 
+  @Override
   public void setNull2Bytes(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
     writeShort(getElementOffset(ordinal), (short)0);
   }
 
+  @Override
   public void setNull4Bytes(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
     writeInt(getElementOffset(ordinal), 0);
   }
 
+  @Override
   public void setNull8Bytes(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
@@ -108,41 +123,49 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
 
   public void setNull(int ordinal) { setNull8Bytes(ordinal); }
 
+  @Override
   public void write(int ordinal, boolean value) {
     assertIndexIsValid(ordinal);
     writeBoolean(getElementOffset(ordinal), value);
   }
 
+  @Override
   public void write(int ordinal, byte value) {
     assertIndexIsValid(ordinal);
     writeByte(getElementOffset(ordinal), value);
   }
 
+  @Override
   public void write(int ordinal, short value) {
     assertIndexIsValid(ordinal);
     writeShort(getElementOffset(ordinal), value);
   }
 
+  @Override
   public void write(int ordinal, int value) {
     assertIndexIsValid(ordinal);
     writeInt(getElementOffset(ordinal), value);
   }
 
+  @Override
   public void write(int ordinal, long value) {
     assertIndexIsValid(ordinal);
     writeLong(getElementOffset(ordinal), value);
   }
 
+  @Override
   public void write(int ordinal, float value) {
     assertIndexIsValid(ordinal);
     writeFloat(getElementOffset(ordinal), value);
   }
 
+  @Override
   public void write(int ordinal, double value) {
     assertIndexIsValid(ordinal);
     writeDouble(getElementOffset(ordinal), value);
   }
 
+  @Override
   public void write(int ordinal, Decimal input, int precision, int scale) {
     // make sure Decimal object has the same scale as DecimalType
     assertIndexIsValid(ordinal);
@@ -168,6 +191,19 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
       }
     } else {
       setNull(ordinal);
+    }
+  }
+
+  @Override
+  public void write(int ordinal, CalendarInterval input) {
+    assertIndexIsValid(ordinal);
+    // the UnsafeWriter version of write(int, CalendarInterval) doesn't handle
+    // null intervals appropriately when the container is an array, so we handle
+    // that case here.
+    if (input == null) {
+      setNull(ordinal);
+    } else {
+      super.write(ordinal, input);
     }
   }
 }

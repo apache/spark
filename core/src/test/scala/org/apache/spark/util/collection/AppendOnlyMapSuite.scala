@@ -17,8 +17,6 @@
 
 package org.apache.spark.util.collection
 
-import java.util.Comparator
-
 import scala.collection.mutable.HashSet
 
 import org.apache.spark.SparkFunSuite
@@ -113,20 +111,20 @@ class AppendOnlyMapSuite extends SparkFunSuite {
     assert(map.size === 100)
     for (i <- 1 to 100) {
       val res = map.changeValue("" + i, (hadValue, oldValue) => {
-        assert(hadValue === true)
+        assert(hadValue)
         assert(oldValue === "" + i)
         oldValue + "!"
       })
-      assert(res === i + "!")
+      assert(res === s"$i!")
     }
     // Iterate from 101 to 400 to make sure the map grows a couple of times, because we had a
     // bug where changeValue would return the wrong result when the map grew on that insert
     for (i <- 101 to 400) {
       val res = map.changeValue("" + i, (hadValue, oldValue) => {
         assert(hadValue === false)
-        i + "!"
+        s"$i!"
       })
-      assert(res === i + "!")
+      assert(res === s"$i!")
     }
     assert(map.size === 400)
     assert(map(null) === null)
@@ -136,7 +134,7 @@ class AppendOnlyMapSuite extends SparkFunSuite {
     })
     assert(map.size === 401)
     map.changeValue(null, (hadValue, oldValue) => {
-      assert(hadValue === true)
+      assert(hadValue)
       assert(oldValue === "null!")
       "null!!"
     })
@@ -170,12 +168,10 @@ class AppendOnlyMapSuite extends SparkFunSuite {
       case e: IllegalStateException => fail()
     }
 
-    val it = map.destructiveSortedIterator(new Comparator[String] {
-      def compare(key1: String, key2: String): Int = {
-        val x = if (key1 != null) key1.toInt else Int.MinValue
-        val y = if (key2 != null) key2.toInt else Int.MinValue
-        x.compareTo(y)
-      }
+    val it = map.destructiveSortedIterator((key1: String, key2: String) => {
+      val x = if (key1 != null) key1.toInt else Int.MinValue
+      val y = if (key2 != null) key2.toInt else Int.MinValue
+      x.compareTo(y)
     })
 
     // Should be sorted by key

@@ -25,7 +25,7 @@ import org.apache.spark.internal.config.package$;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate$;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.KVIterator;
 import org.apache.spark.unsafe.Platform;
@@ -68,12 +68,7 @@ public final class UnsafeFixedWidthAggregationMap {
    *         schema, false otherwise.
    */
   public static boolean supportsAggregationBufferSchema(StructType schema) {
-    for (StructField field: schema.fields()) {
-      if (!UnsafeRow.isMutable(field.dataType())) {
-        return false;
-      }
-    }
-    return true;
+    return Aggregate$.MODULE$.isAggregateBufferMutable(schema);
   }
 
   /**
@@ -98,7 +93,7 @@ public final class UnsafeFixedWidthAggregationMap {
     this.groupingKeyProjection = UnsafeProjection.create(groupingKeySchema);
     this.groupingKeySchema = groupingKeySchema;
     this.map = new BytesToBytesMap(
-      taskContext.taskMemoryManager(), initialCapacity, pageSizeBytes, true);
+      taskContext.taskMemoryManager(), initialCapacity, pageSizeBytes);
 
     // Initialize the buffer for aggregation value
     final UnsafeProjection valueProjection = UnsafeProjection.create(aggregationBufferSchema);
@@ -226,10 +221,10 @@ public final class UnsafeFixedWidthAggregationMap {
   }
 
   /**
-   * Gets the average hash map probe per looking up for the underlying `BytesToBytesMap`.
+   * Gets the average number of hash probes per key lookup in the underlying `BytesToBytesMap`.
    */
-  public double getAverageProbesPerLookup() {
-    return map.getAverageProbesPerLookup();
+  public double getAvgHashProbesPerKey() {
+    return map.getAvgHashProbesPerKey();
   }
 
   /**
@@ -247,6 +242,8 @@ public final class UnsafeFixedWidthAggregationMap {
       map.getPageSizeBytes(),
       (int) SparkEnv.get().conf().get(
         package$.MODULE$.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD()),
+      (long) SparkEnv.get().conf().get(
+        package$.MODULE$.SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD()),
       map);
   }
 }

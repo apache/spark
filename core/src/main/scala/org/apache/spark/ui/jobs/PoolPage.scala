@@ -17,20 +17,18 @@
 
 package org.apache.spark.ui.jobs
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.Node
 
+import jakarta.servlet.http.HttpServletRequest
+
 import org.apache.spark.status.PoolData
-import org.apache.spark.status.api.v1._
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 /** Page showing specific pool details */
 private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    // stripXSS is called first to remove suspicious characters used in XSS attacks
-    val poolName = Option(UIUtils.stripXSS(request.getParameter("poolname"))).map { poolname =>
+    val poolName = Option(request.getParameter("poolname")).map { poolname =>
       UIUtils.decodeURLParameter(poolname)
     }.getOrElse {
       throw new IllegalArgumentException(s"Missing poolname parameter")
@@ -52,15 +50,16 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
     var content = <h4>Summary </h4> ++ poolTable.toNodeSeq(request)
     if (activeStages.nonEmpty) {
       content ++=
-        <span class="collapse-aggregated-poolActiveStages collapse-table"
-            onClick="collapseTable('collapse-aggregated-poolActiveStages',
-            'aggregated-poolActiveStages')">
+        <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-poolActiveStages"
+            aria-expanded="true" aria-controls="aggregated-poolActiveStages"
+            data-collapse-name="collapse-aggregated-poolActiveStages">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Active Stages ({activeStages.size})</a>
           </h4>
         </span> ++
-        <div class="aggregated-poolActiveStages collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-poolActiveStages">
           {activeStagesTable.toNodeSeq}
         </div>
     }

@@ -27,10 +27,11 @@ import org.apache.spark.sql.types.IntegerType
  * To run this benchmark:
  * {{{
  *   1. without sbt:
- *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark sql test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
+ *      bin/spark-submit --class <this class>
+ *        --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
+ *   2. build/sbt "sql/Test/runMain <this class>"
  *   3. generate result:
- *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/JoinBenchmark-results.txt".
  * }}}
  */
@@ -43,8 +44,8 @@ object JoinBenchmark extends SqlBasedBenchmark {
     val dim = broadcast(spark.range(M).selectExpr("id as k", "cast(id as string) as v"))
     codegenBenchmark("Join w long", N) {
       val df = spark.range(N).join(dim, (col("id") % M) === col("k"))
-      assert(df.queryExecution.sparkPlan.find(_.isInstanceOf[BroadcastHashJoinExec]).isDefined)
-      df.count()
+      assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[BroadcastHashJoinExec]))
+      df.noop()
     }
   }
 
@@ -54,8 +55,8 @@ object JoinBenchmark extends SqlBasedBenchmark {
     val dim = broadcast(spark.range(M).selectExpr("cast(id/10 as long) as k"))
     codegenBenchmark("Join w long duplicated", N) {
       val df = spark.range(N).join(dim, (col("id") % M) === col("k"))
-      assert(df.queryExecution.sparkPlan.find(_.isInstanceOf[BroadcastHashJoinExec]).isDefined)
-      df.count()
+      assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[BroadcastHashJoinExec]))
+      df.noop()
     }
   }
 
@@ -69,8 +70,8 @@ object JoinBenchmark extends SqlBasedBenchmark {
       val df = spark.range(N).join(dim2,
         (col("id") % M).cast(IntegerType) === col("k1")
           && (col("id") % M).cast(IntegerType) === col("k2"))
-      assert(df.queryExecution.sparkPlan.find(_.isInstanceOf[BroadcastHashJoinExec]).isDefined)
-      df.count()
+      assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[BroadcastHashJoinExec]))
+      df.noop()
     }
   }
 
@@ -83,8 +84,8 @@ object JoinBenchmark extends SqlBasedBenchmark {
     codegenBenchmark("Join w 2 longs", N) {
       val df = spark.range(N).join(dim3,
         (col("id") % M) === col("k1") && (col("id") % M) === col("k2"))
-      assert(df.queryExecution.sparkPlan.find(_.isInstanceOf[BroadcastHashJoinExec]).isDefined)
-      df.count()
+      assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[BroadcastHashJoinExec]))
+      df.noop()
     }
   }
 
@@ -97,8 +98,8 @@ object JoinBenchmark extends SqlBasedBenchmark {
     codegenBenchmark("Join w 2 longs duplicated", N) {
       val df = spark.range(N).join(dim4,
         (col("id") bitwiseAND M) === col("k1") && (col("id") bitwiseAND M) === col("k2"))
-      assert(df.queryExecution.sparkPlan.find(_.isInstanceOf[BroadcastHashJoinExec]).isDefined)
-      df.count()
+      assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[BroadcastHashJoinExec]))
+      df.noop()
     }
   }
 
@@ -108,8 +109,8 @@ object JoinBenchmark extends SqlBasedBenchmark {
     val dim = broadcast(spark.range(M).selectExpr("id as k", "cast(id as string) as v"))
     codegenBenchmark("outer join w long", N) {
       val df = spark.range(N).join(dim, (col("id") % M) === col("k"), "left")
-      assert(df.queryExecution.sparkPlan.find(_.isInstanceOf[BroadcastHashJoinExec]).isDefined)
-      df.count()
+      assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[BroadcastHashJoinExec]))
+      df.noop()
     }
   }
 
@@ -119,8 +120,8 @@ object JoinBenchmark extends SqlBasedBenchmark {
     val dim = broadcast(spark.range(M).selectExpr("id as k", "cast(id as string) as v"))
     codegenBenchmark("semi join w long", N) {
       val df = spark.range(N).join(dim, (col("id") % M) === col("k"), "leftsemi")
-      assert(df.queryExecution.sparkPlan.find(_.isInstanceOf[BroadcastHashJoinExec]).isDefined)
-      df.count()
+      assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[BroadcastHashJoinExec]))
+      df.noop()
     }
   }
 
@@ -130,8 +131,8 @@ object JoinBenchmark extends SqlBasedBenchmark {
       val df1 = spark.range(N).selectExpr(s"id * 2 as k1")
       val df2 = spark.range(N).selectExpr(s"id * 3 as k2")
       val df = df1.join(df2, col("k1") === col("k2"))
-      assert(df.queryExecution.sparkPlan.find(_.isInstanceOf[SortMergeJoinExec]).isDefined)
-      df.count()
+      assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[SortMergeJoinExec]))
+      df.noop()
     }
   }
 
@@ -143,8 +144,8 @@ object JoinBenchmark extends SqlBasedBenchmark {
       val df2 = spark.range(N)
         .selectExpr(s"(id * 15485867) % ${N*10} as k2")
       val df = df1.join(df2, col("k1") === col("k2"))
-      assert(df.queryExecution.sparkPlan.find(_.isInstanceOf[SortMergeJoinExec]).isDefined)
-      df.count()
+      assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[SortMergeJoinExec]))
+      df.noop()
     }
   }
 
@@ -158,9 +159,21 @@ object JoinBenchmark extends SqlBasedBenchmark {
         val df1 = spark.range(N).selectExpr(s"id as k1")
         val df2 = spark.range(N / 3).selectExpr(s"id * 3 as k2")
         val df = df1.join(df2, col("k1") === col("k2"))
-        assert(df.queryExecution.sparkPlan.find(_.isInstanceOf[ShuffledHashJoinExec]).isDefined)
-        df.count()
+        assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[ShuffledHashJoinExec]))
+        df.noop()
       }
+    }
+  }
+
+  def broadcastNestedLoopJoin(): Unit = {
+    val N = 20 << 20
+    val M = 1 << 4
+
+    val dim = broadcast(spark.range(M).selectExpr("id as k", "cast(id as string) as v"))
+    codegenBenchmark("broadcast nested loop join", N) {
+      val df = spark.range(N).join(dim)
+      assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[BroadcastNestedLoopJoinExec]))
+      df.noop()
     }
   }
 
@@ -176,6 +189,7 @@ object JoinBenchmark extends SqlBasedBenchmark {
       sortMergeJoin()
       sortMergeJoinWithDuplicates()
       shuffleHashJoin()
+      broadcastNestedLoopJoin()
     }
   }
 }

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
-import java.util.{Locale, TimeZone}
 
 import org.scalatest.BeforeAndAfter
 
@@ -33,17 +32,11 @@ import org.apache.spark.util.Utils
  * files, every `createQueryTest` calls should explicitly set `reset` to `false`.
  */
 class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfter {
-  private val originalTimeZone = TimeZone.getDefault
-  private val originalLocale = Locale.getDefault
   private val testTempDir = Utils.createTempDir()
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     TestHive.setCacheTables(true)
-    // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
-    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
-    // Add Locale setting
-    Locale.setDefault(Locale.US)
 
     // Create the table used in windowing.q
     sql("DROP TABLE IF EXISTS part")
@@ -58,7 +51,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
         |  p_size INT,
         |  p_container STRING,
         |  p_retailprice DOUBLE,
-        |  p_comment STRING)
+        |  p_comment STRING) USING hive
       """.stripMargin)
     val testData1 = TestHive.getHiveFile("data/files/part_tiny.txt").getCanonicalPath
     sql(
@@ -100,11 +93,9 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
     sql("set mapreduce.jobtracker.address=local")
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       TestHive.setCacheTables(false)
-      TimeZone.setDefault(originalTimeZone)
-      Locale.setDefault(originalLocale)
       TestHive.reset()
     } finally {
       super.afterAll()
@@ -747,17 +738,11 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
 
 class HiveWindowFunctionQueryFileSuite
   extends HiveCompatibilitySuite with BeforeAndAfter {
-  private val originalTimeZone = TimeZone.getDefault
-  private val originalLocale = Locale.getDefault
   private val testTempDir = Utils.createTempDir()
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     TestHive.setCacheTables(true)
-    // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
-    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
-    // Add Locale setting
-    Locale.setDefault(Locale.US)
 
     // The following settings are used for generating golden files with Hive.
     // We have to use kryo to correctly let Hive serialize plans with window functions.
@@ -769,18 +754,16 @@ class HiveWindowFunctionQueryFileSuite
     // sql("set mapreduce.jobtracker.address=local")
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       TestHive.setCacheTables(false)
-      TimeZone.setDefault(originalTimeZone)
-      Locale.setDefault(originalLocale)
       TestHive.reset()
     } finally {
       super.afterAll()
     }
   }
 
-  override def blackList: Seq[String] = Seq(
+  override def excludeList: Seq[String] = Seq(
     // Partitioned table functions are not supported.
     "ptf*",
     // tests of windowing.q are in HiveWindowFunctionQueryBaseSuite
@@ -808,12 +791,12 @@ class HiveWindowFunctionQueryFileSuite
     "windowing_adjust_rowcontainer_sz"
   )
 
-  override def whiteList: Seq[String] = Seq(
+  override def includeList: Seq[String] = Seq(
     "windowing_udaf2"
   )
 
-  // Only run those query tests in the realWhileList (do not try other ignored query files).
+  // Only run those query tests in the realIncludeList (do not try other ignored query files).
   override def testCases: Seq[(String, File)] = super.testCases.filter {
-    case (name, _) => realWhiteList.contains(name)
+    case (name, _) => realIncludeList.contains(name)
   }
 }

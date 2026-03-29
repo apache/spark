@@ -20,8 +20,6 @@ A simple example demonstrating basic Spark SQL features.
 Run with:
   ./bin/spark-submit examples/src/main/python/sql/basic.py
 """
-from __future__ import print_function
-
 # $example on:init_session$
 from pyspark.sql import SparkSession
 # $example off:init_session$
@@ -32,11 +30,11 @@ from pyspark.sql import Row
 
 # $example on:programmatic_schema$
 # Import data types
-from pyspark.sql.types import *
+from pyspark.sql.types import StringType, StructType, StructField
 # $example off:programmatic_schema$
 
 
-def basic_df_example(spark):
+def basic_df_example(spark: SparkSession) -> None:
     # $example on:create_df$
     # spark is an existing SparkSession
     df = spark.read.json("examples/src/main/resources/people.json")
@@ -139,7 +137,7 @@ def basic_df_example(spark):
     # $example off:global_temp_view$
 
 
-def schema_inference_example(spark):
+def schema_inference_example(spark: SparkSession) -> None:
     # $example on:schema_inferring$
     sc = spark.sparkContext
 
@@ -164,7 +162,7 @@ def schema_inference_example(spark):
     # $example off:schema_inferring$
 
 
-def programmatic_schema_example(spark):
+def programmatic_schema_example(spark: SparkSession) -> None:
     # $example on:programmatic_schema$
     sc = spark.sparkContext
 
@@ -198,6 +196,7 @@ def programmatic_schema_example(spark):
     # | Justin|
     # +-------+
     # $example off:programmatic_schema$
+
 
 if __name__ == "__main__":
     # $example on:init_session$

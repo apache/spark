@@ -17,7 +17,8 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
+
 import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -67,13 +68,12 @@ public final class ChunkFetchSuccess extends AbstractResponseMessage {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(streamChunkId, body());
+    return Objects.hash(streamChunkId, body());
   }
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof ChunkFetchSuccess) {
-      ChunkFetchSuccess o = (ChunkFetchSuccess) other;
+    if (other instanceof ChunkFetchSuccess o) {
       return streamChunkId.equals(o.streamChunkId) && super.equals(o);
     }
     return false;
@@ -81,9 +81,6 @@ public final class ChunkFetchSuccess extends AbstractResponseMessage {
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("streamChunkId", streamChunkId)
-      .add("buffer", body())
-      .toString();
+    return "ChunkFetchSuccess[streamChunkId=" + streamChunkId + ",body=" + body() + "]";
   }
 }

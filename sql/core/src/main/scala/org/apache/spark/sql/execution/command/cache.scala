@@ -17,79 +17,31 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.util.Locale
-
-import org.apache.spark.sql.{Dataset, Row, SparkSession}
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.storage.StorageLevel
-
-case class CacheTableCommand(
-    tableIdent: TableIdentifier,
-    plan: Option[LogicalPlan],
-    isLazy: Boolean,
-    options: Map[String, String]) extends RunnableCommand {
-  require(plan.isEmpty || tableIdent.database.isEmpty,
-    "Database name is not allowed in CACHE TABLE AS SELECT")
-
-  override protected def innerChildren: Seq[QueryPlan[_]] = plan.toSeq
-
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    plan.foreach { logicalPlan =>
-      Dataset.ofRows(sparkSession, logicalPlan).createTempView(tableIdent.quotedString)
-    }
-
-    val storageLevelKey = "storagelevel"
-    val storageLevelValue =
-      CaseInsensitiveMap(options).get(storageLevelKey).map(_.toUpperCase(Locale.ROOT))
-    val withoutStorageLevel = options.filterKeys(_.toLowerCase(Locale.ROOT) != storageLevelKey)
-    if (withoutStorageLevel.nonEmpty) {
-      logWarning(s"Invalid options: ${withoutStorageLevel.mkString(", ")}")
-    }
-
-    if (storageLevelValue.nonEmpty) {
-      sparkSession.catalog.cacheTable(
-        tableIdent.quotedString, StorageLevel.fromString(storageLevelValue.get))
-    } else {
-      sparkSession.catalog.cacheTable(tableIdent.quotedString)
-    }
-
-    if (!isLazy) {
-      // Performs eager caching
-      sparkSession.table(tableIdent).count()
-    }
-
-    Seq.empty[Row]
-  }
-}
-
-
-case class UncacheTableCommand(
-    tableIdent: TableIdentifier,
-    ifExists: Boolean) extends RunnableCommand {
-
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    val tableId = tableIdent.quotedString
-    if (!ifExists || sparkSession.catalog.tableExists(tableId)) {
-      sparkSession.catalog.uncacheTable(tableId)
-    }
-    Seq.empty[Row]
-  }
-}
+import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.ShowCachedTables
 
 /**
  * Clear all cached data from the in-memory cache.
  */
-case class ClearCacheCommand() extends RunnableCommand {
+case object ClearCacheCommand extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     sparkSession.catalog.clearCache()
     Seq.empty[Row]
   }
+}
 
-  /** [[org.apache.spark.sql.catalyst.trees.TreeNode.makeCopy()]] does not support 0-arg ctor. */
-  override def makeCopy(newArgs: Array[AnyRef]): ClearCacheCommand = ClearCacheCommand()
+/**
+ * The command for `SHOW CACHED TABLES`.
+ */
+case object ShowCachedTablesCommand extends LeafRunnableCommand {
+
+  override val output: Seq[Attribute] = ShowCachedTables.output
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.sharedState.cacheManager.listNamedCachedTables().map { case (name, level) =>
+      Row(name, level.description)
+    }
+  }
 }

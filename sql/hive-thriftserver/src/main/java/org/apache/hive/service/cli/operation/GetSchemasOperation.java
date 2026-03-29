@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,6 +27,8 @@ import org.apache.hive.service.cli.RowSet;
 import org.apache.hive.service.cli.RowSetFactory;
 import org.apache.hive.service.cli.TableSchema;
 import org.apache.hive.service.cli.session.HiveSession;
+import org.apache.hive.service.rpc.thrift.TRowSet;
+import org.apache.hive.service.rpc.thrift.TTableSchema;
 
 /**
  * GetSchemasOperation.
@@ -41,14 +42,14 @@ public class GetSchemasOperation extends MetadataOperation {
   .addStringColumn("TABLE_SCHEM", "Schema name.")
   .addStringColumn("TABLE_CATALOG", "Catalog name.");
 
-  private RowSet rowSet;
+  protected RowSet rowSet;
 
   protected GetSchemasOperation(HiveSession parentSession,
       String catalogName, String schemaName) {
     super(parentSession, OperationType.GET_SCHEMAS);
     this.catalogName = catalogName;
     this.schemaName = schemaName;
-    this.rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion());
+    this.rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion(), false);
   }
 
   @Override
@@ -76,21 +77,21 @@ public class GetSchemasOperation extends MetadataOperation {
    * @see org.apache.hive.service.cli.Operation#getResultSetSchema()
    */
   @Override
-  public TableSchema getResultSetSchema() throws HiveSQLException {
+  public TTableSchema getResultSetSchema() throws HiveSQLException {
     assertState(OperationState.FINISHED);
-    return RESULT_SET_SCHEMA;
+    return RESULT_SET_SCHEMA.toTTableSchema();
   }
 
   /* (non-Javadoc)
    * @see org.apache.hive.service.cli.Operation#getNextRowSet(org.apache.hive.service.cli.FetchOrientation, long)
    */
   @Override
-  public RowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException {
+  public TRowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException {
     assertState(OperationState.FINISHED);
     validateDefaultFetchOrientation(orientation);
     if (orientation.equals(FetchOrientation.FETCH_FIRST)) {
       rowSet.setStartOffset(0);
     }
-    return rowSet.extractSubset((int)maxRows);
+    return rowSet.extractSubset((int)maxRows).toTRowSet();
   }
 }

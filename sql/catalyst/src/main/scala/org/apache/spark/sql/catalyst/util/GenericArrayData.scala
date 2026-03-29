@@ -17,37 +17,35 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.{DataType, Decimal}
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-
-private object GenericArrayData {
-
-  // SPARK-16634: Workaround for JVM bug present in some 1.7 versions.
-  def anyToSeq(seqOrArray: Any): Seq[Any] = seqOrArray match {
-    case seq: Seq[Any] => seq
-    case array: Array[_] => array.toSeq
-  }
-
-}
+import org.apache.spark.unsafe.types._
 
 class GenericArrayData(val array: Array[Any]) extends ArrayData {
 
-  def this(seq: Seq[Any]) = this(seq.toArray)
-  def this(list: java.util.List[Any]) = this(list.asScala)
+  // Specified this as`scala.collection.Seq` because seqOrArray can be
+  // `mutable.ArraySeq` in Scala 2.13
+  def this(seq: scala.collection.Seq[Any]) = this(seq.toArray)
+  def this(list: java.util.List[Any]) = this(list.asScala.toArray)
 
   // TODO: This is boxing.  We should specialize.
-  def this(primitiveArray: Array[Int]) = this(primitiveArray.toSeq)
-  def this(primitiveArray: Array[Long]) = this(primitiveArray.toSeq)
-  def this(primitiveArray: Array[Float]) = this(primitiveArray.toSeq)
-  def this(primitiveArray: Array[Double]) = this(primitiveArray.toSeq)
-  def this(primitiveArray: Array[Short]) = this(primitiveArray.toSeq)
-  def this(primitiveArray: Array[Byte]) = this(primitiveArray.toSeq)
-  def this(primitiveArray: Array[Boolean]) = this(primitiveArray.toSeq)
+  def this(primitiveArray: Array[Int]) = this(primitiveArray.toArray[Any])
+  def this(primitiveArray: Array[Long]) = this(primitiveArray.toArray[Any])
+  def this(primitiveArray: Array[Float]) = this(primitiveArray.toArray[Any])
+  def this(primitiveArray: Array[Double]) = this(primitiveArray.toArray[Any])
+  def this(primitiveArray: Array[Short]) = this(primitiveArray.toArray[Any])
+  def this(primitiveArray: Array[Byte]) = this(primitiveArray.toArray[Any])
+  def this(primitiveArray: Array[Boolean]) = this(primitiveArray.toArray[Any])
 
-  def this(seqOrArray: Any) = this(GenericArrayData.anyToSeq(seqOrArray))
+  def this(seqOrArray: Any) = this(seqOrArray match {
+    // Specified this as`scala.collection.Seq` because seqOrArray can be
+    // `mutable.ArraySeq` in Scala 2.13
+    case seq: scala.collection.Seq[Any] => seq.toArray
+    case array: Array[Any] => array  // array of objects, so no need to convert
+    case array: Array[_] => array.toArray[Any] // array of primitives, so box them
+  })
 
   override def copy(): ArrayData = {
     val newValues = new Array[Any](array.length)
@@ -74,7 +72,10 @@ class GenericArrayData(val array: Array[Any]) extends ArrayData {
   override def getDecimal(ordinal: Int, precision: Int, scale: Int): Decimal = getAs(ordinal)
   override def getUTF8String(ordinal: Int): UTF8String = getAs(ordinal)
   override def getBinary(ordinal: Int): Array[Byte] = getAs(ordinal)
+  override def getGeography(ordinal: Int): GeographyVal = getAs(ordinal)
+  override def getGeometry(ordinal: Int): GeometryVal = getAs(ordinal)
   override def getInterval(ordinal: Int): CalendarInterval = getAs(ordinal)
+  override def getVariant(ordinal: Int): VariantVal = getAs(ordinal)
   override def getStruct(ordinal: Int, numFields: Int): InternalRow = getAs(ordinal)
   override def getArray(ordinal: Int): ArrayData = getAs(ordinal)
   override def getMap(ordinal: Int): MapData = getAs(ordinal)
@@ -122,7 +123,7 @@ class GenericArrayData(val array: Array[Any]) extends ArrayData {
             if (!o2.isInstanceOf[Double] || ! java.lang.Double.isNaN(o2.asInstanceOf[Double])) {
               return false
             }
-          case _ => if (!o1.equals(o2)) {
+          case _ => if (o1.getClass != o2.getClass || o1 != o2) {
             return false
           }
         }

@@ -26,9 +26,9 @@ import org.apache.spark.sql.SparkSession
  * Usage: SimpleSkewedGroupByTest [numMappers] [numKVPairs] [valSize] [numReducers] [ratio]
  */
 object SimpleSkewedGroupByTest {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("SimpleSkewedGroupByTest")
       .getOrCreate()
 
@@ -50,16 +50,16 @@ object SimpleSkewedGroupByTest {
           result(i) = (offset, byteArr)
         } else {
           // generate a key for one of the other reducers
-          val key = 1 + ranGen.nextInt(numReducers-1) + offset
+          val key = 1 + ranGen.nextInt(numReducers - 1) + offset
           result(i) = (key, byteArr)
         }
       }
       result
-    }.cache
+    }.cache()
     // Enforce that everything has been calculated and in cache
-    pairs1.count
+    pairs1.count()
 
-    println(s"RESULT: ${pairs1.groupByKey(numReducers).count}")
+    println(s"RESULT: ${pairs1.groupByKey(numReducers).count()}")
 
     spark.stop()
   }

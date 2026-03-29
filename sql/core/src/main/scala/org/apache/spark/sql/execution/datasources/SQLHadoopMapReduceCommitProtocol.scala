@@ -22,6 +22,7 @@ import org.apache.hadoop.mapreduce.{OutputCommitter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.sql.internal.SQLConf
 
@@ -44,7 +45,8 @@ class SQLHadoopMapReduceCommitProtocol(
       configuration.getClass(SQLConf.OUTPUT_COMMITTER_CLASS.key, null, classOf[OutputCommitter])
 
     if (clazz != null) {
-      logInfo(s"Using user defined output committer class ${clazz.getCanonicalName}")
+      logInfo(log"Using user defined output committer class " +
+        log"${MDC(CLASS_NAME, clazz.getCanonicalName)}")
 
       // Every output format based on org.apache.hadoop.mapreduce.lib.output.OutputFormat
       // has an associated output committer. To override this output committer,
@@ -55,7 +57,8 @@ class SQLHadoopMapReduceCommitProtocol(
         // The specified output committer is a FileOutputCommitter.
         // So, we will use the FileOutputCommitter-specified constructor.
         val ctor = clazz.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
-        committer = ctor.newInstance(new Path(path), context)
+        val committerOutputPath = if (dynamicPartitionOverwrite) stagingDir else new Path(path)
+        committer = ctor.newInstance(committerOutputPath, context)
       } else {
         // The specified output committer is just an OutputCommitter.
         // So, we will use the no-argument constructor.
@@ -63,7 +66,8 @@ class SQLHadoopMapReduceCommitProtocol(
         committer = ctor.newInstance()
       }
     }
-    logInfo(s"Using output committer class ${committer.getClass.getCanonicalName}")
+    logInfo(log"Using output committer class " +
+      log"${MDC(CLASS_NAME, committer.getClass.getCanonicalName)}")
     committer
   }
 }

@@ -19,9 +19,12 @@ package org.apache.spark.mllib.tree
 
 import scala.collection.mutable
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.TreeEnsembleModel
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.StatCounter
 
 object EnsembleTestHelper {
@@ -36,21 +39,21 @@ object EnsembleTestHelper {
       numCols: Int,
       expectedMean: Double,
       expectedStddev: Double,
-      epsilon: Double) {
+      epsilon: Double): Unit = {
     val values = new mutable.ArrayBuffer[Double]()
     data.foreach { row =>
-      assert(row.size == numCols)
+      assert(row.length == numCols)
       values ++= row
     }
     val stats = new StatCounter(values)
-    assert(math.abs(stats.mean - expectedMean) < epsilon)
-    assert(math.abs(stats.stdev - expectedStddev) < epsilon)
+    assert(stats.mean ~== expectedMean absTol epsilon)
+    assert(stats.stdev ~== expectedStddev absTol epsilon)
   }
 
   def validateClassifier(
       model: TreeEnsembleModel,
       input: Seq[LabeledPoint],
-      requiredAccuracy: Double) {
+      requiredAccuracy: Double): Unit = {
     val predictions = input.map(x => model.predict(x.features))
     val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
       prediction != expected.label
@@ -67,7 +70,7 @@ object EnsembleTestHelper {
       model: TreeEnsembleModel,
       input: Seq[LabeledPoint],
       required: Double,
-      metricName: String = "mse") {
+      metricName: String = "mse"): Unit = {
     val predictions = input.map(x => model.predict(x.features))
     val errors = predictions.zip(input).map { case (prediction, point) =>
       point.label - prediction

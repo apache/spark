@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.types._
 
 class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   private def checkTuple(actual: Expression, expected: Seq[InternalRow]): Unit = {
-    assert(actual.eval(null).asInstanceOf[TraversableOnce[InternalRow]].toSeq === expected)
+    assert(actual.eval(null).asInstanceOf[IterableOnce[InternalRow]].iterator.to(Seq) === expected)
   }
 
   private final val empty_array = CreateArray(Seq.empty)
@@ -76,9 +78,40 @@ class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       Stack(Seq(3, 1, 1.0, "a", 2, 2.0, "b", 3, 3.0, "c").map(Literal(_))),
       Seq(create_row(1, 1.0, "a"), create_row(2, 2.0, "b"), create_row(3, 3.0, "c")))
 
-    assert(Stack(Seq(Literal(1))).checkInputDataTypes().isFailure)
-    assert(Stack(Seq(Literal(1.0))).checkInputDataTypes().isFailure)
+    checkError(
+      exception = intercept[AnalysisException] {
+        Stack(Seq(Literal(1))).checkInputDataTypes()
+      },
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`stack`",
+        "expectedNum" -> "> 1",
+        "actualNum" -> "1",
+        "docroot" -> SPARK_DOC_ROOT)
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        Stack(Seq(Literal(1.0))).checkInputDataTypes()
+      },
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`stack`",
+        "expectedNum" -> "> 1",
+        "actualNum" -> "1",
+        "docroot" -> SPARK_DOC_ROOT)
+    )
     assert(Stack(Seq(Literal(1), Literal(1), Literal(1.0))).checkInputDataTypes().isSuccess)
-    assert(Stack(Seq(Literal(2), Literal(1), Literal(1.0))).checkInputDataTypes().isFailure)
+    assert(Stack(Seq(Literal(2), Literal(1), Literal(1.0))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "STACK_COLUMN_DIFF_TYPES",
+        messageParameters = Map(
+          "rightParamIndex" -> "2",
+          "leftType" -> "\"INT\"",
+          "leftParamIndex" -> "1",
+          "columnIndex" -> "0",
+          "rightType" -> "\"DOUBLE\""
+        )
+      )
+    )
   }
 }

@@ -20,12 +20,14 @@ package org.apache.spark.deploy
 import java.io._
 import java.util.concurrent.{Semaphore, TimeUnit}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkException, SparkUserAppException}
-import org.apache.spark.api.r.{RBackend, RUtils, SparkRDefaults}
+import org.apache.spark.api.r.{RBackend, RUtils}
+import org.apache.spark.internal.config.R._
+import org.apache.spark.internal.config.SUBMIT_DEPLOY_MODE
 import org.apache.spark.util.RedirectThread
 
 /**
@@ -43,9 +45,9 @@ object RRunner {
     val rCommand = {
       // "spark.sparkr.r.command" is deprecated and replaced by "spark.r.command",
       // but kept here for backward compatibility.
-      var cmd = sys.props.getOrElse("spark.sparkr.r.command", "Rscript")
-      cmd = sys.props.getOrElse("spark.r.command", cmd)
-      if (sys.props.getOrElse("spark.submit.deployMode", "client") == "client") {
+      var cmd = sys.props.getOrElse(SPARKR_COMMAND.key, SPARKR_COMMAND.defaultValue.get)
+      cmd = sys.props.getOrElse(R_COMMAND.key, cmd)
+      if (sys.props.getOrElse(SUBMIT_DEPLOY_MODE.key, "client") == "client") {
         cmd = sys.props.getOrElse("spark.r.driver.command", cmd)
       }
       cmd
@@ -53,7 +55,7 @@ object RRunner {
 
     //  Connection timeout set by R process on its connection to RBackend in seconds.
     val backendConnectionTimeout = sys.props.getOrElse(
-      "spark.r.backendConnectionTimeout", SparkRDefaults.DEFAULT_CONNECTION_TIMEOUT.toString)
+      R_BACKEND_CONNECTION_TIMEOUT.key, R_BACKEND_CONNECTION_TIMEOUT.defaultValue.get.toString)
 
     // Check if the file path exists.
     // If not, change directory to current working directory for YARN cluster mode
@@ -71,7 +73,7 @@ object RRunner {
     @volatile var sparkRBackendSecret: String = null
     val initialized = new Semaphore(0)
     val sparkRBackendThread = new Thread("SparkR backend") {
-      override def run() {
+      override def run(): Unit = {
         val (port, authHelper) = sparkRBackend.init()
         sparkRBackendPort = port
         sparkRBackendSecret = authHelper.secret

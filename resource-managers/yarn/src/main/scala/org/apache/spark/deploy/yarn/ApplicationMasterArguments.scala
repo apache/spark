@@ -26,6 +26,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
   var primaryRFile: String = null
   var userArgs: Seq[String] = Nil
   var propertiesFile: String = null
+  var distCacheConf: String = null
 
   parseArgs(args.toList)
 
@@ -62,6 +63,10 @@ class ApplicationMasterArguments(val args: Array[String]) {
           propertiesFile = value
           args = tail
 
+        case ("--dist-cache-conf") :: value :: tail =>
+          distCacheConf = value
+          args = tail
+
         case _ =>
           printUsageAndExit(1, args)
       }
@@ -77,7 +82,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
     userArgs = userArgsBuffer.toList
   }
 
-  def printUsageAndExit(exitCode: Int, unknownParam: Any = null) {
+  def printUsageAndExit(exitCode: Int, unknownParam: Any = null): Unit = {
     // scalastyle:off println
     if (unknownParam != null) {
       System.err.println("Unknown/unsupported param " + unknownParam)
@@ -96,8 +101,4 @@ class ApplicationMasterArguments(val args: Array[String]) {
     // scalastyle:on println
     System.exit(exitCode)
   }
-}
-
-object ApplicationMasterArguments {
-  val DEFAULT_NUMBER_EXECUTORS = 2
 }

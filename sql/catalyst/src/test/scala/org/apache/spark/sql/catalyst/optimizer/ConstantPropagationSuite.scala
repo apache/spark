@@ -40,11 +40,12 @@ class ConstantPropagationSuite extends PlanTest {
           BooleanSimplification) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+  val testRelation = LocalRelation($"a".int, $"b".int, $"c".int, $"d".int.notNull)
 
-  private val columnA = 'a
-  private val columnB = 'b
-  private val columnC = 'c
+  private val columnA = $"a"
+  private val columnB = $"b"
+  private val columnC = $"c"
+  private val columnD = $"d"
 
   test("basic test") {
     val query = testRelation
@@ -158,9 +159,59 @@ class ConstantPropagationSuite extends PlanTest {
         columnA === Literal(1) && columnA === Literal(2) && columnB === Add(columnA, Literal(3)))
 
     val correctAnswer = testRelation
-      .select(columnA)
-      .where(columnA === Literal(1) && columnA === Literal(2) && columnB === Literal(5)).analyze
+      .select(columnA, columnB)
+      .where(Literal.FalseLiteral)
+      .select(columnA).analyze
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer)
+  }
+
+  test("SPARK-30447: take nullability into account") {
+    val query = testRelation
+      .select(columnA)
+      .where(!(columnA === Literal(1) && Add(columnA, 1) === Literal(1)))
+      .analyze
+    val correctAnswer = testRelation
+      .select(columnA)
+      .where(columnA =!= Literal(1) || Add(columnA, 1) =!= Literal(1))
+      .analyze
+    comparePlans(Optimize.execute(query), correctAnswer)
+
+    val query2 = testRelation
+      .select(columnD)
+      .where(!(columnD === Literal(1) && Add(columnD, 1) === Literal(1)))
+      .analyze
+    val correctAnswer2 = testRelation
+      .select(columnD)
+      .where(true)
+      .analyze
+    comparePlans(Optimize.execute(query2), correctAnswer2)
+  }
+
+  test("SPARK-42500: ConstantPropagation supports more cases") {
+    comparePlans(
+      Optimize.execute(testRelation.where(columnA === 1 && columnB > columnA + 2).analyze),
+      testRelation.where(columnA === 1 && columnB > 3).analyze)
+
+    comparePlans(
+      Optimize.execute(testRelation.where(columnA === 1 && columnA === 2).analyze),
+      testRelation.where(Literal.FalseLiteral).analyze)
+
+    comparePlans(
+      Optimize.execute(testRelation.where(columnA === 1 && columnA === columnA + 2).analyze),
+      testRelation.where(Literal.FalseLiteral).analyze)
+
+    comparePlans(
+      Optimize.execute(
+        testRelation.where((columnA === 1 || columnB === 2) && columnB === 1).analyze),
+      testRelation.where(columnA === 1 && columnB === 1).analyze)
+
+    comparePlans(
+      Optimize.execute(testRelation.where(columnA === 1 && columnA === 1).analyze),
+      testRelation.where(columnA === 1).analyze)
+
+    comparePlans(
+      Optimize.execute(testRelation.where(Not(columnA === 1 && columnA === columnA + 2)).analyze),
+      testRelation.where(Not(columnA === 1) || Not(columnA === columnA + 2)).analyze)
   }
 }

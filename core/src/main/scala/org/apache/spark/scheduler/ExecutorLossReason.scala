@@ -20,7 +20,7 @@ package org.apache.spark.scheduler
 import org.apache.spark.executor.ExecutorExitCode
 
 /**
- * Represents an explanation for an executor or whole slave failing or exiting.
+ * Represents an explanation for an executor or whole process failing or exiting.
  */
 private[spark]
 class ExecutorLossReason(val message: String) extends Serializable {
@@ -40,6 +40,10 @@ private[spark] object ExecutorExited {
   }
 }
 
+private[spark] object ExecutorLossMessage {
+  val decommissionFinished = "Finished decommissioning"
+}
+
 private[spark] object ExecutorKilled extends ExecutorLossReason("Executor killed by driver.")
 
 /**
@@ -53,8 +57,33 @@ private [spark] object LossReasonPending extends ExecutorLossReason("Pending los
 
 /**
  * @param _message human readable loss reason
- * @param workerLost whether the worker is confirmed lost too (i.e. including shuffle service)
+ * @param workerHost it's defined when the host is confirmed lost too (i.e. including
+ *                   shuffle service)
+ * @param causedByApp whether the loss of the executor is the fault of the running app.
+ *                    (assumed true by default unless known explicitly otherwise)
  */
 private[spark]
-case class SlaveLost(_message: String = "Slave lost", workerLost: Boolean = false)
+case class ExecutorProcessLost(
+    _message: String = "Executor Process Lost",
+    workerHost: Option[String] = None,
+    causedByApp: Boolean = true)
   extends ExecutorLossReason(_message)
+
+/**
+ * A loss reason that means the executor is marked for decommissioning.
+ *
+ * This is used by the task scheduler to remove state associated with the executor, but
+ * not yet fail any tasks that were running in the executor before the executor is "fully" lost.
+ * If you update this code make sure to re-run the K8s integration tests.
+ *
+ * @param workerHost it is defined when the worker is decommissioned too
+ * @param reason detailed decommission message
+ */
+private [spark] case class ExecutorDecommission(
+    workerHost: Option[String] = None,
+    reason: String = "")
+  extends ExecutorLossReason(ExecutorDecommission.msgPrefix + reason)
+
+private[spark] object ExecutorDecommission {
+  val msgPrefix = "Executor decommission: "
+}

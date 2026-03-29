@@ -2,6 +2,21 @@
 layout: global
 title: Collaborative Filtering
 displayTitle: Collaborative Filtering
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -41,7 +56,7 @@ for example, users giving ratings to movies.
 
 It is common in many real-world use cases to only have access to *implicit feedback* (e.g. views,
 clicks, purchases, likes, shares etc.). The approach used in `spark.ml` to deal with such data is taken
-from [Collaborative Filtering for Implicit Feedback Datasets](http://dx.doi.org/10.1109/ICDM.2008.22).
+from [Collaborative Filtering for Implicit Feedback Datasets](https://doi.org/10.1109/ICDM.2008.22).
 Essentially, instead of trying to model the matrix of ratings directly, this approach treats the data
 as numbers representing the *strength* in observations of user actions (such as the number of clicks,
 or the cumulative duration someone spent viewing a movie). Those numbers are then related to the level of
@@ -55,7 +70,7 @@ We scale the regularization parameter `regParam` in solving each least squares p
 the number of ratings the user generated in updating user factors,
 or the number of ratings the product received in updating product factors.
 This approach is named "ALS-WR" and discussed in the paper
-"[Large-Scale Parallel Collaborative Filtering for the Netflix Prize](http://dx.doi.org/10.1007/978-3-540-68880-8_32)".
+"[Large-Scale Parallel Collaborative Filtering for the Netflix Prize](https://doi.org/10.1007/978-3-540-68880-8_32)".
 It makes `regParam` less dependent on the scale of the dataset, so we can apply the
 best parameter learned from a sampled subset to the full dataset and expect similar performance.
 
@@ -90,6 +105,33 @@ above) and "drop". Further strategies may be supported in future.
 **Examples**
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+In the following example, we load ratings data from the
+[MovieLens dataset](http://grouplens.org/datasets/movielens/), each row
+consisting of a user, a movie, a rating and a timestamp.
+We then train an ALS model which assumes, by default, that the ratings are
+explicit (`implicitPrefs` is `False`).
+We evaluate the recommendation model by measuring the root-mean-square error of
+rating prediction.
+
+Refer to the [`ALS` Python docs](api/python/reference/api/pyspark.ml.recommendation.ALS.html)
+for more details on the API.
+
+{% include_example python/ml/als_example.py %}
+
+If the rating matrix is derived from another source of information (i.e. it is
+inferred from other signals), you can set `implicitPrefs` to `True` to get
+better results:
+
+{% highlight python %}
+als = ALS(maxIter=5, regParam=0.01, implicitPrefs=True,
+          userCol="userId", itemCol="movieId", ratingCol="rating")
+{% endhighlight %}
+
+</div>
+
 <div data-lang="scala" markdown="1">
 
 In the following example, we load ratings data from the
@@ -100,7 +142,7 @@ explicit (`implicitPrefs` is `false`).
 We evaluate the recommendation model by measuring the root-mean-square error of
 rating prediction.
 
-Refer to the [`ALS` Scala docs](api/scala/index.html#org.apache.spark.ml.recommendation.ALS)
+Refer to the [`ALS` Scala docs](api/scala/org/apache/spark/ml/recommendation/ALS.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/ALSExample.scala %}
@@ -152,35 +194,9 @@ ALS als = new ALS()
 
 </div>
 
-<div data-lang="python" markdown="1">
-
-In the following example, we load ratings data from the
-[MovieLens dataset](http://grouplens.org/datasets/movielens/), each row
-consisting of a user, a movie, a rating and a timestamp.
-We then train an ALS model which assumes, by default, that the ratings are
-explicit (`implicitPrefs` is `False`).
-We evaluate the recommendation model by measuring the root-mean-square error of
-rating prediction.
-
-Refer to the [`ALS` Python docs](api/python/pyspark.ml.html#pyspark.ml.recommendation.ALS)
-for more details on the API.
-
-{% include_example python/ml/als_example.py %}
-
-If the rating matrix is derived from another source of information (i.e. it is
-inferred from other signals), you can set `implicitPrefs` to `True` to get
-better results:
-
-{% highlight python %}
-als = ALS(maxIter=5, regParam=0.01, implicitPrefs=True,
-          userCol="userId", itemCol="movieId", ratingCol="rating")
-{% endhighlight %}
-
-</div>
-
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.als.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.als.html) for more details.
 
 {% include_example r/ml/als.R %}
 </div>

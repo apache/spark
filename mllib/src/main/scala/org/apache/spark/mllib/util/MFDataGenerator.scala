@@ -22,12 +22,12 @@ import java.{util => ju}
 import scala.util.Random
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.ArrayImplicits._
 
 /**
- * :: DeveloperApi ::
  * Generate RDD(s) containing data for Matrix Factorization.
  *
  * This method samples training entries according to the oversampling factor
@@ -50,11 +50,10 @@ import org.apache.spark.rdd.RDD
  *   test           (Boolean) Whether to create testing RDD.
  *   testSampFact   (Double) Percentage of training data to use as test data.
  */
-@DeveloperApi
 @Since("0.8.0")
 object MFDataGenerator {
   @Since("0.8.0")
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 2) {
       // scalastyle:off println
       println("Usage: MFDataGenerator " +
@@ -92,24 +91,24 @@ object MFDataGenerator {
 
     val omega = shuffled.slice(0, sampSize)
     val ordered = omega.sortWith(_ < _).toArray
-    val trainData: RDD[(Int, Int, Double)] = sc.parallelize(ordered)
+    val trainData: RDD[(Int, Int, Double)] = sc.parallelize(ordered.toImmutableArraySeq)
       .map(x => (x % m, x / m, fullData.values(x)))
 
     // optionally add gaussian noise
     if (noise) {
-      trainData.map(x => (x._1, x._2, x._3 + rand.nextGaussian * sigma))
+      trainData.map(x => (x._1, x._2, x._3 + rand.nextGaussian() * sigma))
     }
 
-    trainData.map(x => x._1 + "," + x._2 + "," + x._3).saveAsTextFile(outputPath)
+    trainData.map(x => s"${x._1},${x._2},${x._3}").saveAsTextFile(outputPath)
 
     // optionally generate testing data
     if (test) {
       val testSampSize = math.min(math.round(sampSize * testSampFact).toInt, mn - sampSize)
       val testOmega = shuffled.slice(sampSize, sampSize + testSampSize)
       val testOrdered = testOmega.sortWith(_ < _).toArray
-      val testData: RDD[(Int, Int, Double)] = sc.parallelize(testOrdered)
+      val testData: RDD[(Int, Int, Double)] = sc.parallelize(testOrdered.toImmutableArraySeq)
         .map(x => (x % m, x / m, fullData.values(x)))
-      testData.map(x => x._1 + "," + x._2 + "," + x._3).saveAsTextFile(outputPath)
+      testData.map(x => s"${x._1},${x._2},${x._3}").saveAsTextFile(outputPath)
     }
 
     sc.stop()

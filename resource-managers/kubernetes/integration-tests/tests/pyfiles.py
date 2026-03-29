@@ -14,12 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-from __future__ import print_function
-
 import sys
 
 from pyspark.sql import SparkSession
+from pyspark.sql.types import StringType
 
 
 if __name__ == "__main__":
@@ -33,6 +31,13 @@ if __name__ == "__main__":
 
     from py_container_checks import version_check
     # Begin of Python container checks
-    version_check(sys.argv[1], 2 if sys.argv[1] == "python" else 3)
+    version_check(sys.argv[1], 3)
+
+    # Check python executable at executors
+    spark.udf.register("get_sys_ver",
+                       lambda: "%d.%d" % sys.version_info[:2], StringType())
+    [row] = spark.sql("SELECT get_sys_ver()").collect()
+    driver_version = "%d.%d" % sys.version_info[:2]
+    print("Python runtime version check for executor is: " + str(row[0] == driver_version))
 
     spark.stop()

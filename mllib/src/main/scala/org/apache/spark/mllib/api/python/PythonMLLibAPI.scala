@@ -22,8 +22,7 @@ import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
-import scala.collection.JavaConverters._
-import scala.language.existentials
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import net.razorvine.pickle._
@@ -54,7 +53,9 @@ import org.apache.spark.mllib.tree.model.{DecisionTreeModel, GradientBoostedTree
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.types.LongType
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -90,15 +91,15 @@ private[python] class PythonMLLibAPI extends Serializable {
       initialWeights: Vector): JList[Object] = {
     try {
       val model = learner.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK), initialWeights)
-      if (model.isInstanceOf[LogisticRegressionModel]) {
-        val lrModel = model.asInstanceOf[LogisticRegressionModel]
-        List(lrModel.weights, lrModel.intercept, lrModel.numFeatures, lrModel.numClasses)
-          .map(_.asInstanceOf[Object]).asJava
-      } else {
-        List(model.weights, model.intercept).map(_.asInstanceOf[Object]).asJava
+      model match {
+        case lrModel: LogisticRegressionModel =>
+          List(lrModel.weights, lrModel.intercept, lrModel.numFeatures, lrModel.numClasses)
+            .map(_.asInstanceOf[Object]).asJava
+        case _ =>
+          List(model.weights, model.intercept).map(_.asInstanceOf[Object]).asJava
       }
     } finally {
-      data.rdd.unpersist(blocking = false)
+      data.rdd.unpersist()
     }
   }
 
@@ -336,7 +337,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       val model = isotonicRegressionAlg.run(input)
       List[AnyRef](model.boundaryVector, model.predictionVector).asJava
     } finally {
-      data.rdd.unpersist(blocking = false)
+      data.rdd.unpersist()
     }
   }
 
@@ -347,18 +348,19 @@ private[python] class PythonMLLibAPI extends Serializable {
       data: JavaRDD[Vector],
       k: Int,
       maxIterations: Int,
-      runs: Int,
       initializationMode: String,
       seed: java.lang.Long,
       initializationSteps: Int,
       epsilon: Double,
-      initialModel: java.util.ArrayList[Vector]): KMeansModel = {
+      initialModel: java.util.ArrayList[Vector],
+      distanceMeasure: String): KMeansModel = {
     val kMeansAlg = new KMeans()
       .setK(k)
       .setMaxIterations(maxIterations)
       .setInitializationMode(initializationMode)
       .setInitializationSteps(initializationSteps)
       .setEpsilon(epsilon)
+      .setDistanceMeasure(distanceMeasure)
 
     if (seed != null) kMeansAlg.setSeed(seed)
     if (!initialModel.isEmpty()) kMeansAlg.setInitialModel(new KMeansModel(initialModel))
@@ -366,7 +368,7 @@ private[python] class PythonMLLibAPI extends Serializable {
     try {
       kMeansAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
     } finally {
-      data.rdd.unpersist(blocking = false)
+      data.rdd.unpersist()
     }
   }
 
@@ -399,7 +401,7 @@ private[python] class PythonMLLibAPI extends Serializable {
 
     if (initialModelWeights != null && initialModelMu != null && initialModelSigma != null) {
       val gaussians = initialModelMu.asScala.toSeq.zip(initialModelSigma.asScala.toSeq).map {
-        case (x, y) => new MultivariateGaussian(x.asInstanceOf[Vector], y.asInstanceOf[Matrix])
+        case (x, y) => new MultivariateGaussian(x, y)
       }
       val initialModel = new GaussianMixtureModel(
         initialModelWeights.asScala.toArray, gaussians.toArray)
@@ -408,11 +410,7 @@ private[python] class PythonMLLibAPI extends Serializable {
 
     if (seed != null) gmmAlg.setSeed(seed)
 
-    try {
-      new GaussianMixtureModelWrapper(gmmAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK)))
-    } finally {
-      data.rdd.unpersist(blocking = false)
-    }
+    new GaussianMixtureModelWrapper(gmmAlg.run(data.rdd))
   }
 
   /**
@@ -704,7 +702,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       val model = word2vec.fit(dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER))
       new Word2VecModelWrapper(model)
     } finally {
-      dataJRDD.rdd.unpersist(blocking = false)
+      dataJRDD.rdd.unpersist()
     }
   }
 
@@ -742,7 +740,7 @@ private[python] class PythonMLLibAPI extends Serializable {
     try {
       DecisionTree.train(data.rdd.persist(StorageLevel.MEMORY_AND_DISK), strategy)
     } finally {
-      data.rdd.unpersist(blocking = false)
+      data.rdd.unpersist()
     }
   }
 
@@ -783,7 +781,7 @@ private[python] class PythonMLLibAPI extends Serializable {
         RandomForest.trainRegressor(cached, strategy, numTrees, featureSubsetStrategy, intSeed)
       }
     } finally {
-      cached.unpersist(blocking = false)
+      cached.unpersist()
     }
   }
 
@@ -814,7 +812,7 @@ private[python] class PythonMLLibAPI extends Serializable {
     try {
       GradientBoostedTrees.train(cached, boostingStrategy)
     } finally {
-      cached.unpersist(blocking = false)
+      cached.unpersist()
     }
   }
 
@@ -1143,12 +1141,21 @@ private[python] class PythonMLLibAPI extends Serializable {
     new RowMatrix(rows.rdd, numRows, numCols)
   }
 
+  def createRowMatrix(df: DataFrame, numRows: Long, numCols: Int): RowMatrix = {
+    require(df.schema.length == 1 && df.schema.head.dataType.getClass == classOf[VectorUDT],
+      "DataFrame must have a single vector type column")
+    new RowMatrix(df.rdd.map { case Row(vector: Vector) => vector }, numRows, numCols)
+  }
+
   /**
    * Wrapper around IndexedRowMatrix constructor.
    */
   def createIndexedRowMatrix(rows: DataFrame, numRows: Long, numCols: Int): IndexedRowMatrix = {
     // We use DataFrames for serialization of IndexedRows from Python,
     // so map each Row in the DataFrame back to an IndexedRow.
+    require(rows.schema.length == 2 && rows.schema.head.dataType == LongType &&
+      rows.schema(1).dataType.getClass == classOf[VectorUDT],
+      "DataFrame must consist of a long type index column and a vector type column")
     val indexedRows = rows.rdd.map {
       case Row(index: Long, vector: Vector) => IndexedRow(index, vector)
     }
@@ -1219,28 +1226,28 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Python-friendly version of [[MLUtils.convertVectorColumnsToML()]].
    */
   def convertVectorColumnsToML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
-    MLUtils.convertVectorColumnsToML(dataset, cols.asScala: _*)
+    MLUtils.convertVectorColumnsToML(dataset, cols.asScala.toSeq: _*)
   }
 
   /**
    * Python-friendly version of [[MLUtils.convertVectorColumnsFromML()]]
    */
   def convertVectorColumnsFromML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
-    MLUtils.convertVectorColumnsFromML(dataset, cols.asScala: _*)
+    MLUtils.convertVectorColumnsFromML(dataset, cols.asScala.toSeq: _*)
   }
 
   /**
    * Python-friendly version of [[MLUtils.convertMatrixColumnsToML()]].
    */
   def convertMatrixColumnsToML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
-    MLUtils.convertMatrixColumnsToML(dataset, cols.asScala: _*)
+    MLUtils.convertMatrixColumnsToML(dataset, cols.asScala.toSeq: _*)
   }
 
   /**
    * Python-friendly version of [[MLUtils.convertMatrixColumnsFromML()]]
    */
   def convertMatrixColumnsFromML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
-    MLUtils.convertMatrixColumnsFromML(dataset, cols.asScala: _*)
+    MLUtils.convertMatrixColumnsFromML(dataset, cols.asScala.toSeq: _*)
   }
 }
 
@@ -1303,14 +1310,16 @@ private[spark] abstract class SerDeBase {
       }
     }
 
-    private[python] def saveState(obj: Object, out: OutputStream, pickler: Pickler)
+    private[python] def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit
   }
 
   def dumps(obj: AnyRef): Array[Byte] = {
     obj match {
       // Pickler in Python side cannot deserialize Scala Array normally. See SPARK-12834.
-      case array: Array[_] => new Pickler().dumps(array.toSeq.asJava)
-      case _ => new Pickler().dumps(obj)
+      case array: Array[_] => new Pickler(/* useMemo = */ true,
+        /* valueCompare = */ false).dumps(array.toImmutableArraySeq.asJava)
+      case _ => new Pickler(/* useMemo = */ true,
+        /* valueCompare = */ false).dumps(obj)
     }
   }
 

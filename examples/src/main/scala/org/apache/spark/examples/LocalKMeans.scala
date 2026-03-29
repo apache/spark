@@ -62,7 +62,7 @@ object LocalKMeans {
     bestIndex
   }
 
-  def showWarning() {
+  def showWarning(): Unit = {
     System.err.println(
       """WARN: This is a naive implementation of KMeans Clustering and is given as an example!
         |Please use org.apache.spark.ml.clustering.KMeans
@@ -70,7 +70,7 @@ object LocalKMeans {
       """.stripMargin)
   }
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     showWarning()
 
@@ -90,7 +90,7 @@ object LocalKMeans {
 
     println(s"Initial centers: $kPoints")
 
-    while(tempDist > convergeDist) {
+    while (tempDist > convergeDist) {
       val closest = data.map (p => (closestPoint(p, kPoints), (p, 1)))
 
       val mappings = closest.groupBy[Int] (x => x._1)
@@ -101,7 +101,7 @@ object LocalKMeans {
         }
       }
 
-      var newPoints = pointStats.map {mapping =>
+      val newPoints = pointStats.map { mapping =>
         (mapping._1, mapping._2._1 * (1.0 / mapping._2._2))}
 
       tempDist = 0.0

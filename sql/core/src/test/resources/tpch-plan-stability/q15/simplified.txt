@@ -1,0 +1,42 @@
+WholeStageCodegen (4)
+  Sort [s_suppkey]
+    InputAdapter
+      Exchange [s_suppkey] #1
+        WholeStageCodegen (3)
+          Project [s_suppkey,s_name,s_address,s_phone,total_revenue]
+            BroadcastHashJoin [s_suppkey,supplier_no]
+              Filter [s_suppkey]
+                ColumnarToRow
+                  InputAdapter
+                    Scan parquet spark_catalog.default.supplier [s_suppkey,s_name,s_address,s_phone]
+              InputAdapter
+                BroadcastExchange #2
+                  WholeStageCodegen (2)
+                    Filter [total_revenue]
+                      Subquery #1
+                        WholeStageCodegen (3)
+                          HashAggregate [max] [max(total_revenue),max(total_revenue),max]
+                            InputAdapter
+                              Exchange #4
+                                WholeStageCodegen (2)
+                                  HashAggregate [total_revenue] [max,max]
+                                    HashAggregate [l_suppkey,sum,isEmpty] [sum((l_extendedprice * (1 - l_discount))),total_revenue,sum,isEmpty]
+                                      InputAdapter
+                                        Exchange [l_suppkey] #5
+                                          WholeStageCodegen (1)
+                                            HashAggregate [l_suppkey,l_extendedprice,l_discount] [sum,isEmpty,sum,isEmpty]
+                                              Project [l_suppkey,l_extendedprice,l_discount]
+                                                Filter [l_shipdate]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet spark_catalog.default.lineitem [l_suppkey,l_extendedprice,l_discount,l_shipdate]
+                      HashAggregate [l_suppkey,sum,isEmpty] [sum((l_extendedprice * (1 - l_discount))),supplier_no,total_revenue,sum,isEmpty]
+                        InputAdapter
+                          Exchange [l_suppkey] #3
+                            WholeStageCodegen (1)
+                              HashAggregate [l_suppkey,l_extendedprice,l_discount] [sum,isEmpty,sum,isEmpty]
+                                Project [l_suppkey,l_extendedprice,l_discount]
+                                  Filter [l_shipdate,l_suppkey]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet spark_catalog.default.lineitem [l_suppkey,l_extendedprice,l_discount,l_shipdate]

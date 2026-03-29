@@ -21,15 +21,17 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 
 public class SparkSubmitOptionParserSuite extends BaseSuite {
 
   private SparkSubmitOptionParser parser;
 
-  @Before
+  @BeforeEach
   public void setUp() {
     parser = spy(new DummyParser());
   }
@@ -48,14 +50,17 @@ public class SparkSubmitOptionParserSuite extends BaseSuite {
       }
     }
 
+    int nullCount = 0;
     for (String[] switchNames : parser.switches) {
       int switchCount = 0;
       for (String name : switchNames) {
         parser.parse(Arrays.asList(name));
         count++;
+        nullCount++;
         switchCount++;
         verify(parser, times(switchCount)).handle(eq(switchNames[0]), same(null));
-        verify(parser, times(count)).handle(anyString(), any(String.class));
+        verify(parser, times(nullCount)).handle(anyString(), isNull());
+        verify(parser, times(count - nullCount)).handle(anyString(), any(String.class));
         verify(parser, times(count)).handleExtraArgs(eq(Collections.emptyList()));
       }
     }
@@ -70,9 +75,10 @@ public class SparkSubmitOptionParserSuite extends BaseSuite {
     verify(parser).handleExtraArgs(eq(Arrays.asList("bar")));
   }
 
-  @Test(expected=IllegalArgumentException.class)
+  @Test
   public void testMissingArg() {
-    parser.parse(Arrays.asList(parser.MASTER));
+    assertThrows(IllegalArgumentException.class,
+      () -> parser.parse(Arrays.asList(parser.MASTER)));
   }
 
   @Test

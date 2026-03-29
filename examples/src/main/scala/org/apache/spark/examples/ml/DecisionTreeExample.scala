@@ -65,7 +65,7 @@ object DecisionTreeExample {
       checkpointDir: Option[String] = None,
       checkpointInterval: Int = 10) extends AbstractParams[Params]
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val defaultParams = Params()
 
     val parser = new OptionParser[Params]("DecisionTreeExample") {
@@ -166,7 +166,7 @@ object DecisionTreeExample {
       algo: String,
       fracTest: Double): (DataFrame, DataFrame) = {
     val spark = SparkSession
-      .builder
+      .builder()
       .getOrCreate()
 
     // Load training data
@@ -199,7 +199,7 @@ object DecisionTreeExample {
 
   def run(params: Params): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName(s"DecisionTreeExample with $params")
       .getOrCreate()
 

@@ -17,33 +17,22 @@
 
 package org.apache.spark.ml.stat
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
-import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
-import org.apache.spark.mllib.stat.{Statistics => OldStatistics}
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions.col
-
+import org.apache.spark.mllib.stat.test.{ChiSqTest => OldChiSqTest}
+import org.apache.spark.sql._
+import org.apache.spark.sql.functions._
 
 /**
- * :: Experimental ::
- *
  * Chi-square hypothesis testing for categorical data.
  *
  * See <a href="http://en.wikipedia.org/wiki/Chi-squared_test">Wikipedia</a> for more information
  * on the Chi-squared test.
  */
-@Experimental
 @Since("2.2.0")
 object ChiSquareTest {
-
-  /** Used to construct output schema of tests */
-  private case class ChiSquareResult(
-      pValues: Vector,
-      degreesOfFreedom: Array[Int],
-      statistics: Vector)
 
   /**
    * Conduct Pearson's independence test for every feature against the label. For each feature, the
@@ -65,17 +54,48 @@ object ChiSquareTest {
    */
   @Since("2.2.0")
   def test(dataset: DataFrame, featuresCol: String, labelCol: String): DataFrame = {
+    test(dataset, featuresCol, labelCol, false)
+  }
+
+  /**
+   * @param dataset  DataFrame of categorical labels and categorical features.
+   *                 Real-valued features will be treated as categorical for each distinct value.
+   * @param featuresCol  Name of features column in dataset, of type `Vector` (`VectorUDT`)
+   * @param labelCol  Name of label column in dataset, of any numerical type
+   * @param flatten  If false, the returned DataFrame contains only a single Row, otherwise, one
+   *                 row per feature.
+   */
+  @Since("3.1.0")
+  def test(
+      dataset: DataFrame,
+      featuresCol: String,
+      labelCol: String,
+      flatten: Boolean): DataFrame = {
+    SchemaUtils.checkColumnType(dataset.schema, featuresCol, new VectorUDT)
+    SchemaUtils.checkNumericType(dataset.schema, labelCol)
+
     val spark = dataset.sparkSession
     import spark.implicits._
 
-    SchemaUtils.checkColumnType(dataset.schema, featuresCol, new VectorUDT)
-    SchemaUtils.checkNumericType(dataset.schema, labelCol)
-    val rdd = dataset.select(col(labelCol).cast("double"), col(featuresCol)).as[(Double, Vector)]
-      .rdd.map { case (label, features) => OldLabeledPoint(label, OldVectors.fromML(features)) }
-    val testResults = OldStatistics.chiSqTest(rdd)
-    val pValues: Vector = Vectors.dense(testResults.map(_.pValue))
-    val degreesOfFreedom: Array[Int] = testResults.map(_.degreesOfFreedom)
-    val statistics: Vector = Vectors.dense(testResults.map(_.statistic))
-    spark.createDataFrame(Seq(ChiSquareResult(pValues, degreesOfFreedom, statistics)))
+    val data = dataset.select(col(labelCol).cast("double"), col(featuresCol)).rdd
+      .map { case Row(label: Double, vec: Vector) => (label, OldVectors.fromML(vec)) }
+
+    val resRDD = OldChiSqTest.computeChiSquared(data)
+      .map { case (col, pValue, degreesOfFreedom, statistic, _) =>
+        (col, pValue, degreesOfFreedom, statistic)
+      }
+
+    if (flatten) {
+      resRDD.toDF("featureIndex", "pValue", "degreesOfFreedom", "statistic")
+    } else {
+      resRDD.coalesce(1)
+        .mapPartitions { iter =>
+          val res = iter.toArray.sortBy(_._1)
+          val pValues = Vectors.dense(res.map(_._2))
+          val degreesOfFreedom = res.map(_._3)
+          val statistics = Vectors.dense(res.map(_._4))
+          Iterator.single((pValues, degreesOfFreedom, statistics))
+        }.toDF("pValues", "degreesOfFreedom", "statistics")
+    }
   }
 }

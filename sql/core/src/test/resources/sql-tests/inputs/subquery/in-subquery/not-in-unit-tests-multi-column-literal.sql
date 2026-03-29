@@ -4,6 +4,10 @@
 -- This file has the same test cases as not-in-unit-tests-multi-column.sql with literals instead of
 -- subqueries. Small changes have been made to the literals to make them typecheck.
 
+--CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=true
+--CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=false
+--ONLY_IF spark
+
 CREATE TEMPORARY VIEW m AS SELECT * FROM VALUES
   (null, null),
   (null, 1.0),

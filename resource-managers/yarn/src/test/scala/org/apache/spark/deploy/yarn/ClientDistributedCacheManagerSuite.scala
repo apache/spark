@@ -19,6 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import java.net.URI
 
+import scala.collection.mutable
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.Map
 
@@ -29,9 +30,8 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.yarn.api.records.LocalResource
 import org.apache.hadoop.yarn.api.records.LocalResourceType
 import org.apache.hadoop.yarn.api.records.LocalResourceVisibility
-import org.apache.hadoop.yarn.util.ConverterUtils
 import org.mockito.Mockito.when
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.yarn.config._
@@ -43,6 +43,60 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
         LocalResourceVisibility = {
       LocalResourceVisibility.PRIVATE
     }
+  }
+
+  test("SPARK-44272: test addResource added FileStatus to statCache and getVisibility can read" +
+    " from statCache") {
+    val distMgr = new ClientDistributedCacheManager() {
+      override private[yarn] def getFileStatus(fs: FileSystem, uri: URI,
+        statCache: mutable.Map[URI, FileStatus]): FileStatus = {
+        statCache.getOrElseUpdate(uri, new FileStatus())
+      }
+    }
+    val fs = mock[FileSystem]
+    val conf = new Configuration()
+    val destPathA = new Path("file:///foo.invalid.com:8080/tmp/A")
+    val localResources = HashMap[String, LocalResource]()
+    val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
+    distMgr.addResource(fs, conf, destPathA, localResources, LocalResourceType.FILE, "link",
+      statCache, false)
+    assert(statCache.size === 2)
+    assert(statCache.contains(destPathA.toUri))
+    assert(statCache.contains(destPathA.getParent.toUri))
+
+    val destPathB = new Path("file:///foo.invalid.com:8080/tmp/B")
+    distMgr.addResource(fs, conf, destPathB, localResources, LocalResourceType.FILE, "link",
+      statCache, false)
+    assert(statCache.size === 3)
+    assert(statCache.contains(destPathB.toUri))
+
+    val destPathC = new Path("file:///foo.invalid.com:8080/root/C")
+    distMgr.addResource(fs, conf, destPathC, localResources, LocalResourceType.FILE, "link",
+      statCache, false)
+    assert(statCache.size === 5)
+    assert(statCache.contains(destPathC.toUri))
+    assert(statCache.contains(destPathC.getParent.toUri))
+  }
+
+  test("SPARK-44272: test getParentURI") {
+    val distMgr = new ClientDistributedCacheManager()
+    val scheme = "file"
+    val userInfo = "user"
+    val host = "foo.com"
+    val port = 8080
+    val path = "/tmp/testing"
+    val uri = new URI(scheme, userInfo, host, port, path, null, null)
+    val parentURI = distMgr.getParentURI(uri)
+    assert(uri.getScheme === parentURI.getScheme)
+    assert(uri.getUserInfo === parentURI.getUserInfo)
+    assert(uri.getHost === parentURI.getHost)
+    assert(uri.getPort === parentURI.getPort)
+    assert(new Path(uri.getPath).getParent.toString === parentURI.getPath)
+
+    val rootPath = "/"
+    val parentRootURI = distMgr.getParentURI(
+      new URI(scheme, userInfo, host, port, rootPath, null, null))
+    assert(parentRootURI === null)
   }
 
   test("test getFileStatus empty") {
@@ -80,7 +134,7 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
       statCache, false)
     val resource = localResources("link")
     assert(resource.getVisibility() === LocalResourceVisibility.PRIVATE)
-    assert(ConverterUtils.getPathFromYarnURL(resource.getResource()) === destPath)
+    assert(resource.getResource().toPath === destPath)
     assert(resource.getTimestamp() === 0)
     assert(resource.getSize() === 0)
     assert(resource.getType() === LocalResourceType.FILE)
@@ -102,7 +156,7 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
       statCache, false)
     val resource2 = localResources("link2")
     assert(resource2.getVisibility() === LocalResourceVisibility.PRIVATE)
-    assert(ConverterUtils.getPathFromYarnURL(resource2.getResource()) === destPath2)
+    assert(resource2.getResource().toPath === destPath2)
     assert(resource2.getTimestamp() === 10)
     assert(resource2.getSize() === 20)
     assert(resource2.getType() === LocalResourceType.FILE)
@@ -158,7 +212,7 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
       statCache, true)
     val resource = localResources("link")
     assert(resource.getVisibility() === LocalResourceVisibility.PRIVATE)
-    assert(ConverterUtils.getPathFromYarnURL(resource.getResource()) === destPath)
+    assert(resource.getResource().toPath === destPath)
     assert(resource.getTimestamp() === 10)
     assert(resource.getSize() === 20)
     assert(resource.getType() === LocalResourceType.ARCHIVE)
@@ -187,7 +241,7 @@ class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar
       statCache, false)
     val resource = localResources("link")
     assert(resource.getVisibility() === LocalResourceVisibility.PRIVATE)
-    assert(ConverterUtils.getPathFromYarnURL(resource.getResource()) === destPath)
+    assert(resource.getResource().toPath === destPath)
     assert(resource.getTimestamp() === 10)
     assert(resource.getSize() === 20)
     assert(resource.getType() === LocalResourceType.ARCHIVE)

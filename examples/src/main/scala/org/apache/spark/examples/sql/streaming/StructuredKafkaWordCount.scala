@@ -60,7 +60,7 @@ object StructuredKafkaWordCount {
       if (args.length > 3) args(3) else "/tmp/temporary-" + UUID.randomUUID.toString
 
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("StructuredKafkaWordCount")
       .getOrCreate()
 

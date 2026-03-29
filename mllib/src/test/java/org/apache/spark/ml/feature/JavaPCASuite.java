@@ -21,14 +21,13 @@ import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.linalg.Vector;
 import org.apache.spark.ml.linalg.Vectors;
-import org.apache.spark.mllib.linalg.DenseVector;
 import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.mllib.linalg.distributed.RowMatrix;
 import org.apache.spark.sql.Dataset;
@@ -67,7 +66,7 @@ public class JavaPCASuite extends SharedSparkSession {
     JavaRDD<Vector> dataRDD = jsc.parallelize(points, 2);
 
     RowMatrix mat = new RowMatrix(dataRDD.map(
-        (Vector vector) -> (org.apache.spark.mllib.linalg.Vector) new DenseVector(vector.toArray())
+        (Vector vector) -> org.apache.spark.mllib.linalg.Vectors.fromML(vector)
     ).rdd());
 
     Matrix pc = mat.computePrincipalComponents(3);
@@ -95,7 +94,7 @@ public class JavaPCASuite extends SharedSparkSession {
       Vector calculatedVector = (Vector) r.get(0);
       Vector expectedVector = (Vector) r.get(1);
       for (int i = 0; i < calculatedVector.size(); i++) {
-        Assert.assertEquals(calculatedVector.apply(i), expectedVector.apply(i), 1.0e-8);
+        Assertions.assertEquals(calculatedVector.apply(i), expectedVector.apply(i), 1.0e-8);
       }
     }
   }

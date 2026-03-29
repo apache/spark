@@ -39,10 +39,12 @@ private[spark] trait Schedulable {
   def stageId: Int
   def name: String
 
+  def isSchedulable: Boolean
   def addSchedulable(schedulable: Schedulable): Unit
   def removeSchedulable(schedulable: Schedulable): Unit
   def getSchedulableByName(name: String): Schedulable
   def executorLost(executorId: String, host: String, reason: ExecutorLossReason): Unit
-  def checkSpeculatableTasks(minTimeToSpeculation: Int): Boolean
+  def executorDecommission(executorId: String): Unit
+  def checkSpeculatableTasks(minTimeToSpeculation: Long): Boolean
   def getSortedTaskSetQueue: ArrayBuffer[TaskSetManager]
 }

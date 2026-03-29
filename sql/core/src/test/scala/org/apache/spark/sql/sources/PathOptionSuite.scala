@@ -19,13 +19,11 @@ package org.apache.spark.sql.sources
 
 import java.net.URI
 
-import org.apache.hadoop.fs.Path
-
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
-import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.execution.datasources.LogicalRelationWithTable
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, Metadata, MetadataBuilder, StructType}
 
 class TestOptionsSource extends SchemaRelationProvider with CreatableRelationProvider {
@@ -65,7 +63,7 @@ class TestOptionsRelation(val options: Map[String, String])(@transient val sessi
   }
 }
 
-class PathOptionSuite extends DataSourceTest with SharedSQLContext {
+class PathOptionSuite extends DataSourceTest with SharedSparkSession {
 
   test("path option always exist") {
     withTable("src") {
@@ -123,7 +121,8 @@ class PathOptionSuite extends DataSourceTest with SharedSQLContext {
            |USING ${classOf[TestOptionsSource].getCanonicalName}
            |OPTIONS (PATH '/tmp/path')""".stripMargin)
       sql("ALTER TABLE src SET LOCATION '/tmp/path2'")
-      assert(getPathOption("src").map(makeQualifiedPath) == Some(makeQualifiedPath("/tmp/path2")))
+      assert(getPathOption("src") ==
+        Some(CatalogUtils.URIToString(makeQualifiedPath("/tmp/path2"))))
     }
 
     withTable("src", "src2") {
@@ -135,7 +134,7 @@ class PathOptionSuite extends DataSourceTest with SharedSQLContext {
 
   private def getPathOption(tableName: String): Option[String] = {
     spark.table(tableName).queryExecution.analyzed.collect {
-      case LogicalRelation(r: TestOptionsRelation, _, _, _) => r.pathOption
+      case LogicalRelationWithTable(r: TestOptionsRelation, _) => r.pathOption
     }.head
   }
 

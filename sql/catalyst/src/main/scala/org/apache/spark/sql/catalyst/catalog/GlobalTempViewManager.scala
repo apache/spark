@@ -21,10 +21,9 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 
 
 /**
@@ -36,16 +35,16 @@ import org.apache.spark.sql.catalyst.util.StringUtils
  *
  * @param database The system preserved virtual database that keeps all the global temporary views.
  */
-class GlobalTempViewManager(val database: String) {
+class GlobalTempViewManager(database: String) {
 
   /** List of view definitions, mapping from view name to logical plan. */
   @GuardedBy("this")
-  private val viewDefinitions = new mutable.HashMap[String, LogicalPlan]
+  private val viewDefinitions = new mutable.HashMap[String, TemporaryViewRelation]
 
   /**
    * Returns the global view definition which matches the given name, or None if not found.
    */
-  def get(name: String): Option[LogicalPlan] = synchronized {
+  def get(name: String): Option[TemporaryViewRelation] = synchronized {
     viewDefinitions.get(name)
   }
 
@@ -55,7 +54,7 @@ class GlobalTempViewManager(val database: String) {
    */
   def create(
       name: String,
-      viewDefinition: LogicalPlan,
+      viewDefinition: TemporaryViewRelation,
       overrideIfExists: Boolean): Unit = synchronized {
     if (!overrideIfExists && viewDefinitions.contains(name)) {
       throw new TempTableAlreadyExistsException(name)
@@ -68,7 +67,7 @@ class GlobalTempViewManager(val database: String) {
    */
   def update(
       name: String,
-      viewDefinition: LogicalPlan): Boolean = synchronized {
+      viewDefinition: TemporaryViewRelation): Boolean = synchronized {
     if (viewDefinitions.contains(name)) {
       viewDefinitions.put(name, viewDefinition)
       true
@@ -92,8 +91,7 @@ class GlobalTempViewManager(val database: String) {
   def rename(oldName: String, newName: String): Boolean = synchronized {
     if (viewDefinitions.contains(oldName)) {
       if (viewDefinitions.contains(newName)) {
-        throw new AnalysisException(
-          s"rename temporary view from '$oldName' to '$newName': destination view already exists")
+        throw QueryCompilationErrors.renameTempViewToExistingViewError(newName)
       }
 
       val viewDefinition = viewDefinitions(oldName)

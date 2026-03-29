@@ -20,8 +20,8 @@ package org.apache.spark.mllib.classification;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
@@ -59,7 +59,7 @@ public class JavaNaiveBayesSuite extends SharedSparkSession {
     NaiveBayesModel model = nb.run(testRDD.rdd());
 
     int numAccurate = validatePrediction(POINTS, model);
-    Assert.assertEquals(POINTS.size(), numAccurate);
+    Assertions.assertEquals(POINTS.size(), numAccurate);
   }
 
   @Test
@@ -68,11 +68,11 @@ public class JavaNaiveBayesSuite extends SharedSparkSession {
 
     NaiveBayesModel model1 = NaiveBayes.train(testRDD.rdd());
     int numAccurate1 = validatePrediction(POINTS, model1);
-    Assert.assertEquals(POINTS.size(), numAccurate1);
+    Assertions.assertEquals(POINTS.size(), numAccurate1);
 
     NaiveBayesModel model2 = NaiveBayes.train(testRDD.rdd(), 0.5);
     int numAccurate2 = validatePrediction(POINTS, model2);
-    Assert.assertEquals(POINTS.size(), numAccurate2);
+    Assertions.assertEquals(POINTS.size(), numAccurate2);
   }
 
   @Test

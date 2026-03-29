@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.common.cache._
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{CACHED_TABLE_PARTITION_METADATA_SIZE, MAX_TABLE_PARTITION_METADATA_SIZE}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.SizeEstimator
 
@@ -40,11 +42,13 @@ object FileStatusCache {
    *         shared across all clients.
    */
   def getOrCreate(session: SparkSession): FileStatusCache = synchronized {
-    if (session.sqlContext.conf.manageFilesourcePartitions &&
-      session.sqlContext.conf.filesourcePartitionFileCacheSize > 0) {
+    if (session.sessionState.conf.manageFilesourcePartitions &&
+      session.sessionState.conf.filesourcePartitionFileCacheSize > 0) {
       if (sharedCache == null) {
         sharedCache = new SharedInMemoryCache(
-          session.sqlContext.conf.filesourcePartitionFileCacheSize)
+          session.sessionState.conf.filesourcePartitionFileCacheSize,
+          session.sessionState.conf.metadataCacheTTL
+        )
       }
       sharedCache.createForNewClient()
     } else {
@@ -89,7 +93,7 @@ abstract class FileStatusCache {
  *
  * @param maxSizeInBytes max allowable cache size before entries start getting evicted
  */
-private class SharedInMemoryCache(maxSizeInBytes: Long) extends Logging {
+private class SharedInMemoryCache(maxSizeInBytes: Long, cacheTTL: Long) extends Logging {
 
   // Opaque object that uniquely identifies a shared cache user
   private type ClientId = Object
@@ -108,8 +112,8 @@ private class SharedInMemoryCache(maxSizeInBytes: Long) extends Logging {
       override def weigh(key: (ClientId, Path), value: Array[FileStatus]): Int = {
         val estimate = (SizeEstimator.estimate(key) + SizeEstimator.estimate(value)) / weightScale
         if (estimate > Int.MaxValue) {
-          logWarning(s"Cached table partition metadata size is too big. Approximating to " +
-            s"${Int.MaxValue.toLong * weightScale}.")
+          logWarning(log"Cached table partition metadata size is too big. Approximating to " +
+            log"${MDC(CACHED_TABLE_PARTITION_METADATA_SIZE, Int.MaxValue.toLong * weightScale)}.")
           Int.MaxValue
         } else {
           estimate.toInt
@@ -123,17 +127,24 @@ private class SharedInMemoryCache(maxSizeInBytes: Long) extends Logging {
         if (removed.getCause == RemovalCause.SIZE &&
           warnedAboutEviction.compareAndSet(false, true)) {
           logWarning(
-            "Evicting cached table partition metadata from memory due to size constraints " +
-              "(spark.sql.hive.filesourcePartitionFileCacheSize = "
-              + maxSizeInBytes + " bytes). This may impact query planning performance.")
+            log"Evicting cached table partition metadata from memory due to size constraints " +
+              log"(spark.sql.hive.filesourcePartitionFileCacheSize = " +
+              log"${MDC(MAX_TABLE_PARTITION_METADATA_SIZE, maxSizeInBytes)} bytes). " +
+              log"This may impact query planning performance.")
         }
       }
     }
-    CacheBuilder.newBuilder()
+
+    var builder = CacheBuilder.newBuilder()
       .weigher(weigher)
       .removalListener(removalListener)
       .maximumWeight(maxSizeInBytes / weightScale)
-      .build[(ClientId, Path), Array[FileStatus]]()
+
+    if (cacheTTL > 0) {
+      builder = builder.expireAfterWrite(cacheTTL, TimeUnit.SECONDS)
+    }
+
+    builder.build[(ClientId, Path), Array[FileStatus]]()
   }
 
 

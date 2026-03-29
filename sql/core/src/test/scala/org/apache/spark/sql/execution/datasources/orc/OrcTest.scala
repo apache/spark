@@ -22,11 +22,17 @@ import java.io.File
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-import org.scalatest.BeforeAndAfterAll
-
-import org.apache.spark.sql._
+import org.apache.spark.sql.{Column, DataFrame, QueryTest}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Predicate}
+import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.execution.datasources.FileBasedDataSourceTest
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 /**
  * OrcTest
@@ -40,18 +46,22 @@ import org.apache.spark.sql.test.SQLTestUtils
  *       -> OrcPartitionDiscoverySuite
  *       -> HiveOrcPartitionDiscoverySuite
  *   -> OrcFilterSuite
- *   -> HiveOrcFilterSuite
  */
-abstract class OrcTest extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
-  import testImplicits._
+trait OrcTest extends QueryTest with FileBasedDataSourceTest {
 
   val orcImp: String = "native"
 
   private var originalConfORCImplementation = "native"
 
+  override protected val dataSourceName: String = "orc"
+  override protected val vectorizedReaderEnabledKey: String =
+    SQLConf.ORC_VECTORIZED_READER_ENABLED.key
+  override protected val vectorizedReaderNestedEnabledKey: String =
+    SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key
+
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    originalConfORCImplementation = spark.conf.get(ORC_IMPLEMENTATION)
+    originalConfORCImplementation = spark.sessionState.conf.getConf(ORC_IMPLEMENTATION)
     spark.conf.set(ORC_IMPLEMENTATION.key, orcImp)
   }
 
@@ -66,22 +76,15 @@ abstract class OrcTest extends QueryTest with SQLTestUtils with BeforeAndAfterAl
    */
   protected def withOrcFile[T <: Product: ClassTag: TypeTag]
       (data: Seq[T])
-      (f: String => Unit): Unit = {
-    withTempPath { file =>
-      sparkContext.parallelize(data).toDF().write.orc(file.getCanonicalPath)
-      f(file.getCanonicalPath)
-    }
-  }
+      (f: String => Unit): Unit = withDataSourceFile(data)(f)
 
   /**
    * Writes `data` to a Orc file and reads it back as a `DataFrame`,
    * which is then passed to `f`. The Orc file will be deleted after `f` returns.
    */
   protected def withOrcDataFrame[T <: Product: ClassTag: TypeTag]
-      (data: Seq[T])
-      (f: DataFrame => Unit): Unit = {
-    withOrcFile(data)(path => f(spark.read.orc(path)))
-  }
+      (data: Seq[T], testVectorized: Boolean = true)
+      (f: DataFrame => Unit): Unit = withDataSourceDataFrame(data, testVectorized)(f)
 
   /**
    * Writes `data` to a Orc file, reads it back as a `DataFrame` and registers it as a
@@ -89,23 +92,14 @@ abstract class OrcTest extends QueryTest with SQLTestUtils with BeforeAndAfterAl
    * Orc file will be dropped/deleted after `f` returns.
    */
   protected def withOrcTable[T <: Product: ClassTag: TypeTag]
-      (data: Seq[T], tableName: String)
-      (f: => Unit): Unit = {
-    withOrcDataFrame(data) { df =>
-      df.createOrReplaceTempView(tableName)
-      withTempView(tableName)(f)
-    }
-  }
+      (data: Seq[T], tableName: String, testVectorized: Boolean = true)
+      (f: => Unit): Unit = withDataSourceTable(data, tableName, testVectorized)(f)
 
   protected def makeOrcFile[T <: Product: ClassTag: TypeTag](
-      data: Seq[T], path: File): Unit = {
-    data.toDF().write.mode(SaveMode.Overwrite).orc(path.getCanonicalPath)
-  }
+      data: Seq[T], path: File): Unit = makeDataSourceFile(data, path)
 
   protected def makeOrcFile[T <: Product: ClassTag: TypeTag](
-      df: DataFrame, path: File): Unit = {
-    df.write.mode(SaveMode.Overwrite).orc(path.getCanonicalPath)
-  }
+      df: DataFrame, path: File): Unit = makeDataSourceFile(df, path)
 
   protected def checkPredicatePushDown(df: DataFrame, numRows: Int, predicate: String): Unit = {
     withTempPath { file =>
@@ -114,6 +108,69 @@ abstract class OrcTest extends QueryTest with SQLTestUtils with BeforeAndAfterAl
       df.repartition(numRows).write.orc(file.getCanonicalPath)
       val actual = stripSparkFilter(spark.read.orc(file.getCanonicalPath).where(predicate)).count()
       assert(actual < numRows)
+    }
+  }
+
+  protected def checkNoFilterPredicate
+      (predicate: Predicate, noneSupported: Boolean = false)
+      (implicit df: DataFrame): Unit = {
+    val output = predicate.collect { case a: Attribute => a }.distinct
+    val query = df
+      .select(output.map(e => Column(e)): _*)
+      .where(Column(predicate))
+
+    query.queryExecution.optimizedPlan match {
+      case PhysicalOperation(_, filters, DataSourceV2ScanRelation(_, o: OrcScan, _, _, _)) =>
+        assert(filters.nonEmpty, "No filter is analyzed from the given query")
+        if (noneSupported) {
+          assert(o.pushedFilters.isEmpty, "Unsupported filters should not show in pushed filters")
+        } else {
+          assert(o.pushedFilters.nonEmpty, "No filter is pushed down")
+          val maybeFilter = OrcFilters
+            .createFilter(query.schema, o.pushedFilters.toImmutableArraySeq)
+          assert(maybeFilter.isEmpty, s"Couldn't generate filter predicate for " +
+            s"${o.pushedFilters.mkString("pushedFilters(", ", ", ")")}")
+        }
+
+      case _ => assert(false, "Can not match OrcTable in the query.")
+    }
+  }
+
+  protected def readResourceOrcFile(name: String): DataFrame = {
+    val url = Thread.currentThread().getContextClassLoader.getResource(name)
+    // Copy to avoid URISyntaxException when `sql/hive` accesses the resources in `sql/core`
+    val file = File.createTempFile("orc-test", ".orc")
+    file.deleteOnExit();
+    Utils.copyURLToFile(url, file)
+    spark.read.orc(file.getAbsolutePath)
+  }
+
+  def withAllNativeOrcReaders(code: => Unit): Unit = {
+    // test the row-based reader
+    withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false")(code)
+    // test the vectorized reader
+    withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "true")(code)
+  }
+
+  /**
+   * Takes a sequence of products `data` to generate multi-level nested
+   * dataframes as new test data. It tests both non-nested and nested dataframes
+   * which are written and read back with Orc datasource.
+   *
+   * This is different from [[withOrcDataFrame]] which does not
+   * test nested cases.
+   */
+  protected def withNestedOrcDataFrame[T <: Product: ClassTag: TypeTag](data: Seq[T])
+      (runTest: (DataFrame, String, Any => Any) => Unit): Unit =
+    withNestedOrcDataFrame(spark.createDataFrame(data))(runTest)
+
+  protected def withNestedOrcDataFrame(inputDF: DataFrame)
+      (runTest: (DataFrame, String, Any => Any) => Unit): Unit = {
+    withNestedDataFrame(inputDF).foreach { case (newDF, colName, resultFun) =>
+      withTempPath { file =>
+        newDF.write.format(dataSourceName).save(file.getCanonicalPath)
+        readFile(file.getCanonicalPath, true) { df => runTest(df, colName, resultFun) }
+      }
     }
   }
 }

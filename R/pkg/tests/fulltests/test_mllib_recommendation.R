@@ -27,13 +27,14 @@ test_that("spark.als", {
                list(2, 1, 1.0), list(2, 2, 5.0))
   df <- createDataFrame(data, c("user", "item", "score"))
   model <- spark.als(df, ratingCol = "score", userCol = "user", itemCol = "item",
-                     rank = 10, maxIter = 5, seed = 0, regParam = 0.1)
+                     rank = 10, maxIter = 15, seed = 0, regParam = 0.1)
   stats <- summary(model)
   expect_equal(stats$rank, 10)
   test <- createDataFrame(list(list(0, 2), list(1, 0), list(2, 0)), c("user", "item"))
-  predictions <- collect(predict(model, test))
+  result <- predict(model, test)
+  predictions <- collect(arrange(result, desc(result$item), result$user))
 
-  expect_equal(predictions$prediction, c(-0.1380762, 2.6258414, -1.5018409),
+  expect_equal(predictions$prediction, c(0.6324540, 3.6218479, -0.4568263),
   tolerance = 1e-4)
 
   # Test model save/load

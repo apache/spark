@@ -17,52 +17,56 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.scalatest.PrivateMethodTester
+import scala.jdk.CollectionConverters._
+import scala.reflect.ClassTag
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampNTZType, TimestampType}
 
-class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with PrivateMethodTester {
+class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("time window is unevaluable") {
-    intercept[UnsupportedOperationException] {
+    intercept[SparkException] {
       evaluateWithoutCodegen(TimeWindow(Literal(10L), "1 second", "1 second", "0 second"))
     }
   }
 
-  private def checkErrorMessage(msg: String, value: String): Unit = {
+  private def checkErrorMessage[E <: SparkThrowable : ClassTag](
+      parameters: Map[String, String], value: String): Unit = {
     val validDuration = "10 second"
     val validTime = "5 second"
-    val e1 = intercept[IllegalArgumentException] {
+    val e1 = intercept[E] {
       TimeWindow(Literal(10L), value, validDuration, validTime).windowDuration
     }
-    val e2 = intercept[IllegalArgumentException] {
+    val e2 = intercept[E] {
       TimeWindow(Literal(10L), validDuration, value, validTime).slideDuration
     }
-    val e3 = intercept[IllegalArgumentException] {
+    val e3 = intercept[E] {
       TimeWindow(Literal(10L), validDuration, validDuration, value).startTime
     }
     Seq(e1, e2, e3).foreach { e =>
-      e.getMessage.contains(msg)
+      assert(e.getMessageParameters().asScala == parameters)
     }
   }
 
   test("blank intervals throw exception") {
-    for (blank <- Seq(null, " ", "\n", "\t")) {
-      checkErrorMessage(
-        "The window duration, slide duration and start time cannot be null or blank.", blank)
+    for ((blank, i) <- Seq((null, "''"), (" ", "' '"), ("\n", "'\n'"), ("\t", "'\t'"))) {
+      checkErrorMessage[AnalysisException](
+        Map("intervalString" -> i), blank)
     }
   }
 
   test("invalid intervals throw exception") {
-    checkErrorMessage(
-      "did not correspond to a valid interval string.", "2 apples")
+    checkErrorMessage[AnalysisException](
+      Map("intervalString" -> "'2 apples'"), "2 apples")
   }
 
   test("intervals greater than a month throws exception") {
-    checkErrorMessage(
-      "Intervals greater than or equal to a month is not supported (1 month).", "1 month")
+    checkErrorMessage[SparkIllegalArgumentException](
+      Map("interval" -> "1 month"), "1 month")
   }
 
   test("interval strings work with and without 'interval' prefix and return microseconds") {
@@ -90,35 +94,33 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
     }
   }
 
-  private val parseExpression = PrivateMethod[Long]('parseExpression)
-
   test("parse sql expression for duration in microseconds - string") {
-    val dur = TimeWindow.invokePrivate(parseExpression(Literal("5 seconds")))
+    val dur = TimeWindow.parseExpression(Literal("5 seconds"))
     assert(dur.isInstanceOf[Long])
     assert(dur === 5000000)
   }
 
   test("parse sql expression for duration in microseconds - integer") {
-    val dur = TimeWindow.invokePrivate(parseExpression(Literal(100)))
+    val dur = TimeWindow.parseExpression(Literal(100))
     assert(dur.isInstanceOf[Long])
     assert(dur === 100)
   }
 
   test("parse sql expression for duration in microseconds - long") {
-    val dur = TimeWindow.invokePrivate(parseExpression(Literal.create(2L << 52, LongType)))
+    val dur = TimeWindow.parseExpression(Literal.create(2L << 52, LongType))
     assert(dur.isInstanceOf[Long])
     assert(dur === (2L << 52))
   }
 
   test("parse sql expression for duration in microseconds - invalid interval") {
-    intercept[IllegalArgumentException] {
-      TimeWindow.invokePrivate(parseExpression(Literal("2 apples")))
+    intercept[AnalysisException] {
+      TimeWindow.parseExpression(Literal("2 apples"))
     }
   }
 
   test("parse sql expression for duration in microseconds - invalid expression") {
     intercept[AnalysisException] {
-      TimeWindow.invokePrivate(parseExpression(Rand(123)))
+      TimeWindow.parseExpression(Rand(123))
     }
   }
 
@@ -131,6 +133,62 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
         Literal(slideLength),
         Literal("0 seconds"))
       assert(applyValue == constructed)
+    }
+  }
+
+  test("SPARK-36091: Support TimestampNTZ type in expression TimeWindow") {
+    val timestampWindow =
+      TimeWindow(Literal(10L, TimestampType), "10 seconds", "10 seconds", "0 seconds")
+    assert(timestampWindow.child.dataType == TimestampType)
+    assert(timestampWindow.dataType == StructType(
+      Seq(StructField("start", TimestampType), StructField("end", TimestampType))))
+
+    val timestampNTZWindow =
+      TimeWindow(Literal(10L, TimestampNTZType), "10 seconds", "10 seconds", "0 seconds")
+    assert(timestampNTZWindow.child.dataType == TimestampNTZType)
+    assert(timestampNTZWindow.dataType == StructType(
+      Seq(StructField("start", TimestampNTZType), StructField("end", TimestampNTZType))))
+  }
+
+  Seq("true", "false").foreach { legacyIntervalEnabled =>
+    test("SPARK-36323: Support ANSI interval literals for TimeWindow " +
+      s"(${SQLConf.LEGACY_INTERVAL_ENABLED.key}=$legacyIntervalEnabled)") {
+      withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> legacyIntervalEnabled) {
+        Seq(
+          // Conventional form and some variants
+          (Seq("3 days", "Interval 3 day", "inTerval '3' day"), 3 * MICROS_PER_DAY),
+          (Seq(" 5 hours", "INTERVAL 5 hour", "interval '5' hour"), 5 * MICROS_PER_HOUR),
+          (Seq("\t8 minutes", "interval 8 minute", "interval '8' minute"), 8 * MICROS_PER_MINUTE),
+          (Seq(
+            "10 seconds", "interval 10 second", "interval '10' second"), 10 * MICROS_PER_SECOND),
+          (Seq(
+            "1 day 2 hours 3 minutes 4 seconds",
+            " interval 1 day 2 hours 3 minutes 4 seconds",
+            "\tinterval '1' day '2' hours '3' minutes '4' seconds",
+            "interval '1 2:3:4' day to second"),
+            MICROS_PER_DAY + 2 * MICROS_PER_HOUR + 3 * MICROS_PER_MINUTE + 4 * MICROS_PER_SECOND)
+        ).foreach { case (intervalVariants, expectedMs) =>
+          intervalVariants.foreach { case interval =>
+            val timeWindow = TimeWindow(Literal(10L, TimestampType), interval, interval, interval)
+            val expected =
+              TimeWindow(Literal(10L, TimestampType), expectedMs, expectedMs, expectedMs)
+            assert(timeWindow === expected)
+          }
+        }
+
+        // year-month interval literals are not supported for TimeWindow.
+        Seq(
+          "1 years", "interval 1 year", "interval '1' year",
+          "1 months", "interval 1 month", "interval '1' month",
+          " 1 year 2 months",
+          "interval 1 year 2 month",
+          "interval '1' year '2' month",
+          "\tinterval '1-2' year to month").foreach { interval =>
+          intercept[SparkIllegalArgumentException] {
+            TimeWindow(Literal(10L, TimestampType), interval, interval, interval)
+          }
+        }
+      }
     }
   }
 }

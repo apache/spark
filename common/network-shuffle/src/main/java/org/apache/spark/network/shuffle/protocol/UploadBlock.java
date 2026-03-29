@@ -18,8 +18,8 @@
 package org.apache.spark.network.shuffle.protocol;
 
 import java.util.Arrays;
+import java.util.Objects;
 
-import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.protocol.Encoders;
@@ -60,28 +60,22 @@ public class UploadBlock extends BlockTransferMessage {
 
   @Override
   public int hashCode() {
-    int objectsHashCode = Objects.hashCode(appId, execId, blockId);
+    int objectsHashCode = Objects.hash(appId, execId, blockId);
     return (objectsHashCode * 41 + Arrays.hashCode(metadata)) * 41 + Arrays.hashCode(blockData);
   }
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("appId", appId)
-      .add("execId", execId)
-      .add("blockId", blockId)
-      .add("metadata size", metadata.length)
-      .add("block size", blockData.length)
-      .toString();
+    return "UploadBlock[appId=" + appId + ",execId=" + execId + ",blockId=" + blockId +
+        ",metadata size=" + metadata.length + ",block size=" + blockData.length + "]";
   }
 
   @Override
   public boolean equals(Object other) {
-    if (other != null && other instanceof UploadBlock) {
-      UploadBlock o = (UploadBlock) other;
-      return Objects.equal(appId, o.appId)
-        && Objects.equal(execId, o.execId)
-        && Objects.equal(blockId, o.blockId)
+    if (other instanceof UploadBlock o) {
+      return Objects.equals(appId, o.appId)
+        && Objects.equals(execId, o.execId)
+        && Objects.equals(blockId, o.blockId)
         && Arrays.equals(metadata, o.metadata)
         && Arrays.equals(blockData, o.blockData);
     }

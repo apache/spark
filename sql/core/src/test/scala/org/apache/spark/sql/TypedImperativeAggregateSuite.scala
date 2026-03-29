@@ -23,13 +23,14 @@ import org.apache.spark.sql.TypedImperativeAggregateSuite.TypedMax
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, GenericInternalRow, ImplicitCastInputTypes, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
+class TypedImperativeAggregateSuite extends QueryTest with SharedSparkSession {
 
   import testImplicits._
 
@@ -87,10 +88,10 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
 
   test("dataframe aggregate with object aggregate buffer, should not use HashAggregate") {
     val df = data.toDF("a", "b")
-    val max = TypedMax($"a".expr)
+    val max = Column(TypedMax($"a".expr))
 
     // Always uses SortAggregateExec
-    val sparkPlan = df.select(Column(max.toAggregateExpression())).queryExecution.sparkPlan
+    val sparkPlan = df.select(max).queryExecution.sparkPlan
     assert(!sparkPlan.isInstanceOf[HashAggregateExec])
   }
 
@@ -147,9 +148,9 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
     val query = df.select(typedMax($"key"), count($"key"), typedMax($"value"),
       count($"value"))
     val maxKey = nullableData.map(_._1).filter(_ != null).max
-    val countKey = nullableData.map(_._1).filter(_ != null).size
+    val countKey = nullableData.map(_._1).count(_ != null)
     val maxValue = nullableData.map(_._2).filter(_ != null).max
-    val countValue = nullableData.map(_._2).filter(_ != null).size
+    val countValue = nullableData.map(_._2).count(_ != null)
     val expected = Seq(Row(maxKey, countKey, maxValue, countValue))
     checkAnswer(query, expected)
   }
@@ -210,15 +211,10 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
     checkAnswer(query, expected)
   }
 
-  private def typedMax(column: Column): Column = {
-    val max = TypedMax(column.expr, nullable = false)
-    Column(max.toAggregateExpression())
-  }
+  private def typedMax(column: Column): Column = Column(TypedMax(column.expr))
 
-  private def nullableTypedMax(column: Column): Column = {
-    val max = TypedMax(column.expr, nullable = true)
-    Column(max.toAggregateExpression())
-  }
+  private def nullableTypedMax(column: Column): Column =
+    Column(TypedMax(column.expr, nullable = true))
 }
 
 object TypedImperativeAggregateSuite {
@@ -232,8 +228,8 @@ object TypedImperativeAggregateSuite {
       nullable: Boolean = false,
       mutableAggBufferOffset: Int = 0,
       inputAggBufferOffset: Int = 0)
-    extends TypedImperativeAggregate[MaxValue] with ImplicitCastInputTypes {
-
+    extends TypedImperativeAggregate[MaxValue] with ImplicitCastInputTypes
+    with UnaryLike[Expression] {
 
     override def createAggregationBuffer(): MaxValue = {
       // Returns Int.MinValue if all inputs are null
@@ -270,8 +266,6 @@ object TypedImperativeAggregateSuite {
 
     override lazy val deterministic: Boolean = true
 
-    override def children: Seq[Expression] = Seq(child)
-
     override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType)
 
     override def dataType: DataType = IntegerType
@@ -297,6 +291,9 @@ object TypedImperativeAggregateSuite {
       val value = stream.readInt()
       new MaxValue(value, isValueSet)
     }
+
+    override protected def withNewChildInternal(newChild: Expression): TypedMax =
+      copy(child = newChild)
   }
 
   private class MaxValue(var value: Int, var isValueSet: Boolean = false)

@@ -17,21 +17,22 @@
 
 package org.apache.spark.input
 
-import com.google.common.io.{ByteStreams, Closeables}
+import com.google.common.io.Closeables
 import org.apache.hadoop.conf.{Configurable => HConfigurable, Configuration}
 import org.apache.hadoop.io.Text
-import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.mapreduce.InputSplit
 import org.apache.hadoop.mapreduce.RecordReader
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileRecordReader, CombineFileSplit}
+
+import org.apache.spark.io.HadoopCodecStreams
 
 /**
  * A trait to implement [[org.apache.hadoop.conf.Configurable Configurable]] interface.
  */
 private[spark] trait Configurable extends HConfigurable {
   private var conf: Configuration = _
-  def setConf(c: Configuration) {
+  def setConf(c: Configuration): Unit = {
     conf = c
   }
   def getConf: Configuration = conf
@@ -49,7 +50,6 @@ private[spark] class WholeTextFileRecordReader(
   extends RecordReader[Text, Text] with Configurable {
 
   private[this] val path = split.getPath(index)
-  private[this] val fs = path.getFileSystem(context.getConfiguration)
 
   // True means the current file has been processed, then skip it.
   private[this] var processed = false
@@ -69,15 +69,8 @@ private[spark] class WholeTextFileRecordReader(
 
   override def nextKeyValue(): Boolean = {
     if (!processed) {
-      val conf = new Configuration
-      val factory = new CompressionCodecFactory(conf)
-      val codec = factory.getCodec(path)  // infers from file ext.
-      val fileIn = fs.open(path)
-      val innerBuffer = if (codec != null) {
-        ByteStreams.toByteArray(codec.createInputStream(fileIn))
-      } else {
-        ByteStreams.toByteArray(fileIn)
-      }
+      val fileIn = HadoopCodecStreams.createInputStream(getConf, path)
+      val innerBuffer = fileIn.readAllBytes()
 
       value = new Text(innerBuffer)
       Closeables.close(fileIn, false)
@@ -108,8 +101,17 @@ private[spark] class ConfigurableCombineFileRecordReader[K, V](
   override def initNextRecordReader(): Boolean = {
     val r = super.initNextRecordReader()
     if (r) {
-      this.curReader.asInstanceOf[HConfigurable].setConf(getConf)
+      if (getConf != null) {
+        this.curReader.asInstanceOf[HConfigurable].setConf(getConf)
+      }
     }
     r
+  }
+
+  override def setConf(c: Configuration): Unit = {
+    super.setConf(c)
+    if (this.curReader != null) {
+      this.curReader.asInstanceOf[HConfigurable].setConf(c)
+    }
   }
 }

@@ -16,16 +16,28 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
+
 import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_USE_LEGACY_PVC_ACCESS_MODE
+import org.apache.spark.deploy.k8s.Constants.{DEFAULT_PVC_ACCESS_MODE, ENV_EXECUTOR_ID, SPARK_APP_ID_LABEL}
 
-private[spark] class MountVolumesFeatureStep(
-    kubernetesConf: KubernetesConf[_ <: KubernetesRoleSpecificConf])
+private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
+  import MountVolumesFeatureStep._
+
+  val additionalResources = ArrayBuffer.empty[HasMetadata]
+  val accessMode = if (conf.get(KUBERNETES_USE_LEGACY_PVC_ACCESS_MODE)) {
+    "ReadWriteOnce"
+  } else {
+    DEFAULT_PVC_ACCESS_MODE
+  }
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    val (volumeMounts, volumes) = constructVolumes(kubernetesConf.roleVolumes).unzip
+    val (volumeMounts, volumes) = constructVolumes(conf.volumes).unzip
 
     val podWithVolumes = new PodBuilder(pod.pod)
       .editSpec()
@@ -40,27 +52,66 @@ private[spark] class MountVolumesFeatureStep(
     SparkPod(podWithVolumes, containerWithVolumeMounts)
   }
 
-  override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
-
-  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty
-
   private def constructVolumes(
-    volumeSpecs: Iterable[KubernetesVolumeSpec[_ <: KubernetesVolumeSpecificConf]]
+    volumeSpecs: Iterable[KubernetesVolumeSpec]
   ): Iterable[(VolumeMount, Volume)] = {
-    volumeSpecs.map { spec =>
+    val duplicateMountPaths = volumeSpecs.map(_.mountPath).toSeq.groupBy(identity).collect {
+      case (x, ys) if ys.length > 1 => s"'$x'"
+    }
+    require(duplicateMountPaths.isEmpty,
+      s"Found duplicated mountPath: ${duplicateMountPaths.mkString(", ")}")
+    volumeSpecs.zipWithIndex.map { case (spec, i) =>
       val volumeMount = new VolumeMountBuilder()
         .withMountPath(spec.mountPath)
         .withReadOnly(spec.mountReadOnly)
+        .withSubPath(spec.mountSubPath)
+        .withSubPathExpr(spec.mountSubPathExpr)
         .withName(spec.volumeName)
         .build()
 
       val volumeBuilder = spec.volumeConf match {
-        case KubernetesHostPathVolumeConf(hostPath) =>
-          /* "" means that no checks will be performed before mounting the hostPath volume */
+        case KubernetesHostPathVolumeConf(hostPath, volumeType) =>
           new VolumeBuilder()
-            .withHostPath(new HostPathVolumeSource(hostPath, ""))
+            .withHostPath(new HostPathVolumeSource(hostPath, volumeType))
 
-        case KubernetesPVCVolumeConf(claimName) =>
+        case KubernetesPVCVolumeConf(claimNameTemplate, storageClass, size, labels, annotations) =>
+          val claimName = conf match {
+            case c: KubernetesExecutorConf =>
+              claimNameTemplate
+                .replaceAll(PVC_ON_DEMAND,
+                  s"${conf.resourceNamePrefix}-exec-${c.executorId}$PVC_POSTFIX-$i")
+                .replaceAll(ENV_EXECUTOR_ID, c.executorId)
+            case _ =>
+              claimNameTemplate
+                .replaceAll(PVC_ON_DEMAND, s"${conf.resourceNamePrefix}-driver$PVC_POSTFIX-$i")
+          }
+          if (storageClass.isDefined && size.isDefined) {
+            val defaultVolumeLabels = Map(SPARK_APP_ID_LABEL -> conf.appId)
+            val volumeLabels = labels match {
+              case Some(customLabelsMap) => (customLabelsMap ++ defaultVolumeLabels).asJava
+              case None => defaultVolumeLabels.asJava
+            }
+            val volumeAnnotations = annotations match {
+              case Some(value) => value.asJava
+              case None => Map[String, String]().asJava
+            }
+            additionalResources.append(new PersistentVolumeClaimBuilder()
+              .withKind(PVC)
+              .withApiVersion("v1")
+              .withNewMetadata()
+                .withName(claimName)
+                .addToLabels(volumeLabels)
+                .addToAnnotations(volumeAnnotations)
+                .endMetadata()
+              .withNewSpec()
+                .withStorageClassName(storageClass.get)
+                .withAccessModes(accessMode)
+                .withResources(new VolumeResourceRequirementsBuilder()
+                  .withRequests(Map("storage" -> new Quantity(size.get)).asJava).build())
+                .endSpec()
+              .build())
+          }
+
           new VolumeBuilder()
             .withPersistentVolumeClaim(
               new PersistentVolumeClaimVolumeSource(claimName, spec.mountReadOnly))
@@ -69,7 +120,11 @@ private[spark] class MountVolumesFeatureStep(
           new VolumeBuilder()
             .withEmptyDir(
               new EmptyDirVolumeSource(medium.getOrElse(""),
-              new Quantity(sizeLimit.orNull)))
+                sizeLimit.map(new Quantity(_)).orNull))
+
+        case KubernetesNFSVolumeConf(path, server) =>
+          new VolumeBuilder()
+            .withNfs(new NFSVolumeSource(path, null, server))
       }
 
       val volume = volumeBuilder.withName(spec.volumeName).build()
@@ -77,4 +132,14 @@ private[spark] class MountVolumesFeatureStep(
       (volumeMount, volume)
     }
   }
+
+  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
+    additionalResources.toSeq
+  }
+}
+
+private[spark] object MountVolumesFeatureStep {
+  val PVC_ON_DEMAND = "OnDemand"
+  val PVC = "PersistentVolumeClaim"
+  val PVC_POSTFIX = "-pvc"
 }

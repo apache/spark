@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.TestUtils.assertSpilled
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.internal.SQLConf.{WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD, WINDOW_EXEC_BUFFER_SPILL_THRESHOLD}
+import org.apache.spark.sql.test.SharedSparkSession
 
 case class WindowData(month: Int, area: String, product: Int)
 
@@ -27,7 +28,7 @@ case class WindowData(month: Int, area: String, product: Int)
 /**
  * Test suite for SQL window functions.
  */
-class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
+class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
 
   import testImplicits._
 
@@ -40,67 +41,70 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
       WindowData(5, "c", 9),
       WindowData(6, "c", 10)
     )
-    sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
+    withTempView("windowData") {
+      sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
-    checkAnswer(
-      sql(
-        """
-          |select area, sum(product), sum(sum(product)) over (partition by area)
-          |from windowData group by month, area
-        """.stripMargin),
-      Seq(
-        ("a", 5, 11),
-        ("a", 6, 11),
-        ("b", 7, 15),
-        ("b", 8, 15),
-        ("c", 9, 19),
-        ("c", 10, 19)
-      ).map(i => Row(i._1, i._2, i._3)))
+      checkAnswer(
+        sql(
+          """
+            |select area, sum(product), sum(sum(product)) over (partition by area)
+            |from windowData group by month, area
+          """.stripMargin),
+        Seq(
+          ("a", 5, 11),
+          ("a", 6, 11),
+          ("b", 7, 15),
+          ("b", 8, 15),
+          ("c", 9, 19),
+          ("c", 10, 19)
+        ).map(i => Row(i._1, i._2, i._3)))
 
-    checkAnswer(
-      sql(
-        """
-          |select area, sum(product) - 1, sum(sum(product)) over (partition by area)
-          |from windowData group by month, area
-        """.stripMargin),
-      Seq(
-        ("a", 4, 11),
-        ("a", 5, 11),
-        ("b", 6, 15),
-        ("b", 7, 15),
-        ("c", 8, 19),
-        ("c", 9, 19)
-      ).map(i => Row(i._1, i._2, i._3)))
+      checkAnswer(
+        sql(
+          """
+            |select area, sum(product) - 1, sum(sum(product)) over (partition by area)
+            |from windowData group by month, area
+          """.stripMargin),
+        Seq(
+          ("a", 4, 11),
+          ("a", 5, 11),
+          ("b", 6, 15),
+          ("b", 7, 15),
+          ("c", 8, 19),
+          ("c", 9, 19)
+        ).map(i => Row(i._1, i._2, i._3)))
 
-    checkAnswer(
-      sql(
-        """
-          |select area, sum(product), sum(product) / sum(sum(product)) over (partition by area)
-          |from windowData group by month, area
-        """.stripMargin),
-      Seq(
-        ("a", 5, 5d/11),
-        ("a", 6, 6d/11),
-        ("b", 7, 7d/15),
-        ("b", 8, 8d/15),
-        ("c", 10, 10d/19),
-        ("c", 9, 9d/19)
-      ).map(i => Row(i._1, i._2, i._3)))
+      checkAnswer(
+        sql(
+          """
+            |select area, sum(product), sum(product) / sum(sum(product)) over (partition by area)
+            |from windowData group by month, area
+          """.stripMargin),
+        Seq(
+          ("a", 5, 5d/11),
+          ("a", 6, 6d/11),
+          ("b", 7, 7d/15),
+          ("b", 8, 8d/15),
+          ("c", 10, 10d/19),
+          ("c", 9, 9d/19)
+        ).map(i => Row(i._1, i._2, i._3)))
 
-    checkAnswer(
-      sql(
-        """
-          |select area, sum(product), sum(product) / sum(sum(product) - 1) over (partition by area)
-          |from windowData group by month, area
-        """.stripMargin),
-      Seq(
-        ("a", 5, 5d/9),
-        ("a", 6, 6d/9),
-        ("b", 7, 7d/13),
-        ("b", 8, 8d/13),
-        ("c", 10, 10d/17),
-        ("c", 9, 9d/17)
-      ).map(i => Row(i._1, i._2, i._3)))
+      checkAnswer(
+        sql(
+          """
+            |select area, sum(product), sum(product) / sum(sum(product) - 1) over
+            |(partition by area)
+            |from windowData group by month, area
+          """.stripMargin),
+        Seq(
+          ("a", 5, 5d/9),
+          ("a", 6, 6d/9),
+          ("b", 7, 7d/13),
+          ("b", 8, 8d/13),
+          ("c", 10, 10d/17),
+          ("c", 9, 9d/17)
+        ).map(i => Row(i._1, i._2, i._3)))
+    }
   }
 
   test("window function: refer column in inner select block") {
@@ -112,22 +116,24 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
       WindowData(5, "c", 9),
       WindowData(6, "c", 10)
     )
-    sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
+    withTempView("windowData") {
+      sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
-    checkAnswer(
-      sql(
-        """
-          |select area, rank() over (partition by area order by tmp.month) + tmp.tmp1 as c1
-          |from (select month, area, product, 1 as tmp1 from windowData) tmp
-        """.stripMargin),
-      Seq(
-        ("a", 2),
-        ("a", 3),
-        ("b", 2),
-        ("b", 3),
-        ("c", 2),
-        ("c", 3)
-      ).map(i => Row(i._1, i._2)))
+      checkAnswer(
+        sql(
+          """
+            |select area, rank() over (partition by area order by tmp.month) + tmp.tmp1 as c1
+            |from (select month, area, product, 1 as tmp1 from windowData) tmp
+          """.stripMargin),
+        Seq(
+          ("a", 2),
+          ("a", 3),
+          ("b", 2),
+          ("b", 3),
+          ("c", 2),
+          ("c", 3)
+        ).map(i => Row(i._1, i._2)))
+    }
   }
 
   test("window function: partition and order expressions") {
@@ -139,38 +145,40 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
       WindowData(5, "c", 9),
       WindowData(6, "c", 10)
     )
-    sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
+    withTempView("windowData") {
+      sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
-    checkAnswer(
-      sql(
-        """
-          |select month, area, product, sum(product + 1) over (partition by 1 order by 2)
-          |from windowData
-        """.stripMargin),
-      Seq(
-        (1, "a", 5, 51),
-        (2, "a", 6, 51),
-        (3, "b", 7, 51),
-        (4, "b", 8, 51),
-        (5, "c", 9, 51),
-        (6, "c", 10, 51)
-      ).map(i => Row(i._1, i._2, i._3, i._4)))
+      checkAnswer(
+        sql(
+          """
+            |select month, area, product, sum(product + 1) over (partition by 1 order by 2)
+            |from windowData
+          """.stripMargin),
+        Seq(
+          (1, "a", 5, 51),
+          (2, "a", 6, 51),
+          (3, "b", 7, 51),
+          (4, "b", 8, 51),
+          (5, "c", 9, 51),
+          (6, "c", 10, 51)
+        ).map(i => Row(i._1, i._2, i._3, i._4)))
 
-    checkAnswer(
-      sql(
-        """
-          |select month, area, product, sum(product)
-          |over (partition by month % 2 order by 10 - product)
-          |from windowData
-        """.stripMargin),
-      Seq(
-        (1, "a", 5, 21),
-        (2, "a", 6, 24),
-        (3, "b", 7, 16),
-        (4, "b", 8, 18),
-        (5, "c", 9, 9),
-        (6, "c", 10, 10)
-      ).map(i => Row(i._1, i._2, i._3, i._4)))
+      checkAnswer(
+        sql(
+          """
+            |select month, area, product, sum(product)
+            |over (partition by month % 2 order by 10 - product)
+            |from windowData
+          """.stripMargin),
+        Seq(
+          (1, "a", 5, 21),
+          (2, "a", 6, 24),
+          (3, "b", 7, 16),
+          (4, "b", 8, 18),
+          (5, "c", 9, 9),
+          (6, "c", 10, 10)
+        ).map(i => Row(i._1, i._2, i._3, i._4)))
+    }
   }
 
   test("window function: distinct should not be silently ignored") {
@@ -182,16 +190,18 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
       WindowData(5, "c", 9),
       WindowData(6, "c", 10)
     )
-    sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
+    withTempView("windowData") {
+      sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
-    val e = intercept[AnalysisException] {
-      sql(
-        """
-          |select month, area, product, sum(distinct product + 1) over (partition by 1 order by 2)
-          |from windowData
-        """.stripMargin)
+      val e = intercept[AnalysisException] {
+        sql(
+          """
+            |select month, area, product, sum(distinct product + 1) over (partition by 1 order by 2)
+            |from windowData
+          """.stripMargin)
+      }
+      assert(e.getMessage.contains("Distinct window functions are not supported"))
     }
-    assert(e.getMessage.contains("Distinct window functions are not supported"))
   }
 
   test("window function: expressions in arguments of a window functions") {
@@ -203,23 +213,25 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
       WindowData(5, "c", 9),
       WindowData(6, "c", 10)
     )
-    sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
+    withTempView("windowData") {
+      sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
-    checkAnswer(
-      sql(
-        """
-          |select month, area, month % 2,
-          |lag(product, 1 + 1, product) over (partition by month % 2 order by area)
-          |from windowData
-        """.stripMargin),
-      Seq(
-        (1, "a", 1, 5),
-        (2, "a", 0, 6),
-        (3, "b", 1, 7),
-        (4, "b", 0, 8),
-        (5, "c", 1, 5),
-        (6, "c", 0, 6)
-      ).map(i => Row(i._1, i._2, i._3, i._4)))
+      checkAnswer(
+        sql(
+          """
+            |select month, area, month % 2,
+            |lag(product, 1 + 1, product) over (partition by month % 2 order by area)
+            |from windowData
+          """.stripMargin),
+        Seq(
+          (1, "a", 1, 5),
+          (2, "a", 0, 6),
+          (3, "b", 1, 7),
+          (4, "b", 0, 8),
+          (5, "c", 1, 5),
+          (6, "c", 0, 6)
+        ).map(i => Row(i._1, i._2, i._3, i._4)))
+    }
   }
 
 
@@ -232,63 +244,65 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
       WindowData(5, "c", 9),
       WindowData(6, "c", 11)
     )
-    sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
+    withTempView("windowData") {
+      sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
-    checkAnswer(
-      sql("select month, product, sum(product + 1) over() from windowData order by area"),
-      Seq(
-        (2, 6, 57),
-        (3, 7, 57),
-        (4, 8, 57),
-        (5, 9, 57),
-        (6, 11, 57),
-        (1, 10, 57)
-      ).map(i => Row(i._1, i._2, i._3)))
+      checkAnswer(
+        sql("select month, product, sum(product + 1) over() from windowData order by area"),
+        Seq(
+          (2, 6, 57),
+          (3, 7, 57),
+          (4, 8, 57),
+          (5, 9, 57),
+          (6, 11, 57),
+          (1, 10, 57)
+        ).map(i => Row(i._1, i._2, i._3)))
 
-    checkAnswer(
-      sql(
-        """
-          |select area, rank() over (partition by area order by tmp.month) + tmp.tmp1 as c1
-          |from (select month, area, product as p, 1 as tmp1 from windowData) tmp order by p
-        """.stripMargin),
-      Seq(
-        ("a", 2),
-        ("b", 2),
-        ("b", 3),
-        ("c", 2),
-        ("d", 2),
-        ("c", 3)
-      ).map(i => Row(i._1, i._2)))
+      checkAnswer(
+        sql(
+          """
+            |select area, rank() over (partition by area order by tmp.month) + tmp.tmp1 as c1
+            |from (select month, area, product as p, 1 as tmp1 from windowData) tmp order by p
+          """.stripMargin),
+        Seq(
+          ("a", 2),
+          ("b", 2),
+          ("b", 3),
+          ("c", 2),
+          ("d", 2),
+          ("c", 3)
+        ).map(i => Row(i._1, i._2)))
 
-    checkAnswer(
-      sql(
-        """
-          |select area, rank() over (partition by area order by month) as c1
-          |from windowData group by product, area, month order by product, area
-        """.stripMargin),
-      Seq(
-        ("a", 1),
-        ("b", 1),
-        ("b", 2),
-        ("c", 1),
-        ("d", 1),
-        ("c", 2)
-      ).map(i => Row(i._1, i._2)))
+      checkAnswer(
+        sql(
+          """
+            |select area, rank() over (partition by area order by month) as c1
+            |from windowData group by product, area, month order by product, area
+          """.stripMargin),
+        Seq(
+          ("a", 1),
+          ("b", 1),
+          ("b", 2),
+          ("c", 1),
+          ("d", 1),
+          ("c", 2)
+        ).map(i => Row(i._1, i._2)))
 
-    checkAnswer(
-      sql(
-        """
-          |select area, sum(product) / sum(sum(product)) over (partition by area) as c1
-          |from windowData group by area, month order by month, c1
-        """.stripMargin),
-      Seq(
-        ("d", 1.0),
-        ("a", 1.0),
-        ("b", 0.4666666666666667),
-        ("b", 0.5333333333333333),
-        ("c", 0.45),
-        ("c", 0.55)
-      ).map(i => Row(i._1, i._2)))
+      checkAnswer(
+        sql(
+          """
+            |select area, sum(product) / sum(sum(product)) over (partition by area) as c1
+            |from windowData group by area, month order by month, c1
+          """.stripMargin),
+        Seq(
+          ("d", 1.0),
+          ("a", 1.0),
+          ("b", 0.4666666666666667),
+          ("b", 0.5333333333333333),
+          ("c", 0.45),
+          ("c", 0.55)
+        ).map(i => Row(i._1, i._2)))
+    }
   }
 
   // todo: fix this test case by reimplementing the function ResolveAggregateFunctions
@@ -301,23 +315,25 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
       WindowData(5, "c", 9),
       WindowData(6, "c", 11)
     )
-    sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
+    withTempView("windowData") {
+      sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
-    checkAnswer(
-      sql(
-        """
-          |select area, sum(product) over () as c from windowData
-          |where product > 3 group by area, product
-          |having avg(month) > 0 order by avg(month), product
-        """.stripMargin),
-      Seq(
-        ("a", 51),
-        ("b", 51),
-        ("b", 51),
-        ("c", 51),
-        ("c", 51),
-        ("d", 51)
-      ).map(i => Row(i._1, i._2)))
+      checkAnswer(
+        sql(
+          """
+            |select area, sum(product) over () as c from windowData
+            |where product > 3 group by area, product
+            |having avg(month) > 0 order by avg(month), product
+          """.stripMargin),
+        Seq(
+          ("a", 51),
+          ("b", 51),
+          ("b", 51),
+          ("c", 51),
+          ("c", 51),
+          ("d", 51)
+        ).map(i => Row(i._1, i._2)))
+    }
   }
 
   test("window function: multiple window expressions in a single expression") {
@@ -356,7 +372,7 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
     spark.catalog.dropTempView("nums")
   }
 
-  test("window function: mutiple window expressions specified by range in a single expression") {
+  test("window function: multiple window expressions specified by range in a single expression") {
     val nums = sparkContext.parallelize(1 to 10).map(x => (x, x % 2)).toDF("x", "y")
     nums.createOrReplaceTempView("nums")
     withTempView("nums") {
@@ -477,13 +493,58 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
         |WINDOW w1 AS (ORDER BY x ROWS BETWEEN UNBOUNDED PRECEDiNG AND CURRENT RoW)
       """.stripMargin)
 
-    withSQLConf("spark.sql.windowExec.buffer.in.memory.threshold" -> "1",
-      "spark.sql.windowExec.buffer.spill.threshold" -> "2") {
+    withSQLConf(WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+      WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "2") {
       assertSpilled(sparkContext, "test with low buffer spill threshold") {
         checkAnswer(actual, expected)
       }
     }
 
     spark.catalog.dropTempView("nums")
+  }
+
+  test("sql parameters in window frame clause") {
+    val data = Seq(
+      WindowData(1, "d", 10),
+      WindowData(2, "a", 6),
+      WindowData(3, "b", 7),
+      WindowData(4, "b", 8),
+      WindowData(5, "c", 9),
+      WindowData(6, "c", 11)
+    )
+    val expected = Seq(
+      Row(11),
+      Row(12),
+      Row(15),
+      Row(6),
+      Row(6),
+      Row(9)
+    )
+
+    withTempView("windowData") {
+      sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
+
+      // Named parameters.
+      val namedParamSql = """
+        |SELECT
+        |  SUM(month) OVER (ORDER BY month ROWS BETWEEN CURRENT ROW AND :param1 FOLLOWING)
+        |FROM windowData
+      """.stripMargin
+      checkAnswer(spark.sql(namedParamSql, Map("param1" -> 2)), expected)
+
+      // Positional parameters.
+      val postParamSql = """
+        |SELECT
+        |  SUM(month) OVER (ORDER BY month ROWS BETWEEN CURRENT ROW AND ? FOLLOWING)
+        |FROM windowData
+      """.stripMargin
+      checkAnswer(spark.sql(postParamSql, Array(2)), expected)
+
+      // Wrong type of parameter.
+      val e = intercept[AnalysisException] {
+        spark.sql(namedParamSql, Map("param1" -> "abc")).collect()
+      }
+      assert(e.errorClass.contains("DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE"))
+    }
   }
 }

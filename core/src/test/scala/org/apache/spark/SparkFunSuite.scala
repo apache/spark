@@ -17,93 +17,84 @@
 
 package org.apache.spark
 
-// scalastyle:off
-import java.io.File
+import scala.annotation.tailrec
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Outcome}
-
-import org.apache.spark.internal.Logging
-import org.apache.spark.util.AccumulatorContext
+import org.scalactic.source.Position
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach, Tag}
+import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
+import org.scalatest.time._ // scalastyle:ignore
 
 /**
- * Base abstract class for all unit tests in Spark for handling common functionality.
- *
- * Thread audit happens normally here automatically when a new test suite created.
- * The only prerequisite for that is that the test class must extend [[SparkFunSuite]].
- *
- * It is possible to override the default thread audit behavior by setting enableAutoThreadAudit
- * to false and manually calling the audit methods, if desired. For example:
- *
- * class MyTestSuite extends SparkFunSuite {
- *
- *   override val enableAutoThreadAudit = false
- *
- *   protected override def beforeAll(): Unit = {
- *     doThreadPreAudit()
- *     super.beforeAll()
- *   }
- *
- *   protected override def afterAll(): Unit = {
- *     super.afterAll()
- *     doThreadPostAudit()
- *   }
- * }
+ * Base Spark AnyFunSuite with the abilities from SparkTestSuite
  */
 abstract class SparkFunSuite
-  extends FunSuite
-  with BeforeAndAfterAll
-  with ThreadAudit
-  with Logging {
-// scalastyle:on
+  extends AnyFunSuite // scalastyle:ignore funsuite
+  with SparkTestSuite {
 
-  protected val enableAutoThreadAudit = true
-
-  protected override def beforeAll(): Unit = {
-    System.setProperty("spark.testing", "true")
-    if (enableAutoThreadAudit) {
-      doThreadPreAudit()
+  override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
+    (implicit pos: Position): Unit = {
+    if (excluded.contains(testName)) {
+      ignore(s"$testName (excluded)")(testBody)
+    } else {
+      val timeout = sys.props.getOrElse("spark.test.timeout", "20").toLong
+      super.test(testName, testTags: _*)(
+        failAfter(Span(timeout, Minutes))(testBody)
+      )
     }
-    super.beforeAll()
   }
 
-  protected override def afterAll(): Unit = {
-    try {
-      // Avoid leaking map entries in tests that use accumulators without SparkContext
-      AccumulatorContext.clear()
-    } finally {
-      super.afterAll()
-      if (enableAutoThreadAudit) {
-        doThreadPostAudit()
+  /**
+   * Note: this method doesn't support `BeforeAndAfter`. You must use `BeforeAndAfterEach` to
+   * set up and tear down resources.
+   */
+  def testRetry(s: String, n: Int = 2)(body: => Unit): Unit = {
+    test(s) {
+      retry(n) {
+        body
       }
     }
   }
 
-  // helper function
-  protected final def getTestResourceFile(file: String): File = {
-    new File(getClass.getClassLoader.getResource(file).getFile)
-  }
-
-  protected final def getTestResourcePath(file: String): String = {
-    getTestResourceFile(file).getCanonicalPath
-  }
-
   /**
-   * Log the suite name and the test name before and after each test.
-   *
-   * Subclasses should never override this method. If they wish to run
-   * custom code before and after each test, they should mix in the
-   * {{org.scalatest.BeforeAndAfter}} trait instead.
+   * Note: this method doesn't support `BeforeAndAfter`. You must use `BeforeAndAfterEach` to
+   * set up and tear down resources.
    */
-  final protected override def withFixture(test: NoArgTest): Outcome = {
-    val testName = test.text
-    val suiteName = this.getClass.getName
-    val shortSuiteName = suiteName.replaceAll("org.apache.spark", "o.a.s")
-    try {
-      logInfo(s"\n\n===== TEST OUTPUT FOR $shortSuiteName: '$testName' =====\n")
-      test()
-    } finally {
-      logInfo(s"\n\n===== FINISHED $shortSuiteName: '$testName' =====\n")
+  def retry[T](n: Int)(body: => T): T = {
+    if (this.isInstanceOf[BeforeAndAfter]) {
+      throw new UnsupportedOperationException(
+        s"testRetry/retry cannot be used with ${classOf[BeforeAndAfter]}. " +
+          s"Please use ${classOf[BeforeAndAfterEach]} instead.")
+    }
+    retry0(n, n)(body)
+  }
+
+  @tailrec private final def retry0[T](n: Int, n0: Int)(body: => T): T = {
+    try body
+    catch { case e: Throwable =>
+      if (n > 0) {
+        logWarning(e.getMessage, e)
+        logInfo(s"\n\n===== RETRY #${n0 - n + 1} =====\n")
+        // Reset state before re-attempting in order so that tests which use patterns like
+        // LocalSparkContext to clean up state can work correctly when retried.
+        afterEach()
+        beforeEach()
+        retry0(n-1, n0)(body)
+      }
+      else throw e
     }
   }
 
+  protected def gridTest[A](testNamePrefix: String, testTags: Tag*)(params: Seq[A])(
+    testFun: A => Unit): Unit = {
+    for (param <- params) {
+      test(testNamePrefix + s" ($param)", testTags: _*)(testFun(param))
+    }
+  }
+
+  protected def namedGridTest[A](testNamePrefix: String, testTags: Tag*)(params: Map[String, A])(
+    testFun: A => Unit): Unit = {
+    for (param <- params) {
+      test(testNamePrefix + s" ${param._1}", testTags: _*)(testFun(param._2))
+    }
+  }
 }

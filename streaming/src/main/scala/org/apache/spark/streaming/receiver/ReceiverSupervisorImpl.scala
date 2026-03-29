@@ -21,20 +21,20 @@ import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
-import com.google.common.base.Throwables
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkEnv, SparkException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.internal.LogKeys.{ERROR, MESSAGE}
 import org.apache.spark.rpc.{RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.util.WriteAheadLogUtils
-import org.apache.spark.util.RpcUtils
+import org.apache.spark.util.{RpcUtils, Utils}
 
 /**
  * Concrete implementation of [[org.apache.spark.streaming.receiver.ReceiverSupervisor]]
@@ -84,7 +84,7 @@ private[streaming] class ReceiverSupervisorImpl(
           logDebug("Received delete old batch signal")
           cleanupOldBlocks(threshTime)
         case UpdateRateLimit(eps) =>
-          logInfo(s"Received a new rate limit: $eps.")
+          logInfo(log"Received a new rate limit: ${MDC(LogKeys.RATE_LIMIT, eps)}.")
           registeredBlockGenerators.asScala.foreach { bg =>
             bg.updateRate(eps)
           }
@@ -102,11 +102,11 @@ private[streaming] class ReceiverSupervisorImpl(
 
     def onGenerateBlock(blockId: StreamBlockId): Unit = { }
 
-    def onError(message: String, throwable: Throwable) {
+    def onError(message: String, throwable: Throwable): Unit = {
       reportError(message, throwable)
     }
 
-    def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_]) {
+    def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_]): Unit = {
       pushArrayBuffer(arrayBuffer, None, Some(blockId))
     }
   }
@@ -116,7 +116,7 @@ private[streaming] class ReceiverSupervisorImpl(
   override private[streaming] def getCurrentRateLimit: Long = defaultBlockGenerator.getCurrentLimit
 
   /** Push a single record of received data into block generator. */
-  def pushSingle(data: Any) {
+  def pushSingle(data: Any): Unit = {
     defaultBlockGenerator.addData(data)
   }
 
@@ -125,7 +125,7 @@ private[streaming] class ReceiverSupervisorImpl(
       arrayBuffer: ArrayBuffer[_],
       metadataOption: Option[Any],
       blockIdOption: Option[StreamBlockId]
-    ) {
+    ): Unit = {
     pushAndReportBlock(ArrayBufferBlock(arrayBuffer), metadataOption, blockIdOption)
   }
 
@@ -134,7 +134,7 @@ private[streaming] class ReceiverSupervisorImpl(
       iterator: Iterator[_],
       metadataOption: Option[Any],
       blockIdOption: Option[StreamBlockId]
-    ) {
+    ): Unit = {
     pushAndReportBlock(IteratorBlock(iterator), metadataOption, blockIdOption)
   }
 
@@ -143,7 +143,7 @@ private[streaming] class ReceiverSupervisorImpl(
       bytes: ByteBuffer,
       metadataOption: Option[Any],
       blockIdOption: Option[StreamBlockId]
-    ) {
+    ): Unit = {
     pushAndReportBlock(ByteBufferBlock(bytes), metadataOption, blockIdOption)
   }
 
@@ -152,7 +152,7 @@ private[streaming] class ReceiverSupervisorImpl(
       receivedBlock: ReceivedBlock,
       metadataOption: Option[Any],
       blockIdOption: Option[StreamBlockId]
-    ) {
+    ): Unit = {
     val blockId = blockIdOption.getOrElse(nextBlockId)
     val time = System.currentTimeMillis
     val blockStoreResult = receivedBlockHandler.storeBlock(blockId, receivedBlock)
@@ -166,17 +166,17 @@ private[streaming] class ReceiverSupervisorImpl(
   }
 
   /** Report error to the receiver tracker */
-  def reportError(message: String, error: Throwable) {
-    val errorString = Option(error).map(Throwables.getStackTraceAsString).getOrElse("")
+  def reportError(message: String, error: Throwable): Unit = {
+    val errorString = Option(error).map(Utils.stackTraceToString).getOrElse("")
     trackerEndpoint.send(ReportError(streamId, message, errorString))
-    logWarning("Reported error " + message + " - " + error)
+    logWarning(log"Reported error ${MDC(MESSAGE, message)} - ${MDC(ERROR, error)}")
   }
 
-  override protected def onStart() {
+  override protected def onStart(): Unit = {
     registeredBlockGenerators.asScala.foreach { _.start() }
   }
 
-  override protected def onStop(message: String, error: Option[Throwable]) {
+  override protected def onStop(message: String, error: Option[Throwable]): Unit = {
     receivedBlockHandler match {
       case handler: WriteAheadLogBasedBlockHandler =>
         // Write ahead log should be closed.
@@ -193,11 +193,11 @@ private[streaming] class ReceiverSupervisorImpl(
     trackerEndpoint.askSync[Boolean](msg)
   }
 
-  override protected def onReceiverStop(message: String, error: Option[Throwable]) {
-    logInfo("Deregistering receiver " + streamId)
-    val errorString = error.map(Throwables.getStackTraceAsString).getOrElse("")
+  override protected def onReceiverStop(message: String, error: Option[Throwable]): Unit = {
+    logInfo(log"Deregistering receiver ${MDC(LogKeys.STREAM_ID, streamId)}")
+    val errorString = error.map(Utils.stackTraceToString).getOrElse("")
     trackerEndpoint.askSync[Boolean](DeregisterReceiver(streamId, message, errorString))
-    logInfo("Stopped receiver " + streamId)
+    logInfo(log"Stopped receiver ${MDC(LogKeys.STREAM_ID, streamId)}")
   }
 
   override def createBlockGenerator(
@@ -215,7 +215,7 @@ private[streaming] class ReceiverSupervisorImpl(
   private def nextBlockId = StreamBlockId(streamId, newBlockId.getAndIncrement)
 
   private def cleanupOldBlocks(cleanupThreshTime: Time): Unit = {
-    logDebug(s"Cleaning up blocks older then $cleanupThreshTime")
+    logDebug(s"Cleaning up blocks older than $cleanupThreshTime")
     receivedBlockHandler.cleanupOldBlocks(cleanupThreshTime.milliseconds)
   }
 }

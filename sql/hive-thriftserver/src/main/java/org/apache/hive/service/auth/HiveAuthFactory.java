@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,30 +17,21 @@
 package org.apache.hive.service.auth;
 
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
-import javax.net.ssl.SSLServerSocket;
 import javax.security.auth.login.LoginException;
 import javax.security.sasl.Sasl;
 
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
-import org.apache.hadoop.hive.metastore.HiveMetaStore;
-import org.apache.hadoop.hive.metastore.HiveMetaStore.HMSHandler;
-import org.apache.hadoop.hive.metastore.api.MetaException;
+import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.shims.HadoopShims.KerberosNameShim;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.hive.thrift.DBTokenStore;
+import org.apache.hadoop.hive.thrift.HiveDelegationTokenManager;
 import org.apache.hadoop.hive.thrift.HadoopThriftAuthBridge;
 import org.apache.hadoop.hive.thrift.HadoopThriftAuthBridge.Server.ServerMode;
 import org.apache.hadoop.security.SecurityUtil;
@@ -50,22 +40,21 @@ import org.apache.hadoop.security.authorize.ProxyUsers;
 import org.apache.hive.service.cli.HiveSQLException;
 import org.apache.hive.service.cli.thrift.ThriftCLIService;
 import org.apache.thrift.TProcessorFactory;
-import org.apache.thrift.transport.TSSLTransportFactory;
-import org.apache.thrift.transport.TServerSocket;
-import org.apache.thrift.transport.TSocket;
-import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
 import org.apache.thrift.transport.TTransportFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 /**
  * This class helps in some aspects of authentication. It creates the proper Thrift classes for the
  * given configuration as well as helps with authenticating requests.
  */
 public class HiveAuthFactory {
-  private static final Logger LOG = LoggerFactory.getLogger(HiveAuthFactory.class);
 
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(HiveAuthFactory.class);
 
   public enum AuthTypes {
     NOSASL("NOSASL"),
@@ -91,22 +80,14 @@ public class HiveAuthFactory {
   private String authTypeStr;
   private final String transportMode;
   private final HiveConf conf;
+  private HiveDelegationTokenManager delegationTokenManager = null;
 
   public static final String HS2_PROXY_USER = "hive.server2.proxy.user";
   public static final String HS2_CLIENT_TOKEN = "hiveserver2ClientToken";
 
-  private static Field keytabFile = null;
   private static Method getKeytab = null;
   static {
     Class<?> clz = UserGroupInformation.class;
-    try {
-      keytabFile = clz.getDeclaredField("keytabFile");
-      keytabFile.setAccessible(true);
-    } catch (NoSuchFieldException nfe) {
-      LOG.debug("Cannot find private field \"keytabFile\" in class: " +
-        UserGroupInformation.class.getCanonicalName(), nfe);
-      keytabFile = null;
-    }
 
     try {
       getKeytab = clz.getDeclaredMethod("getKeytab");
@@ -137,27 +118,30 @@ public class HiveAuthFactory {
         String keytab = conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB);
         if (needUgiLogin(UserGroupInformation.getCurrentUser(),
           SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keytab)) {
-          saslServer = ShimLoader.getHadoopThriftAuthBridge().createServer(principal, keytab);
+          saslServer = ShimLoader.getHadoopThriftAuthBridge().createServer(keytab, principal);
         } else {
           // Using the default constructor to avoid unnecessary UGI login.
           saslServer = new HadoopThriftAuthBridge.Server();
         }
 
         // start delegation token manager
+        delegationTokenManager = new HiveDelegationTokenManager();
         try {
           // rawStore is only necessary for DBTokenStore
           Object rawStore = null;
-          String tokenStoreClass = conf.getVar(HiveConf.ConfVars.METASTORE_CLUSTER_DELEGATION_TOKEN_STORE_CLS);
+          String tokenStoreClass = conf.getVar(
+              HiveConf.ConfVars.METASTORE_CLUSTER_DELEGATION_TOKEN_STORE_CLS);
 
           if (tokenStoreClass.equals(DBTokenStore.class.getName())) {
-            HMSHandler baseHandler = new HiveMetaStore.HMSHandler(
-                "new db based metaserver", conf, true);
-            rawStore = baseHandler.getMS();
+            // Follows https://issues.apache.org/jira/browse/HIVE-12270
+            rawStore = Hive.class;
           }
 
-          saslServer.startDelegationTokenSecretManager(conf, rawStore, ServerMode.HIVESERVER2);
+          delegationTokenManager.startDelegationTokenSecretManager(
+              conf, rawStore, ServerMode.HIVESERVER2);
+          saslServer.setSecretManager(delegationTokenManager.getSecretManager());
         }
-        catch (MetaException|IOException e) {
+        catch (IOException e) {
           throw new TTransportException("Failed to start token manager", e);
         }
       }
@@ -245,81 +229,17 @@ public class HiveAuthFactory {
     }
   }
 
-  public static TTransport getSocketTransport(String host, int port, int loginTimeout) {
-    return new TSocket(host, port, loginTimeout);
-  }
-
-  public static TTransport getSSLSocket(String host, int port, int loginTimeout)
-    throws TTransportException {
-    return TSSLTransportFactory.getClientSocket(host, port, loginTimeout);
-  }
-
-  public static TTransport getSSLSocket(String host, int port, int loginTimeout,
-    String trustStorePath, String trustStorePassWord) throws TTransportException {
-    TSSLTransportFactory.TSSLTransportParameters params =
-      new TSSLTransportFactory.TSSLTransportParameters();
-    params.setTrustStore(trustStorePath, trustStorePassWord);
-    params.requireClientAuth(true);
-    return TSSLTransportFactory.getClientSocket(host, port, loginTimeout, params);
-  }
-
-  public static TServerSocket getServerSocket(String hiveHost, int portNum)
-    throws TTransportException {
-    InetSocketAddress serverAddress;
-    if (hiveHost == null || hiveHost.isEmpty()) {
-      // Wildcard bind
-      serverAddress = new InetSocketAddress(portNum);
-    } else {
-      serverAddress = new InetSocketAddress(hiveHost, portNum);
-    }
-    return new TServerSocket(serverAddress);
-  }
-
-  public static TServerSocket getServerSSLSocket(String hiveHost, int portNum, String keyStorePath,
-      String keyStorePassWord, List<String> sslVersionBlacklist) throws TTransportException,
-      UnknownHostException {
-    TSSLTransportFactory.TSSLTransportParameters params =
-        new TSSLTransportFactory.TSSLTransportParameters();
-    params.setKeyStore(keyStorePath, keyStorePassWord);
-    InetSocketAddress serverAddress;
-    if (hiveHost == null || hiveHost.isEmpty()) {
-      // Wildcard bind
-      serverAddress = new InetSocketAddress(portNum);
-    } else {
-      serverAddress = new InetSocketAddress(hiveHost, portNum);
-    }
-    TServerSocket thriftServerSocket =
-        TSSLTransportFactory.getServerSocket(portNum, 0, serverAddress.getAddress(), params);
-    if (thriftServerSocket.getServerSocket() instanceof SSLServerSocket) {
-      List<String> sslVersionBlacklistLocal = new ArrayList<String>();
-      for (String sslVersion : sslVersionBlacklist) {
-        sslVersionBlacklistLocal.add(sslVersion.trim().toLowerCase(Locale.ROOT));
-      }
-      SSLServerSocket sslServerSocket = (SSLServerSocket) thriftServerSocket.getServerSocket();
-      List<String> enabledProtocols = new ArrayList<String>();
-      for (String protocol : sslServerSocket.getEnabledProtocols()) {
-        if (sslVersionBlacklistLocal.contains(protocol.toLowerCase(Locale.ROOT))) {
-          LOG.debug("Disabling SSL Protocol: " + protocol);
-        } else {
-          enabledProtocols.add(protocol);
-        }
-      }
-      sslServerSocket.setEnabledProtocols(enabledProtocols.toArray(new String[0]));
-      LOG.info("SSL Server Socket Enabled Protocols: "
-          + Arrays.toString(sslServerSocket.getEnabledProtocols()));
-    }
-    return thriftServerSocket;
-  }
-
   // retrieve delegation token for the given user
-  public String getDelegationToken(String owner, String renewer) throws HiveSQLException {
-    if (saslServer == null) {
+  public String getDelegationToken(String owner, String renewer, String remoteAddr)
+      throws HiveSQLException {
+    if (delegationTokenManager == null) {
       throw new HiveSQLException(
           "Delegation token only supported over kerberos authentication", "08S01");
     }
 
     try {
-      String tokenStr = saslServer.getDelegationTokenWithService(owner, renewer, HS2_CLIENT_TOKEN);
+      String tokenStr = delegationTokenManager.getDelegationTokenWithService(owner, renewer,
+          HS2_CLIENT_TOKEN, remoteAddr);
       if (tokenStr == null || tokenStr.isEmpty()) {
         throw new HiveSQLException(
             "Received empty retrieving delegation token for user " + owner, "08S01");
@@ -335,12 +255,12 @@ public class HiveAuthFactory {
 
   // cancel given delegation token
   public void cancelDelegationToken(String delegationToken) throws HiveSQLException {
-    if (saslServer == null) {
+    if (delegationTokenManager == null) {
       throw new HiveSQLException(
           "Delegation token only supported over kerberos authentication", "08S01");
     }
     try {
-      saslServer.cancelDelegationToken(delegationToken);
+      delegationTokenManager.cancelDelegationToken(delegationToken);
     } catch (IOException e) {
       throw new HiveSQLException(
           "Error canceling delegation token " + delegationToken, "08S01", e);
@@ -348,25 +268,39 @@ public class HiveAuthFactory {
   }
 
   public void renewDelegationToken(String delegationToken) throws HiveSQLException {
-    if (saslServer == null) {
+    if (delegationTokenManager == null) {
       throw new HiveSQLException(
           "Delegation token only supported over kerberos authentication", "08S01");
     }
     try {
-      saslServer.renewDelegationToken(delegationToken);
+      delegationTokenManager.renewDelegationToken(delegationToken);
     } catch (IOException e) {
       throw new HiveSQLException(
           "Error renewing delegation token " + delegationToken, "08S01", e);
     }
   }
 
-  public String getUserFromToken(String delegationToken) throws HiveSQLException {
-    if (saslServer == null) {
+  public String verifyDelegationToken(String delegationToken) throws HiveSQLException {
+    if (delegationTokenManager == null) {
       throw new HiveSQLException(
           "Delegation token only supported over kerberos authentication", "08S01");
     }
     try {
-      return saslServer.getUserFromToken(delegationToken);
+      return delegationTokenManager.verifyDelegationToken(delegationToken);
+    } catch (IOException e) {
+      String msg = "Error verifying delegation token";
+      LOG.error(msg + " {}", e, MDC.of(LogKeys.TOKEN, delegationToken));
+      throw new HiveSQLException(msg + delegationToken, "08S01", e);
+    }
+  }
+
+  public String getUserFromToken(String delegationToken) throws HiveSQLException {
+    if (delegationTokenManager == null) {
+      throw new HiveSQLException(
+          "Delegation token only supported over kerberos authentication", "08S01");
+    }
+    try {
+      return delegationTokenManager.getUserFromToken(delegationToken);
     } catch (IOException e) {
       throw new HiveSQLException(
           "Error extracting user from delegation token " + delegationToken, "08S01", e);
@@ -403,9 +337,7 @@ public class HiveAuthFactory {
   private static String getKeytabFromUgi() {
     synchronized (UserGroupInformation.class) {
       try {
-        if (keytabFile != null) {
-          return (String) keytabFile.get(null);
-        } else if (getKeytab != null) {
+        if (getKeytab != null) {
           return (String) getKeytab.invoke(UserGroupInformation.getCurrentUser());
         } else {
           return null;

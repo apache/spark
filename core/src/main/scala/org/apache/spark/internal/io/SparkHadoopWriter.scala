@@ -18,7 +18,7 @@
 package org.apache.spark.internal.io
 
 import java.text.NumberFormat
-import java.util.{Date, Locale}
+import java.util.{Date, Locale, UUID}
 
 import scala.reflect.ClassTag
 
@@ -33,9 +33,11 @@ import org.apache.hadoop.mapreduce.task.{TaskAttemptContextImpl => NewTaskAttemp
 import org.apache.spark.{SerializableWritable, SparkConf, SparkException, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{DURATION, JOB_ID, TASK_ATTEMPT_ID}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.util.{SerializableConfiguration, SerializableJobConf, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A helper object that saves an RDD using a Hadoop OutputFormat.
@@ -70,6 +72,11 @@ object SparkHadoopWriter extends Logging {
     // Assert the output format/key/value class is set in JobConf.
     config.assertConf(jobContext, rdd.conf)
 
+    // propagate the description UUID into the jobs, so that committers
+    // get an ID guaranteed to be unique.
+    jobContext.getConfiguration.set("spark.sql.sources.writeJobUUID",
+      UUID.randomUUID.toString)
+
     val committer = config.createCommitter(commitJobId)
     committer.setupJob(jobContext)
 
@@ -78,24 +85,27 @@ object SparkHadoopWriter extends Logging {
       val ret = sparkContext.runJob(rdd, (context: TaskContext, iter: Iterator[(K, V)]) => {
         // SPARK-24552: Generate a unique "attempt ID" based on the stage and task attempt numbers.
         // Assumes that there won't be more than Short.MaxValue attempts, at least not concurrently.
-        val attemptId = (context.stageAttemptNumber << 16) | context.attemptNumber
+        val attemptId = (context.stageAttemptNumber() << 16) | context.attemptNumber()
 
         executeTask(
           context = context,
           config = config,
           jobTrackerId = jobTrackerId,
           commitJobId = commitJobId,
-          sparkPartitionId = context.partitionId,
+          sparkPartitionId = context.partitionId(),
           sparkAttemptNumber = attemptId,
           committer = committer,
           iterator = iter)
       })
 
-      committer.commitJob(jobContext, ret)
-      logInfo(s"Job ${jobContext.getJobID} committed.")
+      logInfo(log"Start to commit write Job ${MDC(JOB_ID, jobContext.getJobID)}.")
+      val (_, duration) = Utils
+        .timeTakenMs { committer.commitJob(jobContext, ret.toImmutableArraySeq) }
+      logInfo(log"Write Job ${MDC(JOB_ID, jobContext.getJobID)} committed." +
+        log" Elapsed time: ${MDC(DURATION, duration)} ms.")
     } catch {
       case cause: Throwable =>
-        logError(s"Aborting job ${jobContext.getJobID}.", cause)
+        logError(log"Aborting job ${MDC(JOB_ID, jobContext.getJobID)}.", cause)
         committer.abortJob(jobContext)
         throw new SparkException("Job aborted.", cause)
     }
@@ -116,11 +126,13 @@ object SparkHadoopWriter extends Logging {
       jobTrackerId, commitJobId, sparkPartitionId, sparkAttemptNumber)
     committer.setupTask(taskContext)
 
-    val (outputMetrics, callback) = initHadoopOutputMetrics(context)
-
     // Initiate the writer.
     config.initWriter(taskContext, sparkPartitionId)
     var recordsWritten = 0L
+
+    // We must initialize the callback for calculating bytes written after the statistic table
+    // is initialized in FileSystem which is happened in initWriter.
+    val (outputMetrics, callback) = initHadoopOutputMetrics(context)
 
     // Write all rows in RDD partition.
     try {
@@ -142,7 +154,7 @@ object SparkHadoopWriter extends Logging {
           config.closeWriter(taskContext)
         } finally {
           committer.abortTask(taskContext)
-          logError(s"Task ${taskContext.getTaskAttemptID} aborted.")
+          logError(log"Task ${MDC(TASK_ATTEMPT_ID, taskContext.getTaskAttemptID)} aborted.")
         }
       })
 
@@ -220,7 +232,9 @@ class HadoopMapRedWriteConfigUtil[K, V: ClassTag](conf: SerializableJobConf)
       if (path != null) {
         path.getFileSystem(getConf)
       } else {
+        // scalastyle:off FileSystemGet
         FileSystem.get(getConf)
+        // scalastyle:on FileSystemGet
       }
     }
 
@@ -283,7 +297,9 @@ class HadoopMapRedWriteConfigUtil[K, V: ClassTag](conf: SerializableJobConf)
 
     if (SparkHadoopWriterUtils.isOutputSpecValidationEnabled(conf)) {
       // FileOutputFormat ignores the filesystem parameter
+      // scalastyle:off FileSystemGet
       val ignoredFs = FileSystem.get(getConf)
+      // scalastyle:on FileSystemGet
       getOutputFormat().checkOutputSpecs(ignoredFs, getConf)
     }
   }

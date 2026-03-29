@@ -17,7 +17,8 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
+
 import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -67,13 +68,12 @@ public final class StreamResponse extends AbstractResponseMessage {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(byteCount, streamId);
+    return Objects.hash(byteCount, streamId);
   }
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof StreamResponse) {
-      StreamResponse o = (StreamResponse) other;
+    if (other instanceof StreamResponse o) {
       return byteCount == o.byteCount && streamId.equals(o.streamId);
     }
     return false;
@@ -81,11 +81,8 @@ public final class StreamResponse extends AbstractResponseMessage {
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("streamId", streamId)
-      .add("byteCount", byteCount)
-      .add("body", body())
-      .toString();
+    return "StreamResponse[streamId=" + streamId + ",byteCount=" + byteCount +
+        ",body=" + body() + "]";
   }
 
 }

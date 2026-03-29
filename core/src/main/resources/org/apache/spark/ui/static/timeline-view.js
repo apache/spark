@@ -15,6 +15,31 @@
  * limitations under the License.
  */
 
+/* global $, vis, uiRoot, appBasePath */
+/* eslint-disable no-unused-vars */
+const xAxisFormat = {
+  minorLabels: {
+    millisecond:'SSS',
+    second:     'ss',
+    minute:     'mm',
+    hour:       'HH',
+    weekday:    'DD',
+    day:        'DD',
+    month:      'MM',
+    year:       'YYYY'
+  },
+  majorLabels: {
+    millisecond:'YYYY/MM/DD HH:mm:ss',
+    second:     'YYYY/MM/DD HH:mm',
+    minute:     'YYYY/MM/DD HH',
+    hour:       'YYYY/MM/DD',
+    weekday:    'YYYY/MM',
+    day:        'YYYY/MM',
+    month:      'YYYY',
+    year:       ''
+  }
+}
+
 function drawApplicationTimeline(groupArray, eventObjArray, startTime, offset) {
   var groups = new vis.DataSet(groupArray);
   var items = new vis.DataSet(eventObjArray);
@@ -26,42 +51,55 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime, offset) {
     editable: false,
     align: 'left',
     showCurrentTime: false,
-    min: startTime,
+    start: startTime,
     zoomable: false,
+    locale: "en",
     moment: function (date) {
       return vis.moment(date).utcOffset(offset);
+    },
+    format: xAxisFormat,
+    xss: {
+      disabled: false,
+      filterOptions: {
+        whiteList: { svg: ['width', 'height', 'class'], div: ['class', 'style', 'data-bs-toggle', 'data-bs-placement',
+          'data-bs-html', 'data-bs-container', 'data-title', 'data-original-title', 'title'],
+        text: ['x', 'y'], rect: ['x', 'y', 'class', 'width', 'height', 'rx', 'ry'],},
+      },
     }
   };
 
-  var applicationTimeline = new vis.Timeline(container);
-  applicationTimeline.setOptions(options);
-  applicationTimeline.setGroups(groups);
-  applicationTimeline.setItems(items);
-
+  var applicationTimeline = new vis.Timeline(container, items, groups, options);
   setupZoomable("#application-timeline-zoom-lock", applicationTimeline);
   setupExecutorEventAction();
 
+  function getIdForJobEntry(baseElem) {
+    var jobIdText = $($(baseElem).find(".application-timeline-content")[0]).text();
+    var jobId = jobIdText.match("\\(Job (\\d+)\\)$")[1];
+    return jobId;
+  }
+
+  function getSelectorForJobEntry(jobId) {
+    return "#job-" + jobId;
+  }
+
   function setupJobEventAction() {
     $(".vis-item.vis-range.job.application-timeline-object").each(function() {
-      var getSelectorForJobEntry = function(baseElem) {
-        var jobIdText = $($(baseElem).find(".application-timeline-content")[0]).text();
-        var jobId = jobIdText.match("\\(Job (\\d+)\\)$")[1];
-       return "#job-" + jobId;
-      };
-
       $(this).click(function() {
-        var jobPagePath = $(getSelectorForJobEntry(this)).find("a.name-link").attr("href")
-          window.location.href = jobPagePath
+        var jobId = getIdForJobEntry(this);
+        var jobPagePath = uiRoot + appBasePath + "/jobs/job/?id=" + jobId;
+        window.location.href = jobPagePath;
       });
 
       $(this).hover(
         function() {
-          $(getSelectorForJobEntry(this)).addClass("corresponding-item-hover");
-          $($(this).find("div.application-timeline-content")[0]).tooltip("show");
+          $(getSelectorForJobEntry(getIdForJobEntry(this))).addClass("corresponding-item-hover");
+          var el = $($(this).find("div.application-timeline-content")[0])[0];
+          var tt = bootstrap.Tooltip.getOrCreateInstance(el, {container: "body"}); tt.show();
         },
         function() {
-          $(getSelectorForJobEntry(this)).removeClass("corresponding-item-hover");
-          $($(this).find("div.application-timeline-content")[0]).tooltip("hide");
+          $(getSelectorForJobEntry(getIdForJobEntry(this))).removeClass("corresponding-item-hover");
+          var el = $($(this).find("div.application-timeline-content")[0])[0];
+          var tt = bootstrap.Tooltip.getInstance(el); if (tt) tt.hide();
         }
       );
     });
@@ -75,6 +113,9 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime, offset) {
 
     $("#application-timeline").toggleClass('collapsed');
 
+    var visibilityState = status ? "" : "none";
+    $("#application-timeline").css("display", visibilityState);
+
     // Switch the class of the arrow from open to closed.
     $(this).find('.expand-application-timeline-arrow').toggleClass('arrow-open');
     $(this).find('.expand-application-timeline-arrow').toggleClass('arrow-closed');
@@ -83,11 +124,14 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime, offset) {
   });
 }
 
-$(function (){
-  if (window.localStorage.getItem("expand-application-timeline") == "true") {
+$(function () {
+  if ($("span.expand-application-timeline").length &&
+      window.localStorage.getItem("expand-application-timeline") == "true") {
     // Set it to false so that the click function can revert it
     window.localStorage.setItem("expand-application-timeline", "false");
     $("span.expand-application-timeline").trigger('click');
+  } else {
+    $("#application-timeline").css("display", "none");
   }
 });
 
@@ -102,42 +146,61 @@ function drawJobTimeline(groupArray, eventObjArray, startTime, offset) {
     editable: false,
     align: 'left',
     showCurrentTime: false,
-    min: startTime,
+    start: startTime,
     zoomable: false,
+    locale: "en",
     moment: function (date) {
       return vis.moment(date).utcOffset(offset);
+    },
+    format: xAxisFormat,
+    xss: {
+      disabled: false,
+      filterOptions: {
+        whiteList: { svg: ['width', 'height', 'class'], div: ['class', 'style', 'data-bs-toggle', 'data-bs-placement',
+          'data-bs-html', 'data-bs-container', 'data-title', 'data-original-title', 'title'],
+        text: ['x', 'y'], rect: ['x', 'y', 'class', 'width', 'height', 'rx', 'ry'],},
+      },
     }
   };
 
-  var jobTimeline = new vis.Timeline(container);
-  jobTimeline.setOptions(options);
-  jobTimeline.setGroups(groups);
-  jobTimeline.setItems(items);
+  var jobTimeline = new vis.Timeline(container, items, groups, options);
 
   setupZoomable("#job-timeline-zoom-lock", jobTimeline);
   setupExecutorEventAction();
 
+  function getStageIdAndAttemptForStageEntry(baseElem) {
+    var stageIdText = $($(baseElem).find(".job-timeline-content")[0]).text();
+    var stageIdAndAttempt = stageIdText.match("\\(Stage (\\d+\\.\\d+)\\)$")[1].split(".");
+    return stageIdAndAttempt;
+  }
+
+  function getSelectorForStageEntry(stageIdAndAttempt) {
+    return "#stage-" + stageIdAndAttempt[0] + "-" + stageIdAndAttempt[1];
+  }
+
   function setupStageEventAction() {
     $(".vis-item.vis-range.stage.job-timeline-object").each(function() {
-      var getSelectorForStageEntry = function(baseElem) {
-        var stageIdText = $($(baseElem).find(".job-timeline-content")[0]).text();
-        var stageIdAndAttempt = stageIdText.match("\\(Stage (\\d+\\.\\d+)\\)$")[1].split(".");
-        return "#stage-" + stageIdAndAttempt[0] + "-" + stageIdAndAttempt[1];
-      };
-
       $(this).click(function() {
-        var stagePagePath = $(getSelectorForStageEntry(this)).find("a.name-link").attr("href")
-        window.location.href = stagePagePath
+        var stageIdAndAttempt = getStageIdAndAttemptForStageEntry(this);
+        var stagePagePath = uiRoot + appBasePath +
+          "/stages/stage/?id=" + stageIdAndAttempt[0] + "&attempt=" + stageIdAndAttempt[1];
+        window.location.href = stagePagePath;
       });
 
       $(this).hover(
         function() {
-          $(getSelectorForStageEntry(this)).addClass("corresponding-item-hover");
-          $($(this).find("div.job-timeline-content")[0]).tooltip("show");
+          $(getSelectorForStageEntry(getStageIdAndAttemptForStageEntry(this)))
+            .addClass("corresponding-item-hover");
+          $($(this).find("div.job-timeline-content")[0]).each(function() {
+            var tt = bootstrap.Tooltip.getOrCreateInstance(this, {container: "body"}); tt.show();
+          });
         },
         function() {
-          $(getSelectorForStageEntry(this)).removeClass("corresponding-item-hover");
-          $($(this).find("div.job-timeline-content")[0]).tooltip("hide");
+          $(getSelectorForStageEntry(getStageIdAndAttemptForStageEntry(this)))
+            .removeClass("corresponding-item-hover");
+          $($(this).find("div.job-timeline-content")[0]).each(function() {
+            var tt = bootstrap.Tooltip.getInstance(this); if (tt) tt.hide();
+          });
         }
       );
     });
@@ -151,6 +214,9 @@ function drawJobTimeline(groupArray, eventObjArray, startTime, offset) {
 
     $("#job-timeline").toggleClass('collapsed');
 
+    var visibilityState = status ? "" : "none";
+    $("#job-timeline").css("display", visibilityState);
+
     // Switch the class of the arrow from open to closed.
     $(this).find('.expand-job-timeline-arrow').toggleClass('arrow-open');
     $(this).find('.expand-job-timeline-arrow').toggleClass('arrow-closed');
@@ -159,18 +225,21 @@ function drawJobTimeline(groupArray, eventObjArray, startTime, offset) {
   });
 }
 
-$(function (){
-  if (window.localStorage.getItem("expand-job-timeline") == "true") {
+$(function () {
+  if ($("span.expand-job-timeline").length &&
+      window.localStorage.getItem("expand-job-timeline") == "true") {
     // Set it to false so that the click function can revert it
     window.localStorage.setItem("expand-job-timeline", "false");
     $("span.expand-job-timeline").trigger('click');
+  } else {
+    $("#job-timeline").css("display", "none");
   }
 });
 
 function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, maxFinishTime, offset) {
   var groups = new vis.DataSet(groupArray);
   var items = new vis.DataSet(eventObjArray);
-  var container = $("#task-assignment-timeline")[0]
+  var container = $("#task-assignment-timeline")[0];
   var options = {
     groupOrder: function(a, b) {
       return a.value - b.value
@@ -179,18 +248,25 @@ function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, ma
     align: 'left',
     selectable: false,
     showCurrentTime: false,
-    min: minLaunchTime,
-    max: maxFinishTime,
+    start: minLaunchTime,
+    end: maxFinishTime,
     zoomable: false,
+    locale: "en",
     moment: function (date) {
       return vis.moment(date).utcOffset(offset);
+    },
+    format: xAxisFormat,
+    xss: {
+      disabled: false,
+      filterOptions: {
+        whiteList: { svg: ['width', 'height', 'class'], div: ['class', 'style', 'data-bs-toggle', 'data-bs-placement',
+          'data-bs-html', 'data-bs-container', 'data-title', 'data-original-title', 'title'],
+        text: ['x', 'y'], rect: ['x', 'y', 'class', 'width', 'height', 'rx', 'ry'],},
+      },
     }
   };
 
-  var taskTimeline = new vis.Timeline(container)
-  taskTimeline.setOptions(options);
-  taskTimeline.setGroups(groups);
-  taskTimeline.setItems(items);
+  var taskTimeline = new vis.Timeline(container, items, groups, options);
 
   // If a user zooms while a tooltip is displayed, the user may zoom such that the cursor is no
   // longer over the task that the tooltip corresponds to. So, when a user zooms, we should hide
@@ -206,7 +282,7 @@ function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, ma
   }, ".task-assignment-timeline-content");
   taskTimeline.on("rangechange", function(prop) {
     if (currentDisplayedTooltip !== null) {
-      $(currentDisplayedTooltip).tooltip("hide");
+      var tt = bootstrap.Tooltip.getInstance(currentDisplayedTooltip); if (tt) tt.hide();
     }
   });
 
@@ -218,7 +294,10 @@ function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, ma
 
     $("#task-assignment-timeline").toggleClass("collapsed");
 
-     // Switch the class of the arrow from open to closed.
+    var visibilityState = status ? "" : "none";
+    $("#task-assignment-timeline").css("display", visibilityState);
+
+    // Switch the class of the arrow from open to closed.
     $(this).find(".expand-task-assignment-timeline-arrow").toggleClass("arrow-open");
     $(this).find(".expand-task-assignment-timeline-arrow").toggleClass("arrow-closed");
 
@@ -226,11 +305,14 @@ function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, ma
   });
 }
 
-$(function (){
-  if (window.localStorage.getItem("expand-task-assignment-timeline") == "true") {
+$(function () {
+  if ($("span.expand-task-assignment-timeline").length &&
+      window.localStorage.getItem("expand-task-assignment-timeline") == "true") {
     // Set it to false so that the click function can revert it
     window.localStorage.setItem("expand-task-assignment-timeline", "false");
     $("span.expand-task-assignment-timeline").trigger('click');
+  } else {
+    $("#task-assignment-timeline").css("display", "none");
   }
 });
 
@@ -238,14 +320,17 @@ function setupExecutorEventAction() {
   $(".vis-item.vis-box.executor").each(function () {
     $(this).hover(
       function() {
-        $($(this).find(".executor-event-content")[0]).tooltip("show");
+        var el = $($(this).find(".executor-event-content")[0])[0];
+        var tt = bootstrap.Tooltip.getOrCreateInstance(el, {container: "body"}); tt.show();
       },
       function() {
-        $($(this).find(".executor-event-content")[0]).tooltip("hide");
+        var el = $($(this).find(".executor-event-content")[0])[0];
+        var tt = bootstrap.Tooltip.getInstance(el); if (tt) tt.hide();
       }
     );
   });
 }
+/* eslint-enable no-unused-vars */
 
 function setupZoomable(id, timeline) {
   $(id + ' > input[type="checkbox"]').click(function() {

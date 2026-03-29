@@ -17,7 +17,8 @@
 
 package org.apache.spark.network.shuffle.protocol;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
+
 import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.protocol.Encoders;
@@ -48,25 +49,21 @@ public class RegisterExecutor extends BlockTransferMessage {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(appId, execId, executorInfo);
+    return Objects.hash(appId, execId, executorInfo);
   }
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("appId", appId)
-      .add("execId", execId)
-      .add("executorInfo", executorInfo)
-      .toString();
+    return "RegisterExecutor[appId=" + appId + ", execId=" + execId +
+        ",executorInfo=" + executorInfo + "]";
   }
 
   @Override
   public boolean equals(Object other) {
-    if (other != null && other instanceof RegisterExecutor) {
-      RegisterExecutor o = (RegisterExecutor) other;
-      return Objects.equal(appId, o.appId)
-        && Objects.equal(execId, o.execId)
-        && Objects.equal(executorInfo, o.executorInfo);
+    if (other instanceof RegisterExecutor o) {
+      return Objects.equals(appId, o.appId)
+        && Objects.equals(execId, o.execId)
+        && Objects.equals(executorInfo, o.executorInfo);
     }
     return false;
   }

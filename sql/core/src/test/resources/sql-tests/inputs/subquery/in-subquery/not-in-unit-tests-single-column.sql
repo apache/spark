@@ -31,6 +31,10 @@
 -- cause cases 2, 3, or 4 to be reduced to case 1 by limiting the number of rows returned by the
 -- subquery, so the row from the parent table should always be included in the output.
 
+--CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=true
+--CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=false
+--ONLY_IF spark
+
 CREATE TEMPORARY VIEW m AS SELECT * FROM VALUES
   (null, 1.0),
   (2, 3.0),

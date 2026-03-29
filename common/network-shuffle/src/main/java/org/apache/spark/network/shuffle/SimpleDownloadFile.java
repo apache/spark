@@ -32,7 +32,7 @@ import org.apache.spark.network.util.TransportConf;
  * A DownloadFile that does not take any encryption settings into account for reading and
  * writing data.
  *
- * This does *not* mean the data in the file is un-encrypted -- it could be that the data is
+ * This does *not* mean the data in the file is unencrypted -- it could be that the data is
  * already encrypted when its written, and subsequent layer is responsible for decrypting.
  */
 public class SimpleDownloadFile implements DownloadFile {
@@ -69,7 +69,8 @@ public class SimpleDownloadFile implements DownloadFile {
     }
 
     @Override
-    public ManagedBuffer closeAndRead() {
+    public ManagedBuffer closeAndRead() throws IOException {
+      channel.close();
       return new FileSegmentManagedBuffer(transportConf, file, 0, file.length());
     }
 

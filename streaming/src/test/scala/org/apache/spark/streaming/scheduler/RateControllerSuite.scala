@@ -30,8 +30,7 @@ class RateControllerSuite extends TestSuiteBase {
   override def batchDuration: Duration = Milliseconds(50)
 
   test("RateController - rate controller publishes updates after batches complete") {
-    val ssc = new StreamingContext(conf, batchDuration)
-    withStreamingContext(ssc) { ssc =>
+    withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
       val dstream = new RateTestInputDStream(ssc)
       dstream.register()
       ssc.start()
@@ -43,8 +42,7 @@ class RateControllerSuite extends TestSuiteBase {
   }
 
   test("ReceiverRateController - published rates reach receivers") {
-    val ssc = new StreamingContext(conf, batchDuration)
-    withStreamingContext(ssc) { ssc =>
+    withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
       val estimator = new ConstantEstimator(100)
       val dstream = new RateTestInputDStream(ssc) {
         override val rateController =
@@ -85,5 +83,5 @@ private[streaming] class ConstantEstimator(@volatile private var rate: Long)
       time: Long,
       elements: Long,
       processingDelay: Long,
-      schedulingDelay: Long): Option[Double] = Some(rate)
+      schedulingDelay: Long): Option[Double] = Some(rate.toDouble)
 }

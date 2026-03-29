@@ -21,25 +21,26 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Objects;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.SettableFuture;
 import io.netty.channel.Channel;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.protocol.*;
+import org.apache.spark.network.util.JavaUtils;
 
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 
@@ -70,7 +71,7 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  * Concurrency: thread safe and can be called from multiple threads.
  */
 public class TransportClient implements Closeable {
-  private static final Logger logger = LoggerFactory.getLogger(TransportClient.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(TransportClient.class);
 
   private final Channel channel;
   private final TransportResponseHandler handler;
@@ -78,8 +79,8 @@ public class TransportClient implements Closeable {
   private volatile boolean timedOut;
 
   public TransportClient(Channel channel, TransportResponseHandler handler) {
-    this.channel = Preconditions.checkNotNull(channel);
-    this.handler = Preconditions.checkNotNull(handler);
+    this.channel = Objects.requireNonNull(channel);
+    this.handler = Objects.requireNonNull(handler);
     this.timedOut = false;
   }
 
@@ -110,7 +111,7 @@ public class TransportClient implements Closeable {
    * Trying to set a different client ID after it's been set will result in an exception.
    */
   public void setClientId(String id) {
-    Preconditions.checkState(clientId == null, "Client ID has already been set.");
+    JavaUtils.checkState(clientId == null, "Client ID has already been set.");
     this.clientId = id;
   }
 
@@ -200,6 +201,35 @@ public class TransportClient implements Closeable {
   }
 
   /**
+   * Sends a MergedBlockMetaRequest message to the server. The response of this message is
+   * either a {@link MergedBlockMetaSuccess} or {@link RpcFailure}.
+   *
+   * @param appId applicationId.
+   * @param shuffleId shuffle id.
+   * @param shuffleMergeId shuffleMergeId is used to uniquely identify merging process
+   *                       of shuffle by an indeterminate stage attempt.
+   * @param reduceId reduce id.
+   * @param callback callback the handle the reply.
+   */
+  public void sendMergedBlockMetaReq(
+      String appId,
+      int shuffleId,
+      int shuffleMergeId,
+      int reduceId,
+      MergedBlockMetaResponseCallback callback) {
+    long requestId = requestId();
+    if (logger.isTraceEnabled()) {
+      logger.trace(
+        "Sending RPC {} to fetch merged block meta to {}", requestId, getRemoteAddress(channel));
+    }
+    handler.addRpcRequest(requestId, callback);
+    RpcChannelListener listener = new RpcChannelListener(requestId, callback);
+    channel.writeAndFlush(
+      new MergedBlockMetaRequest(requestId, appId, shuffleId, shuffleMergeId,
+        reduceId)).addListener(listener);
+  }
+
+  /**
    * Send data to the remote end as a stream.  This differs from stream() in that this is a request
    * to *send* data to the remote end, not to receive it from the remote.
    *
@@ -237,11 +267,16 @@ public class TransportClient implements Closeable {
     sendRpc(message, new RpcResponseCallback() {
       @Override
       public void onSuccess(ByteBuffer response) {
-        ByteBuffer copy = ByteBuffer.allocate(response.remaining());
-        copy.put(response);
-        // flip "copy" to make it readable
-        copy.flip();
-        result.set(copy);
+        try {
+          ByteBuffer copy = ByteBuffer.allocate(response.remaining());
+          copy.put(response);
+          // flip "copy" to make it readable
+          copy.flip();
+          result.set(copy);
+        } catch (Throwable t) {
+          logger.warn("Error in responding RPC callback", t);
+          result.setException(t);
+        }
       }
 
       @Override
@@ -253,9 +288,10 @@ public class TransportClient implements Closeable {
     try {
       return result.get(timeoutMs, TimeUnit.MILLISECONDS);
     } catch (ExecutionException e) {
-      throw Throwables.propagate(e.getCause());
+      throw new RuntimeException(e.getCause());
     } catch (Exception e) {
-      throw Throwables.propagate(e);
+      if (e instanceof RuntimeException re) throw re;
+      throw new RuntimeException(e);
     }
   }
 
@@ -290,17 +326,17 @@ public class TransportClient implements Closeable {
 
   @Override
   public void close() {
-    // close is a local operation and should finish with milliseconds; timeout just to be safe
+    // Mark the connection as timed out, so we do not return a connection that's being closed
+    // from the TransportClientFactory if closing takes some time (e.g. with SSL)
+    this.timedOut = true;
+    // close should not take this long; use a timeout just to be safe
     channel.close().awaitUninterruptibly(10, TimeUnit.SECONDS);
   }
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("remoteAdress", channel.remoteAddress())
-      .add("clientId", clientId)
-      .add("isActive", isActive())
-      .toString();
+    return "TransportClient[remoteAddress=" + channel.remoteAddress() + "clientId=" + clientId +
+        ",isActive=" + isActive() + "]";
   }
 
   private static long requestId() {
@@ -326,11 +362,13 @@ public class TransportClient implements Closeable {
               getRemoteAddress(channel), timeTaken);
         }
       } else {
-        String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,
-            getRemoteAddress(channel), future.cause());
-        logger.error(errorMsg, future.cause());
+        logger.error("Failed to send RPC {} to {}", future.cause(),
+            MDC.of(LogKeys.REQUEST_ID, requestId),
+            MDC.of(LogKeys.HOST_PORT, getRemoteAddress(channel)));
         channel.close();
         try {
+          String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,
+            getRemoteAddress(channel), future.cause());
           handleFailure(errorMsg, future.cause());
         } catch (Exception e) {
           logger.error("Uncaught exception in RPC response callback handler!", e);
@@ -343,9 +381,9 @@ public class TransportClient implements Closeable {
 
   private class RpcChannelListener extends StdChannelListener {
     final long rpcRequestId;
-    final RpcResponseCallback callback;
+    final BaseResponseCallback callback;
 
-    RpcChannelListener(long rpcRequestId, RpcResponseCallback callback) {
+    RpcChannelListener(long rpcRequestId, BaseResponseCallback callback) {
       super("RPC " + rpcRequestId);
       this.rpcRequestId = rpcRequestId;
       this.callback = callback;

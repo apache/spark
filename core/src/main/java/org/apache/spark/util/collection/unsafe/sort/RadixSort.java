@@ -17,10 +17,9 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
-import com.google.common.primitives.Ints;
-
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
+import org.apache.spark.network.util.JavaUtils;
 
 public class RadixSort {
 
@@ -63,7 +62,7 @@ public class RadixSort {
         }
       }
     }
-    return Ints.checkedCast(inIndex);
+    return JavaUtils.checkedCast(inIndex);
   }
 
   /**
@@ -204,7 +203,7 @@ public class RadixSort {
         }
       }
     }
-    return Ints.checkedCast(inIndex);
+    return JavaUtils.checkedCast(inIndex);
   }
 
   /**

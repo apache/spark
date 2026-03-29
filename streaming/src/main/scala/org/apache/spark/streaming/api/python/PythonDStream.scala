@@ -21,7 +21,7 @@ import java.io.{ObjectInputStream, ObjectOutputStream}
 import java.lang.reflect.Proxy
 import java.util.{ArrayList => JArrayList, List => JList}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.language.existentials
 
 import py4j.Py4JException
@@ -163,7 +163,7 @@ private[python] object PythonTransformFunctionSerializer {
 private[streaming] object PythonDStream {
 
   /**
-   * can not access PythonTransformFunctionSerializer.register() via Py4j
+   * cannot access PythonTransformFunctionSerializer.register() via Py4j
    * Py4JError: PythonTransformFunctionSerializerregister does not exist in the JVM
    */
   def registerSerializer(ser: PythonTransformFunctionSerializer): Unit = {
@@ -174,7 +174,7 @@ private[streaming] object PythonDStream {
    * helper function for DStream.foreachRDD(),
    * cannot be `foreachRDD`, it will confusing py4j
    */
-  def callForeachRDD(jdstream: JavaDStream[Array[Byte]], pfunc: PythonTransformFunction) {
+  def callForeachRDD(jdstream: JavaDStream[Array[Byte]], pfunc: PythonTransformFunction): Unit = {
     val func = new TransformFunction((pfunc))
     jdstream.dstream.foreachRDD((rdd, time) => func(Some(rdd), time))
   }

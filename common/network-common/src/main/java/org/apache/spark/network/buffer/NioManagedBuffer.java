@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 
-import com.google.common.base.Objects;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.Unpooled;
 
@@ -66,10 +65,13 @@ public class NioManagedBuffer extends ManagedBuffer {
   }
 
   @Override
+  public Object convertToNettyForSsl() throws IOException {
+    return Unpooled.wrappedBuffer(buf);
+  }
+
+  @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("buf", buf)
-      .toString();
+    return "NioManagedBuffer[buf=" + buf + "]";
   }
 }
 

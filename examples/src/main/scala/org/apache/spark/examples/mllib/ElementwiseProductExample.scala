@@ -34,7 +34,7 @@ object ElementwiseProductExample {
 
     // $example on$
     // Create some vector data; also works for sparse vectors
-    val data = sc.parallelize(Array(Vectors.dense(1.0, 2.0, 3.0), Vectors.dense(4.0, 5.0, 6.0)))
+    val data = sc.parallelize(Seq(Vectors.dense(1.0, 2.0, 3.0), Vectors.dense(4.0, 5.0, 6.0)))
 
     val transformingVector = Vectors.dense(0.0, 1.0, 2.0)
     val transformer = new ElementwiseProduct(transformingVector)
@@ -45,10 +45,10 @@ object ElementwiseProductExample {
     // $example off$
 
     println("transformedData: ")
-    transformedData.foreach(x => println(x))
+    transformedData.collect().foreach(x => println(x))
 
     println("transformedData2: ")
-    transformedData2.foreach(x => println(x))
+    transformedData2.collect().foreach(x => println(x))
 
     sc.stop()
   }

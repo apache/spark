@@ -17,6 +17,7 @@
 
 package org.apache.spark.util
 
+import java.nio.channels.spi.AbstractInterruptibleChannel
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.util.Random
@@ -56,7 +57,7 @@ class UninterruptibleThreadSuite extends SparkFunSuite {
     t.interrupt()
     t.join()
     assert(hasInterruptedException === false)
-    assert(interruptStatusBeforeExit === true)
+    assert(interruptStatusBeforeExit)
   }
 
   test("interrupt before runUninterruptibly runs") {
@@ -80,7 +81,7 @@ class UninterruptibleThreadSuite extends SparkFunSuite {
     interruptLatch.countDown()
     t.join()
     assert(hasInterruptedException === false)
-    assert(interruptStatusBeforeExit === true)
+    assert(interruptStatusBeforeExit)
   }
 
   test("nested runUninterruptibly") {
@@ -112,7 +113,46 @@ class UninterruptibleThreadSuite extends SparkFunSuite {
     interruptLatch.countDown()
     t.join()
     assert(hasInterruptedException === false)
-    assert(interruptStatusBeforeExit === true)
+    assert(interruptStatusBeforeExit)
+  }
+
+  test("no runUninterruptibly") {
+    @volatile var hasInterruptedException = false
+    val t = new UninterruptibleThread("test") {
+      override def run(): Unit = {
+        if (sleep(0)) {
+          hasInterruptedException = true
+        }
+      }
+    }
+    t.interrupt()
+    t.start()
+    t.join()
+    assert(hasInterruptedException === true)
+  }
+
+  test("SPARK-51821 uninterruptibleLock deadlock") {
+    val latch = new CountDownLatch(1)
+    val task = new UninterruptibleThread("task thread") {
+      override def run(): Unit = {
+        val channel = new AbstractInterruptibleChannel() {
+          override def implCloseChannel(): Unit = {
+            begin()
+            latch.countDown()
+            try {
+              Thread.sleep(Long.MaxValue)
+            } catch {
+              case _: InterruptedException => Thread.currentThread().interrupt()
+            }
+          }
+        }
+        channel.close()
+      }
+    }
+    task.start()
+    assert(latch.await(10, TimeUnit.SECONDS), "await timeout")
+    task.interrupt()
+    task.join()
   }
 
   test("stress test") {
@@ -148,9 +188,20 @@ class UninterruptibleThreadSuite extends SparkFunSuite {
       }
     }
     t.start()
-    for (i <- 0 until 400) {
-      Thread.sleep(Random.nextInt(10))
-      t.interrupt()
+    val threads = new Array[Thread](10)
+    for (j <- 0 until 10) {
+      threads(j) = new Thread() {
+        override def run(): Unit = {
+          for (i <- 0 until 400) {
+            Thread.sleep(Random.nextInt(10))
+            t.interrupt()
+          }
+        }
+      }
+      threads(j).start()
+    }
+    for (j <- 0 until 10) {
+      threads(j).join()
     }
     t.join()
     assert(hasInterruptedException === false)

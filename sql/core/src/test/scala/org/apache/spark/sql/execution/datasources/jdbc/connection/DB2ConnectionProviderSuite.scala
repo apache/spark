@@ -1,0 +1,30 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.execution.datasources.jdbc.connection
+
+import org.scalatest.Ignore
+
+@Ignore // TODO(SPARK-55707): Re-enable DB2 JDBC Driver tests
+class DB2ConnectionProviderSuite extends ConnectionProviderSuiteBase {
+  test("setAuthenticationConfig must set authentication all the time") {
+    val provider = new DB2ConnectionProvider()
+    val driver = registerDriver(provider.driverClass)
+
+    testSecureConnectionProvider(provider, driver, options("jdbc:db2://localhost/db2"))
+  }
+}

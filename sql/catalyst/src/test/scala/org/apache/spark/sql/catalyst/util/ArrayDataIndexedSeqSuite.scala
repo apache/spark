@@ -19,15 +19,15 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.RandomDataGenerator
-import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
-import org.apache.spark.sql.catalyst.expressions.{FromUnsafeProjection, UnsafeArrayData, UnsafeProjection}
+import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, ExpressionEncoder}
+import org.apache.spark.sql.catalyst.expressions.{SafeProjection, UnsafeProjection}
 import org.apache.spark.sql.types._
 
 class ArrayDataIndexedSeqSuite extends SparkFunSuite {
   private def compArray(arrayData: ArrayData, elementDt: DataType, array: Array[Any]): Unit = {
-    assert(arrayData.numElements == array.length)
+    assert(arrayData.numElements() == array.length)
     array.zipWithIndex.map { case (e, i) =>
       if (e != null) {
         elementDt match {
@@ -45,7 +45,7 @@ class ArrayDataIndexedSeqSuite extends SparkFunSuite {
       if (e != null) {
         elementDt match {
           // For Nan, etc.
-          case FloatType | DoubleType => assert(seq(i).equals(e))
+          case FloatType | DoubleType => assert(seq(i) == e)
           case _ => assert(seq(i) === e)
         }
       } else {
@@ -53,13 +53,15 @@ class ArrayDataIndexedSeqSuite extends SparkFunSuite {
       }
     }
 
-    intercept[IndexOutOfBoundsException] {
-      seq(-1)
-    }.getMessage().contains("must be between 0 and the length of the ArrayData.")
-
-    intercept[IndexOutOfBoundsException] {
-      seq(seq.length)
-    }.getMessage().contains("must be between 0 and the length of the ArrayData.")
+    Seq(-1, seq.length).foreach { index =>
+      checkError(
+        exception = intercept[SparkException] {
+          seq(index)
+        },
+        condition = "INTERNAL_ERROR",
+        parameters = Map(
+          "message" -> s"Index $index must be between 0 and the length of the ArrayData."))
+    }
   }
 
   private def testArrayData(): Unit = {
@@ -73,17 +75,17 @@ class ArrayDataIndexedSeqSuite extends SparkFunSuite {
     arrayTypes.foreach { dt =>
       val schema = StructType(StructField("col_1", dt, nullable = false) :: Nil)
       val row = RandomDataGenerator.randomRow(random, schema)
-      val rowConverter = RowEncoder(schema)
-      val internalRow = rowConverter.toRow(row)
+      val toRow = ExpressionEncoder(schema).createSerializer()
+      val internalRow = toRow(row)
 
       val unsafeRowConverter = UnsafeProjection.create(schema)
-      val safeRowConverter = FromUnsafeProjection(schema)
+      val safeRowConverter = SafeProjection.create(schema)
 
       val unsafeRow = unsafeRowConverter(internalRow)
       val safeRow = safeRowConverter(unsafeRow)
 
       val genericArrayData = safeRow.getArray(0).asInstanceOf[GenericArrayData]
-      val unsafeArrayData = unsafeRow.getArray(0).asInstanceOf[UnsafeArrayData]
+      val unsafeArrayData = unsafeRow.getArray(0)
 
       val elementType = dt.elementType
       test("ArrayDataIndexedSeq - UnsafeArrayData - " + dt.toString) {

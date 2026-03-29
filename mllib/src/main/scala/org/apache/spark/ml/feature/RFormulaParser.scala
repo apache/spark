@@ -17,11 +17,14 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import scala.collection.mutable
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Represents a parsed R formula.
@@ -34,11 +37,18 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
   def resolve(schema: StructType): ResolvedRFormula = {
     val dotTerms = expandDot(schema)
     var includedTerms = Seq[Seq[String]]()
+    val seen = mutable.Set[Set[String]]()
     terms.foreach {
       case col: ColumnRef =>
         includedTerms :+= Seq(col.value)
       case ColumnInteraction(cols) =>
-        includedTerms ++= expandInteraction(schema, cols)
+        expandInteraction(schema, cols) foreach { t =>
+          // add equivalent interaction terms only once
+          if (!seen.contains(t.toSet)) {
+            includedTerms :+= t
+            seen += t.toSet
+          }
+        }
       case Dot =>
         includedTerms ++= dotTerms.map(Seq(_))
       case Deletion(term: Term) =>
@@ -57,8 +67,12 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
           case _: Deletion =>
             throw new RuntimeException("Deletion terms cannot be nested")
           case _: Intercept =>
+          case _: Terms =>
+          case EmptyTerm =>
         }
       case _: Intercept =>
+      case _: Terms =>
+      case EmptyTerm =>
     }
     ResolvedRFormula(label.value, includedTerms.distinct, hasIntercept)
   }
@@ -114,7 +128,7 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
     schema.fields.filter(_.dataType match {
       case _: NumericType | StringType | BooleanType | _: VectorUDT => true
       case _ => false
-    }).map(_.name).filter(_ != label.value)
+    }).map(_.name).filter(_ != label.value).toImmutableArraySeq
   }
 }
 
@@ -140,14 +154,78 @@ private[ml] case class ResolvedRFormula(
   }
 }
 
+private[ml] object ResolvedRFormula {
+  private[ml] def serializeData(data: ResolvedRFormula, dos: DataOutputStream): Unit = {
+    import org.apache.spark.ml.util.ReadWriteUtils._
+
+    dos.writeUTF(data.label)
+    serializeGenericArray[Seq[String]](
+      data.terms.toArray, dos,
+      (strSeq, dos) => serializeStringArray(strSeq.toArray, dos)
+    )
+    dos.writeBoolean(data.hasIntercept)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): ResolvedRFormula = {
+    import org.apache.spark.ml.util.ReadWriteUtils._
+
+    val label = dis.readUTF()
+    val terms = deserializeGenericArray[Seq[String]](
+      dis, dis => deserializeStringArray(dis).toSeq
+    ).toSeq
+    val hasIntercept = dis.readBoolean()
+    ResolvedRFormula(label, terms, hasIntercept)
+  }
+}
+
 /**
  * R formula terms. See the R formula docs here for more information:
  * http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
  */
-private[ml] sealed trait Term
+private[ml] sealed trait Term {
+
+  /** Default representation of a single Term as a part of summed terms. */
+  def asTerms: Terms = Terms(Seq(this))
+
+  /** Creates a summation term by concatenation of terms. */
+  def add(other: Term): Term = Terms(this.asTerms.terms ++ other.asTerms.terms)
+
+  /**
+   * Fold by adding deletion terms to the left. Double negation
+   * doesn't cancel deletion in order not to add extra terms, e.g.
+   * a - (b - c) = a - Deletion(b) - Deletion(c) = a
+   */
+  def subtract(other: Term): Term = {
+    other.asTerms.terms.foldLeft(this) {
+      case (left, right) =>
+        right match {
+          case t: Deletion => left.add(t)
+          case t: Term => left.add(Deletion(t))
+        }
+    }
+  }
+
+  /** Default interactions of a Term */
+  def interact(other: Term): Term = EmptyTerm
+}
+
+/** Placeholder term for the result of undefined interactions, e.g. '1:1' or 'a:1' */
+private[ml] case object EmptyTerm extends Term
 
 /** A term that may be part of an interaction, e.g. 'x' in 'x:y' */
-private[ml] sealed trait InteractableTerm extends Term
+private[ml] sealed trait InteractableTerm extends Term {
+
+  /** Convert to ColumnInteraction to wrap all interactions. */
+  def asInteraction: ColumnInteraction = ColumnInteraction(Seq(this))
+
+  /** Interactions of interactable terms. */
+  override def interact(other: Term): Term = other match {
+    case t: InteractableTerm => this.asInteraction.interact(t.asInteraction)
+    case t: ColumnInteraction => this.asInteraction.interact(t)
+    case t: Terms => this.asTerms.interact(t)
+    case t: Term => t.interact(this) // Deletion or non-interactable term
+  }
+}
 
 /* R formula reference to all available columns, e.g. "." in a formula */
 private[ml] case object Dot extends InteractableTerm
@@ -156,19 +234,68 @@ private[ml] case object Dot extends InteractableTerm
 private[ml] case class ColumnRef(value: String) extends InteractableTerm
 
 /* R formula interaction of several columns, e.g. "Sepal_Length:Species" in a formula */
-private[ml] case class ColumnInteraction(terms: Seq[InteractableTerm]) extends Term
+private[ml] case class ColumnInteraction(terms: Seq[InteractableTerm]) extends Term {
+
+  // Convert to ColumnInteraction and concat terms
+  override def interact(other: Term): Term = other match {
+    case t: InteractableTerm => this.interact(t.asInteraction)
+    case t: ColumnInteraction => ColumnInteraction(terms ++ t.terms)
+    case t: Terms => this.asTerms.interact(t)
+    case t: Term => t.interact(this)
+  }
+}
 
 /* R formula intercept toggle, e.g. "+ 0" in a formula */
 private[ml] case class Intercept(enabled: Boolean) extends Term
 
 /* R formula deletion of a variable, e.g. "- Species" in a formula */
-private[ml] case class Deletion(term: Term) extends Term
+private[ml] case class Deletion(term: Term) extends Term {
+
+  // Unnest the deletion and interact
+  override def interact(other: Term): Term = other match {
+    case Deletion(t) => Deletion(term.interact(t))
+    case t: Term => Deletion(term.interact(t))
+  }
+}
+
+/* Wrapper for multiple terms in a formula. */
+private[ml] case class Terms(terms: Seq[Term]) extends Term {
+
+  override def asTerms: Terms = this
+
+  override def interact(other: Term): Term = {
+    val interactions = for {
+      left <- terms
+      right <- other.asTerms.terms
+    } yield left.interact(right)
+    Terms(interactions)
+  }
+}
 
 /**
- * Limited implementation of R formula parsing. Currently supports: '~', '+', '-', '.', ':'.
+ * Limited implementation of R formula parsing. Currently supports: '~', '+', '-', '.', ':',
+ * '*', '^'.
  */
 private[ml] object RFormulaParser extends RegexParsers {
-  private val intercept: Parser[Intercept] =
+
+  private def add(left: Term, right: Term) = left.add(right)
+
+  private def subtract(left: Term, right: Term) = left.subtract(right)
+
+  private def interact(left: Term, right: Term) = left.interact(right)
+
+  private def cross(left: Term, right: Term) = left.add(right).add(left.interact(right))
+
+  private def power(base: Term, degree: Int): Term = {
+    val exprs = List.fill(degree)(base)
+    exprs match {
+      case Nil => EmptyTerm
+      case x :: Nil => x
+      case x :: xs => xs.foldLeft(x)(cross _)
+    }
+  }
+
+  private val intercept: Parser[Term] =
     "([01])".r ^^ { case a => Intercept(a == "1") }
 
   private val columnRef: Parser[ColumnRef] =
@@ -178,22 +305,31 @@ private[ml] object RFormulaParser extends RegexParsers {
 
   private val label: Parser[ColumnRef] = columnRef | empty
 
-  private val dot: Parser[InteractableTerm] = "\\.".r ^^ { case _ => Dot }
+  private val dot: Parser[Term] = "\\.".r ^^ { case _ => Dot }
 
-  private val interaction: Parser[List[InteractableTerm]] = rep1sep(columnRef | dot, ":")
+  private val parens: Parser[Term] = "(" ~> expr <~ ")"
 
-  private val term: Parser[Term] = intercept |
-    interaction ^^ { case terms => ColumnInteraction(terms) } | dot | columnRef
+  private val term: Parser[Term] = parens | intercept | columnRef | dot
 
-  private val terms: Parser[List[Term]] = (term ~ rep("+" ~ term | "-" ~ term)) ^^ {
-    case op ~ list => list.foldLeft(List(op)) {
-      case (left, "+" ~ right) => left ++ Seq(right)
-      case (left, "-" ~ right) => left ++ Seq(Deletion(right))
-    }
-  }
+  private val pow: Parser[Term] = term ~ "^" ~ "^[1-9]\\d*".r ^^ {
+    case base ~ "^" ~ degree => power(base, degree.toInt)
+    case t => throw new IllegalArgumentException(s"Invalid term: $t")
+  } | term
+
+  private val interaction: Parser[Term] = pow * (":" ^^^ { interact _ })
+
+  private val factor = interaction * ("*" ^^^ { cross _ })
+
+  private val sum = factor * ("+" ^^^ { add _ } |
+    "-" ^^^ { subtract _ })
+
+  private val expr = (sum | term)
 
   private val formula: Parser[ParsedRFormula] =
-    (label ~ "~" ~ terms) ^^ { case r ~ "~" ~ t => ParsedRFormula(r, t) }
+    (label ~ "~" ~ expr) ^^ {
+      case r ~ "~" ~ t => ParsedRFormula(r, t.asTerms.terms)
+      case t => throw new IllegalArgumentException(s"Invalid term: $t")
+    }
 
   def parse(value: String): ParsedRFormula = parseAll(formula, value) match {
     case Success(result, _) => result

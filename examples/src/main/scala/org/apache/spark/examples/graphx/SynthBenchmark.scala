@@ -47,7 +47,7 @@ object SynthBenchmark {
    *   -degFile the local file to save the degree information (Default: Empty)
    *   -seed seed to use for RNGs (Default: -1, picks seed randomly)
    */
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val options = args.map {
       arg =>
         arg.dropWhile(_ == '-').split('=') match {
@@ -116,7 +116,7 @@ object SynthBenchmark {
       println(s"Total PageRank = $totalPR")
     } else if (app == "cc") {
       println("Running Connected Components")
-      val numComponents = graph.connectedComponents.vertices.map(_._2).distinct().count()
+      val numComponents = graph.connectedComponents().vertices.map(_._2).distinct().count()
       println(s"Number of components = $numComponents")
     }
     val runTime = System.currentTimeMillis() - startTime

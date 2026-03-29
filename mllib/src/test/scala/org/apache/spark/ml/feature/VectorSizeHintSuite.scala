@@ -21,7 +21,7 @@ import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.streaming.StreamTest
 
 class VectorSizeHintSuite
@@ -198,7 +198,7 @@ class VectorSizeHintStreamingSuite extends StreamTest {
     val b = Vectors.sparse(4, Array(0, 3), Array(3, 6))
 
     val stream = MemoryStream[(Vector, Vector)]
-    val streamingDF = stream.toDS.toDF("a", "b")
+    val streamingDF = stream.toDS().toDF("a", "b")
     val sizeHintA = new VectorSizeHint()
       .setSize(3)
       .setInputCol("a")

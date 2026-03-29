@@ -20,10 +20,13 @@ package org.apache.spark.sql.execution.aggregate
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, _}
-import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate, TypedImperativeAggregate}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction, UserDefinedAggregator}
 import org.apache.spark.sql.types._
 
 /**
@@ -81,7 +84,15 @@ sealed trait BufferSetterGetterUtils {
           (row: InternalRow, ordinal: Int) =>
             if (row.isNullAt(ordinal)) null else row.getInt(ordinal)
 
-        case TimestampType =>
+        case TimestampType | TimestampNTZType | _: TimeType =>
+          (row: InternalRow, ordinal: Int) =>
+            if (row.isNullAt(ordinal)) null else row.getLong(ordinal)
+
+        case _: YearMonthIntervalType =>
+          (row: InternalRow, ordinal: Int) =>
+            if (row.isNullAt(ordinal)) null else row.getInt(ordinal)
+
+        case _: DayTimeIntervalType =>
           (row: InternalRow, ordinal: Int) =>
             if (row.isNullAt(ordinal)) null else row.getLong(ordinal)
 
@@ -177,7 +188,23 @@ sealed trait BufferSetterGetterUtils {
               row.setNullAt(ordinal)
             }
 
-        case TimestampType =>
+        case TimestampType | TimestampNTZType | _: TimeType =>
+          (row: InternalRow, ordinal: Int, value: Any) =>
+            if (value != null) {
+              row.setLong(ordinal, value.asInstanceOf[Long])
+            } else {
+              row.setNullAt(ordinal)
+            }
+
+        case _: YearMonthIntervalType =>
+          (row: InternalRow, ordinal: Int, value: Any) =>
+            if (value != null) {
+              row.setInt(ordinal, value.asInstanceOf[Int])
+            } else {
+              row.setNullAt(ordinal)
+            }
+
+        case _: DayTimeIntervalType =>
           (row: InternalRow, ordinal: Int, value: Any) =>
             if (value != null) {
               row.setLong(ordinal, value.asInstanceOf[Long])
@@ -323,7 +350,8 @@ case class ScalaUDAF(
     children: Seq[Expression],
     udaf: UserDefinedAggregateFunction,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
+    inputAggBufferOffset: Int = 0,
+    udafName: Option[String] = None)
   extends ImperativeAggregate
   with NonSQLExpression
   with Logging
@@ -346,7 +374,7 @@ case class ScalaUDAF(
 
   override val aggBufferSchema: StructType = udaf.bufferSchema
 
-  override val aggBufferAttributes: Seq[AttributeReference] = aggBufferSchema.toAttributes
+  override val aggBufferAttributes: Seq[AttributeReference] = toAttributes(aggBufferSchema)
 
   // Note: although this simply copies aggBufferAttributes, this common code can not be placed
   // in the superclass because that will lead to initialization ordering issues.
@@ -362,7 +390,7 @@ case class ScalaUDAF(
   }
 
   private lazy val inputProjection = {
-    val inputAttributes = childrenSchema.toAttributes
+    val inputAttributes = toAttributes(childrenSchema)
     log.debug(
       s"Creating MutableProj: $children, inputSchema: $inputAttributes.")
     MutableProjection.create(children, inputAttributes)
@@ -445,8 +473,113 @@ case class ScalaUDAF(
   }
 
   override def toString: String = {
-    s"""${udaf.getClass.getSimpleName}(${children.mkString(",")})"""
+    s"""$nodeName(${children.mkString(",")})"""
   }
 
-  override def nodeName: String = udaf.getClass.getSimpleName
+  override def nodeName: String = name
+
+  override def name: String = udafName.getOrElse(udaf.getClass.getSimpleName)
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ScalaUDAF =
+    copy(children = newChildren)
+}
+
+case class ScalaAggregator[IN, BUF, OUT](
+    children: Seq[Expression],
+    agg: Aggregator[IN, BUF, OUT],
+    inputEncoder: ExpressionEncoder[IN],
+    bufferEncoder: ExpressionEncoder[BUF],
+    nullable: Boolean = true,
+    isDeterministic: Boolean = true,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0,
+    aggregatorName: Option[String] = None)
+  extends TypedImperativeAggregate[BUF]
+  with NonSQLExpression
+  with UserDefinedExpression
+  with ImplicitCastInputTypes
+  with Logging {
+
+  // input and buffer encoders are resolved by ResolveEncodersInScalaAgg
+  @transient private[this] lazy val inputDeserializer = inputEncoder.createDeserializer()
+  @transient private[this] lazy val bufferSerializer = bufferEncoder.createSerializer()
+  @transient private[this] lazy val bufferDeserializer = bufferEncoder.createDeserializer()
+  @transient private[this] lazy val outputEncoder = encoderFor(agg.outputEncoder)
+  @transient private[this] lazy val outputSerializer = outputEncoder.createSerializer()
+
+  def dataType: DataType = outputEncoder.objSerializer.dataType
+
+  def inputTypes: Seq[DataType] = inputEncoder.schema.map(_.dataType)
+
+  @transient override lazy val deterministic: Boolean = isDeterministic
+
+  def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ScalaAggregator[IN, BUF, OUT] =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ScalaAggregator[IN, BUF, OUT] =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  @transient private[this] lazy val inputProjection = UnsafeProjection.create(children)
+
+  def createAggregationBuffer(): BUF = agg.zero
+
+  def update(buffer: BUF, input: InternalRow): BUF =
+    agg.reduce(buffer, inputDeserializer(inputProjection(input)))
+
+  def merge(buffer: BUF, input: BUF): BUF = agg.merge(buffer, input)
+
+  def eval(buffer: BUF): Any = {
+    val row = outputSerializer(agg.finish(buffer))
+    if (outputEncoder.isSerializedAsStructForTopLevel) row else row.get(0, dataType)
+  }
+
+  @transient private[this] lazy val bufferRow = new UnsafeRow(bufferEncoder.namedExpressions.length)
+
+  def serialize(agg: BUF): Array[Byte] =
+    bufferSerializer(agg).asInstanceOf[UnsafeRow].getBytes()
+
+  def deserialize(storageFormat: Array[Byte]): BUF = {
+    bufferRow.pointTo(storageFormat, storageFormat.length)
+    bufferDeserializer(bufferRow)
+  }
+
+  override def toString: String = s"""${nodeName}(${children.mkString(",")})"""
+
+  override def nodeName: String = name
+
+  override def name: String = aggregatorName.getOrElse(agg.getClass.getSimpleName)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): ScalaAggregator[IN, BUF, OUT] =
+    copy(children = newChildren)
+}
+
+object ScalaAggregator {
+  def apply[IN, BUF, OUT](
+      uda: UserDefinedAggregator[IN, BUF, OUT],
+      children: Seq[Expression]): ScalaAggregator[IN, BUF, OUT] = {
+    new ScalaAggregator(
+      children = children,
+      agg = uda.aggregator,
+      inputEncoder = encoderFor(uda.inputEncoder),
+      bufferEncoder = encoderFor(uda.aggregator.bufferEncoder),
+      nullable = uda.nullable,
+      isDeterministic = uda.deterministic,
+      aggregatorName = uda.givenName)
+  }
+}
+
+/**
+ * An extension rule to resolve encoder expressions from a [[ScalaAggregator]]
+ */
+object ResolveEncodersInScalaAgg extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+    case p if !p.resolved => p
+    case p => p.transformExpressionsUp {
+      case agg: ScalaAggregator[_, _, _] =>
+        agg.copy(
+          inputEncoder = agg.inputEncoder.resolveAndBind(),
+          bufferEncoder = agg.bufferEncoder.resolveAndBind())
+    }
+  }
 }

@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen;
 
+import java.util.Map;
+
+import org.apache.spark.SparkIllegalArgumentException;
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -48,9 +52,9 @@ final class BufferHolder {
   BufferHolder(UnsafeRow row, int initialSize) {
     int bitsetWidthInBytes = UnsafeRow.calculateBitSetWidthInBytes(row.numFields());
     if (row.numFields() > (ARRAY_MAX - initialSize - bitsetWidthInBytes) / 8) {
-      throw new UnsupportedOperationException(
-        "Cannot create BufferHolder for input UnsafeRow because there are " +
-          "too many fields (number of fields: " + row.numFields() + ")");
+      throw new SparkUnsupportedOperationException(
+        "_LEGACY_ERROR_TEMP_3130",
+        Map.of("numFields", String.valueOf(row.numFields())));
     }
     this.fixedSize = bitsetWidthInBytes + 8 * row.numFields();
     int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(fixedSize + initialSize);
@@ -64,13 +68,14 @@ final class BufferHolder {
    */
   void grow(int neededSize) {
     if (neededSize < 0) {
-      throw new IllegalArgumentException(
-        "Cannot grow BufferHolder by size " + neededSize + " because the size is negative");
+      throw new SparkIllegalArgumentException(
+        "_LEGACY_ERROR_TEMP_3198",
+        Map.of("neededSize", String.valueOf(neededSize)));
     }
     if (neededSize > ARRAY_MAX - totalSize()) {
-      throw new IllegalArgumentException(
-        "Cannot grow BufferHolder by size " + neededSize + " because the size after growing " +
-          "exceeds size limitation " + ARRAY_MAX);
+      throw new SparkIllegalArgumentException(
+        "_LEGACY_ERROR_TEMP_3199",
+        Map.of("neededSize", String.valueOf(neededSize), "arrayMax", String.valueOf(ARRAY_MAX)));
     }
     final int length = totalSize() + neededSize;
     if (buffer.length < length) {

@@ -22,25 +22,37 @@ import java.io.PrintStream
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.types._
 
 class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  test("assert_true") {
-    intercept[RuntimeException] {
-      checkEvaluation(AssertTrue(Literal.create(false, BooleanType)), null)
-    }
-    intercept[RuntimeException] {
-      checkEvaluation(AssertTrue(Cast(Literal(0), BooleanType)), null)
-    }
-    intercept[RuntimeException] {
-      checkEvaluation(AssertTrue(Literal.create(null, NullType)), null)
-    }
-    intercept[RuntimeException] {
-      checkEvaluation(AssertTrue(Literal.create(null, BooleanType)), null)
-    }
-    checkEvaluation(AssertTrue(Literal.create(true, BooleanType)), null)
-    checkEvaluation(AssertTrue(Cast(Literal(1), BooleanType)), null)
+  test("RaiseError") {
+    checkExceptionInExpression[RuntimeException](
+      RaiseError(Literal("error message")),
+      EmptyRow,
+      "error message"
+    )
+
+    checkExceptionInExpression[RuntimeException](
+      RaiseError(Literal.create(null, StringType)),
+      EmptyRow,
+      "[USER_RAISED_EXCEPTION] null"
+    )
+
+    // Expects a string
+    assert(RaiseError(Literal(5)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(1),
+          "requiredType" -> "\"MAP<STRING, STRING>\"",
+          "inputSql" -> "\"map(errorMessage, 5)\"",
+          "inputType" -> "\"MAP<STRING, INT>\""
+        )
+      )
+    )
   }
 
   test("uuid") {
@@ -60,11 +72,12 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(evaluateWithUnsafeProjection(Uuid(seed1)) !==
       evaluateWithUnsafeProjection(Uuid(seed2)))
 
-    val uuid = Uuid(seed1)
-    assert(uuid.fastEquals(uuid))
-    assert(!uuid.fastEquals(Uuid(seed1)))
-    assert(!uuid.fastEquals(uuid.freshCopy()))
-    assert(!uuid.fastEquals(Uuid(seed2)))
+    val seed3 = Literal.create(r.nextInt())
+    assert(evaluateWithoutCodegen(new Uuid(seed3)) === evaluateWithoutCodegen(new Uuid(seed3)))
+    assert(evaluateWithMutableProjection(new Uuid(seed3)) ===
+      evaluateWithMutableProjection(new Uuid(seed3)))
+    assert(evaluateWithUnsafeProjection(new Uuid(seed3)) ===
+      evaluateWithUnsafeProjection(new Uuid(seed3)))
   }
 
   test("PrintToStderr") {

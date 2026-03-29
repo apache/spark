@@ -19,11 +19,9 @@ from pyspark.testing.streamingutils import PySparkStreamingTestCase
 
 
 class StreamingListenerTests(PySparkStreamingTestCase):
-
-    duration = .5
+    duration = 0.5
 
     class BatchInfoCollector(StreamingListener):
-
         def __init__(self):
             super(StreamingListener, self).__init__()
             self.batchInfosCompleted = []
@@ -50,6 +48,7 @@ class StreamingListenerTests(PySparkStreamingTestCase):
 
         def func(dstream):
             return dstream.map(int)
+
         expected = [[1], [2], [3], [4]]
         self._test_func(input, func, expected)
 
@@ -148,11 +147,6 @@ class StreamingListenerTests(PySparkStreamingTestCase):
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.streaming.tests.test_listener import *
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'), verbosity=2)
-    except ImportError:
-        unittest.main(verbosity=2)
+    main()

@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import org.apache.spark.TaskState
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.errors.SparkCoreErrors
 
 /**
  * :: DeveloperApi ::
@@ -34,11 +35,33 @@ class TaskInfo(
      */
     val index: Int,
     val attemptNumber: Int,
+    /**
+     * The actual RDD partition ID in this task.
+     * The ID of the RDD partition is always same across task attempts.
+     * This will be -1 for historical data, and available for all applications since Spark 3.3.
+     */
+    val partitionId: Int,
     val launchTime: Long,
     val executorId: String,
     val host: String,
     val taskLocality: TaskLocality.TaskLocality,
-    val speculative: Boolean) {
+    val speculative: Boolean) extends Cloneable {
+
+  /**
+   * This api doesn't contains partitionId, please use the new api.
+   * Remain it for backward compatibility before Spark 3.3.
+   */
+  def this(
+      taskId: Long,
+      index: Int,
+      attemptNumber: Int,
+      launchTime: Long,
+      executorId: String,
+      host: String,
+      taskLocality: TaskLocality.TaskLocality,
+      speculative: Boolean) = {
+    this(taskId, index, attemptNumber, -1, launchTime, executorId, host, taskLocality, speculative)
+  }
 
   /**
    * The time when the task started remotely getting the result. Will not be set if the
@@ -60,6 +83,14 @@ class TaskInfo(
     _accumulables = newAccumulables
   }
 
+  override def clone(): TaskInfo = super.clone().asInstanceOf[TaskInfo]
+
+  private[scheduler] def cloneWithEmptyAccumulables(): TaskInfo = {
+    val cloned = clone()
+    cloned.setAccumulables(Nil)
+    cloned
+  }
+
   /**
    * The time when the task has completed successfully (including the time to remotely fetch
    * results, if necessary).
@@ -70,19 +101,22 @@ class TaskInfo(
 
   var killed = false
 
-  private[spark] def markGettingResult(time: Long) {
+  var launching = true
+
+  private[spark] def markGettingResult(time: Long): Unit = {
     gettingResultTime = time
   }
 
-  private[spark] def markFinished(state: TaskState, time: Long) {
+  private[spark] def markFinished(state: TaskState, time: Long): Unit = {
     // finishTime should be set larger than 0, otherwise "finished" below will return false.
     assert(time > 0)
     finishTime = time
-    if (state == TaskState.FAILED) {
-      failed = true
-    } else if (state == TaskState.KILLED) {
-      killed = true
-    }
+    failed = state == TaskState.FAILED
+    killed = state == TaskState.KILLED
+  }
+
+  private[spark] def launchSucceeded(): Unit = {
+    launching = false
   }
 
   def gettingResult: Boolean = gettingResultTime != 0
@@ -115,7 +149,7 @@ class TaskInfo(
 
   def duration: Long = {
     if (!finished) {
-      throw new UnsupportedOperationException("duration() called on unfinished task")
+      throw SparkCoreErrors.durationCalledOnUnfinishedTaskError()
     } else {
       finishTime - launchTime
     }

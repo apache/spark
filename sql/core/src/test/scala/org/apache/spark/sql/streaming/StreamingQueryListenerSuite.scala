@@ -20,50 +20,58 @@ package org.apache.spark.sql.streaming
 import java.util.UUID
 
 import scala.collection.mutable
-import scala.language.reflectiveCalls
 
-import org.scalactic.TolerantNumerics
+import org.json4s.jackson.JsonMethods.{compact, parse, render}
+import org.scalactic.{Equality, TolerantNumerics}
 import org.scalatest.BeforeAndAfter
-import org.scalatest.PrivateMethodTester._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.concurrent.Waiters.Waiter
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler._
-import org.apache.spark.sql.{Encoder, SparkSession}
-import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.{Encoder, Row, SparkSession}
+import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit}
+import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2}
 import org.apache.spark.sql.streaming.StreamingQueryListener._
+import org.apache.spark.sql.streaming.ui.StreamingQueryStatusListener
 import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.JsonProtocol
 
+@SlowSQLTest
 class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   import testImplicits._
 
   // To make === between double tolerate inexact values
-  implicit val doubleEquality = TolerantNumerics.tolerantDoubleEquality(0.01)
+  implicit val doubleEquality: Equality[Double] = TolerantNumerics.tolerantDoubleEquality(0.01)
 
   after {
     spark.streams.active.foreach(_.stop())
     assert(spark.streams.active.isEmpty)
-    assert(addedListeners().isEmpty)
+    // Skip check default `StreamingQueryStatusListener` which is for streaming UI.
+    assert(spark.streams.listListeners()
+      .forall(_.isInstanceOf[StreamingQueryStatusListener]))
     // Make sure we don't leak any events to the next test
-    spark.sparkContext.listenerBus.waitUntilEmpty(10000)
+    spark.sparkContext.listenerBus.waitUntilEmpty()
   }
 
   testQuietly("single listener, check trigger events are generated correctly") {
+    testSingleListenerBasic(new EventCollectorV1)
+    testSingleListenerBasic(new EventCollectorV2)
+  }
+
+  private def testSingleListenerBasic(listener: EventCollector): Unit = {
     val clock = new StreamManualClock
-    val inputData = new MemoryStream[Int](0, sqlContext)
+    val inputData = new MemoryStream[Int](0, spark)
     val df = inputData.toDS().as[Long].map { 10 / _ }
-    val listener = new EventCollector
 
     case class AssertStreamExecThreadToWaitForClock()
       extends AssertOnQuery(q => {
         eventually(Timeout(streamingTimeout)) {
           if (q.exception.isEmpty) {
-            assert(clock.asInstanceOf[StreamManualClock].isStreamWaitingAt(clock.getTimeMillis))
+            assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
           }
         }
         if (q.exception.isDefined) {
@@ -82,7 +90,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       testStream(df, OutputMode.Append)(
 
         // Start event generated when query started
-        StartStream(ProcessingTime(100), triggerClock = clock),
+        StartStream(Trigger.ProcessingTime(100), triggerClock = clock),
         AssertOnQuery { query =>
           assert(listener.startEvent !== null)
           assert(listener.startEvent.id === query.id)
@@ -124,7 +132,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         },
 
         // Termination event generated with exception message when stopped with error
-        StartStream(ProcessingTime(100), triggerClock = clock),
+        StartStream(Trigger.ProcessingTime(100), triggerClock = clock),
         AssertStreamExecThreadToWaitForClock(),
         AddData(inputData, 0),
         AdvanceManualClock(100), // process bad data
@@ -152,7 +160,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   test("SPARK-19594: all of listeners should receive QueryTerminatedEvent") {
     val df = MemoryStream[Int].toDS().as[Long]
-    val listeners = (1 to 5).map(_ => new EventCollector)
+    val listeners = (1 to 5).map(_ => new EventCollectorV2)
     try {
       listeners.foreach(listener => spark.streams.addListener(listener))
       testStream(df, OutputMode.Append)(
@@ -164,6 +172,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
             listeners.foreach(listener => assert(listener.terminationEvent.id === query.id))
             listeners.foreach(listener => assert(listener.terminationEvent.runId === query.runId))
             listeners.foreach(listener => assert(listener.terminationEvent.exception === None))
+            listeners.foreach(listener => assert(listener.terminationEvent.errorClassOnException
+              === None))
           }
           listeners.foreach(listener => listener.checkAsyncErrors())
           listeners.foreach(listener => listener.reset())
@@ -177,10 +187,10 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   test("continuous processing listeners should receive QueryTerminatedEvent") {
     val df = spark.readStream.format("rate").load()
-    val listeners = (1 to 5).map(_ => new EventCollector)
+    val listeners = (1 to 5).map(_ => new EventCollectorV2)
     try {
       listeners.foreach(listener => spark.streams.addListener(listener))
-      testStream(df, OutputMode.Append, useV2Sink = true)(
+      testStream(df, OutputMode.Append)(
         StartStream(Trigger.Continuous(1000)),
         StopStream,
         AssertOnQuery { query =>
@@ -189,6 +199,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
             listeners.foreach(listener => assert(listener.terminationEvent.id === query.id))
             listeners.foreach(listener => assert(listener.terminationEvent.runId === query.runId))
             listeners.foreach(listener => assert(listener.terminationEvent.exception === None))
+            listeners.foreach(listener => assert(listener.terminationEvent.errorClassOnException
+              === None))
           }
           listeners.foreach(listener => listener.checkAsyncErrors())
           listeners.foreach(listener => listener.reset())
@@ -203,7 +215,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   test("adding and removing listener") {
     def isListenerActive(listener: EventCollector): Boolean = {
       listener.reset()
-      testStream(MemoryStream[Int].toDS)(
+      testStream(MemoryStream[Int].toDS())(
         StartStream(),
         StopStream
       )
@@ -211,30 +223,30 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     }
 
     try {
-      val listener1 = new EventCollector
-      val listener2 = new EventCollector
+      val listener1 = new EventCollectorV1
+      val listener2 = new EventCollectorV2
 
       spark.streams.addListener(listener1)
-      assert(isListenerActive(listener1) === true)
+      assert(isListenerActive(listener1))
       assert(isListenerActive(listener2) === false)
       spark.streams.addListener(listener2)
-      assert(isListenerActive(listener1) === true)
-      assert(isListenerActive(listener2) === true)
+      assert(isListenerActive(listener1))
+      assert(isListenerActive(listener2))
       spark.streams.removeListener(listener1)
       assert(isListenerActive(listener1) === false)
-      assert(isListenerActive(listener2) === true)
+      assert(isListenerActive(listener2))
     } finally {
-      addedListeners().foreach(spark.streams.removeListener)
+      spark.streams.listListeners().foreach(spark.streams.removeListener)
     }
   }
 
   test("event ordering") {
-    val listener = new EventCollector
+    val listener = new EventCollectorV2
     withListenerAdded(listener) {
       for (i <- 1 to 50) {
         listener.reset()
         require(listener.startEvent === null)
-        testStream(MemoryStream[Int].toDS)(
+        testStream(MemoryStream[Int].toDS())(
           StartStream(),
           Assert(listener.startEvent !== null, "onQueryStarted not called before query returned"),
           StopStream,
@@ -246,105 +258,176 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   test("QueryStartedEvent serialization") {
     def testSerialization(event: QueryStartedEvent): Unit = {
-      val json = JsonProtocol.sparkEventToJson(event)
+      val json = JsonProtocol.sparkEventToJsonString(event)
       val newEvent = JsonProtocol.sparkEventFromJson(json).asInstanceOf[QueryStartedEvent]
       assert(newEvent.id === event.id)
       assert(newEvent.runId === event.runId)
       assert(newEvent.name === event.name)
+      assert(newEvent.timestamp === event.timestamp)
+      assert(newEvent.jobTags === event.jobTags)
     }
 
-    testSerialization(new QueryStartedEvent(UUID.randomUUID, UUID.randomUUID, "name"))
-    testSerialization(new QueryStartedEvent(UUID.randomUUID, UUID.randomUUID, null))
+    testSerialization(
+      new QueryStartedEvent(
+        UUID.randomUUID,
+        UUID.randomUUID,
+        "name",
+        "2016-12-05T20:54:20.827Z",
+        Set()
+      )
+    )
+    testSerialization(
+      new QueryStartedEvent(
+        UUID.randomUUID,
+        UUID.randomUUID,
+        null,
+        "2016-12-05T20:54:20.827Z",
+        Set("tag1", "tag2")
+      )
+    )
+  }
+
+  private def removeFieldFromJson(jsonString: String, fieldName: String): String = {
+    val jv = parse(jsonString, useBigDecimalForDouble = true)
+    val removed = jv.removeField { case (name, _) => name == fieldName }
+    compact(render(removed))
   }
 
   test("QueryProgressEvent serialization") {
     def testSerialization(event: QueryProgressEvent): Unit = {
-      import scala.collection.JavaConverters._
-      val json = JsonProtocol.sparkEventToJson(event)
+      import scala.jdk.CollectionConverters._
+      val json = JsonProtocol.sparkEventToJsonString(event)
       val newEvent = JsonProtocol.sparkEventFromJson(json).asInstanceOf[QueryProgressEvent]
       assert(newEvent.progress.json === event.progress.json)  // json as a proxy for equality
       assert(newEvent.progress.durationMs.asScala === event.progress.durationMs.asScala)
       assert(newEvent.progress.eventTime.asScala === event.progress.eventTime.asScala)
+
+      // Verify we can get the event back from the JSON string, this is important for Spark Connect
+      // and the StreamingQueryListenerBus. This is the method that is used to deserialize the event
+      // in StreamingQueryListenerBus.queryEventHandler
+      val eventFromNewEvent = QueryProgressEvent.fromJson(newEvent.json)
+      // TODO: Remove after SC-206585 is fixed
+      // We remove the observedMetrics field because it is not serialized properly when being
+      // removed from the listener bus, so this test is to verify that everything expect the
+      // observedMetrics field is equal in the JSON string
+      val eventWithoutObservedMetrics = removeFieldFromJson(event.progress.json, "observedMetrics")
+      assert(eventFromNewEvent.progress.json === eventWithoutObservedMetrics)
     }
     testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress1))
     testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress2))
+    testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress3))
+    testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress4))
+    testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress5))
+    testSerialization(new QueryProgressEvent(StreamingQueryStatusAndProgressSuite.testProgress6))
   }
 
   test("QueryTerminatedEvent serialization") {
     def testSerialization(event: QueryTerminatedEvent): Unit = {
-      val json = JsonProtocol.sparkEventToJson(event)
+      val json = JsonProtocol.sparkEventToJsonString(event)
       val newEvent = JsonProtocol.sparkEventFromJson(json).asInstanceOf[QueryTerminatedEvent]
       assert(newEvent.id === event.id)
       assert(newEvent.runId === event.runId)
       assert(newEvent.exception === event.exception)
+      assert(newEvent.errorClassOnException === event.errorClassOnException)
     }
 
-    val exception = new RuntimeException("exception")
+    val exception = SparkException.internalError("testpurpose")
     testSerialization(
-      new QueryTerminatedEvent(UUID.randomUUID, UUID.randomUUID, Some(exception.getMessage)))
+      new QueryTerminatedEvent(UUID.randomUUID, UUID.randomUUID,
+        Some(exception.getMessage), Some(exception.getCondition)))
   }
 
   test("only one progress event per interval when no data") {
     // This test will start a query but not push any data, and then check if we push too many events
     withSQLConf(SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "100ms") {
       @volatile var numProgressEvent = 0
+      @volatile var numIdleEvent = 0
       val listener = new StreamingQueryListener {
         override def onQueryStarted(event: QueryStartedEvent): Unit = {}
         override def onQueryProgress(event: QueryProgressEvent): Unit = {
           numProgressEvent += 1
         }
+        override def onQueryIdle(event: QueryIdleEvent): Unit = {
+          numIdleEvent += 1
+        }
         override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
       }
       spark.streams.addListener(listener)
       try {
-        val input = new MemoryStream[Int](0, sqlContext) {
-          @volatile var numTriggers = 0
-          override def latestOffset(): OffsetV2 = {
+        var numTriggers = 0
+        val input = new MemoryStream[Int](0, spark) {
+          override def latestOffset(startOffset: OffsetV2, limit: ReadLimit): OffsetV2 = {
             numTriggers += 1
-            super.latestOffset()
+            super.latestOffset(startOffset, limit)
           }
         }
         val clock = new StreamManualClock()
         val actions = mutable.ArrayBuffer[StreamAction]()
-        actions += StartStream(trigger = ProcessingTime(10), triggerClock = clock)
+        actions += StartStream(trigger = Trigger.ProcessingTime(10), triggerClock = clock)
         for (_ <- 1 to 100) {
           actions += AdvanceManualClock(10)
         }
         actions += AssertOnQuery { _ =>
           eventually(timeout(streamingTimeout)) {
-            assert(input.numTriggers > 100) // at least 100 triggers have occurred
+            assert(numTriggers > 100) // at least 100 triggers have occurred
           }
           true
         }
         // `recentProgress` should not receive too many no data events
         actions += AssertOnQuery { q =>
-          q.recentProgress.size > 1 && q.recentProgress.size <= 11
+          q.recentProgress.length > 1 && q.recentProgress.length <= 11
         }
-        testStream(input.toDS)(actions: _*)
-        spark.sparkContext.listenerBus.waitUntilEmpty(10000)
+        testStream(input.toDS())(actions.toSeq: _*)
+        spark.sparkContext.listenerBus.waitUntilEmpty()
         // 11 is the max value of the possible numbers of events.
-        assert(numProgressEvent > 1 && numProgressEvent <= 11)
+        assert(numIdleEvent > 1 && numIdleEvent <= 11)
       } finally {
         spark.streams.removeListener(listener)
       }
     }
   }
 
+  test("QueryStartedEvent has the right jobTags set") {
+    val session = spark.newSession()
+    val collector = new EventCollectorV2
+    val jobTag1 = "test-jobTag1"
+    val jobTag2 = "test-jobTag2"
+
+    def runQuery(session: SparkSession): Unit = {
+      collector.reset()
+      session.sparkContext.addJobTag(jobTag1)
+      session.sparkContext.addJobTag(jobTag2)
+      val mem = MemoryStream[Int](implicitly[Encoder[Int]], session)
+      testStream(mem.toDS())(
+        AddData(mem, 1, 2, 3),
+        CheckAnswer(1, 2, 3)
+      )
+      session.sparkContext.listenerBus.waitUntilEmpty()
+      session.sparkContext.clearJobTags()
+    }
+
+    withListenerAdded(collector, session) {
+      runQuery(session)
+      assert(collector.startEvent !== null)
+      assert(collector.startEvent.jobTags === Set(jobTag1, jobTag2))
+    }
+  }
+
   test("listener only posts events from queries started in the related sessions") {
     val session1 = spark.newSession()
     val session2 = spark.newSession()
-    val collector1 = new EventCollector
-    val collector2 = new EventCollector
+    val collector1 = new EventCollectorV2
+    val collector2 = new EventCollectorV2
 
     def runQuery(session: SparkSession): Unit = {
       collector1.reset()
       collector2.reset()
-      val mem = MemoryStream[Int](implicitly[Encoder[Int]], session.sqlContext)
-      testStream(mem.toDS)(
+      val mem = MemoryStream[Int](implicitly[Encoder[Int]], session)
+      testStream(mem.toDS())(
         AddData(mem, 1, 2, 3),
         CheckAnswer(1, 2, 3)
       )
-      session.sparkContext.listenerBus.waitUntilEmpty(5000)
+      session.sparkContext.listenerBus.waitUntilEmpty()
     }
 
     def assertEventsCollected(collector: EventCollector): Unit = {
@@ -363,10 +446,10 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     assert(session1.streams.ne(session2.streams))
 
     withListenerAdded(collector1, session1) {
-      assert(addedListeners(session1).nonEmpty)
+      assert(session1.streams.listListeners().nonEmpty)
 
       withListenerAdded(collector2, session2) {
-        assert(addedListeners(session2).nonEmpty)
+        assert(session2.streams.listListeners().nonEmpty)
 
         // query on session1 should send events only to collector1
         runQuery(session1)
@@ -381,31 +464,150 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  testQuietly("ReplayListenerBus should ignore broken event jsons generated in 2.0.0") {
+  testQuietly("ReplayListenerBus should ignore broken event jsons generated in 2_0_0") {
     // query-event-logs-version-2.0.0.txt has all types of events generated by
-    // Structured Streaming in Spark 2.0.0.
+    // Structured Streaming in Spark 2.0.0. Because we renamed the classes,
     // SparkListenerApplicationEnd is the only valid event and it's the last event. We use it
     // to verify that we can skip broken jsons generated by Structured Streaming.
-    testReplayListenerBusWithBorkenEventJsons("query-event-logs-version-2.0.0.txt")
+    testReplayListenerBusWithBrokenEventJsons("query-event-logs-version-2.0.0.txt", 1)
   }
 
-  testQuietly("ReplayListenerBus should ignore broken event jsons generated in 2.0.1") {
+  testQuietly("ReplayListenerBus should ignore broken event jsons generated in 2_0_1") {
     // query-event-logs-version-2.0.1.txt has all types of events generated by
-    // Structured Streaming in Spark 2.0.1.
+    // Structured Streaming in Spark 2.0.1. Because we renamed the classes,
     // SparkListenerApplicationEnd is the only valid event and it's the last event. We use it
     // to verify that we can skip broken jsons generated by Structured Streaming.
-    testReplayListenerBusWithBorkenEventJsons("query-event-logs-version-2.0.1.txt")
+    testReplayListenerBusWithBrokenEventJsons("query-event-logs-version-2.0.1.txt", 1)
   }
 
-  testQuietly("ReplayListenerBus should ignore broken event jsons generated in 2.0.2") {
+  testQuietly("ReplayListenerBus should ignore broken event jsons generated in 2_0_2") {
     // query-event-logs-version-2.0.2.txt has all types of events generated by
-    // Structured Streaming in Spark 2.0.2.
-    // SparkListenerApplicationEnd is the only valid event and it's the last event. We use it
-    // to verify that we can skip broken jsons generated by Structured Streaming.
-    testReplayListenerBusWithBorkenEventJsons("query-event-logs-version-2.0.2.txt")
+    // Structured Streaming in Spark 2.0.2. SPARK-18516 refactored Structured Streaming query events
+    // in 2.1.0. This test is to verify we are able to load events generated by Spark 2.0.2.
+    testReplayListenerBusWithBrokenEventJsons("query-event-logs-version-2.0.2.txt", 5)
   }
 
-  private def testReplayListenerBusWithBorkenEventJsons(fileName: String): Unit = {
+  test("listener propagates observable metrics") {
+    import org.apache.spark.sql.functions._
+    val clock = new StreamManualClock
+    val inputData = new MemoryStream[Int](0, spark)
+    val df = inputData.toDF()
+      .observe(
+        name = "my_event",
+        min($"value").as("min_val"),
+        max($"value").as("max_val"),
+        sum($"value").as("sum_val"),
+        count(when($"value" % 2 === 0, 1)).as("num_even"),
+        percentile_approx($"value", lit(0.5), lit(100)).as("percentile_approx_val"))
+      .observe(
+        name = "other_event",
+        avg($"value").cast("int").as("avg_val"))
+    val listener = new EventCollectorV2
+    def checkMetrics(f: java.util.Map[String, Row] => Unit): StreamAction = {
+      AssertOnQuery { _ =>
+        eventually(Timeout(streamingTimeout)) {
+          assert(listener.allProgressEvents.nonEmpty)
+          f(listener.allProgressEvents.last.observedMetrics)
+          true
+        }
+      }
+    }
+
+    try {
+      val noDataProgressIntervalKey = SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key
+      spark.streams.addListener(listener)
+      testStream(df, OutputMode.Append)(
+        StartStream(
+          Trigger.ProcessingTime(100),
+          triggerClock = clock,
+          Map(noDataProgressIntervalKey -> "100")),
+        // Batch 1
+        AddData(inputData, 1, 2),
+        AdvanceManualClock(100),
+        checkMetrics { metrics =>
+          assert(metrics.get("my_event") === Row(1, 2, 3L, 1L, 1))
+          assert(metrics.get("other_event") === Row(1))
+        },
+
+        // Batch 2
+        AddData(inputData, 10, 30, -10, 5),
+        AdvanceManualClock(100),
+        checkMetrics { metrics =>
+          assert(metrics.get("my_event") === Row(-10, 30, 35L, 3L, 5))
+          assert(metrics.get("other_event") === Row(8))
+        },
+
+        // Batch 3 - no data, does not produce query progress event
+        AdvanceManualClock(110),
+        AssertOnQuery { _ =>
+          eventually(Timeout(streamingTimeout)) {
+            assert(listener.idleEvent != null)
+            true
+          }
+        },
+        StopStream
+      )
+    } finally {
+      spark.streams.removeListener(listener)
+    }
+  }
+
+  test("SPARK-31593: remove unnecessary streaming query progress update") {
+    withSQLConf(SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "100") {
+      @volatile var numProgressEvent = 0
+      @volatile var numIdleEvent = 0
+      val listener = new StreamingQueryListener {
+        override def onQueryStarted(event: QueryStartedEvent): Unit = {}
+        override def onQueryProgress(event: QueryProgressEvent): Unit = {
+          numProgressEvent += 1
+        }
+        override def onQueryIdle(event: QueryIdleEvent): Unit = {
+          numIdleEvent += 1
+        }
+        override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
+      }
+      spark.streams.addListener(listener)
+
+      def checkProgressEvent(count: Int): StreamAction = {
+        AssertOnQuery { _ =>
+          eventually(Timeout(streamingTimeout)) {
+            assert(numProgressEvent == count)
+          }
+          true
+        }
+      }
+      def checkIdleEvent(count: Int): StreamAction = {
+        AssertOnQuery { _ =>
+          eventually(Timeout(streamingTimeout)) {
+            assert(numIdleEvent == count)
+          }
+          true
+        }
+      }
+
+      try {
+        val input = new MemoryStream[Int](0, spark)
+        val clock = new StreamManualClock()
+        val result = input.toDF().select("value")
+        testStream(result)(
+          StartStream(trigger = Trigger.ProcessingTime(10), triggerClock = clock),
+          AddData(input, 10),
+          AdvanceManualClock(10),
+          checkProgressEvent(1),
+          AdvanceManualClock(90),
+          checkIdleEvent(0),
+          AdvanceManualClock(20),
+          checkIdleEvent(1)
+        )
+      } finally {
+        spark.streams.removeListener(listener)
+      }
+    }
+  }
+
+  private def testReplayListenerBusWithBrokenEventJsons(
+      fileName: String,
+      expectedEventSize: Int): Unit = {
     val input = getClass.getResourceAsStream(s"/structured-streaming/$fileName")
     val events = mutable.ArrayBuffer[SparkListenerEvent]()
     try {
@@ -421,8 +623,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       replayer.addListener(new SparkListener {})
       replayer.replay(input, fileName)
       // SparkListenerApplicationEnd is the only valid event
-      assert(events.size === 1)
-      assert(events(0).isInstanceOf[SparkListenerApplicationEnd])
+      assert(events.size === expectedEventSize)
+      assert(events.last.isInstanceOf[SparkListenerApplicationEnd])
     } finally {
       input.close()
     }
@@ -441,29 +643,28 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  private def addedListeners(session: SparkSession = spark): Array[StreamingQueryListener] = {
-    val listenerBusMethod =
-      PrivateMethod[StreamingQueryListenerBus]('listenerBus)
-    val listenerBus = session.streams invokePrivate listenerBusMethod()
-    listenerBus.listeners.toArray.map(_.asInstanceOf[StreamingQueryListener])
-  }
-
   /** Collects events from the StreamingQueryListener for testing */
-  class EventCollector extends StreamingQueryListener {
+  abstract class EventCollector extends StreamingQueryListener {
     // to catch errors in the async listener events
     @volatile private var asyncTestWaiter = new Waiter
 
     @volatile var startEvent: QueryStartedEvent = null
     @volatile var terminationEvent: QueryTerminatedEvent = null
+    @volatile var idleEvent: QueryIdleEvent = null
 
     private val _progressEvents = new mutable.Queue[StreamingQueryProgress]
 
     def progressEvents: Seq[StreamingQueryProgress] = _progressEvents.synchronized {
-      _progressEvents.filter(_.numInputRows > 0)
+      _progressEvents.filter(_.numInputRows > 0).toSeq
+    }
+
+    def allProgressEvents: Seq[StreamingQueryProgress] = _progressEvents.synchronized {
+      _progressEvents.clone().toSeq
     }
 
     def reset(): Unit = {
       startEvent = null
+      idleEvent = null
       terminationEvent = null
       _progressEvents.clear()
       asyncTestWaiter = new Waiter
@@ -473,25 +674,61 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       asyncTestWaiter.await(timeout(streamingTimeout))
     }
 
-    override def onQueryStarted(queryStarted: QueryStartedEvent): Unit = {
+    protected def handleOnQueryStarted(queryStarted: QueryStartedEvent): Unit = {
       asyncTestWaiter {
         startEvent = queryStarted
       }
     }
 
-    override def onQueryProgress(queryProgress: QueryProgressEvent): Unit = {
+    protected def handleOnQueryProgress(queryProgress: QueryProgressEvent): Unit = {
       asyncTestWaiter {
         assert(startEvent != null, "onQueryProgress called before onQueryStarted")
-        _progressEvents.synchronized { _progressEvents += queryProgress.progress }
+        _progressEvents.synchronized {
+          _progressEvents += queryProgress.progress
+        }
       }
     }
 
-    override def onQueryTerminated(queryTerminated: QueryTerminatedEvent): Unit = {
+    protected def handleOnQueryIdle(queryIdle: QueryIdleEvent): Unit = {
+      asyncTestWaiter {
+        assert(startEvent != null, "onQueryIdle called before onQueryStarted")
+        idleEvent = queryIdle
+      }
+    }
+
+    protected def handleOnQueryTerminated(queryTerminated: QueryTerminatedEvent): Unit = {
       asyncTestWaiter {
         assert(startEvent != null, "onQueryTerminated called before onQueryStarted")
         terminationEvent = queryTerminated
       }
       asyncTestWaiter.dismiss()
     }
+  }
+
+  /**
+   * V1: Initial interface of StreamingQueryListener containing methods `onQueryStarted`,
+   * `onQueryProgress`, `onQueryTerminated`. It is prior to Spark 3.5.
+   */
+  class EventCollectorV1 extends EventCollector {
+    override def onQueryStarted(event: QueryStartedEvent): Unit = handleOnQueryStarted(event)
+
+    override def onQueryProgress(event: QueryProgressEvent): Unit = handleOnQueryProgress(event)
+
+    override def onQueryTerminated(event: QueryTerminatedEvent): Unit =
+      handleOnQueryTerminated(event)
+  }
+
+  /**
+   * V2: The interface after the method `onQueryIdle` is added. It is Spark 3.5+.
+   */
+  class EventCollectorV2 extends EventCollector {
+    override def onQueryStarted(event: QueryStartedEvent): Unit = handleOnQueryStarted(event)
+
+    override def onQueryProgress(event: QueryProgressEvent): Unit = handleOnQueryProgress(event)
+
+    override def onQueryIdle(event: QueryIdleEvent): Unit = handleOnQueryIdle(event)
+
+    override def onQueryTerminated(event: QueryTerminatedEvent): Unit =
+      handleOnQueryTerminated(event)
   }
 }

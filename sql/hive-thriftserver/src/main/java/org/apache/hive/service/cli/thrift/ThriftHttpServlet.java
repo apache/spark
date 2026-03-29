@@ -1,13 +1,12 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,43 +20,46 @@ package org.apache.hive.service.cli.thrift;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.security.PrivilegedExceptionAction;
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
-import javax.servlet.ServletException;
-import javax.servlet.http.Cookie;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import javax.ws.rs.core.NewCookie;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.ws.rs.core.NewCookie;
 
-import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.codec.binary.StringUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.shims.HadoopShims.KerberosNameShim;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hive.service.CookieSigner;
 import org.apache.hive.service.auth.AuthenticationProviderFactory;
 import org.apache.hive.service.auth.AuthenticationProviderFactory.AuthMethods;
 import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.auth.HttpAuthUtils;
 import org.apache.hive.service.auth.HttpAuthenticationException;
 import org.apache.hive.service.auth.PasswdAuthenticationProvider;
+import org.apache.hive.service.cli.HiveSQLException;
 import org.apache.hive.service.cli.session.SessionManager;
-import org.apache.hive.service.CookieSigner;
 import org.apache.thrift.TProcessor;
 import org.apache.thrift.protocol.TProtocolFactory;
-import org.apache.thrift.server.TServlet;
 import org.ietf.jgss.GSSContext;
 import org.ietf.jgss.GSSCredential;
 import org.ietf.jgss.GSSException;
 import org.ietf.jgss.GSSManager;
 import org.ietf.jgss.GSSName;
 import org.ietf.jgss.Oid;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 /**
  *
@@ -67,7 +69,7 @@ import org.ietf.jgss.Oid;
 public class ThriftHttpServlet extends TServlet {
 
   private static final long serialVersionUID = 1L;
-  public static final Log LOG = LogFactory.getLog(ThriftHttpServlet.class.getName());
+  public static final SparkLogger LOG = SparkLoggerFactory.getLogger(ThriftHttpServlet.class);
   private final String authType;
   private final UserGroupInformation serviceUGI;
   private final UserGroupInformation httpUGI;
@@ -76,20 +78,24 @@ public class ThriftHttpServlet extends TServlet {
   // Class members for cookie based authentication.
   private CookieSigner signer;
   public static final String AUTH_COOKIE = "hive.server2.auth";
-  private static final Random RAN = new Random();
+  private static final SecureRandom RAN = new SecureRandom();
   private boolean isCookieAuthEnabled;
   private String cookieDomain;
   private String cookiePath;
   private int cookieMaxAge;
   private boolean isCookieSecure;
   private boolean isHttpOnlyCookie;
+  private final HiveAuthFactory hiveAuthFactory;
+  private static final String HIVE_DELEGATION_TOKEN_HEADER =  "X-Hive-Delegation-Token";
 
   public ThriftHttpServlet(TProcessor processor, TProtocolFactory protocolFactory,
-      String authType, UserGroupInformation serviceUGI, UserGroupInformation httpUGI) {
+      String authType, UserGroupInformation serviceUGI, UserGroupInformation httpUGI,
+      HiveAuthFactory hiveAuthFactory) {
     super(processor, protocolFactory);
     this.authType = authType;
     this.serviceUGI = serviceUGI;
     this.httpUGI = httpUGI;
+    this.hiveAuthFactory = hiveAuthFactory;
     this.isCookieAuthEnabled = hiveConf.getBoolVar(
       ConfVars.HIVE_SERVER2_THRIFT_HTTP_COOKIE_AUTH_ENABLED);
     // Initialize the cookie based authentication related variables.
@@ -132,7 +138,13 @@ public class ThriftHttpServlet extends TServlet {
       if (clientUserName == null) {
         // For a kerberos setup
         if (isKerberosAuthMode(authType)) {
-          clientUserName = doKerberosAuth(request);
+          String delegationToken = request.getHeader(HIVE_DELEGATION_TOKEN_HEADER);
+          // Each http request must have an Authorization header
+          if ((delegationToken != null) && (!delegationToken.isEmpty())) {
+            clientUserName = doTokenAuth(request, response);
+          } else {
+            clientUserName = doKerberosAuth(request);
+          }
         }
         // For password based authentication
         else {
@@ -145,7 +157,7 @@ public class ThriftHttpServlet extends TServlet {
       SessionManager.setUserName(clientUserName);
 
       // find proxy user if any from query param
-      String doAsQueryParam = getDoAsQueryParam(request.getQueryString());
+      String doAsQueryParam = getDoAsQueryParam(request);
       if (doAsQueryParam != null) {
         SessionManager.setProxyUserName(doAsQueryParam);
       }
@@ -165,7 +177,8 @@ public class ThriftHttpServlet extends TServlet {
         } else {
           response.addCookie(hs2Cookie);
         }
-        LOG.info("Cookie added for clientUserName " + clientUserName);
+        LOG.info("Cookie added for clientUserName {}",
+          MDC.of(LogKeys.USER_NAME, clientUserName));
       }
       super.doPost(request, response);
     }
@@ -219,7 +232,7 @@ public class ThriftHttpServlet extends TServlet {
         String userName = HttpAuthUtils.getUserNameFromCookieToken(currValue);
 
         if (userName == null) {
-          LOG.warn("Invalid cookie token " + currValue);
+          LOG.warn("Invalid cookie token {}", MDC.of(LogKeys.TOKEN, currValue));
           continue;
         }
         //We have found a valid cookie in the client request.
@@ -331,6 +344,16 @@ public class ThriftHttpServlet extends TServlet {
     return userName;
   }
 
+  private String doTokenAuth(HttpServletRequest request, HttpServletResponse response)
+      throws HttpAuthenticationException {
+    String tokenStr = request.getHeader(HIVE_DELEGATION_TOKEN_HEADER);
+    try {
+      return hiveAuthFactory.verifyDelegationToken(tokenStr);
+    } catch (HiveSQLException e) {
+      throw new HttpAuthenticationException(e);
+    }
+  }
+
   /**
    * Do the GSS-API kerberos authentication.
    * We already have a logged in subject in the form of serviceUGI,
@@ -400,7 +423,7 @@ public class ThriftHttpServlet extends TServlet {
         gssContext = manager.createContext(serverCreds);
         // Get service ticket from the authorization header
         String serviceTicketBase64 = getAuthHeader(request, authType);
-        byte[] inToken = Base64.decodeBase64(serviceTicketBase64.getBytes());
+        byte[] inToken = Base64.getDecoder().decode(serviceTicketBase64.getBytes());
         gssContext.acceptSecContext(inToken, 0, inToken.length);
         // Authenticate or deny based on its context completion
         if (!gssContext.isEstablished()) {
@@ -472,7 +495,7 @@ public class ThriftHttpServlet extends TServlet {
     // Password must be present
     if (creds[1] == null || creds[1].isEmpty()) {
       throw new HttpAuthenticationException("Authorization header received " +
-          "from the client does not contain username.");
+          "from the client does not contain password.");
     }
     return creds[1];
   }
@@ -481,7 +504,7 @@ public class ThriftHttpServlet extends TServlet {
       String authType) throws HttpAuthenticationException {
     String authHeaderBase64 = getAuthHeader(request, authType);
     String authHeaderString = StringUtils.newStringUtf8(
-        Base64.decodeBase64(authHeaderBase64.getBytes()));
+      Base64.getDecoder().decode(authHeaderBase64.getBytes()));
     String[] creds = authHeaderString.split(":");
     return creds;
   }
@@ -523,14 +546,15 @@ public class ThriftHttpServlet extends TServlet {
     return authType.equalsIgnoreCase(HiveAuthFactory.AuthTypes.KERBEROS.toString());
   }
 
-  private static String getDoAsQueryParam(String queryString) {
+  private static String getDoAsQueryParam(HttpServletRequest request) {
+    String queryString = request.getQueryString();
     if (LOG.isDebugEnabled()) {
       LOG.debug("URL query string:" + queryString);
     }
     if (queryString == null) {
       return null;
     }
-    Map<String, String[]> params = javax.servlet.http.HttpUtils.parseQueryString( queryString );
+    Map<String, String[]> params = request.getParameterMap();
     Set<String> keySet = params.keySet();
     for (String key: keySet) {
       if (key.equalsIgnoreCase("doAs")) {

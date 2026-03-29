@@ -42,9 +42,9 @@ object ALSExample {
   }
   // $example off$
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("ALSExample")
       .getOrCreate()
     import spark.implicits._

@@ -17,18 +17,21 @@
 
 package org.apache.spark.sql.hive.orc
 
-import java.io.IOException
+import java.io.{FileNotFoundException, IOException}
 
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.ql.io.orc.{OrcFile, Reader}
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
 
-import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ThreadUtils
 
 private[hive] object OrcFileOperator extends Logging {
   /**
@@ -51,14 +54,15 @@ private[hive] object OrcFileOperator extends Logging {
    */
   def getFileReader(basePath: String,
       config: Option[Configuration] = None,
-      ignoreCorruptFiles: Boolean = false)
+      ignoreCorruptFiles: Boolean = false,
+      ignoreMissingFiles: Boolean = false)
       : Option[Reader] = {
     def isWithNonEmptySchema(path: Path, reader: Reader): Boolean = {
       reader.getObjectInspector match {
         case oi: StructObjectInspector if oi.getAllStructFieldRefs.size() == 0 =>
           logInfo(
-            s"ORC file $path has empty schema, it probably contains no rows. " +
-              "Trying to read another ORC file to figure out the schema.")
+            log"ORC file ${MDC(PATH, path)} has empty schema, it probably contains no rows. " +
+              log"Trying to read another ORC file to figure out the schema.")
           false
         case _ => true
       }
@@ -74,12 +78,16 @@ private[hive] object OrcFileOperator extends Logging {
       val reader = try {
         Some(OrcFile.createReader(fs, path))
       } catch {
+        case e: Exception if ignoreMissingFiles &&
+            ExceptionUtils.getThrowables(e).exists(_.isInstanceOf[FileNotFoundException]) =>
+          logWarning(log"Skipped missing file: ${MDC(PATH, path)}", e)
+          None
         case e: IOException =>
           if (ignoreCorruptFiles) {
-            logWarning(s"Skipped the footer in the corrupted file: $path", e)
+            logWarning(log"Skipped the footer in the corrupted file: ${MDC(PATH, path)}", e)
             None
           } else {
-            throw new SparkException(s"Could not read footer for file: $path", e)
+            throw QueryExecutionErrors.cannotReadFooterForFileError(path, e)
           }
       }
       path -> reader
@@ -92,13 +100,32 @@ private[hive] object OrcFileOperator extends Logging {
       : Option[StructType] = {
     // Take the first file where we can open a valid reader if we can find one.  Otherwise just
     // return None to indicate we can't infer the schema.
-    paths.toIterator.map(getFileReader(_, conf, ignoreCorruptFiles)).collectFirst {
+    paths.iterator.map(getFileReader(_, conf, ignoreCorruptFiles)).collectFirst {
       case Some(reader) =>
         val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
         val schema = readerInspector.getTypeName
         logDebug(s"Reading schema from file $paths, got Hive schema string: $schema")
         CatalystSqlParser.parseDataType(schema).asInstanceOf[StructType]
     }
+  }
+
+  /**
+   * Reads ORC file schemas in multi-threaded manner, using Hive ORC library.
+   * This is visible for testing.
+   */
+  def readOrcSchemasInParallel(
+      partFiles: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean,
+      ignoreMissingFiles: Boolean)
+      : Seq[StructType] = {
+    ThreadUtils.parmap(partFiles, "readingOrcSchemas", 8) { currentFile =>
+      val file = currentFile.getPath.toString
+      getFileReader(file, Some(conf), ignoreCorruptFiles, ignoreMissingFiles).map(reader => {
+        val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
+        val schema = readerInspector.getTypeName
+        logDebug(s"Reading schema from file $file., got Hive schema string: $schema")
+        CatalystSqlParser.parseDataType(schema).asInstanceOf[StructType]
+      })
+    }.flatten
   }
 
   def getObjectInspector(

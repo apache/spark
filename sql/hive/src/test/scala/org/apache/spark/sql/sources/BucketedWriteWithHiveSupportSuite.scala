@@ -17,14 +17,71 @@
 
 package org.apache.spark.sql.sources
 
+import java.io.File
+
+import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.catalyst.expressions.{BitwiseAnd, Expression, HiveHash, Literal, Pmod}
+import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.test.TestHive.sparkSession.implicits._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
 class BucketedWriteWithHiveSupportSuite extends BucketedWriteSuite with TestHiveSingleton {
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive")
+    assert(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive")
   }
 
   override protected def fileFormatsToTest: Seq[String] = Seq("parquet", "orc")
+
+  test("write hive bucketed table") {
+    def bucketIdExpression(expressions: Seq[Expression], numBuckets: Int): Expression =
+      Pmod(BitwiseAnd(HiveHash(expressions), Literal(Int.MaxValue)), Literal(8))
+
+    def getBucketIdFromFileName(fileName: String): Option[Int] = {
+      val hiveBucketedFileName = """^(\d+)_0_.*$""".r
+      fileName match {
+        case hiveBucketedFileName(bucketId) => Some(bucketId.toInt)
+        case _ => None
+      }
+    }
+
+    val table = "hive_bucketed_table"
+
+    fileFormatsToTest.foreach { format =>
+      Seq("true", "false").foreach { enableConvertMetastore =>
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> enableConvertMetastore,
+          HiveUtils.CONVERT_METASTORE_ORC.key -> enableConvertMetastore) {
+          withTable(table) {
+            sql(
+              s"""
+                 |CREATE TABLE IF NOT EXISTS $table (i int, j string)
+                 |PARTITIONED BY(k string)
+                 |CLUSTERED BY (i, j) SORTED BY (i) INTO 8 BUCKETS
+                 |STORED AS $format
+               """.stripMargin)
+
+            val df =
+              (0 until 50).map(i => (i % 13, i.toString, i % 5)).toDF("i", "j", "k")
+
+            withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+              df.write.mode(SaveMode.Overwrite).insertInto(table)
+            }
+
+            for (k <- 0 until 5) {
+              testBucketing(
+                new File(tableDir(table), s"k=$k"),
+                format,
+                8,
+                Seq("i", "j"),
+                Seq("i"),
+                df,
+                bucketIdExpression,
+                getBucketIdFromFileName)
+            }
+          }
+        }
+      }
+    }
+  }
 }
