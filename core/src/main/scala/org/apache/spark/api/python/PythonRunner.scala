@@ -326,8 +326,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
     envVars.put("SPARK_PYTHON_RUNTIME", "PYTHON_WORKER")
 
-    val (worker: PythonWorker, handle: Option[ProcessHandle]) = env.createPythonWorker(
-      pythonExec, workerModule, daemonModule, envVars.asScala.toMap, useDaemon)
+    val (worker: PythonWorker, handle: Option[ProcessHandle]) = env.pythonWorkerManager
+      .createPythonWorker(pythonExec, workerModule, daemonModule, envVars.asScala.toMap, useDaemon)
     // Whether is the worker released into idle pool or closed. When any codes try to release or
     // close a worker, they should use `releasedOrClosed.compareAndSet` to flip the state to make
     // sure there is only one winner that is going to release or close the worker.
@@ -676,7 +676,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       // Check whether the worker is ready to be re-used.
       if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
         if (reuseWorker && releasedOrClosed.compareAndSet(false, true)) {
-          env.releasePythonWorker(
+          env.pythonWorkerManager.releasePythonWorker(
             pythonExec, workerModule, daemonModule, envVars.asScala.toMap, worker)
         }
       }
@@ -741,7 +741,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           try {
             logWarning(log"Incomplete task interrupted: Attempting to kill Python Worker - " +
               log"${MDC(TASK_NAME, taskIdentifier(context))}")
-            env.destroyPythonWorker(
+            env.pythonWorkerManager.destroyPythonWorker(
               pythonExec, workerModule, daemonModule, envVars.asScala.toMap, worker)
           } catch {
             case e: Exception =>

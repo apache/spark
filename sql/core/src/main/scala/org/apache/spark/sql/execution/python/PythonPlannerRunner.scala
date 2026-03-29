@@ -116,7 +116,8 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
       /* valueCompare = */ false)
 
     val (worker: PythonWorker, handle: Option[ProcessHandle]) =
-      env.createPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, useDaemon)
+      env.pythonWorkerManager.createPythonWorker(
+        pythonExec, workerModule, envVars.asScala.toMap, useDaemon)
     val pid = handle.map(_.pid.toInt)
     var releasedOrClosed = false
     val bufferStream = new DirectByteBufferOutputStream()
@@ -146,9 +147,11 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
 
       dataIn.readInt() match {
         case SpecialLengths.END_OF_STREAM if reuseWorker =>
-          env.releasePythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
+          env.pythonWorkerManager.releasePythonWorker(
+            pythonExec, workerModule, envVars.asScala.toMap, worker)
         case _ =>
-          env.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
+          env.pythonWorkerManager.destroyPythonWorker(
+            pythonExec, workerModule, envVars.asScala.toMap, worker)
       }
       releasedOrClosed = true
 
@@ -173,7 +176,8 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
       } finally {
         if (!releasedOrClosed) {
           // An error happened. Force to close the worker.
-          env.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
+          env.pythonWorkerManager.destroyPythonWorker(
+            pythonExec, workerModule, envVars.asScala.toMap, worker)
         }
       }
     }
