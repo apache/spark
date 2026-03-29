@@ -1776,6 +1776,48 @@ case class CreateView(
 }
 
 /**
+ * The logical plan node produced by `ResolveSessionCatalog` when CREATE [OR REPLACE] VIEW
+ * targets a V2 [[ViewCatalog]].
+ *
+ * Extending [[AnalysisOnlyCommand]] ensures that:
+ *  1. The view query body is analyzed but not optimized (optimizer skips children once
+ *     `isAnalyzed = true`), so `View` nodes for temp views remain intact for validation.
+ *  2. [[markAsAnalyzed]] captures `referredTempFunctionNames` from [[AnalysisContext]]
+ *     before they are lost at physical planning time.
+ */
+case class CreateV2View(
+    catalog: ViewCatalog,
+    ident: Identifier,
+    userSpecifiedColumns: Seq[(String, Option[String])],
+    comment: Option[String],
+    properties: Map[String, String],
+    originalText: Option[String],
+    query: LogicalPlan,
+    allowExisting: Boolean,
+    replace: Boolean,
+    viewSchemaMode: ViewSchemaMode,
+    isAnalyzed: Boolean = false,
+    referredTempFunctions: Seq[String] = Seq.empty)
+  extends AnalysisOnlyCommand with CTEInChildren {
+
+  override def childrenToAnalyze: Seq[LogicalPlan] = query :: Nil
+
+  override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan =
+    copy(
+      isAnalyzed = true,
+      referredTempFunctions = ac.referredTempFunctionNames.toSeq)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): CreateV2View = {
+    assert(!isAnalyzed)
+    copy(query = newChildren.head)
+  }
+
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan =
+    copy(query = WithCTE(query, cteDefs))
+}
+
+/**
  * Used to apply ApplyDefaultCollation to CreateViewCommand
  */
 trait CreateTempView {

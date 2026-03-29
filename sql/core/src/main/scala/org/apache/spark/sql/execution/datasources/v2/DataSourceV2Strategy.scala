@@ -31,9 +31,9 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TruncatableTable, V1Table}
+import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TruncatableTable, V1Table, ViewCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
@@ -43,7 +43,7 @@ import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBat
 import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan, SparkStrategy => Strategy}
-import org.apache.spark.sql.execution.command.CommandUtils
+import org.apache.spark.sql.execution.command.{CommandUtils, ViewHelper}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelationWithTable, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -259,6 +259,30 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       CreateTableLikeExec(catalog.asTableCatalog, ident, table,
         location, provider, properties, ifNotExists) :: Nil
+
+    // DROP VIEW targeting a V2 catalog that implements ViewCatalog.
+    case DropView(ResolvedIdentifier(catalog: ViewCatalog, ident), ifExists) =>
+      DropViewExec(catalog, ident, ifExists) :: Nil
+
+    // CREATE [OR REPLACE] VIEW targeting a V2 catalog that implements ViewCatalog.
+    // CreateV2View is produced by ResolveSessionCatalog and extends AnalysisOnlyCommand, so
+    // its query has been analyzed but not optimized, keeping temp-view View nodes intact.
+    case c: CreateV2View =>
+      if (c.originalText.isEmpty) {
+        throw QueryCompilationErrors.createPersistedViewFromDatasetAPINotAllowedError()
+      }
+      val aliasedPlan = ViewHelper.aliasPlan(session, c.query, c.userSpecifiedColumns)
+      val viewSchema = CharVarcharUtils.getRawSchema(
+        aliasedPlan.schema, session.sessionState.conf)
+      val queryColumnNames = c.query.output.map(_.name).toArray
+      val columnAliases = c.userSpecifiedColumns.map(_._1).toArray
+      val columnComments = c.userSpecifiedColumns.map(_._2.orNull).toArray
+      val manager = session.sessionState.catalogManager
+      CreateViewExec(
+        c.catalog, c.ident, viewSchema, queryColumnNames, columnAliases, columnComments,
+        c.comment, c.properties, c.originalText.get, c.query, c.referredTempFunctions,
+        c.allowExisting, c.replace, c.viewSchemaMode,
+        manager.currentCatalog.name, manager.currentNamespace) :: Nil
 
     case RefreshTable(r: ResolvedTable) =>
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r, includeTimeTravel = true)) :: Nil

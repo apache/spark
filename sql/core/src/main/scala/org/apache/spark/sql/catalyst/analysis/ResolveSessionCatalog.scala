@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, CharVarcharUtils, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table, ViewCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
@@ -318,12 +318,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DropView(DropViewInSessionCatalog(ident), ifExists) =>
       DropTableCommand(ident, ifExists, isView = true, purge = false)
 
-    case DropView(r @ ResolvedIdentifier(catalog, ident), ifExists) =>
-      if (catalog == FakeSystemCatalog) {
-        DropTempViewCommand(ident, ifExists)
-      } else {
-        throw QueryCompilationErrors.catalogOperationNotSupported(catalog, "views")
-      }
+    case DropView(ResolvedIdentifier(catalog, ident), ifExists)
+        if catalog == FakeSystemCatalog =>
+      DropTempViewCommand(ident, ifExists)
+
+    case DropView(ResolvedIdentifier(catalog, _), _)
+        if !catalog.isInstanceOf[ViewCatalog] =>
+      throw QueryCompilationErrors.catalogOperationNotSupported(catalog, "views")
+    // DropView targeting a ViewCatalog falls through to DataSourceV2Strategy.
 
     case c @ CreateNamespace(DatabaseNameInSessionCatalog(name), _, _) if conf.useV1Command =>
       val comment = c.properties.get(SupportsNamespaces.PROP_COMMENT)
@@ -528,8 +530,15 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         viewType = PersistedView,
         viewSchemaMode = viewSchemaMode)
 
-    case CreateView(ResolvedIdentifier(catalog, _), _, _, _, _, _, _, _, _, _) =>
+    case CreateView(ResolvedIdentifier(catalog, _), _, _, _, _, _, _, _, _, _)
+        if !catalog.isInstanceOf[ViewCatalog] =>
       throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
+
+    case CreateView(ResolvedIdentifier(catalog: ViewCatalog, ident),
+        userSpecifiedColumns, comment, _, properties, originalText, query,
+        allowExisting, replace, viewSchemaMode) =>
+      CreateV2View(catalog, ident, userSpecifiedColumns, comment, properties,
+        originalText, query, allowExisting, replace, viewSchemaMode)
 
     case ShowViews(ns: ResolvedNamespace, pattern, output) =>
       ns match {
