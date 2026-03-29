@@ -3052,7 +3052,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     val threadId = threadInfo.get.threadRef.get.get.getId
     assert(
       threadId == Thread.currentThread().getId,
-      s"acquired thread should be curent thread ${Thread.currentThread().getId} " +
+      s"acquired thread should be current thread ${Thread.currentThread().getId} " +
         s"after load but was $threadId")
   }
 }

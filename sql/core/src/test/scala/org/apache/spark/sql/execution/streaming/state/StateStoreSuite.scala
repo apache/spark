@@ -2209,7 +2209,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       version = store.commit()
     }
 
-    // Reload the store from the commited version and repeat the above test.
+    // Reload the store from the committed version and repeat the above test.
     tryWithProviderResource(newStoreProvider(storeId, colFamiliesEnabled)) { provider =>
       assert(version > 0)
       val store = provider.getStore(version)
