@@ -464,14 +464,15 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case DropNamespace(ResolvedNamespace(catalog, ns, _), ifExists, cascade) =>
       DropNamespaceExec(catalog, ns, ifExists, cascade) :: Nil
 
-    case ShowTables(ResolvedNamespace(catalog, ns, _), pattern, output) =>
-      ShowTablesExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
+    case ShowTables(ResolvedNamespace(catalog, ns, _), pattern, asJson, output) =>
+      ShowTablesExec(output, catalog.asTableCatalog, ns, pattern, asJson) :: Nil
 
     case ShowTablesExtended(
         ResolvedNamespace(catalog, ns, _),
         pattern,
+        asJson,
         output) =>
-      ShowTablesExtendedExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
+      ShowTablesExtendedExec(output, catalog.asTableCatalog, ns, pattern, asJson) :: Nil
 
     case ShowTablePartition(r: ResolvedTable, part, output) =>
       ShowTablePartitionExec(output, r.catalog, r.identifier,

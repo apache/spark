@@ -5532,7 +5532,10 @@ class AstBuilder extends DataTypeAstBuilder
     } else {
       CurrentNamespace
     }
-    ShowTables(ns, Option(ctx.pattern).map(x => string(visitStringLit(x))))
+    val asJson = ctx.JSON != null
+    val pattern = Option(ctx.pattern).map(x => string(visitStringLit(x)))
+    val output = if (asJson) ShowTables.getJsonOutputAttrs else ShowTables.getOutputAttrs
+    ShowTables(ns, pattern, asJson, output)
   }
 
   /**
@@ -5540,6 +5543,10 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitShowTableExtended(
       ctx: ShowTableExtendedContext): LogicalPlan = withOrigin(ctx) {
+    val asJson = ctx.JSON != null
+    if (asJson && ctx.partitionSpec != null) {
+      throw QueryCompilationErrors.showTableExtendedJsonWithPartitionError()
+    }
     Option(ctx.partitionSpec).map { spec =>
       val table = withOrigin(ctx.pattern) {
         if (ctx.identifierReference() != null) {
@@ -5559,7 +5566,8 @@ class AstBuilder extends DataTypeAstBuilder
       } else {
         CurrentNamespace
       }
-      ShowTablesExtended(ns, string(visitStringLit(ctx.pattern)))
+      val output = if (asJson) ShowTables.getJsonOutputAttrs else ShowTablesUtils.getOutputAttrs
+      ShowTablesExtended(ns, string(visitStringLit(ctx.pattern)), asJson, output)
     }
   }
 

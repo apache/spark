@@ -337,19 +337,23 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case d @ DropNamespace(ResolvedV1Database(db), _, _) if conf.useV1Command =>
       DropDatabaseCommand(db, d.ifExists, d.cascade)
 
-    case ShowTables(ResolvedV1Database(db), pattern, output) if conf.useV1Command =>
-      ShowTablesCommand(Some(db), pattern, output)
+    case ShowTables(ResolvedV1Database(db), pattern, asJson, output) if conf.useV1Command =>
+      ShowTablesCommand(Some(db), pattern, output, asJson = asJson)
 
     case ShowTablesExtended(
         ResolvedV1Database(db),
         pattern,
+        asJson,
         output) =>
-      val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
+      val newOutput = if (asJson) {
+        output
+      } else if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
         output.head.withName("database") +: output.tail
       } else {
         output
       }
-      ShowTablesCommand(Some(db), Some(pattern), newOutput, isExtended = true)
+      ShowTablesCommand(Some(db), Some(pattern), newOutput,
+        isExtended = true, asJson = asJson)
 
     case ShowTablePartition(
         ResolvedTable(catalog, _, table: V1Table, _),

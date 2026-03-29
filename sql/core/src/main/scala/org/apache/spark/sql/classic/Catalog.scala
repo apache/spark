@@ -196,7 +196,7 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
   private def makeTablesDataset(plan: ShowTables): Dataset[Table] = {
     val qe = sparkSession.sessionState.executePlan(plan)
     val catalog = qe.analyzed.collectFirst {
-      case ShowTables(r: ResolvedNamespace, _, _) => r.catalog
+      case ShowTables(r: ResolvedNamespace, _, _, _) => r.catalog
       case _: ShowTablesCommand =>
         sparkSession.sessionState.catalogManager.v2SessionCatalog
     }.get

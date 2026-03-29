@@ -7528,6 +7528,11 @@
           "DESC TABLE COLUMN for a specific partition."
         ]
       },
+      "SHOW_TABLE_EXTENDED_JSON_WITH_PARTITION" : {
+        "message" : [
+          "SHOW TABLE EXTENDED with PARTITION does not support AS JSON output."
+        ]
+      },
       "DROP_DATABASE" : {
         "message" : [
           "Drop the default database <database>."
