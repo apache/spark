@@ -774,6 +774,29 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  test("SPARK-56134: Codegen working for empty output") {
+    // Create a balanced tree of AND conditions. This prevents generating a very deep tree,
+    // which can cause stack overflow.
+    def balancedAnd(cols: Seq[String]): String = cols match {
+      case Seq(single) => single
+      case seq =>
+        val (left, right) = seq.splitAt(seq.length / 2)
+        balancedAnd(left) + " and " + balancedAnd(right)
+    }
+
+    withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        sql("select array(0) as value from range(0, 1, 1, 1)")
+          .write.mode(SaveMode.Overwrite).parquet(path)
+
+        val numConditions = 1000
+        val conditions = (0 until numConditions).map(i => s"value <= array($i)")
+        val condition = balancedAnd(conditions)
+        val df = spark.read.parquet(path).filter(condition).selectExpr()
+        assert(df.limit(1).selectExpr("count(*)").collect() === Array(Row(1)))
+    }
+  }
+
   test("SPARK-25767: Lazy evaluated stream of expressions handled correctly") {
     val a = Seq(1).toDF("key")
     val b = Seq((1, "a")).toDF("key", "value")

@@ -33,7 +33,8 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 public abstract class BufferedRowIterator {
   protected LinkedList<InternalRow> currentRows = new LinkedList<>();
   // used when there is no column in output
-  protected UnsafeRow unsafeRow = new UnsafeRow(0);
+  // Keep it public for codegen to access.
+  public UnsafeRow unsafeRow = new UnsafeRow(0);
   private long startTimeNs = System.nanoTime();
 
   protected int partitionIndex = -1;
