@@ -162,6 +162,57 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
     }
   }
 
+  testWithTempDir("infer shredding nested array of arrays") { dir =>
+    // Array-of-arrays [[1,2],[3,4]] in all rows. Verifies that nested arrays are
+    // correctly inferred and shredded using the FieldNode tree (arrayElementNode chain).
+    val df = spark.sql(
+      """
+        | select parse_json('[[1, 2], [3, 4]]') as v
+        | from range(0, 100, 1, 1)
+      """.stripMargin)
+    df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+    val expected = DataType.fromDDL("array<array<long>>")
+    checkFileSchema(expected, dir)
+    checkAnswer(spark.read.parquet(dir.getAbsolutePath), df.collect())
+  }
+
+  test("infer shredding does not infer rare nested arrays") {
+    // Similar to "infer shredding does not infer rare rows" but for nested arrays.
+    // Demonstrates row-level gating for nested arrays.
+    Seq(2, 9, 10, 11, 19, 20, 21, 100).foreach { inverseFreq =>
+      withTempDir { dir =>
+        val df = spark.sql(
+          s"""
+             | select case when id % $inverseFreq = 0 then
+             |  parse_json('{"a": ' || id ||
+             |  ', "nestedArr": [[1, 2], [3, 4]]' ||
+             |  ', "nestedArr2": [[1, 2], [3, 4]]' ||
+             |  ', "b": "' || id || '"}')
+             |  else
+             |  parse_json('{"a": ' || id ||
+             |  ', "nestedArr2": []' ||
+             |  ', "b": "' || id || '"}')
+             |  end as v
+             |  from range(0, 10000, 1, 1)
+             |""".stripMargin)
+        df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+        // "a" and "b" appear in all rows. nestedArr: only in 1/inverseFreq rows (like rareArray).
+        // nestedArr2: always present, inner arrays only in 1/inverseFreq rows (like rareArray2).
+        val expected = if (inverseFreq > 10) {
+          // nestedArr dropped. nestedArr2: array<variant> (inner array in < 10% rows)
+          DataType.fromDDL("struct<a long, b string, nestedArr2 array<variant>>")
+        } else {
+          // Both nested arrays in >= 10% of rows -> array<array<long>>
+          DataType.fromDDL(
+            "struct<a long, b string, " +
+            "nestedArr array<array<long>>, nestedArr2 array<array<long>>>")
+        }
+        checkFileSchema(expected, dir)
+        checkStringAndSchema(dir, df)
+      }
+    }
+  }
+
   test("infer shredding does not infer wide schemas") {
     Seq(50, 60, 70).foreach { topLevelFields =>
       // If this changes, we should change the test, or set it explicitly.
@@ -203,13 +254,10 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
   }
 
   testWithTempDir("infer shredding key as data") { dir =>
-      // The first 10 fields in each object include the row ID in the field name, so they'll be
-      // unique. Because we impose a 1000-field limit when building up the schema, we'll end up
-      // dropping all but the first 1000, so we won't include the non-unique fields in the schema.
-      // Since the unique names are below the count threshold, we'll end up with an unshredded
-      // schema.
-      // In the future, we could consider trying to improve this by dropping the least-common fields
-      // when we hit the limit of 1000.
+      // The first 50 fields include the row ID in the field name, so they're
+      // unique (low cardinality). The last 50 fields are shared across all rows
+      // (high cardinality). With cardinality-based sorting,
+      // we now correctly shred the high-cardinality last_* fields
       val bigObject = (0 until 100).map { i =>
         if (i < 50) {
           s""" "first_${i}_' || id || '": {"x": $i, "y": "${i + 1}"}  """
@@ -226,15 +274,23 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
       val footers = getFooters(dir)
       assert(footers.size == 1)
 
-      // We can't call checkFileSchema, because it only handles the case of one Variant column in
-      // the file.
-      val largeExpected = SparkShreddingUtils.variantShreddingSchema(DataType.fromDDL("variant"))
+      // With cardinality-based sorting, v should now have a shredded schema
+      // for the high-cardinality last_* fields (not an unshredded schema like
+      // master would produce). v2 should still be shredded correctly.
+      val actual = getFileSchema(dir)
+      val v_schema = actual.fields(0).dataType.asInstanceOf[StructType]
+      val v2_schema = actual.fields(1).dataType.asInstanceOf[StructType]
+
+      // v should have shredded typed_value (struct with nested last_* fields)
+      assert(v_schema.fieldNames.contains("typed_value"))
+      val v_typed = v_schema("typed_value").dataType.asInstanceOf[StructType]
+      assert(v_typed.fields.exists(_.name.startsWith("last_")))
+
+      // v2 should be fully shredded
       val smallExpected = SparkShreddingUtils.variantShreddingSchema(
         DataType.fromDDL("struct<x long, y long>"))
-      val actual = getFileSchema(dir)
-      assert(actual == StructType(Seq(
-              StructField("v", largeExpected, nullable = false),
-              StructField("v2", smallExpected, nullable = false))))
+      assert(v2_schema == smallExpected)
+
       checkStringAndSchema(dir, df)
   }
 
@@ -633,5 +689,112 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
     val expected = DataType.fromDDL("struct<a variant, b long>")
     checkFileSchema(expected, dir)
     checkAnswer(spark.read.parquet(dir.getAbsolutePath), df.collect())
+  }
+
+  testWithTempDir("special characters in field names - dots") { dir =>
+    val df = spark.sql(
+      """
+        |select parse_json(
+        |  '{"field.with.dots": ' || id || ', "another.dotted.field": "value"}'
+        |) as v
+        |from range(0, 100, 1, 1)
+      """.stripMargin)
+    df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+
+    // Verify the schema contains fields with dots
+    val schema = getFileSchema(dir)
+    val vSchema = schema("v").dataType.asInstanceOf[StructType]
+    val typedValue = vSchema("typed_value").dataType.asInstanceOf[StructType]
+    assert(typedValue.fieldNames.contains("another.dotted.field"))
+    assert(typedValue.fieldNames.contains("field.with.dots"))
+
+    // Verify we can read the data back
+    val result = spark.read.parquet(dir.getAbsolutePath)
+    assert(result.count() == 100)
+  }
+
+  testWithTempDir("special characters in field names - brackets") { dir =>
+    val df = spark.sql(
+      """
+        |select parse_json(
+        |  '{"field[0]": ' || id || ', "another[key]": "value"}'
+        |) as v
+        |from range(0, 100, 1, 1)
+      """.stripMargin)
+    df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+
+    // Verify the schema contains fields with brackets
+    val schema = getFileSchema(dir)
+    val vSchema = schema("v").dataType.asInstanceOf[StructType]
+    val typedValue = vSchema("typed_value").dataType.asInstanceOf[StructType]
+    assert(typedValue.fieldNames.contains("another[key]"))
+    assert(typedValue.fieldNames.contains("field[0]"))
+
+    // Verify we can read the data back
+    val result = spark.read.parquet(dir.getAbsolutePath)
+    assert(result.count() == 100)
+  }
+
+  testWithTempDir("special characters in field names - mixed") { dir =>
+    val df = spark.sql(
+      """
+        |select parse_json(
+        |  '{"a.b[0]": ' || id || ', "c[d].e": "value", "normal_field": 42}'
+        |) as v
+        |from range(0, 100, 1, 1)
+      """.stripMargin)
+    df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+
+    // Verify the schema contains fields with mixed special characters
+    val schema = getFileSchema(dir)
+    val vSchema = schema("v").dataType.asInstanceOf[StructType]
+    val typedValue = vSchema("typed_value").dataType.asInstanceOf[StructType]
+    assert(typedValue.fieldNames.contains("a.b[0]"))
+    assert(typedValue.fieldNames.contains("c[d].e"))
+    assert(typedValue.fieldNames.contains("normal_field"))
+
+    // Verify we can read the data back
+    val result = spark.read.parquet(dir.getAbsolutePath)
+    assert(result.count() == 100)
+  }
+
+  testWithTempDir("special characters in field names - literal empty brackets") { dir =>
+    val df = spark.sql(
+      """
+        |select parse_json(
+        |  '{"[]": ' || id || ', "normal_field": "value"}'
+        |) as v
+        |from range(0, 100, 1, 1)
+      """.stripMargin)
+    df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+
+    val schema = getFileSchema(dir)
+    val vSchema = schema("v").dataType.asInstanceOf[StructType]
+    val typedValue = vSchema("typed_value").dataType.asInstanceOf[StructType]
+    assert(typedValue.fieldNames.contains("[]"))
+    assert(typedValue.fieldNames.contains("normal_field"))
+
+    val result = spark.read.parquet(dir.getAbsolutePath)
+    assert(result.count() == 100)
+  }
+
+  testWithTempDir("special characters in field names - literal empty brackets with array") { dir =>
+    val df = spark.sql(
+      """
+        |select parse_json(
+        |  '{"[]": ' || id || ', "arr": [' || id || ', ' || (id + 1) || ']}'
+        |) as v
+        |from range(0, 100, 1, 1)
+      """.stripMargin)
+    df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+
+    val schema = getFileSchema(dir)
+    val vSchema = schema("v").dataType.asInstanceOf[StructType]
+    val typedValue = vSchema("typed_value").dataType.asInstanceOf[StructType]
+    assert(typedValue.fieldNames.contains("[]"))
+    assert(typedValue.fieldNames.contains("arr"))
+
+    val result = spark.read.parquet(dir.getAbsolutePath)
+    assert(result.count() == 100)
   }
 }
