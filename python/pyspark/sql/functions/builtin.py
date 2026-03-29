@@ -1124,11 +1124,11 @@ def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
     +---------+
 
     >>> df.select(sf.mode("col", True)).show()
-    +---------------------------------------+
-    |mode() WITHIN GROUP (ORDER BY col DESC)|
-    +---------------------------------------+
-    |                                    -10|
-    +---------------------------------------+
+    +----------------------------------+
+    |mode() WITHIN GROUP (ORDER BY col)|
+    +----------------------------------+
+    |                               -10|
+    +----------------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 

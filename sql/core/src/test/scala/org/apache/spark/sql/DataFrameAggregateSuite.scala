@@ -4793,6 +4793,35 @@ class DataFrameAggregateSuite extends QueryTest
     assert(unionRow.getAs[Double]("union_estimate") >= 5.0)
   }
 
+  test("SPARK-54833: mode() WITHIN GROUP sql() roundtrip - sort direction correctness") {
+    val df = spark.sql(
+      """SELECT
+        |  mode() WITHIN GROUP (ORDER BY col) AS mode_asc,
+        |  mode() WITHIN GROUP (ORDER BY col DESC) AS mode_desc
+        |FROM VALUES (10), (20), (20), (30), (30) AS tab(col)""".stripMargin)
+    checkAnswer(df, Row(20, 30))
+
+    // Without aliases, verify schema column names reflect the correct sort direction
+    val df2 = spark.sql(
+      """SELECT
+        |  mode() WITHIN GROUP (ORDER BY col),
+        |  mode() WITHIN GROUP (ORDER BY col DESC)
+        |FROM VALUES (10), (10), (20), (20) AS tab(col)""".stripMargin)
+
+    val colNames = df2.schema.fieldNames
+    assert(!colNames(0).toUpperCase(Locale.ROOT).contains("DESC"),
+      s"ASC mode column name should not contain DESC, got: ${colNames(0)}")
+    assert(colNames(1).toUpperCase(Locale.ROOT).contains("DESC"),
+      s"DESC mode column name should contain DESC, got: ${colNames(1)}")
+    checkAnswer(df2, Row(10, 20))
+
+    // SQL roundtrip
+    df2.createOrReplaceTempView("mode_result")
+    val roundtrip = spark.sql(
+      s"SELECT `${colNames(0)}`, `${colNames(1)}` FROM mode_result")
+    checkAnswer(roundtrip, Row(10, 20))
+  }
+
   test("SPARK-54179: tuple_sketch with null values") {
     val df = Seq((1, Some(10)), (2, Some(20)), (3, None)).toDF("key", "summary")
 

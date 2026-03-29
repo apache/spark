@@ -174,9 +174,9 @@ case class Mode(
     reverseOpt.map {
       reverse =>
         if (reverse) {
-          s"$prettyName() WITHIN GROUP (ORDER BY ${child.sql} DESC)"
-        } else {
           s"$prettyName() WITHIN GROUP (ORDER BY ${child.sql})"
+        } else {
+          s"$prettyName() WITHIN GROUP (ORDER BY ${child.sql} DESC)"
         }
     }.getOrElse(super.sql(isDistinct))
   }

@@ -108,7 +108,7 @@ Aggregate [mode(col#x, 0, 0, None) AS mode(col)#x]
 -- !query
 SELECT mode(col, true) FROM VALUES (-10), (0), (10) AS tab(col)
 -- !query analysis
-Aggregate [mode(col#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY col DESC)#x]
+Aggregate [mode(col#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY col)#x]
 +- SubqueryAlias tab
    +- LocalRelation [col#x]
 
@@ -199,7 +199,7 @@ Aggregate [mode(col#x, 0, 0, None) AS mode(col)#x]
 -- !query
 SELECT mode(col, true) FROM VALUES (map(1, 'a')) AS tab(col)
 -- !query analysis
-Aggregate [mode(col#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY col DESC)#x]
+Aggregate [mode(col#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY col)#x]
 +- SubqueryAlias tab
    +- LocalRelation [col#x]
 
@@ -210,7 +210,7 @@ SELECT
   mode() WITHIN GROUP (ORDER BY col DESC)
 FROM VALUES (null), (null), (null) AS tab(col)
 -- !query analysis
-Aggregate [mode(col#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY col DESC)#x, mode(col#x, 0, 0, Some(false)) AS mode() WITHIN GROUP (ORDER BY col)#x]
+Aggregate [mode(col#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY col)#x, mode(col#x, 0, 0, Some(false)) AS mode() WITHIN GROUP (ORDER BY col DESC)#x]
 +- SubqueryAlias tab
    +- LocalRelation [col#x]
 
@@ -222,7 +222,7 @@ SELECT
 FROM basic_pays
 WHERE salary > 20000
 -- !query analysis
-Aggregate [mode(salary#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY salary DESC)#x, mode(salary#x, 0, 0, Some(false)) AS mode() WITHIN GROUP (ORDER BY salary)#x]
+Aggregate [mode(salary#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY salary)#x, mode(salary#x, 0, 0, Some(false)) AS mode() WITHIN GROUP (ORDER BY salary DESC)#x]
 +- Filter (salary#x > 20000)
    +- SubqueryAlias basic_pays
       +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
@@ -238,7 +238,7 @@ SELECT
   mode() WITHIN GROUP (ORDER BY salary DESC)
 FROM basic_pays
 -- !query analysis
-Aggregate [mode(salary#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY salary DESC)#x, mode(salary#x, 0, 0, Some(false)) AS mode() WITHIN GROUP (ORDER BY salary)#x]
+Aggregate [mode(salary#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY salary)#x, mode(salary#x, 0, 0, Some(false)) AS mode() WITHIN GROUP (ORDER BY salary DESC)#x]
 +- SubqueryAlias basic_pays
    +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
       +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
@@ -253,7 +253,7 @@ SELECT
   mode() WITHIN GROUP (ORDER BY salary) FILTER (WHERE salary > 10000)
 FROM basic_pays
 -- !query analysis
-Aggregate [mode(salary#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY salary DESC)#x, mode(salary#x, 0, 0, Some(true)) FILTER (WHERE (salary#x > 10000)) AS mode() WITHIN GROUP (ORDER BY salary DESC) FILTER (WHERE (salary > 10000))#x]
+Aggregate [mode(salary#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY salary)#x, mode(salary#x, 0, 0, Some(true)) FILTER (WHERE (salary#x > 10000)) AS mode() WITHIN GROUP (ORDER BY salary) FILTER (WHERE (salary > 10000))#x]
 +- SubqueryAlias basic_pays
    +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
       +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
@@ -272,7 +272,7 @@ GROUP BY department
 ORDER BY department
 -- !query analysis
 Sort [department#x ASC NULLS FIRST], true
-+- Aggregate [department#x], [department#x, mode(salary#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY salary DESC)#x, mode(salary#x, 0, 0, Some(true)) FILTER (WHERE (salary#x > 10000)) AS mode() WITHIN GROUP (ORDER BY salary DESC) FILTER (WHERE (salary > 10000))#x]
++- Aggregate [department#x], [department#x, mode(salary#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY salary)#x, mode(salary#x, 0, 0, Some(true)) FILTER (WHERE (salary#x > 10000)) AS mode() WITHIN GROUP (ORDER BY salary) FILTER (WHERE (salary > 10000))#x]
    +- SubqueryAlias basic_pays
       +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
          +- Project [cast(employee_name#x as string) AS employee_name#x, cast(department#x as string) AS department#x, cast(salary#x as int) AS salary#x]
@@ -291,9 +291,9 @@ FROM basic_pays
 ORDER BY salary
 -- !query analysis
 Sort [salary#x ASC NULLS FIRST], true
-+- Project [employee_name#x, department#x, salary#x, mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
-   +- Project [employee_name#x, department#x, salary#x, mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
-      +- Window [mode(salary#x, 0, 0, Some(true)) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x], [department#x]
++- Project [employee_name#x, department#x, salary#x, mode() WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
+   +- Project [employee_name#x, department#x, salary#x, mode() WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, mode() WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
+      +- Window [mode(salary#x, 0, 0, Some(true)) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS mode() WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x], [department#x]
          +- Project [employee_name#x, department#x, salary#x]
             +- SubqueryAlias basic_pays
                +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
@@ -313,9 +313,9 @@ FROM basic_pays
 ORDER BY salary
 -- !query analysis
 Sort [salary#x ASC NULLS FIRST], true
-+- Project [employee_name#x, department#x, salary#x, mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
-   +- Project [employee_name#x, department#x, salary#x, mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
-      +- Window [mode(salary#x, 0, 0, Some(true)) windowspecdefinition(department#x, salary#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [department#x], [salary#x ASC NULLS FIRST]
++- Project [employee_name#x, department#x, salary#x, mode() WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
+   +- Project [employee_name#x, department#x, salary#x, mode() WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, mode() WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
+      +- Window [mode(salary#x, 0, 0, Some(true)) windowspecdefinition(department#x, salary#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS mode() WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [department#x], [salary#x ASC NULLS FIRST]
          +- Project [employee_name#x, department#x, salary#x]
             +- SubqueryAlias basic_pays
                +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
@@ -335,9 +335,9 @@ FROM basic_pays
 ORDER BY salary
 -- !query analysis
 Sort [salary#x ASC NULLS FIRST], true
-+- Project [employee_name#x, department#x, salary#x, mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x]
-   +- Project [employee_name#x, department#x, salary#x, mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x]
-      +- Window [mode(salary#x, 0, 0, Some(true)) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x], [department#x]
++- Project [employee_name#x, department#x, salary#x, mode() WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x]
+   +- Project [employee_name#x, department#x, salary#x, mode() WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x, mode() WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x]
+      +- Window [mode(salary#x, 0, 0, Some(true)) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), 1)) AS mode() WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)#x], [department#x]
          +- Project [employee_name#x, department#x, salary#x]
             +- SubqueryAlias basic_pays
                +- View (`basic_pays`, [employee_name#x, department#x, salary#x])
@@ -359,9 +359,9 @@ WINDOW w AS (PARTITION BY department)
 ORDER BY salary
 -- !query analysis
 Sort [salary#x ASC NULLS FIRST], true
-+- Project [employee_name#x, department#x, salary#x, mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
-   +- Project [employee_name#x, department#x, salary#x, mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
-      +- Window [mode(salary#x, 0, 0, Some(true)) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x], [department#x]
++- Project [employee_name#x, department#x, salary#x, mode() WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
+   +- Project [employee_name#x, department#x, salary#x, mode() WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, mode() WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
+      +- Window [mode(salary#x, 0, 0, Some(true)) windowspecdefinition(department#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS mode() WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x], [department#x]
          +- Project [employee_name#x, department#x, salary#x]
             +- Filter (salary#x > 8900)
                +- SubqueryAlias basic_pays
@@ -483,7 +483,7 @@ SELECT
   mode() WITHIN GROUP (ORDER BY dt DESC)
 FROM intervals
 -- !query analysis
-Aggregate [mode(dt#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY dt DESC)#x, mode(dt#x, 0, 0, Some(false)) AS mode() WITHIN GROUP (ORDER BY dt)#x]
+Aggregate [mode(dt#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY dt)#x, mode(dt#x, 0, 0, Some(false)) AS mode() WITHIN GROUP (ORDER BY dt DESC)#x]
 +- SubqueryAlias intervals
    +- View (`intervals`, [k#x, dt#x, ym#x, dt2#x])
       +- Project [cast(k#x as int) AS k#x, cast(dt#x as interval month) AS dt#x, cast(ym#x as interval second) AS ym#x, cast(dt2#x as interval minute) AS dt2#x]
@@ -502,7 +502,7 @@ GROUP BY k
 ORDER BY k
 -- !query analysis
 Sort [k#x ASC NULLS FIRST], true
-+- Aggregate [k#x], [k#x, mode(ym#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY ym DESC)#x, mode(dt#x, 0, 0, Some(false)) AS mode() WITHIN GROUP (ORDER BY dt)#x]
++- Aggregate [k#x], [k#x, mode(ym#x, 0, 0, Some(true)) AS mode() WITHIN GROUP (ORDER BY ym)#x, mode(dt#x, 0, 0, Some(false)) AS mode() WITHIN GROUP (ORDER BY dt DESC)#x]
    +- SubqueryAlias intervals
       +- View (`intervals`, [k#x, dt#x, ym#x, dt2#x])
          +- Project [cast(k#x as int) AS k#x, cast(dt#x as interval month) AS dt#x, cast(ym#x as interval second) AS ym#x, cast(dt2#x as interval minute) AS dt2#x]

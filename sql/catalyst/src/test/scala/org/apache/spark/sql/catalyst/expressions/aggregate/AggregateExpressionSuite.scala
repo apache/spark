@@ -18,10 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute, UnresolvedWithinGroup}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{Add, AttributeSet, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Add, Ascending, AttributeReference, AttributeSet, Descending, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
+import org.apache.spark.sql.types.IntegerType
 
 class AggregateExpressionSuite extends SparkFunSuite {
 
@@ -107,6 +108,26 @@ class AggregateExpressionSuite extends SparkFunSuite {
     )
     assert(RegrSlope(Literal(3.0D), Literal(1D)).checkInputDataTypes() ===
       TypeCheckResult.TypeCheckSuccess)
+  }
+
+  test("SPARK-54833: sql() should display correct sort direction for WITHIN GROUP") {
+    val col = AttributeReference("col", IntegerType)()
+
+    val modeAsc = Mode(UnresolvedWithinGroup).withOrderingWithinGroup(
+      Seq(SortOrder(col, Ascending))
+    ).asInstanceOf[Mode]
+    assert(modeAsc.reverseOpt === Some(true))
+    val ascSql = modeAsc.sql(isDistinct = false)
+    assert(!ascSql.contains("DESC"),
+      s"MODE() WITHIN GROUP (ORDER BY col ASC) should not contain DESC, but got: $ascSql")
+
+    val modeDesc = Mode(UnresolvedWithinGroup).withOrderingWithinGroup(
+      Seq(SortOrder(col, Descending))
+    ).asInstanceOf[Mode]
+    assert(modeDesc.reverseOpt === Some(false))
+    val descSql = modeDesc.sql(isDistinct = false)
+    assert(descSql.contains("DESC"),
+      s"MODE() WITHIN GROUP (ORDER BY col DESC) should contain DESC, but got: $descSql")
   }
 
   test("test regr_intercept input types") {
