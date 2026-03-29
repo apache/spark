@@ -81,7 +81,7 @@ private[v2] trait V2JDBCTest
     // nullable is true in the expectedSchema because Spark always sets nullable to true
     // regardless of the JDBC metadata https://github.com/apache/spark/pull/18445
     var expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata())
-    // If function is not overriden we don't want to compare external engine types
+    // If function is not overridden we don't want to compare external engine types
     var expectedSchemaWithoutJdbcClientType =
       removeMetadataFromAllFields(expectedSchema, "jdbcClientType")
     var schemaWithoutJdbcClientType =
@@ -91,7 +91,7 @@ private[v2] trait V2JDBCTest
     t = spark.table(s"$catalogName.alt_table")
     expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata())
 
-    // If function is not overriden we don't want to compare external engine types
+    // If function is not overridden we don't want to compare external engine types
     expectedSchemaWithoutJdbcClientType =
       removeMetadataFromAllFields(expectedSchema, "jdbcClientType")
     schemaWithoutJdbcClientType =
@@ -118,7 +118,7 @@ private[v2] trait V2JDBCTest
       .add("ID1", StringType, true, defaultMetadata())
       .add("ID2", StringType, true, defaultMetadata())
 
-    // If function is not overriden we don't want to compare external engine types
+    // If function is not overridden we don't want to compare external engine types
     val expectedSchemaWithoutJdbcClientType =
       removeMetadataFromAllFields(expectedSchema, "jdbcClientType")
     val schemaWithoutJdbcClientType =
