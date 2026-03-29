@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.util.geo.WkbParseException;
 import org.apache.spark.sql.catalyst.util.geo.WkbReader;
 import org.apache.spark.sql.catalyst.util.geo.WkbWriter;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
+import org.apache.spark.sql.types.GeometryType;
 import org.apache.spark.unsafe.types.GeometryVal;
 
 import java.nio.ByteBuffer;
@@ -84,6 +85,7 @@ public final class Geometry implements Geo {
   // Returns a Geometry object with the specified SRID value by parsing the input WKB.
   public static Geometry fromWkb(byte[] wkb, int srid) {
     try {
+      validateSrid(srid); // Validate the SRID before parsing the WKB.
       WkbReader reader = new WkbReader();
       reader.read(wkb); // Validate WKB
 
@@ -190,6 +192,7 @@ public final class Geometry implements Geo {
 
   @Override
   public void setSrid(int srid) {
+    validateSrid(srid); // Validate the SRID before actually setting it.
     // This method sets the SRID value in the in-memory Geometry representation header.
     getWrapper().putInt(SRID_OFFSET, srid);
   }
@@ -199,6 +202,13 @@ public final class Geometry implements Geo {
   // Returns a byte buffer wrapper over the byte buffer of this geometry value.
   private ByteBuffer getWrapper() {
     return ByteBuffer.wrap(getBytes()).order(DEFAULT_ENDIANNESS);
+  }
+
+  // Validates that the given SRID is supported for GEOMETRY values.
+  private static void validateSrid(int srid) {
+    if (!GeometryType.isSridSupported(srid)) {
+      throw new IllegalArgumentException("Unsupported SRID value: " + srid);
+    }
   }
 
 }

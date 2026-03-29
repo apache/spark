@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.util.geo.WkbParseException;
 import org.apache.spark.sql.catalyst.util.geo.WkbReader;
 import org.apache.spark.sql.catalyst.util.geo.WkbWriter;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
+import org.apache.spark.sql.types.GeographyType;
 import org.apache.spark.unsafe.types.GeographyVal;
 
 import java.nio.ByteBuffer;
@@ -84,6 +85,7 @@ public final class Geography implements Geo {
   // Returns a Geography object with the specified SRID value by parsing the input WKB.
   public static Geography fromWkb(byte[] wkb, int srid) {
     try {
+      validateSrid(srid); // Validate the SRID before parsing the WKB.
       WkbReader reader = new WkbReader(true);
       reader.read(wkb); // Validate WKB with geography coordinate bounds.
 
@@ -187,6 +189,7 @@ public final class Geography implements Geo {
 
   @Override
   public void setSrid(int srid) {
+    validateSrid(srid); // Validate the SRID before actually setting it.
     // This method sets the SRID value in the in-memory Geography representation header.
     getWrapper().putInt(SRID_OFFSET, srid);
   }
@@ -196,6 +199,13 @@ public final class Geography implements Geo {
   // Returns a byte buffer wrapper over the byte buffer of this geography value.
   private ByteBuffer getWrapper() {
     return ByteBuffer.wrap(getBytes()).order(DEFAULT_ENDIANNESS);
+  }
+
+  // Validates that the given SRID is supported for GEOGRAPHY values.
+  private static void validateSrid(int srid) {
+    if (!GeographyType.isSridSupported(srid)) {
+      throw new IllegalArgumentException("Unsupported SRID value: " + srid);
+    }
   }
 
 }
