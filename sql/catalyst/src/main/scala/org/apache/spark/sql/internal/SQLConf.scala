@@ -2314,6 +2314,22 @@ object SQLConf {
       .intConf
       .createWithDefault(10000)
 
+  val PARALLEL_PARTITION_DISCOVERY_TRAVERSAL_DEPTH =
+    buildConf("spark.sql.sources.parallelPartitionDiscovery.traversalDepth")
+      .doc("Controls sequential directory pre-traversal on the driver before " +
+        "delegating to parallel workers during partition discovery. " +
+        "A value of 1 (default) means no sequential pre-traversal is performed. " +
+        "A value of N causes the driver to sequentially expand up to N-1 directory " +
+        "levels before parallelizing. For deep directory hierarchies with " +
+        "single-child roots (e.g., root/subpath/{year}/{month}/), increasing this " +
+        "value (e.g., to 2 or 3) allows the driver to collect enough paths before " +
+        "parallelizing, improving listing performance.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .intConf
+      .checkValue(depth => depth >= 1, "The traversal depth must be at least 1")
+      .createWithDefault(1)
+
   val IGNORE_DATA_LOCALITY =
     buildConf("spark.sql.sources.ignoreDataLocality")
       .doc("If true, Spark will not fetch the block locations for each file on " +
@@ -7704,6 +7720,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def parallelPartitionDiscoveryParallelism: Int =
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_PARALLELISM)
+
+  def parallelPartitionDiscoveryTraversalDepth: Int =
+    getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_TRAVERSAL_DEPTH)
 
   def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
 
