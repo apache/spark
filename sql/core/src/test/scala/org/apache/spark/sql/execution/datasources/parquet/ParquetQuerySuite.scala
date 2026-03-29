@@ -935,6 +935,32 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
+  test("SPARK-48942: Array of Structs with UDT fields in Parquet") {
+    val schema = StructType(
+      StructField("arr", ArrayType(
+        StructType(Seq(
+          StructField("col1", new TestPrimitiveUDT())
+        ))
+      )) :: Nil)
+
+    withTempPath { dir =>
+      val rows = sparkContext.parallelize(0 until 2).map { i =>
+        Row(Seq(Row(TestPrimitive(i + 1))))
+      }
+      val df = spark.createDataFrame(rows, schema)
+      df.write.parquet(dir.getCanonicalPath)
+
+      for (offHeapEnabled <- Seq(true, false)) {
+        withSQLConf(SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapEnabled.toString) {
+          withAllParquetReaders {
+            val res = spark.read.parquet(dir.getCanonicalPath)
+            checkAnswer(res, df)
+          }
+        }
+      }
+    }
+  }
+
   test("expand UDT in StructType") {
     val schema = new StructType().add("n", new TestNestedStructUDT, nullable = true)
     val expected = new StructType().add("n", new TestNestedStructUDT().sqlType, nullable = true)
