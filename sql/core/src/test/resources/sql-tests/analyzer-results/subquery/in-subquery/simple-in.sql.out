@@ -385,3 +385,61 @@ Project [a1#x, a2#x]
             +- Project [a1#x, a2#x]
                +- SubqueryAlias a
                   +- LocalRelation [a1#x, a2#x]
+
+
+-- !query
+SELECT *
+FROM a
+WHERE a1 IN (SELECT * FROM VALUES(a.a1))
+ORDER BY a1
+-- !query analysis
+Sort [a1#x ASC NULLS FIRST], true
++- Project [a1#x, a2#x]
+   +- Filter a1#x IN (list#x [a1#x])
+      :  +- Project [col1#x]
+      :     +- ResolvedInlineTable [[outer(a1#x)]], [col1#x]
+      +- SubqueryAlias a
+         +- View (`a`, [a1#x, a2#x])
+            +- Project [cast(a1#x as int) AS a1#x, cast(a2#x as int) AS a2#x]
+               +- Project [a1#x, a2#x]
+                  +- SubqueryAlias a
+                     +- LocalRelation [a1#x, a2#x]
+
+
+-- !query
+SELECT *
+FROM a
+WHERE a1 NOT IN (SELECT * FROM VALUES(a.a1 + 100))
+ORDER BY a1
+-- !query analysis
+Sort [a1#x ASC NULLS FIRST], true
++- Project [a1#x, a2#x]
+   +- Filter NOT a1#x IN (list#x [a1#x])
+      :  +- Project [col1#x]
+      :     +- ResolvedInlineTable [[(outer(a1#x) + 100)]], [col1#x]
+      +- SubqueryAlias a
+         +- View (`a`, [a1#x, a2#x])
+            +- Project [cast(a1#x as int) AS a1#x, cast(a2#x as int) AS a2#x]
+               +- Project [a1#x, a2#x]
+                  +- SubqueryAlias a
+                     +- LocalRelation [a1#x, a2#x]
+
+
+-- !query
+SELECT *
+FROM a
+WHERE a2 IN (SELECT * FROM VALUES(a.a1 * 2) AS v(doubled))
+ORDER BY a1
+-- !query analysis
+Sort [a1#x ASC NULLS FIRST], true
++- Project [a1#x, a2#x]
+   +- Filter a2#x IN (list#x [a1#x])
+      :  +- Project [doubled#x]
+      :     +- SubqueryAlias v
+      :        +- ResolvedInlineTable [[(outer(a1#x) * 2)]], [doubled#x]
+      +- SubqueryAlias a
+         +- View (`a`, [a1#x, a2#x])
+            +- Project [cast(a1#x as int) AS a1#x, cast(a2#x as int) AS a2#x]
+               +- Project [a1#x, a2#x]
+                  +- SubqueryAlias a
+                     +- LocalRelation [a1#x, a2#x]
