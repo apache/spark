@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.metric
 import java.io.File
 
 import scala.collection.mutable.HashMap
+import scala.util.Try
 
 import org.apache.spark.TestUtils
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
@@ -174,8 +175,22 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
     }
     sparkContext.listenerBus.waitUntilEmpty(10000)
     val executionIds = currentExecutionIds().diff(previousExecutionIds)
-    assert(executionIds.size === 1)
-    val executionId = executionIds.head
+    assert(executionIds.nonEmpty)
+    val executionId = if (executionIds.size == 1) {
+      executionIds.head
+    } else {
+      // More than one SQL execution can be registered for a single collect() (e.g. some optimizer
+      // paths). Prefer the execution whose stored plan graph contains all expected metric nodes.
+      val containing = executionIds.filter { id =>
+        Try(statusStore.planGraph(id).allNodes.map(_.id).toSet).toOption.exists { graphIds =>
+          expectedNodeIds.subsetOf(graphIds)
+        }
+      }
+      assert(
+        containing.nonEmpty,
+        s"No new execution among $executionIds contains metric nodes $expectedNodeIds")
+      containing.max
+    }
     val jobs = statusStore.execution(executionId).get.jobs
     // Use "<=" because there is a race condition that we may miss some jobs
     // TODO Change it to "=" once we fix the race condition that missing the JobStarted event.

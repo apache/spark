@@ -2,28 +2,30 @@
 * HashAggregate (4)
 +- Exchange (3)
    +- * HashAggregate (2)
-      +- * LocalTableScan (1)
+      +- * EmptyRelation (1)
+         +- Project [l_extendedprice#1, l_discount#2]
+            +- LocalRelation <empty>, [l_orderkey#3, l_partkey#4, l_suppkey#5, l_linenumber#6, l_quantity#7, l_extendedprice#1, l_discount#2, l_tax#8, l_returnflag#9, l_linestatus#10, l_shipdate#11, l_commitdate#12, l_receiptdate#13, l_shipinstruct#14, l_shipmode#15, l_comment#16]
 
 
-(1) LocalTableScan [codegen id : 1]
+(1) EmptyRelation [codegen id : 1]
 Output [2]: [l_extendedprice#1, l_discount#2]
-Arguments: <empty>, [l_extendedprice#1, l_discount#2]
+Arguments: [plan_id=1]
 
 (2) HashAggregate [codegen id : 1]
 Input [2]: [l_extendedprice#1, l_discount#2]
 Keys: []
 Functions [1]: [partial_sum((l_extendedprice#1 * l_discount#2))]
-Aggregate Attributes [2]: [sum#3, isEmpty#4]
-Results [2]: [sum#5, isEmpty#6]
+Aggregate Attributes [2]: [sum#17, isEmpty#18]
+Results [2]: [sum#19, isEmpty#20]
 
 (3) Exchange
-Input [2]: [sum#5, isEmpty#6]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=1]
+Input [2]: [sum#19, isEmpty#20]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=2]
 
 (4) HashAggregate [codegen id : 2]
-Input [2]: [sum#5, isEmpty#6]
+Input [2]: [sum#19, isEmpty#20]
 Keys: []
 Functions [1]: [sum((l_extendedprice#1 * l_discount#2))]
-Aggregate Attributes [1]: [sum((l_extendedprice#1 * l_discount#2))#7]
-Results [1]: [sum((l_extendedprice#1 * l_discount#2))#7 AS revenue#8]
+Aggregate Attributes [1]: [sum((l_extendedprice#1 * l_discount#2))#21]
+Results [1]: [sum((l_extendedprice#1 * l_discount#2))#21 AS revenue#22]
 

@@ -35,7 +35,12 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, ScalarSubquery}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LocalRelation, LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{
+  EmptyRelation,
+  Filter,
+  LeafNode,
+  LogicalPlan,
+  OneRowRelation}
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.execution.{FilterExec, LogicalRDD, QueryExecution, SortExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -2165,10 +2170,10 @@ class DataFrameSuite extends QueryTest
     val emptyDf = spark.emptyDataFrame.withColumn("id", lit(1L))
     val joined = spark.range(10).join(emptyDf, "id")
     joined.queryExecution.optimizedPlan match {
-      case LocalRelation(Seq(id), Nil, _, _) =>
-        assert(id.name == "id")
+      case e: EmptyRelation =>
+        assert(e.output.map(_.name) == Seq("id"))
       case _ =>
-        fail("emptyDataFrame should be foldable")
+        fail("emptyDataFrame should be foldable to EmptyRelation")
     }
   }
 

@@ -22,12 +22,32 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{Distinct, GlobalLimit, LocalLimit, LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Distinct, EmptyRelation, GlobalLimit, LocalLimit, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.IntegerType
 
 // Test class to verify correct functioning of OptimizeLimitZero rule in various scenarios
 class OptimizeLimitZeroSuite extends PlanTest {
+
+  /** [[EmptyRelation]] or empty [[LocalRelation]] vs reference `expectedEmptyLocalRelation`. */
+  private def assertEmptyRelationOutput(
+      optimized: LogicalPlan,
+      expectedEmptyLocalRelation: LocalRelation): Unit = {
+    val expectedAttrs = expectedEmptyLocalRelation.output
+    optimized match {
+      case e: EmptyRelation =>
+        assert(
+          e.output.map(a => (a.name, a.dataType, a.nullable, a.metadata)) ==
+            expectedAttrs.map(a => (a.name, a.dataType, a.nullable, a.metadata)))
+      case lr: LocalRelation if lr.data.isEmpty =>
+        comparePlans(optimized, expectedEmptyLocalRelation)
+      case other =>
+        fail(
+          s"Expected EmptyRelation or empty LocalRelation, got ${other.getClass.getSimpleName}:\n" +
+            other)
+    }
+  }
+
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("OptimizeLimitZero", Once,
@@ -45,7 +65,7 @@ class OptimizeLimitZeroSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = LocalRelation($"a".int)
 
-    comparePlans(optimized, correctAnswer)
+    assertEmptyRelationOutput(optimized, correctAnswer)
   }
 
   test("Limit 0: individual LocalLimit 0 node") {
@@ -54,7 +74,7 @@ class OptimizeLimitZeroSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = LocalRelation($"a".int)
 
-    comparePlans(optimized, correctAnswer)
+    assertEmptyRelationOutput(optimized, correctAnswer)
   }
 
   test("Limit 0: individual GlobalLimit 0 node") {
@@ -63,25 +83,33 @@ class OptimizeLimitZeroSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = LocalRelation($"a".int)
 
-    comparePlans(optimized, correctAnswer)
+    assertEmptyRelationOutput(optimized, correctAnswer)
   }
 
   Seq(
-    (Inner, LocalRelation($"a".int, $"b".int)),
-    (LeftOuter, Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1)
-      .analyze),
-    (RightOuter, LocalRelation($"a".int, $"b".int)),
-    (FullOuter, Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1)
-      .analyze)
-  ).foreach { case (jt, correctAnswer) =>
-      test(s"Limit 0: for join type $jt") {
-        val query = testRelation1
-          .join(testRelation2.limit(0), joinType = jt, condition = Some($"a".attr === $"b".attr))
+    (Inner, LocalRelation($"a".int, $"b".int), true),
+    (
+      LeftOuter,
+      Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1).analyze,
+      false),
+    (RightOuter, LocalRelation($"a".int, $"b".int), true),
+    (
+      FullOuter,
+      Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1).analyze,
+      false)
+  ).foreach { case (jt, correctAnswer, expectEmptyRelationOrEmptyLocal) =>
+    test(s"Limit 0: for join type $jt") {
+      val query = testRelation1
+        .join(testRelation2.limit(0), joinType = jt, condition = Some($"a".attr === $"b".attr))
 
-        val optimized = Optimize.execute(query.analyze)
+      val optimized = Optimize.execute(query.analyze)
 
+      if (expectEmptyRelationOrEmptyLocal) {
+        assertEmptyRelationOutput(optimized, correctAnswer.asInstanceOf[LocalRelation])
+      } else {
         comparePlans(optimized, correctAnswer)
       }
+    }
   }
 
   test("Limit 0: 3-way join") {
@@ -95,7 +123,7 @@ class OptimizeLimitZeroSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = LocalRelation($"a".int, $"b".int, $"c".int)
 
-    comparePlans(optimized, correctAnswer)
+    assertEmptyRelationOutput(optimized, correctAnswer)
   }
 
   test("Limit 0: intersect") {
@@ -103,8 +131,14 @@ class OptimizeLimitZeroSuite extends PlanTest {
       .intersect(testRelation1.limit(0), isAll = false)
 
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = Distinct(LocalRelation($"a".int))
 
-    comparePlans(optimized, correctAnswer)
+    optimized match {
+      case Distinct(child: EmptyRelation) =>
+        val correctAnswer = LocalRelation($"a".int)
+
+        assertEmptyRelationOutput(child, correctAnswer)
+      case other =>
+        fail(s"Expected Distinct(EmptyRelation), got ${other.getClass.getSimpleName}:\n$other")
+    }
   }
 }

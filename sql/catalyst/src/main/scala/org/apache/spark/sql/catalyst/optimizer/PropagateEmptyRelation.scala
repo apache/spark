@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, REPARTITION_OPERATION, TRUE_OR_FALSE_LITERAL}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EMPTY_RELATION, LOCAL_RELATION, REPARTITION_OPERATION, TRUE_OR_FALSE_LITERAL}
 
 /**
  * The base class of two rules in the normal and AQE Optimizer. It simplifies query plans with
@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, REPARTIT
  *       Right side is non-empty and condition is empty. Eliminate join to its left side.
  *     - Left anti join
  *       Right side is non-empty and condition is empty. Eliminate join to an empty
- *       [[LocalRelation]].
+ *       [[EmptyRelation]] so the underlying plan is preserved.
  *  3. Unary-node Logical Plans
  *     - Project/Filter/Sample with all empty children.
  *     - Limit/Repartition/RepartitionByExpression/Rebalance with all empty children.
@@ -50,6 +50,7 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
 
   protected def isEmpty(plan: LogicalPlan): Boolean = plan match {
     case p: LocalRelation => p.data.isEmpty
+    case _: EmptyRelation => true
     case _ => false
   }
 
@@ -59,7 +60,7 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
   }
 
   protected def empty(plan: LogicalPlan): LogicalPlan =
-    LocalRelation(plan.output, data = Seq.empty, isStreaming = plan.isStreaming)
+    EmptyRelation(plan)
 
   // Construct a project list from plan's output, while the value is always NULL.
   private def nullValueProjectList(plan: LogicalPlan): Seq[NamedExpression] =
@@ -218,7 +219,7 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
  */
 object PropagateEmptyRelation extends PropagateEmptyRelationBase {
   override protected def applyInternal(p: LogicalPlan): LogicalPlan = p.transformUpWithPruning(
-    _.containsAnyPattern(LOCAL_RELATION, TRUE_OR_FALSE_LITERAL), ruleId) {
+    _.containsAnyPattern(LOCAL_RELATION, EMPTY_RELATION, TRUE_OR_FALSE_LITERAL), ruleId) {
     commonApplyFunc
   }
 }

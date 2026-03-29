@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelationBase
 import org.apache.spark.sql.catalyst.planning.ExtractSingleColumnNullAwareAntiJoin
 import org.apache.spark.sql.catalyst.plans.logical.EmptyRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, LOGICAL_QUERY_STAGE, TRUE_OR_FALSE_LITERAL}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EMPTY_RELATION, LOCAL_RELATION, LOGICAL_QUERY_STAGE, TRUE_OR_FALSE_LITERAL}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
  * compared to [[PropagateEmptyRelationBase]]:
  * 1. Join is single column NULL-aware anti join (NAAJ)
  *    Broadcasted [[HashedRelation]] is [[HashedRelationWithAllNullKeys]]. Eliminate join to an
- *    empty [[LocalRelation]].
+ *    empty [[EmptyRelation]].
  */
 object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
   override protected def isEmpty(plan: LogicalPlan): Boolean =
@@ -39,8 +39,6 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
 
   override protected def nonEmpty(plan: LogicalPlan): Boolean =
     super.nonEmpty(plan) || getEstimatedRowCount(plan).exists(_ > 0)
-
-  override protected def empty(plan: LogicalPlan): LogicalPlan = EmptyRelation(plan)
 
   private def isRootRepartition(plan: LogicalPlan): Boolean = plan match {
     case l: LogicalQueryStage if l.containsTag(ROOT_REPARTITION) => true
@@ -95,12 +93,16 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
   }
 
   override protected def applyInternal(p: LogicalPlan): LogicalPlan = p.transformUpWithPruning(
-    // LOCAL_RELATION and TRUE_OR_FALSE_LITERAL pattern are matched at
+    // LOCAL_RELATION, EMPTY_RELATION, and TRUE_OR_FALSE_LITERAL patterns are matched at
     // `PropagateEmptyRelationBase.commonApplyFunc`
     // LOGICAL_QUERY_STAGE pattern is matched at `PropagateEmptyRelationBase.commonApplyFunc`
     // and `AQEPropagateEmptyRelation.eliminateSingleColumnNullAwareAntiJoin`
     // Note that, We can not specify ruleId here since the LogicalQueryStage is not immutable.
-    _.containsAnyPattern(LOGICAL_QUERY_STAGE, LOCAL_RELATION, TRUE_OR_FALSE_LITERAL)) {
+    _.containsAnyPattern(
+      LOGICAL_QUERY_STAGE,
+      LOCAL_RELATION,
+      EMPTY_RELATION,
+      TRUE_OR_FALSE_LITERAL)) {
     eliminateSingleColumnNullAwareAntiJoin.orElse(commonApplyFunc)
   }
 }

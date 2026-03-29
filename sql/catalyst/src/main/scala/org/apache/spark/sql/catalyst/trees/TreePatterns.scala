@@ -136,6 +136,7 @@ object TreePattern extends Enumeration  {
   val DESERIALIZE_TO_OBJECT: Value = Value
   val DF_DROP_COLUMNS: Value = Value
   val DISTINCT_LIKE: Value = Value
+  val EMPTY_RELATION: Value = Value
   val EVAL_PYTHON_UDF: Value = Value
   val EVAL_PYTHON_UDTF: Value = Value
   val EVENT_TIME_WATERMARK: Value = Value

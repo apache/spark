@@ -4,4 +4,4 @@ WholeStageCodegen (2)
       Exchange #1
         WholeStageCodegen (1)
           HashAggregate [l_extendedprice,l_discount] [sum,isEmpty,sum,isEmpty]
-            LocalTableScan [l_extendedprice,l_discount]
+            EmptyRelation [l_extendedprice,l_discount]
