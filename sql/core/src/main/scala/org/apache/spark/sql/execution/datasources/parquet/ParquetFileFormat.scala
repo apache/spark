@@ -516,7 +516,8 @@ object ParquetFileFormat extends Logging {
       partFiles: Seq[FileStatus],
       ignoreCorruptFiles: Boolean,
       ignoreMissingFiles: Boolean = false): Seq[Footer] = {
-    ThreadUtils.parmap(partFiles, "readingParquetFooters", 8) { currentFile =>
+    ThreadUtils.parmap(partFiles, "readingParquetFooters", 8,
+        preserveSparkThrowable = true) { currentFile =>
       try {
         // Skips row group information since we only need the schema.
         // ParquetFileReader.readFooter throws RuntimeException, instead of IOException,
