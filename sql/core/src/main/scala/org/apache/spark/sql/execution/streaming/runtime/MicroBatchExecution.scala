@@ -32,21 +32,21 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Deduplicate, DeduplicateWithinWatermark, Distinct, FlatMapGroupsInPandasWithState, FlatMapGroupsWithState, GlobalLimit, Join, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan, TransformWithState, TransformWithStateInPySpark}
-import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, Unassigned, WriteToStream}
+import org.apache.spark.sql.catalyst.streaming.{FlowAssigned, StreamingRelationV2, StreamingSourceIdentifyingName, Unassigned, UserProvided, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability}
-import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsRealTimeMode, SupportsTriggerAvailableNow}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsOffsetLogUpgrade, SupportsRealTimeMode, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, RealTimeStreamScanExec, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, Offset, OneTimeTrigger, ProcessingTimeTrigger, RealTimeModeAllowlist, RealTimeTrigger, Sink, Source, StreamingQueryPlanTraverseHelper}
-import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitMetadata, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataV2}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitMetadata, OffsetMap, OffsetSeq, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataV2}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, StateStoreWriter}
-import org.apache.spark.sql.execution.streaming.runtime.AcceptsLatestSeenOffsetHandler
+import org.apache.spark.sql.execution.streaming.runtime.{AcceptsLatestSeenOffsetHandler, StreamingExecutionRelation}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchSink, WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
 import org.apache.spark.sql.execution.streaming.state.{OfflineStateRepartitionUtils, StateSchemaBroadcast, StateStoreErrors}
@@ -461,7 +461,7 @@ class MicroBatchExecution(
 
     // Read the offset log format version from the last written offset log entry. If no entries
     // are found, use the set/default value from the config.
-    val offsetLogFormatVersion = if (latestStartedBatch.isDefined) {
+    val currentOffsetLogFormatVersion = if (latestStartedBatch.isDefined) {
       latestStartedBatch.get._2.version
     } else {
       // If no offset log entries are found, assert that the query does not have any committed
@@ -470,16 +470,50 @@ class MicroBatchExecution(
       sparkSessionForStream.conf.get(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION)
     }
 
+    // Get the desired offset log format version from config (what user explicitly requested)
+    val desiredOffsetLogFormatVersion =
+      sparkSessionForStream.conf.get(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION)
+
+    // --- V1 to V2 auto-upgrade ---
+    // Only upgrade if:
+    // 1. Current offset log is V1
+    // 2. User explicitly requests V2 via config
+    // 3. User has explicitly enabled the upgrade
+    val finalOffsetLogFormatVersion =
+      if (currentOffsetLogFormatVersion == OffsetSeqLog.VERSION_1 &&
+          desiredOffsetLogFormatVersion == OffsetSeqLog.VERSION_2) {
+
+        val upgradeEnabled =
+          sparkSessionForStream.conf.get(SQLConf.STREAMING_OFFSET_LOG_V1_TO_V2_AUTO_UPGRADE_ENABLED)
+
+        if (upgradeEnabled) {
+          maybeUpgradeOffsetLogToV2(lastCommittedBatchId, sparkSessionForStream)
+          OffsetSeqLog.VERSION_2
+        } else {
+          // User wants V2 but hasn't enabled upgrade - give clear guidance
+          throw new IllegalStateException(
+            "Offset log is in V1 format but V2 format was requested via " +
+            "spark.sql.streaming.offsetLog.formatVersion=2. " +
+            "To migrate the offset log, set " +
+            "spark.sql.streaming.offsetLog.v1ToV2.autoUpgrade.enabled=true. " +
+            "Important: This is a one-way migration that cannot be rolled back. " +
+            "Ensure all batches are committed before enabling. " +
+            "See documentation for details.")
+        }
+      } else {
+        currentOffsetLogFormatVersion
+      }
+
     // Set the offset log format version in the sparkSessionForStream conf
     sparkSessionForStream.conf.set(
-      SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key, offsetLogFormatVersion)
+      SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key, finalOffsetLogFormatVersion)
 
     val execCtx = new MicroBatchExecutionContext(id, runId, name, triggerClock, sources, sink,
       progressReporter, -1, sparkSession,
-      offsetLogFormatVersionOpt = Some(offsetLogFormatVersion),
+      offsetLogFormatVersionOpt = Some(finalOffsetLogFormatVersion),
       previousContext = None)
 
-    execCtx.offsetSeqMetadata = offsetLogFormatVersion match {
+    execCtx.offsetSeqMetadata = finalOffsetLogFormatVersion match {
       case OffsetSeqLog.VERSION_2 =>
         OffsetSeqMetadataV2(batchWatermarkMs = 0, batchTimestampMs = 0, sparkSessionForStream.conf)
       case OffsetSeqLog.VERSION_1 =>
@@ -1455,6 +1489,167 @@ class MicroBatchExecution(
       f
     } finally {
       awaitProgressLock.unlock()
+    }
+  }
+
+  /**
+   * Performs V1 to V2 offset log upgrade if needed.
+   *
+   * This method:
+   * 1. Converts the last committed V1 OffsetSeq to V2 OffsetMap format
+   * 2. Creates an upgrade batch (N+1) in offset log, commit log, and source metadata logs
+   * 3. For named upgrades: Renames source directories from positional to named paths
+   * 4. Stops query execution (user must restart)
+   *
+   * @param lastCommittedBatchId The last committed batch ID
+   * @param sparkSessionForStream The Spark session for this stream
+   */
+  private def maybeUpgradeOffsetLogToV2(
+      lastCommittedBatchId: Long,
+      sparkSessionForStream: SparkSession): Unit = {
+    // Fresh query (never committed a batch) - nothing to upgrade
+    if (lastCommittedBatchId < 0) {
+      logInfo("No upgrade needed: fresh query with no committed batches")
+      return
+    }
+
+    val latestBatchId = offsetLog.getLatestBatchId().getOrElse {
+      logInfo("No upgrade needed: no offset log entries")
+      return
+    }
+
+    // Only upgrade from a clean state (no outstanding uncommitted batch)
+    if (latestBatchId != lastCommittedBatchId) {
+      logWarning(
+        s"V1 to V2 offset log upgrade skipped: uncommitted batch exists " +
+        s"(latest=$latestBatchId, lastCommitted=$lastCommittedBatchId). " +
+        s"Allow the query to finish one clean batch then restart to trigger the upgrade.")
+      return
+    }
+
+    offsetLog.get(lastCommittedBatchId) match {
+      case Some(v1: OffsetSeq) =>
+        val v1Offsets = v1.offsets  // Seq[Option[OffsetV2]], positionally ordered
+
+        // Sanity-check: plan must have the same number of sources as the offset log
+        if (v1Offsets.size != sources.size) {
+          throw new IllegalStateException(
+            s"Cannot upgrade offset log to V2: offset log has ${v1Offsets.size} " +
+            s"source(s) but the current query plan has ${sources.size} source(s). " +
+            s"Make sure the query has the same number of sources as when it was last run.")
+        }
+
+        val newBatchId = latestBatchId + 1
+
+        // Determine upgrade path: positional vs named
+        val sourceEvolutionEnabled =
+          sparkSessionForStream.conf.get(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION)
+
+        // Extract source identifying names from the logical plan in traversal order
+        val sourceNames = logicalPlan.collect {
+          case s: StreamingExecutionRelation => s.sourceIdentifyingName
+          case r: StreamingDataSourceV2ScanRelation => r.relation.sourceIdentifyingName
+        }
+
+        // Generate source IDs based on whether we're doing positional or named upgrade
+        val sourceIds = if (sourceEvolutionEnabled && allSourcesNamed(sourceNames)) {
+          // Path 2: Named upgrade - use actual source names
+          val namedIds = sourceNames.map(sourceIdentifyingNameToId)
+          logInfo(s"Upgrading to V2 with named keys: ${namedIds.mkString(", ")}")
+          namedIds
+        } else {
+          // Path 1: Positional upgrade - use stringified indices
+          val positionalIds = sourceNames.indices.map(_.toString).toSeq
+          logInfo(s"Upgrading to V2 with positional keys: " +
+            s"${positionalIds.mkString(", ")}")
+          positionalIds
+        }
+
+        // Convert V1 OffsetSeq to V2 OffsetMap
+        val upgradeOffsetMap = v1.toOffsetMap(sourceIds)
+
+        // Write upgrade batch to offset log
+        if (!offsetLog.add(newBatchId, upgradeOffsetMap)) {
+          throw QueryExecutionErrors.concurrentStreamLogUpdate(newBatchId)
+        }
+
+        // Write upgrade batch to commit log
+        val upgradeCommit = commitLog.get(lastCommittedBatchId)
+          .getOrElse(CommitMetadata())
+          .copy(stateUniqueIds = None)
+        if (!commitLog.add(newBatchId, upgradeCommit)) {
+          throw QueryExecutionErrors.concurrentStreamLogUpdate(newBatchId)
+        }
+
+        // CRITICAL: Write upgrade batch to each source's metadata log
+        // This ensures getBatch(N, N+1) won't fail with "batch N+1 doesn't exist"
+        writeUpgradeBatchToSourceMetadataLogs(lastCommittedBatchId, newBatchId, sourceIds)
+
+        logInfo(s"Successfully upgraded offset log from V1 to V2 at batch $newBatchId. " +
+          s"Query will now stop. Restart the query to continue with V2 format.")
+
+        // Stop query execution - user must restart
+        // The upgrade batch is committed but no data was processed
+        // On restart, sources will be created with correct paths and continues from
+        // batch N+2
+        stop()
+
+      case Some(_: OffsetMap) =>
+        logInfo("No upgrade needed: already using V2 offset log format")
+
+      case _ =>
+        logInfo("No upgrade needed: no offset log entry found")
+    }
+  }
+
+  /**
+   * Checks if all sources have names (UserProvided or FlowAssigned, not Unassigned).
+   */
+  private def allSourcesNamed(names: Seq[StreamingSourceIdentifyingName]): Boolean =
+    names.nonEmpty && names.forall {
+      case UserProvided(_) | FlowAssigned(_) => true
+      case Unassigned => false
+    }
+
+  /**
+   * Extracts the string ID from a StreamingSourceIdentifyingName.
+   */
+  private def sourceIdentifyingNameToId(name: StreamingSourceIdentifyingName): String =
+    name match {
+      case UserProvided(n) => n
+      case FlowAssigned(n) => n
+      case Unassigned =>
+        throw new IllegalStateException("Cannot derive source ID from Unassigned name")
+    }
+
+  /**
+   * Migrates source metadata from old paths to new paths for upgrade batch.
+   * Delegates to sources that implement SupportsOffsetLogUpgrade.
+   *
+   * @param lastBatchId The last committed batch ID (batch N)
+   * @param upgradeBatchId The upgrade batch ID (batch N+1)
+   * @param sourceIds The source IDs in plan order (positional or named)
+   */
+  private def writeUpgradeBatchToSourceMetadataLogs(
+      lastBatchId: Long,
+      upgradeBatchId: Long,
+      sourceIds: Seq[String]): Unit = {
+
+    sourceIds.zipWithIndex.foreach { case (sourceId, index) =>
+      val source = sources(index)
+      source match {
+        case upgradeable: SupportsOffsetLogUpgrade =>
+          val oldMetadataPath = s"$resolvedCheckpointRoot/sources/$index"
+          val newMetadataPath = s"$resolvedCheckpointRoot/sources/$sourceId"
+          upgradeable.migrateMetadataForUpgrade(
+            oldMetadataPath,
+            newMetadataPath,
+            lastBatchId,
+            upgradeBatchId)
+
+        case _ =>
+          logInfo(s"Source $sourceId does not require metadata migration")
+      }
     }
   }
 }

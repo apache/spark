@@ -32,7 +32,7 @@ import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.connector.read.streaming
-import org.apache.spark.sql.connector.read.streaming.{ReadAllAvailable, ReadLimit, ReadMaxBytes, ReadMaxFiles, SupportsAdmissionControl, SupportsTriggerAvailableNow}
+import org.apache.spark.sql.connector.read.streaming.{ReadAllAvailable, ReadLimit, ReadMaxBytes, ReadMaxFiles, SupportsAdmissionControl, SupportsOffsetLogUpgrade, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{DataSource, InMemoryFileIndex, LogicalRelation}
 import org.apache.spark.sql.execution.streaming.{Offset, Source}
@@ -55,6 +55,7 @@ class FileStreamSource(
     options: Map[String, String])
   extends SupportsAdmissionControl
   with SupportsTriggerAvailableNow
+  with SupportsOffsetLogUpgrade
   with Source
   with Logging {
 
@@ -430,6 +431,87 @@ class FileStreamSource(
   }
 
   override def stop(): Unit = sourceCleaner.foreach(_.stop())
+
+  override def migrateMetadataForUpgrade(
+      oldMetadataPath: String,
+      newMetadataPath: String,
+      lastBatchId: Long,
+      upgradeBatchId: Long): Unit = {
+
+    // For positional upgrades, old and new paths are the same - no copy needed
+    if (oldMetadataPath == newMetadataPath) {
+      logInfo(s"Paths are identical ($oldMetadataPath), skipping metadata copy")
+
+      // Still need to write the upgrade batch
+      val log = new FileStreamSourceLog(
+        FileStreamSourceLog.VERSION,
+        sparkSession,
+        oldMetadataPath)
+
+      log.get(lastBatchId) match {
+        case Some(entries) =>
+          if (!log.add(upgradeBatchId, entries)) {
+            throw new IllegalStateException(
+              s"Failed to write upgrade batch to $oldMetadataPath")
+          }
+          logInfo(s"Wrote upgrade batch $upgradeBatchId")
+        case None =>
+          if (!log.add(upgradeBatchId, Array.empty)) {
+            throw new IllegalStateException(
+              s"Failed to write empty upgrade batch to $oldMetadataPath")
+          }
+          logInfo(s"Wrote empty upgrade batch $upgradeBatchId")
+      }
+      return
+    }
+
+    val oldLog = new FileStreamSourceLog(
+      FileStreamSourceLog.VERSION,
+      sparkSession,
+      oldMetadataPath)
+
+    val newLog = new FileStreamSourceLog(
+      FileStreamSourceLog.VERSION,
+      sparkSession,
+      newMetadataPath)
+
+    // Copy all existing batches from old path to new path
+    // This is needed because FileStreamSource.restore() reads all batches from 0 to latest
+    val oldBatches = oldLog.allFiles()
+    val batchIds = oldBatches.map(_.batchId).distinct.sorted
+
+    batchIds.foreach { batchId =>
+      oldLog.get(batchId) match {
+        case Some(entries) =>
+          if (!newLog.add(batchId, entries)) {
+            throw new IllegalStateException(
+              s"Failed to copy batch $batchId metadata to $newMetadataPath")
+          }
+          logInfo(s"Copied batch $batchId: ${entries.length} entries from " +
+            s"$oldMetadataPath to $newMetadataPath")
+
+        case None =>
+          logWarning(s"Batch $batchId not found in $oldMetadataPath, skipping")
+      }
+    }
+
+    // Write upgrade batch using data from lastBatchId
+    oldLog.get(lastBatchId) match {
+      case Some(entries) =>
+        if (!newLog.add(upgradeBatchId, entries)) {
+          throw new IllegalStateException(
+            s"Failed to write upgrade batch metadata to $newMetadataPath")
+        }
+        logInfo(s"Wrote upgrade batch $upgradeBatchId with ${entries.length} entries")
+
+      case None =>
+        if (!newLog.add(upgradeBatchId, Array.empty)) {
+          throw new IllegalStateException(
+            s"Failed to write empty upgrade batch metadata to $newMetadataPath")
+        }
+        logInfo(s"Wrote empty upgrade batch $upgradeBatchId")
+    }
+  }
 }
 
 

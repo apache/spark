@@ -97,6 +97,33 @@ case class OffsetSeq(
     offsets: Seq[Option[OffsetV2]],
     metadataOpt: Option[OffsetSeqMetadata] = None) extends OffsetSeqBase {
   override def version: Int = OffsetSeqLog.VERSION_1
+
+  /**
+   * Converts this V1 OffsetSeq to a V2 OffsetMap using the provided ordered source IDs.
+   * This is used during V1 to V2 offset log upgrade to map positional offsets to keyed offsets.
+   *
+   * @param orderedSourceIds The source IDs in the same order as the positional offsets.
+   *                         Can be either positional ("0", "1", "2") or named ("payments", etc).
+   * @return An OffsetMap with offsets keyed by source ID.
+   */
+  def toOffsetMap(orderedSourceIds: Seq[String]): OffsetMap = {
+    require(orderedSourceIds.size == offsets.size,
+      s"orderedSourceIds.size (${orderedSourceIds.size}) != offsets.size (${offsets.size})")
+
+    // Validate no duplicate source IDs - duplicates would cause silent data loss in toMap
+    val duplicates = orderedSourceIds.groupBy(identity).filter(_._2.size > 1).keys
+    require(duplicates.isEmpty,
+      s"Cannot convert V1 OffsetSeq to V2 OffsetMap: duplicate source IDs found: " +
+      s"${duplicates.mkString(", ")}")
+
+    val offsetsMap = orderedSourceIds.zip(offsets).toMap
+    val v1Meta = metadataOpt.getOrElse(OffsetSeqMetadata())
+    val v2Meta = OffsetSeqMetadataV2(
+      batchWatermarkMs = v1Meta.batchWatermarkMs,
+      batchTimestampMs = v1Meta.batchTimestampMs,
+      conf = v1Meta.conf)
+    OffsetMap(offsetsMap, v2Meta)
+  }
 }
 
 object OffsetSeq {
