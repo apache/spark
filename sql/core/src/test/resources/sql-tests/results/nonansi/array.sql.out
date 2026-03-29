@@ -994,3 +994,43 @@ select array_distinct(array(0.0, -0.0, -0.0, DOUBLE("NaN"), DOUBLE("NaN")))
 struct<array_distinct(array(0.0, 0.0, 0.0, NaN, NaN)):array<double>>
 -- !query output
 [0.0,NaN]
+
+
+-- !query
+select array_union(
+  array(named_struct('a', -0.0D), named_struct('a', DOUBLE('NaN'))),
+  array(named_struct('a', 0.0D), named_struct('a', DOUBLE('NaN')), named_struct('a', 1.0D)))
+-- !query schema
+struct<array_union(array(named_struct(a, -0.0), named_struct(a, NaN)), array(named_struct(a, 0.0), named_struct(a, NaN), named_struct(a, 1.0))):array<struct<a:double>>>
+-- !query output
+[{"a":-0.0},{"a":NaN},{"a":1.0}]
+
+
+-- !query
+select array_distinct(
+  array(named_struct('a', -0.0D), named_struct('a', 0.0D),
+    named_struct('a', DOUBLE('NaN')), named_struct('a', DOUBLE('NaN'))))
+-- !query schema
+struct<array_distinct(array(named_struct(a, -0.0), named_struct(a, 0.0), named_struct(a, NaN), named_struct(a, NaN))):array<struct<a:double>>>
+-- !query output
+[{"a":-0.0},{"a":NaN}]
+
+
+-- !query
+select array_except(
+  array(named_struct('a', -0.0D), named_struct('a', DOUBLE('NaN')), named_struct('a', 1.0D)),
+  array(named_struct('a', 0.0D), named_struct('a', DOUBLE('NaN'))))
+-- !query schema
+struct<array_except(array(named_struct(a, -0.0), named_struct(a, NaN), named_struct(a, 1.0)), array(named_struct(a, 0.0), named_struct(a, NaN))):array<struct<a:double>>>
+-- !query output
+[{"a":1.0}]
+
+
+-- !query
+select array_intersect(
+  array(named_struct('a', -0.0D), named_struct('a', DOUBLE('NaN')), named_struct('a', 1.0D)),
+  array(named_struct('a', 0.0D), named_struct('a', DOUBLE('NaN')), named_struct('a', 2.0D)))
+-- !query schema
+struct<array_intersect(array(named_struct(a, -0.0), named_struct(a, NaN), named_struct(a, 1.0)), array(named_struct(a, 0.0), named_struct(a, NaN), named_struct(a, 2.0))):array<struct<a:double>>>
+-- !query output
+[{"a":-0.0},{"a":NaN}]
