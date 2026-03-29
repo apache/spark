@@ -18,7 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.hadoop.fs.Path
-import org.scalatest.{Args, Status, Tag}
+import org.scalatest.Tag
 
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
@@ -35,7 +35,8 @@ import org.apache.spark.tags.SlowSQLTest
  * RocksDB with virtual column families. The innermost withSQLConf wins,
  * so wrapping the test body overrides the V3 setting from the parent trait.
  */
-trait TestWithV4StateFormat extends AlsoTestWithVirtualColumnFamilyJoins {
+trait TestWithV4StateFormat extends StreamingJoinSuite {
+  override protected def testMode: Mode = Mode.WithVCF
 
   override def testWithVirtualColumnFamilyJoins(
       testName: String, testTags: Tag*)(testBody: => Any): Unit = {
@@ -47,40 +48,11 @@ trait TestWithV4StateFormat extends AlsoTestWithVirtualColumnFamilyJoins {
       }
     }
   }
-
-  // V4 always uses virtual column families, so skip non-VCF tests.
-  override def testWithoutVirtualColumnFamilyJoins(
-      testName: String, testTags: Tag*)(testBody: => Any): Unit = {}
-
-  // Use lazy val because the parent constructor registers tests before
-  // subclass vals are initialized.
-  private lazy val testsToSkip = Seq(
-    // V4's timestamp-based indexing does not support window structs
-    // in join keys.
-    "stream stream inner join on windows - with watermark",
-    // V4 uses 1 store with VCFs instead of V3's 4*partitions layout,
-    // so metric assertions about number of state store instances differ.
-    "SPARK-35896: metrics in StateOperatorProgress are output correctly",
-    // V4 uses different column families and encoder specs than V3;
-    // overridden in StreamingInnerJoinV4Suite with V4-specific assertions.
-    "SPARK-51779 Verify StateSchemaV3 writes correct key and value " +
-      "schemas for join operator",
-    // V4's key encoding is not yet supported by StateDataSource reader.
-    "SPARK-49829"
-  )
-
-  override def runTest(testName: String, args: Args): Status = {
-    if (testsToSkip.exists(testName.contains)) {
-      org.scalatest.SucceededStatus
-    } else {
-      super.runTest(testName, args)
-    }
-  }
 }
 
 @SlowSQLTest
 class StreamingInnerJoinV4Suite
-  extends StreamingInnerJoinSuite
+  extends StreamingInnerJoinBase
   with TestWithV4StateFormat {
 
   import testImplicits._
@@ -216,15 +188,15 @@ class StreamingInnerJoinV4Suite
 
 @SlowSQLTest
 class StreamingOuterJoinV4Suite
-  extends StreamingOuterJoinSuite
+  extends StreamingOuterJoinBase
   with TestWithV4StateFormat
 
 @SlowSQLTest
 class StreamingFullOuterJoinV4Suite
-  extends StreamingFullOuterJoinSuite
+  extends StreamingFullOuterJoinBase
   with TestWithV4StateFormat
 
 @SlowSQLTest
 class StreamingLeftSemiJoinV4Suite
-  extends StreamingLeftSemiJoinSuite
+  extends StreamingLeftSemiJoinBase
     with TestWithV4StateFormat
