@@ -830,6 +830,29 @@ case class Join(
 }
 
 /**
+ * A logical plan that combines the columns of two DataFrames that derive from the same
+ * base plan through chains of Project nodes. This node is always unresolved and must be
+ * rewritten by [[ResolveZip]] into a single Project over the shared base plan during
+ * analysis. If the two children do not share the same base plan (after stripping Project
+ * nodes), analysis will fail with an error.
+ */
+case class Zip(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
+  override def output: Seq[Attribute] = left.output ++ right.output
+
+  override def maxRows: Option[Long] = left.maxRows
+
+  override def maxRowsPerPartition: Option[Long] = left.maxRowsPerPartition
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ZIP)
+
+  // Always unresolved -- must be rewritten by ResolveZip during analysis.
+  override lazy val resolved: Boolean = false
+
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): Zip = copy(left = newLeft, right = newRight)
+}
+
+/**
  * Insert query result into a directory.
  *
  * @param isLocal Indicates whether the specified directory is local directory

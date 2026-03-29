@@ -637,6 +637,19 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 messageParameters = Map.empty)
             }
 
+          case z: Zip =>
+            def stripProjects(plan: LogicalPlan): LogicalPlan = plan match {
+              case Project(_, child) => stripProjects(child)
+              case other => other
+            }
+            val leftBase = stripProjects(z.left)
+            val rightBase = stripProjects(z.right)
+            if (!leftBase.sameResult(rightBase)) {
+              z.failAnalysis(
+                errorClass = "ZIP_PLANS_NOT_MERGEABLE",
+                messageParameters = Map.empty)
+            }
+
           case a: Aggregate =>
             a.groupingExpressions.foreach(
               expression =>
