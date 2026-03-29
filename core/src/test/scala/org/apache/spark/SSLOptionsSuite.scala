@@ -58,6 +58,7 @@ class SSLOptionsSuite extends SparkFunSuite {
     conf.set("spark.ssl.openSslEnabled", "false")
     conf.set("spark.ssl.enabledAlgorithms", algorithms.mkString(","))
     conf.set("spark.ssl.protocol", "TLSv1.2")
+    conf.set("spark.ssl.disableHttpPort", "true")
 
     val opts = SSLOptions.parse(conf, hadoopConf, "spark.ssl")
 
@@ -82,6 +83,7 @@ class SSLOptionsSuite extends SparkFunSuite {
     assert(opts.keyPassword === Some("password"))
     assert(opts.protocol === Some("TLSv1.2"))
     assert(opts.enabledAlgorithms === algorithms)
+    assert(opts.disableHttpPort === Some(true))
   }
 
   test("test resolving property with defaults specified ") {
@@ -106,6 +108,7 @@ class SSLOptionsSuite extends SparkFunSuite {
     conf.set("spark.ssl.enabledAlgorithms",
       "TLS_RSA_WITH_AES_128_CBC_SHA, TLS_RSA_WITH_AES_256_CBC_SHA")
     conf.set("spark.ssl.protocol", "SSLv3")
+    conf.set("spark.ssl.disableHttpPort", "true")
 
     val defaultOpts = SSLOptions.parse(conf, hadoopConf, "spark.ssl", defaults = None)
     val opts = SSLOptions.parse(conf, hadoopConf, "spark.ssl.ui", defaults = Some(defaultOpts))
@@ -133,6 +136,7 @@ class SSLOptionsSuite extends SparkFunSuite {
     assert(opts.protocol === Some("SSLv3"))
     assert(opts.enabledAlgorithms ===
       Set("TLS_RSA_WITH_AES_128_CBC_SHA", "TLS_RSA_WITH_AES_256_CBC_SHA"))
+    assert(opts.disableHttpPort === Some(true))
   }
 
   test("test whether defaults can be overridden ") {
@@ -161,6 +165,8 @@ class SSLOptionsSuite extends SparkFunSuite {
       "TLS_RSA_WITH_AES_128_CBC_SHA, TLS_RSA_WITH_AES_256_CBC_SHA")
     conf.set("spark.ssl.ui.enabledAlgorithms", "ABC, DEF")
     conf.set("spark.ssl.protocol", "SSLv3")
+    conf.set("spark.ssl.disableHttpPort", "false")
+    conf.set("spark.ssl.ui.disableHttpPort", "true")
 
     val defaultOpts = SSLOptions.parse(conf, hadoopConf, "spark.ssl", defaults = None)
     val opts = SSLOptions.parse(conf, hadoopConf, "spark.ssl.ui", defaults = Some(defaultOpts))
@@ -187,6 +193,7 @@ class SSLOptionsSuite extends SparkFunSuite {
     assert(opts.openSslEnabled === true)
     assert(opts.protocol === Some("SSLv3"))
     assert(opts.enabledAlgorithms === Set("ABC", "DEF"))
+    assert(opts.disableHttpPort === Some(true))
   }
 
   test("ensure RPC settings don't get enabled via inheritance ") {
