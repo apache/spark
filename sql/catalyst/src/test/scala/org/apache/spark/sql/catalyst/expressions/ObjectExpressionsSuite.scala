@@ -26,7 +26,7 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 
-import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection, ScroogeLikeExample}
@@ -103,6 +103,17 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         ("Couldn't find method oneArgNotExistMethod with arguments " +
           "(class org.apache.spark.unsafe.types.UTF8String) on class java.lang.Object.")
       )
+    )
+  }
+
+  test("SPARK-43253: UNRESOLVED_COLLECTION_CLS error class") {
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        val unresolved = UnresolvedMapObjects(identity, Literal(1), None)
+        unresolved.dataType
+      },
+      condition = "UNRESOLVED_COLLECTION_CLS",
+      parameters = Map.empty
     )
   }
 
