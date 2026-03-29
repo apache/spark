@@ -44,6 +44,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimestampNTZType,
     TimestampType,
     UserDefinedType,
     VariantType,
@@ -786,6 +787,235 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
             pa.array([], type=geometry_type), GeometryType(0)
         )
         self.assertEqual(len(result), 0)
+
+    def test_array_convert_numpy(self):
+        import pyarrow as pa
+        import numpy as np
+
+        arr = pa.array([[1, 2, 3], [4, 5]], type=pa.list_(pa.int64()))
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, ArrayType(IntegerType()))
+        self.assertIsInstance(result.iloc[0], np.ndarray)
+        self.assertEqual(list(result.iloc[0]), [1, 2, 3])
+        self.assertEqual(list(result.iloc[1]), [4, 5])
+
+        # empty inner arrays
+        arr = pa.array([[], [1, 2], []], type=pa.list_(pa.int64()))
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, ArrayType(IntegerType()))
+        self.assertEqual(len(result.iloc[0]), 0)
+        self.assertEqual(list(result.iloc[1]), [1, 2])
+
+        # nulls: inner nulls become NaN (float64) to preserve numeric ndarray dtype
+        arr = pa.array([[1, None, 3], None, [4, 5]], type=pa.list_(pa.int64()))
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, ArrayType(IntegerType()))
+        self.assertTrue(np.isnan(result.iloc[0][1]))
+        self.assertIsNone(result.iloc[1])
+
+        # nested arrays
+        arr = pa.array([[[1, 2], [3]], [[4, 5]]], type=pa.list_(pa.list_(pa.int64())))
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(ArrayType(IntegerType()))
+        )
+        self.assertIsInstance(result.iloc[0], np.ndarray)
+        self.assertEqual(list(result.iloc[0][0]), [1, 2])
+        self.assertEqual(list(result.iloc[0][1]), [3])
+
+    def test_array_with_timestamps(self):
+        import pyarrow as pa
+        import numpy as np
+
+        # tz-aware timestamps: preprocess_time strips tz and coerces to ns
+        ts1 = datetime.datetime(2024, 1, 1, 12, 0, tzinfo=ZoneInfo("UTC"))
+        ts2 = datetime.datetime(2024, 6, 15, 8, 30, tzinfo=ZoneInfo("UTC"))
+        arr = pa.array([[ts1, ts2]], type=pa.list_(pa.timestamp("us", tz="UTC")))
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, ArrayType(TimestampType()))
+        self.assertIsInstance(result.iloc[0], np.ndarray)
+        self.assertEqual(result.iloc[0][0], np.datetime64("2024-01-01T12:00:00", "ns"))
+        self.assertEqual(result.iloc[0][1], np.datetime64("2024-06-15T08:30:00", "ns"))
+
+        # tz-naive timestamps
+        arr = pa.array(
+            [[datetime.datetime(2024, 1, 1), datetime.datetime(2024, 6, 15)]],
+            type=pa.list_(pa.timestamp("us")),
+        )
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, ArrayType(TimestampNTZType()))
+        self.assertEqual(result.iloc[0][0], np.datetime64("2024-01-01T00:00:00", "ns"))
+
+    def test_array_ndarray_as_list(self):
+        import pyarrow as pa
+
+        arr = pa.array([[1, 2, 3], [4, 5]], type=pa.list_(pa.int64()))
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(IntegerType()), ndarray_as_list=True
+        )
+        self.assertIsInstance(result.iloc[0], list)
+        self.assertEqual(result.iloc[0], [1, 2, 3])
+
+        # nulls preserved as None (not NaN)
+        arr = pa.array([[1, None, 3], None], type=pa.list_(pa.int64()))
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(IntegerType()), ndarray_as_list=True
+        )
+        self.assertIsInstance(result.iloc[0], list)
+        self.assertIsNone(result.iloc[0][1])
+        self.assertIsNone(result.iloc[1])
+
+        # nested arrays recursively converted to lists
+        arr = pa.array([[[1, 2], [3]]], type=pa.list_(pa.list_(pa.int64())))
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(ArrayType(IntegerType())), ndarray_as_list=True
+        )
+        self.assertIsInstance(result.iloc[0], list)
+        self.assertIsInstance(result.iloc[0][0], list)
+        self.assertEqual(result.iloc[0][0], [1, 2])
+
+    def test_array_of_complex_ndarray_as_list(self):
+        import pyarrow as pa
+
+        variant_type = pa.struct(
+            [
+                pa.field("value", pa.binary(), nullable=False),
+                pa.field("metadata", pa.binary(), nullable=False, metadata={b"variant": b"true"}),
+            ]
+        )
+
+        # ndarray_as_list=True with element_conv: exercises to_pandas(integer_object_nulls=True)
+        arr = pa.array(
+            [[{"value": b"\x01", "metadata": b"\x02"}, None], None],
+            type=pa.list_(variant_type),
+        )
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(VariantType()), ndarray_as_list=True
+        )
+        self.assertIsInstance(result.iloc[0], list)
+        self.assertIsInstance(result.iloc[0][0], VariantVal)
+        self.assertIsNone(result.iloc[0][1])
+        self.assertIsNone(result.iloc[1])
+
+        # nested ArrayType with element_conv: exercises the recursive branch in
+        # _create_element_converter where inner_conv is not None
+        arr = pa.array(
+            [[[{"value": b"\x01", "metadata": b"\x02"}], None]],
+            type=pa.list_(pa.list_(variant_type)),
+        )
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(ArrayType(VariantType()))
+        )
+        self.assertIsInstance(result.iloc[0], list)
+        self.assertIsInstance(result.iloc[0][0], list)
+        self.assertIsInstance(result.iloc[0][0][0], VariantVal)
+        self.assertIsNone(result.iloc[0][1])
+
+    def test_array_of_variant(self):
+        import pyarrow as pa
+
+        variant_type = pa.struct(
+            [
+                pa.field("value", pa.binary(), nullable=False),
+                pa.field("metadata", pa.binary(), nullable=False, metadata={b"variant": b"true"}),
+            ]
+        )
+
+        arr = pa.array(
+            [
+                [{"value": b"\x01", "metadata": b"\x02"}, {"value": b"\x03", "metadata": b"\x04"}],
+                [None],
+                None,
+            ],
+            type=pa.list_(variant_type),
+        )
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(VariantType()), ser_name="v"
+        )
+        self.assertIsInstance(result.iloc[0], list)
+        self.assertIsInstance(result.iloc[0][0], VariantVal)
+        self.assertEqual(result.iloc[0][0].value, b"\x01")
+        self.assertEqual(result.iloc[0][1].value, b"\x03")
+        self.assertIsNone(result.iloc[1][0])
+        self.assertIsNone(result.iloc[2])
+
+    def test_array_of_udt(self):
+        import pyarrow as pa
+
+        arr = pa.array(
+            [[[1.0, 2.0], [3.0, 4.0]], [None], None],
+            type=pa.list_(pa.list_(pa.float64())),
+        )
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(ExamplePointUDT()), ser_name="p"
+        )
+        self.assertIsInstance(result.iloc[0], list)
+        self.assertEqual(result.iloc[0][0], ExamplePoint(1.0, 2.0))
+        self.assertEqual(result.iloc[0][1], ExamplePoint(3.0, 4.0))
+        self.assertIsNone(result.iloc[1][0])
+        self.assertIsNone(result.iloc[2])
+
+    def test_array_of_geography(self):
+        import pyarrow as pa
+
+        geography_type = pa.struct(
+            [
+                pa.field("srid", pa.int32(), nullable=False),
+                pa.field(
+                    "wkb",
+                    pa.binary(),
+                    nullable=False,
+                    metadata={b"geography": b"true", b"srid": b"4326"},
+                ),
+            ]
+        )
+
+        wkb1 = bytes.fromhex("0101000000000000000000F03F0000000000000040")
+        wkb2 = bytes.fromhex("010100000000000000000031400000000000001c40")
+        arr = pa.array(
+            [
+                [{"srid": 4326, "wkb": wkb1}, {"srid": 4326, "wkb": wkb2}],
+                [None],
+                None,
+            ],
+            type=pa.list_(geography_type),
+        )
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(GeographyType(4326)), ser_name="g"
+        )
+        self.assertIsInstance(result.iloc[0], list)
+        self.assertEqual(result.iloc[0][0], Geography(wkb1, 4326))
+        self.assertEqual(result.iloc[0][1], Geography(wkb2, 4326))
+        self.assertIsNone(result.iloc[1][0])
+        self.assertIsNone(result.iloc[2])
+
+    def test_array_of_geometry(self):
+        import pyarrow as pa
+
+        geometry_type = pa.struct(
+            [
+                pa.field("srid", pa.int32(), nullable=False),
+                pa.field(
+                    "wkb",
+                    pa.binary(),
+                    nullable=False,
+                    metadata={b"geometry": b"true", b"srid": b"0"},
+                ),
+            ]
+        )
+
+        wkb1 = bytes.fromhex("0101000000000000000000F03F0000000000000040")
+        wkb2 = bytes.fromhex("010100000000000000000031400000000000001c40")
+        arr = pa.array(
+            [
+                [{"srid": 0, "wkb": wkb1}, {"srid": 0, "wkb": wkb2}],
+                [None],
+                None,
+            ],
+            type=pa.list_(geometry_type),
+        )
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(GeometryType(0)), ser_name="g"
+        )
+        self.assertIsInstance(result.iloc[0], list)
+        self.assertEqual(result.iloc[0][0], Geometry(wkb1, 0))
+        self.assertEqual(result.iloc[0][1], Geometry(wkb2, 0))
+        self.assertIsNone(result.iloc[1][0])
+        self.assertIsNone(result.iloc[2])
 
 
 if __name__ == "__main__":
