@@ -113,6 +113,22 @@ private[spark] object History {
     .checkValues(LocalStoreSerializer.values.map(_.toString))
     .createWithDefault(LocalStoreSerializer.JSON.toString)
 
+  val SNAPSHOT_ENABLED = ConfigBuilder("spark.history.snapshot.enabled")
+    .doc("Whether Spark should write a protobuf history snapshot for completed applications " +
+      "and allow the History Server to load that snapshot instead of replaying the event log.")
+    .version("4.2.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .booleanConf
+    .createWithDefault(false)
+
+  val SNAPSHOT_PATH = ConfigBuilder("spark.history.snapshot.path")
+    .doc("Shared filesystem or object store path where Spark writes protobuf history snapshots " +
+      "for completed applications and the History Server reads them from.")
+    .version("4.2.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .stringConf
+    .createOptional
+
   val MAX_LOCAL_DISK_USAGE = ConfigBuilder("spark.history.store.maxDiskUsage")
     .version("2.3.0")
     .doc("Maximum disk usage for the local directory where the cache application history " +

@@ -25,8 +25,9 @@ import scala.reflect.{classTag, ClassTag}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
+import org.apache.spark.deploy.history.HistorySnapshotStore
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
-import org.apache.spark.internal.config.History.{HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend}
+import org.apache.spark.internal.config.History.{HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend, SNAPSHOT_ENABLED, SNAPSHOT_PATH}
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.resource.ResourceProfile
@@ -706,6 +707,82 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
       assert(attempt.duration === 41L)
       assert(attempt.sparkUser === "user")
       assert(attempt.completed)
+    }
+  }
+
+  test("writes history snapshot and records metrics when application store closes") {
+    val snapshotConf = newSnapshotConf()
+    val appStatusSource = new AppStatusSource()
+    val liveStore = AppStatusStore.createLiveStore(snapshotConf, Some(appStatusSource))
+    val listener = liveStore.listener.get
+
+    try {
+      listener.onApplicationStart(SparkListenerApplicationStart(
+        "snapshot-app",
+        Some("snapshot-app-id"),
+        1L,
+        "user",
+        Some("attempt-1"),
+        None))
+      listener.onApplicationEnd(SparkListenerApplicationEnd(2L))
+
+      assert(HistorySnapshotStore.findSnapshot(
+        snapshotConf,
+        "snapshot-app-id",
+        Some("attempt-1")).isEmpty)
+    } finally {
+      liveStore.close()
+    }
+
+    val manifest = HistorySnapshotStore.findSnapshot(snapshotConf, "snapshot-app-id",
+      Some("attempt-1"))
+    assert(manifest.isDefined)
+    assert(appStatusSource.SNAPSHOT_WRITES.getCount === 1L)
+    assert(appStatusSource.SNAPSHOT_WRITE_FAILURES.getCount === 0L)
+    assert(appStatusSource.SNAPSHOT_WRITE_TIME.getCount === 1L)
+  }
+
+  test("history snapshot includes events posted after application end once store closes") {
+    val snapshotConf = newSnapshotConf()
+    val liveStore = AppStatusStore.createLiveStore(snapshotConf)
+    val listener = liveStore.listener.get
+
+    val stage = new StageInfo(1, 0, "stage", 1, Nil, Nil, "details",
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    val task = createTasks(1, Array("1")).head
+
+    try {
+      listener.onApplicationStart(SparkListenerApplicationStart(
+        "snapshot-app",
+        Some("snapshot-app-id"),
+        1L,
+        "user",
+        Some("attempt-1"),
+        None))
+      listener.onJobStart(SparkListenerJobStart(1, 2L, Seq(stage), null))
+      listener.onTaskStart(SparkListenerTaskStart(stage.stageId, stage.attemptNumber(), task))
+      listener.onApplicationEnd(SparkListenerApplicationEnd(3L))
+      task.markFinished(TaskState.FINISHED, 4L)
+      listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber(), "taskType",
+        Success, task, new ExecutorMetrics, null))
+      listener.onJobEnd(SparkListenerJobEnd(1, 4L, JobSucceeded))
+    } finally {
+      liveStore.close()
+    }
+
+    val manifest = HistorySnapshotStore.findSnapshot(snapshotConf, "snapshot-app-id",
+      Some("attempt-1"))
+    assert(manifest.isDefined)
+
+    val restored = new InMemoryStore()
+    restored.setMetadata(AppStatusStoreMetadata(AppStatusStore.CURRENT_VERSION))
+    try {
+      HistorySnapshotStore.restoreSnapshot(snapshotConf, restored, manifest.get)
+      val restoredStatusStore = new AppStatusStore(restored)
+      assert(restoredStatusStore.job(1).status === JobExecutionStatus.SUCCEEDED)
+      assert(restoredStatusStore.taskCount(stage.stageId, stage.attemptNumber()) === 1L)
+    } finally {
+      restored.close()
     }
   }
 
@@ -1954,6 +2031,11 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
         TaskLocality.PROCESS_LOCAL, id % 2 == 0)
     }
   }
+
+  private def newSnapshotConf(): SparkConf = conf.clone()
+    .set(SNAPSHOT_ENABLED, true)
+    .set(SNAPSHOT_PATH,
+      Utils.createTempDir(testDir.getAbsolutePath, "history-snapshot").getAbsolutePath)
 
   private def nextTaskId(): Long = {
     taskIdTracker += 1

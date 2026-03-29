@@ -117,21 +117,30 @@ private class HistoryServerDiskManager(
    * will still return `None` for the application.
    */
   def lease(eventLogSize: Long, isCompressed: Boolean = false): Lease = {
-    val needed = approximateSize(eventLogSize, isCompressed)
-    makeRoom(needed)
+    leaseExact(approximateSize(eventLogSize, isCompressed))
+  }
+
+  /**
+   * Lease an exact number of bytes from the store.
+   *
+   * This is meant for callers that already know the number of bytes they need to reserve, rather
+   * than having to infer it from event log size heuristics.
+   */
+  def leaseExact(size: Long): Lease = {
+    makeRoom(size)
 
     val tmp = Utils.createTempDir(tmpStoreDir.getPath(), "appstore")
     Utils.chmod700(tmp)
 
-    updateUsage(needed)
+    updateUsage(size)
     val current = currentUsage.get()
     if (current > maxUsage) {
-      logInfo(log"Lease of ${MDC(NUM_BYTES, Utils.bytesToString(needed))} may cause" +
+      logInfo(log"Lease of ${MDC(NUM_BYTES, Utils.bytesToString(size))} may cause" +
         log" usage to exceed max (${MDC(NUM_BYTES_CURRENT, Utils.bytesToString(current))}" +
         log" > ${MDC(NUM_BYTES_MAX, Utils.bytesToString(maxUsage))})")
     }
 
-    new Lease(tmp, needed)
+    new Lease(tmp, size)
   }
 
   /**

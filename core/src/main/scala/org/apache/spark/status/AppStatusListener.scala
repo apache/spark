@@ -19,12 +19,15 @@ package org.apache.spark.status
 
 import java.util.Date
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 import org.apache.spark._
+import org.apache.spark.deploy.history.HistorySnapshotStore
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.CPUS_PER_TASK
@@ -35,6 +38,7 @@ import org.apache.spark.status.api.v1
 import org.apache.spark.storage._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.scope._
+import org.apache.spark.util.Utils
 
 /**
  * A Spark listener that writes application information to a data store. The types written to the
@@ -59,6 +63,7 @@ private[spark] class AppStatusListener(
   // meaning only the last write will happen. For live applications, this avoids a few
   // operations that we can live without when rapidly processing incoming task events.
   private val liveUpdatePeriodNs = if (live) conf.get(LIVE_ENTITY_UPDATE_PERIOD) else -1L
+  private val historySnapshotEnabled = live && HistorySnapshotStore.isEnabled(conf)
 
   /**
    * Minimum time elapsed before stale UI data is flushed. This avoids UI staleness when incoming
@@ -101,9 +106,15 @@ private[spark] class AppStatusListener(
   }
 
   kvstore.onFlush {
-    if (!live) {
+    if (!live || historySnapshotEnabled) {
       val now = System.nanoTime()
       flush(update(_, now))
+    }
+  }
+
+  if (historySnapshotEnabled) {
+    kvstore.onClose {
+      writeHistorySnapshot()
     }
   }
 
@@ -210,6 +221,7 @@ private[spark] class AppStatusListener(
       None,
       Seq(attempt))
     kvstore.write(new ApplicationInfoWrapper(appInfo))
+    flush(update(_, System.nanoTime()))
   }
 
   override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
@@ -1430,6 +1442,41 @@ private[spark] class AppStatusListener(
       math.max(retainedSize / 10L, dataSize - retainedSize)
     } else {
       0L
+    }
+  }
+
+  /** Writes the final history snapshot once the application store is closed. */
+  private def writeHistorySnapshot(): Unit = {
+    if (!HistorySnapshotStore.shouldWriteSnapshot(appInfo)) {
+      return
+    }
+
+    val appId = appInfo.id
+    val attemptId = appInfo.attempts.lastOption.flatMap(_.attemptId)
+    val targetManifestPath = HistorySnapshotStore.manifestPath(conf, appId, attemptId)
+    val startNs = System.nanoTime()
+
+    try {
+      HistorySnapshotStore.writeSnapshot(conf, kvstore, appId, attemptId).foreach { manifestPath =>
+        val durationNs = System.nanoTime() - startNs
+        appStatusSource.foreach(_.SNAPSHOT_WRITES.inc())
+        appStatusSource.foreach(_.SNAPSHOT_WRITE_TIME.update(durationNs, TimeUnit.NANOSECONDS))
+
+        val durationMs = TimeUnit.NANOSECONDS.toMillis(durationNs)
+        logInfo(
+          s"Wrote history snapshot to $manifestPath for appId: $appId " +
+            s"in ${Utils.msDurationToString(durationMs)}.")
+      }
+    } catch {
+      case NonFatal(e) =>
+        val durationNs = System.nanoTime() - startNs
+        appStatusSource.foreach(_.SNAPSHOT_WRITE_FAILURES.inc())
+        appStatusSource.foreach(_.SNAPSHOT_WRITE_TIME.update(durationNs, TimeUnit.NANOSECONDS))
+        logWarning(
+          s"Failed to write history snapshot" +
+            targetManifestPath.map(path => s" to $path").getOrElse("") +
+            s" for appId: $appId.",
+          e)
     }
   }
 

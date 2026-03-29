@@ -29,8 +29,10 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
+import org.apache.spark.deploy.history.HistorySnapshotStore
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.resource.ResourceProfile
@@ -156,6 +158,51 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
   }
 
   protected def createStatusStore(): SQLAppStatusStore
+
+  test("history snapshot restores SQL execution data") {
+    val snapshotDir = Utils.createTempDir()
+    val snapshotConf = sparkContext.conf.clone()
+      .set(SNAPSHOT_ENABLED, true)
+      .set(SNAPSHOT_PATH, snapshotDir.getAbsolutePath)
+    val statusStore = createStatusStore()
+    val listener = statusStore.listener.get
+    val executionId = 999L
+    val df = createTestDataFrame
+
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      executionId,
+      Some(executionId),
+      "snapshot-test",
+      "snapshot-test-details",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      System.currentTimeMillis(),
+      Map("spark.sql.shuffle.partitions" -> "4")))
+    listener.onOtherEvent(SparkListenerSQLExecutionEnd(executionId, System.currentTimeMillis()))
+
+    assert(statusStore.execution(executionId).flatMap(_.completionTime).nonEmpty)
+    assert(statusStore.planGraphCount() == 1L)
+
+    val manifestPath = HistorySnapshotStore.writeSnapshot(
+      snapshotConf,
+      kvstore,
+      "sql-snapshot-app",
+      None)
+    assert(manifestPath.isDefined)
+
+    val restored = new InMemoryStore()
+    try {
+      HistorySnapshotStore.restoreSnapshot(snapshotConf, restored, manifestPath.get)
+      val restoredStatusStore = new SQLAppStatusStore(restored)
+      assert(restoredStatusStore.executionsCount() == 1L)
+      assert(restoredStatusStore.planGraphCount() == 1L)
+      assert(restoredStatusStore.execution(executionId).map(_.description) == Some("snapshot-test"))
+      assert(restoredStatusStore.execution(executionId).flatMap(_.completionTime).nonEmpty)
+      assert(restoredStatusStore.planGraph(executionId).nodes.nonEmpty)
+    } finally {
+      restored.close()
+    }
+  }
 
   test("basic") {
     def checkAnswer(actual: Map[Long, String], expected: Map[Long, Long]): Unit = {
