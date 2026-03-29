@@ -302,6 +302,28 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       checkStringToTimestamp("T18:12:15.12312 UTC+07:30", expected)
       checkStringToTimestamp("T18:12:15.12312+0730", expected)
 
+      // Leading whitespace with T prefix
+      expected = Option(time(23, 17, 50, zid = zid))
+      checkStringToTimestamp(" T23:17:50", expected)
+      checkStringToTimestamp("  T23:17:50", expected)
+      expected = Option(time(12, 0, 0, zid = zid))
+      checkStringToTimestamp("  T12:00:00", expected)
+      expected = Option(time(9, 30, 0, zid = zid))
+      checkStringToTimestamp("\tT09:30:00", expected)
+
+      // Leading whitespace with T prefix and time zone
+      zoneId = getZoneId("+07:30")
+      expected = Option(time(18, 12, 15, 123120, zid = zoneId))
+      checkStringToTimestamp(" T18:12:15.12312+7:30", expected)
+      checkStringToTimestamp("  T18:12:15.12312+0730", expected)
+      checkStringToTimestamp(" T18:12:15.12312 UTC+07:30", expected)
+
+      // Leading whitespace with year sign
+      expected = Option(date(10000, 1, 1, zid = zid))
+      checkStringToTimestamp(" +10000-01-01", expected)
+      expected = Option(date(-1, 1, 1, zid = zid))
+      checkStringToTimestamp("  -0001-01-01", expected)
+
       zoneId = getZoneId("+07:30")
       expected = Option(time(18, 12, 15, 123120, zid = zoneId))
       checkStringToTimestamp("18:12:15.12312+7:30", expected)
