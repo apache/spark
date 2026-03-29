@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, Project
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions.JDBC_UPSERT_KEY_COLUMNS
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.functions.{lit, percentile_approx}
 import org.apache.spark.sql.internal.SQLConf
@@ -1167,6 +1168,68 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(oracle.getTruncateQuery(table, Some(true)) == oracleQuery)
     assert(teradata.getTruncateQuery(table, Some(true)) == teradataQuery)
     assert(db2.getTruncateQuery(table, Some(true)) == db2Query)
+  }
+
+  Seq(
+    (JdbcDialects.get("jdbc:mysql://127.0.0.1/db"),
+     """
+       |INSERT INTO table (`id`, `time`, `value`, `comment`)
+       |VALUES ( ?,?,?,? )
+       |ON DUPLICATE KEY UPDATE `value` = VALUES(`value`), `comment` = VALUES(`comment`)
+       |""".stripMargin),
+    (JdbcDialects.get("jdbc:postgresql://127.0.0.1/db"),
+     """
+       |INSERT INTO table ("id", "time", "value", "comment")
+       |VALUES ( ?,?,?,? )
+       |ON CONFLICT ("id", "time")
+       |DO UPDATE SET "value" = EXCLUDED."value", "comment" = EXCLUDED."comment"
+       |""".stripMargin),
+    (JdbcDialects.get("jdbc:sqlserver://localhost/db"),
+     """
+       |DECLARE @param0 BIGINT; SET @param0 = ?;
+       |DECLARE @param1 DATETIME; SET @param1 = ?;
+       |DECLARE @param2 DOUBLE PRECISION; SET @param2 = ?;
+       |DECLARE @param3 NVARCHAR(MAX); SET @param3 = ?;
+       |
+       |INSERT table ("id", "time", "value", "comment")
+       |SELECT @param0, @param1, @param2, @param3
+       |WHERE NOT EXISTS (
+       |    SELECT 1
+       |    FROM table WITH (UPDLOCK, SERIALIZABLE)
+       |    WHERE "id" = @param0 AND "time" = @param1
+       |)
+       |
+       |IF (@@ROWCOUNT = 0)
+       |BEGIN
+       |    UPDATE TOP (1) table
+       |    SET "value" = @param2, "comment" = @param3
+       |    WHERE "id" = @param0 AND "time" = @param1
+       |END
+       |""".stripMargin)
+  ).foreach { case (dialect, expected) =>
+    test(s"upsert table query by dialect - ${dialect.getClass.getSimpleName.stripSuffix("$")}") {
+      assert(dialect.supportsUpsert() === true)
+
+      val options = {
+        new JDBCOptions(Map(
+          JDBC_UPSERT_KEY_COLUMNS -> "id, time",
+          JDBCOptions.JDBC_URL -> url,
+          JDBCOptions.JDBC_TABLE_NAME -> "table"
+        ))
+      }
+
+      val table = "table"
+      val columns = Array(
+        StructField("id", LongType),
+        StructField("time", TimestampType),
+        StructField("value", DoubleType),
+        StructField("comment", StringType)
+      )
+      val isCaseSensitive = false
+      val stmt = dialect.getUpsertStatement(table, columns, isCaseSensitive, options)
+
+      assert(stmt === expected)
+    }
   }
 
   test("Test DataFrame.where for Date and Timestamp") {
