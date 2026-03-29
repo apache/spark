@@ -16,12 +16,13 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
+import java.text.StringCharacterIterator;
+import java.util.Map;
+import java.util.regex.Pattern;
+
 import com.ibm.icu.text.StringSearch;
 
 import org.apache.spark.unsafe.types.UTF8String;
-
-import java.util.Map;
-import java.util.regex.Pattern;
 
 /**
  * Static entry point for collation-aware expressions (StringExpressions, RegexpExpressions, and
@@ -104,6 +105,14 @@ public final class CollationSupport {
       StringSearch stringSearch = CollationFactory.getStringSearch(l, r, collationId);
       return stringSearch.first() != StringSearch.DONE;
     }
+    public static boolean execICU(final UTF8String l, final StringSearch stringSearch) {
+      if (l.numBytes() == 0) return false;
+      stringSearch.setTarget(new StringCharacterIterator(l.toValidString()));
+      return stringSearch.first() != StringSearch.DONE;
+    }
+    public static String genCode(final String l, final String cachedSearch) {
+      return String.format("CollationSupport.Contains.execICU(%s, %s)", l, cachedSearch);
+    }
   }
 
   public static class StartsWith {
@@ -144,6 +153,14 @@ public final class CollationSupport {
       StringSearch stringSearch = CollationFactory.getStringSearch(l, r, collationId);
       return stringSearch.first() == 0;
     }
+    public static boolean execICU(final UTF8String l, final StringSearch stringSearch) {
+      if (l.numBytes() == 0) return false;
+      stringSearch.setTarget(new StringCharacterIterator(l.toValidString()));
+      return stringSearch.first() == 0;
+    }
+    public static String genCode(final String l, final String cachedSearch) {
+      return String.format("CollationSupport.StartsWith.execICU(%s, %s)", l, cachedSearch);
+    }
   }
 
   public static class EndsWith {
@@ -182,6 +199,15 @@ public final class CollationSupport {
       StringSearch stringSearch = CollationFactory.getStringSearch(l, r, collationId);
       int endIndex = stringSearch.getTarget().getEndIndex();
       return stringSearch.last() == endIndex - stringSearch.getMatchLength();
+    }
+    public static boolean execICU(final UTF8String l, final StringSearch stringSearch) {
+      if (l.numBytes() == 0) return false;
+      stringSearch.setTarget(new StringCharacterIterator(l.toValidString()));
+      int endIndex = stringSearch.getTarget().getEndIndex();
+      return stringSearch.last() == endIndex - stringSearch.getMatchLength();
+    }
+    public static String genCode(final String l, final String cachedSearch) {
+      return String.format("CollationSupport.EndsWith.execICU(%s, %s)", l, cachedSearch);
     }
   }
 

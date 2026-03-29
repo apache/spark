@@ -25,6 +25,9 @@ import java.util.{Base64 => JBase64, HashMap, Locale, Map => JMap}
 
 import scala.collection.mutable.ArrayBuffer
 
+import com.ibm.icu.text.StringSearch
+import org.apache.commons.text.StringEscapeUtils
+
 import org.apache.spark.QueryContext
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.catalyst.InternalRow
@@ -615,13 +618,86 @@ object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
 }
 
 case class Contains(left: Expression, right: Expression) extends StringPredicate {
-  override def compare(l: UTF8String, r: UTF8String): Boolean = {
-    CollationSupport.Contains.exec(l, r, collationId)
+
+  @transient private lazy val isICUCollation: Boolean = {
+    val collation = CollationFactory.fetchCollation(collationId)
+    !collation.isUtf8BinaryType && !collation.isUtf8LcaseType
   }
+
+  @transient private lazy val cachedStringSearch: StringSearch = {
+    if (isICUCollation && right.foldable) {
+      val pattern = right.eval().asInstanceOf[UTF8String]
+      if (pattern != null && pattern.numBytes() > 0) {
+        val collation = CollationFactory.fetchCollation(collationId)
+        val patternStr = if (collation.supportsSpaceTrimming) {
+          CollationFactory.applyTrimmingPolicy(pattern, collationId).toValidString()
+        } else {
+          pattern.toValidString()
+        }
+        CollationFactory.getStringSearchForPattern(patternStr, collationId)
+      } else null
+    } else null
+  }
+
+  override def compare(l: UTF8String, r: UTF8String): Boolean = {
+    if (cachedStringSearch != null) {
+      val collation = CollationFactory.fetchCollation(collationId)
+      val target = if (collation.supportsSpaceTrimming) {
+        CollationFactory.applyTrimmingPolicy(l, collationId)
+      } else l
+      CollationSupport.Contains.execICU(target, cachedStringSearch)
+    } else {
+      CollationSupport.Contains.exec(l, r, collationId)
+    }
+  }
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    if (isICUCollation && right.foldable) {
+      val rVal = right.eval()
+      if (rVal != null) {
+        val pattern = rVal.asInstanceOf[UTF8String]
+        if (pattern.numBytes() > 0) {
+          val collation = CollationFactory.fetchCollation(collationId)
+          val patternStr = if (collation.supportsSpaceTrimming) {
+            CollationFactory.applyTrimmingPolicy(pattern, collationId).toValidString()
+          } else {
+            pattern.toValidString()
+          }
+          val escapedPattern = StringEscapeUtils.escapeJava(patternStr)
+          val searchClass = classOf[StringSearch].getName
+          val factoryClass = classOf[CollationFactory].getName
+          val searchInit = s"""$factoryClass""" +
+            s""".getStringSearchForPattern(""" +
+            s""""$escapedPattern", $collationId)"""
+          val cachedSearch = ctx.addMutableState(
+            searchClass, "cachedStringSearch",
+            v => s"""$v = $searchInit;""")
+          val eval = left.genCode(ctx)
+          val targetExpr = if (collation.supportsSpaceTrimming) {
+            s"""$factoryClass.applyTrimmingPolicy(""" +
+              s"""${eval.value}, $collationId)"""
+          } else {
+            s"${eval.value}"
+          }
+          val execCode = s"""CollationSupport""" +
+            s""".Contains.execICU(""" +
+            s"""$targetExpr, $cachedSearch)"""
+          return ev.copy(code = code"""
+            ${eval.code}
+            boolean ${ev.isNull} = ${eval.isNull};
+            ${CodeGenerator.javaType(dataType)} ${ev.value} =
+              ${CodeGenerator.defaultValue(dataType)};
+            if (!${ev.isNull}) {
+              ${ev.value} = $execCode;
+            }
+          """)
+        }
+      }
+    }
     defineCodeGen(ctx, ev, (c1, c2) =>
       CollationSupport.Contains.genCode(c1, c2, collationId))
   }
+
   override def inputTypes : Seq[AbstractDataType] =
     Seq(StringTypeNonCSAICollation(supportsTrimCollation = true),
       StringTypeNonCSAICollation(supportsTrimCollation = true)
@@ -659,11 +735,82 @@ object StartsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilde
 }
 
 case class StartsWith(left: Expression, right: Expression) extends StringPredicate {
+
+  @transient private lazy val isICUCollation: Boolean = {
+    val collation = CollationFactory.fetchCollation(collationId)
+    !collation.isUtf8BinaryType && !collation.isUtf8LcaseType
+  }
+
+  @transient private lazy val cachedStringSearch: StringSearch = {
+    if (isICUCollation && right.foldable) {
+      val pattern = right.eval().asInstanceOf[UTF8String]
+      if (pattern != null && pattern.numBytes() > 0) {
+        val collation = CollationFactory.fetchCollation(collationId)
+        val patternStr = if (collation.supportsSpaceTrimming) {
+          CollationFactory.applyTrimmingPolicy(pattern, collationId).toValidString()
+        } else {
+          pattern.toValidString()
+        }
+        CollationFactory.getStringSearchForPattern(patternStr, collationId)
+      } else null
+    } else null
+  }
+
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
-    CollationSupport.StartsWith.exec(l, r, collationId)
+    if (cachedStringSearch != null) {
+      val collation = CollationFactory.fetchCollation(collationId)
+      val target = if (collation.supportsSpaceTrimming) {
+        CollationFactory.applyTrimmingPolicy(l, collationId)
+      } else l
+      CollationSupport.StartsWith.execICU(target, cachedStringSearch)
+    } else {
+      CollationSupport.StartsWith.exec(l, r, collationId)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    if (isICUCollation && right.foldable) {
+      val rVal = right.eval()
+      if (rVal != null) {
+        val pattern = rVal.asInstanceOf[UTF8String]
+        if (pattern.numBytes() > 0) {
+          val collation = CollationFactory.fetchCollation(collationId)
+          val patternStr = if (collation.supportsSpaceTrimming) {
+            CollationFactory.applyTrimmingPolicy(pattern, collationId).toValidString()
+          } else {
+            pattern.toValidString()
+          }
+          val escapedPattern = StringEscapeUtils.escapeJava(patternStr)
+          val searchClass = classOf[StringSearch].getName
+          val factoryClass = classOf[CollationFactory].getName
+          val searchInit = s"""$factoryClass""" +
+            s""".getStringSearchForPattern(""" +
+            s""""$escapedPattern", $collationId)"""
+          val cachedSearch = ctx.addMutableState(
+            searchClass, "cachedStringSearch",
+            v => s"""$v = $searchInit;""")
+          val eval = left.genCode(ctx)
+          val targetExpr = if (collation.supportsSpaceTrimming) {
+            s"""$factoryClass.applyTrimmingPolicy(""" +
+              s"""${eval.value}, $collationId)"""
+          } else {
+            s"${eval.value}"
+          }
+          val execCode = s"""CollationSupport""" +
+            s""".StartsWith.execICU(""" +
+            s"""$targetExpr, $cachedSearch)"""
+          return ev.copy(code = code"""
+            ${eval.code}
+            boolean ${ev.isNull} = ${eval.isNull};
+            ${CodeGenerator.javaType(dataType)} ${ev.value} =
+              ${CodeGenerator.defaultValue(dataType)};
+            if (!${ev.isNull}) {
+              ${ev.value} = $execCode;
+            }
+          """)
+        }
+      }
+    }
     defineCodeGen(ctx, ev, (c1, c2) =>
       CollationSupport.StartsWith.genCode(c1, c2, collationId))
   }
@@ -708,11 +855,82 @@ object EndsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
 }
 
 case class EndsWith(left: Expression, right: Expression) extends StringPredicate {
+
+  @transient private lazy val isICUCollation: Boolean = {
+    val collation = CollationFactory.fetchCollation(collationId)
+    !collation.isUtf8BinaryType && !collation.isUtf8LcaseType
+  }
+
+  @transient private lazy val cachedStringSearch: StringSearch = {
+    if (isICUCollation && right.foldable) {
+      val pattern = right.eval().asInstanceOf[UTF8String]
+      if (pattern != null && pattern.numBytes() > 0) {
+        val collation = CollationFactory.fetchCollation(collationId)
+        val patternStr = if (collation.supportsSpaceTrimming) {
+          CollationFactory.applyTrimmingPolicy(pattern, collationId).toValidString()
+        } else {
+          pattern.toValidString()
+        }
+        CollationFactory.getStringSearchForPattern(patternStr, collationId)
+      } else null
+    } else null
+  }
+
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
-    CollationSupport.EndsWith.exec(l, r, collationId)
+    if (cachedStringSearch != null) {
+      val collation = CollationFactory.fetchCollation(collationId)
+      val target = if (collation.supportsSpaceTrimming) {
+        CollationFactory.applyTrimmingPolicy(l, collationId)
+      } else l
+      CollationSupport.EndsWith.execICU(target, cachedStringSearch)
+    } else {
+      CollationSupport.EndsWith.exec(l, r, collationId)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    if (isICUCollation && right.foldable) {
+      val rVal = right.eval()
+      if (rVal != null) {
+        val pattern = rVal.asInstanceOf[UTF8String]
+        if (pattern.numBytes() > 0) {
+          val collation = CollationFactory.fetchCollation(collationId)
+          val patternStr = if (collation.supportsSpaceTrimming) {
+            CollationFactory.applyTrimmingPolicy(pattern, collationId).toValidString()
+          } else {
+            pattern.toValidString()
+          }
+          val escapedPattern = StringEscapeUtils.escapeJava(patternStr)
+          val searchClass = classOf[StringSearch].getName
+          val factoryClass = classOf[CollationFactory].getName
+          val searchInit = s"""$factoryClass""" +
+            s""".getStringSearchForPattern(""" +
+            s""""$escapedPattern", $collationId)"""
+          val cachedSearch = ctx.addMutableState(
+            searchClass, "cachedStringSearch",
+            v => s"""$v = $searchInit;""")
+          val eval = left.genCode(ctx)
+          val targetExpr = if (collation.supportsSpaceTrimming) {
+            s"""$factoryClass.applyTrimmingPolicy(""" +
+              s"""${eval.value}, $collationId)"""
+          } else {
+            s"${eval.value}"
+          }
+          val execCode = s"""CollationSupport""" +
+            s""".EndsWith.execICU(""" +
+            s"""$targetExpr, $cachedSearch)"""
+          return ev.copy(code = code"""
+            ${eval.code}
+            boolean ${ev.isNull} = ${eval.isNull};
+            ${CodeGenerator.javaType(dataType)} ${ev.value} =
+              ${CodeGenerator.defaultValue(dataType)};
+            if (!${ev.isNull}) {
+              ${ev.value} = $execCode;
+            }
+          """)
+        }
+      }
+    }
     defineCodeGen(ctx, ev, (c1, c2) =>
       CollationSupport.EndsWith.genCode(c1, c2, collationId))
   }

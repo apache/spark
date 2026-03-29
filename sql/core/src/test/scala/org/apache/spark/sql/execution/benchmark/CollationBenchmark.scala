@@ -18,6 +18,8 @@ package org.apache.spark.sql.execution.benchmark
 
 import scala.concurrent.duration._
 
+import com.ibm.icu.text.StringSearch
+
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.expressions.Murmur3HashFunction
 import org.apache.spark.sql.catalyst.util.{CollationFactory, CollationSupport}
@@ -188,6 +190,123 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
     benchmark.run(relativeTime = true)
   }
 
+  def benchmarkContainsCached(
+      collationTypes: Seq[String],
+      utf8Strings: Seq[UTF8String]): Unit = {
+    val pattern = "abc"
+    val benchmark = new Benchmark(
+      "collation unit benchmarks - contains (fixed pattern)",
+      utf8Strings.size * 10,
+      warmupTime = 10.seconds,
+      output = output)
+    collationTypes.foreach { collationType =>
+      val collationId =
+        CollationFactory.collationNameToId(collationType)
+      val collation =
+        CollationFactory.fetchCollation(collationId)
+      val useCache = collation.getCollator != null
+      benchmark.addCase(s"$collationType") { _ =>
+        if (useCache) {
+          val ss: StringSearch =
+            CollationFactory.getStringSearchForPattern(
+              pattern, collationId)
+          utf8Strings.foreach { s =>
+            (0 to 3).foreach { _ =>
+              CollationSupport.Contains.execICU(s, ss)
+            }
+          }
+        } else {
+          val p = UTF8String.fromString(pattern)
+          utf8Strings.foreach { s =>
+            (0 to 3).foreach { _ =>
+              CollationSupport.Contains.exec(
+                s, p, collationId)
+            }
+          }
+        }
+      }
+    }
+    benchmark.run(relativeTime = true)
+  }
+
+  def benchmarkStartsWithCached(
+      collationTypes: Seq[String],
+      utf8Strings: Seq[UTF8String]): Unit = {
+    val pattern = "abc"
+    val benchmark = new Benchmark(
+      "collation unit benchmarks - startsWith (fixed pattern)",
+      utf8Strings.size * 10,
+      warmupTime = 10.seconds,
+      output = output)
+    collationTypes.foreach { collationType =>
+      val collationId =
+        CollationFactory.collationNameToId(collationType)
+      val collation =
+        CollationFactory.fetchCollation(collationId)
+      val useCache = collation.getCollator != null
+      benchmark.addCase(s"$collationType") { _ =>
+        if (useCache) {
+          val ss: StringSearch =
+            CollationFactory.getStringSearchForPattern(
+              pattern, collationId)
+          utf8Strings.foreach { s =>
+            (0 to 3).foreach { _ =>
+              CollationSupport.StartsWith.execICU(s, ss)
+            }
+          }
+        } else {
+          val p = UTF8String.fromString(pattern)
+          utf8Strings.foreach { s =>
+            (0 to 3).foreach { _ =>
+              CollationSupport.StartsWith.exec(
+                s, p, collationId)
+            }
+          }
+        }
+      }
+    }
+    benchmark.run(relativeTime = true)
+  }
+
+  def benchmarkEndsWithCached(
+      collationTypes: Seq[String],
+      utf8Strings: Seq[UTF8String]): Unit = {
+    val pattern = "abc"
+    val benchmark = new Benchmark(
+      "collation unit benchmarks - endsWith (fixed pattern)",
+      utf8Strings.size * 10,
+      warmupTime = 10.seconds,
+      output = output)
+    collationTypes.foreach { collationType =>
+      val collationId =
+        CollationFactory.collationNameToId(collationType)
+      val collation =
+        CollationFactory.fetchCollation(collationId)
+      val useCache = collation.getCollator != null
+      benchmark.addCase(s"$collationType") { _ =>
+        if (useCache) {
+          val ss: StringSearch =
+            CollationFactory.getStringSearchForPattern(
+              pattern, collationId)
+          utf8Strings.foreach { s =>
+            (0 to 3).foreach { _ =>
+              CollationSupport.EndsWith.execICU(s, ss)
+            }
+          }
+        } else {
+          val p = UTF8String.fromString(pattern)
+          utf8Strings.foreach { s =>
+            (0 to 3).foreach { _ =>
+              CollationSupport.EndsWith.exec(
+                s, p, collationId)
+            }
+          }
+        }
+      }
+    }
+    benchmark.run(relativeTime = true)
+  }
+
   def benchmarkInitCap(
       collationTypes: Seq[String],
       utf8Strings: Seq[UTF8String]): Unit = {
@@ -263,6 +382,9 @@ object CollationBenchmark extends CollationBenchmarkBase {
     benchmarkContains(collationTypes, inputs)
     benchmarkStartsWith(collationTypes, inputs)
     benchmarkEndsWith(collationTypes, inputs)
+    benchmarkContainsCached(collationTypes, inputs)
+    benchmarkStartsWithCached(collationTypes, inputs)
+    benchmarkEndsWithCached(collationTypes, inputs)
     benchmarkInitCap(collationTypes, inputs)
   }
 }
