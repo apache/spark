@@ -151,17 +151,27 @@ class ResolveHintsSuite extends AnalysisTest {
       UnresolvedHint("REPARTITION", Seq(Literal(100.toShort)), table("TaBlE")),
       Repartition(numPartitions = 100, shuffle = true, child = testRelation))
 
-    val errMsg = "COALESCE Hint expects a partition number as a parameter"
+    checkError(
+      exception = intercept[AnalysisException] {
+        getAnalyzer.execute(UnresolvedHint("COALESCE", Seq.empty, table("TaBlE")))
+      },
+      condition = "INVALID_COALESCE_HINT_PARAMETER",
+      parameters = Map("hintName" -> "COALESCE"))
 
-    assertAnalysisError(
-      UnresolvedHint("COALESCE", Seq.empty, table("TaBlE")),
-      Seq(errMsg))
-    assertAnalysisError(
-      UnresolvedHint("COALESCE", Seq(Literal(10), Literal(false)), table("TaBlE")),
-      Seq(errMsg))
-    assertAnalysisError(
-      UnresolvedHint("COALESCE", Seq(Literal(1.0)), table("TaBlE")),
-      Seq(errMsg))
+    checkError(
+      exception = intercept[AnalysisException] {
+        getAnalyzer.execute(
+          UnresolvedHint("COALESCE", Seq(Literal(10), Literal(false)), table("TaBlE")))
+      },
+      condition = "INVALID_COALESCE_HINT_PARAMETER",
+      parameters = Map("hintName" -> "COALESCE"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        getAnalyzer.execute(UnresolvedHint("COALESCE", Seq(Literal(1.0)), table("TaBlE")))
+      },
+      condition = "INVALID_COALESCE_HINT_PARAMETER",
+      parameters = Map("hintName" -> "COALESCE"))
 
     checkAnalysisWithoutViewWrapper(
       UnresolvedHint("RePartition", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),

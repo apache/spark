@@ -1049,7 +1049,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def invalidCoalesceHintParameterError(hintName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1048",
+      errorClass = "INVALID_COALESCE_HINT_PARAMETER",
       messageParameters = Map("hintName" -> hintName))
   }
 
