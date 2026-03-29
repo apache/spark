@@ -401,6 +401,7 @@ public class TaskMemoryManager {
         logger.warn("Failed to allocate a page ({} bytes) for {} times, try again.", e,
             MDC.of(LogKeys.PAGE_SIZE, acquired),
             MDC.of(LogKeys.NUM_RETRY, retryCount));
+        showMemoryUsage();
       } else {
         logger.warn("Failed to allocate a page ({} bytes) for {} times, try again.",
             MDC.of(LogKeys.PAGE_SIZE, acquired),
