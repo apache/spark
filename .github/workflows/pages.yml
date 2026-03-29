@@ -43,17 +43,17 @@ jobs:
     if: github.repository == 'apache/spark'
     steps:
       - name: Checkout Spark repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           repository: apache/spark
           ref: 'master'
       - name: Install Java 17
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5
         with:
           distribution: zulu
           java-version: 17
       - name: Install Python 3.11
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: '3.11'
           architecture: x64
@@ -66,7 +66,7 @@ jobs:
             'pandas-stubs==1.2.0.53' 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.5' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0' \
             'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' 'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' 'sphinxcontrib-serializinghtml==1.1.5'
       - name: Install Ruby for documentation generation
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@4dc28cf14d77b0afa6832d9765ac422dbf0dfedd # v1
         with:
           ruby-version: '3.3'
           bundler-cache: true
@@ -88,11 +88,11 @@ jobs:
           cd docs
           SKIP_RDOC=1 bundle exec jekyll build
       - name: Setup Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
           path: 'docs/_site'
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
