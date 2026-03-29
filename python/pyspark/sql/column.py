@@ -1512,24 +1512,24 @@ class Column(TableValuedFunctionArgument):
         ...
 
     @dispatch_col_method
-    def transform(self, f: Callable[["Column"], "Column"]) -> "Column":
+    def transform(self, f: Union[Callable[["Column"], "Column"], str]) -> "Column":
         """
-        Applies a transformation function to this column.
+        Applies a transformation to this column.
 
-        This method allows you to apply a function that takes a Column and returns a Column,
-        enabling method chaining and functional transformations.
+        Accepts either a Python callable or a SQL lambda expression string.
 
         .. versionadded:: 4.1.0
 
         Parameters
         ----------
-        f : callable
-            A function that takes a :class:`Column` and returns a :class:`Column`.
+        f : callable or str
+            A function that takes a :class:`Column` and returns a :class:`Column`,
+            or a SQL lambda expression string in the format ``'param -> expression'``.
 
         Returns
         -------
         :class:`Column`
-            The result of applying the function to this column.
+            The result of applying the transformation to this column.
 
         Examples
         --------
@@ -1545,7 +1545,7 @@ class Column(TableValuedFunctionArgument):
         | WORLD|
         +------+
 
-        Example 2: Use lambda functions
+        Example 2: Use Python lambda functions
 
         >>> df = spark.createDataFrame([(10,), (20,), (30,)], ["value"])
         >>> df.select(
@@ -1559,6 +1559,29 @@ class Column(TableValuedFunctionArgument):
         |    20|
         |    40|
         |    60|
+        +------+
+
+        Example 3: Use SQL lambda expression
+
+        >>> df = spark.createDataFrame([(1,), (2,), (3,)], ["value"])
+        >>> df.select(df.value.transform('x -> x * 2').alias("result")).show()
+        +------+
+        |result|
+        +------+
+        |     2|
+        |     4|
+        |     6|
+        +------+
+
+        Example 4: SQL lambda with function calls
+
+        >>> df = spark.createDataFrame([("hello",), ("world",)], ["text"])
+        >>> df.select(df.text.transform('x -> upper(x)').alias("result")).show()
+        +------+
+        |result|
+        +------+
+        | HELLO|
+        | WORLD|
         +------+
         """
         ...

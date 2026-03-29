@@ -44,6 +44,7 @@ from pyspark.sql.connect.expressions import (
     LiteralExpression,
     CaseWhen,
     SortOrder,
+    SQLExpression,
     SubqueryExpression,
     CastExpression,
     WindowExpression,
@@ -489,7 +490,30 @@ class Column(ParentColumn):
 
         return Column(WindowExpression(windowFunction=self._expr, windowSpec=window))
 
-    def transform(self, f: Callable[[ParentColumn], ParentColumn]) -> ParentColumn:
+    def transform(self, f: Union[Callable[[ParentColumn], ParentColumn], str]) -> ParentColumn:
+        if isinstance(f, str):
+            arrow_idx = f.find("->")
+            if arrow_idx == -1:
+                raise PySparkValueError(
+                    errorClass="INVALID_LAMBDA_EXPRESSION",
+                    messageParameters={"expression": f},
+                )
+
+            param = f[:arrow_idx].strip()
+            if not param.isidentifier():
+                raise PySparkValueError(
+                    errorClass="INVALID_LAMBDA_EXPRESSION",
+                    messageParameters={"expression": f},
+                )
+
+            # Build: transform(array(col), lambda)[0]
+            # The server-side parser handles the lambda expression natively.
+            lambda_expr = SQLExpression(f)
+            array_col = Column(UnresolvedFunction("array", [self._expr]))
+            transform_col = Column(
+                UnresolvedFunction("transform", [array_col._expr, lambda_expr])
+            )
+            return transform_col[0]
         return f(self)
 
     def outer(self) -> ParentColumn:
