@@ -234,7 +234,7 @@ private[ml] object TreeTests extends SparkFunSuite {
       LabeledPoint(1.0, Vectors.dense(1.0, 1.0)),
       LabeledPoint(1.0, Vectors.dense(1.0, 0.0)),
       LabeledPoint(1.0, Vectors.dense(1.0, 2.0)))
-    sc.parallelize(arr.toImmutableArraySeq)
+    sc.parallelize(arr.toImmutableArraySeq).cache()
   }
 
   /**

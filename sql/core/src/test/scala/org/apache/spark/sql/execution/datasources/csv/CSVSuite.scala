@@ -162,6 +162,42 @@ abstract class CSVSuite
     verifyCars(cars, withHeader = true, checkTypes = true)
   }
 
+  test("SPARK-46959: CSV reader reads data inconsistently depending on column position") {
+    // When escape="" is set, empty quoted strings ("") should be parsed consistently
+    // as empty (and mapped to null via nullValue="") regardless of column position.
+    // Before the fix, the last column on a line would parse "" as a literal '"'.
+    import testImplicits._
+    val data = Seq(
+      """"a";"b";"c";"d"""",
+      """10;100,00;"Some;String";"ok"""",
+      """20;200,00;"";"still ok"""",
+      """30;300,00;"also ok";""  """.trim,
+      """40;400,00;"";""  """.trim
+    )
+    val df = spark.read
+      .option("header", "true")
+      .option("sep", ";")
+      .option("nullValue", "")
+      .option("quote", "\"")
+      .option("escape", "")
+      .csv(spark.createDataset(data))
+
+    val results = df.collect()
+    assert(results.length == 4)
+    // Row 0: both c and d have values
+    assert(results(0).getString(2) == "Some;String")
+    assert(results(0).getString(3) == "ok")
+    // Row 1: c is empty (mid-line), d has a value
+    assert(results(1).getString(2) == null)
+    assert(results(1).getString(3) == "still ok")
+    // Row 2: c has a value, d is empty (last column) - this was the buggy case
+    assert(results(2).getString(2) == "also ok")
+    assert(results(2).getString(3) == null)
+    // Row 3: both c and d are empty
+    assert(results(3).getString(2) == null)
+    assert(results(3).getString(3) == null)
+  }
+
   test("simple csv test with string dataset") {
     val csvDataset = spark.read.text(testFile(carsFile)).as[String]
     val cars = spark.read
