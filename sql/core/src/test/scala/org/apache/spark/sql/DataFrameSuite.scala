@@ -2501,6 +2501,18 @@ class DataFrameSuite extends QueryTest
     assert(d1.exceptAll(d1).count() === 0)
   }
 
+  test("SPARK-54724: dropDuplicates(columns) followed by exceptAll should work") {
+    val df = Seq(("1", "Alice"), ("1", "Bob")).toDF("id", "name")
+    val expected = Seq(("1", "Alice")).toDF("id", "name")
+    // dropDuplicates with a subset of columns followed by exceptAll
+    val result = df.dropDuplicates(Seq("id")).exceptAll(expected)
+    assert(result.count() === 0)
+
+    // Also verify intersectAll works with dropDuplicates(columns)
+    val intersectResult = df.dropDuplicates(Seq("id")).intersectAll(expected)
+    assert(intersectResult.count() === 1)
+  }
+
   test("SPARK-39887: RemoveRedundantAliases should keep attributes of a Union's first child") {
     val df = sql(
       """

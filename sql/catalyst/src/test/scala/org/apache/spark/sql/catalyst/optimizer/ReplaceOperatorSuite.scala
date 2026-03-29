@@ -296,4 +296,30 @@ class ReplaceOperatorSuite extends PlanTest {
     ).analyze
     comparePlans(result, correctAnswer)
   }
+
+  test("SPARK-54724: Deduplicate with subset keys followed by exceptAll") {
+    // Verify that ReplaceDeduplicateWithAggregate runs before RewriteExceptAll
+    // so that the Except plan uses consistent exprIds from the Aggregate output.
+    object OptimizeWithExceptAll extends RuleExecutor[LogicalPlan] {
+      val batches =
+        Batch("Replace Operators", FixedPoint(100),
+          ReplaceDeduplicateWithAggregate,
+          RewriteExceptAll) :: Nil
+    }
+
+    val a = $"a".int
+    val b = $"b".int
+    val left = LocalRelation(Seq(a, b))
+    val right = LocalRelation(Seq(a, b))
+
+    val dedup = Deduplicate(keys = Seq(a), child = left)
+    val except = Except(dedup, right, isAll = true)
+    val plan = except.analyze
+
+    // Should not throw an error due to mismatched exprIds
+    val optimized = OptimizeWithExceptAll.execute(plan)
+    // Verify the Deduplicate and Except have both been replaced
+    assert(!optimized.exists(_.isInstanceOf[Deduplicate]))
+    assert(!optimized.exists(_.isInstanceOf[Except]))
+  }
 }
