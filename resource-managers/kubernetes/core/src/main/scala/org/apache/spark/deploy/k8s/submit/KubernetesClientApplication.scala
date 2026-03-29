@@ -101,9 +101,11 @@ private[spark] class Client(
     kubernetesClient: KubernetesClient,
     watcher: LoggingPodStatusWatcher) extends Logging {
 
+  // Generate the config map name once per Client instance
+  private val configMapName = KubernetesClientUtils.configMapNameDriver
+
   def run(): Unit = {
     val resolvedDriverSpec = builder.buildFromFeatures(conf, kubernetesClient)
-    val configMapName = KubernetesClientUtils.configMapNameDriver
     val confFilesMap = KubernetesClientUtils.buildSparkConfDirFilesMap(configMapName,
       conf.sparkConf, resolvedDriverSpec.systemProperties)
     val configMap = KubernetesClientUtils.buildConfigMap(configMapName, confFilesMap +
