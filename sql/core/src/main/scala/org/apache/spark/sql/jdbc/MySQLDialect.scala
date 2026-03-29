@@ -167,7 +167,8 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
         // scalastyle:on line.size.limit
         Some(StringType)
       case Types.TINYINT =>
-        if (md.build().getBoolean("isSigned")) {
+        if (md.build().getBoolean("isSigned") ||
+            conf.legacyMySqlUnsignedTinyIntMappingEnabled) {
           Some(ByteType)
         } else {
           Some(ShortType)
