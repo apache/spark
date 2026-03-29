@@ -144,6 +144,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         SimplifyBinaryComparison,
         ReplaceNullWithFalseInPredicate,
         PruneFilters,
+        PropagateEmptyRelation,
         SimplifyCasts,
         SimplifyCaseConversionExpressions,
         SimplifyDateTimeConversions,
