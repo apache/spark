@@ -36,7 +36,7 @@ class PushFoldableIntoBranchesSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("PushFoldableIntoBranches", FixedPoint(50),
-      BooleanSimplification, ConstantFolding, SimplifyConditionals, PushFoldableIntoBranches) :: Nil
+      SimplifyConditionals, BooleanSimplification, ConstantFolding, PushFoldableIntoBranches) :: Nil
   }
 
   private val relation = LocalRelation($"a".int, $"b".int, $"c".boolean)
