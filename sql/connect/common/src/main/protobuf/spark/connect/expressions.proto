@@ -20,6 +20,7 @@ syntax = 'proto3';
 import "google/protobuf/any.proto";
 import "spark/connect/types.proto";
 import "spark/connect/common.proto";
+import "spark/connect/udf_protocol.proto";
 
 package spark.connect;
 
@@ -431,6 +432,7 @@ message CommonInlineUserDefinedFunction {
     PythonUDF python_udf = 4;
     ScalarScalaUDF scalar_scala_udf = 5;
     JavaUDF java_udf = 6;
+    ExternalUDF external_udf = 8;  // SPARK-55278: Language-agnostic external UDF
   }
   // (Required) Indicate if this function should be applied on distinct values.
   bool is_distinct = 7;
@@ -471,6 +473,28 @@ message JavaUDF {
 
   // (Required) Indicate if the Java user-defined function is an aggregate function
   bool aggregate = 3;
+}
+
+// SPARK-55278: Language-agnostic external UDF definition.
+// Enables UDFs written in any language (Python, Go, Rust, etc.)
+// to execute within Spark via the gRPC + Arrow IPC protocol.
+message ExternalUDF {
+  // (Required) Language identifier, e.g. "python", "go", "rust", "swift"
+  string language = 1;
+  // (Required) UDF execution mode
+  UdfMode mode = 2;
+  // (Required) Language-specific serialized function payload
+  bytes serialized_payload = 3;
+  // (Required) Payload format identifier, e.g. "cloudpickle", "source", "wasm", "entry_point"
+  string payload_format = 4;
+  // (Required) Spark SQL return type
+  DataType return_type = 5;
+  // (Optional) UDF-specific configuration
+  map<string, string> config = 6;
+  // (Optional) For pre-compiled or module-reference UDFs: "module:function" or symbol name
+  string entry_point = 7;
+  // (Optional) Pre-compiled binary/bytecode
+  bytes compiled_artifact = 8;
 }
 
 message TypedAggregateExpression {
