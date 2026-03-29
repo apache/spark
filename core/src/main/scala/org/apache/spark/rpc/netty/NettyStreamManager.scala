@@ -59,7 +59,11 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
       case other =>
         val dir = dirs.get(ftype)
         require(dir != null, s"Invalid stream URI: $ftype not found.")
-        new File(dir, fname)
+        val child = new File(dir, fname).getCanonicalFile
+        val dirPath = dir.getCanonicalPath + File.separator
+        require(child.getCanonicalPath.startsWith(dirPath),
+          s"Invalid stream URI: path traversal not allowed.")
+        child
     }
 
     if (file != null && file.isFile()) {
