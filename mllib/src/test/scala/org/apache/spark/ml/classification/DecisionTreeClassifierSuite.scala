@@ -49,27 +49,28 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
     super.beforeAll()
     categoricalDataPointsRDD =
       sc.parallelize(
-        OldDecisionTreeSuite.generateCategoricalDataPoints().toImmutableArraySeq).map(_.asML)
+        OldDecisionTreeSuite.generateCategoricalDataPoints().toImmutableArraySeq)
+        .map(_.asML).cache()
     orderedLabeledPointsWithLabel0RDD =
       sc.parallelize(
         OldDecisionTreeSuite.generateOrderedLabeledPointsWithLabel0().toImmutableArraySeq)
-        .map(_.asML)
+        .map(_.asML).cache()
     orderedLabeledPointsWithLabel1RDD =
       sc.parallelize(
         OldDecisionTreeSuite.generateOrderedLabeledPointsWithLabel1().toImmutableArraySeq)
-        .map(_.asML)
+        .map(_.asML).cache()
     categoricalDataPointsForMulticlassRDD =
       sc.parallelize(
         OldDecisionTreeSuite.generateCategoricalDataPointsForMulticlass().toImmutableArraySeq)
-        .map(_.asML)
+        .map(_.asML).cache()
     continuousDataPointsForMulticlassRDD =
       sc.parallelize(
         OldDecisionTreeSuite.generateContinuousDataPointsForMulticlass().toImmutableArraySeq)
-        .map(_.asML)
+        .map(_.asML).cache()
     categoricalDataPointsForMulticlassForOrderedFeaturesRDD = sc.parallelize(
       OldDecisionTreeSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures()
         .toImmutableArraySeq)
-      .map(_.asML)
+      .map(_.asML).cache()
   }
 
   test("params") {

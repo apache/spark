@@ -151,23 +151,27 @@ class BitwiseExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(BitwiseCount(Literal(1.toByte)), 1)
     checkEvaluation(BitwiseCount(Literal(2.toByte)), 1)
     checkEvaluation(BitwiseCount(Literal(3.toByte)), 2)
+    checkEvaluation(BitwiseCount(Literal(-1.toByte)), 8)
 
     // short/smallint
     checkEvaluation(BitwiseCount(Literal(1.toShort)), 1)
     checkEvaluation(BitwiseCount(Literal(2.toShort)), 1)
     checkEvaluation(BitwiseCount(Literal(3.toShort)), 2)
+    checkEvaluation(BitwiseCount(Literal(-1.toShort)), 16)
+    checkEvaluation(BitwiseCount(Literal(-256.toShort)), 8)
 
     // int
     checkEvaluation(BitwiseCount(Literal(1)), 1)
     checkEvaluation(BitwiseCount(Literal(2)), 1)
     checkEvaluation(BitwiseCount(Literal(3)), 2)
+    checkEvaluation(BitwiseCount(Literal(-1)), 32)
+    checkEvaluation(BitwiseCount(Literal(-65536)), 16)
+    checkEvaluation(BitwiseCount(Literal(-2147483648)), 1)
 
     // long/bigint
     checkEvaluation(BitwiseCount(Literal(1L)), 1)
     checkEvaluation(BitwiseCount(Literal(2L)), 1)
     checkEvaluation(BitwiseCount(Literal(3L)), 2)
-
-    // negative num
     checkEvaluation(BitwiseCount(Literal(-1L)), 64)
 
     // edge value
