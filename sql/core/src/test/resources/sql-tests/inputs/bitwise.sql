@@ -30,6 +30,12 @@ select bit_count(3L);
 -- negative num
 select bit_count(-1L);
 
+-- single-argument backward compatibility: negative values respect type bit width
+select bit_count(cast(-1 as tinyint));
+select bit_count(cast(-1 as smallint));
+select bit_count(-1);
+select bit_count(-1L);
+
 -- edge value
 select bit_count(9223372036854775807L);
 select bit_count(-9223372036854775808L);
@@ -37,6 +43,22 @@ select bit_count(-9223372036854775808L);
 -- other illegal arguments
 select bit_count("bit count");
 select bit_count('a');
+
+-- two-argument bit_count (Trino-compatible)
+select bit_count(9, 64);
+select bit_count(9, 8);
+select bit_count(-7, 64);
+select bit_count(-7, 8);
+select bit_count(0, 8);
+select bit_count(-1, 8);
+select bit_count(-1, 64);
+
+-- two-argument bit_count error cases
+select bit_count(9, 0);
+select bit_count(9, 65);
+select bit_count(9, null);
+select bit_count(9, 'a');
+select bit_count(9, 8, 3);
 
 -- test for bit_xor
 --

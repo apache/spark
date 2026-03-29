@@ -3764,17 +3764,27 @@ def bitwise_not(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def bit_count(col: "ColumnOrName") -> Column:
+def bit_count(col: "ColumnOrName", bits: Optional[Union[Column, int]] = None) -> Column:
     """
     Returns the number of bits that are set in the argument expr as an unsigned 64-bit integer,
     or NULL if the argument is NULL.
 
+    If bits is specified, treats expr as a bits-bit signed integer in 2's complement
+    representation before counting set bits.
+
     .. versionadded:: 3.5.0
+
+    .. versionchanged:: 4.2.0
+        Added optional `bits` parameter for Trino-compatible bit width control.
 
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
+    bits : :class:`~pyspark.sql.Column` or int, optional
+        the bit width to use for counting. Must be between 1 and 64.
+
+        .. versionadded:: 4.2.0
 
     Returns
     -------
@@ -3801,8 +3811,21 @@ def bit_count(col: "ColumnOrName") -> Column:
     |    3|               2|
     | NULL|            NULL|
     +-----+----------------+
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.bit_count(sf.lit(-7), 8)).show()
+    +----------------+
+    |bit_count(-7, 8)|
+    +----------------+
+    |               6|
+    +----------------+
     """
-    return _invoke_function_over_columns("bit_count", col)
+    if bits is None:
+        return _invoke_function_over_columns("bit_count", col)
+    else:
+        bits = _enum_to_value(bits)
+        bits = lit(bits) if isinstance(bits, int) else bits
+        return _invoke_function_over_columns("bit_count", col, bits)
 
 
 @_try_remote_functions

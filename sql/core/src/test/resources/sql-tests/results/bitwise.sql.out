@@ -2,7 +2,7 @@
 -- !query
 select bit_count(null)
 -- !query schema
-struct<bit_count(NULL):int>
+struct<bit_count(NULL, 64):int>
 -- !query output
 NULL
 
@@ -128,6 +128,38 @@ struct<bit_count(-1):int>
 
 
 -- !query
+select bit_count(cast(-1 as tinyint))
+-- !query schema
+struct<bit_count(CAST(-1 AS TINYINT)):int>
+-- !query output
+8
+
+
+-- !query
+select bit_count(cast(-1 as smallint))
+-- !query schema
+struct<bit_count(CAST(-1 AS SMALLINT)):int>
+-- !query output
+16
+
+
+-- !query
+select bit_count(-1)
+-- !query schema
+struct<bit_count(-1):int>
+-- !query output
+32
+
+
+-- !query
+select bit_count(-1L)
+-- !query schema
+struct<bit_count(-1):int>
+-- !query output
+64
+
+
+-- !query
 select bit_count(9223372036854775807L)
 -- !query schema
 struct<bit_count(9223372036854775807):int>
@@ -191,6 +223,183 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 8,
     "stopIndex" : 21,
     "fragment" : "bit_count('a')"
+  } ]
+}
+
+
+-- !query
+select bit_count(9, 64)
+-- !query schema
+struct<bit_count(9, 64):int>
+-- !query output
+2
+
+
+-- !query
+select bit_count(9, 8)
+-- !query schema
+struct<bit_count(9, 8):int>
+-- !query output
+2
+
+
+-- !query
+select bit_count(-7, 64)
+-- !query schema
+struct<bit_count(-7, 64):int>
+-- !query output
+62
+
+
+-- !query
+select bit_count(-7, 8)
+-- !query schema
+struct<bit_count(-7, 8):int>
+-- !query output
+6
+
+
+-- !query
+select bit_count(0, 8)
+-- !query schema
+struct<bit_count(0, 8):int>
+-- !query output
+0
+
+
+-- !query
+select bit_count(-1, 8)
+-- !query schema
+struct<bit_count(-1, 8):int>
+-- !query output
+8
+
+
+-- !query
+select bit_count(-1, 64)
+-- !query schema
+struct<bit_count(-1, 64):int>
+-- !query output
+64
+
+
+-- !query
+select bit_count(9, 0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.BITS_RANGE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`bit_count`",
+    "invalidValue" : "0",
+    "parameter" : "`bits`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "bit_count(9, 0)"
+  } ]
+}
+
+
+-- !query
+select bit_count(9, 65)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.BITS_RANGE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`bit_count`",
+    "invalidValue" : "65",
+    "parameter" : "`bits`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "bit_count(9, 65)"
+  } ]
+}
+
+
+-- !query
+select bit_count(9, null)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "sqlState" : "42K08",
+  "messageParameters" : {
+    "funcName" : "`bit_count`",
+    "paramName" : "`bits`",
+    "paramType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "bit_count(9, null)"
+  } ]
+}
+
+
+-- !query
+select bit_count(9, 'a')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "sqlState" : "42K08",
+  "messageParameters" : {
+    "funcName" : "`bit_count`",
+    "paramName" : "`bits`",
+    "paramType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "bit_count(9, 'a')"
+  } ]
+}
+
+
+-- !query
+select bit_count(9, 8, 3)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "3",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "[1, 2]",
+    "functionName" : "`bit_count`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "bit_count(9, 8, 3)"
   } ]
 }
 

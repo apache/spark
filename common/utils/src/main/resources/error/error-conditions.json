@@ -4050,6 +4050,16 @@
           "expects one of binary formats 'base64', 'hex', 'utf-8', but got <invalidFormat>."
         ]
       },
+      "BITS_RANGE" : {
+        "message" : [
+          "expects an integer value in [1, 64], but got <invalidValue>."
+        ]
+      },
+      "BITS_VALUE_OUT_OF_RANGE" : {
+        "message" : [
+          "expects a value in the range of a <bits>-bit signed integer [<lower>, <upper>], but got <invalidValue>."
+        ]
+      },
       "BIT_POSITION_RANGE" : {
         "message" : [
           "expects an integer value in [0, <upper>), but got <invalidValue>."
