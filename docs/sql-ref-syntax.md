@@ -83,6 +83,7 @@ ability to generate logical and physical plan for a given query using
    * [Window Function](sql-ref-syntax-qry-select-window.html)
    * [CASE Clause](sql-ref-syntax-qry-select-case.html)
    * [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)
+   * [Temporal Clause](sql-ref-syntax-qry-select-temporal.html)
    * [UNPIVOT Clause](sql-ref-syntax-qry-select-unpivot.html)
    * [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)
    * [LATERAL SUBQUERY](sql-ref-syntax-qry-select-lateral-subquery.html)
