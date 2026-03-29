@@ -83,7 +83,7 @@ You can enable the `yarn` profile and specify the exact version of Hadoop to com
 
 Example:
 
-    ./build/mvn -Pyarn -Dhadoop.version=3.4.3 -DskipTests clean package
+    ./build/mvn -Pyarn -Dhadoop.version=3.5.0 -DskipTests clean package
 
 ## Building With Hive and JDBC Support
 
