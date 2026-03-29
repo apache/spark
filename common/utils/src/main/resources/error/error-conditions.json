@@ -1796,11 +1796,6 @@
         "message" : [
           ""
         ]
-      },
-      "WITH_SUGGESTION" : {
-        "message" : [
-          "If necessary set <ansiConfig> to \"false\" to bypass this error."
-        ]
       }
     },
     "sqlState" : "22023"
