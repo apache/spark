@@ -16,6 +16,7 @@
 #
 
 import unittest
+from unittest.mock import patch
 
 from pyspark.sql.types import (
     StructType,
@@ -50,6 +51,61 @@ if should_test_connect:
 
 
 class SparkConnectDataFramePropertyTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
+    def test_metadata_plan_is_reused_across_metadata_access(self):
+        cdf = self.connect.range(10).withColumn("value2", CF.lit(1))
+        with patch.object(cdf._plan, "to_proto", wraps=cdf._plan.to_proto) as to_proto:
+            self.assertEqual(cdf.columns, ["id", "value2"])
+            self.assertEqual(cdf.schema.fieldNames(), ["id", "value2"])
+            self.assertIsInstance(cdf.isLocal(), bool)
+            self.assertIsInstance(cdf.isStreaming, bool)
+            self.assertEqual(list(cdf.inputFiles()), [])
+            self.assertIsInstance(cdf.semanticHash(), int)
+        self.assertEqual(to_proto.call_count, 1)
+
+    def test_same_object_metadata_uses_single_schema_rpc(self):
+        cdf = self.connect.range(10).withColumn("value2", CF.lit(1))
+
+        with patch.object(
+            cdf._session.client, "schema", wraps=cdf._session.client.schema
+        ) as schema:
+            self.assertEqual(cdf.columns, ["id", "value2"])
+            self.assertEqual(cdf.schema.fieldNames(), ["id", "value2"])
+            self.assertEqual([field for field, _ in cdf.dtypes], ["id", "value2"])
+            self.assertEqual(cdf.schema.fieldNames(), ["id", "value2"])
+
+        self.assertEqual(schema.call_count, 1)
+
+    def test_schema_preserving_metadata_reuses_cached_schema(self):
+        cdf = self.connect.range(10).withColumn("value2", CF.lit(1))
+
+        with patch.object(
+            cdf._session.client, "schema", wraps=cdf._session.client.schema
+        ) as schema:
+            self.assertEqual(cdf.schema.fieldNames(), ["id", "value2"])
+            self.assertEqual(schema.call_count, 1)
+
+            filtered = cdf.where(cdf.value2 > 0)
+            self.assertEqual(filtered.columns, ["id", "value2"])
+            self.assertEqual([field for field, _ in filtered.dtypes], ["id", "value2"])
+
+        self.assertEqual(schema.call_count, 1)
+
+    def test_schema_mutating_metadata_triggers_one_new_schema_rpc(self):
+        base = self.connect.range(10)
+
+        with patch.object(
+            base._session.client, "schema", wraps=base._session.client.schema
+        ) as schema:
+            self.assertEqual(base.schema.fieldNames(), ["id"])
+            self.assertEqual(schema.call_count, 1)
+
+            derived = base.withColumn("value2", CF.lit(1))
+            self.assertEqual(derived.columns, ["id", "value2"])
+            self.assertEqual(schema.call_count, 2)
+            self.assertEqual(derived.schema.fieldNames(), ["id", "value2"])
+
+        self.assertEqual(schema.call_count, 2)
+
     def test_cached_property_is_copied(self):
         schema = StructType(
             [

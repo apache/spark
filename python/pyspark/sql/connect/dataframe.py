@@ -92,6 +92,8 @@ from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignor
 from pyspark.sql.table_arg import TableArg
 
 if TYPE_CHECKING:
+    import pyspark.sql.connect.proto as proto
+
     from pyspark.sql.connect._typing import (
         ColumnOrName,
         ColumnOrNameOrOrdinal,
@@ -145,6 +147,20 @@ class DataFrame(ParentDataFrame):
         self._cached_schema: Optional[StructType] = None
         self._cached_schema_serialized: Optional[bytes] = None
         self._execution_info: Optional["ExecutionInfo"] = None
+
+    @functools.cached_property
+    def _metadata_plan(self) -> "proto.Plan":
+        # Connect DataFrames are immutable on the client so metadata requests can safely
+        # reuse the unresolved proto plan. Keeping metadata on one path also leaves a single
+        # insertion point for future session-scoped metadata caching.
+        try:
+            return self._plan.to_proto(self._session.client)
+        except (AttributeError, LookupError):
+            # Plan-only tests use a lightweight mock session without a .client property.
+            return self._plan.to_proto(cast(Any, self._session))
+
+    def _resolve_schema(self) -> StructType:
+        return self._session.client.schema(self._metadata_plan)
 
     def __reduce__(self) -> Tuple:
         """
@@ -1996,8 +2012,7 @@ class DataFrame(ParentDataFrame):
         # etc...) of the plan changes between the schema() call, and a subsequent action, the
         # cached schema might be inconsistent with the end schema.
         if self._cached_schema is None:
-            query = self._plan.to_proto(self._session.client)
-            self._cached_schema = self._session.client.schema(query)
+            self._cached_schema = self._resolve_schema()
             try:
                 self._cached_schema_serialized = CPickleSerializer().dumps(self._schema)
             except Exception as e:
@@ -2019,15 +2034,15 @@ class DataFrame(ParentDataFrame):
 
     @functools.cache
     def isLocal(self) -> bool:
-        query = self._plan.to_proto(self._session.client)
-        result = self._session.client._analyze(method="is_local", plan=query).is_local
+        result = self._session.client._analyze(method="is_local", plan=self._metadata_plan).is_local
         assert result is not None
         return result
 
     @functools.cached_property
     def isStreaming(self) -> bool:
-        query = self._plan.to_proto(self._session.client)
-        result = self._session.client._analyze(method="is_streaming", plan=query).is_streaming
+        result = self._session.client._analyze(
+            method="is_streaming", plan=self._metadata_plan
+        ).is_streaming
         assert result is not None
         return result
 
@@ -2039,8 +2054,9 @@ class DataFrame(ParentDataFrame):
 
     @functools.cache
     def inputFiles(self) -> List[str]:
-        query = self._plan.to_proto(self._session.client)
-        result = self._session.client._analyze(method="input_files", plan=query).input_files
+        result = self._session.client._analyze(
+            method="input_files", plan=self._metadata_plan
+        ).input_files
         assert result is not None
         return result
 
@@ -2121,8 +2137,7 @@ class DataFrame(ParentDataFrame):
         elif is_extended_as_mode:
             explain_mode = cast(str, extended)
 
-        query = self._plan.to_proto(self._session.client)
-        return self._session.client.explain_string(query, explain_mode)
+        return self._session.client.explain_string(self._metadata_plan, explain_mode)
 
     def explain(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
@@ -2332,14 +2347,14 @@ class DataFrame(ParentDataFrame):
             )
         other = self._check_same_session(other)
         return self._session.client.same_semantics(
-            plan=self._plan.to_proto(self._session.client),
-            other=other._plan.to_proto(other._session.client),
+            plan=self._metadata_plan,
+            other=other._metadata_plan,
         )
 
     @functools.cache
     def semanticHash(self) -> int:
         return self._session.client.semantic_hash(
-            plan=self._plan.to_proto(self._session.client),
+            plan=self._metadata_plan,
         )
 
     def writeTo(self, table: str) -> "DataFrameWriterV2":

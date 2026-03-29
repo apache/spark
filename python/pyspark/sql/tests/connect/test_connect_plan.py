@@ -19,6 +19,7 @@ import uuid
 import datetime
 import decimal
 import math
+from unittest.mock import patch
 
 from pyspark.testing.connectutils import (
     PlanOnlyTestFixture,
@@ -51,6 +52,13 @@ if should_test_connect:
 class SparkConnectPlanTests(PlanOnlyTestFixture):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""
+
+    def test_metadata_plan_is_cached(self):
+        df = self.connect.readTable(table_name=self.tbl_name)
+        with patch.object(df._plan, "to_proto", wraps=df._plan.to_proto) as to_proto:
+            self.assertIs(df._metadata_plan, df._metadata_plan)
+
+        self.assertEqual(to_proto.call_count, 1)
 
     def test_sql_project(self):
         plan = self.connect.sql("SELECT 1")._plan.to_proto(self.connect)
