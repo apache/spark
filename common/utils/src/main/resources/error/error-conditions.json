@@ -5056,6 +5056,12 @@
     ],
     "sqlState" : "42803"
   },
+  "MISSING_STATIC_PARTITION_COLUMN" : {
+    "message" : [
+      "Static partition column <staticName> is not found in the table."
+    ],
+    "sqlState" : "42703"
+  },
   "MISSING_TIMEOUT_CONFIGURATION" : {
     "message" : [
       "The operation has timed out, but no timeout duration is configured. To set a processing time-based timeout, use 'GroupState.setTimeoutDuration()' in your 'mapGroupsWithState' or 'flatMapGroupsWithState' operation. For event-time-based timeout, use 'GroupState.setTimeoutTimestamp()' and define a watermark using 'Dataset.withWatermark()'."
