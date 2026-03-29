@@ -428,4 +428,15 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
       assert(aliasedRelation.analyze.constraints.isEmpty)
     }
   }
+
+  test("constructIsNotNullConstraints should not crash on unresolved attributes") {
+    val helper = new ConstraintHelper {}
+    val resolved = AttributeReference("a", IntegerType, nullable = false)()
+    val unresolved = UnresolvedAttribute("b")
+    val output = Seq(resolved, unresolved)
+
+    val result = helper.constructIsNotNullConstraints(ExpressionSet(), output)
+    assert(result.contains(IsNotNull(resolved)))
+    assert(result.size === 1)
+  }
 }

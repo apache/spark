@@ -100,7 +100,7 @@ trait ConstraintHelper {
 
     // Second, we infer additional constraints from non-nullable attributes that are part of the
     // operator's output
-    val nonNullableAttributes = output.filterNot(_.nullable)
+    val nonNullableAttributes = output.filter(a => a.resolved && !a.nullable)
     isNotNullConstraints ++= nonNullableAttributes.map(IsNotNull)
 
     isNotNullConstraints -- constraints

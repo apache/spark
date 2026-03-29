@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -398,5 +399,31 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val optimizedQuery = InferFiltersFromConstraints(originalQuery)
     comparePlans(optimizedQuery, correctAnswer)
     comparePlans(InferFiltersFromConstraints(optimizedQuery), correctAnswer)
+  }
+
+  test("SPARK-56181: should not crash when plan output contains unresolved attributes") {
+    // Reproduces an issue where a REPLACE TABLE AS SELECT query submitted via Spark Connect
+    // hit UnresolvedException during optimizer constraint inference. The stack trace:
+    //   UnresolvedAttribute.nullable -> constructIsNotNullConstraints -> constraints ->
+    //   InferFiltersFromConstraints.inferFilters
+    //
+    // Root cause: a plan node's output contained UnresolvedAttribute (produced by
+    // Alias.toAttribute when the Alias is unresolved), and constructIsNotNullConstraints
+    // called output.filterNot(_.nullable) which threw on the UnresolvedAttribute.
+    val resolvedAttr = testRelation.output.head
+    val unresolvedAlias = Alias(UnresolvedAttribute("unknown_col"), "x")()
+    val projectWithUnresolved = Project(
+      Seq(resolvedAttr, unresolvedAlias),
+      testRelation
+    )
+    val filterPlan = Filter(
+      GreaterThan(resolvedAttr, Literal(5)),
+      projectWithUnresolved
+    )
+
+    // Without the fix, this throws:
+    //   org.apache.spark.sql.catalyst.analysis.UnresolvedException: nullable
+    val result = InferFiltersFromConstraints(filterPlan)
+    assert(result != null)
   }
 }
