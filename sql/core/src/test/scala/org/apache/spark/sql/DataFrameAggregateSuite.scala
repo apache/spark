@@ -24,7 +24,7 @@ import scala.util.Random
 
 import org.scalatest.matchers.must.Matchers.the
 
-import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
+import org.apache.spark.{SparkArithmeticException, SparkNumberFormatException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
@@ -4803,6 +4803,699 @@ class DataFrameAggregateSuite extends QueryTest
       .collect()(0)(0)
     assert(estimate != null)
     assert(estimate.asInstanceOf[Double] == 2.0)
+  }
+
+  test("items_sketch_agg + items_sketch_get_frequent_items + items_sketch_get_estimate " +
+    "positive tests") {
+    val df1 = Seq(
+      (1, "a"), (1, "a"), (1, "a"), (1, "b"), (1, "c"), (1, "c"), (1, "d")
+    ).toDF("id", "value")
+    df1.createOrReplaceTempView("items_df1")
+
+    val df2 = Seq(
+      (1, "a"), (1, "c"), (1, "d"), (1, "d"), (1, "d"), (1, "e"), (1, "e"), (1, "f")
+    ).toDF("id", "value")
+    df2.createOrReplaceTempView("items_df2")
+
+    // Test items_sketch_agg via DataFrame API with default and explicit maxMapSize
+    val res1 = df1
+      .groupBy("id")
+      .agg(
+        items_sketch_agg("value").as("sketch_1"),
+        items_sketch_agg("value", 64).as("sketch_2"))
+
+    // Verify sketches are non-null binary
+    val row1 = res1.collect()(0)
+    assert(row1.getAs[Array[Byte]]("sketch_1").length > 0)
+    assert(row1.getAs[Array[Byte]]("sketch_2").length > 0)
+
+    // Test items_sketch_get_estimate via DataFrame API
+    val res2 = df1
+      .groupBy("id")
+      .agg(items_sketch_agg($"value").as("sketch"))
+      .withColumn("est_a", items_sketch_get_estimate($"sketch", lit("a")))
+      .withColumn("est_b", items_sketch_get_estimate($"sketch", lit("b")))
+      .withColumn("est_z", items_sketch_get_estimate($"sketch", lit("z")))
+    val row2 = res2.collect()(0)
+    assert(row2.getAs[Long]("est_a") == 3L)
+    assert(row2.getAs[Long]("est_b") == 1L)
+    assert(row2.getAs[Long]("est_z") == 0L)
+
+    // Test items_sketch_get_frequent_items with NO_FALSE_POSITIVES via DataFrame API
+    val res3 = df1
+      .groupBy("id")
+      .agg(items_sketch_agg($"value").as("sketch"))
+      .select(items_sketch_get_frequent_items($"sketch", "NO_FALSE_POSITIVES").as("freq"))
+    val freq3 = res3.collect()(0).getSeq[Any](0)
+    assert(freq3.nonEmpty)
+
+    // Test items_sketch_get_frequent_items with NO_FALSE_NEGATIVES
+    val res4 = df1
+      .groupBy("id")
+      .agg(items_sketch_agg($"value").as("sketch"))
+      .select(items_sketch_get_frequent_items($"sketch", "NO_FALSE_NEGATIVES").as("freq"))
+    val freq4 = res4.collect()(0).getSeq[Any](0)
+    assert(freq4.nonEmpty)
+    // NO_FALSE_NEGATIVES should return at least as many items as NO_FALSE_POSITIVES
+    assert(freq4.size >= freq3.size)
+
+    // Test via SQL
+    val res5 = sql(
+      """WITH sketches AS (
+        |  SELECT id,
+        |    items_sketch_agg(value) AS sketch_1,
+        |    items_sketch_agg(value, 64) AS sketch_2
+        |  FROM items_df1
+        |  GROUP BY id
+        |)
+        |SELECT
+        |  id,
+        |  items_sketch_get_estimate(sketch_1, 'a') AS est_a,
+        |  items_sketch_get_estimate(sketch_1, 'b') AS est_b,
+        |  items_sketch_get_estimate(sketch_1, 'z') AS est_z
+        |FROM sketches
+        |""".stripMargin)
+    checkAnswer(res5, Row(1, 3L, 1L, 0L))
+
+    // Test items_sketch_get_frequent_items via SQL
+    val res6 = sql(
+      """SELECT items_sketch_get_frequent_items(
+        |  items_sketch_agg(col), 'NO_FALSE_POSITIVES')
+        |FROM VALUES ('a'), ('a'), ('a'), ('b'), ('c') tab(col)
+        |""".stripMargin)
+    val freq6 = res6.collect()(0).getSeq[Any](0)
+    assert(freq6.nonEmpty)
+  }
+
+  test("items_sketch_agg with multiple data types") {
+    // Integer type
+    val intDf = Seq((1, 10), (1, 10), (1, 10), (1, 20), (1, 30)).toDF("id", "value")
+    val intSketch = intDf
+      .groupBy("id")
+      .agg(items_sketch_agg($"value").as("sketch"))
+      .select(items_sketch_get_estimate($"sketch", lit("10")))
+      .collect()(0)(0)
+    assert(intSketch.asInstanceOf[Long] == 3L)
+
+    // Long type
+    val longDf = Seq((1, 100L), (1, 100L), (1, 200L)).toDF("id", "value")
+    val longSketch = longDf
+      .groupBy("id")
+      .agg(items_sketch_agg($"value").as("sketch"))
+      .select(items_sketch_get_estimate($"sketch", lit("100")))
+      .collect()(0)(0)
+    assert(longSketch.asInstanceOf[Long] == 2L)
+
+    // Double type
+    val doubleDf = Seq((1, 1.5), (1, 1.5), (1, 2.5)).toDF("id", "value")
+    val doubleSketch = doubleDf
+      .groupBy("id")
+      .agg(items_sketch_agg($"value").as("sketch"))
+      .select(items_sketch_get_estimate($"sketch", lit("1.5")))
+      .collect()(0)(0)
+    assert(doubleSketch.asInstanceOf[Long] == 2L)
+
+    // Boolean type
+    val boolDf = Seq((1, true), (1, true), (1, false)).toDF("id", "value")
+    val boolSketch = boolDf
+      .groupBy("id")
+      .agg(items_sketch_agg($"value").as("sketch"))
+      .select(items_sketch_get_estimate($"sketch", lit("true")))
+      .collect()(0)(0)
+    assert(boolSketch.asInstanceOf[Long] == 2L)
+  }
+
+  test("items_sketch_merge + items_sketch_merge_agg positive tests") {
+    val df1 = Seq(
+      (1, "a"), (1, "a"), (1, "a"), (1, "b"), (1, "c"), (1, "c"), (1, "d")
+    ).toDF("id", "value")
+    df1.createOrReplaceTempView("items_merge_df1")
+
+    val df2 = Seq(
+      (1, "a"), (1, "c"), (1, "d"), (1, "d"), (1, "d"), (1, "e"), (1, "e"), (1, "f")
+    ).toDF("id", "value")
+    df2.createOrReplaceTempView("items_merge_df2")
+
+    // Build per-group sketches
+    val sketch1Df = df1
+      .groupBy("id")
+      .agg(items_sketch_agg($"value").as("sketch"))
+    val sketch2Df = df2
+      .groupBy("id")
+      .agg(items_sketch_agg($"value").as("sketch"))
+
+    // Test items_sketch_merge (scalar binary merge) via DataFrame API
+    val joined = sketch1Df
+      .join(sketch2Df.withColumnRenamed("sketch", "sketch2"), "id")
+    val mergedDf = joined
+      .withColumn("merged", items_sketch_merge($"sketch", $"sketch2"))
+      .select(
+        items_sketch_get_estimate($"merged", lit("a")).as("est_a"),
+        items_sketch_get_estimate($"merged", lit("d")).as("est_d"),
+        items_sketch_get_estimate($"merged", lit("f")).as("est_f"))
+    val mergedRow = mergedDf.collect()(0)
+    assert(mergedRow.getAs[Long]("est_a") == 4L) // 3 from df1 + 1 from df2
+    assert(mergedRow.getAs[Long]("est_d") == 4L) // 1 from df1 + 3 from df2
+    assert(mergedRow.getAs[Long]("est_f") == 1L)
+
+    // Test items_sketch_merge via SQL
+    val mergedSql = sql(
+      """WITH s1 AS (
+        |  SELECT id, items_sketch_agg(value) AS sketch FROM items_merge_df1 GROUP BY id
+        |), s2 AS (
+        |  SELECT id, items_sketch_agg(value) AS sketch FROM items_merge_df2 GROUP BY id
+        |)
+        |SELECT
+        |  items_sketch_get_estimate(items_sketch_merge(s1.sketch, s2.sketch), 'a') AS est_a,
+        |  items_sketch_get_estimate(items_sketch_merge(s1.sketch, s2.sketch), 'f') AS est_f
+        |FROM s1 JOIN s2 ON s1.id = s2.id
+        |""".stripMargin)
+    checkAnswer(mergedSql, Row(4L, 1L))
+
+    // Test items_sketch_merge_agg (aggregate merge) via DataFrame API
+    val combined = sketch1Df.union(sketch2Df)
+    val mergeAggDf = combined
+      .groupBy("id")
+      .agg(items_sketch_merge_agg($"sketch").as("merged_sketch"))
+      .select(
+        items_sketch_get_estimate($"merged_sketch", lit("a")).as("est_a"),
+        items_sketch_get_estimate($"merged_sketch", lit("d")).as("est_d"))
+    checkAnswer(mergeAggDf, Row(4L, 4L))
+
+    // Test items_sketch_merge_agg with explicit maxMapSize
+    val mergeAggDf2 = combined
+      .groupBy("id")
+      .agg(items_sketch_merge_agg($"sketch", 64).as("merged_sketch"))
+      .select(items_sketch_get_estimate($"merged_sketch", lit("a")).as("est_a"))
+    checkAnswer(mergeAggDf2, Row(4L))
+
+    // Test items_sketch_merge_agg with column name API
+    val mergeAggDf3 = combined
+      .groupBy("id")
+      .agg(items_sketch_merge_agg("sketch").as("merged_sketch"))
+      .select(items_sketch_get_estimate($"merged_sketch", lit("a")).as("est_a"))
+    checkAnswer(mergeAggDf3, Row(4L))
+
+    // Test items_sketch_merge_agg via SQL
+    val mergeAggSql = sql(
+      """WITH sketches AS (
+        |  SELECT id, items_sketch_agg(value) AS sketch FROM items_merge_df1 GROUP BY id
+        |  UNION ALL
+        |  SELECT id, items_sketch_agg(value) AS sketch FROM items_merge_df2 GROUP BY id
+        |)
+        |SELECT
+        |  items_sketch_get_estimate(items_sketch_merge_agg(sketch), 'a') AS est_a,
+        |  items_sketch_get_estimate(items_sketch_merge_agg(sketch), 'd') AS est_d
+        |FROM sketches
+        |GROUP BY id
+        |""".stripMargin)
+    checkAnswer(mergeAggSql, Row(4L, 4L))
+  }
+
+  test("items_sketch_to_string positive tests") {
+    val df = Seq("a", "a", "b", "c").toDF("value")
+
+    // Test via DataFrame API
+    val res1 = df
+      .agg(items_sketch_agg($"value").as("sketch"))
+      .select(items_sketch_to_string($"sketch").as("summary"))
+    val summary1 = res1.collect()(0).getString(0)
+    assert(summary1.nonEmpty)
+    assert(summary1.contains("FrequentItems"))
+
+    // Test via column name API
+    val res2 = df
+      .agg(items_sketch_agg($"value").as("sketch"))
+      .select(items_sketch_to_string("sketch").as("summary"))
+    val summary2 = res2.collect()(0).getString(0)
+    assert(summary2.nonEmpty)
+
+    // Test via SQL
+    val df2 = sql(
+      """SELECT length(items_sketch_to_string(items_sketch_agg(col))) > 0 AS has_summary
+        |FROM VALUES ('a'), ('b') tab(col)
+        |""".stripMargin)
+    checkAnswer(df2, Row(true))
+  }
+
+  test("items_sketch_agg with null and empty input") {
+    // All-null column
+    val nullDf = Seq[( Int, Option[String])]((1, None), (1, None), (2, None))
+      .toDF("id", "value")
+
+    val res1 = nullDf
+      .groupBy("id")
+      .agg(items_sketch_agg($"value").as("sketch"))
+      .select($"id", items_sketch_get_estimate($"sketch", lit("a")).as("est"))
+      .orderBy("id")
+    checkAnswer(res1, Seq(Row(1, 0L), Row(2, 0L)))
+
+    // Mixed null and non-null
+    val mixedDf = Seq(
+      (1, Some("a")), (1, Some("a")), (1, None), (2, None), (2, None)
+    ).toDF("id", "value")
+
+    val res2 = mixedDf
+      .groupBy("id")
+      .agg(items_sketch_agg($"value").as("sketch"))
+      .select($"id", items_sketch_get_estimate($"sketch", lit("a")).as("est"))
+      .orderBy("id")
+    checkAnswer(res2, Seq(Row(1, 2L), Row(2, 0L)))
+
+    // Empty DataFrame
+    val emptyDf = Seq.empty[(Int, String)].toDF("id", "value")
+    val res3 = emptyDf
+      .agg(items_sketch_agg($"value").as("sketch"))
+      .select(items_sketch_get_estimate($"sketch", lit("a")).as("est"))
+    checkAnswer(res3, Row(0L))
+  }
+
+  test("items_sketch_agg negative tests") {
+    val df = Seq((1, "a"), (1, "b")).toDF("id", "value")
+    df.createOrReplaceTempView("items_neg_df")
+
+    // maxMapSize too small
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        df.groupBy("id")
+          .agg(items_sketch_agg("value", 4).as("sketch"))
+          .collect()
+      },
+      condition = "ITEMS_SKETCH_INVALID_MAX_MAP_SIZE",
+      parameters = Map(
+        "function" -> "`items_sketch_agg`",
+        "min" -> "8",
+        "max" -> "67108864",
+        "value" -> "4"
+      )
+    )
+
+    // maxMapSize too large
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        df.groupBy("id")
+          .agg(items_sketch_agg("value", 134217728).as("sketch"))
+          .collect()
+      },
+      condition = "ITEMS_SKETCH_INVALID_MAX_MAP_SIZE",
+      parameters = Map(
+        "function" -> "`items_sketch_agg`",
+        "min" -> "8",
+        "max" -> "67108864",
+        "value" -> "134217728"
+      )
+    )
+
+    // maxMapSize not a power of 2
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        df.groupBy("id")
+          .agg(items_sketch_agg("value", 100).as("sketch"))
+          .collect()
+      },
+      condition = "ITEMS_SKETCH_MAX_MAP_SIZE_NOT_POWER_OF_TWO",
+      parameters = Map(
+        "function" -> "`items_sketch_agg`",
+        "value" -> "100"
+      )
+    )
+
+    // Wrong type for maxMapSize parameter via SQL - string is implicitly cast to int,
+    // so this throws a SparkNumberFormatException at runtime rather than AnalysisException
+    checkError(
+      exception = intercept[SparkNumberFormatException] {
+        sql("SELECT items_sketch_agg(value, 'text') FROM items_neg_df GROUP BY id").collect()
+      },
+      condition = "CAST_INVALID_INPUT",
+      parameters = Map(
+        "expression" -> "'text'",
+        "sourceType" -> "\"STRING\"",
+        "targetType" -> "\"INT\"",
+        "ansiConfig" -> "\"spark.sql.ansi.enabled\""),
+      context = ExpectedContext(
+        fragment = "items_sketch_agg(value, 'text')",
+        start = 7,
+        stop = 37)
+    )
+
+    // Invalid errorType for items_sketch_get_frequent_items
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql(
+          """SELECT items_sketch_get_frequent_items(
+            |  items_sketch_agg(col), 'INVALID_TYPE')
+            |FROM VALUES ('a'), ('b') tab(col)
+            |""".stripMargin).collect()
+      },
+      condition = "ITEMS_SKETCH_INVALID_ERROR_TYPE",
+      parameters = Map(
+        "function" -> "`items_sketch_get_frequent_items`",
+        "errorType" -> "INVALID_TYPE"
+      )
+    )
+
+    // Wrong type for maxMapSize in items_sketch_merge_agg via SQL
+    val mergeNegDf = df
+      .groupBy("id")
+      .agg(items_sketch_agg($"value").as("sketch"))
+    mergeNegDf.createOrReplaceTempView("items_merge_neg_df")
+    checkError(
+      exception = intercept[SparkNumberFormatException] {
+        sql(
+          "SELECT items_sketch_merge_agg(sketch, 'text') FROM items_merge_neg_df"
+        ).collect()
+      },
+      condition = "CAST_INVALID_INPUT",
+      parameters = Map(
+        "expression" -> "'text'",
+        "sourceType" -> "\"STRING\"",
+        "targetType" -> "\"INT\"",
+        "ansiConfig" -> "\"spark.sql.ansi.enabled\""),
+      context = ExpectedContext(
+        fragment = "items_sketch_merge_agg(sketch, 'text')",
+        start = 7,
+        stop = 44)
+    )
+
+    // Invalid binary input to items_sketch_get_estimate
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql(
+          "SELECT items_sketch_get_estimate(X'DEADBEEF', 'a')"
+        ).collect()
+      },
+      condition = "ITEMS_SKETCH_INVALID_INPUT_BUFFER",
+      parameters = Map(
+        "function" -> "`items_sketch_get_estimate`"
+      )
+    )
+
+    // Invalid binary input to items_sketch_get_frequent_items
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql(
+          "SELECT items_sketch_get_frequent_items(X'DEADBEEF', 'NO_FALSE_POSITIVES')"
+        ).collect()
+      },
+      condition = "ITEMS_SKETCH_INVALID_INPUT_BUFFER",
+      parameters = Map(
+        "function" -> "`items_sketch_get_frequent_items`"
+      )
+    )
+
+    // Invalid binary input to items_sketch_merge
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql(
+          """SELECT items_sketch_merge(X'DEADBEEF',
+            |  items_sketch_agg(col)) FROM VALUES ('a') tab(col)
+            |""".stripMargin).collect()
+      },
+      condition = "ITEMS_SKETCH_INVALID_INPUT_BUFFER",
+      parameters = Map(
+        "function" -> "`items_sketch_merge`"
+      )
+    )
+
+    // Invalid binary input to items_sketch_to_string
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql(
+          "SELECT items_sketch_to_string(X'DEADBEEF')"
+        ).collect()
+      },
+      condition = "ITEMS_SKETCH_INVALID_INPUT_BUFFER",
+      parameters = Map(
+        "function" -> "`items_sketch_to_string`"
+      )
+    )
+  }
+
+  test("items_sketch_agg with small capacity and error type semantics") {
+    // Use maxMapSize=8 (smallest allowed) with enough distinct items to trigger
+    // approximation. With capacity 8, the internal map can hold ~6 items before
+    // eviction starts, so 20 distinct items will force heavy approximation.
+    val data = (1 to 200).map { i =>
+      // "a" appears 100 times, "b" appears 50 times, 18 others appear ~3 times each
+      if (i <= 100) (1, "a")
+      else if (i <= 150) (1, "b")
+      else (1, s"item_${i % 18}")
+    }
+    val df = data.toDF("id", "value")
+
+    val sketch = df
+      .groupBy("id")
+      .agg(items_sketch_agg($"value", 8).as("sketch"))
+
+    // "a" (100 occurrences) should always be detected as frequent
+    val estA = sketch
+      .select(items_sketch_get_estimate($"sketch", lit("a")))
+      .collect()(0).getLong(0)
+    assert(estA >= 90, s"Expected estimate for 'a' >= 90, got $estA")
+
+    // NO_FALSE_POSITIVES: every returned item is truly frequent (may miss some)
+    val nfp = sketch
+      .select(items_sketch_get_frequent_items($"sketch", "NO_FALSE_POSITIVES").as("freq"))
+      .collect()(0).getSeq[Any](0)
+    // "a" must be in NO_FALSE_POSITIVES results since it's clearly dominant
+    val nfpItems = nfp.map(_.asInstanceOf[org.apache.spark.sql.Row].getString(0))
+    assert(nfpItems.contains("a"),
+      s"Expected 'a' in NO_FALSE_POSITIVES results, got: $nfpItems")
+
+    // NO_FALSE_NEGATIVES: returns all items that might be frequent (may include extras)
+    val nfn = sketch
+      .select(items_sketch_get_frequent_items($"sketch", "NO_FALSE_NEGATIVES").as("freq"))
+      .collect()(0).getSeq[Any](0)
+    val nfnItems = nfn.map(_.asInstanceOf[org.apache.spark.sql.Row].getString(0))
+    assert(nfnItems.contains("a"),
+      s"Expected 'a' in NO_FALSE_NEGATIVES results, got: $nfnItems")
+    // NO_FALSE_NEGATIVES should return at least as many items as NO_FALSE_POSITIVES
+    assert(nfn.size >= nfp.size,
+      s"NO_FALSE_NEGATIVES (${nfn.size}) should return >= NO_FALSE_POSITIVES (${nfp.size})")
+
+    // Validate struct fields: item, estimate, lowerBound, upperBound
+    val firstRow = nfn.head.asInstanceOf[org.apache.spark.sql.Row]
+    assert(firstRow.schema.fieldNames.toSeq == Seq("item", "estimate", "lowerBound", "upperBound"))
+    assert(firstRow.getLong(1) > 0, "estimate should be positive")
+    assert(firstRow.getLong(2) >= 0, "lowerBound should be non-negative")
+    assert(firstRow.getLong(3) >= firstRow.getLong(1),
+      "upperBound should be >= estimate")
+    assert(firstRow.getLong(2) <= firstRow.getLong(1),
+      "lowerBound should be <= estimate")
+
+    // Case-insensitive error type strings
+    val nfpLower = sketch
+      .select(items_sketch_get_frequent_items($"sketch", "no_false_positives").as("freq"))
+      .collect()(0).getSeq[Any](0)
+    assert(nfpLower.nonEmpty, "Lowercase error type should work")
+  }
+
+  test("items_sketch_agg single item and single row edge cases") {
+    // Single distinct item repeated
+    val singleItem = Seq("x", "x", "x").toDF("value")
+    val res1 = singleItem
+      .agg(items_sketch_agg($"value").as("sketch"))
+      .select(
+        items_sketch_get_estimate($"sketch", lit("x")).as("est_x"),
+        items_sketch_get_estimate($"sketch", lit("y")).as("est_y"))
+    checkAnswer(res1, Row(3L, 0L))
+
+    // Single row
+    val singleRow = Seq("only").toDF("value")
+    val res2 = singleRow
+      .agg(items_sketch_agg($"value").as("sketch"))
+      .select(items_sketch_get_estimate($"sketch", lit("only")))
+    checkAnswer(res2, Row(1L))
+
+    // Frequent items from single-item sketch
+    val freq = singleRow
+      .agg(items_sketch_agg($"value").as("sketch"))
+      .select(items_sketch_get_frequent_items($"sketch", "NO_FALSE_POSITIVES").as("freq"))
+      .collect()(0).getSeq[Any](0)
+    assert(freq.size == 1)
+    assert(freq.head.asInstanceOf[org.apache.spark.sql.Row].getString(0) == "only")
+  }
+
+  test("items_sketch_agg rollup across dimension hierarchy and time horizon") {
+    // Scenario: 7 days of visitor data with a parent/child dimension hierarchy
+    // (category -> product). Each row records a visitor and the number of visits.
+    //
+    //   Electronics visitors: visitor_1 (steady), visitor_2/visitor_3/visitor_4 (rotate
+    //   as daily burst visitors), visitor_5 (one-day spike on Wednesday).
+    //   Clothing visitors: visitor_6, visitor_7, visitor_8.
+    //
+    //   visitor_1 visits 4 times every day across Electronics products (28 weekly).
+    //   visitor_5 visits 20 times on Wednesday only, dominating that single day.
+    //   visitor_2/visitor_3/visitor_4 each burst to 6 visits on their respective days.
+    //
+    //   On any given day, visitor_1 is never the daily top visitor.
+    //   For the full week, visitor_1 is the overall top visitor (28 > 20 > 6).
+    //
+    // Dimension hierarchy:
+    //   Electronics -> laptop, phone, tablet
+    //   Clothing    -> shirt, pants
+
+    // Compact representation: (day, category, product, visitor, visits)
+    val salesData = Seq(
+      // --- Monday: visitor_2=6, visitor_1=4 ---
+      ("Monday", "Electronics", "laptop", "visitor_2", 3),
+      ("Monday", "Electronics", "phone", "visitor_2", 3),
+      ("Monday", "Electronics", "laptop", "visitor_1", 1),
+      ("Monday", "Electronics", "phone", "visitor_1", 1),
+      ("Monday", "Electronics", "tablet", "visitor_1", 2),
+      ("Monday", "Clothing", "shirt", "visitor_6", 2),
+      // --- Tuesday: visitor_3=6, visitor_1=4 ---
+      ("Tuesday", "Electronics", "laptop", "visitor_3", 2),
+      ("Tuesday", "Electronics", "phone", "visitor_3", 2),
+      ("Tuesday", "Electronics", "tablet", "visitor_3", 2),
+      ("Tuesday", "Electronics", "laptop", "visitor_1", 1),
+      ("Tuesday", "Electronics", "phone", "visitor_1", 1),
+      ("Tuesday", "Electronics", "tablet", "visitor_1", 2),
+      ("Tuesday", "Clothing", "pants", "visitor_7", 2),
+      // --- Wednesday: visitor_5=20, visitor_1=4 ---
+      ("Wednesday", "Electronics", "laptop", "visitor_5", 7),
+      ("Wednesday", "Electronics", "phone", "visitor_5", 7),
+      ("Wednesday", "Electronics", "tablet", "visitor_5", 6),
+      ("Wednesday", "Electronics", "laptop", "visitor_1", 1),
+      ("Wednesday", "Electronics", "phone", "visitor_1", 1),
+      ("Wednesday", "Electronics", "tablet", "visitor_1", 2),
+      ("Wednesday", "Clothing", "shirt", "visitor_8", 1),
+      // --- Thursday: visitor_4=6, visitor_1=4 ---
+      ("Thursday", "Electronics", "laptop", "visitor_4", 2),
+      ("Thursday", "Electronics", "phone", "visitor_4", 2),
+      ("Thursday", "Electronics", "tablet", "visitor_4", 2),
+      ("Thursday", "Electronics", "laptop", "visitor_1", 1),
+      ("Thursday", "Electronics", "phone", "visitor_1", 1),
+      ("Thursday", "Electronics", "tablet", "visitor_1", 2),
+      ("Thursday", "Clothing", "pants", "visitor_6", 2),
+      // --- Friday: visitor_2=6, visitor_1=4 ---
+      ("Friday", "Electronics", "laptop", "visitor_2", 2),
+      ("Friday", "Electronics", "phone", "visitor_2", 2),
+      ("Friday", "Electronics", "tablet", "visitor_2", 2),
+      ("Friday", "Electronics", "laptop", "visitor_1", 1),
+      ("Friday", "Electronics", "phone", "visitor_1", 1),
+      ("Friday", "Electronics", "tablet", "visitor_1", 2),
+      ("Friday", "Clothing", "shirt", "visitor_7", 1),
+      // --- Saturday: visitor_3=6, visitor_1=4 ---
+      ("Saturday", "Electronics", "laptop", "visitor_3", 2),
+      ("Saturday", "Electronics", "phone", "visitor_3", 2),
+      ("Saturday", "Electronics", "tablet", "visitor_3", 2),
+      ("Saturday", "Electronics", "laptop", "visitor_1", 1),
+      ("Saturday", "Electronics", "phone", "visitor_1", 1),
+      ("Saturday", "Electronics", "tablet", "visitor_1", 2),
+      ("Saturday", "Clothing", "shirt", "visitor_8", 1),
+      ("Saturday", "Clothing", "pants", "visitor_6", 1),
+      // --- Sunday: visitor_4=6, visitor_1=4 ---
+      ("Sunday", "Electronics", "laptop", "visitor_4", 2),
+      ("Sunday", "Electronics", "phone", "visitor_4", 2),
+      ("Sunday", "Electronics", "tablet", "visitor_4", 2),
+      ("Sunday", "Electronics", "laptop", "visitor_1", 1),
+      ("Sunday", "Electronics", "phone", "visitor_1", 1),
+      ("Sunday", "Electronics", "tablet", "visitor_1", 2),
+      ("Sunday", "Clothing", "pants", "visitor_7", 1)
+    ).toDF("day", "category", "product", "visitor", "qty")
+
+    // Expand visits into repeated visitor events: each visit = one sketch event
+    val dailyEvents = salesData
+      .select($"day", $"category", $"product",
+        explode(array_repeat($"visitor", $"qty")).as("visitor"))
+
+    // Step 1: Build per-day per-product sketches (child-level daily aggregation)
+    val dailyProductSketches = dailyEvents
+      .groupBy($"day", $"category", $"product")
+      .agg(items_sketch_agg($"visitor").as("sketch"))
+
+    // Step 2: Build per-day per-category sketches by merging child products
+    val dailyCategorySketches = dailyProductSketches
+      .groupBy($"day", $"category")
+      .agg(items_sketch_merge_agg($"sketch").as("daily_sketch"))
+
+    // Step 3: Find the daily top visitor per day for Electronics
+    val dailyTopVisitors = dailyCategorySketches
+      .filter($"category" === "Electronics")
+      .select(
+        $"day",
+        items_sketch_get_frequent_items($"daily_sketch", "NO_FALSE_NEGATIVES")
+          .as("freq_items"))
+      .collect()
+      .map { r =>
+        val day = r.getString(0)
+        val items = r.getSeq[Row](1)
+        val topVisitor = items.maxBy(_.getLong(1)).getString(0)
+        day -> topVisitor
+      }.toMap
+
+    // Verify: on Wednesday, visitor_5 is the daily top (20 visits vs 4 for visitor_1)
+    assert(dailyTopVisitors("Wednesday") == "visitor_5",
+      s"Wednesday daily top should be visitor_5, got ${dailyTopVisitors("Wednesday")}")
+
+    // Verify: visitor_1 is never the daily top on any day
+    // (each day has a burst visitor with 6 visits vs visitor_1's 4)
+    dailyTopVisitors.foreach { case (day, topVisitor) =>
+      assert(topVisitor != "visitor_1",
+        s"visitor_1 should NOT be the daily top on $day, but it was")
+    }
+
+    // Step 4: Roll up to weekly per-category by merging across all days
+    val weeklyCategorySketches = dailyCategorySketches
+      .groupBy($"category")
+      .agg(items_sketch_merge_agg($"daily_sketch").as("merged_sketch"))
+
+    // Step 5: Find the weekly top visitor for Electronics
+    val weeklyElecRow = weeklyCategorySketches
+      .filter($"category" === "Electronics")
+      .select(
+        items_sketch_get_frequent_items($"merged_sketch", "NO_FALSE_NEGATIVES")
+          .as("freq_items"))
+      .collect()(0)
+    val weeklyItems = weeklyElecRow.getSeq[Row](0)
+    val weeklyTopVisitor = weeklyItems.maxBy(_.getLong(1)).getString(0)
+
+    // Verify: visitor_1 is the weekly top (4 visits/day * 7 days = 28 total)
+    // while visitor_5 only has 20 (all on Wednesday)
+    assert(weeklyTopVisitor == "visitor_1",
+      s"Weekly top should be visitor_1 (28 total), got $weeklyTopVisitor")
+
+    // Verify exact estimates via items_sketch_get_estimate
+    // visitor_1 = 4 visits/day * 7 days = 28
+    val estVisitor1 = weeklyCategorySketches
+      .filter($"category" === "Electronics")
+      .select(items_sketch_get_estimate($"merged_sketch", lit("visitor_1")))
+      .collect()(0).getLong(0)
+    assert(estVisitor1 == 28L,
+      s"visitor_1 should have weekly estimate 28, got $estVisitor1")
+
+    // visitor_5 = 20 visits on Wednesday only
+    val estVisitor5 = weeklyCategorySketches
+      .filter($"category" === "Electronics")
+      .select(items_sketch_get_estimate($"merged_sketch", lit("visitor_5")))
+      .collect()(0).getLong(0)
+    assert(estVisitor5 == 20L,
+      s"visitor_5 should have weekly estimate 20, got $estVisitor5")
+
+    // visitor_2 appears on Monday (6) + Friday (6) = 12
+    val estVisitor2 = weeklyCategorySketches
+      .filter($"category" === "Electronics")
+      .select(items_sketch_get_estimate($"merged_sketch", lit("visitor_2")))
+      .collect()(0).getLong(0)
+    assert(estVisitor2 == 12L,
+      s"visitor_2 should have weekly estimate 12, got $estVisitor2")
+
+    // Cross-dimension isolation: Electronics visitors should be 0 in Clothing
+    val estVisitor1InCloth = weeklyCategorySketches
+      .filter($"category" === "Clothing")
+      .select(items_sketch_get_estimate($"merged_sketch", lit("visitor_1")))
+      .collect()(0).getLong(0)
+    assert(estVisitor1InCloth == 0L,
+      s"visitor_1 should have estimate 0 in Clothing, got $estVisitor1InCloth")
+
+    // Verify summary strings are non-empty
+    val summaries = weeklyCategorySketches.select(
+      $"category",
+      items_sketch_to_string($"merged_sketch").as("summary")
+    ).collect().map(r => r.getString(0) -> r.getString(1)).toMap
+    assert(summaries("Electronics").nonEmpty, "Electronics summary should be non-empty")
+    assert(summaries("Clothing").nonEmpty, "Clothing summary should be non-empty")
   }
 }
 

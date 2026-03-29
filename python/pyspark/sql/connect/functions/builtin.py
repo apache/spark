@@ -4719,6 +4719,34 @@ def tuple_intersection_agg_integer(
 tuple_intersection_agg_integer.__doc__ = pysparkfuncs.tuple_intersection_agg_integer.__doc__
 
 
+def items_sketch_agg(
+    col: "ColumnOrName",
+    maxMapSize: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "items_sketch_agg"
+    if maxMapSize is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(maxMapSize))
+
+
+items_sketch_agg.__doc__ = pysparkfuncs.items_sketch_agg.__doc__
+
+
+def items_sketch_merge_agg(
+    col: "ColumnOrName",
+    maxMapSize: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "items_sketch_merge_agg"
+    if maxMapSize is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(maxMapSize))
+
+
+items_sketch_merge_agg.__doc__ = pysparkfuncs.items_sketch_merge_agg.__doc__
+
+
 def kll_sketch_agg_bigint(
     col: "ColumnOrName",
     k: Optional[Union[int, Column]] = None,
@@ -5092,6 +5120,34 @@ def tuple_difference_integer(col1: "ColumnOrName", col2: "ColumnOrName") -> Colu
 
 
 tuple_difference_integer.__doc__ = pysparkfuncs.tuple_difference_integer.__doc__
+
+
+def items_sketch_get_frequent_items(col: "ColumnOrName", errorType: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("items_sketch_get_frequent_items", col, errorType)
+
+
+items_sketch_get_frequent_items.__doc__ = pysparkfuncs.items_sketch_get_frequent_items.__doc__
+
+
+def items_sketch_get_estimate(col: "ColumnOrName", item: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("items_sketch_get_estimate", col, item)
+
+
+items_sketch_get_estimate.__doc__ = pysparkfuncs.items_sketch_get_estimate.__doc__
+
+
+def items_sketch_merge(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("items_sketch_merge", col1, col2)
+
+
+items_sketch_merge.__doc__ = pysparkfuncs.items_sketch_merge.__doc__
+
+
+def items_sketch_to_string(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("items_sketch_to_string", col)
+
+
+items_sketch_to_string.__doc__ = pysparkfuncs.items_sketch_to_string.__doc__
 
 
 def tuple_difference_theta_double(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:

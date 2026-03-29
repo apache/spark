@@ -4764,6 +4764,42 @@
     },
     "sqlState" : "42000"
   },
+  "ITEMS_SKETCH_INVALID_ERROR_TYPE" : {
+    "message" : [
+      "Invalid call to <function>; the `errorType` must be 'NO_FALSE_POSITIVES' or 'NO_FALSE_NEGATIVES': <errorType>."
+    ],
+    "sqlState" : "22000"
+  },
+  "ITEMS_SKETCH_INVALID_INPUT_BUFFER" : {
+    "message" : [
+      "Invalid call to <function>; only valid ItemsSketch buffers are supported as inputs (such as those produced by the `items_sketch_agg` function)."
+    ],
+    "sqlState" : "22000"
+  },
+  "ITEMS_SKETCH_INVALID_MAX_MAP_SIZE" : {
+    "message" : [
+      "Invalid call to <function>; the `maxMapSize` value must be between <min> and <max>, inclusive: <value>."
+    ],
+    "sqlState" : "22000"
+  },
+  "ITEMS_SKETCH_MAX_MAP_SIZE_MUST_BE_CONSTANT" : {
+    "message" : [
+      "For function <function>, the maxMapSize parameter must be a constant value, but got a non-constant expression."
+    ],
+    "sqlState" : "42K0E"
+  },
+  "ITEMS_SKETCH_MAX_MAP_SIZE_NOT_POWER_OF_TWO" : {
+    "message" : [
+      "Invalid call to <function>; the `maxMapSize` value must be a power of 2: <value>."
+    ],
+    "sqlState" : "22000"
+  },
+  "ITEMS_SKETCH_UNSUPPORTED_DATA_TYPE" : {
+    "message" : [
+      "ItemsSketch functions do not support the data type: <dataType>."
+    ],
+    "sqlState" : "22000"
+  },
   "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR" : {
     "message" : [
       "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>. <externalEngineError>."
