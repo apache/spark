@@ -108,7 +108,7 @@ class CachedTableSuite extends QueryTest
 
   private def getNumInMemoryRelations(ds: classic.Dataset[_]): Int = {
     val plan = ds.queryExecution.withCachedData
-    var sum = plan.collect { case _: InMemoryRelation => 1 }.sum
+    var sum = plan.collect { case CachedRelation(_) => 1 }.sum
     plan.transformAllExpressions {
       case e: SubqueryExpression =>
         sum += getNumInMemoryRelations(e.plan)
@@ -223,20 +223,20 @@ class CachedTableSuite extends QueryTest
 
     assertCached(spark.table("testData"))
     assert(spark.table("testData").queryExecution.withCachedData match {
-      case _: InMemoryRelation => true
+      case CachedRelation(_) => true
       case _ => false
     })
 
     uncacheTable("testData")
     assert(!spark.catalog.isCached("testData"))
     assert(spark.table("testData").queryExecution.withCachedData match {
-      case _: InMemoryRelation => false
+      case CachedRelation(_) => false
       case _ => true
     })
   }
 
   test("SPARK-1669: cacheTable should be idempotent") {
-    assert(!spark.table("testData").logicalPlan.isInstanceOf[InMemoryRelation])
+    assert(!CachedRelation.unapply(spark.table("testData").logicalPlan).isDefined)
 
     spark.catalog.cacheTable("testData")
     assertCached(spark.table("testData"))
@@ -248,7 +248,7 @@ class CachedTableSuite extends QueryTest
     spark.catalog.cacheTable("testData")
     assertResult(0, "Double InMemoryRelations found, cacheTable() is not idempotent") {
       spark.table("testData").queryExecution.withCachedData.collect {
-        case r: InMemoryRelation if r.cachedPlan.isInstanceOf[InMemoryTableScanExec] => r
+        case CachedRelation(r) if r.cachedPlan.isInstanceOf[InMemoryTableScanExec] => r
       }.size
     }
 
@@ -411,7 +411,7 @@ class CachedTableSuite extends QueryTest
   test("InMemoryRelation statistics") {
     sql("CACHE TABLE testData")
     spark.table("testData").queryExecution.withCachedData.collect {
-      case cached: InMemoryRelation =>
+      case CachedRelation(cached) =>
         val actualSizeInBytes = (1 to 100).map(i => 4 + i.toString.length + 4).sum
         assert(cached.stats.sizeInBytes === actualSizeInBytes)
     }
@@ -475,12 +475,12 @@ class CachedTableSuite extends QueryTest
       val toBeCleanedAccIds = new HashSet[Long]
 
       val accId1 = spark.table("t1").queryExecution.withCachedData.collect {
-        case i: InMemoryRelation => i.cacheBuilder.sizeInBytesStats.id
+        case CachedRelation(i) => i.cacheBuilder.sizeInBytesStats.id
       }.head
       toBeCleanedAccIds += accId1
 
       val accId2 = spark.table("t1").queryExecution.withCachedData.collect {
-        case i: InMemoryRelation => i.cacheBuilder.sizeInBytesStats.id
+        case CachedRelation(i) => i.cacheBuilder.sizeInBytesStats.id
       }.head
       toBeCleanedAccIds += accId2
 
@@ -1601,7 +1601,7 @@ class CachedTableSuite extends QueryTest
       sql(s"CACHE TABLE $tableName AS SELECT TIMESTAMP_NTZ'2021-01-01 00:00:00'")
       checkAnswer(spark.table(tableName), Row(LocalDateTime.parse("2021-01-01T00:00:00")))
       spark.table(tableName).queryExecution.withCachedData.collect {
-        case cached: InMemoryRelation =>
+        case CachedRelation(cached) =>
           assert(cached.stats.sizeInBytes === 8)
       }
       sql(s"UNCACHE TABLE $tableName")
@@ -1812,7 +1812,7 @@ class CachedTableSuite extends QueryTest
       sql(s"CACHE TABLE $tableName AS SELECT TIME'22:00:00'")
       checkAnswer(spark.table(tableName), Row(LocalTime.parse("22:00:00")))
       spark.table(tableName).queryExecution.withCachedData.collect {
-        case cached: InMemoryRelation =>
+        case CachedRelation(cached) =>
           assert(cached.stats.sizeInBytes === 8)
       }
       sql(s"UNCACHE TABLE $tableName")

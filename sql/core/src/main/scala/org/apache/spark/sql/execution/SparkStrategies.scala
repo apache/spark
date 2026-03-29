@@ -36,7 +36,6 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkStrategy => Strategy}
 import org.apache.spark.sql.execution.aggregate.AggUtils
-import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, WriteFiles, WriteFilesExec}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -699,18 +698,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val finalWindowGroupLimit = execution.window.WindowGroupLimitExec(partitionSpec, orderSpec,
           rankLikeFunction, limit, execution.window.Final, partialWindowGroupLimit)
         finalWindowGroupLimit :: Nil
-      case _ => Nil
-    }
-  }
-
-  object InMemoryScans extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case PhysicalOperation(projectList, filters, mem: InMemoryRelation) =>
-        pruneFilterProject(
-          projectList,
-          filters,
-          identity[Seq[Expression]], // All filters still need to be evaluated.
-          InMemoryTableScanExec(_, filters, mem)) :: Nil
       case _ => Nil
     }
   }

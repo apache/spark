@@ -43,6 +43,7 @@ import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBat
 import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan, SparkStrategy => Strategy}
+import org.apache.spark.sql.execution.columnar.{InMemoryCacheScan, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelationWithTable, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
@@ -150,6 +151,16 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val localScanExec = LocalTableScanExec(output, scan.rows().toImmutableArraySeq, None)
       DataSourceV2Strategy.withProjectAndFilter(
         project, filters, localScanExec, needsUnsafeConversion = false) :: Nil
+
+    case PhysicalOperation(project, filters,
+        DataSourceV2ScanRelation(_, scan: InMemoryCacheScan, output, _, _)) =>
+      // Route cached DataFrames back to InMemoryTableScanExec, preserving the optimized
+      // columnar path. Filters are passed for batch-level min/max pruning and a post-scan
+      // FilterExec is added by withProjectAndFilter for row-level re-evaluation.
+      DataSourceV2Strategy.withProjectAndFilter(
+        project, filters,
+        InMemoryTableScanExec(output, filters, scan.relation),
+        needsUnsafeConversion = false) :: Nil
 
     case PhysicalOperation(project, filters, relation: DataSourceV2ScanRelation) =>
       // projection and filters were already pushed down in the optimizer.

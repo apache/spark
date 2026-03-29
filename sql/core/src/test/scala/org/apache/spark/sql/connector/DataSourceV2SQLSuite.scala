@@ -43,7 +43,7 @@ import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.columnar.CachedRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
@@ -2525,7 +2525,7 @@ class DataSourceV2SQLSuiteV1Filter
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       def isCached(table: String): Boolean = {
-        spark.table(table).queryExecution.withCachedData.isInstanceOf[InMemoryRelation]
+        CachedRelation.unapply(spark.table(table).queryExecution.withCachedData).isDefined
       }
 
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")

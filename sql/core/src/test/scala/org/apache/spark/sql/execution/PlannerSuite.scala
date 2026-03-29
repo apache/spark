@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, 
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
-import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
+import org.apache.spark.sql.execution.columnar.{CachedRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, EnsureRequirements, REPARTITION_BY_COL, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
@@ -232,7 +232,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   test("CollectLimit can appear in the middle of a plan when caching is used") {
     val query = testData.select($"key", $"value").limit(2).cache()
-    val planned = query.queryExecution.optimizedPlan.asInstanceOf[InMemoryRelation]
+    val planned = CachedRelation.unapply(query.queryExecution.optimizedPlan).get
     assert(planned.cachedPlan.isInstanceOf[CollectLimitExec])
   }
 

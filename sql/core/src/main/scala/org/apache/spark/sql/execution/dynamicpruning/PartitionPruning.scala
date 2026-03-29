@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
-import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.columnar.CachedRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.util.ArrayImplicits._
@@ -183,17 +183,17 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
    */
   private def calculatePlanOverhead(plan: LogicalPlan): Float = {
     val (cached, notCached) = plan.collectLeaves().partition(p => p match {
-      case _: InMemoryRelation => true
+      case CachedRelation(_) => true
       case _ => false
     })
     val scanOverhead = notCached.map(_.stats.sizeInBytes).sum.toFloat
     val cachedOverhead = cached.map {
-      case m: InMemoryRelation if m.cacheBuilder.storageLevel.useDisk &&
+      case CachedRelation(m) if m.cacheBuilder.storageLevel.useDisk &&
           !m.cacheBuilder.storageLevel.useMemory =>
         m.stats.sizeInBytes.toFloat
-      case m: InMemoryRelation if m.cacheBuilder.storageLevel.useDisk =>
+      case CachedRelation(m) if m.cacheBuilder.storageLevel.useDisk =>
         m.stats.sizeInBytes.toFloat * 0.2
-      case m: InMemoryRelation if m.cacheBuilder.storageLevel.useMemory =>
+      case CachedRelation(_) =>
         0.0
     }.sum.toFloat
     scanOverhead + cachedOverhead
