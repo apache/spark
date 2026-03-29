@@ -142,13 +142,23 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     // Whether to enable arrow batch chunking for large result batches.
     val isResultChunkingEnabled = executePlan.resultChunkingEnabled
 
-    val converter = rowToArrowConverter(
-      schema,
-      maxRecordsPerBatch,
-      maxBatchSize,
-      timeZoneId,
-      errorOnDuplicatedFieldNames = false,
-      largeVarTypes = largeVarTypes)
+    val mkBatches = (rows: Iterator[InternalRow]) =>
+      ArrowConverters.toBatchWithSchemaIterator(
+        rows,
+        schema,
+        maxRecordsPerBatch,
+        maxBatchSize,
+        timeZoneId,
+        errorOnDuplicatedFieldNames = false,
+        largeVarTypes = largeVarTypes)
+
+    // toBatchWithSchemaIterator passes TaskContext.get() to ArrowBatchWithSchemaIterator,
+    // which already registers a TaskCompletionListener to close itself on task completion.
+    // No additional TCL is needed here.
+    val converter: Iterator[InternalRow] => Iterator[Batch] = rows => {
+      val batches = mkBatches(rows)
+      batches.map(b => b -> batches.rowCountInLastBatch)
+    }
 
     var numSent = 0
     def sendBatch(bytes: Array[Byte], count: Long, startOffset: Long): Unit = {
@@ -207,18 +217,32 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     def sendCollectedRows(rows: Array[InternalRow]): Unit = {
       executePlan.eventsManager.postFinished(Some(rows.length))
       var offset = 0L
-      converter(rows.iterator).foreach { case (bytes, count) =>
-        sendBatch(bytes, count, offset)
-        offset += count
+      val batches = mkBatches(rows.iterator)
+      try {
+        while (batches.hasNext) {
+          val batchBytes = batches.next()
+          val count = batches.rowCountInLastBatch
+          sendBatch(batchBytes, count, offset)
+          offset += count
+        }
+      } finally {
+        batches.close()
       }
     }
     dataframe.queryExecution.executedPlan match {
       case LocalTableScanExec(_, rows, _) =>
         executePlan.eventsManager.postFinished(Some(rows.length))
         var offset = 0L
-        converter(rows.iterator).foreach { case (bytes, count) =>
-          sendBatch(bytes, count, offset)
-          offset += count
+        val batches = mkBatches(rows.iterator)
+        try {
+          while (batches.hasNext) {
+            val batchBytes = batches.next()
+            val count = batches.rowCountInLastBatch
+            sendBatch(batchBytes, count, offset)
+            offset += count
+          }
+        } finally {
+          batches.close()
         }
       case collectLimit: CollectLimitExec =>
         SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectLimitArrow")) {

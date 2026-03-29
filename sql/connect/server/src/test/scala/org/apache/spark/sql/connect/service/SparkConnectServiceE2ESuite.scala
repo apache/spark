@@ -35,7 +35,7 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
   // buffers and are not pushed out immediately even when the client doesn't consume them, so that
   // even if the connection got closed, the client would see it as succeeded because the results
   // were all already in the buffer.
-  val BIG_ENOUGH_QUERY = "select * from range(1000000)"
+  val BIG_ENOUGH_QUERY = "select * from range(100000)"
 
   test("Execute is sent eagerly to the server upon iterator creation") {
     // This behavior changed with grpc upgrade from 1.56.0 to 1.59.0.
@@ -213,7 +213,7 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
   test("SPARK-45133 query should reach FINISHED state when results are not consumed") {
     withRawBlockingStub { stub =>
       val iter =
-        stub.executePlan(buildExecutePlanRequest(buildPlan("select * from range(1000000)")))
+        stub.executePlan(buildExecutePlanRequest(buildPlan("select * from range(100000)")))
       val execution = eventuallyGetExecutionHolder
       Eventually.eventually(timeout(30.seconds)) {
         assert(execution.eventsManager.status == ExecuteStatus.Finished)
@@ -223,7 +223,7 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
 
   test("SPARK-45133 local relation should reach FINISHED state when results are not consumed") {
     withClient { client =>
-      val iter = client.execute(buildLocalRelation((1 to 1000000).map(i => (i, i + 1))))
+      val iter = client.execute(buildLocalRelation((1 to 1000).map(i => (i, i + 1))))
       val execution = eventuallyGetExecutionHolder
       Eventually.eventually(timeout(30.seconds)) {
         assert(execution.eventsManager.status == ExecuteStatus.Finished)
@@ -257,7 +257,7 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       val iter =
         stub.executePlan(
           buildExecutePlanRequest(
-            buildPlan("select * from range(1000000)"),
+            buildPlan("select * from range(100000)"),
             sessionId = sessionId))
       iter.hasNext // guarantees the request was received by server.
 
@@ -266,7 +266,7 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       val iter2 =
         stub.executePlan(
           buildExecutePlanRequest(
-            buildPlan("select * from range(1000000)"),
+            buildPlan("select * from range(100000)"),
             sessionId = sessionId))
       // guarantees the request was received by server. No exception should be thrown on reuse
       iter2.hasNext

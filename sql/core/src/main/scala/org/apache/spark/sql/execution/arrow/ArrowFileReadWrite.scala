@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.arrow
 
 import java.nio.channels.Channels
 import java.nio.file.{Files, Path}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
 
@@ -39,22 +40,38 @@ private[sql] class SparkArrowFileWriter(schema: Schema, path: Path) extends Auto
   protected val fileWriter =
     new ArrowFileWriter(root, null, Channels.newChannel(Files.newOutputStream(path)))
 
+  // AtomicBoolean ensures close() is safe to call concurrently and from multiple code paths
+  // (write()'s finally block and the outer save() finally block). ArrowFileWriter.close() is
+  // NOT idempotent, so we must guard it; root/allocator are closed unconditionally via
+  // try/finally so they are always released even if fileWriter.close() throws.
+  private val fileWriterClosed = new AtomicBoolean(false)
+
   override def close(): Unit = {
-    fileWriter.close()
-    root.close()
-    allocator.close()
+    try {
+      if (fileWriterClosed.compareAndSet(false, true)) fileWriter.close()
+    } finally {
+      try { root.close() } finally { allocator.close() }
+    }
   }
 
   def write(batchBytesIter: Iterator[Array[Byte]]): Unit = {
     fileWriter.start()
-    while (batchBytesIter.hasNext) {
-      val batchBytes = batchBytesIter.next()
-      val batch = ArrowConverters.loadBatch(batchBytes, allocator)
-      loader.load(batch)
-      fileWriter.writeBatch()
-      batch.close()
+    try {
+      while (batchBytesIter.hasNext) {
+        val batchBytes = batchBytesIter.next()
+        val batch = ArrowConverters.loadBatch(batchBytes, allocator)
+        try {
+          loader.load(batch)
+          fileWriter.writeBatch()
+        } finally {
+          batch.close()
+        }
+      }
+    } finally {
+      // close() uses compareAndSet so this is safe even if the outer save() finally also calls
+      // writer.close()
+      if (fileWriterClosed.compareAndSet(false, true)) fileWriter.close()
     }
-    fileWriter.close()
   }
 }
 
@@ -91,12 +108,21 @@ private[spark] object ArrowFileReadWrite {
     val rdd = df.toArrowBatchRdd(maxRecordsPerBatch, "UTC", true, false)
     val arrowSchema = ArrowUtils.toArrowSchema(df.schema, "UTC", true, false)
     val writer = new SparkArrowFileWriter(arrowSchema, path)
-    writer.write(rdd.toLocalIterator)
+    try {
+      writer.write(rdd.toLocalIterator)
+    } finally {
+      writer.close()
+    }
   }
 
   def load(spark: SparkSession, path: Path): DataFrame = {
     val reader = new SparkArrowFileReader(path)
-    val schema = ArrowUtils.fromArrowSchema(reader.schema)
-    ArrowConverters.toDataFrame(reader.read(), schema, spark, "UTC", true, false)
+    try {
+      val schema = ArrowUtils.fromArrowSchema(reader.schema)
+      val batches = reader.read().toArray
+      ArrowConverters.toDataFrame(batches.iterator, schema, spark, "UTC", true, false)
+    } finally {
+      reader.close()
+    }
   }
 }
