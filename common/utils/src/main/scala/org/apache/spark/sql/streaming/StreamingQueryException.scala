@@ -99,7 +99,9 @@ class StreamingQueryException private[sql](
     if (queryDebugString.isEmpty) message else s"${message}\n${queryDebugString}"
 
   override def toString(): String =
-    s"""${classOf[StreamingQueryException].getName}: ${cause.getMessage}
+    s"""${classOf[StreamingQueryException].getName}: ${
+          if (cause != null) cause.getMessage else s"$message (no cause)"
+        }
        |$queryDebugString""".stripMargin
 
   override def getCondition: String = errorClass
