@@ -386,6 +386,8 @@ class DataTypeSuite extends SparkFunSuite {
   checkDefaultSize(DateType, 4)
   checkDefaultSize(TimestampType, 8)
   checkDefaultSize(TimestampNTZType, 8)
+  checkDefaultSize(TimestampNSType, 8)
+  checkDefaultSize(TimestampNTZNSType, 8)
   checkDefaultSize(StringType, 20)
   checkDefaultSize(CharType(20), 20)
   checkDefaultSize(VarcharType(20), 20)
