@@ -1855,6 +1855,19 @@ class CollectionExpressionsSuite
     checkEvaluation(Reverse(as6), Seq.empty)
     checkEvaluation(Reverse(as7), null)
     checkEvaluation(Reverse(aa), Seq(Seq("e"), Seq("c", "d"), Seq("a", "b")))
+
+    // BinaryType
+    val bb0 = Literal.create(Array[Byte](0xe6.toByte, 0x87.toByte), BinaryType)
+    val bb1 = Literal.create(Array[Byte](), BinaryType)
+    val bb2 = Literal.create(Array[Byte](0xff.toByte), BinaryType)
+    val bb3 = Literal.create(Array[Byte](0x00.toByte, 0x87.toByte), BinaryType)
+    val bb4 = Literal.create(null, BinaryType)
+
+    checkEvaluation(Reverse(bb0), Array[Byte](0x87.toByte, 0xe6.toByte))
+    checkEvaluation(Reverse(bb1), Array[Byte]())
+    checkEvaluation(Reverse(bb2), Array[Byte](0xff.toByte))
+    checkEvaluation(Reverse(bb3), Array[Byte](0x87.toByte, 0x00.toByte))
+    checkEvaluation(Reverse(bb4), null)
   }
 
   test("Array Position") {
