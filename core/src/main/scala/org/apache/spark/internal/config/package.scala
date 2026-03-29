@@ -1501,6 +1501,13 @@ package object config {
         "maxRemoteBlockSizeFetchToMem cannot be larger than (Int.MaxValue - 512) bytes.")
       .createWithDefaultString("200m")
 
+  private[spark] val REDUCER_FALLBACK_STORAGE_READ_THREADS =
+    ConfigBuilder("spark.reducer.fallbackStorage.readThreads")
+      .doc("Number of threads used by the reducer to read shuffle blocks from fallback storage.")
+      .version("4.2.0")
+      .intConf
+      .createWithDefault(5)
+
   private[spark] val TASK_METRICS_TRACK_UPDATED_BLOCK_STATUSES =
     ConfigBuilder("spark.taskMetrics.trackUpdatedBlockStatuses")
       .doc("Enable tracking of updatedBlockStatuses in the TaskMetrics. Off by default since " +

@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.io._
 import java.nio.ByteBuffer
+import java.util
 import java.util.UUID
 import java.util.concurrent.{CompletableFuture, Semaphore}
 import java.util.zip.CheckedInputStream
@@ -32,10 +33,12 @@ import scala.concurrent.Future
 import io.netty.util.internal.OutOfDirectMemoryError
 import org.apache.logging.log4j.Level
 import org.mockito.ArgumentMatchers.{any, eq => meq}
-import org.mockito.Mockito.{doThrow, mock, times, verify, when}
+import org.mockito.Mockito.{doThrow, mock, never, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.roaringbitmap.RoaringBitmap
+import org.scalatest.concurrent.Eventually
+import org.scalatest.time.SpanSugar.convertIntToGrainOfTime
 
 import org.apache.spark.{MapOutputTracker, SparkFunSuite, TaskContext}
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
@@ -49,7 +52,7 @@ import org.apache.spark.storage.ShuffleBlockFetcherIterator._
 import org.apache.spark.util.Utils
 
 
-class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
+class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with Eventually {
 
   private var transfer: BlockTransferService = _
   private var mapOutputTracker: MapOutputTracker = _
@@ -153,6 +156,9 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     val in = mock(classOf[InputStream])
     when(in.read(any())).thenReturn(1)
     when(in.read(any(), any(), any())).thenReturn(1)
+    val buf = ByteBuffer.allocate(size)
+    util.Arrays.fill(buf.array(), 1.byteValue)
+    when(mockManagedBuffer.nioByteBuffer()).thenReturn(buf)
     when(mockManagedBuffer.createInputStream()).thenReturn(in)
     when(mockManagedBuffer.size()).thenReturn(size)
     mockManagedBuffer
@@ -191,6 +197,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
       maxBlocksInFlightPerAddress: Int = Int.MaxValue,
       maxReqSizeShuffleToMem: Int = Int.MaxValue,
       maxAttemptsOnNettyOOM: Int = 10,
+      fallbackStorageReadThreads: Int = 5,
       detectCorrupt: Boolean = true,
       detectCorruptUseExtraMemory: Boolean = true,
       checksumEnabled: Boolean = true,
@@ -217,6 +224,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
       maxBlocksInFlightPerAddress,
       maxReqSizeShuffleToMem,
       maxAttemptsOnNettyOOM,
+      fallbackStorageReadThreads,
       detectCorrupt,
       detectCorruptUseExtraMemory,
       checksumEnabled,
@@ -300,11 +308,11 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     }
   }
 
-  test("successful 3 local + 4 host local + 2 remote reads") {
+  test("successful 3 local + 4 host local + 2 remote + 2 fallback storage reads") {
     val blockManager = createMockBlockManager()
-    val localBmId = blockManager.blockManagerId
 
     // Make sure blockManager.getBlockData would return the blocks
+    val localBmId = blockManager.blockManagerId
     val localBlocks = Map[BlockId, ManagedBuffer](
       ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer(),
       ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer(),
@@ -334,11 +342,21 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     // returning local dir for hostLocalBmId
     initHostLocalDirManager(blockManager, hostLocalDirs)
 
+    // Make sure fallback storage blocks would return
+    val fallbackBmId = FallbackStorage.FALLBACK_BLOCK_MANAGER_ID
+    val fallbackBlocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 9, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 10, 0) -> createMockManagedBuffer())
+    fallbackBlocks.foreach { case (blockId, buf) =>
+      doReturn(buf).when(blockManager).getFallbackStorageBlockData(meq(blockId))
+    }
+
     val iterator = createShuffleBlockIteratorWithDefaults(
       Map(
         localBmId -> toBlockList(localBlocks.keys, 1L, 0),
         remoteBmId -> toBlockList(remoteBlocks.keys, 1L, 1),
-        hostLocalBmId -> toBlockList(hostLocalBlocks.keys, 1L, 1)
+        hostLocalBmId -> toBlockList(hostLocalBlocks.keys, 1L, 1),
+        fallbackBmId -> toBlockList(fallbackBlocks.keys, 1L, 1)
       ),
       blockManager = Some(blockManager)
     )
@@ -346,7 +364,21 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     // 3 local blocks fetched in initialization
     verify(blockManager, times(3)).getLocalBlockData(any())
 
-    val allBlocks = localBlocks ++ remoteBlocks ++ hostLocalBlocks
+    // 2 fallback storage blocks fetched in initialization
+    // initialize creates futures that eventually call into getFallbackStorageBlockData
+    eventually(timeout(1.seconds), interval(10.millis)) {
+      assert(iterator.fallbackStorageReadPool.getCompletedTaskCount >= 2)
+    }
+    verify(blockManager, times(2)).getFallbackStorageBlockData(any())
+    // SPARK-55469: but buffer data have never been materialized
+    fallbackBlocks.values.foreach { mockBuf =>
+      verify(mockBuf, never()).nioByteBuffer()
+      verify(mockBuf, never()).createInputStream()
+      verify(mockBuf, never()).convertToNetty()
+      verify(mockBuf, never()).convertToNettyForSsl()
+    }
+
+    val allBlocks = localBlocks ++ remoteBlocks ++ hostLocalBlocks ++ fallbackBlocks
     for (i <- 0 until allBlocks.size) {
       assert(iterator.hasNext,
         s"iterator should have ${allBlocks.size} elements but actually has $i elements")
@@ -354,16 +386,27 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
 
       // Make sure we release buffers when a wrapped input stream is closed.
       val mockBuf = allBlocks(blockId)
-      verifyBufferRelease(mockBuf, inputStream)
+      if (!fallbackBlocks.contains(blockId)) {
+        verifyBufferRelease(mockBuf, inputStream)
+      }
     }
+    assert(!iterator.hasNext)
 
     // 4 host-local locks fetched
     verify(blockManager, times(4))
       .getHostLocalShuffleData(any(), meq(Array("local-dir")))
 
-    // 2 remote blocks are read from the same block manager
+    // 2 remote blocks are read from the same block manager in one fetch
     verifyFetchBlocksInvocationCount(1)
     assert(blockManager.hostLocalDirManager.get.getCachedHostLocalDirs.size === 1)
+
+    // SPARK-55469: fallback buffer data have been materialized once
+    fallbackBlocks.values.foreach { mockBuf =>
+      verify(mockBuf, times(1)).nioByteBuffer()
+      verify(mockBuf, never()).createInputStream()
+      verify(mockBuf, never()).convertToNetty()
+      verify(mockBuf, never()).convertToNettyForSsl()
+    }
   }
 
   test("error during accessing host local dirs for executors") {
@@ -451,10 +494,12 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     assert(!iterator.hasNext)
   }
 
-  test("fetch continuous blocks in batch successful 3 local + 4 host local + 2 remote reads") {
+  test("fetch continuous blocks in batch successful 3 local + 4 host local + 2 remote + " +
+    "2 fallback storage reads") {
     val blockManager = createMockBlockManager()
-    val localBmId = blockManager.blockManagerId
+
     // Make sure blockManager.getBlockData would return the merged block
+    val localBmId = blockManager.blockManagerId
     val localBlocks = Seq[BlockId](
       ShuffleBlockId(0, 0, 0),
       ShuffleBlockId(0, 0, 1),
@@ -463,6 +508,17 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
       ShuffleBlockBatchId(0, 0, 0, 3) -> createMockManagedBuffer())
     mergedLocalBlocks.foreach { case (blockId, buf) =>
       doReturn(buf).when(blockManager).getLocalBlockData(meq(blockId))
+    }
+
+    // Make sure fallback storage would return the merged block
+    val fallbackBmId = FallbackStorage.FALLBACK_BLOCK_MANAGER_ID
+    val fallbackBlocks = Seq[BlockId](
+      ShuffleBlockId(0, 1, 0),
+      ShuffleBlockId(0, 1, 1))
+    val mergedFallbackBlocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockBatchId(0, 1, 0, 2) -> createMockManagedBuffer())
+    mergedFallbackBlocks.foreach { case (blockId, buf) =>
+      doReturn(buf).when(blockManager).getFallbackStorageBlockData(meq(blockId))
     }
 
     // Make sure remote blocks would return the merged block
@@ -496,6 +552,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     val iterator = createShuffleBlockIteratorWithDefaults(
       Map(
         localBmId -> toBlockList(localBlocks, 1L, 0),
+        fallbackBmId -> toBlockList(fallbackBlocks, 1L, 1),
         remoteBmId -> toBlockList(remoteBlocks, 1L, 1),
         hostLocalBmId -> toBlockList(hostLocalBlocks.keys, 1L, 1)
       ),
@@ -503,24 +560,52 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
       doBatchFetch = true
     )
 
-    // 3 local blocks batch fetched in initialization
+    // 1 local merge block fetched in initialization
     verify(blockManager, times(1)).getLocalBlockData(any())
 
-    val allBlocks = mergedLocalBlocks ++ mergedRemoteBlocks ++ mergedHostLocalBlocks
-    for (i <- 0 until 3) {
-      assert(iterator.hasNext, s"iterator should have 3 elements but actually has $i elements")
+    // 1 fallback merge block fetched in initialization
+    // initialize creates futures that eventually call into getFallbackStorageBlockData
+    eventually(timeout(1.seconds), interval(10.millis)) {
+      assert(iterator.fallbackStorageReadPool.getCompletedTaskCount >= 1)
+    }
+    verify(blockManager, times(1)).getFallbackStorageBlockData(any())
+    // SPARK-55469: but buffer data have never been materialized
+    mergedFallbackBlocks.values.foreach { mockBuf =>
+      verify(mockBuf, never()).nioByteBuffer()
+      verify(mockBuf, never()).createInputStream()
+      verify(mockBuf, never()).convertToNetty()
+      verify(mockBuf, never()).convertToNettyForSsl()
+    }
+
+    val allBlocks = mergedLocalBlocks ++ mergedFallbackBlocks ++ mergedRemoteBlocks ++
+      mergedHostLocalBlocks
+    for (i <- 0 until 4) {
+      assert(iterator.hasNext, s"iterator should have 4 elements but actually has $i elements")
       val (blockId, inputStream) = iterator.next()
       verifyFetchBlocksInvocationCount(1)
       // Make sure we release buffers when a wrapped input stream is closed.
       val mockBuf = allBlocks(blockId)
-      verifyBufferRelease(mockBuf, inputStream)
+      if (!mergedFallbackBlocks.contains(blockId)) {
+        verifyBufferRelease(mockBuf, inputStream)
+      }
     }
+    assert(!iterator.hasNext)
 
-    // 4 host-local locks fetched
+    // 1 merged host-local locks fetched
     verify(blockManager, times(1))
       .getHostLocalShuffleData(any(), meq(Array("local-dir")))
 
+    // 1 merged remote block is read from the same block manager
+    verifyFetchBlocksInvocationCount(1)
     assert(blockManager.hostLocalDirManager.get.getCachedHostLocalDirs.size === 1)
+
+    // SPARK-55469: merged fallback buffer data have been materialized once
+    mergedFallbackBlocks.values.foreach { mockBuf =>
+      verify(mockBuf, times(1)).nioByteBuffer()
+      verify(mockBuf, never()).createInputStream()
+      verify(mockBuf, never()).convertToNetty()
+      verify(mockBuf, never()).convertToNettyForSsl()
+    }
   }
 
   test("fetch continuous blocks in batch should respect maxBytesInFlight") {
@@ -1051,6 +1136,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
       val mockBuf = remoteBlocks(blockId)
       verifyBufferRelease(mockBuf, inputStream)
     }
+    assert(!iterator.hasNext)
 
     // 1st fetch request (contains 1 block) would fail due to Netty OOM
     // 2nd fetch request retry the block of the 1st fetch request
@@ -1091,6 +1177,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
         val mockBuf = remoteBlocks(blockId)
         verifyBufferRelease(mockBuf, inputStream)
       }
+      assert(!iterator.hasNext)
 
       // 1st fetch request (contains 3 blocks) would fail on the someone block due to Netty OOM
       // but succeed for the remaining blocks
@@ -2037,9 +2124,9 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
 
   test("SPARK-52395: Fast fail when failed to get host local dirs") {
     val blockManager = createMockBlockManager()
-    val localBmId = blockManager.blockManagerId
 
     // Make sure blockManager.getBlockData would return the blocks
+    val localBmId = blockManager.blockManagerId
     val localBlocks = Map[BlockId, ManagedBuffer](
       ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer(),
       ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer())
