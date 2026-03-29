@@ -16,15 +16,12 @@
  */
 package org.apache.spark.network.protocol;
 
-import java.io.InputStream;
 import java.util.List;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageEncoder;
-import io.netty.handler.stream.ChunkedStream;
 
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
@@ -94,15 +91,9 @@ public final class SslMessageEncoder extends MessageToMessageEncoder<Message> {
     assert header.writableBytes() == 0;
 
     if (body != null && bodyLength > 0) {
-      if (body instanceof ByteBuf byteBuf) {
-        out.add(Unpooled.wrappedBuffer(header, byteBuf));
-      } else if (body instanceof InputStream || body instanceof ChunkedStream) {
-        // For now, assume the InputStream is doing proper chunking.
-        out.add(new EncryptedMessageWithHeader(in.body(), header, body, bodyLength));
-      } else {
-        throw new IllegalArgumentException(
-          "Body must be a ByteBuf, ChunkedStream or an InputStream");
-      }
+      // We transfer ownership of the reference on in.body() to EncryptedMessageWithHeader.
+      // This reference will be freed when EncryptedMessageWithHeader.close() is called.
+      out.add(new EncryptedMessageWithHeader(in.body(), header, body, bodyLength));
     } else {
       out.add(header);
     }
