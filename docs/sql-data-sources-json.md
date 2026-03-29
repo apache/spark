@@ -244,6 +244,12 @@ Data source options of JSON can be set via:
     <td>read</td>
   </tr>
   <tr>
+    <td><code>inferTimestamp</code></td>
+    <td><code>false</code></td>
+    <td>Enables inferring of TimestampType and TimestampNTZType from strings matched to the timestamp pattern defined by <code>timestampFormat</code> and <code>timestampNTZFormat</code> options respectively.</td>
+    <td>read</td>
+  </tr>
+  <tr>
     <td><code>locale</code></td>
     <td><code>en-US</code></td>
     <td>Sets a locale as language tag in IETF BCP 47 format. For instance, <code>locale</code> is used while parsing dates and timestamps.</td>
