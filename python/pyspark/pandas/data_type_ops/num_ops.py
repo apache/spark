@@ -445,7 +445,7 @@ class FractionalOps(NumericOps):
             raise TypeError("Multiplication can not be applied to given types.")
 
         is_ansi = is_ansi_mode_enabled(left._internal.spark_frame.sparkSession)
-        if is_ansi and _is_decimal_float_mixed(left, right):
+        if _is_decimal_float_mixed(left, right):
             raise TypeError("Multiplication can not be applied to given types.")
         new_right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
 
@@ -455,8 +455,7 @@ class FractionalOps(NumericOps):
         return column_op(wrapped_mul)(left, new_right)
 
     def mod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        is_ansi = is_ansi_mode_enabled(left._internal.spark_frame.sparkSession)
-        if is_ansi and _is_decimal_float_mixed(left, right):
+        if _is_decimal_float_mixed(left, right):
             raise TypeError("Modulo can not be applied to given types.")
 
         return super().mod(left, right)
@@ -466,7 +465,7 @@ class FractionalOps(NumericOps):
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("True division can not be applied to given types.")
         is_ansi = is_ansi_mode_enabled(left._internal.spark_frame.sparkSession)
-        if is_ansi and _is_decimal_float_mixed(left, right):
+        if _is_decimal_float_mixed(left, right):
             raise TypeError("True division can not be applied to given types.")
         new_right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
         left_dtype = left.dtype
@@ -497,7 +496,7 @@ class FractionalOps(NumericOps):
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Floor division can not be applied to given types.")
         is_ansi = is_ansi_mode_enabled(left._internal.spark_frame.sparkSession)
-        if is_ansi and _is_decimal_float_mixed(left, right):
+        if _is_decimal_float_mixed(left, right):
             raise TypeError("Floor division can not be applied to given types.")
         left_dtype = left.dtype
 
@@ -529,8 +528,7 @@ class FractionalOps(NumericOps):
         if not isinstance(right, numbers.Number):
             raise TypeError("True division can not be applied to given types.")
 
-        is_ansi = is_ansi_mode_enabled(left._internal.spark_frame.sparkSession)
-        if is_ansi and _is_decimal_float_mixed(left, right):
+        if _is_decimal_float_mixed(left, right):
             raise TypeError("True division can not be applied to given types.")
 
         def rtruediv(left: PySparkColumn, right: Any) -> PySparkColumn:
@@ -546,8 +544,7 @@ class FractionalOps(NumericOps):
         if not isinstance(right, numbers.Number):
             raise TypeError("Floor division can not be applied to given types.")
 
-        is_ansi = is_ansi_mode_enabled(left._internal.spark_frame.sparkSession)
-        if is_ansi and _is_decimal_float_mixed(left, right):
+        if _is_decimal_float_mixed(left, right):
             raise TypeError("Floor division can not be applied to given types.")
 
         def rfloordiv(left: PySparkColumn, right: Any) -> PySparkColumn:
@@ -559,14 +556,12 @@ class FractionalOps(NumericOps):
         return numpy_column_op(rfloordiv)(left, right)
 
     def rmul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        is_ansi = is_ansi_mode_enabled(left._internal.spark_frame.sparkSession)
-        if is_ansi and _is_decimal_float_mixed(left, right):
+        if _is_decimal_float_mixed(left, right):
             raise TypeError("Multiplication can not be applied to given types.")
         return super().rmul(left, right)
 
     def rmod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        is_ansi = is_ansi_mode_enabled(left._internal.spark_frame.sparkSession)
-        if is_ansi and _is_decimal_float_mixed(left, right):
+        if _is_decimal_float_mixed(left, right):
             raise TypeError("Modulo can not be applied to given types.")
 
         return super().rmod(left, right)

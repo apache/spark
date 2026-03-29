@@ -20,7 +20,6 @@ import pandas as pd
 import numpy as np
 
 from pyspark import pandas as ps
-from pyspark.testing.utils import is_ansi_mode_test
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
@@ -62,13 +61,12 @@ class NumMulDivTestsMixin:
             self.assertRaises(TypeError, lambda: psser * psdf["date"])
             self.assertRaises(TypeError, lambda: psser * psdf["categorical"])
 
-        if is_ansi_mode_test:
-            self.assertRaises(TypeError, lambda: psdf["decimal"] * psdf["float"])
-            self.assertRaises(TypeError, lambda: psdf["float"] * psdf["decimal"])
-            self.assertRaises(TypeError, lambda: psdf["decimal"] * psdf["float32"])
-            self.assertRaises(TypeError, lambda: psdf["float32"] * psdf["decimal"])
-            self.assertRaises(TypeError, lambda: psdf["decimal"] * 0.1)
-            self.assertRaises(TypeError, lambda: 0.1 * psdf["decimal"])
+        self.assertRaises(TypeError, lambda: psdf["decimal"] * psdf["float"])
+        self.assertRaises(TypeError, lambda: psdf["float"] * psdf["decimal"])
+        self.assertRaises(TypeError, lambda: psdf["decimal"] * psdf["float32"])
+        self.assertRaises(TypeError, lambda: psdf["float32"] * psdf["decimal"])
+        self.assertRaises(TypeError, lambda: psdf["decimal"] * 0.1)
+        self.assertRaises(TypeError, lambda: 0.1 * psdf["decimal"])
 
     def test_truediv(self):
         pdf, psdf = self.pdf, self.psdf
@@ -86,13 +84,12 @@ class NumMulDivTestsMixin:
                 else:
                     self.assertRaises(TypeError, lambda: psser / psdf[n_col])
 
-        if is_ansi_mode_test:
-            self.assertRaises(TypeError, lambda: psdf["decimal"] / psdf["float"])
-            self.assertRaises(TypeError, lambda: psdf["float"] / psdf["decimal"])
-            self.assertRaises(TypeError, lambda: psdf["decimal"] / psdf["float32"])
-            self.assertRaises(TypeError, lambda: psdf["float32"] / psdf["decimal"])
-            self.assertRaises(TypeError, lambda: psdf["decimal"] / 0.1)
-            self.assertRaises(TypeError, lambda: 0.1 / psdf["decimal"])
+        self.assertRaises(TypeError, lambda: psdf["decimal"] / psdf["float"])
+        self.assertRaises(TypeError, lambda: psdf["float"] / psdf["decimal"])
+        self.assertRaises(TypeError, lambda: psdf["decimal"] / psdf["float32"])
+        self.assertRaises(TypeError, lambda: psdf["float32"] / psdf["decimal"])
+        self.assertRaises(TypeError, lambda: psdf["decimal"] / 0.1)
+        self.assertRaises(TypeError, lambda: 0.1 / psdf["decimal"])
 
     def test_floordiv(self):
         pdf, psdf = self.pdf, self.psdf
@@ -110,13 +107,12 @@ class NumMulDivTestsMixin:
                     psser = psdf[col]
                     self.assertRaises(TypeError, lambda: psser // psdf[n_col])
 
-        if is_ansi_mode_test:
-            self.assertRaises(TypeError, lambda: psdf["decimal"] // psdf["float"])
-            self.assertRaises(TypeError, lambda: psdf["float"] // psdf["decimal"])
-            self.assertRaises(TypeError, lambda: psdf["decimal"] // psdf["float32"])
-            self.assertRaises(TypeError, lambda: psdf["float32"] // psdf["decimal"])
-            self.assertRaises(TypeError, lambda: psdf["decimal"] // 0.1)
-            self.assertRaises(TypeError, lambda: 0.1 // psdf["decimal"])
+        self.assertRaises(TypeError, lambda: psdf["decimal"] // psdf["float"])
+        self.assertRaises(TypeError, lambda: psdf["float"] // psdf["decimal"])
+        self.assertRaises(TypeError, lambda: psdf["decimal"] // psdf["float32"])
+        self.assertRaises(TypeError, lambda: psdf["float32"] // psdf["decimal"])
+        self.assertRaises(TypeError, lambda: psdf["decimal"] // 0.1)
+        self.assertRaises(TypeError, lambda: 0.1 // psdf["decimal"])
 
     def test_mod(self):
         pdf, psdf = self.pdf, self.psdf
@@ -139,13 +135,12 @@ class NumMulDivTestsMixin:
                 else:
                     self.assertRaises(TypeError, lambda: psser % psdf[n_col])
 
-        if is_ansi_mode_test:
-            self.assertRaises(TypeError, lambda: psdf["decimal"] % psdf["float"])
-            self.assertRaises(TypeError, lambda: psdf["float"] % psdf["decimal"])
-            self.assertRaises(TypeError, lambda: psdf["decimal"] % psdf["float32"])
-            self.assertRaises(TypeError, lambda: psdf["float32"] % psdf["decimal"])
-            self.assertRaises(TypeError, lambda: psdf["decimal"] % 0.1)
-            self.assertRaises(TypeError, lambda: 0.1 % psdf["decimal"])
+        self.assertRaises(TypeError, lambda: psdf["decimal"] % psdf["float"])
+        self.assertRaises(TypeError, lambda: psdf["float"] % psdf["decimal"])
+        self.assertRaises(TypeError, lambda: psdf["decimal"] % psdf["float32"])
+        self.assertRaises(TypeError, lambda: psdf["float32"] % psdf["decimal"])
+        self.assertRaises(TypeError, lambda: psdf["decimal"] % 0.1)
+        self.assertRaises(TypeError, lambda: 0.1 % psdf["decimal"])
 
 
 class NumMulDivTests(
