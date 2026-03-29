@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.time.Duration
+
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
@@ -30,7 +32,7 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNes
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, StringType, StructField, StructType}
 
 // Disable AQE because the WholeStageCodegenExec is added when running QueryStageExec
 class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
@@ -948,12 +950,20 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
 
   test("SPARK-56032: subexpression elimination in FilterExec codegen") {
     val schema = StructType(Seq(
-      StructField("a", IntegerType, nullable = true),
-      StructField("b", IntegerType, nullable = true)))
+      StructField("a", DayTimeIntervalType(), nullable = true),
+      StructField("b", DayTimeIntervalType(), nullable = true)))
     val data = spark.sparkContext.parallelize(Seq(
-      Row(1, 5), Row(null, 3), Row(4, null), Row(5, 6), Row(7, 8), Row(2, 3)))
+      Row(Duration.ofDays(1), Duration.ofDays(5)),
+      Row(null, Duration.ofDays(3)),
+      Row(Duration.ofDays(4), null),
+      Row(Duration.ofDays(5), Duration.ofDays(6)),
+      Row(Duration.ofDays(7), Duration.ofDays(8)),
+      Row(Duration.ofDays(2), Duration.ofDays(3))))
 
-    val expected = Seq(Row(1, 5), Row(5, 6), Row(2, 3))
+    val expected = Seq(
+      Row(Duration.ofDays(1), Duration.ofDays(5)),
+      Row(Duration.ofDays(5), Duration.ofDays(6)),
+      Row(Duration.ofDays(2), Duration.ofDays(3)))
 
     Seq("1", Int.MaxValue.toString).foreach { splitThreshold =>
       def testFilterCSE(cseEnabled: Boolean): String = {
@@ -964,7 +974,8 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> splitThreshold) {
           val df = spark.createDataFrame(data, schema)
           val filtered = df.where(
-            "a IS NOT NULL AND (a + b) > 3 AND (a + b) < 15 AND (a + b) != 10")
+            "a IS NOT NULL AND (a + b) > INTERVAL '3' DAY " +
+              "AND (a + b) < INTERVAL '15' DAY AND (a + b) != INTERVAL '10' DAY")
           val plan = filtered.queryExecution.executedPlan
           assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
             "Filter should be in whole-stage codegen")
