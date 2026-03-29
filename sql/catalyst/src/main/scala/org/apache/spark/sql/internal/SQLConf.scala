@@ -1229,6 +1229,14 @@ object SQLConf {
       .bytesConf(ByteUnit.BYTE)
       .createOptional
 
+  val ADAPTIVE_BROADCAST_JOIN_FALLBACK_TO_SHUFFLE_ENABLED =
+    buildConf("spark.sql.adaptive.broadcastJoin.fallbackToShuffle.enabled")
+      .doc("When true, adaptive execution retries with broadcast joins disabled if a broadcast " +
+        "query stage fails because it exceeds broadcast table row or size limits.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD =
     buildConf("spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold")
       .doc("Configures the maximum size in bytes per partition that can be allowed to build " +
@@ -7422,6 +7430,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def nonEmptyPartitionRatioForBroadcastJoin: Double =
     getConf(NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN)
+
+  def adaptiveBroadcastJoinFallbackToShuffleEnabled: Boolean =
+    getConf(ADAPTIVE_BROADCAST_JOIN_FALLBACK_TO_SHUFFLE_ENABLED)
 
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
 
