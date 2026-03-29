@@ -22,8 +22,8 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.{SparkConf, SparkThrowable}
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedHaving, UnresolvedRelation, UnresolvedStar}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, GreaterThan, Literal, NullsFirst, SortOrder, UnresolvedWindowExpression, UnspecifiedFrame, WindowSpecDefinition, WindowSpecReference}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, QualifyExpression, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedHaving, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, AttributeReference, Concat, EqualTo, GreaterThan, Literal, NullsFirst, SortOrder, UnresolvedWindowExpression, UnspecifiedFrame, WindowExpression, WindowSpecDefinition, WindowSpecReference}
 import org.apache.spark.sql.catalyst.parser.{AbstractParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -785,6 +785,52 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
         fragment = sql2,
         start = 0,
         stop = 264))
+  }
+
+  test("QUALIFY clause") {
+    assertEqual(
+      """
+        |SELECT a, RANK() OVER (ORDER BY b) AS rank
+        |FROM testData2
+        |QUALIFY rank = 1
+      """.stripMargin,
+      Filter(
+        QualifyExpression(
+          EqualTo(UnresolvedAttribute("rank"), Literal(1)),
+          selectListHasWindowFunction = true),
+        Project(
+          Seq(
+            $"a",
+            Alias(
+              WindowExpression(
+                UnresolvedFunction("RANK", Seq.empty, isDistinct = false),
+                WindowSpecDefinition(
+                  Nil,
+                  Seq(SortOrder($"b", Ascending, NullsFirst, Seq.empty)),
+                  UnspecifiedFrame)),
+              "rank")()),
+          UnresolvedRelation(TableIdentifier("testData2")))))
+
+    assertEqual(
+      """
+        |SELECT a
+        |FROM testData2
+        |QUALIFY RANK() OVER (ORDER BY b) = 1
+      """.stripMargin,
+      Filter(
+        QualifyExpression(
+          EqualTo(
+            WindowExpression(
+              UnresolvedFunction("RANK", Seq.empty, isDistinct = false),
+              WindowSpecDefinition(
+                Nil,
+                Seq(SortOrder($"b", Ascending, NullsFirst, Seq.empty)),
+                UnspecifiedFrame)),
+            Literal(1)),
+          selectListHasWindowFunction = false),
+        Project(
+          Seq($"a"),
+          UnresolvedRelation(TableIdentifier("testData2")))))
   }
 
   test("CLEAR CACHE") {

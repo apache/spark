@@ -5748,6 +5748,18 @@
     ],
     "sqlState" : "38000"
   },
+  "QUALIFY_AGGREGATE_NOT_ALLOWED" : {
+    "message" : [
+      "Aggregate functions are not supported in QUALIFY: <aggregateExpr>."
+    ],
+    "sqlState" : "42903"
+  },
+  "QUALIFY_REQUIRES_WINDOW_FUNCTION" : {
+    "message" : [
+      "The QUALIFY clause requires at least one window function in the current SELECT list or the QUALIFY condition."
+    ],
+    "sqlState" : "42903"
+  },
   "RECURSION_LEVEL_LIMIT_EXCEEDED" : {
     "message" : [
       "Recursion level limit <levelLimit> reached but query has not exhausted, try increasing it like 'WITH RECURSIVE t(col) MAX RECURSION LEVEL 200'."

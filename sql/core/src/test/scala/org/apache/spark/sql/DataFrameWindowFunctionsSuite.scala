@@ -1053,6 +1053,185 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       "HAVING")
   }
 
+  test("QUALIFY filters window function results") {
+    withTempView("dealer") {
+      Seq(
+        (100, "Fremont", "Honda Civic", 10),
+        (100, "Fremont", "Honda Accord", 15),
+        (100, "Fremont", "Honda CRV", 7),
+        (200, "Dublin", "Honda Civic", 20),
+        (200, "Dublin", "Honda Accord", 10),
+        (200, "Dublin", "Honda CRV", 3),
+        (300, "San Jose", "Honda Civic", 5),
+        (300, "San Jose", "Honda Accord", 8)
+      ).toDF("id", "city", "car_model", "quantity").createOrReplaceTempView("dealer")
+
+      val expectedWithRank = Seq(
+        Row("San Jose", "Honda Accord", 1),
+        Row("Dublin", "Honda CRV", 1),
+        Row("San Jose", "Honda Civic", 1))
+      checkAnswer(
+        sql(
+          """
+            |SELECT city, car_model, RANK() OVER (PARTITION BY car_model ORDER BY quantity) AS rank
+            |FROM dealer
+            |QUALIFY rank = 1
+          """.stripMargin),
+        expectedWithRank)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT city, car_model
+            |FROM dealer
+            |QUALIFY RANK() OVER (PARTITION BY car_model ORDER BY quantity) = 1
+          """.stripMargin),
+        expectedWithRank.map(row => Row(row.getString(0), row.getString(1))))
+    }
+  }
+
+  test("QUALIFY filters window function results after HAVING") {
+    withTempView("testData2") {
+      testData2.createOrReplaceTempView("testData2")
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, SUM(b) AS total
+            |FROM testData2
+            |GROUP BY a
+            |HAVING SUM(b) > 2
+            |QUALIFY ROW_NUMBER() OVER (ORDER BY a DESC) = 1
+          """.stripMargin),
+        Row(3, 3))
+    }
+  }
+
+  test("QUALIFY filters window function results after legacy HAVING without GROUP BY") {
+    withSQLConf(SQLConf.LEGACY_HAVING_WITHOUT_GROUP_BY_AS_WHERE.key -> "true") {
+      withTempView("testData2") {
+        testData2.createOrReplaceTempView("testData2")
+
+        checkAnswer(
+          sql(
+            """
+              |SELECT a
+              |FROM testData2
+              |HAVING a > 1
+              |QUALIFY ROW_NUMBER() OVER (ORDER BY b, a) = 1
+            """.stripMargin),
+          Row(2))
+      }
+    }
+  }
+
+  test("QUALIFY requires a current-query window function") {
+    withTempView("testData2") {
+      testData2.createOrReplaceTempView("testData2")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT a FROM testData2 QUALIFY a = 1").queryExecution.analyzed
+        },
+        condition = "QUALIFY_REQUIRES_WINDOW_FUNCTION",
+        parameters = Map.empty)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            """
+              |SELECT a
+              |FROM (SELECT a, RANK() OVER (ORDER BY b) AS rank FROM testData2) t
+              |QUALIFY a = 1
+            """.stripMargin).queryExecution.analyzed
+        },
+        condition = "QUALIFY_REQUIRES_WINDOW_FUNCTION",
+        parameters = Map.empty)
+    }
+  }
+
+  test("QUALIFY does not allow aggregate functions in its predicate") {
+    withTempView("testData2") {
+      testData2.createOrReplaceTempView("testData2")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT a, RANK() OVER (ORDER BY b) AS rank FROM testData2 QUALIFY COUNT(1) > 1")
+            .queryExecution.analyzed
+        },
+        condition = "QUALIFY_AGGREGATE_NOT_ALLOWED",
+        parameters = Map("aggregateExpr" -> "\"count(1)\""),
+        context = ExpectedContext("COUNT(1)", 66, 73))
+
+      Seq(
+        """
+          |SELECT a, SUM(b) AS total, RANK() OVER (ORDER BY SUM(b)) AS rank
+          |FROM testData2
+          |GROUP BY a
+          |QUALIFY SUM(b) > 1
+        """.stripMargin
+      ).foreach { query =>
+        val e = withClue(query) {
+          intercept[AnalysisException] {
+            sql(query).queryExecution.analyzed
+          }
+        }
+        assert(e.getCondition == "QUALIFY_AGGREGATE_NOT_ALLOWED")
+      }
+    }
+  }
+
+  test("QUALIFY allows aggregate aliases in its predicate") {
+    withTempView("testData2") {
+      testData2.createOrReplaceTempView("testData2")
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, SUM(b) AS total, ROW_NUMBER() OVER (ORDER BY a) AS rn
+            |FROM testData2
+            |GROUP BY a
+            |QUALIFY total > 1
+          """.stripMargin),
+        Seq(Row(1, 3, 1), Row(2, 3, 2), Row(3, 3, 3)))
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, SUM(b) AS total
+            |FROM testData2
+            |GROUP BY a
+            |QUALIFY ROW_NUMBER() OVER (ORDER BY a) = 1 AND total > 1
+          """.stripMargin),
+        Row(1, 3))
+    }
+  }
+
+  test("QUALIFY allows references to columns from an inner aggregated subquery") {
+    withTempView("testData2") {
+      testData2.createOrReplaceTempView("testData2")
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, total
+            |FROM (
+            |  SELECT a, SUM(b) AS total
+            |  FROM testData2
+            |  GROUP BY a
+            |) t
+            |QUALIFY ROW_NUMBER() OVER (ORDER BY a) = 1 AND total > 1
+          """.stripMargin),
+        Row(1, 3))
+    }
+  }
+
+  test("QUALIFY is non-reserved in non-ANSI mode") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkAnswer(sql("SELECT qualify FROM VALUES (1) AS t(qualify)"), Row(1))
+    }
+  }
+
   test("window functions in multiple selects") {
     val df = Seq(
       ("S1", "P1", 100),

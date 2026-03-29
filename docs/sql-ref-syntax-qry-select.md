@@ -49,6 +49,8 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
     [ WHERE boolean_expression ]
     [ GROUP BY expression [ , ... ] ]
     [ HAVING boolean_expression ]
+    [ WINDOW clause ]
+    [ QUALIFY boolean_expression ]
 ```
 
 ### Parameters
@@ -121,6 +123,12 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
      Specifies the predicates by which the rows produced by GROUP BY are filtered. The HAVING clause is used to
      filter rows after the grouping is performed. If HAVING is specified without GROUP BY, it indicates a GROUP BY
      without grouping expressions (global aggregate).
+
+* **QUALIFY**
+
+     Filters rows after window functions have been evaluated. The current `SELECT` list or the
+     `QUALIFY` condition must contain at least one window function, and aggregate functions are
+     not allowed inside the `QUALIFY` condition.
 
 * **ORDER BY**
 

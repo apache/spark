@@ -488,6 +488,7 @@ class Analyzer(
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
+      ResolveQualifyExpressions ::
       TimeWindowing ::
       SessionWindowing ::
       ResolveWindowTime ::
@@ -1653,6 +1654,20 @@ class Analyzer(
           resolveExpressionByPlanChildren(resolvedWithAgg, u, includeLastResort = true)
         }
 
+      case Filter(QualifyExpression(cond, _), _)
+        if invalidQualifyAggregateFunction(cond).isDefined =>
+        throw QueryCompilationErrors.aggregateInQualifyNotAllowedError(
+          invalidQualifyAggregateFunction(cond).get)
+
+      // QUALIFY can host grouping expressions/aggregate functions when it is attached to an
+      // Aggregate. Resolve columns with `agg.child.output` first, similar to HAVING.
+      case f @ Filter(QualifyExpression(cond, selectListHasWindowFunction), agg: Aggregate)
+        if !cond.resolved =>
+        val resolvedWithAgg = resolveColWithAgg(cond, agg)
+        val resolvedCond =
+          resolveExpressionByPlanChildren(resolvedWithAgg, f, includeLastResort = true)
+        f.copy(condition = QualifyExpression(resolvedCond, selectListHasWindowFunction))
+
       // RepartitionByExpression can host missing attributes that are from a descendant node.
       // For example, `spark.table("t").select($"a").repartition($"b")`. We can resolve `b` with
       // table `t` even if there is a Project node between the table scan node and Sort node.
@@ -1699,6 +1714,22 @@ class Analyzer(
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(conf.maxToStringFields)}")
         q.mapExpressions(resolveExpressionByPlanChildren(_, q, includeLastResort = true))
+    }
+
+    private def isUnresolvedAggregateFunction(unresolvedFunc: UnresolvedFunction): Boolean = {
+      Try(functionResolution.resolveFunction(unresolvedFunc)) match {
+        case Success(_: AggregateExpression | _: AggregateFunction) => true
+        case _ => false
+      }
+    }
+
+    private def invalidQualifyAggregateFunction(expr: Expression): Option[Expression] = expr match {
+      case _: WindowExpression | _: UnresolvedWindowExpression => None
+      case unresolvedFunc: UnresolvedFunction if isUnresolvedAggregateFunction(unresolvedFunc) =>
+        Some(unresolvedFunc)
+      case agg: AggregateExpression => Some(agg)
+      case agg: AggregateFunction => Some(agg)
+      case other => other.children.to(LazyList).flatMap(invalidQualifyAggregateFunction).headOption
     }
 
     private object MergeResolvePolicy extends Enumeration {
@@ -2833,8 +2864,17 @@ class Analyzer(
    *
    * We need to make sure the expressions all fully resolved before looking for aggregate functions
    * and group by expressions from them.
-   */
+  */
   object ResolveAggregateFunctions extends Rule[LogicalPlan] {
+    private def invalidResolvedQualifyAggregateFunction(expr: Expression): Option[Expression] =
+      expr match {
+        case _: WindowExpression | _: UnresolvedWindowExpression => None
+        case agg: AggregateExpression => Some(agg)
+        case agg: AggregateFunction => Some(agg)
+        case other =>
+          other.children.to(LazyList).flatMap(invalidResolvedQualifyAggregateFunction).headOption
+      }
+
     def apply(plan: LogicalPlan): LogicalPlan = {
       val collatedPlan =
         if (conf.getConf(SQLConf.RUN_COLLATION_TYPE_CASTS_BEFORE_ALIAS_ASSIGNMENT)) {
@@ -2860,6 +2900,15 @@ class Analyzer(
             // resolution order.
             UnresolvedHaving(newCond, newChild)
           }
+        })
+
+      case Filter(QualifyExpression(cond, selectListHasWindowFunction), agg: Aggregate)
+        if agg.resolved && cond.resolved =>
+        invalidResolvedQualifyAggregateFunction(cond).foreach { agg =>
+          throw QueryCompilationErrors.aggregateInQualifyNotAllowedError(agg)
+        }
+        resolveOperatorWithAggregate(Seq(cond), agg, (newExprs, newChild) => {
+          Filter(QualifyExpression(newExprs.head, selectListHasWindowFunction), newChild)
         })
 
       case Filter(cond, agg: Aggregate) if agg.resolved && cond.resolved =>
@@ -3226,6 +3275,21 @@ class Analyzer(
       }
     }
 
+    private def invalidResolvedQualifyAggregateFunction(expr: Expression): Option[Expression] =
+      expr match {
+        case _: WindowExpression | _: UnresolvedWindowExpression => None
+        case agg: AggregateExpression => Some(agg)
+        case agg: AggregateFunction => Some(agg)
+        case other =>
+          other.children.to(LazyList).flatMap(invalidResolvedQualifyAggregateFunction).headOption
+      }
+
+    private def validateQualifyAggregateCondition(condition: Expression): Unit = {
+      invalidResolvedQualifyAggregateFunction(condition).foreach { agg =>
+        throw QueryCompilationErrors.aggregateInQualifyNotAllowedError(agg)
+      }
+    }
+
     /**
      * From a Seq of [[NamedExpression]]s, extract expressions containing window expressions and
      * other regular expressions that do not contain any window expression. For example, for
@@ -3404,10 +3468,107 @@ class Analyzer(
       Project(windowOps.output ++ newExpressionsWithWindowFunctions, windowOps)
     } // end of addWindow
 
+    private def addQualifyFilter(
+        projectList: Seq[NamedExpression],
+        havingCondition: Expression,
+        qualifyCondition: Expression,
+        child: LogicalPlan): LogicalPlan = {
+      val qualifyAlias = Alias(qualifyCondition, "__qualify_cond")()
+      val (windowExpressions, regularExpressions) = extract(projectList :+ qualifyAlias)
+      val withProject = Project(regularExpressions, child)
+      val extractedFilter = Filter(havingCondition, withProject)
+      val withWindow = addWindow(windowExpressions, extractedFilter)
+      Project(projectList.map(_.toAttribute), Filter(qualifyAlias.toAttribute, withWindow))
+    }
+
+    private def addQualifyFilter(
+        projectList: Seq[NamedExpression],
+        qualifyCondition: Expression,
+        child: LogicalPlan): LogicalPlan = {
+      val qualifyAlias = Alias(qualifyCondition, "__qualify_cond")()
+      val (windowExpressions, regularExpressions) = extract(projectList :+ qualifyAlias)
+      val withProject = Project(regularExpressions, child)
+      val withWindow = addWindow(windowExpressions, withProject)
+      Project(projectList.map(_.toAttribute), Filter(qualifyAlias.toAttribute, withWindow))
+    }
+
+    private def addQualifyFilter(
+        groupingExprs: Seq[Expression],
+        aggregateExprs: Seq[NamedExpression],
+        qualifyCondition: Expression,
+        child: LogicalPlan): LogicalPlan = {
+      val withAggregate = Aggregate(groupingExprs, aggregateExprs, child)
+      validateQualifyAggregateCondition(qualifyCondition)
+
+      val qualifyAlias = Alias(qualifyCondition, "__qualify_cond")()
+      val (windowExpressions, extractedAggregateExprs) = extract(aggregateExprs :+ qualifyAlias)
+      val extractedAggregate = Aggregate(groupingExprs, extractedAggregateExprs, child)
+      val withWindow = addWindow(windowExpressions, extractedAggregate)
+      Project(aggregateExprs.map(_.toAttribute), Filter(qualifyAlias.toAttribute, withWindow))
+    }
+
+    private def addQualifyFilter(
+        groupingExprs: Seq[Expression],
+        aggregateExprs: Seq[NamedExpression],
+        havingCondition: Expression,
+        qualifyCondition: Expression,
+        child: LogicalPlan): LogicalPlan = {
+      val withAggregate = Aggregate(groupingExprs, aggregateExprs, child)
+      val withFilter = Filter(havingCondition, withAggregate)
+      validateQualifyAggregateCondition(qualifyCondition)
+
+      val qualifyAlias = Alias(qualifyCondition, "__qualify_cond")()
+      val (windowExpressions, extractedAggregateExprs) = extract(aggregateExprs :+ qualifyAlias)
+      val extractedAggregate = Aggregate(groupingExprs, extractedAggregateExprs, child)
+      val extractedFilter = Filter(havingCondition, extractedAggregate)
+      val withWindow = addWindow(windowExpressions, extractedFilter)
+      Project(aggregateExprs.map(_.toAttribute), Filter(qualifyAlias.toAttribute, withWindow))
+    }
+
     // We have to use transformDown at here to make sure the rule of
     // "Aggregate with Having clause" will be triggered.
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
       _.containsPattern(WINDOW_EXPRESSION), ruleId) {
+
+      case f @ Filter(QualifyExpression(condition, _), a @ Aggregate(groupingExprs, aggregateExprs,
+          child, _))
+        if hasWindowFunction(condition) &&
+          condition.resolved &&
+          child.resolved &&
+          a.expressions.forall(_.resolved) &&
+          !aggregateExprs.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
+        addQualifyFilter(groupingExprs, aggregateExprs, condition, child)
+
+      case f @ Filter(QualifyExpression(condition, _),
+          Filter(havingCondition, a @ Aggregate(groupingExprs, aggregateExprs, child, _)))
+        if hasWindowFunction(condition) &&
+          condition.resolved &&
+          child.resolved &&
+          havingCondition.resolved &&
+          a.expressions.forall(_.resolved) &&
+          !aggregateExprs.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
+        addQualifyFilter(groupingExprs, aggregateExprs, havingCondition, condition, child)
+
+      case f @ Filter(QualifyExpression(condition, _), p @ Project(projectList, child))
+        if hasWindowFunction(condition) &&
+          condition.resolved &&
+          child.resolved &&
+          p.expressions.forall(_.resolved) &&
+          !projectList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
+        addQualifyFilter(projectList, condition, child)
+
+      case f @ Filter(QualifyExpression(condition, _), Filter(havingCondition,
+          p @ Project(projectList, child)))
+        if hasWindowFunction(condition) &&
+          condition.resolved &&
+          child.resolved &&
+          havingCondition.resolved &&
+          p.expressions.forall(_.resolved) &&
+          !projectList.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
+        addQualifyFilter(projectList, havingCondition, condition, child)
+
+      case f @ Filter(QualifyExpression(_, _), _) =>
+        f
 
       case Filter(condition, _) if hasWindowFunction(condition) =>
         throw QueryCompilationErrors.windowFunctionNotAllowedError("WHERE")
@@ -4246,6 +4407,35 @@ object ResolveUnresolvedHaving extends Rule[LogicalPlan] {
       case u @ UnresolvedHaving(havingCondition, child)
         if havingCondition.resolved && child.resolved =>
         Filter(condition = havingCondition, child = child)
+    }
+  }
+}
+
+/**
+ * Rewrites QUALIFY predicates into regular filters once the current query's window expressions
+ * have been materialized.
+ */
+object ResolveQualifyExpressions extends Rule[LogicalPlan] {
+  private def invalidResolvedQualifyAggregateFunction(expr: Expression): Option[Expression] =
+    expr match {
+      case _: WindowExpression | _: UnresolvedWindowExpression => None
+      case agg: AggregateExpression => Some(agg)
+      case agg: AggregateFunction => Some(agg)
+      case other =>
+        other.children.to(LazyList).flatMap(invalidResolvedQualifyAggregateFunction).headOption
+    }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.resolveOperatorsWithPruning(_.containsPattern(FILTER), ruleId) {
+      case Filter(QualifyExpression(condition, selectListHasWindowFunction), child)
+        if condition.resolved && child.resolved =>
+        invalidResolvedQualifyAggregateFunction(condition).foreach { agg =>
+          throw QueryCompilationErrors.aggregateInQualifyNotAllowedError(agg)
+        }
+        if (!selectListHasWindowFunction) {
+          throw QueryCompilationErrors.qualifyRequiresWindowFunctionError()
+        }
+        Filter(condition, child)
     }
   }
 }

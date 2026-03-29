@@ -792,6 +792,7 @@ class AstBuilder extends DataTypeAstBuilder
         ctx.aggregationClause,
         ctx.havingClause,
         ctx.windowClause,
+        ctx.qualifyClause,
         plan,
         isPipeOperatorSelect = false
       )
@@ -1451,6 +1452,7 @@ class AstBuilder extends DataTypeAstBuilder
       ctx.aggregationClause,
       ctx.havingClause,
       ctx.windowClause,
+      ctx.qualifyClause,
       from,
       isPipeOperatorSelect = false
     )
@@ -1500,6 +1502,16 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
+   * Create a logical plan using a qualify clause.
+   */
+  private def withQualifyClause(
+      ctx: QualifyClauseContext,
+      selectListHasWindowFunction: Boolean,
+      plan: LogicalPlan): LogicalPlan = {
+    Filter(QualifyExpression(expression(ctx.booleanExpression), selectListHasWindowFunction), plan)
+  }
+
+  /**
    * Add a hive-style transform (SELECT TRANSFORM/MAP/REDUCE) query specification to a logical plan.
    */
   private def withTransformQuerySpecification(
@@ -1539,6 +1551,7 @@ class AstBuilder extends DataTypeAstBuilder
       aggregationClause,
       havingClause,
       windowClause,
+      qualifyClause = null,
       isDistinct = false,
       isPipeOperatorSelect = false)
 
@@ -1574,6 +1587,7 @@ class AstBuilder extends DataTypeAstBuilder
       aggregationClause: AggregationClauseContext,
       havingClause: HavingClauseContext,
       windowClause: WindowClauseContext,
+      qualifyClause: QualifyClauseContext,
       relation: LogicalPlan,
       isPipeOperatorSelect: Boolean): LogicalPlan = withOrigin(ctx) {
     val isDistinct = selectClause.setQuantifier() != null &&
@@ -1587,6 +1601,7 @@ class AstBuilder extends DataTypeAstBuilder
       aggregationClause,
       havingClause,
       windowClause,
+      qualifyClause,
       isDistinct,
       isPipeOperatorSelect)
 
@@ -1602,8 +1617,14 @@ class AstBuilder extends DataTypeAstBuilder
       aggregationClause: AggregationClauseContext,
       havingClause: HavingClauseContext,
       windowClause: WindowClauseContext,
+      qualifyClause: QualifyClauseContext,
       isDistinct: Boolean,
       isPipeOperatorSelect: Boolean): LogicalPlan = {
+    def hasWindowFunction(expr: Expression): Boolean = expr.exists {
+      case _: WindowExpression | _: UnresolvedWindowExpression => true
+      case _ => false
+    }
+
     // Add lateral views.
     val withLateralView = lateralView.asScala.foldLeft(relation)(withGenerate)
 
@@ -1615,6 +1636,7 @@ class AstBuilder extends DataTypeAstBuilder
       case (e: NamedExpression, _) => e
       case (e: Expression, aliasFunc) => UnresolvedAlias(e, aliasFunc)
     }
+    val selectListHasWindowFunction = namedExpressions.exists(hasWindowFunction)
 
     def createProject() = if (namedExpressions.nonEmpty) {
       val newProjectList: Seq[NamedExpression] = if (isPipeOperatorSelect) {
@@ -1662,11 +1684,15 @@ class AstBuilder extends DataTypeAstBuilder
       createProject()
     }
 
+    val withQualify = withProject.optionalMap(qualifyClause) {
+      (ctx, plan) => withQualifyClause(ctx, selectListHasWindowFunction, plan)
+    }
+
     // Distinct
     val withDistinct = if (isDistinct) {
-      Distinct(withProject)
+      Distinct(withQualify)
     } else {
-      withProject
+      withQualify
     }
 
     // Window
@@ -7009,6 +7035,7 @@ class AstBuilder extends DataTypeAstBuilder
         aggregationClause = ctx.aggregationClause,
         havingClause = null,
         windowClause = ctx.windowClause,
+        qualifyClause = null,
         relation = left,
         isPipeOperatorSelect = true)
     }.getOrElse(Option(ctx.EXTEND).map { _ =>
