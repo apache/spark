@@ -979,7 +979,7 @@ FROM VALUES
 -- !query schema
 struct<collect_list(col):array<int>,collect_list(col):array<int>>
 -- !query output
-[1,2,1]	[1,2,1]
+[1,1,2]	[1,1,2]
 
 
 -- !query
