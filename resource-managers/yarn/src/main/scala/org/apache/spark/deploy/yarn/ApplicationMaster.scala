@@ -811,6 +811,9 @@ private[spark] class ApplicationMaster(
         exitCode = code
         shutdown = true
         allocator.setShutdown(true)
+
+      case ExecutorRegisteredOnDriver(executorId, resourceProfileId) =>
+        Option(allocator).foreach(_.onExecutorRegistered(executorId, resourceProfileId))
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
