@@ -20,7 +20,6 @@ package org.apache.spark.shuffle
 import java.io.{DataOutputStream, File, FileOutputStream}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper.getChecksumFileName
 import org.apache.spark.shuffle.KubernetesLocalDiskShuffleExecutorComponents.verifyChecksum
 import org.apache.spark.storage.{ShuffleChecksumBlockId, ShuffleDataBlockId, ShuffleIndexBlockId}
 
@@ -60,7 +59,7 @@ class ShuffleChecksumUtilsSuite extends SparkFunSuite {
       val dataFile = new File(dir, dataBlockId.name)
       dataFile.createNewFile()
 
-      val checksumFileName = getChecksumFileName(checksumBlockId.name, ALGORITHM)
+      val checksumFileName = checksumBlockId.name
       val checksumFile = new File(dir, checksumFileName)
       checksumFile.createNewFile()
       assert(!verifyChecksum(ALGORITHM, dataBlockId, checksumFile, null, dataFile))
@@ -77,7 +76,7 @@ class ShuffleChecksumUtilsSuite extends SparkFunSuite {
       val dataFile = new File(dir, dataBlockId.name)
       dataFile.createNewFile()
 
-      val checksumFileName = getChecksumFileName(checksumBlockId.name, ALGORITHM)
+      val checksumFileName = checksumBlockId.name
       val checksumFile = new File(dir, checksumFileName)
       checksumFile.createNewFile()
       val out = new DataOutputStream(new FileOutputStream(checksumFile))
@@ -94,7 +93,7 @@ class ShuffleChecksumUtilsSuite extends SparkFunSuite {
       val dataFile = new File(dir, dataBlockId.name)
       dataFile.createNewFile()
 
-      val checksumFileName = getChecksumFileName(checksumBlockId.name, ALGORITHM)
+      val checksumFileName = checksumBlockId.name
       val checksumFile = new File(dir, checksumFileName)
       checksumFile.createNewFile()
       val out = new DataOutputStream(new FileOutputStream(checksumFile))
@@ -112,7 +111,7 @@ class ShuffleChecksumUtilsSuite extends SparkFunSuite {
     withTempDir { dir =>
       val indexFile = new File(dir, indexBlockId.name)
       val dataFile = new File(dir, dataBlockId.name)
-      val checksumFileName = getChecksumFileName(checksumBlockId.name, ALGORITHM)
+      val checksumFileName = checksumBlockId.name
       val checksumFile = new File(dir, checksumFileName)
 
       indexFile.createNewFile()
