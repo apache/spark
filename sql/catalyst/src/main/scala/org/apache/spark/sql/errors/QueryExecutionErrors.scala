@@ -1002,7 +1002,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def cannotSpecifyBothJdbcTableNameAndQueryError(
       jdbcTableName: String, jdbcQueryString: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2078",
+      errorClass = "JDBC_TABLE_AND_QUERY_BOTH_SPECIFIED",
       messageParameters = Map(
         "jdbcTableName" -> jdbcTableName,
         "jdbcQueryString" -> jdbcQueryString))
