@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io.File
+import java.util.concurrent.CountDownLatch
 
 import scala.collection.mutable
 import scala.util.Random
@@ -388,6 +389,56 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
     // All the task partitionIds are shared across all tasks
     assert(messages.length === 2)
     assert(messages.forall(_ == List("0", "1")))
+  }
+
+  test("BDW, make global resource offer when a barrier stage is pending") {
+    sc = new SparkContext(new SparkConf().setAppName("test")
+      .setMaster("local[2]")
+      .set("spark.executor.cores", "1")
+      .set("spark.executor.instances", "2"))
+    sc.setLogLevel("INFO")
+    val numJobs = 30
+    val numTasks = 2
+    // execute one job, so the executors get created
+    sc.parallelize(1 to numTasks, numTasks).barrier().mapPartitions { i =>
+      Thread.sleep(1000)
+      Iterator(1)
+    }.count()
+
+    // this test requires that the jobs be in the queue before executing
+    val threadList = mutable.ListBuffer[Thread]()
+    var doneSignal: CountDownLatch = new CountDownLatch(numJobs)
+    val startTime = java.lang.System.currentTimeMillis()
+    for (jobNum <- 0 to numJobs) {
+      val t = new Thread(new Runnable {
+        def run(): Unit = {
+          val jobId = jobNum
+          sc.parallelize(1 to numTasks, numTasks).barrier().mapPartitions { i =>
+            // make the first job take some time, forcing the rest of the jobs to queue.
+            if (jobId == 0) {
+              Thread.sleep(3000)
+            }
+            Iterator(1)
+          }.count()
+          doneSignal.countDown()
+        }
+      })
+      threadList += t;
+      t.start()
+      // make sure the first job actually starts first
+      if (jobNum == 0) {
+        Thread.sleep(1000)
+      }
+    }
+    doneSignal.await()
+    for (t <- threadList) {
+      t.join()
+    }
+    val stopTime = java.lang.System.currentTimeMillis()
+    // alternatively, could create a listener and look at the times between tasks manually, or
+    // just look at the total time it takes to complete all the jobs.
+    // The first job takes 3000ms.  The remaining 30 should take less than 1000ms.
+    assert((stopTime - startTime) < 4000)
   }
 
 }
