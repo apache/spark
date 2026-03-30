@@ -22,11 +22,12 @@ import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.csv.CSVOptions
-import org.apache.spark.sql.connector.write.{LogicalWriteInfo, Write, WriteBuilder}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.csv.CSVDataSource
 import org.apache.spark.sql.execution.datasources.v2.FileTable
-import org.apache.spark.sql.types.{AtomicType, DataType, GeographyType, GeometryType, StructType, UserDefinedType}
+import org.apache.spark.sql.types.{AtomicType, DataType, GeographyType,
+  GeometryType, StructType, UserDefinedType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class CSVTable(
@@ -50,9 +51,10 @@ case class CSVTable(
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
-    new WriteBuilder {
-      override def build(): Write =
-        CSVWrite(paths, formatName, supportsDataType, mergedWriteInfo(info))
+    createFileWriteBuilder(info) {
+      (mergedInfo, partSchema, customLocs, dynamicOverwrite, truncate) =>
+      CSVWrite(paths, formatName, supportsDataType, mergedInfo, partSchema, customLocs,
+        dynamicOverwrite, truncate)
     }
   }
 

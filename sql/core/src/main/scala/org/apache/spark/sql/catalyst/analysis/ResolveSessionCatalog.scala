@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2, FileTable}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructField, StructType}
@@ -247,7 +247,34 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         constructV1TableCmd(None, c.tableSpec, ident, StructType(fields), c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
-        c
+        // File sources: validate data types and create via
+        // V1 command. Non-file V2 providers keep V2 plan.
+        DataSourceV2Utils.getTableProvider(
+            provider, conf) match {
+          case Some(f: FileDataSourceV2) =>
+            val ft = f.getTable(
+              c.tableSchema, c.partitioning.toArray,
+              new org.apache.spark.sql.util
+                .CaseInsensitiveStringMap(
+                  java.util.Collections.emptyMap()))
+            ft match {
+              case ft: FileTable =>
+                c.tableSchema.foreach { field =>
+                  if (!ft.supportsDataType(
+                      field.dataType)) {
+                    throw QueryCompilationErrors
+                      .dataTypeUnsupportedByDataSourceError(
+                        ft.formatName, field)
+                  }
+                }
+              case _ =>
+            }
+            constructV1TableCmd(None, c.tableSpec, ident,
+              StructType(c.columns.map(_.toV1Column)),
+              c.partitioning,
+              c.ignoreIfExists, storageFormat, provider)
+          case _ => c
+        }
       }
 
     case c @ CreateTableAsSelect(
@@ -267,7 +294,17 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         constructV1TableCmd(Some(c.query), c.tableSpec, ident, new StructType, c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
-        c
+        // File sources: create via V1 command.
+        // Non-file V2 providers keep V2 plan.
+        DataSourceV2Utils.getTableProvider(
+            provider, conf) match {
+          case Some(_: FileDataSourceV2) =>
+            constructV1TableCmd(Some(c.query),
+              c.tableSpec, ident, new StructType,
+              c.partitioning, c.ignoreIfExists,
+              storageFormat, provider)
+          case _ => c
+        }
       }
 
     case RefreshTable(ResolvedV1TableOrViewIdentifier(ident)) =>
@@ -281,7 +318,16 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         throw QueryCompilationErrors.unsupportedTableOperationError(
           ident, "REPLACE TABLE")
       } else {
-        c
+        // File sources don't support REPLACE TABLE in
+        // the session catalog (requires StagingTableCatalog).
+        DataSourceV2Utils.getTableProvider(
+            provider, conf) match {
+          case Some(_: FileDataSourceV2) =>
+            throw QueryCompilationErrors
+              .unsupportedTableOperationError(
+                ident, "REPLACE TABLE")
+          case _ => c
+        }
       }
 
     case c @ ReplaceTableAsSelect(ResolvedV1Identifier(ident), _, _, _, _, _, _) =>
@@ -290,7 +336,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         throw QueryCompilationErrors.unsupportedTableOperationError(
           ident, "REPLACE TABLE AS SELECT")
       } else {
-        c
+        DataSourceV2Utils.getTableProvider(
+            provider, conf) match {
+          case Some(_: FileDataSourceV2) =>
+            throw QueryCompilationErrors
+              .unsupportedTableOperationError(
+                ident, "REPLACE TABLE AS SELECT")
+          case _ => c
+        }
       }
 
     // For CREATE TABLE LIKE, use the v1 command if both the target and source are in the session
@@ -377,8 +430,33 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case AnalyzeTables(ResolvedV1Database(db), noScan) =>
       AnalyzeTablesCommand(Some(db), noScan)
 
+    // TODO(SPARK-56176): V2-native ANALYZE TABLE/COLUMN for file tables.
+    // FileTable from V2SessionCatalog.loadTable doesn't match V1 extractors,
+    // so we intercept here and delegate to V1 commands using catalogTable.
+    case AnalyzeTable(
+        ResolvedTable(catalog, _, ft: FileTable, _),
+        partitionSpec, noScan)
+        if supportsV1Command(catalog)
+          && ft.catalogTable.isDefined =>
+      val tableIdent = ft.catalogTable.get.identifier
+      if (partitionSpec.isEmpty) {
+        AnalyzeTableCommand(tableIdent, noScan)
+      } else {
+        AnalyzePartitionCommand(
+          tableIdent, partitionSpec, noScan)
+      }
+
     case AnalyzeColumn(ResolvedV1TableOrViewIdentifier(ident), columnNames, allColumns) =>
       AnalyzeColumnCommand(ident, columnNames, allColumns)
+
+    case AnalyzeColumn(
+        ResolvedTable(catalog, _, ft: FileTable, _),
+        columnNames, allColumns)
+        if supportsV1Command(catalog)
+          && ft.catalogTable.isDefined =>
+      AnalyzeColumnCommand(
+        ft.catalogTable.get.identifier,
+        columnNames, allColumns)
 
     // V2 catalog doesn't support REPAIR TABLE yet, we must use v1 command here.
     case RepairTable(
