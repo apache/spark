@@ -1643,6 +1643,15 @@ def sum(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         the column for computed results.
 
+    Notes
+    -----
+    - Null values are ignored during the computation.
+    - The return type depends on the input:
+      :class:`~pyspark.sql.types.LongType` for integral inputs,
+      :class:`~pyspark.sql.types.DecimalType` for decimal inputs,
+      :class:`~pyspark.sql.types.DoubleType` for other numeric inputs, or an interval type
+      for interval inputs.
+
     Examples
     --------
     Example 1: Calculating the sum of values in a column
@@ -1701,6 +1710,14 @@ def avg(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         the column for computed results.
 
+    Notes
+    -----
+    - Null values are ignored during the computation.
+    - The return type depends on the input:
+      :class:`~pyspark.sql.types.DoubleType` for numeric inputs,
+      :class:`~pyspark.sql.types.DecimalType` for decimal inputs, or an interval type
+      for interval inputs.
+
     Examples
     --------
     Example 1: Calculating the average age
@@ -1748,6 +1765,14 @@ def mean(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the column for computed results.
+
+    Notes
+    -----
+    - Null values are ignored during the computation.
+    - The return type depends on the input:
+      :class:`~pyspark.sql.types.DoubleType` for numeric inputs,
+      :class:`~pyspark.sql.types.DecimalType` for decimal inputs, or an interval type
+      for interval inputs.
 
     Examples
     --------
@@ -4250,6 +4275,12 @@ def stddev(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         standard deviation of given column.
 
+    Notes
+    -----
+    - Null values are ignored during the computation.
+    - The result is always a :class:`~pyspark.sql.types.DoubleType` column,
+      regardless of the input column type.
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -4288,6 +4319,12 @@ def std(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.variance`
     :meth:`pyspark.sql.functions.skewness`
     :meth:`pyspark.sql.functions.kurtosis`
+
+    Notes
+    -----
+    - Null values are ignored during the computation.
+    - The result is always a :class:`~pyspark.sql.types.DoubleType` column,
+      regardless of the input column type.
 
     Examples
     --------
@@ -4330,6 +4367,12 @@ def stddev_samp(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.stddev_pop`
     :meth:`pyspark.sql.functions.var_samp`
 
+    Notes
+    -----
+    - Null values are ignored during the computation.
+    - The result is always a :class:`~pyspark.sql.types.DoubleType` column,
+      regardless of the input column type.
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -4370,6 +4413,12 @@ def stddev_pop(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.stddev`
     :meth:`pyspark.sql.functions.stddev_samp`
     :meth:`pyspark.sql.functions.var_pop`
+
+    Notes
+    -----
+    - Null values are ignored during the computation.
+    - The result is always a :class:`~pyspark.sql.types.DoubleType` column,
+      regardless of the input column type.
 
     Examples
     --------
@@ -4412,6 +4461,12 @@ def variance(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.skewness`
     :meth:`pyspark.sql.functions.kurtosis`
 
+    Notes
+    -----
+    - Null values are ignored during the computation.
+    - The result is always a :class:`~pyspark.sql.types.DoubleType` column,
+      regardless of the input column type.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -4453,6 +4508,12 @@ def var_samp(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.var_pop`
     :meth:`pyspark.sql.functions.std_samp`
 
+    Notes
+    -----
+    - Null values are ignored during the computation.
+    - The result is always a :class:`~pyspark.sql.types.DoubleType` column,
+      regardless of the input column type.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -4492,6 +4553,12 @@ def var_pop(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.variance`
     :meth:`pyspark.sql.functions.var_samp`
     :meth:`pyspark.sql.functions.std_pop`
+
+    Notes
+    -----
+    - Null values are ignored during the computation.
+    - The result is always a :class:`~pyspark.sql.types.DoubleType` column,
+      regardless of the input column type.
 
     Examples
     --------
@@ -5777,6 +5844,12 @@ def skewness(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         skewness of given column.
 
+    Notes
+    -----
+    - Null values are ignored during the computation.
+    - The result is always a :class:`~pyspark.sql.types.DoubleType` column,
+      regardless of the input column type.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -5817,6 +5890,12 @@ def kurtosis(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.stddev`
     :meth:`pyspark.sql.functions.variance`
     :meth:`pyspark.sql.functions.skewness`
+
+    Notes
+    -----
+    - Null values are ignored during the computation.
+    - The result is always a :class:`~pyspark.sql.types.DoubleType` column,
+      regardless of the input column type.
 
     Examples
     --------
@@ -6751,6 +6830,12 @@ def corr(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         Pearson Correlation Coefficient of these two column values.
 
+    Notes
+    -----
+    - Null values are ignored during the computation.
+    - The result is always a :class:`~pyspark.sql.types.DoubleType` column,
+      regardless of the input column type.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -6793,6 +6878,12 @@ def covar_pop(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     --------
     :meth:`pyspark.sql.functions.covar_samp`
 
+    Notes
+    -----
+    - Null values are ignored during the computation.
+    - The result is always a :class:`~pyspark.sql.types.DoubleType` column,
+      regardless of the input column type.
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -6834,6 +6925,12 @@ def covar_samp(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.covar_pop`
+
+    Notes
+    -----
+    - Null values are ignored during the computation.
+    - The result is always a :class:`~pyspark.sql.types.DoubleType` column,
+      regardless of the input column type.
 
     Examples
     --------
