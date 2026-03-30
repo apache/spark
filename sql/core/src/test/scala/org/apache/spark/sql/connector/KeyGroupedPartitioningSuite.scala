@@ -3590,6 +3590,13 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     val keyExpr = ordering.head.child
     assert(keyExpr.isInstanceOf[AttributeReference])
     assert(keyExpr.asInstanceOf[AttributeReference].name === "id")
+
+    // With the config disabled the derivation is suppressed and ordering falls back to empty.
+    withSQLConf(V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "false") {
+      val scansDisabled = collectScans(df.queryExecution.executedPlan)
+      assert(scansDisabled.size === 1)
+      assert(scansDisabled.head.outputOrdering.isEmpty)
+    }
   }
 
   test("SPARK-56241: GroupPartitionsExec non-coalescing passes through child ordering, " +
