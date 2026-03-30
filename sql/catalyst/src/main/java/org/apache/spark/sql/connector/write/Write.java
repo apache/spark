@@ -56,7 +56,7 @@ public interface Write {
    */
   default BatchWrite toBatch() {
     throw new SparkUnsupportedOperationException(
-      "DATASOURCE_BATCH_WRITE_NOT_SUPPORTED", Map.of("description", description()));
+      "DATA_SOURCE_BATCH_WRITE_NOT_SUPPORTED", Map.of("description", description()));
   }
 
   /**
@@ -67,7 +67,7 @@ public interface Write {
    */
   default StreamingWrite toStreaming() {
     throw new SparkUnsupportedOperationException(
-      "DATASOURCE_STREAMING_WRITE_NOT_SUPPORTED", Map.of("description", description()));
+      "DATA_SOURCE_STREAMING_WRITE_NOT_SUPPORTED", Map.of("description", description()));
   }
 
   /**

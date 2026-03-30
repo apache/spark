@@ -55,7 +55,7 @@ public interface LogicalWriteInfo {
    */
   default Optional<StructType> rowIdSchema() {
     throw new SparkUnsupportedOperationException(
-      "DATASOURCE_ROW_ID_SCHEMA_NOT_IMPLEMENTED", Map.of("class", getClass().getName()));
+      "DATA_SOURCE_ROW_ID_SCHEMA_NOT_IMPLEMENTED", Map.of("class", getClass().getName()));
   }
 
   /**
@@ -63,6 +63,6 @@ public interface LogicalWriteInfo {
    */
   default Optional<StructType> metadataSchema() {
     throw new SparkUnsupportedOperationException(
-      "DATASOURCE_METADATA_SCHEMA_NOT_IMPLEMENTED", Map.of("class", getClass().getName()));
+      "DATA_SOURCE_METADATA_SCHEMA_NOT_IMPLEMENTED", Map.of("class", getClass().getName()));
   }
 }
