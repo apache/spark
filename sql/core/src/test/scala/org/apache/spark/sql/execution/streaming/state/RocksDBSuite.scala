@@ -2745,8 +2745,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       Files.writeString(new File(dfsRootDir, crcFileName).toPath, wrongChecksumJson)
 
       if (enableStateStoreCheckpointIds) {
-        // Checkpoint v2: each zip has a unique suffix (the checkpointUniqueId), so a checksum
-        // file always corresponds to exactly one zip write and corruption is reliably detected.
         val zipName = s"1_${checkpointUniqueId.get}\\.zip"
         val ex = intercept[SparkException] {
           fileManager.loadCheckpointFromDfs(
@@ -2763,9 +2761,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
             "computedChecksum" -> "^-?\\d+$"),
           matchPVals = true)
       } else {
-        // Checkpoint v1: the zip filename is fixed (e.g. "1.zip"), so a later overwrite with
-        // checksums disabled would reuse the same name and leave a stale checksum file behind.
-        // Checksum verification is skipped to avoid spurious mismatches in this case.
+        // Checkpoint verification is skipped for checkpoint v1 zip
         loadAndVerifyCheckpointFiles(
           fileManager, Utils.createTempDir().getAbsolutePath,
           version = 1, cpFiles, 3, new RocksDBFileMapping())
