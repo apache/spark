@@ -525,7 +525,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     /**
      * If any dedup key is a floating-point type, wraps the physical child in a ProjectExec that
      * normalizes NaN and -0.0 so that semantically equal values produce identical UnsafeRow bytes
-     * in the state store. This mirrors the aggregate key normalization at lines 600-608.
+     * in the state store.
      */
     private def maybeNormalizeFloatingPointKeys(
         keys: Seq[Attribute], child: LogicalPlan): SparkPlan = {
