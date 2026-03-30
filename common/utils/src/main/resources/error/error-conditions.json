@@ -1459,7 +1459,7 @@
   },
   "DATASOURCE_COLUMNAR_READER_NOT_SUPPORTED" : {
     "message" : [
-      "<class>: Cannot create columnar reader."
+      "<class> cannot create columnar reader."
     ],
     "sqlState" : "0A000"
   },

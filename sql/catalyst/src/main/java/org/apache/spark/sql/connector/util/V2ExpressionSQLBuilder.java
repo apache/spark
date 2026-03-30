@@ -320,14 +320,14 @@ public class V2ExpressionSQLBuilder {
       String funcName, String canonicalName, String[] inputs) {
     throw new SparkUnsupportedOperationException(
       "V2_EXPRESSION_SQL_BUILDER_UDF_NOT_SUPPORTED",
-      Map.of("class", this.getClass().getSimpleName(), "funcName", funcName));
+      Map.of("class", this.getClass().getName(), "funcName", funcName));
   }
 
   protected String visitUserDefinedAggregateFunction(
       String funcName, String canonicalName, boolean isDistinct, String[] inputs) {
     throw new SparkUnsupportedOperationException(
       "V2_EXPRESSION_SQL_BUILDER_UDAF_NOT_SUPPORTED",
-      Map.of("class", this.getClass().getSimpleName(), "funcName", funcName));
+      Map.of("class", this.getClass().getName(), "funcName", funcName));
   }
 
   protected String visitUnexpectedExpr(Expression expr) throws IllegalArgumentException {
