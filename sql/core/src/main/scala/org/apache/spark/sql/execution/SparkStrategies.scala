@@ -51,6 +51,7 @@ import org.apache.spark.sql.execution.streaming.runtime.{StreamingExecutionRelat
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.types.{DoubleType, FloatType}
 
 /**
  * Converts a logical plan into zero or more SparkPlans.  This API is exposed for experimenting
@@ -511,12 +512,42 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object StreamingDeduplicationStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case Deduplicate(keys, child) if child.isStreaming =>
-        StreamingDeduplicateExec(keys, planLater(child)) :: Nil
+        StreamingDeduplicateExec(
+          keys, maybeNormalizeFloatingPointKeys(keys, child)) :: Nil
 
       case DeduplicateWithinWatermark(keys, child) if child.isStreaming =>
-        StreamingDeduplicateWithinWatermarkExec(keys, planLater(child)) :: Nil
+        StreamingDeduplicateWithinWatermarkExec(
+          keys, maybeNormalizeFloatingPointKeys(keys, child)) :: Nil
 
       case _ => Nil
+    }
+
+    /**
+     * If any dedup key is a floating-point type, wraps the physical child in a ProjectExec that
+     * normalizes NaN and -0.0 so that semantically equal values produce identical UnsafeRow bytes
+     * in the state store. This mirrors the aggregate key normalization at lines 600-608.
+     */
+    private def maybeNormalizeFloatingPointKeys(
+        keys: Seq[Attribute], child: LogicalPlan): SparkPlan = {
+      val physicalChild = planLater(child)
+      val needsNormalization = keys.exists(k =>
+        k.dataType == FloatType || k.dataType == DoubleType)
+      if (needsNormalization) {
+        val normalizedProjectList = child.output.map { attr =>
+          if (keys.exists(_.exprId == attr.exprId) &&
+              (attr.dataType == FloatType || attr.dataType == DoubleType)) {
+            NormalizeFloatingNumbers.normalize(attr) match {
+              case a: NamedExpression => a
+              case other => Alias(other, attr.name)(exprId = attr.exprId)
+            }
+          } else {
+            attr
+          }
+        }
+        execution.ProjectExec(normalizedProjectList, physicalChild)
+      } else {
+        physicalChild
+      }
     }
   }
 

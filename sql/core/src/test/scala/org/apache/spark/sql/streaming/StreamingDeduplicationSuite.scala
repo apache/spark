@@ -60,6 +60,50 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest
     )
   }
 
+  test("different NaN bit patterns should be deduplicated") {
+    val inputData = MemoryStream[(Float, Int)]
+    val result = inputData.toDS().toDF("value", "id").dropDuplicates("value")
+
+    // Canonical quiet NaN (0x7fc00000) and non-canonical signaling NaN (0x7f800001).
+    val canonicalNaN = java.lang.Float.intBitsToFloat(0x7fc00000)
+    val nonCanonicalNaN = java.lang.Float.intBitsToFloat(0x7f800001)
+    assert(java.lang.Float.isNaN(canonicalNaN) && java.lang.Float.isNaN(nonCanonicalNaN))
+    assert(java.lang.Float.floatToRawIntBits(canonicalNaN) !=
+      java.lang.Float.floatToRawIntBits(nonCanonicalNaN))
+
+    testStream(result, Append)(
+      AddData(inputData, (canonicalNaN, 1)),
+      CheckLastBatch((canonicalNaN, 1)),
+      assertNumStateRows(total = 1, updated = 1),
+
+      // Non-canonical NaN should be treated as a duplicate of canonical NaN
+      AddData(inputData, (nonCanonicalNaN, 2)),
+      CheckLastBatch(),
+      assertNumStateRows(total = 1, updated = 0),
+
+      // Only the first NaN row should be in the complete output
+      CheckAnswer((canonicalNaN, 1))
+    )
+  }
+
+  test("negative zero and positive zero should be deduplicated") {
+    val inputData = MemoryStream[(Float, Int)]
+    val result = inputData.toDS().toDF("value", "id").dropDuplicates("value")
+
+    testStream(result, Append)(
+      AddData(inputData, (0.0f, 1)),
+      CheckLastBatch((0.0f, 1)),
+      assertNumStateRows(total = 1, updated = 1),
+
+      // -0.0f should be treated as a duplicate of 0.0f
+      AddData(inputData, (-0.0f, 2)),
+      CheckLastBatch(),
+      assertNumStateRows(total = 1, updated = 0),
+
+      CheckAnswer((0.0f, 1))
+    )
+  }
+
   test("deduplicate with some columns") {
     val inputData = MemoryStream[(String, Int)]
     val result = inputData.toDS().dropDuplicates("_1")
