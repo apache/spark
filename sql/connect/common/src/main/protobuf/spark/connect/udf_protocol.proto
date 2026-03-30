@@ -1,0 +1,594 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto3";
+
+package spark.connect;
+
+option java_package = "org.apache.spark.connect.proto";
+option java_multiple_files = true;
+option go_package = "github.com/apache/spark-connect-go/internal/generated";
+
+// SPARK-55278: Language-Agnostic UDF IPC Protocol
+//
+// This protocol defines the bidirectional communication between Spark executors
+// and external UDF worker processes. It supports multiple UDF execution modes,
+// Arrow IPC serialization, streaming batches, backpressure, and comprehensive
+// error reporting.
+//
+// Design principles:
+// - Language-agnostic: Works with Python, R, JavaScript, Go, Rust, etc.
+// - Performance: Streaming + batching, zero-copy Arrow IPC, backpressure
+// - Security: Authentication tokens, payload integrity verification
+// - Observability: Detailed metrics, error categorization, health monitoring
+// - Resource management: Explicit cleanup, graceful shutdown
+
+// =============================================================================
+// Service Definition
+// =============================================================================
+
+// Main service for UDF worker processes.
+// Workers are long-lived processes that can execute multiple UDFs over their lifetime.
+service UdfWorkerService {
+  // Register a new worker with the Spark executor.
+  // Called once when the worker process starts. Includes capability negotiation.
+  // SEC-001: Requires valid auth_token for worker authentication.
+  rpc RegisterWorker(RegisterWorkerRequest) returns (RegisterWorkerResponse);
+
+  // Initialize a specific UDF for execution.
+  // Called once per UDF before any ExecuteUdf calls. Validates schemas and loads code.
+  // SEC-002: Validates payload integrity via payload_integrity_hash.
+  rpc InitializeUdf(InitializeUdfRequest) returns (InitializeUdfResponse);
+
+  // Execute a UDF on streaming batches of data.
+  // Bidirectional streaming allows pipelining and backpressure control.
+  // Request stream: DataBatch -> DataBatch -> ... -> EndOfData
+  // Response stream: DataBatchResult -> DataBatchResult -> ... -> EndOfDataResult
+  rpc ExecuteUdf(stream ExecuteUdfRequest) returns (stream ExecuteUdfResponse);
+
+  // Health check and metrics collection.
+  // Called periodically to monitor worker health and gather runtime metrics.
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+
+  // Clean up resources for a specific UDF.
+  // Called after UDF execution completes to free memory and clear state.
+  rpc CleanupWorker(CleanupWorkerRequest) returns (CleanupWorkerResponse);
+
+  // Gracefully shutdown the worker process.
+  // Allows workers to finish in-flight work and report final metrics.
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+}
+
+// =============================================================================
+// Enumerations
+// =============================================================================
+
+// Supported UDF execution modes.
+enum UdfMode {
+  UDF_MODE_UNSPECIFIED = 0;
+
+  // Scalar UDF: row-by-row function application (e.g., f(x) -> y)
+  UDF_MODE_SCALAR = 1;
+
+  // Vectorized UDF: operates on batches/arrays (e.g., pandas UDF, Arrow UDF)
+  UDF_MODE_VECTORIZED = 2;
+
+  // Grouped map UDF: operates on grouped data (e.g., groupby().apply())
+  UDF_MODE_GROUPED_MAP = 3;
+
+  // Table UDF: produces multiple rows/columns from input (UDTF)
+  UDF_MODE_TABLE = 4;
+}
+
+// Worker registration status.
+enum WorkerStatus {
+  WORKER_STATUS_UNSPECIFIED = 0;
+
+  // Worker accepted and registered successfully
+  ACCEPTED = 1;
+
+  // Worker rejected (e.g., too many workers, invalid auth)
+  REJECTED = 2;
+
+  // Protocol version mismatch
+  VERSION_MISMATCH = 3;
+}
+
+// UDF initialization status.
+enum InitializeUdfStatus {
+  INITIALIZE_UDF_STATUS_UNSPECIFIED = 0;
+
+  // UDF initialized successfully
+  OK = 1;
+
+  // Input/output schema validation failed
+  SCHEMA_MISMATCH = 2;
+
+  // Payload deserialization or loading failed
+  PAYLOAD_ERROR = 3;
+
+  // Requested UDF mode not supported by worker
+  UNSUPPORTED_MODE = 4;
+
+  // Resource limits exceeded (e.g., payload too large)
+  RESOURCE_EXCEEDED = 5;
+}
+
+// Error severity classification.
+enum ErrorSeverity {
+  ERROR_SEVERITY_UNSPECIFIED = 0;
+
+  // Transient error, retry may succeed (e.g., network timeout)
+  RETRYABLE = 1;
+
+  // Permanent error, retry will not help (e.g., invalid input)
+  FATAL = 2;
+
+  // Worker process crashed or became unresponsive
+  WORKER_CRASHED = 3;
+}
+
+// Error category for better diagnostics and metrics.
+enum ErrorCategory {
+  ERROR_CATEGORY_UNSPECIFIED = 0;
+
+  // Error during UDF function execution (user code)
+  UDF_EXECUTION = 1;
+
+  // Serialization/deserialization error (Arrow IPC, payload)
+  SERIALIZATION = 2;
+
+  // Resource limit exceeded (memory, CPU, timeout)
+  RESOURCE_LIMIT = 3;
+
+  // Protocol violation or RPC error
+  PROTOCOL = 4;
+
+  // Internal worker error (not user's fault)
+  INTERNAL = 5;
+}
+
+// Worker health status.
+enum HealthStatus {
+  HEALTH_STATUS_UNSPECIFIED = 0;
+
+  // Worker is healthy and operating normally
+  HEALTHY = 1;
+
+  // Worker is degraded but still functional (e.g., high memory)
+  DEGRADED = 2;
+
+  // Worker is unhealthy and may need restart
+  UNHEALTHY = 3;
+}
+
+// Reason for worker shutdown.
+enum ShutdownReason {
+  SHUTDOWN_REASON_UNSPECIFIED = 0;
+
+  // Worker idle for too long
+  IDLE_TIMEOUT = 1;
+
+  // Executor shutting down (task completion, container termination)
+  EXECUTOR_SHUTTING_DOWN = 2;
+
+  // Resource pressure (OOM, CPU throttling)
+  RESOURCE_PRESSURE = 3;
+
+  // Administrative shutdown request
+  ADMIN_REQUEST = 4;
+}
+
+// =============================================================================
+// Registration Messages
+// =============================================================================
+
+// Request to register a worker with the executor.
+message RegisterWorkerRequest {
+  // Unique identifier for this worker (e.g., UUID or hostname:pid)
+  string worker_id = 1;
+
+  // SEC-001: Authentication token provided by executor at worker startup.
+  // Workers must include this to prove they were launched by the executor.
+  string auth_token = 2;
+
+  // Worker capabilities for negotiation
+  WorkerCapabilities capabilities = 3;
+}
+
+// Worker capabilities advertised during registration.
+message WorkerCapabilities {
+  // Programming language (e.g., "python", "r", "javascript", "go")
+  string language = 1;
+
+  // Language runtime version (e.g., "3.11.5", "4.3.1")
+  string language_version = 2;
+
+  // UDF SDK/library version (e.g., "pyspark-udf-1.0.0")
+  string sdk_version = 3;
+
+  // Protocol version this worker implements (for compatibility checks)
+  // Current version: 1
+  uint32 protocol_version = 4;
+
+  // List of UDF modes this worker supports
+  repeated UdfMode supported_modes = 5;
+
+  // Whether this worker supports Apache Arrow IPC serialization
+  bool supports_arrow_ipc = 6;
+
+  // Maximum batch size in bytes this worker can handle
+  // Default: 64MB
+  uint64 max_batch_bytes = 7;
+}
+
+// Response to worker registration.
+message RegisterWorkerResponse {
+  // Registration outcome
+  WorkerStatus status = 1;
+
+  // SEC-001: Session token for subsequent RPCs (if ACCEPTED)
+  // Workers must include this in all future requests.
+  string session_token = 2;
+
+  // Human-readable error message (if REJECTED or VERSION_MISMATCH)
+  string error_message = 3;
+}
+
+// =============================================================================
+// UDF Initialization Messages
+// =============================================================================
+
+// Request to initialize a specific UDF.
+message InitializeUdfRequest {
+  // Unique identifier for this UDF instance (used in ExecuteUdf calls)
+  string udf_id = 1;
+
+  // Human-readable UDF name (for logging/debugging)
+  string udf_name = 2;
+
+  // Execution mode for this UDF
+  UdfMode mode = 3;
+
+  // Input schema in Arrow IPC schema format (serialized arrow::Schema)
+  // Defines the structure and types of input batches
+  bytes input_schema = 4;
+
+  // Expected output schema in Arrow IPC schema format
+  // Worker should validate it can produce this schema
+  bytes output_schema = 5;
+
+  // UDF code/artifact payload
+  UdfPayload payload = 6;
+
+  // Optional configuration parameters (e.g., {"batch_size": "1000"})
+  map<string, string> config = 7;
+
+  // Resource hints to help workers allocate resources
+  UdfResourceHints resource_hints = 8;
+
+  // SEC-002: SHA-256 hash of the payload for integrity verification.
+  // Workers should compute hash of received payload and compare.
+  bytes payload_integrity_hash = 9;
+}
+
+// UDF code/artifact payload with multiple delivery formats.
+message UdfPayload {
+  // The actual UDF code/artifact (one of these fields must be set)
+  oneof payload_type {
+    // Serialized function object (e.g., cloudpickle, RDS, JS bytecode)
+    bytes serialized_function = 1;
+
+    // Source code as text (e.g., Python function def, R script)
+    string source_code = 2;
+
+    // Entry point reference (e.g., "module.function", "package::func")
+    string entry_point = 3;
+
+    // Pre-compiled artifact (e.g., WASM binary, shared library)
+    bytes compiled_artifact = 4;
+  }
+
+  // Format identifier for the payload (e.g., "cloudpickle", "python-source", "wasm")
+  // Allows workers to select appropriate deserializer
+  string payload_format = 10;
+
+  // Optional dependencies (e.g., additional modules, libraries)
+  // Key: dependency name, Value: dependency bytes
+  map<string, bytes> dependencies = 11;
+
+  // SEC-002: Hash of the payload for duplicate detection and caching
+  bytes payload_hash = 12;
+
+  // SEC-002: Optional digital signature for payload verification
+  bytes payload_signature = 13;
+}
+
+// Resource hints to guide worker resource allocation.
+message UdfResourceHints {
+  // Estimated memory needed per batch (bytes)
+  uint64 estimated_memory_bytes = 1;
+
+  // Estimated CPU usage as fraction of one core (0.0 to 1.0+)
+  double estimated_cpu_fraction = 2;
+
+  // Whether this UDF requires GPU acceleration
+  bool requires_gpu = 3;
+
+  // Expected output row multiplier (e.g., 2 = doubles rows, 0.5 = halves rows)
+  // Used for buffer pre-allocation. Default: 1 (same row count)
+  uint32 estimated_output_row_multiplier = 4;
+}
+
+// Response to UDF initialization.
+message InitializeUdfResponse {
+  // Initialization outcome
+  InitializeUdfStatus status = 1;
+
+  // Actual output schema the worker will produce (if different from requested)
+  // Useful for schema inference or dynamic schema UDFs
+  bytes actual_output_schema = 2;
+
+  // Human-readable error message (if not OK)
+  string error_message = 3;
+
+  // Detailed error information for debugging (stack trace, etc.)
+  string error_detail = 4;
+}
+
+// =============================================================================
+// UDF Execution Messages (Streaming)
+// =============================================================================
+
+// Request message in the ExecuteUdf streaming RPC.
+message ExecuteUdfRequest {
+  // UDF identifier (from InitializeUdf)
+  string udf_id = 1;
+
+  // Monotonically increasing message ID for request/response correlation
+  uint64 message_id = 2;
+
+  // Request payload (one of these must be set)
+  oneof request_type {
+    // A batch of data to process
+    DataBatch data_batch = 10;
+
+    // Signal that no more data will be sent
+    EndOfData end_of_data = 11;
+
+    // Cancel ongoing execution
+    CancelExecution cancel = 12;
+  }
+}
+
+// A batch of input data in Arrow IPC format.
+message DataBatch {
+  // Unique ID for this batch (for correlation in responses)
+  uint64 batch_id = 1;
+
+  // Arrow RecordBatch serialized as Arrow IPC stream format
+  // Contains all input columns according to input_schema
+  bytes arrow_ipc_bytes = 2;
+
+  // Number of rows in this batch (for validation/metrics)
+  uint64 num_rows = 3;
+
+  // Number of columns in this batch (for validation)
+  uint32 num_columns = 4;
+
+  // Optional group key for GROUPED_MAP UDFs
+  // Identifies which group this batch belongs to
+  GroupKey group_key = 5;
+}
+
+// Group key for grouped UDFs (GROUPED_MAP mode).
+message GroupKey {
+  // Names of grouping columns
+  repeated string key_columns = 1;
+
+  // Values of grouping columns in Arrow IPC format
+  // Contains a single-row RecordBatch with key values
+  bytes key_values_arrow = 2;
+}
+
+// Signal that no more batches will be sent.
+message EndOfData {
+  // Total number of batches sent (for validation)
+  uint64 total_batches_sent = 1;
+
+  // Total number of rows sent across all batches
+  uint64 total_rows_sent = 2;
+}
+
+// Request to cancel execution.
+message CancelExecution {
+  // Reason for cancellation (e.g., "user interrupt", "timeout")
+  string reason = 1;
+}
+
+// Response message in the ExecuteUdf streaming RPC.
+message ExecuteUdfResponse {
+  // UDF identifier (from InitializeUdf)
+  string udf_id = 1;
+
+  // Message ID from corresponding request (for correlation)
+  uint64 message_id = 2;
+
+  // Response payload (one of these must be set)
+  oneof response_type {
+    // Result of processing a data batch
+    DataBatchResult data_batch_result = 10;
+
+    // Final result after processing all data
+    EndOfDataResult end_of_data_result = 11;
+
+    // Error encountered during execution
+    UdfError error = 12;
+
+    // Backpressure signal to slow down sender
+    BackpressureSignal backpressure = 13;
+  }
+}
+
+// Result of processing a single batch.
+message DataBatchResult {
+  // Batch ID from the corresponding request
+  uint64 batch_id = 1;
+
+  // Output data in Arrow IPC format (according to output_schema)
+  bytes arrow_ipc_bytes = 2;
+
+  // Number of rows in the output (may differ from input for TABLE UDFs)
+  uint64 num_rows = 3;
+
+  // Time spent processing this batch (nanoseconds)
+  uint64 processing_time_ns = 4;
+}
+
+// Final result after processing all batches.
+message EndOfDataResult {
+  // Total number of batches processed
+  uint64 total_batches_processed = 1;
+
+  // Total number of rows processed (input)
+  uint64 total_rows_processed = 2;
+
+  // Total processing time across all batches (nanoseconds)
+  uint64 total_processing_time_ns = 3;
+
+  // Optional UDF-specific metrics (e.g., cache hits, model inference count)
+  map<string, string> metrics = 4;
+}
+
+// Backpressure signal to control flow rate.
+message BackpressureSignal {
+  // Suggested backoff time in milliseconds before sending next batch
+  uint32 backoff_ms = 1;
+
+  // Reason for backpressure (e.g., "high memory usage", "slow disk")
+  string reason = 2;
+}
+
+// Error encountered during UDF execution.
+message UdfError {
+  // Error severity classification
+  ErrorSeverity severity = 1;
+
+  // Error category for metrics/diagnostics
+  ErrorCategory category = 2;
+
+  // Human-readable error message
+  string message = 3;
+
+  // Stack trace or detailed error information
+  string stack_trace = 4;
+
+  // Batch ID where error occurred (if applicable)
+  uint64 batch_id = 5;
+
+  // Row offset within batch where error occurred (if known, -1 if unknown)
+  int64 row_offset = 6;
+
+  // Additional error metadata (e.g., {"exception_type": "ValueError"})
+  map<string, string> metadata = 7;
+}
+
+// =============================================================================
+// Health and Monitoring Messages
+// =============================================================================
+
+// Heartbeat request to check worker health.
+message HeartbeatRequest {
+  // Timestamp when heartbeat was sent (nanoseconds since epoch)
+  uint64 timestamp_ns = 1;
+}
+
+// Heartbeat response with health and metrics.
+message HeartbeatResponse {
+  // Current health status
+  HealthStatus status = 1;
+
+  // Runtime metrics snapshot
+  WorkerMetrics metrics = 2;
+}
+
+// Worker runtime metrics.
+message WorkerMetrics {
+  // Current heap/memory usage (bytes)
+  uint64 heap_used_bytes = 1;
+
+  // Total heap/memory available (bytes)
+  uint64 heap_total_bytes = 2;
+
+  // Current CPU usage as percentage (0.0 to 100.0+)
+  double cpu_usage_percent = 3;
+
+  // Total number of batches processed since startup
+  uint64 total_batches_processed = 4;
+
+  // Total number of rows processed since startup
+  uint64 total_rows_processed = 5;
+
+  // Number of currently active UDFs
+  uint64 active_udf_count = 6;
+}
+
+// =============================================================================
+// Cleanup and Shutdown Messages
+// =============================================================================
+
+// Request to clean up a specific UDF's resources.
+message CleanupWorkerRequest {
+  // UDF identifier to clean up (empty = clean up all UDFs)
+  string udf_id = 1;
+
+  // Whether to force garbage collection after cleanup
+  bool force_gc = 2;
+
+  // Whether to clear global state/caches (use with caution)
+  bool clear_global_state = 3;
+}
+
+// Response to cleanup request.
+message CleanupWorkerResponse {
+  // Whether cleanup was successful
+  bool success = 1;
+
+  // Estimated memory freed (bytes)
+  uint64 heap_bytes_freed = 2;
+
+  // Error message if cleanup failed
+  string error_message = 3;
+}
+
+// Request to gracefully shutdown worker.
+message ShutdownRequest {
+  // Reason for shutdown
+  ShutdownReason reason = 1;
+
+  // Grace period in milliseconds to finish in-flight work
+  uint32 grace_period_ms = 2;
+}
+
+// Response to shutdown request.
+message ShutdownResponse {
+  // Whether shutdown request was acknowledged
+  bool acknowledged = 1;
+
+  // Final metrics snapshot before shutdown
+  WorkerMetrics final_metrics = 2;
+}
