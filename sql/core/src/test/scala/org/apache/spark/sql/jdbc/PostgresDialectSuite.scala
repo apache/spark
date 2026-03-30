@@ -38,6 +38,30 @@ class PostgresDialectSuite extends SparkFunSuite with MockitoSugar {
     ) ++ extraOptions)
   }
 
+  test("beforeFetch sets autoCommit=false with lowercase fetchsize") {
+    val conn = mock[Connection]
+    dialect.beforeFetch(conn, createJDBCOptions(Map("fetchsize" -> "100")))
+    verify(conn).setAutoCommit(false)
+  }
+
+  test("beforeFetch sets autoCommit=false with camelCase fetchSize") {
+    val conn = mock[Connection]
+    dialect.beforeFetch(conn, createJDBCOptions(Map("fetchSize" -> "100")))
+    verify(conn).setAutoCommit(false)
+  }
+
+  test("beforeFetch sets autoCommit=false with uppercase FETCHSIZE") {
+    val conn = mock[Connection]
+    dialect.beforeFetch(conn, createJDBCOptions(Map("FETCHSIZE" -> "100")))
+    verify(conn).setAutoCommit(false)
+  }
+
+  test("beforeFetch does not set autoCommit when fetchSize is 0") {
+    val conn = mock[Connection]
+    dialect.beforeFetch(conn, createJDBCOptions(Map("fetchsize" -> "0")))
+    verify(conn, never()).setAutoCommit(false)
+  }
+
   test("effectiveFetchSize: returns user-specified value when set") {
     assert(dialect.effectiveFetchSize(createJDBCOptions(Map("fetchsize" -> "500"))) === 500)
   }
