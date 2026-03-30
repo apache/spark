@@ -19,6 +19,9 @@ package org.apache.spark.sql.internal
 
 import java.io.File
 
+import scala.jdk.CollectionConverters._
+
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, DataFrame}
@@ -1134,6 +1137,128 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
         Array(UTF8String.fromString(dbName), UTF8String.fromString("non_existing_table"), isTemp))
       impl.resolveTable(row, CatalogManager.SESSION_CATALOG_NAME)
     }
+  }
+
+  test("catalog API: SHOW CACHED TABLES and listCachedTables") {
+    val t = "catalog_api_ext_cached_t"
+    spark.sql(s"DROP TABLE IF EXISTS $t")
+    spark.sql(s"CREATE TABLE $t (id INT) USING parquet")
+    try {
+      assert(spark.catalog.listCachedTables().collect().isEmpty)
+      assert(spark.sql("SHOW CACHED TABLES").collect().isEmpty)
+      spark.catalog.cacheTable(t)
+      val fromApi = spark.catalog.listCachedTables().collect()
+      assert(fromApi.exists(_.name.contains(t)))
+      val fromSql = spark
+        .sql("SHOW CACHED TABLES")
+        .collect()
+        .map(r => (r.getString(0), r.getString(1)))
+        .toSet
+      val fromApiSet = fromApi.map(c => (c.name, c.storageLevel)).toSet
+      assert(fromSql === fromApiSet)
+    } finally {
+      spark.catalog.uncacheTable(t)
+      spark.catalog.dropTable(t, ifExists = true)
+    }
+  }
+
+  test("catalog API: dropTable") {
+    val t = "catalog_api_ext_drop_t"
+    spark.sql(s"DROP TABLE IF EXISTS $t")
+    spark.sql(s"CREATE TABLE $t (id INT) USING parquet")
+    assert(spark.catalog.tableExists(t))
+    spark.catalog.dropTable(t)
+    assert(!spark.catalog.tableExists(t))
+  }
+
+  test("catalog API: dropView") {
+    val v = "catalog_api_ext_drop_v"
+    spark.sql(s"DROP VIEW IF EXISTS $v")
+    spark.sql(s"CREATE VIEW $v AS SELECT 1 AS x")
+    assert(spark.catalog.tableExists(v))
+    spark.catalog.dropView(v)
+    assert(!spark.catalog.tableExists(v))
+  }
+
+  test("catalog API: createDatabase and dropDatabase") {
+    val db = "catalog_api_ext_db"
+    spark.catalog.dropDatabase(db, ifExists = true, cascade = true)
+    assert(!spark.catalog.databaseExists(db))
+    spark.catalog.createDatabase(db)
+    assert(spark.catalog.databaseExists(db))
+    spark.catalog.dropDatabase(db, ifExists = false, cascade = true)
+    assert(!spark.catalog.databaseExists(db))
+  }
+
+  test("catalog API: listPartitions") {
+    val t = "catalog_api_ext_part_t"
+    withTempPath { dir =>
+      spark.sql(s"DROP TABLE IF EXISTS $t")
+      val loc = dir.toURI.toString.replace("'", "\\'")
+      spark.sql(
+        s"CREATE TABLE $t (id INT, p INT) USING parquet PARTITIONED BY (p) LOCATION '$loc'")
+      spark.sql(s"INSERT INTO $t PARTITION (p = 7) SELECT 1")
+      val parts = spark.catalog.listPartitions(t).collect().map(_.partition)
+      assert(parts.exists(_.contains("p=7")))
+      spark.catalog.dropTable(t)
+    }
+  }
+
+  test("catalog API: listViews") {
+    val v = "catalog_api_ext_list_v"
+    spark.sql(s"DROP VIEW IF EXISTS $v")
+    spark.sql(s"CREATE VIEW $v AS SELECT 1 AS c")
+    val names = spark.catalog.listViews().collect().map(_.name)
+    assert(names.contains(v))
+    spark.catalog.dropView(v)
+  }
+
+  test("catalog API: getTableProperties") {
+    val t = "catalog_api_ext_props_t"
+    spark.sql(s"DROP TABLE IF EXISTS $t")
+    spark.sql(
+      s"CREATE TABLE $t (id INT) USING parquet " +
+        "TBLPROPERTIES ('catalog_api_ext_k' = 'catalog_api_ext_v')")
+    val props = spark.catalog.getTableProperties(t).asScala.toMap
+    assert(props.get("catalog_api_ext_k").contains("catalog_api_ext_v"))
+    spark.catalog.dropTable(t)
+  }
+
+  test("catalog API: getCreateTableString") {
+    val t = "catalog_api_ext_ddl_t"
+    spark.sql(s"DROP TABLE IF EXISTS $t")
+    spark.sql(s"CREATE TABLE $t (id INT) USING parquet")
+    val ddl = spark.catalog.getCreateTableString(t)
+    assert(ddl.nonEmpty && ddl.toLowerCase(java.util.Locale.ROOT).contains("create"))
+    spark.catalog.dropTable(t)
+  }
+
+  test("catalog API: truncateTable") {
+    val t = "catalog_api_ext_trunc_t"
+    spark.sql(s"DROP TABLE IF EXISTS $t")
+    spark.sql(s"CREATE TABLE $t (id INT) USING parquet")
+    spark.sql(s"INSERT INTO $t VALUES (1), (2)")
+    val ident = TableIdentifier(t, Some(spark.catalog.currentDatabase))
+    def parquetCount(path: Path, fs: FileSystem): Int =
+      fs.listStatus(path).count(_.getPath.getName.endsWith(".parquet"))
+    val loc = sessionCatalog.getTableMetadata(ident).storage.locationUri
+    assert(loc.isDefined)
+    val tablePath = new Path(loc.get)
+    val fs = tablePath.getFileSystem(spark.sessionState.newHadoopConf())
+    assert(parquetCount(tablePath, fs) > 0)
+    spark.catalog.truncateTable(t)
+    assert(parquetCount(tablePath, fs) == 0)
+    // Avoid catalog.dropTable: DropTableCommand may scan the table during uncacheQuery after data
+    // was removed. afterEach sessionCatalog.reset() drops the table.
+  }
+
+  test("catalog API: analyzeTable") {
+    val t = "catalog_api_ext_analyze_t"
+    spark.sql(s"DROP TABLE IF EXISTS $t")
+    spark.sql(s"CREATE TABLE $t (id INT) USING parquet")
+    spark.sql(s"INSERT INTO $t VALUES (1)")
+    spark.catalog.analyzeTable(t, noScan = true)
+    spark.catalog.dropTable(t)
   }
 
   private def getConstructorParameterValues(obj: DefinedByConstructorParams): Seq[AnyRef] = {

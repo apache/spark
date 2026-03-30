@@ -697,6 +697,50 @@ class SymmetricHashJoinStateManagerEventTimeInKeySuite
       }
     }
   }
+
+  // V1 excluded: V1 converter does not persist matched flags (SPARK-26154)
+  versionsInTest.filter(_ >= 2).foreach { ver =>
+    test(s"StreamingJoinStateManager V$ver - skipUpdatingMatchedFlag skips matched flag update") {
+      withTempDir { checkpointDir =>
+        withJoinStateManagerWithCheckpointDir(
+          inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver,
+          checkpointDir, storeVersion = 0, changelogCheckpoint = false) { manager =>
+          implicit val mgr = manager
+
+          append(20, 2)
+          append(20, 3)
+          append(30, 1)
+
+          val dummyRow = new GenericInternalRow(0)
+          val matched = manager.getJoinedRows(
+            toJoinKeyRow(20),
+            row => new JoinedRow(row, dummyRow),
+            jr => jr.getInt(1) == 2,
+            skipUpdatingMatchedFlag = true
+          ).toSeq
+          assert(matched.size == 1)
+
+          mgr.commit()
+        }
+
+        withJoinStateManagerWithCheckpointDir(
+          inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver,
+          checkpointDir, storeVersion = 1, changelogCheckpoint = false) { manager =>
+          implicit val mgr = manager
+
+          val evicted = removeAndReturnByKey(25)
+          val evictedPairs = evicted.map(p => (toValueInt(p.value), p.matched)).toSeq
+          val matchedByValue = evictedPairs.toMap
+          // Without skipUpdatingMatchedFlag = true, the value would be true.
+          assert(matchedByValue(2) === false)
+          assert(matchedByValue(3) === false)
+
+          mgr.commit()
+        }
+      }
+    }
+  }
+
 }
 
 class SymmetricHashJoinStateManagerEventTimeInValueSuite
@@ -1058,6 +1102,46 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
       assert(getJoinedRowTimestamps(40, Some((20L, 20L))) === Seq(20, 20, 20))
       assert(getJoinedRowTimestamps(40, Some((10L, 20L))) === Seq(10, 10, 20, 20, 20))
       assert(getJoinedRowTimestamps(40, Some((10L, 30L))) === Seq(10, 10, 20, 20, 20, 30))
+    }
+  }
+
+  // V1 excluded: V1 converter does not persist matched flags (SPARK-26154)
+  versionsInTest.filter(_ >= 2).foreach { ver =>
+    test(s"StreamingJoinStateManager V$ver - skipUpdatingMatchedFlag skips matched flag update") {
+      withTempDir { checkpointDir =>
+        withJoinStateManagerWithCheckpointDir(
+          inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver,
+          checkpointDir, storeVersion = 0, changelogCheckpoint = false) { manager =>
+          implicit val mgr = manager
+
+          appendAndTest(40, 100, 200, 300)
+
+          val dummyRow = new GenericInternalRow(0)
+          val matched = manager.getJoinedRows(
+            toJoinKeyRow(40),
+            row => new JoinedRow(row, dummyRow),
+            jr => jr.getInt(1) == 100,
+            skipUpdatingMatchedFlag = true
+          ).toSeq
+          assert(matched.size == 1)
+
+          mgr.commit()
+        }
+
+        withJoinStateManagerWithCheckpointDir(
+          inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver,
+          checkpointDir, storeVersion = 1, changelogCheckpoint = false) { manager =>
+          implicit val mgr = manager
+
+          val evicted = removeAndReturnByValue(125)
+          val evictedPairs = evicted.map(p => (toValueInt(p.value), p.matched)).toSeq
+          val matchedByValue = evictedPairs.toMap
+          // Without skipUpdatingMatchedFlag = true, the value would be true.
+          assert(matchedByValue(100) === false)
+
+          mgr.commit()
+        }
+      }
     }
   }
 }

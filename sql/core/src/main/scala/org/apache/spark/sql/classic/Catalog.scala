@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.classic
 
+import java.util
+
+import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
@@ -24,7 +27,15 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CATALOG_NAME, DATABASE_NAME, TABLE_NAME}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog
-import org.apache.spark.sql.catalog.{CatalogMetadata, Column, Database, Function, Table}
+import org.apache.spark.sql.catalog.{
+  CachedTable,
+  CatalogMetadata,
+  CatalogTablePartition,
+  Column,
+  Database,
+  Function,
+  Table
+}
 import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
@@ -32,14 +43,39 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreateTable, LocalRelation, LogicalPlan, OptionList, RecoverPartitions, ShowFunctions, ShowTables, UnresolvedTableSpec, View}
+import org.apache.spark.sql.catalyst.plans.logical.{
+  AnalyzeTable,
+  ColumnDefinition,
+  CreateNamespace,
+  CreateTable,
+  DropNamespace,
+  DropTable,
+  DropView,
+  LocalRelation,
+  LogicalPlan,
+  OptionList,
+  RecoverPartitions,
+  ShowCreateTable,
+  ShowFunctions,
+  ShowPartitions,
+  ShowTableProperties,
+  ShowTables,
+  ShowViews,
+  TruncateTable,
+  UnresolvedTableSpec,
+  View
+}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogManager, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, MultipartIdentifierHelper, NamespaceHelper, TransformHelper}
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.v2ColumnsToStructType
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.command.{ShowNamespacesCommand, ShowTablesCommand}
+import org.apache.spark.sql.execution.command.{
+  ShowNamespacesCommand,
+  ShowTablesCommand,
+  ShowViewsCommand
+}
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -952,6 +988,120 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
   override def listCatalogs(pattern: String): Dataset[CatalogMetadata] = {
     val catalogs = sparkSession.sessionState.catalogManager.listCatalogs(Some(pattern))
     Catalog.makeDataset(catalogs.map(name => makeCatalog(name)), sparkSession)
+  }
+
+  override def listCachedTables(): Dataset[CachedTable] = {
+    val cached = sparkSession.sharedState.cacheManager.listNamedCachedTables().map { case (n, sl) =>
+      new CachedTable(n, sl.description)
+    }
+    Catalog.makeDataset(cached, sparkSession)
+  }
+
+  override def dropTable(tableName: String, ifExists: Boolean, purge: Boolean): Unit = {
+    val plan = DropTable(
+      UnresolvedIdentifier(parseIdent(tableName), allowTemp = true),
+      ifExists,
+      purge)
+    sparkSession.sessionState.executePlan(plan).toRdd
+  }
+
+  override def dropView(viewName: String, ifExists: Boolean): Unit = {
+    val plan = DropView(
+      UnresolvedIdentifier(parseIdent(viewName), allowTemp = true),
+      ifExists)
+    sparkSession.sessionState.executePlan(plan).toRdd
+  }
+
+  override def createDatabase(
+      dbName: String,
+      ifNotExists: Boolean,
+      properties: util.Map[String, String]): Unit = {
+    val props = properties.asScala.toMap
+    val plan = CreateNamespace(UnresolvedNamespace(parseIdent(dbName)), ifNotExists, props)
+    sparkSession.sessionState.executePlan(plan).toRdd
+  }
+
+  override def dropDatabase(dbName: String, ifExists: Boolean, cascade: Boolean): Unit = {
+    val plan = DropNamespace(UnresolvedNamespace(parseIdent(dbName)), ifExists, cascade)
+    sparkSession.sessionState.executePlan(plan).toRdd
+  }
+
+  override def listPartitions(tableName: String): Dataset[CatalogTablePartition] = {
+    val plan = ShowPartitions(
+      UnresolvedTable(toTableIdent(tableName), "Catalog.listPartitions"),
+      None)
+    val partitions = sparkSession.sessionState.executePlan(plan).toRdd.collect().map { row =>
+      new CatalogTablePartition(row.getString(0))
+    }
+    Catalog.makeDataset(partitions.toImmutableArraySeq, sparkSession)
+  }
+
+  override def listViews(): Dataset[Table] = {
+    listViewsInternal(CurrentNamespace, None)
+  }
+
+  @throws[AnalysisException]("database does not exist")
+  override def listViews(dbName: String): Dataset[Table] = {
+    listViewsInternal(UnresolvedNamespace(resolveNamespace(dbName)), None)
+  }
+
+  @throws[AnalysisException]("database does not exist")
+  override def listViews(dbName: String, pattern: String): Dataset[Table] = {
+    listViewsInternal(UnresolvedNamespace(resolveNamespace(dbName)), Some(pattern))
+  }
+
+  private def listViewsInternal(ns: LogicalPlan, pattern: Option[String]): Dataset[Table] = {
+    val plan = ShowViews(ns, pattern)
+    makeViewsDataset(plan)
+  }
+
+  private def makeViewsDataset(plan: ShowViews): Dataset[Table] = {
+    val qe = sparkSession.sessionState.executePlan(plan)
+    val catalog = qe.analyzed.collectFirst {
+      case ShowViews(r: ResolvedNamespace, _, _) => r.catalog
+      case _: ShowViewsCommand =>
+        sparkSession.sessionState.catalogManager.v2SessionCatalog
+    }.get
+    val tables = qe.toRdd.collect().flatMap { row => resolveTable(row, catalog.name()) }
+    Catalog.makeDataset(tables.toImmutableArraySeq, sparkSession)
+  }
+
+  override def getTableProperties(tableName: String): util.Map[String, String] = {
+    val plan = ShowTableProperties(
+      UnresolvedTableOrView(
+        toTableIdent(tableName),
+        "Catalog.getTableProperties",
+        allowTempView = true),
+      None)
+    val m = new util.HashMap[String, String]()
+    sparkSession.sessionState.executePlan(plan).toRdd.collect().foreach { row =>
+      m.put(row.getString(0), row.getString(1))
+    }
+    m
+  }
+
+  override def getCreateTableString(tableName: String, asSerde: Boolean): String = {
+    val plan = ShowCreateTable(
+      UnresolvedTableOrView(
+        toTableIdent(tableName),
+        "Catalog.getCreateTableString",
+        allowTempView = true),
+      asSerde)
+    val rows = sparkSession.sessionState.executePlan(plan).toRdd.collect()
+    if (rows.isEmpty) "" else rows(0).getString(0)
+  }
+
+  override def truncateTable(tableName: String): Unit = {
+    val plan = TruncateTable(UnresolvedTable(toTableIdent(tableName), "Catalog.truncateTable"))
+    sparkSession.sessionState.executePlan(plan).toRdd
+  }
+
+  override def analyzeTable(tableName: String, noScan: Boolean): Unit = {
+    val plan = AnalyzeTable(
+      UnresolvedTable(toTableIdent(tableName), "Catalog.analyzeTable"),
+      partitionSpec = Map.empty,
+      noScan = noScan)
+    sparkSession.sessionState.executePlan(plan).toRdd
   }
 
   private def makeCatalog(name: String): CatalogMetadata = {

@@ -492,6 +492,7 @@ pyspark_core = Module(
         "pyspark.tests.test_conf",
         "pyspark.tests.test_context",
         "pyspark.tests.test_daemon",
+        "pyspark.tests.test_import_spark",
         "pyspark.tests.test_join",
         "pyspark.tests.test_memory_profiler",
         "pyspark.tests.test_pin_thread",
@@ -510,6 +511,7 @@ pyspark_core = Module(
         # unittests for upstream projects
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_cast",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_type_inference",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_default",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_ignore_timezone",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_coercion",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_inference",

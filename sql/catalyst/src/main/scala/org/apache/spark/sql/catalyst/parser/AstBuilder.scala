@@ -6317,6 +6317,13 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
+   * Create a [[ShowCachedTables]] command.
+   */
+  override def visitShowCachedTables(ctx: ShowCachedTablesContext): LogicalPlan = withOrigin(ctx) {
+    ShowCachedTables
+  }
+
+  /**
    * Create a [[RefreshTable]].
    *
    * For example:

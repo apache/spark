@@ -1689,6 +1689,18 @@ object ShowPartitions {
 }
 
 /**
+ * The logical plan of the SHOW CACHED TABLES command.
+ *
+ * Lists in-memory cache entries that were registered with an explicit table or view name
+ * (for example via `CACHE TABLE` or `Catalog.cacheTable`).
+ */
+case object ShowCachedTables extends LeafCommand {
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("tableName", StringType, nullable = false)(),
+    AttributeReference("storageLevel", StringType, nullable = false)())
+}
+
+/**
  * The logical plan of the DROP VIEW command.
  */
 case class DropView(

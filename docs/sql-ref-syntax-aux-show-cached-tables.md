@@ -1,7 +1,7 @@
 ---
 layout: global
-title: UNCACHE TABLE
-displayTitle: UNCACHE TABLE
+title: SHOW CACHED TABLES
+displayTitle: SHOW CACHED TABLES
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -21,36 +21,31 @@ license: |
 
 ### Description
 
-`UNCACHE TABLE` removes the entries and associated data from the in-memory and/or on-disk cache for a given table or view. The
-underlying entries should already have been brought to cache by previous `CACHE TABLE` operation. `UNCACHE TABLE` on a non-existent table throws an exception if `IF EXISTS` is not specified.
+The `SHOW CACHED TABLES` statement returns every in-memory cache entry that was registered with an explicit table or view name, for example via [`CACHE TABLE`](sql-ref-syntax-aux-cache-cache-table.html) or `spark.catalog.cacheTable`. The result has two columns: `tableName` (the name used when caching) and `storageLevel` (a string description of how the data is cached).
 
-**Note:** Cached data is shared across all Spark sessions on the cluster, so uncaching it affects all sessions.
+Relations cached only through `Dataset.cache()` / `DataFrame.cache()` without assigning a catalog name are **not** listed.
 
 ### Syntax
 
 ```sql
-UNCACHE TABLE [ IF EXISTS ] table_identifier
+SHOW CACHED TABLES
 ```
-
-### Parameters
-
-* **table_identifier**
-
-    Specifies the table or view name to be uncached. The table or view name may be optionally qualified with a database name.
-
-    **Syntax:** `[ database_name. ] table_name`
 
 ### Examples
 
 ```sql
-UNCACHE TABLE t1;
+CACHE TABLE my_table AS SELECT * FROM src;
+
+SHOW CACHED TABLES;
++----------+--------------------------------------+
+| tableName|                          storageLevel|
++----------+--------------------------------------+
+|  my_table|Disk Memory Deserialized 1x Replicated|
++----------+--------------------------------------+
 ```
 
 ### Related Statements
 
 * [CACHE TABLE](sql-ref-syntax-aux-cache-cache-table.html)
-* [SHOW CACHED TABLES](sql-ref-syntax-aux-show-cached-tables.html)
+* [UNCACHE TABLE](sql-ref-syntax-aux-cache-uncache-table.html)
 * [CLEAR CACHE](sql-ref-syntax-aux-cache-clear-cache.html)
-* [REFRESH TABLE](sql-ref-syntax-aux-cache-refresh-table.html)
-* [REFRESH](sql-ref-syntax-aux-cache-refresh.html)
-* [REFRESH FUNCTION](sql-ref-syntax-aux-cache-refresh-function.html)

@@ -347,7 +347,7 @@ def _parse_memory(s: str) -> int:
     return int(float(s[:-1]) * units[s[-1].lower()])
 
 
-def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = None) -> Callable:
+def inheritable_thread_target(f: Union[Callable, "SparkSession"]) -> Callable:
     """
     Return thread target wrapper which is recommended to be used in PySpark when the
     pinned thread mode is enabled. The wrapper function, before calling original
@@ -355,7 +355,7 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
     to JVM thread such as ``InheritableThreadLocal``, or thread local such as tags
     with Spark Connect.
 
-    When the pinned thread mode is off, it return the original ``f``.
+    When the pinned thread mode is off, the target wrapper is a no-op.
 
     .. versionadded:: 3.2.0
 
@@ -492,7 +492,14 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
 
         return wrapped
     else:
-        return f  # type: ignore[return-value]
+        if isinstance(f, SparkSession):
+
+            def outer(ff: Callable) -> Callable:
+                return ff
+
+            return outer
+        else:
+            return f
 
 
 def handle_worker_exception(
