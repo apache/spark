@@ -274,17 +274,6 @@ object ExtractV2Table {
   def unapply(relation: DataSourceV2Relation): Option[Table] = Some(relation.table)
 }
 
-object ExtractV2Scan {
-  def unapply(scanRelation: DataSourceV2ScanRelation): Option[Scan] =
-    Some(scanRelation.scan)
-}
-
-object ExtractV2Relation {
-  def unapply(scanRelation: DataSourceV2ScanRelation)
-      : Option[(DataSourceV2Relation, Scan, Seq[AttributeReference])] =
-    Some((scanRelation.relation, scanRelation.scan, scanRelation.output))
-}
-
 object ExtractV2CatalogAndIdentifier {
   def unapply(relation: DataSourceV2Relation): Option[(TableCatalog, Identifier)] = {
     relation match {
@@ -294,6 +283,17 @@ object ExtractV2CatalogAndIdentifier {
         None
     }
   }
+}
+
+object ExtractV2Scan {
+  def unapply(scanRelation: DataSourceV2ScanRelation): Option[Scan] =
+    Some(scanRelation.scan)
+}
+
+object ExtractV2Relation {
+  def unapply(scanRelation: DataSourceV2ScanRelation)
+      : Option[(DataSourceV2Relation, Scan, Seq[AttributeReference])] =
+    Some((scanRelation.relation, scanRelation.scan, scanRelation.output))
 }
 
 object DataSourceV2Relation {
