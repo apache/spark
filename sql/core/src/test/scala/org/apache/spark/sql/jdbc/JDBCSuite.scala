@@ -940,6 +940,11 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     metadata.putBoolean("isSigned", value = false)
     assert(mySqlDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1, metadata) ===
       Some(ShortType))
+    withSQLConf(SQLConf.LEGACY_MYSQL_UNSIGNED_TINYINT_MAPPING_ENABLED.key -> "true") {
+      metadata.putBoolean("isSigned", value = false)
+      assert(mySqlDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1, metadata) ===
+        Some(ByteType))
+    }
     assert(mySqlDialect.getCatalystType(java.sql.Types.REAL, "FLOAT", 1, metadata) ===
       Some(DoubleType))
     assert(mySqlDialect.getCatalystType(java.sql.Types.FLOAT, "FLOAT", 1, metadata) ===

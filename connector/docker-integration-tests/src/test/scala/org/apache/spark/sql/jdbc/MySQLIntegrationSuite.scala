@@ -27,7 +27,7 @@ import scala.util.Using
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.ShortType
+import org.apache.spark.sql.types.{ByteType, ShortType}
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -179,6 +179,22 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
       assert(rows.getBoolean(7) === false)
     } else {
       assert(rows.getShort(7) === 0)
+    }
+  }
+
+  test("SPARK-55076: Legacy config for unsigned TINYINT mapping") {
+    // Default behavior: unsigned TINYINT -> ShortType
+    val df = spark.read.jdbc(jdbcUrl, "unsigned_numbers", new Properties)
+    assert(df.schema("tiny").dataType === ShortType)
+    assert(df.head().getShort(0) === 255)
+
+    // Legacy behavior: unsigned TINYINT -> ByteType
+    withSQLConf(
+      SQLConf.LEGACY_MYSQL_UNSIGNED_TINYINT_MAPPING_ENABLED.key -> "true") {
+      val legacyDf = spark.read.jdbc(jdbcUrl, "unsigned_numbers", new Properties)
+      assert(legacyDf.schema("tiny").dataType === ByteType)
+      // 255 unsigned overflows to -1 as signed byte
+      assert(legacyDf.head().getByte(0) === -1.toByte)
     }
   }
 

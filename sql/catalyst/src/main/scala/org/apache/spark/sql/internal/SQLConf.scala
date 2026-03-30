@@ -5787,6 +5787,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_MYSQL_UNSIGNED_TINYINT_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.mysql.unsignedTinyIntMapping.enabled")
+      .internal()
+      .doc("When true, MySQL TINYINT UNSIGNED is mapped to ByteType (same as signed TINYINT), " +
+        "which may cause overflow for values outside [-128, 127]. " +
+        "When false (default), it is mapped to ShortType to accommodate the full " +
+        "unsigned range [0, 255].")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.oracle.timestampMapping.enabled")
       .internal()
@@ -7583,6 +7594,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyMySqlTimestampNTZMappingEnabled: Boolean =
     getConf(LEGACY_MYSQL_TIMESTAMPNTZ_MAPPING_ENABLED)
+
+  def legacyMySqlUnsignedTinyIntMappingEnabled: Boolean =
+    getConf(LEGACY_MYSQL_UNSIGNED_TINYINT_MAPPING_ENABLED)
 
   def legacyOracleTimestampMappingEnabled: Boolean =
     getConf(LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED)
