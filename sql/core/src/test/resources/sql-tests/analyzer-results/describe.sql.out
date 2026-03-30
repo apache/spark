@@ -359,7 +359,7 @@ ExplainCommand 'DescribeColumn 'b, false, [info_name#x, info_value#x], SimpleMod
 -- !query
 EXPLAIN DESCRIBE t PARTITION (c='Us', d=2)
 -- !query analysis
-ExplainCommand 'DescribeRelation [[unresolvedpartitionspec((c,Us), (d,2), None)]], false, [col_name#x, data_type#x, comment#x], SimpleMode
+ExplainCommand 'DescribeRelation unresolvedpartitionspec((c,Us), (d,2), None), false, [col_name#x, data_type#x, comment#x], SimpleMode
 
 
 -- !query
