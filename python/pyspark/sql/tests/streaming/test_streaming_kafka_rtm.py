@@ -115,9 +115,8 @@ def _is_docker_available():
     """Check if Docker daemon is running and accessible."""
     try:
         import subprocess
-        result = subprocess.run(
-            ["docker", "info"], capture_output=True, timeout=10
-        )
+
+        result = subprocess.run(["docker", "info"], capture_output=True, timeout=10)
         return result.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         return False

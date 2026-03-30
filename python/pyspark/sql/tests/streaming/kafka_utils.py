@@ -330,7 +330,7 @@ class KafkaUtils:
 
         # Timeout reached, raise assertion error
         raise AssertionError(
-            f"Condition not met within {timeout}s. " f"Expected: {expected}, Got: {last_result}"
+            f"Condition not met within {timeout}s. Expected: {expected}, Got: {last_result}"
         )
 
     def wait_for_query_alive(self, query, timeout: int = 60, interval: float = 1.0) -> None:
