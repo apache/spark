@@ -41,6 +41,6 @@ public interface ContinuousPartitionReaderFactory extends PartitionReaderFactory
   @Override
   default ContinuousPartitionReader<ColumnarBatch> createColumnarReader(InputPartition partition) {
     throw new SparkUnsupportedOperationException(
-      "DATASOURCE_COLUMNAR_READER_NOT_SUPPORTED", Map.of("class", getClass().getName()));
+      "DATA_SOURCE_COLUMNAR_READER_NOT_SUPPORTED", Map.of("class", getClass().getName()));
   }
 }

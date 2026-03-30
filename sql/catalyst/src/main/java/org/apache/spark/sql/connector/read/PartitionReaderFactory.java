@@ -53,7 +53,7 @@ public interface PartitionReaderFactory extends Serializable {
    */
   default PartitionReader<ColumnarBatch> createColumnarReader(InputPartition partition) {
     throw new SparkUnsupportedOperationException(
-      "DATASOURCE_COLUMNAR_READER_NOT_SUPPORTED", Map.of("class", getClass().getName()));
+      "DATA_SOURCE_COLUMNAR_READER_NOT_SUPPORTED", Map.of("class", getClass().getName()));
   }
 
   /**
