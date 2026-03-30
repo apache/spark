@@ -22,12 +22,14 @@ import java.util.List;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.FileRegion;
 import io.netty.handler.codec.MessageToMessageEncoder;
 
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.MDC;
+import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 
 /**
  * Encoder used by the server side to encode server-to-client responses.
@@ -89,9 +91,24 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
     assert header.writableBytes() == 0;
 
     if (body != null) {
-      // We transfer ownership of the reference on in.body() to MessageWithHeader.
-      // This reference will be freed when MessageWithHeader.deallocate() is called.
-      out.add(new MessageWithHeader(in.body(), header, body, bodyLength));
+      if (body instanceof FileRegion && in.body() instanceof FileSegmentManagedBuffer) {
+        // Emit header and FileRegion as separate objects so that native transports
+        // (EPOLL, KQUEUE) can apply zero-copy sendfile/splice on the FileRegion directly.
+        // When wrapped in MessageWithHeader, native transports fall into a generic
+        // FileRegion.transferTo() fallback that copies data through user-space, bypassing
+        // the optimized sendfile() path.
+        //
+        // This split is only safe when the ManagedBuffer is FileSegmentManagedBuffer,
+        // whose release() is a no-op. Other ManagedBuffer types (e.g.,
+        // BlockManagerManagedBuffer) perform resource cleanup in release() that must be
+        // tied to the write lifecycle via MessageWithHeader.deallocate().
+        out.add(header);
+        out.add(body);
+      } else {
+        // We transfer ownership of the reference on in.body() to MessageWithHeader.
+        // This reference will be freed when MessageWithHeader.deallocate() is called.
+        out.add(new MessageWithHeader(in.body(), header, body, bodyLength));
+      }
     } else {
       out.add(header);
     }
