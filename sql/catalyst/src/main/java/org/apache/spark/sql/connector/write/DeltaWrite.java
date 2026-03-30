@@ -32,6 +32,6 @@ public interface DeltaWrite extends Write {
   @Override
   default DeltaBatchWrite toBatch() {
     throw new SparkUnsupportedOperationException(
-      "_LEGACY_ERROR_TEMP_3139", Map.of("description", description()));
+      "DATA_SOURCE_DELTA_BATCH_WRITE_NOT_SUPPORTED", Map.of("description", description()));
   }
 }

@@ -32,6 +32,6 @@ public interface DeltaWriteBuilder extends WriteBuilder {
   @Override
   default DeltaWrite build() {
     throw new SparkUnsupportedOperationException(
-      "_LEGACY_ERROR_TEMP_3140", Map.of("class", getClass().getName()));
+      "DATA_SOURCE_DELTA_WRITE_BUILD_NOT_IMPLEMENTED", Map.of("class", getClass().getName()));
   }
 }
