@@ -153,18 +153,13 @@ class ArrowStreamSerializer(Serializer):
             if writer is not None:
                 writer.close()
 
-    @classmethod
-    def _read_arrow_stream(cls, stream: IO[bytes]) -> Iterator["pa.RecordBatch"]:
-        """Read a plain Arrow IPC stream, yielding one RecordBatch per message."""
+    def load_stream(self, stream: IO[bytes]) -> Iterator["pa.RecordBatch"]:
+        """Load batches from a plain Arrow stream."""
         import pyarrow as pa
 
         reader = pa.ipc.open_stream(stream)
         for batch in reader:
             yield batch
-
-    def load_stream(self, stream: IO[bytes]) -> Iterator["pa.RecordBatch"]:
-        """Load batches from a plain Arrow stream."""
-        yield from self._read_arrow_stream(stream)
 
     def _write_stream_start(
         self, batch_iterator: Iterator["pa.RecordBatch"], stream: IO[bytes]
@@ -193,13 +188,9 @@ class ArrowStreamGroupSerializer(ArrowStreamSerializer):
 
     def load_stream(self, stream: IO[bytes]) -> Iterator[Iterator["pa.RecordBatch"]]:
         """Yield one iterator of record batches per group from the stream."""
-        dataframes_in_group: Optional[int] = None
-
-        while dataframes_in_group is None or dataframes_in_group > 0:
-            dataframes_in_group = read_int(stream)
-
+        while dataframes_in_group := read_int(stream):
             if dataframes_in_group == 1:
-                yield self._read_arrow_stream(stream)
+                yield super().load_stream(stream)
             elif dataframes_in_group > 0:
                 raise PySparkValueError(
                     errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
@@ -217,16 +208,12 @@ class ArrowStreamCoGroupSerializer(ArrowStreamSerializer):
         self, stream: IO[bytes]
     ) -> Iterator[Tuple[List["pa.RecordBatch"], List["pa.RecordBatch"]]]:
         """Yield pairs of (left_batches, right_batches) from the stream."""
-        dataframes_in_group: Optional[int] = None
-
-        while dataframes_in_group is None or dataframes_in_group > 0:
-            dataframes_in_group = read_int(stream)
-
+        while dataframes_in_group := read_int(stream):
             if dataframes_in_group == 2:
                 # Must eagerly load each dataframe to maintain correct stream position
                 yield (
-                    list(self._read_arrow_stream(stream)),
-                    list(self._read_arrow_stream(stream)),
+                    list(super().load_stream(stream)),
+                    list(super().load_stream(stream)),
                 )
             elif dataframes_in_group > 0:
                 raise PySparkValueError(
@@ -265,7 +252,7 @@ class ArrowStreamUDTFSerializer(ArrowStreamUDFSerializer):
     """
 
     def load_stream(self, stream):
-        return self._read_arrow_stream(stream)
+        return ArrowStreamSerializer.load_stream(self, stream)
 
 
 class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
