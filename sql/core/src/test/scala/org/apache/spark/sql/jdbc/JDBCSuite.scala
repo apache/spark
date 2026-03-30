@@ -531,6 +531,56 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-56251: Dialect defaultFetchSize is applied when user does not specify fetchsize") {
+    @volatile var capturedFetchSize: Int = -1
+
+    val testDialect = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+      override val defaultFetchSize: Int = 100
+      override def effectiveFetchSize(options: JDBCOptions): Int = {
+        val result = super.effectiveFetchSize(options)
+        capturedFetchSize = result
+        result
+      }
+    }
+
+    JdbcDialects.registerDialect(testDialect)
+    try {
+      val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties())
+      assert(df.collect().length === 3)
+      assert(capturedFetchSize === 100,
+        s"Expected effectiveFetchSize to return 100 (dialect default), got $capturedFetchSize")
+    } finally {
+      JdbcDialects.unregisterDialect(testDialect)
+    }
+  }
+
+  test("SPARK-56251: User-specified fetchsize takes precedence over dialect defaultFetchSize") {
+    @volatile var capturedFetchSize: Int = -1
+
+    val testDialect = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+      override val defaultFetchSize: Int = 100
+      override def effectiveFetchSize(options: JDBCOptions): Int = {
+        val result = super.effectiveFetchSize(options)
+        capturedFetchSize = result
+        result
+      }
+    }
+
+    JdbcDialects.registerDialect(testDialect)
+    try {
+      val properties = new Properties()
+      properties.setProperty(JDBCOptions.JDBC_BATCH_FETCH_SIZE, "42")
+      val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties)
+      assert(df.collect().length === 3)
+      assert(capturedFetchSize === 42,
+        s"Expected effectiveFetchSize to return 42 (user-specified), got $capturedFetchSize")
+    } finally {
+      JdbcDialects.unregisterDialect(testDialect)
+    }
+  }
+
   test("Partitioning via JDBCPartitioningInfo API") {
     val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3, new Properties())
     checkNumPartitions(df, expectedNumPartitions = 3)

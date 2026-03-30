@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.SQLException
+import java.sql.{Connection, SQLException}
 
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.types.{DataType, MetadataBuilder}
 
 /**
@@ -82,5 +83,15 @@ private class AggregatedDialect(dialects: List[JdbcDialect])
       table: String,
       cascade: Option[Boolean] = isCascadingTruncateTable()): String = {
     dialects.head.getTruncateQuery(table, cascade)
+  }
+
+  override def defaultFetchSize: Int = dialects.head.defaultFetchSize
+
+  override def effectiveFetchSize(options: JDBCOptions): Int = {
+    dialects.head.effectiveFetchSize(options)
+  }
+
+  override def beforeFetch(connection: Connection, options: JDBCOptions): Unit = {
+    dialects.head.beforeFetch(connection, options)
   }
 }

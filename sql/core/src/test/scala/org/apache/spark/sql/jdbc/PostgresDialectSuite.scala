@@ -28,6 +28,8 @@ import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
 class PostgresDialectSuite extends SparkFunSuite with MockitoSugar {
 
+  private val dialect = PostgresDialect()
+
   private def createJDBCOptions(extraOptions: Map[String, String]): JDBCOptions = {
     new JDBCOptions(Map(
       "url" -> "jdbc:postgresql://localhost:5432/test",
@@ -37,29 +39,52 @@ class PostgresDialectSuite extends SparkFunSuite with MockitoSugar {
 
   test("beforeFetch sets autoCommit=false with lowercase fetchsize") {
     val conn = mock[Connection]
-    val dialect = PostgresDialect()
     dialect.beforeFetch(conn, createJDBCOptions(Map("fetchsize" -> "100")))
     verify(conn).setAutoCommit(false)
   }
 
   test("beforeFetch sets autoCommit=false with camelCase fetchSize") {
     val conn = mock[Connection]
-    val dialect = PostgresDialect()
     dialect.beforeFetch(conn, createJDBCOptions(Map("fetchSize" -> "100")))
     verify(conn).setAutoCommit(false)
   }
 
   test("beforeFetch sets autoCommit=false with uppercase FETCHSIZE") {
     val conn = mock[Connection]
-    val dialect = PostgresDialect()
     dialect.beforeFetch(conn, createJDBCOptions(Map("FETCHSIZE" -> "100")))
     verify(conn).setAutoCommit(false)
   }
 
   test("beforeFetch does not set autoCommit when fetchSize is 0") {
     val conn = mock[Connection]
-    val dialect = PostgresDialect()
     dialect.beforeFetch(conn, createJDBCOptions(Map("fetchsize" -> "0")))
     verify(conn, never()).setAutoCommit(false)
+  }
+
+  test("SPARK-56251: effectiveFetchSize: returns user-specified value when set") {
+    assert(dialect.effectiveFetchSize(createJDBCOptions(Map("fetchsize" -> "500"))) === 500)
+  }
+
+  test("SPARK-56251: effectiveFetchSize: returns 0 when user explicitly sets 0") {
+    assert(dialect.effectiveFetchSize(createJDBCOptions(Map("fetchsize" -> "0"))) === 0)
+  }
+
+  test("SPARK-56251: effectiveFetchSize: returns defaultFetchSize (1000) when not set") {
+    assert(dialect.effectiveFetchSize(createJDBCOptions(Map.empty)) === 1000)
+  }
+
+  test("SPARK-56251: effectiveFetchSize: base dialect returns 0 when not set") {
+    val baseDialect = new JdbcDialect {
+      override def canHandle(url: String): Boolean = true
+    }
+    assert(baseDialect.defaultFetchSize === 0)
+    assert(baseDialect.effectiveFetchSize(createJDBCOptions(Map.empty)) === 0)
+  }
+
+  test("SPARK-56251: beforeFetch sets autoCommit=false when using default fetchSize") {
+    val conn = mock[Connection]
+    // No explicit fetchsize - should use defaultFetchSize (1000) and set autoCommit=false
+    dialect.beforeFetch(conn, createJDBCOptions(Map.empty))
+    verify(conn).setAutoCommit(false)
   }
 }
