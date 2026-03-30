@@ -299,24 +299,22 @@ public interface TableCatalog extends CatalogPlugin {
    * Create a table in the catalog by copying metadata from an existing source table.
    * <p>
    * This method is called for {@code CREATE TABLE ... LIKE ...} statements targeting this catalog.
-   * The {@code userSpecifiedOverrides} parameter contains strictly user-specified overrides:
-   * TBLPROPERTIES, LOCATION, and the USING provider (only if explicitly specified).
-   * It does NOT contain schema, partitioning, properties, constraints, or owner from the source
-   * table. Connectors must read all source metadata directly from {@code sourceTable}, including
-   * columns ({@link Table#columns()}), partitioning ({@link Table#partitioning()}),
-   * constraints ({@link Table#constraints()}), and format-specific properties
-   * ({@link Table#properties()}). Connectors are also responsible for setting the owner of the
-   * new table (e.g. via {@code org.apache.spark.sql.catalyst.CurrentUserContext#getCurrentUser}).
+   * The {@code tableInfo} parameter contains all the explicit information for the new table:
+   * columns and partitioning copied from the source, any constraints copied from the source,
+   * user-specified TBLPROPERTIES / LOCATION / USING provider (if given), and
+   * {@link #PROP_OWNER} set to the current user. Source table properties are intentionally
+   * excluded from {@code tableInfo}; connectors may read {@code sourceTable.properties()} to
+   * clone additional format-specific or custom state as appropriate for their implementation.
    * <p>
    * The default implementation throws {@link UnsupportedOperationException}. Connectors that
    * support {@code CREATE TABLE ... LIKE ...} must override this method.
    *
    * @param ident a table identifier for the new table
-   * @param sourceTable the resolved source table; connectors read schema, partitioning,
-   *                    constraints, properties, and any format-specific metadata from this object
-   * @param userSpecifiedOverrides strictly user-specified overrides: TBLPROPERTIES, LOCATION,
-   *                               and USING provider (if explicitly given); source schema,
-   *                               partitioning, provider, constraints, and owner are NOT included
+   * @param tableInfo complete description of the new table: columns, partitioning, constraints,
+   *                  explicit properties (user overrides + owner); source table properties
+   *                  are NOT included
+   * @param sourceTable the resolved source table; connectors may read format-specific properties
+   *                    or other custom state from this object to clone additional metadata
    * @return metadata for the new table
    *
    * @throws TableAlreadyExistsException If a table or view already exists for the identifier
@@ -325,7 +323,7 @@ public interface TableCatalog extends CatalogPlugin {
    * @since 4.2.0
    */
   default Table createTableLike(
-      Identifier ident, Table sourceTable, TableInfo userSpecifiedOverrides)
+      Identifier ident, TableInfo tableInfo, Table sourceTable)
       throws TableAlreadyExistsException, NoSuchNamespaceException {
     throw new UnsupportedOperationException(name() + " does not support CREATE TABLE LIKE");
   }
