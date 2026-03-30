@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.ops.ClientTypeOps
 import org.apache.spark.util.{Utils => SparkUtils}
 
 private[hive] class SparkExecuteStatementOperation(
@@ -326,7 +327,11 @@ private[hive] class SparkExecuteStatementOperation(
 
 object SparkExecuteStatementOperation {
 
-  def toTTypeId(typ: DataType): TTypeId = typ match {
+  def toTTypeId(typ: DataType): TTypeId =
+    ClientTypeOps(typ).map(ops => TTypeId.valueOf(ops.thriftTypeName))
+      .getOrElse(toTTypeIdDefault(typ))
+
+  private def toTTypeIdDefault(typ: DataType): TTypeId = typ match {
     case NullType => TTypeId.NULL_TYPE
     case BooleanType => TTypeId.BOOLEAN_TYPE
     case ByteType => TTypeId.TINYINT_TYPE

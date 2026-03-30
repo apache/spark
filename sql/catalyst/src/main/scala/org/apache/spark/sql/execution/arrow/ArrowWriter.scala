@@ -24,6 +24,7 @@ import org.apache.arrow.vector.complex._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
+import org.apache.spark.sql.catalyst.types.ops.CatalystTypeOps
 import org.apache.spark.sql.catalyst.util.STUtils
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
@@ -52,7 +53,14 @@ object ArrowWriter {
 
   private[sql] def createFieldWriter(vector: ValueVector): ArrowFieldWriter = {
     val field = vector.getField()
-    (ArrowUtils.fromArrowField(field), vector) match {
+    val dt = ArrowUtils.fromArrowField(field)
+    CatalystTypeOps(dt).map(_.createArrowFieldWriter(vector))
+      .getOrElse(createFieldWriterDefault(dt, vector))
+  }
+
+  private[sql] def createFieldWriterDefault(
+      dt: DataType, vector: ValueVector): ArrowFieldWriter = {
+    (dt, vector) match {
       case (BooleanType, vector: BitVector) => new BooleanWriter(vector)
       case (ByteType, vector: TinyIntVector) => new ByteWriter(vector)
       case (ShortType, vector: SmallIntVector) => new ShortWriter(vector)
@@ -146,7 +154,7 @@ class ArrowWriter(val root: VectorSchemaRoot, fields: Array[ArrowFieldWriter]) {
   }
 }
 
-private[arrow] abstract class ArrowFieldWriter {
+private[sql] abstract class ArrowFieldWriter {
 
   def valueVector: ValueVector
 
@@ -371,7 +379,7 @@ private[arrow] class TimestampNTZWriter(
   }
 }
 
-private[arrow] class TimeWriter(
+private[sql] class TimeWriter(
     val valueVector: TimeNanoVector) extends ArrowFieldWriter {
 
   override def setNull(): Unit = {

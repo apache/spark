@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.connect.common.types.ops.ConnectArrowTypeOps
 import org.apache.spark.sql.errors.{CompilationErrors, ExecutionErrors}
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.sql.util.{CloseableIterator, ConcatenatingArrowStreamReader, MessageIterator}
@@ -88,6 +89,14 @@ object ArrowDeserializers {
   }
 
   private[arrow] def deserializerFor(
+      encoder: AgnosticEncoder[_],
+      data: AnyRef,
+      timeZoneId: String): Deserializer[Any] =
+    ConnectArrowTypeOps(encoder)
+      .map(_.createArrowDeserializer(encoder, data, timeZoneId).asInstanceOf[Deserializer[Any]])
+      .getOrElse(deserializerForDefault(encoder, data, timeZoneId))
+
+  private def deserializerForDefault(
       encoder: AgnosticEncoder[_],
       data: AnyRef,
       timeZoneId: String): Deserializer[Any] = {

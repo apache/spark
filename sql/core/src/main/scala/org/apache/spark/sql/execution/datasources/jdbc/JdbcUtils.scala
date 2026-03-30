@@ -49,6 +49,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType, NoopDialect}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.ops.ClientTypeOps
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
@@ -145,7 +146,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * @param dt The datatype (e.g. [[org.apache.spark.sql.types.StringType]])
    * @return The default JdbcType for this DataType
    */
-  def getCommonJDBCType(dt: DataType): Option[JdbcType] = {
+  // Uses .orElse (not .getOrElse) because this method returns Option[JdbcType].
+  def getCommonJDBCType(dt: DataType): Option[JdbcType] =
+    ClientTypeOps(dt).map(ops => JdbcType(ops.jdbcTypeName, ops.getJdbcType))
+      .orElse(getCommonJDBCTypeDefault(dt))
+
+  private def getCommonJDBCTypeDefault(dt: DataType): Option[JdbcType] = {
     dt match {
       case IntegerType => Option(JdbcType("INTEGER", java.sql.Types.INTEGER))
       case LongType => Option(JdbcType("BIGINT", java.sql.Types.BIGINT))
