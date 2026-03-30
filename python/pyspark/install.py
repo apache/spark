@@ -38,7 +38,7 @@ SUPPORTED_HIVE_VERSIONS = ["hive2.3"]
 UNSUPPORTED_COMBINATIONS = []  # type: ignore
 
 
-def checked_package_name(spark_version: str, hadoop_version: str) -> str:
+def checked_package_name(spark_version: str, hadoop_version: str, hive_version: str) -> str:
     """
     Check the generated package name, here we need to use the final hadoop version.
     """
@@ -133,7 +133,7 @@ def install_spark(dest: str, spark_version: str, hadoop_version: str, hive_versi
         Hive version. It should be hiveX.X such as 'hive2.3'.
     """
 
-    package_name = checked_package_name(spark_version, hadoop_version)
+    package_name = checked_package_name(spark_version, hadoop_version, hive_version)
     package_local_path = os.path.join(dest, "%s.tgz" % package_name)
     if "PYSPARK_RELEASE_MIRROR" in os.environ:
         sites = [os.environ["PYSPARK_RELEASE_MIRROR"]]
