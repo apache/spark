@@ -1681,9 +1681,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def unsupportedJDBCNamespaceChangeInCatalogError(changes: Seq[NamespaceChange]): Throwable = {
+    val changesDesc = changes.map(_.toString).mkString("; ")
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1120",
-      messageParameters = Map("changes" -> changes.toString()))
+      messageParameters = Map("changes" -> changesDesc))
   }
 
   private def tableDoesNotSupportError(cmd: String, table: Table): Throwable = {
