@@ -389,7 +389,7 @@ class Parse(LogicalPlan):
     def __init__(
         self,
         child: "LogicalPlan",
-        format: int,
+        format: "proto.Parse.ParseFormat.ValueType",
         schema: Optional[str] = None,
         options: Optional[Mapping[str, str]] = None,
     ) -> None:
@@ -402,7 +402,7 @@ class Parse(LogicalPlan):
         assert self._child is not None
         plan = self._create_proto_relation()
         plan.parse.input.CopyFrom(self._child.plan(session))
-        plan.parse.format = self._format  # type: ignore[assignment]
+        plan.parse.format = self._format
         if self._schema is not None and len(self._schema) > 0:
             plan.parse.schema.CopyFrom(
                 pyspark_types_to_proto_types(
