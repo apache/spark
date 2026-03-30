@@ -257,6 +257,27 @@ class DataSourceV2EnhancedPartitionFilterSuite
     }
   }
 
+  test("nested identity partition: field name containing a dot") {
+    withTable(partFilterTableName) {
+      sql(s"CREATE TABLE $partFilterTableName " +
+        s"(s struct<`a.b`: string, x: int>, data string) USING $v2Source " +
+        "PARTITIONED BY (s.`a.b`)")
+      sql(s"INSERT INTO $partFilterTableName VALUES " +
+        "(named_struct('a.b', 'LA', 'x', 1), 'v1'), " +
+        "(named_struct('a.b', 'NY', 'x', 2), 'v2')")
+
+      spark.udf.register("my_upper_dot", (s: String) =>
+        if (s == null) null else s.toUpperCase(Locale.ROOT))
+
+      val df = sql(
+        s"SELECT * FROM $partFilterTableName WHERE my_upper_dot(s.`a.b`) = 'LA'")
+      checkAnswer(df, Seq(Row(Row("LA", 1), "v1")))
+      assertPushedPartitionPredicates(df, 1)
+      assertScanReturnsPartitionKeys(df, Set("LA"))
+      assertReferencedPartitionFieldOrdinals(df, Array(0), Array("s.a.b"))
+    }
+  }
+
   test("partition filter with data array col filter") {
     withTable(partFilterTableName) {
       sql(s"CREATE TABLE $partFilterTableName " +
@@ -453,7 +474,7 @@ class DataSourceV2EnhancedPartitionFilterSuite
       expectedPartitionFieldNames: Array[String]): Unit = {
     val predicates = getPushedPartitionPredicates(df)
     val names = expectedPartitionFieldNames
-  predicates.foreach { p =>
+    predicates.foreach { p =>
       val refs = p.references()
       val ordinals = refs.map(_.asInstanceOf[PartitionFieldReference].ordinal()).sorted
       assert(ordinals.sameElements(expectedOrdinals.sorted),

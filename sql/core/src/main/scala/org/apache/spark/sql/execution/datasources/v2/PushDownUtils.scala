@@ -162,7 +162,7 @@ object PushDownUtils extends Logging {
    */
   private def resolveIdentityPartitionField(
       transform: IdentityTransform,
-      rootStruct: StructType) = {
+      rootStruct: StructType): Option[StructField] = {
     val names = transform.ref.fieldNames().toSeq
     try {
       rootStruct.findNestedField(names, resolver = SQLConf.get.resolver).map {
@@ -188,10 +188,10 @@ object PushDownUtils extends Logging {
       remainingFilters: Seq[Expression]): Seq[Expression] = {
     val normalizedToOriginal = normalizeNestedPartitionFilters(remainingFilters, partitionFields)
     val normalized = normalizedToOriginal.keys.toSeq
-    val partitionSchema = StructType(partitionFields.map(_.structField))
+    val partitionAttributes = partitionFields.map(_.attrRef)
     // may infer additional partition filters
     val (partFilters, nonPartitionFilters) =
-      DataSourceUtils.getPartitionFiltersAndDataFilters(partitionSchema, normalized)
+      DataSourceUtils.getPartitionFiltersAndDataFilters(partitionAttributes, normalized)
     val (pushable, nonPushable) = partFilters.partition(isPushablePartitionFilter)
     val partitionPredicates = pushable.map(PartitionPredicateImpl(_, partitionFields))
     val rejectedPartitionFilters = scanBuilder.pushPredicates(partitionPredicates.toArray).map {
@@ -208,8 +208,8 @@ object PushDownUtils extends Logging {
       !f.exists(_.isInstanceOf[PythonUDF])
 
   /**
-   * Replaces all partition column references with canonical [[AttributeReference]]s that
-   * share [[ExprId]]s with the [[PartitionPredicateField]]s.
+   * Replaces all partition column references with canonical [[AttributeReference]]
+   * provided by the matching [[PartitionPredicateField]].
    *
    * Nested struct accesses on partition fields are replaced with flat [[AttributeReference]]s
    * whose names match the partition schema. For example, given a table partitioned by `s.tz`
