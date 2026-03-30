@@ -101,6 +101,7 @@ final class ShuffleBlockFetcherIterator(
     checksumAlgorithm: String,
     shuffleMetrics: ShuffleReadMetricsReporter,
     doBatchFetch: Boolean,
+    fallbackStorage: Option[FallbackStorage],
   clock: Clock = new SystemClock())
   extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
@@ -359,13 +360,16 @@ final class ShuffleBlockFetcherIterator(
 
             case _ =>
               val block = BlockId(blockId)
+              remainingBlocks -= blockId
               if (block.isShuffleChunk) {
-                remainingBlocks -= blockId
                 updateMergedReqsDuration(wasReqForMergedChunks = true)
                 results.put(FallbackOnPushMergedFailureResult(
                   block, address, infoMap(blockId)._1, remainingBlocks.isEmpty))
               } else {
-                results.putFirst(FailureFetchResult(block, infoMap(blockId)._2, address, e))
+                results.putFirst(FailureFetchResult(block, infoMap(blockId)._2, address, e,
+                  // we might want to recover from this fetch failure using fallback storage
+                  // so we need to be able to decrement reqsInFlight and bytesInFlight correctly
+                  isNetworkReqDone = remainingBlocks.isEmpty))
               }
           }
         }
@@ -977,15 +981,31 @@ final class ShuffleBlockFetcherIterator(
             }
           }
 
-        case FailureFetchResult(blockId, mapIndex, address, e) =>
+        case FailureFetchResult(blockId, mapIndex, address, e, isNetworkReqDone) =>
+          var error = e
           var errorMsg: String = null
-          if (e.isInstanceOf[OutOfDirectMemoryError]) {
-            val logMessage = log"Block ${MDC(BLOCK_ID, blockId)} fetch failed after " +
-              log"${MDC(MAX_ATTEMPTS, maxAttemptsOnNettyOOM)} retries due to Netty OOM"
-            logError(logMessage)
-            errorMsg = logMessage.message
+          if (fallbackStorage.isDefined) {
+            try {
+              val buf = fallbackStorage.get.read(blockId)
+              results.put(SuccessFetchResult(blockId, mapIndex, address, buf.size(), buf,
+                // the original fetch request that we recovered has to be accounted for
+                isNetworkReqDone = isNetworkReqDone))
+              result = null
+              error = null
+            } catch {
+              case t: Throwable =>
+                logInfo(s"Failed to read block from fallback storage: $blockId", t)
+            }
           }
-          throwFetchFailedException(blockId, mapIndex, address, e, Some(errorMsg))
+          if (error != null) {
+            if (error.isInstanceOf[OutOfDirectMemoryError]) {
+              val logMessage = log"Block ${MDC(BLOCK_ID, blockId)} fetch failed after " +
+                log"${MDC(MAX_ATTEMPTS, maxAttemptsOnNettyOOM)} retries due to Netty OOM"
+              logError(logMessage)
+              errorMsg = logMessage.message
+            }
+            throwFetchFailedException(blockId, mapIndex, address, error, Some(errorMsg))
+          }
 
         case DeferFetchRequestResult(request) =>
           val address = request.address
@@ -1601,7 +1621,8 @@ object ShuffleBlockFetcherIterator {
       blockId: BlockId,
       mapIndex: Int,
       address: BlockManagerId,
-      e: Throwable)
+      e: Throwable,
+      isNetworkReqDone: Boolean = false)
     extends FetchResult
 
   /**
