@@ -15,14 +15,42 @@
 # limitations under the License.
 #
 
+import glob
 import json
 import importlib.resources
+import os
+import zipfile
+from pyspark.find_spark_home import _find_spark_home
 
 # Note: Though we call them "error classes" here, the proper name is "error conditions",
 #   hence why the name of the JSON file is different.
 #   For more information, please see: https://issues.apache.org/jira/browse/SPARK-46810
 #   This discrepancy will be resolved as part of: https://issues.apache.org/jira/browse/SPARK-47429
-ERROR_CLASSES_JSON = (
-    importlib.resources.files("pyspark.errors").joinpath("error-conditions.json").read_text()
-)
-ERROR_CLASSES_MAP = json.loads(ERROR_CLASSES_JSON)
+
+
+def get_error_classes():
+    python_error_classes_json = (
+        importlib.resources.files("pyspark.errors").joinpath("error-conditions.json").read_text()
+    )
+    python_error_classes_map = json.loads(python_error_classes_json)
+
+    # We load the Java error classes from the jars so Python recognizes them too
+    java_error_classes_map = {}
+    spark_home = _find_spark_home()
+
+    # Released spark packages have the jars in SPARK_HOME/jars, and development builds have them
+    # in assembly/target
+    for bin_dir in ("jars", "assembly/target/scala-*/jars"):
+        bin_path = os.path.join(spark_home, bin_dir)
+        jars = glob.glob(os.path.join(bin_path, "spark-common-utils_*.jar"))
+        if jars:
+            with zipfile.ZipFile(jars[0]) as zf:
+                with zf.open("error/error-conditions.json") as f:
+                    java_error_classes_json = f.read().decode("utf-8")
+                    java_error_classes_map = json.loads(java_error_classes_json)
+                    break
+
+    return java_error_classes_map | python_error_classes_map
+
+
+ERROR_CLASSES_MAP = get_error_classes()

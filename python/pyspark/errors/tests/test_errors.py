@@ -16,19 +16,23 @@
 # limitations under the License.
 #
 
+import importlib.resources
 import json
 import unittest
 
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
-from pyspark.errors.error_classes import ERROR_CLASSES_JSON
 from pyspark.errors.utils import ErrorClassesReader
 
 
 class ErrorsTest(unittest.TestCase):
     def test_error_classes_sorted(self):
         # Test error classes is sorted alphabetically
-        error_reader = ErrorClassesReader()
-        error_class_names = list(error_reader.error_info_map.keys())
+        ERROR_CLASSES_JSON = (
+            importlib.resources.files("pyspark.errors")
+            .joinpath("error-conditions.json")
+            .read_text()
+        )
+        error_class_names = list(json.loads(ERROR_CLASSES_JSON).keys())
         for i in range(len(error_class_names) - 1):
             self.assertTrue(
                 error_class_names[i] < error_class_names[i + 1],
@@ -47,6 +51,12 @@ class ErrorsTest(unittest.TestCase):
                 self.assertTrue(name not in error_classes_json, f"Duplicate error class: {name}")
                 error_classes_json[name] = message
             return error_classes_json
+
+        ERROR_CLASSES_JSON = (
+            importlib.resources.files("pyspark.errors")
+            .joinpath("error-conditions.json")
+            .read_text()
+        )
 
         json.loads(ERROR_CLASSES_JSON, object_pairs_hook=detect_duplication)
 
@@ -107,6 +117,11 @@ class ErrorsTest(unittest.TestCase):
         )
         subclass_map = error_reader.error_info_map["TEST_ERROR_WITH_SUB_CLASS"]["sub_class"]
         self.assertEqual(breaking_change_info2, subclass_map["SUBCLASS"]["breaking_change_info"])
+
+    def test_java_error_classes(self):
+        error_reader = ErrorClassesReader()
+        msg = error_reader.get_error_message("AGGREGATE_OUT_OF_MEMORY", {})
+        self.assertEqual(msg, "No enough memory for aggregation")
 
     def test_sqlstate(self):
         error = PySparkRuntimeError(errorClass="APPLICATION_NAME_NOT_SET", messageParameters={})
