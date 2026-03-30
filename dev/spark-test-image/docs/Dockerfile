@@ -70,15 +70,6 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# See more in SPARK-39959, roxygen2 < 7.2.1
-RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown', 'rmarkdown', 'testthat', 'remotes'), repos='https://cloud.r-project.org/')" && \
-    Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')" && \
-    Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')" && \
-    Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
-
-# See more in SPARK-39735
-ENV R_LIBS_SITE="/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
-
 # Setup virtual environment
 ENV VIRTUAL_ENV=/opt/spark-venv
 RUN python3.12 -m venv $VIRTUAL_ENV
@@ -87,7 +78,8 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 # Should unpin 'sphinxcontrib-*' after upgrading sphinx>5
 # See 'ipython_genutils' in SPARK-38517
 # See 'docutils<0.18.0' in SPARK-39421
-RUN python3.12 -m pip install 'sphinx==4.5.0' mkdocs 'pydata_sphinx_theme>=0.13' sphinx-copybutton nbsphinx numpydoc jinja2 markupsafe \
+RUN . $VIRTUAL_ENV/bin/activate \
+    && python3.12 -m pip install 'sphinx==4.5.0' mkdocs 'pydata_sphinx_theme>=0.13' sphinx-copybutton nbsphinx numpydoc jinja2 markupsafe \
   ipython ipython_genutils sphinx_plotly_directive 'numpy>=1.22' 'pyarrow>=23.0.0' 'pandas==2.3.3' 'plotly>=4.8' 'docutils<0.18.0' \
   'flake8==3.9.0' 'mypy==1.19.1' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' 'ruff==0.14.8' \
   'pandas-stubs==1.2.0.53' 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.5' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0' \

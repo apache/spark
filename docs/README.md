@@ -60,7 +60,8 @@ To generate the Python or R API docs, you'll also need to [install Pandoc](https
 If you'd like to generate R API documentation, install these libraries:
 
 ```sh
-$ sudo Rscript -e 'install.packages(c("knitr", "devtools", "testthat", "rmarkdown"), repos="https://cloud.r-project.org/")'
+$ sudo Rscript -e 'install.packages(c("knitr", "devtools", "testthat", "rmarkdown", "remotes"), repos="https://cloud.r-project.org/")'
+$ sudo Rscript -e 'remotes::install_version("markdown", version="1.12", repos="https://cloud.r-project.org")'
 $ sudo Rscript -e 'devtools::install_version("roxygen2", version = "7.1.2", repos="https://cloud.r-project.org/")'
 $ sudo Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
 $ sudo Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
@@ -136,6 +137,6 @@ Note: Before running it, you need to have `docker` installed.
 $ dev/spark-test-image-util/docs/build-docs
 ```
 
-It will generate all documents on the `container` and `host`.
+It will generate all documents on the `container` except for R and `host` (R).
 Especially when there are conflicts between the libraries required by Python development environment
 and the libraries required by generating Python docs environment, this is a good choice.

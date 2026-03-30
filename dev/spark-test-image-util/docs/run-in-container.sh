@@ -1,3 +1,4 @@
+#!/bin/bash
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -16,20 +17,29 @@
 #
 
 # 1.Set env variable.
-export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64
-export PATH=$JAVA_HOME/bin:$PATH
+set -ex
+_arch="$(uname -m)"
+case "$_arch" in
+  "aarch64") export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64 ;;
+  "x86_64") export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 ;;
+  *) echo "Unexpected arch $_arch picking first java-17-openjdk in /usr/lib/jvm";
+     export JAVA_HOME=$(ls /usr/lib/jvm/java-17-openjdk-* | head -n 1);;
+esac
+export PATH="$HOME/.bin:$JAVA_HOME/bin:$PATH"
 export SPARK_DOCS_IS_BUILT_ON_HOST=1
 # We expect to compile the R document on the host.
 export SKIP_RDOC=1
+mkdir -p ~/.bin
+mkdir -p ~/.gem
 
 # 2.Install bundler.
-gem install bundler -v 2.4.22
+gem install bundler -v 2.4.22 --install-dir ~/.gem --bindir ~/.bin
 cd /__w/spark/spark/docs
 bundle install
 
 # 3.Build docs, includes: `error docs`, `scala doc`, `python doc`, `sql doc`, excludes: `r doc`.
-# We need this link to make sure `python3` points to `python3.11` which contains the prerequisite packages.
-ln -s "$(which python3.11)" "/usr/local/bin/python3"
+# Activate the venv with mkdocs and friends.
+. $VIRTUAL_ENV/bin/activate
 
 # Build docs first with SKIP_API to ensure they are buildable without requiring any
 # language docs to be built beforehand.
