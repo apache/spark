@@ -43,7 +43,7 @@ Example usage:
 
 import logging
 import time
-from typing import List, Dict, Callable, Any
+from typing import List, Tuple, Callable, Any
 
 logger = logging.getLogger(__name__)
 
@@ -143,9 +143,6 @@ class KafkaUtils:
         This method closes the admin client, producer, and stops the Kafka container.
         It's safe to call multiple times.
         """
-        if not self.initialized:
-            return
-
         # Close admin client
         if self._admin_client is not None:
             try:
@@ -257,7 +254,7 @@ class KafkaUtils:
         topic: str,
         key_deserializer: str = "STRING",
         value_deserializer: str = "STRING",
-    ) -> Dict[str, str]:
+    ) -> List[Tuple[str, str]]:
         """
         Read all records from a Kafka topic using Spark.
 
@@ -268,11 +265,11 @@ class KafkaUtils:
             value_deserializer: How to deserialize values (default: "STRING")
 
         Returns:
-            Dictionary mapping keys to values
+            Sorted list of (key, value) tuples.
 
         Example:
             records = kafka_utils.get_all_records(self.spark, "test-topic")
-            assert records == {"key1": "value1", "key2": "value2"}
+            assert records == [("key1", "value1"), ("key2", "value2")]
         """
         self._assert_initialized()
 
@@ -291,7 +288,7 @@ class KafkaUtils:
         )
 
         rows = df.collect()
-        return {row.key_str: row.value_str for row in rows}
+        return sorted((row.key_str, row.value_str) for row in rows)
 
     def assert_eventually(
         self,

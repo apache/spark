@@ -54,7 +54,6 @@ if kafka_sql_jar is None:
 # Define the project name mapping for SBT builds
 kafka_project_name_map = {
     "connector/kafka-0-10-sql": "sql-kafka-0-10",
-    "connector/kafka-0-10": "kafka-0-10",
 }
 kafka_classpath = read_classpath("connector/kafka-0-10-sql", kafka_project_name_map)
 all_jars = f"{kafka_sql_jar},{kafka_classpath}"
@@ -112,10 +111,28 @@ class StreamingKafkaTestsMixin:
         super().tearDown()
 
 
+def _is_docker_available():
+    """Check if Docker daemon is running and accessible."""
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["docker", "info"], capture_output=True, timeout=10
+        )
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return False
+
+
 class StreamingKafkaTests(StreamingKafkaTestsMixin, ReusedSQLTestCase):
     """
     Tests for Kafka streaming integration with PySpark.
     """
+
+    @classmethod
+    def setUpClass(cls):
+        if not _is_docker_available():
+            raise unittest.SkipTest("Docker is not available")
+        super().setUpClass()
 
     def test_streaming_stateless(self):
         """
@@ -154,12 +171,10 @@ class StreamingKafkaTests(StreamingKafkaTestsMixin, ReusedSQLTestCase):
             .start()
         )
 
-        # Wait for the streaming to process data
-        self.kafka_utils.wait_for_query_alive(query)
-
-        # Validate results
-        expected = {k: k for k in sorted([str(i) for i in range(10)])}
+        expected = sorted((str(i), str(i)) for i in range(10))
         try:
+            # Wait for the streaming to process data
+            self.kafka_utils.wait_for_query_alive(query)
             self.kafka_utils.assert_eventually(
                 result_func=lambda: self.kafka_utils.get_all_records(self.spark, self.sink_topic),
                 expected=expected,

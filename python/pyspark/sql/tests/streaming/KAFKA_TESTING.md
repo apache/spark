@@ -20,7 +20,7 @@ Docker must be installed and running on your system. The Kafka test container re
 Install the required Python packages:
 
 ```bash
-pip install testcontainers[kafka] kafka-python
+pip install testcontainers[kafka] kafka-python-ng
 ```
 
 Or install all dev dependencies:
@@ -161,12 +161,12 @@ Read all records from a Kafka topic using Spark batch read.
 - **key_deserializer** (str): How to deserialize keys (default: "STRING")
 - **value_deserializer** (str): How to deserialize values (default: "STRING")
 
-**Returns:** Dictionary mapping keys to values
+**Returns:** Sorted list of (key, value) tuples.
 
 **Example:**
 ```python
 records = kafka_utils.get_all_records(self.spark, "test-topic")
-assert records == {"key1": "value1", "key2": "value2"}
+assert records == [("key1", "value1"), ("key2", "value2")]
 ```
 
 ### Testing Utilities
@@ -187,7 +187,7 @@ Assert that a condition becomes true within a timeout. Useful for testing stream
 ```python
 kafka_utils.assert_eventually(
     lambda: kafka_utils.get_all_records(self.spark, "sink-topic"),
-    {"key1": "processed-value1"},
+    [("key1", "processed-value1")],
     timeout=30
 )
 ```
@@ -247,7 +247,7 @@ def test_kafka_batch(self):
 
     # Read back
     records = self.kafka_utils.get_all_records(self.spark, topic)
-    assert records == {"key1": "value1"}
+    assert records == [("key1", "value1")]
 ```
 
 ### Pattern 2: Streaming Queries
@@ -291,7 +291,7 @@ def test_kafka_streaming(self):
         self.kafka_utils.wait_for_query_alive(query)
         self.kafka_utils.assert_eventually(
             lambda: self.kafka_utils.get_all_records(self.spark, sink_topic),
-            {"k1": "v1"}
+            [("k1", "v1")]
         )
     finally:
         query.stop()
@@ -327,7 +327,7 @@ def test_kafka_aggregation(self):
     # Verify aggregated results
     self.kafka_utils.assert_eventually(
         lambda: self.kafka_utils.get_all_records(self.spark, "sink"),
-        {"user1": "2", "user2": "1"}
+        [("user1", "2"), ("user2", "1")]
     )
 ```
 
@@ -355,8 +355,8 @@ def test_multiple_topics(self):
     )
 
     # Verify data in each topic
-    assert self.kafka_utils.get_all_records(self.spark, topic1) == {"key1": "value1"}
-    assert self.kafka_utils.get_all_records(self.spark, topic2) == {"key2": "value2"}
+    assert self.kafka_utils.get_all_records(self.spark, topic1) == [("key1", "value1")]
+    assert self.kafka_utils.get_all_records(self.spark, topic2) == [("key2", "value2")]
 ```
 
 ## Running Tests
@@ -422,5 +422,5 @@ ImportError: testcontainers is required for Kafka tests
 
 **Solution:**
 ```bash
-pip install testcontainers[kafka] kafka-python
+pip install testcontainers[kafka] kafka-python-ng
 ```
