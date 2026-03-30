@@ -177,6 +177,15 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
             # Read the text file as a DataFrame.
             self.assert_eq(self.connect.read.csv(d).toPandas(), self.spark.read.csv(d).toPandas())
 
+    def test_json_with_dataframe_input(self):
+        json_df = self.connect.createDataFrame(
+            [('{"name": "Alice", "age": 25}',), ('{"name": "Bob", "age": 30}',)],
+            schema="value STRING",
+        )
+        result = self.connect.read.json(json_df)
+        expected = [Row(age=25, name="Alice"), Row(age=30, name="Bob")]
+        self.assertEqual(sorted(result.collect(), key=lambda r: r.name), expected)
+
     def test_multi_paths(self):
         # SPARK-42041: DataFrameReader should support list of paths
 
