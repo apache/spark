@@ -3407,13 +3407,45 @@ class Analyzer(
     // We have to use transformDown at here to make sure the rule of
     // "Aggregate with Having clause" will be triggered.
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
-      _.containsPattern(WINDOW_EXPRESSION), ruleId) {
+      _.containsAnyPattern(WINDOW_EXPRESSION, UNRESOLVED_QUALIFY), ruleId) {
 
       case Filter(condition, _) if hasWindowFunction(condition) =>
         throw QueryCompilationErrors.windowFunctionNotAllowedError("WHERE")
 
       case UnresolvedHaving(condition, _) if hasWindowFunction(condition) =>
         throw QueryCompilationErrors.windowFunctionNotAllowedError("HAVING")
+
+      case UnresolvedQualify(condition, child) if child.resolved =>
+        // The expressions specified in the QUALIFY clause cannot contain aggregate functions.
+        condition.collectFirst {
+          case agg: AggregateExpression => agg
+        }.foreach { agg =>
+          throw QueryCompilationErrors.qualifyWithAggregateExpressionError(agg)
+        }
+
+        val hasWindowInCondition = hasWindowFunction(condition)
+        val hasWindowInChild = child.exists {
+          case _: Window => true
+          case p: Project => p.projectList.exists(hasWindowFunction)
+          case _ => false
+        }
+
+        if (hasWindowInCondition) {
+          val (windowExpressions, regularExpressions) =
+            extract(child.output ++ Seq(Alias(condition, "_qualify")()))
+          val withProject = Project(regularExpressions, child)
+          val withWindow = addWindow(windowExpressions, withProject)
+          // The `withWindow` returns a plan where the last expression in the final project
+          // is the resolved QUALIFY condition. We use its attribute to filter.
+          val conditionAttr = withWindow.output.last
+          Project(child.output, Filter(conditionAttr, withWindow))
+        } else if (hasWindowInChild) {
+          Filter(condition, child)
+        } else {
+          // To use QUALIFY, at least one window function is required to be present in the
+          // SELECT list or the QUALIFY clause.
+          throw QueryCompilationErrors.qualifyClauseWithoutWindowFunctionError(condition)
+        }
 
       // Aggregate with Having clause. This rule works with an unresolved Aggregate because
       // a resolved Aggregate will not have Window Functions.

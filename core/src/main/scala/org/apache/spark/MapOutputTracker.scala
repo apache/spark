@@ -1456,18 +1456,29 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
           if (fetchedMapStatuses == null || fetchedMergeStatuses == null) {
             logInfo(log"Doing the fetch; tracker endpoint = " +
               log"${MDC(RPC_ENDPOINT_REF, trackerEndpoint)}")
-            val fetchedBytes =
-              askTracker[(Array[Byte], Array[Byte])](GetMapAndMergeResultStatuses(shuffleId))
-            try {
-              fetchedMapStatuses =
-                MapOutputTracker.deserializeOutputStatuses[MapStatus](fetchedBytes._1, conf)
-              fetchedMergeStatuses =
-                MapOutputTracker.deserializeOutputStatuses[MergeStatus](fetchedBytes._2, conf)
-            } catch {
-              case e: SparkException =>
-                throw new MetadataFetchFailedException(shuffleId, -1,
-                  s"Unable to deserialize broadcasted map/merge statuses" +
-                    s" for shuffle $shuffleId: " + e.getCause)
+            var attempt = 0
+            var success = false
+            while (!success && attempt < 3) {
+              try {
+                val fetchedBytes =
+                  askTracker[(Array[Byte], Array[Byte])](GetMapAndMergeResultStatuses(shuffleId))
+                fetchedMapStatuses =
+                  MapOutputTracker.deserializeOutputStatuses[MapStatus](fetchedBytes._1, conf)
+                fetchedMergeStatuses =
+                  MapOutputTracker.deserializeOutputStatuses[MergeStatus](fetchedBytes._2, conf)
+                success = true
+              } catch {
+                case e: SparkException if attempt < 2 &&
+                    e.getMessage != null && e.getMessage.startsWith("Unable to deserialize") =>
+                  logWarning(s"Failed to deserialize broadcasted map/merge statuses for " +
+                    s"shuffle $shuffleId, retrying...", e)
+                  attempt += 1
+                  Thread.sleep(100)
+                case e: SparkException =>
+                  throw new MetadataFetchFailedException(shuffleId, -1,
+                    s"Unable to deserialize broadcasted map/merge statuses" +
+                      s" for shuffle $shuffleId: " + e.getCause)
+              }
             }
             logInfo("Got the map/merge output locations")
             mapStatuses.put(shuffleId, fetchedMapStatuses)
@@ -1491,15 +1502,26 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
           if (fetchedStatuses == null) {
             logInfo(log"Doing the fetch; tracker endpoint =" +
               log" ${MDC(RPC_ENDPOINT_REF, trackerEndpoint)}")
-            val fetchedBytes = askTracker[Array[Byte]](GetMapOutputStatuses(shuffleId))
-            try {
-              fetchedStatuses =
-                MapOutputTracker.deserializeOutputStatuses[MapStatus](fetchedBytes, conf)
-            } catch {
-              case e: SparkException =>
-                throw new MetadataFetchFailedException(shuffleId, -1,
-                  s"Unable to deserialize broadcasted map statuses for shuffle $shuffleId: " +
-                    e.getCause)
+            var attempt = 0
+            var success = false
+            while (!success && attempt < 3) {
+              try {
+                val fetchedBytes = askTracker[Array[Byte]](GetMapOutputStatuses(shuffleId))
+                fetchedStatuses =
+                  MapOutputTracker.deserializeOutputStatuses[MapStatus](fetchedBytes, conf)
+                success = true
+              } catch {
+                case e: SparkException if attempt < 2 &&
+                    e.getMessage != null && e.getMessage.startsWith("Unable to deserialize") =>
+                  logWarning(s"Failed to deserialize broadcasted map statuses for " +
+                    s"shuffle $shuffleId, retrying...", e)
+                  attempt += 1
+                  Thread.sleep(100)
+                case e: SparkException =>
+                  throw new MetadataFetchFailedException(shuffleId, -1,
+                    s"Unable to deserialize broadcasted map statuses for shuffle $shuffleId: " +
+                      e.getCause)
+              }
             }
             logInfo("Got the map output locations")
             mapStatuses.put(shuffleId, fetchedStatuses)

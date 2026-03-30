@@ -781,6 +781,7 @@ class AstBuilder extends DataTypeAstBuilder
         ctx.aggregationClause,
         ctx.havingClause,
         ctx.windowClause,
+        ctx.qualifyClause,
         plan
       )
     } else {
@@ -792,6 +793,7 @@ class AstBuilder extends DataTypeAstBuilder
         ctx.aggregationClause,
         ctx.havingClause,
         ctx.windowClause,
+        ctx.qualifyClause,
         plan,
         isPipeOperatorSelect = false
       )
@@ -1434,6 +1436,7 @@ class AstBuilder extends DataTypeAstBuilder
       ctx.aggregationClause,
       ctx.havingClause,
       ctx.windowClause,
+      ctx.qualifyClause,
       from
     )
   }
@@ -1451,6 +1454,7 @@ class AstBuilder extends DataTypeAstBuilder
       ctx.aggregationClause,
       ctx.havingClause,
       ctx.windowClause,
+      ctx.qualifyClause,
       from,
       isPipeOperatorSelect = false
     )
@@ -1493,6 +1497,20 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
+   * Create a logical plan using a qualify clause.
+   */
+  private def withQualifyClause(
+      ctx: QualifyClauseContext, plan: LogicalPlan): LogicalPlan = {
+    // Note that we add a cast to non-predicate expressions. If the expression itself is
+    // already boolean, the optimizer will get rid of the unnecessary cast.
+    val predicate = expression(ctx.booleanExpression) match {
+      case p: Predicate => p
+      case e => Cast(e, BooleanType)
+    }
+    UnresolvedQualify(predicate, plan)
+  }
+
+  /**
    * Create a logical plan using a where clause.
    */
   private def withWhereClause(ctx: WhereClauseContext, plan: LogicalPlan): LogicalPlan = {
@@ -1510,6 +1528,7 @@ class AstBuilder extends DataTypeAstBuilder
       aggregationClause: AggregationClauseContext,
       havingClause: HavingClauseContext,
       windowClause: WindowClauseContext,
+      qualifyClause: QualifyClauseContext,
       relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     if (transformClause.setQuantifier != null) {
       throw QueryParsingErrors.transformNotSupportQuantifierError(transformClause.setQuantifier)
@@ -1539,6 +1558,7 @@ class AstBuilder extends DataTypeAstBuilder
       aggregationClause,
       havingClause,
       windowClause,
+      qualifyClause,
       isDistinct = false,
       isPipeOperatorSelect = false)
 
@@ -1574,6 +1594,7 @@ class AstBuilder extends DataTypeAstBuilder
       aggregationClause: AggregationClauseContext,
       havingClause: HavingClauseContext,
       windowClause: WindowClauseContext,
+      qualifyClause: QualifyClauseContext,
       relation: LogicalPlan,
       isPipeOperatorSelect: Boolean): LogicalPlan = withOrigin(ctx) {
     val isDistinct = selectClause.setQuantifier() != null &&
@@ -1587,6 +1608,7 @@ class AstBuilder extends DataTypeAstBuilder
       aggregationClause,
       havingClause,
       windowClause,
+      qualifyClause,
       isDistinct,
       isPipeOperatorSelect)
 
@@ -1602,6 +1624,7 @@ class AstBuilder extends DataTypeAstBuilder
       aggregationClause: AggregationClauseContext,
       havingClause: HavingClauseContext,
       windowClause: WindowClauseContext,
+      qualifyClause: QualifyClauseContext,
       isDistinct: Boolean,
       isPipeOperatorSelect: Boolean): LogicalPlan = {
     // Add lateral views.
@@ -1674,7 +1697,10 @@ class AstBuilder extends DataTypeAstBuilder
       withWindowClause(_, _, isPipeOperatorSelect)
     }
 
-    withWindow
+    // Qualify
+    val withQualify = withWindow.optionalMap(qualifyClause)(withQualifyClause)
+
+    withQualify
   }
 
   // Script Transform's input/output format.
@@ -7009,6 +7035,7 @@ class AstBuilder extends DataTypeAstBuilder
         aggregationClause = ctx.aggregationClause,
         havingClause = null,
         windowClause = ctx.windowClause,
+        qualifyClause = ctx.qualifyClause,
         relation = left,
         isPipeOperatorSelect = true)
     }.getOrElse(Option(ctx.EXTEND).map { _ =>
@@ -7062,11 +7089,13 @@ class AstBuilder extends DataTypeAstBuilder
     }.getOrElse(Option(ctx.operator).map { c =>
       val all = Option(ctx.setQuantifier()).exists(_.ALL != null)
       visitSetOperationImpl(left, plan(ctx.right), all, c.getType)
+    }.getOrElse(Option(ctx.qualifyClause()).map { c =>
+      UnresolvedQualify(expression(c.booleanExpression), left)
     }.getOrElse(Option(ctx.queryOrganization).map { c =>
       withQueryResultClauses(c, PipeOperator(left), forPipeOperators = true)
     }.getOrElse(
       visitOperatorPipeAggregate(ctx, left)
-    ))))))))))))
+    )))))))))))))
   }
 
   private def visitOperatorPipeSet(

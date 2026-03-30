@@ -2218,7 +2218,7 @@
           "Remove a comment on the namespace: <namespace>."
         ]
       },
-      "RENAME_TABLE" : {
+      "REORGANIZE_TABLE" : {
         "message" : [
           "Rename the table <oldName> to <newName>."
         ]
@@ -5748,6 +5748,12 @@
     ],
     "sqlState" : "38000"
   },
+  "QUALIFY_WITHOUT_WINDOW_EXPRESSION" : {
+    "message" : [
+      "The QUALIFY clause requires at least one window function to be present in the SELECT list or the QUALIFY clause. Found: <condition>."
+    ],
+    "sqlState" : "42000"
+  },
   "RECURSION_LEVEL_LIMIT_EXCEEDED" : {
     "message" : [
       "Recursion level limit <levelLimit> reached but query has not exhausted, try increasing it like 'WITH RECURSIVE t(col) MAX RECURSION LEVEL 200'."
@@ -7681,6 +7687,11 @@
       "PYTHON_UDF_IN_ON_CLAUSE" : {
         "message" : [
           "Python UDF in the ON clause of a <joinType> JOIN. In case of an INNER JOIN consider rewriting to a CROSS JOIN with a WHERE clause."
+        ]
+      },
+      "QUALIFY_WITH_AGGREGATE_EXPRESSION" : {
+        "message" : [
+          "The QUALIFY clause cannot contain aggregate functions. Found: <aggExpr>."
         ]
       },
       "QUERY_ONLY_CORRUPT_RECORD_COLUMN" : {

@@ -859,8 +859,20 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def windowFunctionNotAllowedError(clauseName: String): Throwable = {
     new AnalysisException(
-      errorClass = "WINDOW_FUNCTION_NOT_ALLOWED_IN_CLAUSE",
-      messageParameters = Map("clauseName" -> clauseName))
+      errorClass = "WINDOW_FUNCTION_NOT_ALLOWED",
+      messageParameters = Map("clauseName" -> toSQLId(clauseName)))
+  }
+
+  def qualifyClauseWithoutWindowFunctionError(condition: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "QUALIFY_WITHOUT_WINDOW_EXPRESSION",
+      messageParameters = Map("condition" -> toSQLExpr(condition)))
+  }
+
+  def qualifyWithAggregateExpressionError(aggExpr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.QUALIFY_WITH_AGGREGATE_EXPRESSION",
+      messageParameters = Map("aggExpr" -> toSQLExpr(aggExpr)))
   }
 
   def cannotSpecifyWindowFrameError(prettyName: String): Throwable = {

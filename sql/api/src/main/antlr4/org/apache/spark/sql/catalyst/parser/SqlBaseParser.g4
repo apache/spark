@@ -796,6 +796,7 @@ fromStatementBody
       aggregationClause?
       havingClause?
       windowClause?
+      qualifyClause?
       queryOrganization
     ;
 
@@ -806,14 +807,16 @@ querySpecification
       whereClause?
       aggregationClause?
       havingClause?
-      windowClause?                                                         #transformQuerySpecification
+      windowClause?
+      qualifyClause?                                                         #transformQuerySpecification
     | selectClause
       fromClause?
       lateralView*
       whereClause?
       aggregationClause?
       havingClause?
-      windowClause?                                                         #regularQuerySpecification
+      windowClause?
+      qualifyClause?                                                         #regularQuerySpecification
     ;
 
 transformClause
@@ -882,6 +885,10 @@ whereClause
 
 havingClause
     : HAVING booleanExpression
+    ;
+
+qualifyClause
+    : QUALIFY booleanExpression
     ;
 
 hint
@@ -1861,7 +1868,7 @@ version
     ;
 
 operatorPipeRightSide
-    : selectClause aggregationClause? windowClause?
+    : selectClause aggregationClause? windowClause? qualifyClause?
     | EXTEND extendList=namedExpressionSeq
     | SET operatorPipeSetAssignmentSeq
     | DROP multipartIdentifierList
@@ -1878,6 +1885,7 @@ operatorPipeRightSide
     | sample
     | joinRelation
     | operator=(UNION | EXCEPT | SETMINUS | INTERSECT) setQuantifier? right=queryPrimary
+    | qualifyClause
     | queryOrganization
     | AGGREGATE namedExpressionSeq? aggregationClause?
     ;
@@ -2533,6 +2541,7 @@ nonReserved
     | PROCEDURES
     | PROPERTIES
     | PURGE
+    | QUALIFY
     | QUARTER
     | QUERY
     | RANGE
