@@ -26,7 +26,9 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoImpl}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo,
+  LogicalWriteInfoImpl, SupportsDynamicOverwrite,
+  SupportsTruncate, Write, WriteBuilder}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.streaming.runtime.MetadataLogFileIndex
@@ -49,18 +51,27 @@ abstract class FileTable(
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
-    if (FileStreamSink.hasMetadata(paths, hadoopConf, sparkSession.sessionState.conf)) {
-      // We are reading from the results of a streaming query. We will load files from
-      // the metadata log instead of listing them using HDFS APIs.
+    // When userSpecifiedSchema is provided (e.g., write path via DataFrame API), the path
+    // may not exist yet. Skip streaming metadata check and file existence checks.
+    val isStreamingMetadata = userSpecifiedSchema.isEmpty &&
+      FileStreamSink.hasMetadata(paths, hadoopConf, sparkSession.sessionState.conf)
+    if (isStreamingMetadata) {
       new MetadataLogFileIndex(sparkSession, new Path(paths.head),
         options.asScala.toMap, userSpecifiedSchema)
     } else {
-      // This is a non-streaming file based datasource.
-      val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(paths, hadoopConf,
-        checkEmptyGlobPath = true, checkFilesExist = true, enableGlobbing = globPaths)
-      val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
+      val checkFilesExist = userSpecifiedSchema.isEmpty
+      val rootPathsSpecified =
+        DataSource.checkAndGlobPathIfNecessary(
+          paths, hadoopConf,
+          checkEmptyGlobPath = checkFilesExist,
+          checkFilesExist = checkFilesExist,
+          enableGlobbing = globPaths)
+      val fileStatusCache =
+        FileStatusCache.getOrCreate(sparkSession)
       new InMemoryFileIndex(
-        sparkSession, rootPathsSpecified, caseSensitiveMap, userSpecifiedSchema, fileStatusCache)
+        sparkSession, rootPathsSpecified,
+        caseSensitiveMap, userSpecifiedSchema,
+        fileStatusCache)
     }
   }
 
@@ -174,8 +185,43 @@ abstract class FileTable(
       writeInfo.rowIdSchema(),
       writeInfo.metadataSchema())
   }
+
+  /**
+   * Creates a [[WriteBuilder]] that supports truncate and
+   * dynamic partition overwrite for file-based tables.
+   */
+  protected def createFileWriteBuilder(
+      info: LogicalWriteInfo)(
+      buildWrite: (LogicalWriteInfo, StructType,
+        Map[Map[String, String], String],
+        Boolean, Boolean) => Write
+  ): WriteBuilder = {
+    new WriteBuilder with SupportsDynamicOverwrite with SupportsTruncate {
+      private var isDynamicOverwrite = false
+      private var isTruncate = false
+
+      override def overwriteDynamicPartitions(): WriteBuilder = {
+        isDynamicOverwrite = true
+        this
+      }
+
+      override def truncate(): WriteBuilder = {
+        isTruncate = true
+        this
+      }
+
+      override def build(): Write = {
+        val merged = mergedWriteInfo(info)
+        val partSchema = fileIndex.partitionSchema
+        buildWrite(merged, partSchema,
+          Map.empty, isDynamicOverwrite, isTruncate)
+      }
+    }
+  }
+
 }
 
 object FileTable {
-  private val CAPABILITIES = util.EnumSet.of(BATCH_READ, BATCH_WRITE)
+  private val CAPABILITIES = util.EnumSet.of(
+    BATCH_READ, BATCH_WRITE, TRUNCATE, OVERWRITE_DYNAMIC)
 }
