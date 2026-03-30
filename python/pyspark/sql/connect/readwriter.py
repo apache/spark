@@ -228,6 +228,8 @@ class DataFrameReader(OptionUtils):
         from pyspark.sql.connect.dataframe import DataFrame
 
         if isinstance(path, DataFrame):
+            if schema is not None:
+                self.schema(schema)
             return self._df(
                 Parse(
                     child=path._plan,

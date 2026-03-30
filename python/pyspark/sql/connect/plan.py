@@ -402,13 +402,13 @@ class Parse(LogicalPlan):
         assert self._child is not None
         plan = self._create_proto_relation()
         plan.parse.input.CopyFrom(self._child.plan(session))
-        plan.parse.format = self._format
+        plan.parse.format = self._format  # type: ignore[assignment]
         if self._schema is not None and len(self._schema) > 0:
             plan.parse.schema.CopyFrom(
                 pyspark_types_to_proto_types(
                     StructType.fromDDL(self._schema)
                     if not self._schema.startswith("{")
-                    else StructType.fromJson(self._schema)
+                    else StructType.fromJson(json.loads(self._schema))
                 )
             )
         if self._options is not None:

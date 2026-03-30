@@ -508,6 +508,7 @@ class DataFrameReader(OptionUtils):
         from pyspark.sql.dataframe import DataFrame
 
         if isinstance(path, DataFrame):
+            assert self._spark._jvm is not None
             string_encoder = self._spark._jvm.Encoders.STRING()
             jdataset = getattr(path._jdf, "as")(string_encoder)
             return self._df(self._jreader.json(jdataset))
