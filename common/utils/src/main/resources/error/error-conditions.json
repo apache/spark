@@ -4435,6 +4435,12 @@
           "LATERAL can only be used with subquery and table-valued functions."
         ]
       },
+      "MISSING_COLUMN_BEFORE_IN" : {
+        "message" : [
+          "Invalid IN predicate: a column or expression must appear before IN and its parenthesized value list.",
+          "For example, use `WHERE id IN (1, 2)` instead of `WHERE IN (1, 2)` or `WHERE in (1)` with no expression before `in`."
+        ]
+      },
       "MULTI_PART_NAME" : {
         "message" : [
           "<statement> with multiple part name(<name>) is not allowed."

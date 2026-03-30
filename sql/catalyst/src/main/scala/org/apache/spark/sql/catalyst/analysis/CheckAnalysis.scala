@@ -392,6 +392,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           u.multipartIdentifier,
           searchPathForUnresolvedRelation(u.multipartIdentifier))
 
+      // Rare: identifier "in" as column + IN (list) when "in" is a valid unquoted identifier.
+      case f @ Filter(In(UnresolvedAttribute(Seq(name)), _), _) if name.equalsIgnoreCase("in") =>
+        throw QueryCompilationErrors.missingColumnBeforeInError(f.condition.origin)
+
       case u: UnresolvedFunctionName =>
         val searchPath =
           SQLConf.get.resolutionSearchPath(catalogPathForError).map(_.quoted)

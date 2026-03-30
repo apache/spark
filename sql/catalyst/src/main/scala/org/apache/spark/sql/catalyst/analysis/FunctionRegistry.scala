@@ -924,7 +924,7 @@ object FunctionRegistry {
     // predicates
     expression[Between]("between"),
     expression[And]("and"),
-    expression[In]("in"),
+    expressionBuilder("in", InPredicateExpressionBuilder),
     expression[Not]("not"),
     expression[Or]("or"),
 
@@ -1344,6 +1344,29 @@ object TableFunctionRegistry {
  * representations are constructed in [[FunctionRegistry]].
  */
 trait ExpressionBuilder extends FunctionBuilderBase[Expression]
+
+/**
+ * SQL `in(col, v1, ...)` as a function. Rejects:
+ *   - `in(v)` — how `WHERE in (v)` is parsed (column omitted before IN list).
+ *   - `in(v1, v2, ...)` when every argument is a [[Literal]] — how
+ *     `WHERE IN ('a','b','c')` / `DELETE ... WHERE IN (...)` is parsed (no column).
+ * Legitimate `in(col, v1, v2)` has a non-literal first argument (the column).
+ */
+private[analysis] object InPredicateExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    expressions.length match {
+      case 0 =>
+        throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), 0)
+      case 1 =>
+        throw QueryCompilationErrors.missingColumnBeforeInError(expressions.head.origin)
+      case _ =>
+        if (expressions.forall(_.isInstanceOf[Literal])) {
+          throw QueryCompilationErrors.missingColumnBeforeInError(expressions.head.origin)
+        }
+        In(expressions.head, expressions.tail)
+    }
+  }
+}
 
 /**
  * This is a trait used for table valued functions that defines how their expression

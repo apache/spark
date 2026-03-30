@@ -1062,6 +1062,39 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
         "expressionList" -> "max(DISTINCT b)"))
   }
 
+  test("Error when column name is missing before IN in WHERE clause") {
+    val a = AttributeReference("a", StringType)()
+    val plan = Filter(
+      In(UnresolvedAttribute("in"), Seq(Literal("2024-07-05"))),
+      LocalRelation(a))
+    assertAnalysisErrorCondition(plan,
+      expectedErrorCondition = "INVALID_SQL_SYNTAX.MISSING_COLUMN_BEFORE_IN",
+      expectedMessageParameters = Map.empty)
+  }
+
+  test("Error when WHERE uses in(v) as function — same as Spark SQL WHERE in (1)") {
+    val a = AttributeReference("id", IntegerType)()
+    val plan = Filter(
+      UnresolvedFunction("in", Seq(Literal(1)), isDistinct = false),
+      LocalRelation(a))
+    assertAnalysisErrorCondition(plan,
+      expectedErrorCondition = "INVALID_SQL_SYNTAX.MISSING_COLUMN_BEFORE_IN",
+      expectedMessageParameters = Map.empty)
+  }
+
+  test("Error when in(...) has only literals — no column before IN list (e.g. WHERE IN (v1,v2,...))") {
+    val a = AttributeReference("id", IntegerType)()
+    val plan = Filter(
+      UnresolvedFunction(
+        "in",
+        Seq(Literal(1), Literal(2), Literal(3)),
+        isDistinct = false),
+      LocalRelation(a))
+    assertAnalysisErrorCondition(plan,
+      expectedErrorCondition = "INVALID_SQL_SYNTAX.MISSING_COLUMN_BEFORE_IN",
+      expectedMessageParameters = Map.empty)
+  }
+
   test("SPARK-30811: CTE should not cause stack overflow when " +
     "it refers to non-existent table with same name") {
     val plan = UnresolvedWith(
