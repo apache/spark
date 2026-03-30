@@ -184,11 +184,33 @@ case class GroupPartitionsExec(
     copy(child = newChild)
 
   override def outputOrdering: Seq[SortOrder] = {
-    // when multiple partitions are grouped together, ordering inside partitions is not preserved
     if (groupedPartitions.forall(_._2.size <= 1)) {
+      // No coalescing: each output partition is exactly one input partition. The child's
+      // within-partition ordering is fully preserved (including any key-derived ordering that
+      // `DataSourceV2ScanExecBase` already prepended).
       child.outputOrdering
     } else {
-      super.outputOrdering
+      // Coalescing: multiple input partitions are merged into one output partition. The child's
+      // within-partition ordering is lost due to concatenation -- for example, if two input
+      // partitions both belong to the same output group (same partition key value) and hold
+      // [1, 3] and [2, 5] respectively (each sorted ascending), concatenating them yields
+      // [1, 3, 2, 5] which is no longer sorted. Only sort orders over partition key expressions
+      // (which are constant across all merged partitions) remain valid.
+      outputPartitioning match {
+        case p: Partitioning with Expression if reducers.isEmpty =>
+          // Without reducers all merged partitions share the same original key value, so the key
+          // expressions remain constant within the output partition. The child's outputOrdering
+          // should already be in sync with the partitioning (either reported by the source or
+          // derived from it in DataSourceV2ScanExecBase), so we only need to keep the sort orders
+          // whose expression is a partition key expression -- all others are lost by concatenation.
+          val keyedPartitionings = p.collect { case k: KeyedPartitioning => k }
+          val keyExprs = ExpressionSet(keyedPartitionings.flatMap(_.expressions))
+          child.outputOrdering.filter(order => keyExprs.contains(order.child))
+        case _ =>
+          // With reducers, merged partitions share only the reduced key, not the original key
+          // expressions, which can take different values within the output partition.
+          super.outputOrdering
+      }
     }
   }
 
