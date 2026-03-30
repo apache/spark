@@ -51,7 +51,6 @@ import org.apache.spark.sql.execution.streaming.runtime.{StreamingExecutionRelat
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{DoubleType, FloatType}
 
 /**
  * Converts a logical plan into zero or more SparkPlans.  This API is exposed for experimenting
@@ -523,27 +522,27 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
 
     /**
-     * If any dedup key is a floating-point type, wraps the physical child in a ProjectExec that
-     * normalizes NaN and -0.0 so that semantically equal values produce identical UnsafeRow bytes
-     * in the state store.
+     * If any dedup key contains a floating-point type (including nested types), wraps the physical
+     * child in a ProjectExec that normalizes NaN and -0.0 so that semantically equal values produce
+     * identical UnsafeRow bytes in the state store.
+     *
+     * Note that the streaming dedupe node does not support map-typed keys, althoug the
+     * `NormalizeFloatingNumbers` helper does.
      */
     private def maybeNormalizeFloatingPointKeys(
         keys: Seq[Attribute], child: LogicalPlan): SparkPlan = {
       val physicalChild = planLater(child)
-      val needsNormalization = keys.exists(k =>
-        k.dataType == FloatType || k.dataType == DoubleType)
-      if (needsNormalization) {
-        val normalizedProjectList = child.output.map { attr =>
-          if (keys.exists(_.exprId == attr.exprId) &&
-              (attr.dataType == FloatType || attr.dataType == DoubleType)) {
-            NormalizeFloatingNumbers.normalize(attr) match {
-              case a: NamedExpression => a
-              case other => Alias(other, attr.name)(exprId = attr.exprId)
-            }
-          } else {
-            attr
+      val normalizedProjectList = child.output.map { attr =>
+        if (keys.exists(_.exprId == attr.exprId)) {
+          NormalizeFloatingNumbers.normalize(attr) match {
+            case a: Attribute => a
+            case other => Alias(other, attr.name)(exprId = attr.exprId)
           }
+        } else {
+          attr
         }
+      }
+      if (normalizedProjectList.exists(!_.isInstanceOf[Attribute])) {
         execution.ProjectExec(normalizedProjectList, physicalChild)
       } else {
         physicalChild

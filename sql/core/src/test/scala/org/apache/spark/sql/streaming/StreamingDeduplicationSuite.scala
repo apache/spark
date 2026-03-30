@@ -60,52 +60,61 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest
     )
   }
 
-  test("same NaN bit patterns should be treated as duplicates") {
+  // Canonical quiet NaN and a non-canonical NaN with a different bit pattern.
+  // Both are NaN, but they have distinct raw bit representations.
+  private val canonicalNaN = java.lang.Float.intBitsToFloat(0x7fc00000)
+  private val nonCanonicalNaN = java.lang.Float.intBitsToFloat(0x7f800001)
+  assert(java.lang.Float.isNaN(canonicalNaN) && java.lang.Float.isNaN(nonCanonicalNaN),
+    "Both values must be NaN")
+  assert(java.lang.Float.floatToRawIntBits(canonicalNaN) !=
+    java.lang.Float.floatToRawIntBits(nonCanonicalNaN),
+    "The two NaN values must have different bit patterns")
+
+  test("same NaN bit pattern should be deduplicated") {
     val inputData = MemoryStream[(Float, Int)]
     val result = inputData.toDS().toDF("value", "id").dropDuplicates("value")
-
-    val canonicalNaN = java.lang.Float.intBitsToFloat(0x7fc00000)
-    val otherNan = java.lang.Float.intBitsToFloat(0x7fc00000)
-    assert(java.lang.Float.isNaN(canonicalNaN) && java.lang.Float.isNaN(otherNan))
-    assert(java.lang.Float.floatToRawIntBits(canonicalNaN) ==
-      java.lang.Float.floatToRawIntBits(otherNan))
-
-    testStream(result, Append)(
-      AddData(inputData, (canonicalNaN, 1)),
-      CheckLastBatch((canonicalNaN, 1)),
-      assertNumStateRows(total = 1, updated = 1),
-      AddData(inputData, (otherNan, 2)),
-      CheckLastBatch(),
-      assertNumStateRows(total = 1, updated = 0),
-      CheckAnswer((canonicalNaN, 1))
-    )
-  }
-
-  test("different NaN bit patterns should be deduplicated") {
-    val inputData = MemoryStream[(Float, Int)]
-    val result = inputData.toDS().toDF("value", "id").dropDuplicates("value")
-
-    // Canonical quiet NaN (0x7fc00000) and non-canonical signaling NaN (0x7f800001).
-    val canonicalNaN = java.lang.Float.intBitsToFloat(0x7fc00000)
-    val nonCanonicalNaN = java.lang.Float.intBitsToFloat(0x7f800001)
-    assert(java.lang.Float.isNaN(canonicalNaN) && java.lang.Float.isNaN(nonCanonicalNaN))
-    assert(java.lang.Float.floatToRawIntBits(canonicalNaN) !=
-      java.lang.Float.floatToRawIntBits(nonCanonicalNaN))
 
     testStream(result, Append)(
       AddData(inputData, (canonicalNaN, 1)),
       CheckLastBatch((canonicalNaN, 1)),
       assertNumStateRows(total = 1, updated = 1),
 
-      // Non-canonical NaN should be treated as a duplicate of canonical NaN
-      AddData(inputData, (nonCanonicalNaN, 2)),
+      AddData(inputData, (canonicalNaN, 2)),
       CheckLastBatch(),
       assertNumStateRows(total = 1, updated = 0),
 
-      // Only the first NaN row should be in the complete output
       CheckAnswer((canonicalNaN, 1))
     )
   }
+
+  /**
+   * Tests that different NaN bit patterns are deduplicated for a given key type.
+   * `buildKey` transforms the base DataFrame (columns: f, id) to add a "key" column.
+   */
+  private def testNaNDedup(keyDesc: String, buildKey: DataFrame => DataFrame): Unit = {
+    test(s"NaN normalization in dedup key: $keyDesc") {
+      val inputData = MemoryStream[(Float, Int)]
+      val base = inputData.toDS().toDF("f", "id")
+      val result = buildKey(base).dropDuplicates("key").select("f", "id")
+
+      testStream(result, Append)(
+        AddData(inputData, (canonicalNaN, 1)),
+        CheckLastBatch((canonicalNaN, 1)),
+        assertNumStateRows(total = 1, updated = 1),
+
+        // Non-canonical NaN should be treated as a duplicate
+        AddData(inputData, (nonCanonicalNaN, 2)),
+        CheckLastBatch(),
+        assertNumStateRows(total = 1, updated = 0),
+
+        CheckAnswer((canonicalNaN, 1))
+      )
+    }
+  }
+
+  testNaNDedup("scalar float", _.withColumn("key", col("f")))
+  testNaNDedup("struct containing float", _.withColumn("key", struct(col("f"))))
+  testNaNDedup("array containing float", _.withColumn("key", array(col("f"))))
 
   test("negative zero and positive zero should be deduplicated") {
     val inputData = MemoryStream[(Float, Int)]
@@ -116,7 +125,6 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest
       CheckLastBatch((0.0f, 1)),
       assertNumStateRows(total = 1, updated = 1),
 
-      // -0.0f should be treated as a duplicate of 0.0f
       AddData(inputData, (-0.0f, 2)),
       CheckLastBatch(),
       assertNumStateRows(total = 1, updated = 0),
