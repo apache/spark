@@ -55,6 +55,10 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
   }
 
+  test("SPARK-55109: RaiseError.sql should produce valid single-argument form") {
+    assert(RaiseError(Literal("error!")).sql === "raise_error('error!')")
+  }
+
   test("uuid") {
     checkEvaluation(Length(Uuid(Some(0))), 36)
     val r = new Random()
