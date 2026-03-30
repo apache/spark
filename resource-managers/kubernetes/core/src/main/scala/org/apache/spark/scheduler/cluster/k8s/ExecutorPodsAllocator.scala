@@ -165,18 +165,51 @@ class ExecutorPodsAllocator(
       applicationId: String,
       schedulerBackend: KubernetesClusterSchedulerBackend,
       snapshots: Seq[ExecutorPodsSnapshot]): Unit = {
+    val snapshotProcessStartTime = clock.getTimeMillis()
     logDebug(s"Received ${snapshots.size} snapshots")
-    val k8sKnownExecIds = snapshots.flatMap(_.executorPods.keys).distinct
+
+    // Optimization: Since each snapshot is built incrementally via withUpdate() on top of the
+    // previous one, the last snapshot is always a superset of all prior snapshots in most cases.
+    // However, replaceSnapshot() can cause pods that appeared in earlier snapshots to be absent
+    // in the last one. We merge all snapshots to capture every executor ID that appeared during
+    // this batch, which is the conservative and correct approach.
+    val aggregatedPods: Map[Long, ExecutorPodState] = if (snapshots.size <= 1) {
+      snapshots.headOption.map(_.executorPods).getOrElse(Map.empty)
+    } else {
+      val merged = mutable.HashMap.empty[Long, ExecutorPodState]
+      snapshots.foreach { s => merged ++= s.executorPods }
+      merged.toMap
+    }
+
+    val k8sKnownExecIds = aggregatedPods.keySet
     newlyCreatedExecutors --= k8sKnownExecIds
     schedulerKnownNewlyCreatedExecs --= k8sKnownExecIds
 
     // Although we are going to delete some executors due to timeout in this function,
     // it takes undefined time before the actual deletion. Hence, we should collect all PVCs
     // in use at the beginning. False positive is okay in this context in order to be safe.
-    val k8sKnownPVCNames = snapshots.flatMap(_.executorPods.values.map(_.pod)).flatMap { pod =>
-      pod.getSpec.getVolumes.asScala
-        .flatMap { v => Option(v.getPersistentVolumeClaim).map(_.getClaimName) }
-    }.distinct
+    // Optimization: iterate over the aggregated pod set (already deduplicated by exec ID)
+    // instead of iterating all snapshots which contain massive overlap.
+    val k8sKnownPVCNames: Set[String] = {
+      val pvcNameSet = mutable.HashSet.empty[String]
+      aggregatedPods.valuesIterator.foreach { state =>
+        state.pod.getSpec.getVolumes.asScala.foreach { v =>
+          val pvc = v.getPersistentVolumeClaim
+          if (pvc != null) {
+            pvcNameSet.add(pvc.getClaimName)
+          }
+        }
+      }
+      pvcNameSet.toSet
+    }
+    val snapshotPreprocessMs = clock.getTimeMillis() - snapshotProcessStartTime
+    if (snapshots.size > 1) {
+      logDebug(s"Snapshot preprocessing: " +
+        s"snapshotCount=${snapshots.size}, " +
+        s"aggregatedPodCount=${aggregatedPods.size}, " +
+        s"pvcCount=${k8sKnownPVCNames.size}, " +
+        s"totalPreprocessMs=${snapshotPreprocessMs}")
+    }
 
     // transfer the scheduler backend known executor requests from the newlyCreatedExecutors
     // to the schedulerKnownNewlyCreatedExecs
@@ -399,7 +432,7 @@ class ExecutorPodsAllocator(
     numOutstandingPods.set(totalPendingCount + newlyCreatedExecutors.size)
   }
 
-  protected def getReusablePVCs(applicationId: String, pvcsInUse: Seq[String]) = {
+  protected def getReusablePVCs(applicationId: String, pvcsInUse: Set[String]) = {
     if (conf.get(KUBERNETES_DRIVER_OWN_PVC) && conf.get(KUBERNETES_DRIVER_REUSE_PVC) &&
         driverPod.nonEmpty) {
       try {
@@ -437,7 +470,7 @@ class ExecutorPodsAllocator(
       numExecutorsToAllocate: Int,
       applicationId: String,
       resourceProfileId: Int,
-      pvcsInUse: Seq[String]): Unit = {
+      pvcsInUse: Set[String]): Unit = {
     // Check reusable PVCs for this executor allocation batch
     val reusablePVCs = getReusablePVCs(applicationId, pvcsInUse)
     for ( _ <- 0 until numExecutorsToAllocate) {

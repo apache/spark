@@ -18,6 +18,7 @@
 """
 PySpark exceptions.
 """
+
 from pyspark.errors.exceptions.base import (
     PySparkException,
     AnalysisException,
@@ -52,7 +53,6 @@ from pyspark.errors.exceptions.base import (
     StreamingPythonRunnerInitializationException,
     PickleException,
 )
-
 
 __all__ = [
     "PySparkException",

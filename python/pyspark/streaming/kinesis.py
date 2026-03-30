@@ -22,7 +22,6 @@ from pyspark.streaming import DStream
 from pyspark.streaming.context import StreamingContext
 from pyspark.util import _print_missing_jar
 
-
 __all__ = ["KinesisUtils", "InitialPositionInStream", "MetricsLevel", "utf8_decoder"]
 
 
@@ -63,8 +62,7 @@ class KinesisUtils:
         stsAssumeRoleArn: Optional[str] = ...,
         stsSessionName: Optional[str] = ...,
         stsExternalId: Optional[str] = ...,
-    ) -> "DStream[Optional[str]]":
-        ...
+    ) -> "DStream[Optional[str]]": ...
 
     @staticmethod
     @overload
@@ -84,8 +82,7 @@ class KinesisUtils:
         stsAssumeRoleArn: Optional[str] = ...,
         stsSessionName: Optional[str] = ...,
         stsExternalId: Optional[str] = ...,
-    ) -> "DStream[T]":
-        ...
+    ) -> "DStream[T]": ...
 
     @staticmethod
     def createStream(

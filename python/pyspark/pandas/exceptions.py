@@ -18,6 +18,7 @@
 """
 Exceptions/Errors used in pandas-on-Spark.
 """
+
 from typing import Optional
 
 
@@ -90,8 +91,9 @@ class PandasNotImplementedError(NotImplementedError):
                     )
         elif scalar_name is not None:
             msg = (
-                "The scalar `{0}.{1}` is not reimplemented in pyspark.pandas;"
-                " use `pd.{1}`.".format(class_name, scalar_name)
+                "The scalar `{0}.{1}` is not reimplemented in pyspark.pandas; use `pd.{1}`.".format(
+                    class_name, scalar_name
+                )
             )
         else:
             if deprecated:
@@ -126,7 +128,7 @@ def _test() -> None:
         .appName("pyspark.pandas.exceptions tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.exceptions,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import tempfile
+
 from pyspark import StorageLevel
 from pyspark.errors import AnalysisException, PySparkTypeError
 from pyspark.sql.types import StructType, StructField, IntegerType
@@ -82,7 +84,7 @@ class CatalogTestsMixin:
                     schema = StructType([StructField("a", IntegerType(), True)])
                     description = "this a table created via Catalog.createTable()"
 
-                    with self.assertRaisesRegex(PySparkTypeError, "should be a struct type"):
+                    with self.assertRaisesRegex(PySparkTypeError, "should be struct type"):
                         # Test deprecated API and negative error case.
                         spark.catalog.createExternalTable(
                             "invalid_table_creation", schema=IntegerType(), description=description
@@ -495,6 +497,112 @@ class CatalogTestsMixin:
 
                 spark.catalog.refreshTable("spark_catalog.default.my_tab")
                 self.assertEqual(spark.table("my_tab").count(), 0)
+
+    def test_catalog_list_cached_tables(self):
+        spark = self.spark
+        t = "py_catalog_api_cached_t"
+        with self.table(t):
+            spark.sql(f"CREATE TABLE {t} (id INT) USING parquet")
+            spark.catalog.clearCache()
+            self.assertEqual(spark.catalog.listCachedTables(), [])
+            self.assertEqual(len(spark.sql("SHOW CACHED TABLES").collect()), 0)
+            spark.catalog.cacheTable(t)
+            cached = spark.catalog.listCachedTables()
+            self.assertTrue(any(t in ct.name for ct in cached))
+            sql_set = {(r[0], r[1]) for r in spark.sql("SHOW CACHED TABLES").collect()}
+            api_set = {(ct.name, ct.storageLevel) for ct in cached}
+            self.assertEqual(sql_set, api_set)
+            spark.catalog.uncacheTable(t)
+
+    def test_catalog_drop_table(self):
+        spark = self.spark
+        t = "py_catalog_api_drop_t"
+        with self.table(t):
+            spark.sql(f"CREATE TABLE {t} (id INT) USING parquet")
+            self.assertTrue(spark.catalog.tableExists(t))
+            spark.catalog.dropTable(t)
+            self.assertFalse(spark.catalog.tableExists(t))
+
+    def test_catalog_drop_view(self):
+        spark = self.spark
+        v = "py_catalog_api_drop_v"
+        with self.view(v):
+            spark.sql(f"CREATE VIEW {v} AS SELECT 1 AS x")
+            self.assertTrue(spark.catalog.tableExists(v))
+            spark.catalog.dropView(v)
+            self.assertFalse(spark.catalog.tableExists(v))
+
+    def test_catalog_create_and_drop_database(self):
+        spark = self.spark
+        db = "py_catalog_api_db"
+        with self.database(db):
+            spark.catalog.dropDatabase(db, ifExists=True, cascade=True)
+            self.assertFalse(spark.catalog.databaseExists(db))
+            spark.catalog.createDatabase(db)
+            self.assertTrue(spark.catalog.databaseExists(db))
+            spark.catalog.dropDatabase(db, ifExists=False, cascade=True)
+            self.assertFalse(spark.catalog.databaseExists(db))
+
+    def test_catalog_list_partitions(self):
+        spark = self.spark
+        t = "py_catalog_api_part_t"
+        with tempfile.TemporaryDirectory(prefix="py_catalog_part_") as td:
+            with self.table(t):
+                # LOCATION expects a string path; normalize for SQL single quotes
+                loc = td.replace("'", "''")
+                spark.sql(
+                    f"CREATE TABLE {t} (id INT, p INT) USING parquet "
+                    f"PARTITIONED BY (p) LOCATION '{loc}'"
+                )
+                spark.sql(f"INSERT INTO {t} PARTITION (p = 7) SELECT 1")
+                parts = [p.partition for p in spark.catalog.listPartitions(t)]
+                self.assertTrue(any("p=7" in p for p in parts))
+
+    def test_catalog_list_views(self):
+        spark = self.spark
+        v = "py_catalog_api_list_v"
+        with self.view(v):
+            spark.sql(f"CREATE VIEW {v} AS SELECT 1 AS c")
+            names = [tv.name for tv in spark.catalog.listViews()]
+            self.assertIn(v, names)
+
+    def test_catalog_get_table_properties(self):
+        spark = self.spark
+        t = "py_catalog_api_props_t"
+        with self.table(t):
+            spark.sql(
+                f"CREATE TABLE {t} (id INT) USING parquet "
+                "TBLPROPERTIES ('py_catalog_api_k' = 'py_catalog_api_v')"
+            )
+            props = spark.catalog.getTableProperties(t)
+            self.assertEqual(props.get("py_catalog_api_k"), "py_catalog_api_v")
+
+    def test_catalog_get_create_table_string(self):
+        spark = self.spark
+        t = "py_catalog_api_ddl_t"
+        with self.table(t):
+            spark.sql(f"CREATE TABLE {t} (id INT) USING parquet")
+            ddl = spark.catalog.getCreateTableString(t)
+            self.assertTrue(ddl)
+            self.assertIn("create", ddl.lower())
+
+    def test_catalog_truncate_table(self):
+        spark = self.spark
+        t = "py_catalog_api_trunc_t"
+        with self.table(t):
+            spark.sql(f"CREATE TABLE {t} (id INT) USING parquet")
+            spark.sql(f"INSERT INTO {t} VALUES (1), (2)")
+            self.assertEqual(spark.table(t).count(), 2)
+            spark.catalog.truncateTable(t)
+            self.assertEqual(spark.table(t).count(), 0)
+
+    def test_catalog_analyze_table(self):
+        spark = self.spark
+        t = "py_catalog_api_analyze_t"
+        with self.table(t):
+            spark.sql(f"CREATE TABLE {t} (id INT) USING parquet")
+            spark.sql(f"INSERT INTO {t} VALUES (1)")
+            spark.catalog.analyzeTable(t, noScan=True)
 
 
 class CatalogTests(CatalogTestsMixin, ReusedSQLTestCase):

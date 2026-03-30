@@ -217,9 +217,11 @@ def _validate_and_transform_multiple_inputs(
     if input_shapes:
         if len(input_shapes) == num_input_cols:
             multi_inputs = [
-                np.vstack(v).reshape([-1] + input_shapes[i])  # type: ignore
-                if input_shapes[i]
-                else v
+                (
+                    np.vstack(v).reshape([-1] + input_shapes[i])  # type: ignore
+                    if input_shapes[i]
+                    else v
+                )
                 for i, v in enumerate(multi_inputs)
             ]
             if not all([len(x) == len(batch) for x in multi_inputs]):
@@ -824,9 +826,7 @@ def predict_batch_udf(
                     raise ValueError(msg.format(num_expected_cols, num_input_cols))
 
                 # return transformed predictions to Spark
-                yield _validate_and_transform_prediction_result(
-                    preds, num_input_rows, return_type
-                )  # type: ignore
+                yield _validate_and_transform_prediction_result(preds, num_input_rows, return_type)  # type: ignore
 
     return pandas_udf(predict, return_type)  # type: ignore[call-overload]
 
@@ -858,7 +858,7 @@ def _test() -> None:
     globs["sc"] = sc
     globs["spark"] = spark
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.ml.functions,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

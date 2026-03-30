@@ -193,6 +193,11 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       return
     }
 
+    // SPARK-53339: Post the Started event here, right after the CAS succeeds, to ensure that
+    // postStarted() is never called when interrupt() has already transitioned the state to
+    // interrupted. This eliminates the race between postStarted() and interrupt().
+    executeHolder.eventsManager.postStarted()
+
     // `withSession` ensures that session-specific artifacts (such as JARs and class files) are
     // available during processing.
     executeHolder.sessionHolder.withSession { session =>

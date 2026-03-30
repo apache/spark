@@ -55,7 +55,6 @@ class Rating(NamedTuple):
 class MatrixFactorizationModel(
     JavaModelWrapper, JavaSaveable, JavaLoader["MatrixFactorizationModel"]
 ):
-
     """A matrix factorisation model trained by regularized alternating
     least-squares.
 
@@ -379,7 +378,7 @@ def _test() -> None:
     sc = SparkContext("local[4]", "PythonTest")
     globs["sc"] = sc
     globs["sqlContext"] = SQLContext(sc)
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs["sc"].stop()
     if failure_count:
         sys.exit(-1)

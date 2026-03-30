@@ -43,7 +43,7 @@ def parse_opts():
         "--modules",
         type=str,
         default=default_value,
-        help="A comma-separated list of modules to test " "(default: %s)" % default_value,
+        help="A comma-separated list of modules to test (default: %s)" % default_value,
     )
 
     args, unknown = parser.parse_known_args()

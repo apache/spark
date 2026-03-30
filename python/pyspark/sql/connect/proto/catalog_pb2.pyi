@@ -33,6 +33,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
 import builtins
 import collections.abc
 import google.protobuf.descriptor
@@ -81,6 +82,17 @@ class Catalog(google.protobuf.message.Message):
     CURRENT_CATALOG_FIELD_NUMBER: builtins.int
     SET_CURRENT_CATALOG_FIELD_NUMBER: builtins.int
     LIST_CATALOGS_FIELD_NUMBER: builtins.int
+    LIST_CACHED_TABLES_FIELD_NUMBER: builtins.int
+    DROP_TABLE_FIELD_NUMBER: builtins.int
+    DROP_VIEW_FIELD_NUMBER: builtins.int
+    CREATE_DATABASE_FIELD_NUMBER: builtins.int
+    DROP_DATABASE_FIELD_NUMBER: builtins.int
+    LIST_PARTITIONS_FIELD_NUMBER: builtins.int
+    LIST_VIEWS_FIELD_NUMBER: builtins.int
+    GET_TABLE_PROPERTIES_FIELD_NUMBER: builtins.int
+    GET_CREATE_TABLE_STRING_FIELD_NUMBER: builtins.int
+    TRUNCATE_TABLE_FIELD_NUMBER: builtins.int
+    ANALYZE_TABLE_FIELD_NUMBER: builtins.int
     @property
     def current_database(self) -> global___CurrentDatabase: ...
     @property
@@ -133,6 +145,28 @@ class Catalog(google.protobuf.message.Message):
     def set_current_catalog(self) -> global___SetCurrentCatalog: ...
     @property
     def list_catalogs(self) -> global___ListCatalogs: ...
+    @property
+    def list_cached_tables(self) -> global___ListCachedTables: ...
+    @property
+    def drop_table(self) -> global___DropTable: ...
+    @property
+    def drop_view(self) -> global___DropView: ...
+    @property
+    def create_database(self) -> global___CreateDatabase: ...
+    @property
+    def drop_database(self) -> global___DropDatabase: ...
+    @property
+    def list_partitions(self) -> global___ListPartitions: ...
+    @property
+    def list_views(self) -> global___ListViews: ...
+    @property
+    def get_table_properties(self) -> global___GetTableProperties: ...
+    @property
+    def get_create_table_string(self) -> global___GetCreateTableString: ...
+    @property
+    def truncate_table(self) -> global___TruncateTable: ...
+    @property
+    def analyze_table(self) -> global___AnalyzeTable: ...
     def __init__(
         self,
         *,
@@ -162,16 +196,31 @@ class Catalog(google.protobuf.message.Message):
         current_catalog: global___CurrentCatalog | None = ...,
         set_current_catalog: global___SetCurrentCatalog | None = ...,
         list_catalogs: global___ListCatalogs | None = ...,
+        list_cached_tables: global___ListCachedTables | None = ...,
+        drop_table: global___DropTable | None = ...,
+        drop_view: global___DropView | None = ...,
+        create_database: global___CreateDatabase | None = ...,
+        drop_database: global___DropDatabase | None = ...,
+        list_partitions: global___ListPartitions | None = ...,
+        list_views: global___ListViews | None = ...,
+        get_table_properties: global___GetTableProperties | None = ...,
+        get_create_table_string: global___GetCreateTableString | None = ...,
+        truncate_table: global___TruncateTable | None = ...,
+        analyze_table: global___AnalyzeTable | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
+            "analyze_table",
+            b"analyze_table",
             "cache_table",
             b"cache_table",
             "cat_type",
             b"cat_type",
             "clear_cache",
             b"clear_cache",
+            "create_database",
+            b"create_database",
             "create_external_table",
             b"create_external_table",
             "create_table",
@@ -182,20 +231,32 @@ class Catalog(google.protobuf.message.Message):
             b"current_database",
             "database_exists",
             b"database_exists",
+            "drop_database",
+            b"drop_database",
             "drop_global_temp_view",
             b"drop_global_temp_view",
+            "drop_table",
+            b"drop_table",
             "drop_temp_view",
             b"drop_temp_view",
+            "drop_view",
+            b"drop_view",
             "function_exists",
             b"function_exists",
+            "get_create_table_string",
+            b"get_create_table_string",
             "get_database",
             b"get_database",
             "get_function",
             b"get_function",
             "get_table",
             b"get_table",
+            "get_table_properties",
+            b"get_table_properties",
             "is_cached",
             b"is_cached",
+            "list_cached_tables",
+            b"list_cached_tables",
             "list_catalogs",
             b"list_catalogs",
             "list_columns",
@@ -204,8 +265,12 @@ class Catalog(google.protobuf.message.Message):
             b"list_databases",
             "list_functions",
             b"list_functions",
+            "list_partitions",
+            b"list_partitions",
             "list_tables",
             b"list_tables",
+            "list_views",
+            b"list_views",
             "recover_partitions",
             b"recover_partitions",
             "refresh_by_path",
@@ -218,6 +283,8 @@ class Catalog(google.protobuf.message.Message):
             b"set_current_database",
             "table_exists",
             b"table_exists",
+            "truncate_table",
+            b"truncate_table",
             "uncache_table",
             b"uncache_table",
         ],
@@ -225,12 +292,16 @@ class Catalog(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "analyze_table",
+            b"analyze_table",
             "cache_table",
             b"cache_table",
             "cat_type",
             b"cat_type",
             "clear_cache",
             b"clear_cache",
+            "create_database",
+            b"create_database",
             "create_external_table",
             b"create_external_table",
             "create_table",
@@ -241,20 +312,32 @@ class Catalog(google.protobuf.message.Message):
             b"current_database",
             "database_exists",
             b"database_exists",
+            "drop_database",
+            b"drop_database",
             "drop_global_temp_view",
             b"drop_global_temp_view",
+            "drop_table",
+            b"drop_table",
             "drop_temp_view",
             b"drop_temp_view",
+            "drop_view",
+            b"drop_view",
             "function_exists",
             b"function_exists",
+            "get_create_table_string",
+            b"get_create_table_string",
             "get_database",
             b"get_database",
             "get_function",
             b"get_function",
             "get_table",
             b"get_table",
+            "get_table_properties",
+            b"get_table_properties",
             "is_cached",
             b"is_cached",
+            "list_cached_tables",
+            b"list_cached_tables",
             "list_catalogs",
             b"list_catalogs",
             "list_columns",
@@ -263,8 +346,12 @@ class Catalog(google.protobuf.message.Message):
             b"list_databases",
             "list_functions",
             b"list_functions",
+            "list_partitions",
+            b"list_partitions",
             "list_tables",
             b"list_tables",
+            "list_views",
+            b"list_views",
             "recover_partitions",
             b"recover_partitions",
             "refresh_by_path",
@@ -277,6 +364,8 @@ class Catalog(google.protobuf.message.Message):
             b"set_current_database",
             "table_exists",
             b"table_exists",
+            "truncate_table",
+            b"truncate_table",
             "uncache_table",
             b"uncache_table",
         ],
@@ -311,6 +400,17 @@ class Catalog(google.protobuf.message.Message):
             "current_catalog",
             "set_current_catalog",
             "list_catalogs",
+            "list_cached_tables",
+            "drop_table",
+            "drop_view",
+            "create_database",
+            "drop_database",
+            "list_partitions",
+            "list_views",
+            "get_table_properties",
+            "get_create_table_string",
+            "truncate_table",
+            "analyze_table",
         ]
         | None
     ): ...
@@ -1131,3 +1231,298 @@ class ListCatalogs(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["pattern"] | None: ...
 
 global___ListCatalogs = ListCatalogs
+
+class ListCachedTables(google.protobuf.message.Message):
+    """See `spark.catalog.listCachedTables`"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+
+global___ListCachedTables = ListCachedTables
+
+class DropTable(google.protobuf.message.Message):
+    """See `spark.catalog.dropTable`"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TABLE_NAME_FIELD_NUMBER: builtins.int
+    IF_EXISTS_FIELD_NUMBER: builtins.int
+    PURGE_FIELD_NUMBER: builtins.int
+    table_name: builtins.str
+    """(Required)"""
+    if_exists: builtins.bool
+    purge: builtins.bool
+    def __init__(
+        self,
+        *,
+        table_name: builtins.str = ...,
+        if_exists: builtins.bool = ...,
+        purge: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "if_exists", b"if_exists", "purge", b"purge", "table_name", b"table_name"
+        ],
+    ) -> None: ...
+
+global___DropTable = DropTable
+
+class DropView(google.protobuf.message.Message):
+    """See `spark.catalog.dropView`"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    VIEW_NAME_FIELD_NUMBER: builtins.int
+    IF_EXISTS_FIELD_NUMBER: builtins.int
+    view_name: builtins.str
+    """(Required)"""
+    if_exists: builtins.bool
+    def __init__(
+        self,
+        *,
+        view_name: builtins.str = ...,
+        if_exists: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal["if_exists", b"if_exists", "view_name", b"view_name"],
+    ) -> None: ...
+
+global___DropView = DropView
+
+class CreateDatabase(google.protobuf.message.Message):
+    """See `spark.catalog.createDatabase`"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class PropertiesEntry(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        value: builtins.str
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
+
+    DB_NAME_FIELD_NUMBER: builtins.int
+    IF_NOT_EXISTS_FIELD_NUMBER: builtins.int
+    PROPERTIES_FIELD_NUMBER: builtins.int
+    db_name: builtins.str
+    """(Required)"""
+    if_not_exists: builtins.bool
+    @property
+    def properties(
+        self,
+    ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        db_name: builtins.str = ...,
+        if_not_exists: builtins.bool = ...,
+        properties: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "db_name", b"db_name", "if_not_exists", b"if_not_exists", "properties", b"properties"
+        ],
+    ) -> None: ...
+
+global___CreateDatabase = CreateDatabase
+
+class DropDatabase(google.protobuf.message.Message):
+    """See `spark.catalog.dropDatabase`"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DB_NAME_FIELD_NUMBER: builtins.int
+    IF_EXISTS_FIELD_NUMBER: builtins.int
+    CASCADE_FIELD_NUMBER: builtins.int
+    db_name: builtins.str
+    """(Required)"""
+    if_exists: builtins.bool
+    cascade: builtins.bool
+    def __init__(
+        self,
+        *,
+        db_name: builtins.str = ...,
+        if_exists: builtins.bool = ...,
+        cascade: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "cascade", b"cascade", "db_name", b"db_name", "if_exists", b"if_exists"
+        ],
+    ) -> None: ...
+
+global___DropDatabase = DropDatabase
+
+class ListPartitions(google.protobuf.message.Message):
+    """See `spark.catalog.listPartitions`"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TABLE_NAME_FIELD_NUMBER: builtins.int
+    table_name: builtins.str
+    """(Required)"""
+    def __init__(
+        self,
+        *,
+        table_name: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["table_name", b"table_name"]
+    ) -> None: ...
+
+global___ListPartitions = ListPartitions
+
+class ListViews(google.protobuf.message.Message):
+    """See `spark.catalog.listViews`"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DB_NAME_FIELD_NUMBER: builtins.int
+    PATTERN_FIELD_NUMBER: builtins.int
+    db_name: builtins.str
+    """(Optional)"""
+    pattern: builtins.str
+    """(Optional) The pattern that the view name needs to match"""
+    def __init__(
+        self,
+        *,
+        db_name: builtins.str | None = ...,
+        pattern: builtins.str | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_db_name",
+            b"_db_name",
+            "_pattern",
+            b"_pattern",
+            "db_name",
+            b"db_name",
+            "pattern",
+            b"pattern",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_db_name",
+            b"_db_name",
+            "_pattern",
+            b"_pattern",
+            "db_name",
+            b"db_name",
+            "pattern",
+            b"pattern",
+        ],
+    ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_db_name", b"_db_name"]
+    ) -> typing_extensions.Literal["db_name"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_pattern", b"_pattern"]
+    ) -> typing_extensions.Literal["pattern"] | None: ...
+
+global___ListViews = ListViews
+
+class GetTableProperties(google.protobuf.message.Message):
+    """See `spark.catalog.getTableProperties`"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TABLE_NAME_FIELD_NUMBER: builtins.int
+    table_name: builtins.str
+    """(Required)"""
+    def __init__(
+        self,
+        *,
+        table_name: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["table_name", b"table_name"]
+    ) -> None: ...
+
+global___GetTableProperties = GetTableProperties
+
+class GetCreateTableString(google.protobuf.message.Message):
+    """See `spark.catalog.getCreateTableString`"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TABLE_NAME_FIELD_NUMBER: builtins.int
+    AS_SERDE_FIELD_NUMBER: builtins.int
+    table_name: builtins.str
+    """(Required)"""
+    as_serde: builtins.bool
+    def __init__(
+        self,
+        *,
+        table_name: builtins.str = ...,
+        as_serde: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal["as_serde", b"as_serde", "table_name", b"table_name"],
+    ) -> None: ...
+
+global___GetCreateTableString = GetCreateTableString
+
+class TruncateTable(google.protobuf.message.Message):
+    """See `spark.catalog.truncateTable`"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TABLE_NAME_FIELD_NUMBER: builtins.int
+    table_name: builtins.str
+    """(Required)"""
+    def __init__(
+        self,
+        *,
+        table_name: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["table_name", b"table_name"]
+    ) -> None: ...
+
+global___TruncateTable = TruncateTable
+
+class AnalyzeTable(google.protobuf.message.Message):
+    """See `spark.catalog.analyzeTable`"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TABLE_NAME_FIELD_NUMBER: builtins.int
+    NO_SCAN_FIELD_NUMBER: builtins.int
+    table_name: builtins.str
+    """(Required)"""
+    no_scan: builtins.bool
+    def __init__(
+        self,
+        *,
+        table_name: builtins.str = ...,
+        no_scan: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal["no_scan", b"no_scan", "table_name", b"table_name"],
+    ) -> None: ...
+
+global___AnalyzeTable = AnalyzeTable

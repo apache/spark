@@ -248,7 +248,9 @@ case class DefaultValueExpression(
   final override val nodePatterns: Seq[TreePattern] = Seq(ANALYSIS_AWARE_EXPRESSION)
 
   override def dataType: DataType = child.dataType
-  override def stringArgs: Iterator[Any] = Iterator(child, originalSQL)
+  override def prettyName: String = "default"
+  override def sql: String = s"DEFAULT $originalSQL"
+  override def stringArgs: Iterator[Any] = Iterator(child, s"sql='$originalSQL'")
   override def markAsAnalyzed(): DefaultValueExpression =
     copy(analyzedChild = Some(child))
   override protected def withNewChildInternal(newChild: Expression): Expression =

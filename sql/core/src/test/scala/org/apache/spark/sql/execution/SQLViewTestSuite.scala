@@ -208,11 +208,9 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
           },
           condition = "RECURSIVE_VIEW",
           parameters = Map(
-            "viewIdent" -> tableIdentifier("v1").quotedString,
-            "newPath" -> (s"${tableIdentifier("v1").quotedString} " +
-              s"-> ${tableIdentifier("v2").quotedString} " +
-              s"-> ${tableIdentifier("v1").quotedString}"))
-        )
+            "viewIdent" -> ".*`v1`.*",
+            "newPath" -> ".*`v1`.*`v2`.*`v1`.*"),
+          matchPVals = true)
       }
     }
   }

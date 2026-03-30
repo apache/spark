@@ -16,10 +16,10 @@
 #
 from abc import ABC, abstractmethod
 from collections import UserDict
+from collections.abc import MutableMapping
 from dataclasses import dataclass
 from typing import (
     Any,
-    Dict,
     Iterable,
     Iterator,
     List,
@@ -85,7 +85,7 @@ class DataSource(ABC):
     .. versionadded: 4.0.0
     """
 
-    def __init__(self, options: Dict[str, str]) -> None:
+    def __init__(self, options: MutableMapping[str, str]) -> None:
         """
         Initializes the data source with user-provided options.
 
@@ -588,8 +588,8 @@ class DataSourceReader(ABC):
         partition value to read the data.
 
         This method is called once during query planning. By default, it returns a
-        single partition with the value ``None``. Subclasses can override this method
-        to return multiple partitions.
+        single partition with the value `InputPartition(None)`. Subclasses can override
+        this method to return multiple partitions.
 
         It's recommended to override this method for better performance when reading
         large datasets.
@@ -626,10 +626,7 @@ class DataSourceReader(ABC):
         >>> def partitions(self):
         ...     return [RangeInputPartition(1, 3), RangeInputPartition(5, 10)]
         """
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "partitions"},
-        )
+        return [InputPartition(None)]
 
     @abstractmethod
     def read(self, partition: InputPartition) -> Union[Iterator[Tuple], Iterator["RecordBatch"]]:
@@ -643,7 +640,7 @@ class DataSourceReader(ABC):
 
         Parameters
         ----------
-        partition : object
+        partition : InputPartition
             The partition to read. It must be one of the partition values returned by
             :meth:`DataSourceReader.partitions`.
 
@@ -1282,7 +1279,7 @@ class CaseInsensitiveDict(UserDict):
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
+        super().__init__()
         self.update(*args, **kwargs)
 
     def __setitem__(self, key: str, value: Any) -> None:

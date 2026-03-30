@@ -87,7 +87,7 @@ class DataFrameObservationTestsMixin:
         )
 
         # observation requires name (if given) to be non empty string
-        with self.assertRaisesRegex(TypeError, "`name` should be a str, got int"):
+        with self.assertRaisesRegex(PySparkTypeError, "`name` should be str, got int"):
             Observation(123)
         with self.assertRaisesRegex(ValueError, "`name` must be a non-empty string, got ''."):
             Observation("")
@@ -110,8 +110,12 @@ class DataFrameObservationTestsMixin:
 
                 self.check_error(
                     exception=pe.exception,
-                    errorClass="NOT_LIST_OF_COLUMN",
-                    messageParameters={"arg_name": "exprs"},
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "expected_type": "list[Column]",
+                        "arg_name": "exprs",
+                        "arg_type": "tuple",
+                    },
                 )
 
     def test_observe_str(self):
@@ -182,8 +186,9 @@ class DataFrameObservationTestsMixin:
 
         # DataFrameWriter
         for cache_enabled in [False, True]:
-            with self.subTest(cache_enabled=cache_enabled), self.sql_conf(
-                {"spark.connect.session.planCache.enabled": cache_enabled}
+            with (
+                self.subTest(cache_enabled=cache_enabled),
+                self.sql_conf({"spark.connect.session.planCache.enabled": cache_enabled}),
             ):
                 for command, action in [
                     ("collect", lambda df: df.collect()),
@@ -192,8 +197,9 @@ class DataFrameObservationTestsMixin:
                     ("create", lambda df: df.writeTo(test_table).using("parquet").create()),
                 ]:
                     for select_star in [True, False]:
-                        with self.subTest(command=command, select_star=select_star), self.table(
-                            test_table
+                        with (
+                            self.subTest(command=command, select_star=select_star),
+                            self.table(test_table),
                         ):
                             observation = Observation()
                             observed_df = df.observe(observation, F.count(F.lit(1)).alias("cnt"))

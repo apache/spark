@@ -37,7 +37,7 @@ object SchemaMergeUtils extends Logging {
       sparkSession: SparkSession,
       parameters: Map[String, String],
       files: Seq[FileStatus],
-      schemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType])
+      schemaReader: (Seq[FileStatus], Configuration, Boolean, Boolean) => Seq[StructType])
       : Option[StructType] = {
     val serializedConf = new SerializableConfiguration(
       sparkSession.sessionState.newHadoopConfWithOptions(parameters))
@@ -62,8 +62,9 @@ object SchemaMergeUtils extends Logging {
     val numParallelism = Math.min(Math.max(partialFileStatusInfo.size, 1),
       sparkSession.sparkContext.defaultParallelism)
 
-    val ignoreCorruptFiles =
-      new FileSourceOptions(CaseInsensitiveMap(parameters)).ignoreCorruptFiles
+    val fileSourceOptions = new FileSourceOptions(CaseInsensitiveMap(parameters))
+    val ignoreCorruptFiles = fileSourceOptions.ignoreCorruptFiles
+    val ignoreMissingFiles = fileSourceOptions.ignoreMissingFiles
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
 
     // Issues a Spark job to read Parquet/ORC schema in parallel.
@@ -77,7 +78,8 @@ object SchemaMergeUtils extends Logging {
             new FileStatus(length, false, 0, 0, 0, 0, null, null, null, new Path(path))
           }.toSeq
 
-          val schemas = schemaReader(fakeFileStatuses, serializedConf.value, ignoreCorruptFiles)
+          val schemas = schemaReader(
+            fakeFileStatuses, serializedConf.value, ignoreCorruptFiles, ignoreMissingFiles)
 
           if (schemas.isEmpty) {
             Iterator.empty

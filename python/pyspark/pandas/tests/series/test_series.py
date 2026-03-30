@@ -364,6 +364,66 @@ class SeriesTestsMixin:
 
         self.assert_eq(psser.isin([1, 5, 0, None]), pser.isin([1, 5, 0, None]))
 
+        # Cross-type matching: string values against int column should not match
+        pser = pd.Series([1, 2, 3], name="a")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.isin(["1", "2"]), pser.isin(["1", "2"]))
+
+        # Numeric cross-type: float values against int column should match
+        self.assert_eq(psser.isin([1.0, 2.0]), pser.isin([1.0, 2.0]))
+
+        # String column with numeric values should not match
+        pser = pd.Series(["1", "2", "3"], name="a")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.isin([1, 2]), pser.isin([1, 2]))
+
+        # Bool column: int/float are compatible, string is not
+        pser = pd.Series([True, False, True], name="a")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.isin([1]), pser.isin([1]))
+        self.assert_eq(psser.isin([1.0]), pser.isin([1.0]))
+        self.assert_eq(psser.isin(["True"]), pser.isin(["True"]))
+
+        # Int column: bool/float are compatible, string is not
+        pser = pd.Series([1, 2, 3], name="a")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.isin([True]), pser.isin([True]))
+        self.assert_eq(psser.isin([1.0, 2.0]), pser.isin([1.0, 2.0]))
+        self.assert_eq(psser.isin(["1"]), pser.isin(["1"]))
+
+        # Date column: date/Timestamp are compatible, string/int are not
+        pser = pd.Series([datetime(2023, 1, 1).date(), datetime(2023, 1, 2).date()], name="a")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(
+            psser.isin([datetime(2023, 1, 1).date()]),
+            pser.isin([datetime(2023, 1, 1).date()]),
+        )
+        self.assert_eq(psser.isin(["2023-01-01"]), pser.isin(["2023-01-01"]))
+        self.assert_eq(psser.isin([1]), pser.isin([1]))
+
+        # Timestamp column: datetime is compatible, int/string are not
+        pser = pd.Series(pd.to_datetime(["2023-01-01", "2023-01-02"]), name="a")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.isin([datetime(2023, 1, 1)]), pser.isin([datetime(2023, 1, 1)]))
+        self.assert_eq(psser.isin([1]), pser.isin([1]))
+
+        # Binary column: bytes is compatible, string is not
+        pser = pd.Series([b"abc", b"def"], name="a")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.isin([b"abc"]), pser.isin([b"abc"]))
+        self.assert_eq(psser.isin(["abc"]), pser.isin(["abc"]))
+
+        # Timedelta column: timedelta is compatible, int/string are not
+        pser = pd.Series([timedelta(days=1), timedelta(days=2)], name="a")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.isin([timedelta(days=1)]), pser.isin([timedelta(days=1)]))
+        self.assert_eq(psser.isin([1]), pser.isin([1]))
+
+        # None with incompatible types: None passes type filter but never matches via IN
+        pser = pd.Series([1, 2, 3, None], name="a")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.isin(["a", "b", "c", None]), pser.isin(["a", "b", "c", None]))
+
     def test_notnull(self):
         pser = pd.Series([1, 2, 3, 4, np.nan, 6], name="x")
         psser = ps.from_pandas(pser)
@@ -428,8 +488,11 @@ class SeriesTestsMixin:
         psser = ps.from_pandas(pser)
 
         # dict correspondence
-        # Currently pandas API on Spark doesn't return NaN as pandas does.
-        self.assert_eq(psser.map({}), pser.map({}).replace({np.nan: None}))
+        if LooseVersion(pd.__version__) < "3.0.0":
+            # Currently pandas API on Spark doesn't return NaN as pandas does.
+            self.assert_eq(psser.map({}), pser.map({}).replace({np.nan: None}))
+        else:
+            self.assert_eq(psser.map({}), pser.map({}))
 
         d = defaultdict(lambda: "abc")
         self.assertTrue("abc" in repr(psser.map(d)))
@@ -450,7 +513,7 @@ class SeriesTestsMixin:
         )
 
         def to_upper(string) -> str:
-            return string.upper() if string else ""
+            return string.upper() if isinstance(string, str) else ""
 
         self.assert_eq(psser.map(to_upper), pser.map(to_upper))
 

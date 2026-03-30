@@ -45,8 +45,13 @@ case class BroadcastHashJoinExec private(
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan,
-    isNullAwareAntiJoin: Boolean = false)
+    isNullAwareAntiJoin: Boolean = false,
+    isSkewJoin: Boolean = false)
   extends HashJoin {
+
+  override def nodeName: String = {
+    if (isSkewJoin) super.nodeName + "(skew=true)" else super.nodeName
+  }
 
   if (isNullAwareAntiJoin) {
     require(leftKeys.length == 1, "leftKeys length should be 1")
@@ -255,7 +260,8 @@ object BroadcastHashJoinExec extends JoinSelectionHelper {
       condition: Option[Expression],
       left: SparkPlan,
       right: SparkPlan,
-      isNullAwareAntiJoin: Boolean = false): BroadcastHashJoinExec = {
+      isNullAwareAntiJoin: Boolean = false,
+      isSkewJoin: Boolean = false): BroadcastHashJoinExec = {
     val (normalizedLeftKeys, normalizedRightKeys) = HashJoin.normalizeJoinKeys(leftKeys, rightKeys)
 
     new BroadcastHashJoinExec(
@@ -266,6 +272,7 @@ object BroadcastHashJoinExec extends JoinSelectionHelper {
       condition,
       left,
       right,
-      isNullAwareAntiJoin)
+      isNullAwareAntiJoin,
+      isSkewJoin)
   }
 }

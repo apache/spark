@@ -30,6 +30,8 @@ Spark SQL can cache tables using an in-memory columnar format by calling `spark.
 Then Spark SQL will scan only required columns and will automatically tune compression to minimize
 memory usage and GC pressure. You can call `spark.catalog.uncacheTable("tableName")` or `dataFrame.unpersist()` to remove the table from memory.
 
+To list relations cached with an explicit name, use `SHOW CACHED TABLES` in SQL or `spark.catalog.listCachedTables()`. Entries cached only via `Dataset.cache()` without a name are not included.
+
 Configuration of in-memory caching can be done via `spark.conf.set` or by running
 `SET key=value` commands using SQL.
 

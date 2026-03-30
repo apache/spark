@@ -188,22 +188,25 @@ class SubstituteParamsParser extends Logging {
    * Apply a list of substitutions to the SQL text.
    * Inserts a space separator when a parameter is immediately preceded by a quote
    * to avoid back-to-back quotes after substitution.
+   *
+   * ANTLR's CodePointCharStream reports token positions in Unicode code points, but
+   * Java/Scala String indices are in UTF-16 code units. Supplementary characters
+   * (e.g. emojis) occupy 1 code point but 2 code units, so we must convert.
    */
   private def applySubstitutions(sqlText: String, substitutions: List[Substitution]): String = {
-    // Sort substitutions by start position in reverse order to avoid offset issues
     val sortedSubstitutions = substitutions.sortBy(-_.start)
 
     var result = sqlText
     sortedSubstitutions.foreach { substitution =>
-      val prefix = result.substring(0, substitution.start)
+      val startCU = result.offsetByCodePoints(0, substitution.start)
+      val endCU = result.offsetByCodePoints(0, substitution.end)
+      val prefix = result.substring(0, startCU)
       val replacement = substitution.replacement
-      val suffix = result.substring(substitution.end)
+      val suffix = result.substring(endCU)
 
-      // Check if replacement is immediately preceded by a quote and doesn't already
-      // start with whitespace
-      val needsSpace = substitution.start > 0 &&
-        (result(substitution.start - 1) == '\'' || result(substitution.start - 1) == '"') &&
-        replacement.nonEmpty && !replacement(0).isWhitespace
+      val needsSpace = startCU > 0 &&
+        (result.charAt(startCU - 1) == '\'' || result.charAt(startCU - 1) == '"') &&
+        replacement.nonEmpty && !replacement.charAt(0).isWhitespace
 
       val space = if (needsSpace) " " else ""
       result = s"$prefix$space$replacement$suffix"

@@ -83,4 +83,4 @@ ShowTablePropertiesCommand `tv`, [key#x, value#x]
 -- !query
 DROP VIEW tv
 -- !query analysis
-DropTempViewCommand tv
+DropTempViewCommand tv, false

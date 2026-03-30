@@ -26,7 +26,7 @@ import java.util.function.Function
  * keys with a custom [[mapKey]] method.
  * It preserves the order of insertion by using the [[LinkedHashMap]] as an underlying map.
  */
-private abstract class KeyTransformingMap[K, V] {
+abstract class KeyTransformingMap[K, V] {
   private val impl = new LinkedHashMap[K, V]
 
   def get(key: K): Option[V] = Option(impl.get(mapKey(key)))
@@ -50,6 +50,17 @@ private abstract class KeyTransformingMap[K, V] {
   def -=(key: K): this.type = {
     impl.remove(mapKey(key))
     this
+  }
+
+  def clear(): Unit = impl.clear()
+
+  def copyTo[M <: KeyTransformingMap[K, V]](destination: M): M = {
+    val iter = iterator
+    while (iter.hasNext) {
+      val entry = iter.next()
+      destination += (entry.getKey, entry.getValue)
+    }
+    destination
   }
 
   def mapKey(key: K): K

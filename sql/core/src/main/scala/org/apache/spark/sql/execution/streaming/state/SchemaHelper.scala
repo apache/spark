@@ -170,7 +170,9 @@ object SchemaHelper {
       version match {
         case 1 if Utils.isTesting => new SchemaV1Writer
         case 2 => new SchemaV2Writer
-        case 3 => new SchemaV3Writer
+        case 3 | 4 => new SchemaV3Writer
+        case _ => throw new IllegalArgumentException(
+          s"Unsupported schema writer version: $version")
       }
     }
   }

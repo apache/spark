@@ -110,11 +110,9 @@ class SubqueryTestsMixin:
                     .scalar()
                     + 1
                 ),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     select (select key from subqueryData where key > 2 order by key limit 1) + 1
-                    """
-                ),
+                    """),
             )
 
             assertDataFrameEqual(
@@ -145,14 +143,12 @@ class SubqueryTestsMixin:
                     .select(sf.min("value"))
                     .scalar()
                 ),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     select (
                         select min(value) from subqueryData
                         where key = (select max(key) from subqueryData) - 1
                     )
-                    """
-                ),
+                    """),
             )
 
     def test_scalar_subquery_against_local_relations(self):
@@ -238,13 +234,11 @@ class SubqueryTestsMixin:
                                 "a",
                                 df2.where(cond).select(sf.sum("b")).scalar().alias("sum_b"),
                             ),
-                            self.spark.sql(
-                                """
+                            self.spark.sql("""
                                 select
                                     a, (select sum(b) from l t2 where t2.a = t1.a) sum_b
                                 from l t1
-                                """
-                            ),
+                                """),
                         )
 
             with self.subTest("without .outer()"):
@@ -278,11 +272,9 @@ class SubqueryTestsMixin:
                             .alias("sum_b")
                         ),
                     ),
-                    self.spark.sql(
-                        """
+                    self.spark.sql("""
                         select a, (select sum(b) from l l2 where l2.a <=> l1.a) sum_b from l l1
-                        """
-                    ),
+                        """),
                 )
 
             with self.subTest("in aggregate"):
@@ -299,11 +291,9 @@ class SubqueryTestsMixin:
                         ),
                     )
                     .agg({}),
-                    self.spark.sql(
-                        """
+                    self.spark.sql("""
                         select a, (select sum(d) from r where a = c) sum_d from l l1 group by 1, 2
-                        """
-                    ),
+                        """),
                 )
 
             with self.subTest("non-aggregated"):
@@ -355,15 +345,13 @@ class SubqueryTestsMixin:
                         > 0
                     )
                     .select("a"),
-                    self.spark.sql(
-                        """
+                    self.spark.sql("""
                         select a
                         from   l
                         where  (select count(*)
                                 from   r
                                 where (a = c and d = 2.0) or (a = c and d = 1.0)) > 0
-                        """
-                    ),
+                        """),
                 )
 
     def test_exists_subquery(self):
@@ -390,11 +378,9 @@ class SubqueryTestsMixin:
                                 self.spark.table("r").where(cond).exists()
                                 & (sf.col("a") <= sf.lit(2))
                             ),
-                            self.spark.sql(
-                                """
+                            self.spark.sql("""
                         select * from l where exists (select * from r where l.a = r.c) and l.a <= 2
-                        """
-                            ),
+                        """),
                         )
 
             with self.subTest("NOT EXISTS"):
@@ -418,12 +404,10 @@ class SubqueryTestsMixin:
                             .exists()
                         )
                     ),
-                    self.spark.sql(
-                        """
+                    self.spark.sql("""
                         select * from l
                             where not exists (select * from r where l.a = r.c and l.b < r.d)
-                        """
-                    ),
+                        """),
                 )
 
             with self.subTest("EXISTS within OR"):
@@ -432,12 +416,10 @@ class SubqueryTestsMixin:
                         self.spark.table("r").where(sf.col("a").outer() == sf.col("c")).exists()
                         | self.spark.table("r").where(sf.col("a").outer() == sf.col("c")).exists()
                     ),
-                    self.spark.sql(
-                        """
+                    self.spark.sql("""
                         select * from l where exists (select * from r where l.a = r.c)
                             or exists (select * from r where l.a = r.c)
-                        """
-                    ),
+                        """),
                 )
 
                 assertDataFrameEqual(
@@ -450,12 +432,10 @@ class SubqueryTestsMixin:
                         .exists()
                         | self.spark.table("r").where(sf.col("a").outer() == sf.col("c")).exists()
                     ),
-                    self.spark.sql(
-                        """
+                    self.spark.sql("""
                         select * from l where exists (select * from r where l.a = r.c and l.b < r.d)
                             or exists (select * from r where l.a = r.c)
-                        """
-                    ),
+                        """),
                 )
 
     def test_in_subquery(self):
@@ -491,12 +471,10 @@ class SubqueryTestsMixin:
                         & (sf.col("l.a") > sf.lit(2))
                         & sf.col("l.b").isNotNull()
                     ),
-                    self.spark.sql(
-                        """
+                    self.spark.sql("""
                         select * from l
                         where l.a in (select c from r) and l.a > 2 and l.b is not null
-                        """
-                    ),
+                        """),
                 )
 
             with self.subTest("IN with struct"), self.temp_view("ll", "rr"):
@@ -586,12 +564,10 @@ class SubqueryTestsMixin:
                             )
                         )
                     ),
-                    self.spark.sql(
-                        """
+                    self.spark.sql("""
                         select * from l
                         where l.a in (select c from r) or l.a in (select c from r where l.b < r.d)
-                        """
-                    ),
+                        """),
                 )
                 assertDataFrameEqual(
                     self.spark.table("l").where(
@@ -604,13 +580,11 @@ class SubqueryTestsMixin:
                             )
                         )
                     ),
-                    self.spark.sql(
-                        """
+                    self.spark.sql("""
                         select * from l
                         where a not in (select c from r)
                         or a not in (select c from r where c is not null)
-                        """
-                    ),
+                        """),
                 )
 
             with self.subTest("complex IN"):
@@ -631,12 +605,10 @@ class SubqueryTestsMixin:
                         )
                         & ((sf.col("a") + sf.col("b")).isNotNull())
                     ),
-                    self.spark.sql(
-                        """
+                    self.spark.sql("""
                         select * from l
                         where (a, b) not in (select c, d from t) and (a + b) is not null
-                        """
-                    ),
+                        """),
                 )
 
             with self.subTest("same column in subquery"):
@@ -845,11 +817,9 @@ class SubqueryTestsMixin:
                         sf.max(sf.col("c2")).alias("m")
                     )
                 ),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT * FROM t1, LATERAL (SELECT max(c2) AS m FROM t2 WHERE t1.c2 < t2.c2)
-                    """
-                ),
+                    """),
             )
 
     def test_lateral_join_reference_preceding_from_clause_items(self):
@@ -884,14 +854,12 @@ class SubqueryTestsMixin:
                         (sf.col("a").outer() * sf.col("b").outer()).alias("c")
                     )
                 ),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT * FROM t1,
                     LATERAL (SELECT c1 + c2 AS a),
                     LATERAL (SELECT c1 - c2 AS b),
                     LATERAL (SELECT a * b AS c)
-                    """
-                ),
+                    """),
             )
 
     def test_lateral_join_in_between_regular_joins(self):
@@ -906,13 +874,11 @@ class SubqueryTestsMixin:
                     .alias("s"),
                     how="left",
                 ).join(t1.alias("t3"), sf.col("s.c2") == sf.col("t3.c2"), how="left"),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT * FROM t1
                     LEFT OUTER JOIN LATERAL (SELECT c2 FROM t2 WHERE t1.c1 = t2.c1) s
                     LEFT OUTER JOIN t1 t3 ON s.c2 = t3.c2
-                    """
-                ),
+                    """),
             )
 
     def test_nested_lateral_joins(self):
@@ -932,12 +898,10 @@ class SubqueryTestsMixin:
                     .select((sf.col("c1").outer() + sf.lit(1)).alias("c1"))
                     .lateralJoin(self.spark.range(1).select(sf.col("c1").outer()))
                 ),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT * FROM t1,
                     LATERAL (SELECT * FROM (SELECT c1 + 1 AS c1), LATERAL (SELECT c1))
-                    """
-                ),
+                    """),
             )
 
     def test_scalar_subquery_inside_lateral_join(self):
@@ -965,13 +929,11 @@ class SubqueryTestsMixin:
                         .scalar()
                     )
                 ),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT * FROM t1, LATERAL (
                         SELECT (SELECT SUM(c2) FROM t2 WHERE c1 = a) FROM (SELECT c1 AS a)
                     )
-                    """
-                ),
+                    """),
             )
 
     def test_lateral_join_inside_subquery(self):
@@ -988,11 +950,9 @@ class SubqueryTestsMixin:
                         .scalar()
                     )
                 ),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT * FROM t1 WHERE c1 = (SELECT MIN(a) FROM t2, LATERAL (SELECT c1 AS a))
-                    """
-                ),
+                    """),
             )
             assertDataFrameEqual(
                 t1.where(
@@ -1004,12 +964,10 @@ class SubqueryTestsMixin:
                         .scalar()
                     )
                 ),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT * FROM t1
                     WHERE c1 = (SELECT MIN(a) FROM t2, LATERAL (SELECT c1 AS a) WHERE c1 = t1.c1)
-                    """
-                ),
+                    """),
             )
 
     def test_lateral_join_with_table_valued_functions(self):

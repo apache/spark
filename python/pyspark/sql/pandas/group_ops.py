@@ -948,9 +948,7 @@ class PandasGroupedOpsMixin:
             eval_type = PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
 
         # The usage of the pandas_udf is internal so type checking is disabled.
-        udf = pandas_udf(
-            func, returnType=schema, functionType=eval_type
-        )  # type: ignore[call-overload]
+        udf = pandas_udf(func, returnType=schema, functionType=eval_type)  # type: ignore[call-overload]
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
         jdf = self._jgd.flatMapGroupsInArrow(udf_column._jc)
@@ -1215,7 +1213,7 @@ def _test() -> None:
 
     spark = SparkSession.builder.master("local[4]").appName("sql.pandas.group tests").getOrCreate()
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.pandas.group_ops,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,

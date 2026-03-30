@@ -452,13 +452,13 @@ DescribeRelationJsonCommand [B=SPARK, C=2018-11-17 13:33:33], true, [json_metada
 -- !query
 DROP VIEW temp_v
 -- !query analysis
-DropTempViewCommand temp_v
+DropTempViewCommand temp_v, false
 
 
 -- !query
 DROP VIEW temp_Data_Source_View
 -- !query analysis
-DropTempViewCommand temp_Data_Source_View
+DropTempViewCommand temp_Data_Source_View, false
 
 
 -- !query

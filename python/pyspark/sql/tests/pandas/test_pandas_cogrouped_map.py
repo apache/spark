@@ -208,7 +208,7 @@ class CogroupedApplyInPandasTestsMixin:
         self._test_merge_error(
             fn=merge_pandas,
             errorClass=PythonException,
-            error_message_regex="Column names of the returned pandas.DataFrame "
+            error_message_regex="Column names of the returned data "
             "do not match specified schema. Unexpected: add, more.",
         )
 
@@ -229,7 +229,7 @@ class CogroupedApplyInPandasTestsMixin:
         self._test_merge_error(
             fn=merge_pandas,
             errorClass=PythonException,
-            error_message_regex="Number of columns of the returned pandas.DataFrame "
+            error_message_regex="Number of columns of the returned data "
             "doesn't match specified schema. Expected: 4 Actual: 6",
         )
 
@@ -249,8 +249,9 @@ class CogroupedApplyInPandasTestsMixin:
 
     def check_apply_in_pandas_returning_incompatible_type(self):
         for safely in [True, False]:
-            with self.subTest(convertToArrowArraySafely=safely), self.sql_conf(
-                {"spark.sql.execution.pandas.convertToArrowArraySafely": safely}
+            with (
+                self.subTest(convertToArrowArraySafely=safely),
+                self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": safely}),
             ):
                 # sometimes we see ValueErrors
                 with self.subTest(convert="string to double"):
@@ -479,12 +480,16 @@ class CogroupedApplyInPandasTestsMixin:
             return pd.DataFrame(
                 [
                     {
-                        "id": left["id"][0]
-                        if not left.empty
-                        else (right["id"][0] if not right.empty else None),
-                        "day": left["day"][0]
-                        if not left.empty
-                        else (right["day"][0] if not right.empty else None),
+                        "id": (
+                            left["id"][0]
+                            if not left.empty
+                            else (right["id"][0] if not right.empty else None)
+                        ),
+                        "day": (
+                            left["day"][0]
+                            if not left.empty
+                            else (right["day"][0] if not right.empty else None)
+                        ),
                         "lefts": len(left.index),
                         "rights": len(right.index),
                     }

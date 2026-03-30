@@ -35,14 +35,19 @@ from pyspark.serializers import (
 )
 from pyspark.util import fail_on_stopiteration
 
+process = None
 
-try:
-    import psutil
 
-    process = None
+def get_used_memory():
+    """Return the used memory in MiB"""
+    try:
+        import psutil
 
-    def get_used_memory():
-        """Return the used memory in MiB"""
+        has_psutil = True
+    except ImportError:
+        has_psutil = False
+
+    if has_psutil:
         global process
         if process is None or process._pid != os.getpid():
             process = psutil.Process(os.getpid())
@@ -52,17 +57,14 @@ try:
             info = process.get_memory_info()
         return info.rss >> 20
 
-except ImportError:
-
-    def get_used_memory():
-        """Return the used memory in MiB"""
+    else:
         if platform.system() == "Linux":
             for line in open("/proc/self/status"):
                 if line.startswith("VmRSS:"):
                     return int(line.split()[1]) >> 10
 
         else:
-            warnings.warn("Please install psutil to have better " "support with spilling")
+            warnings.warn("Please install psutil to have better support with spilling")
             if platform.system() == "Darwin":
                 import resource
 
@@ -93,7 +95,6 @@ DiskBytesSpilled = 0
 
 
 class Aggregator:
-
     """
     Aggregator has tree functions to merge values into combiner.
 
@@ -109,7 +110,6 @@ class Aggregator:
 
 
 class SimpleAggregator(Aggregator):
-
     """
     SimpleAggregator is useful for the cases that combiners have
     same type with values
@@ -120,7 +120,6 @@ class SimpleAggregator(Aggregator):
 
 
 class Merger:
-
     """
     Merge shuffled data together by aggregator
     """
@@ -148,7 +147,6 @@ def _compressed_serializer(self, serializer=None):
 
 
 class ExternalMerger(Merger):
-
     """
     External merger will dump the aggregated data into disks when
     memory usage goes above the limit, then merge them together.
@@ -696,7 +694,6 @@ class GroupByKey:
 
 
 class ExternalGroupBy(ExternalMerger):
-
     """
     Group by the items by key. If any partition of them can not been
     hold in memory, it will do sort based group by.
@@ -849,6 +846,6 @@ class ExternalGroupBy(ExternalMerger):
 if __name__ == "__main__":
     import doctest
 
-    (failure_count, test_count) = doctest.testmod()
+    failure_count, test_count = doctest.testmod()
     if failure_count:
         sys.exit(-1)

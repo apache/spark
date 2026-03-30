@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# Wrapper script to run ASV (Airspeed Velocity) benchmarks for PySpark.
+# All arguments are forwarded to asv.
+#
+# Usage:
+#   ./python/asv run --python=same --quick
+#   ./python/asv run --python=same --quick -b 'bench_eval_type.GroupedMapPandasUDFTimeBench'
+#   ./python/asv continuous -f 1.1 upstream/master HEAD
+
+set -euo pipefail
+
+PYTHON_DIR="$(cd "$(dirname "$0")" && pwd)"
+BENCHMARKS_DIR="$PYTHON_DIR/benchmarks"
+
+if ! command -v asv &> /dev/null; then
+  echo "Error: asv is not installed. Install it with: pip install asv" >&2
+  exit 1
+fi
+
+# Ensure pyspark is importable from source when using --python=same
+PY4J_ZIP="$(ls "$PYTHON_DIR"/lib/py4j-*-src.zip 2>/dev/null | head -1)"
+export PYTHONPATH="${PYTHON_DIR}${PY4J_ZIP:+:$PY4J_ZIP}${PYTHONPATH:+:$PYTHONPATH}"
+
+cd "$BENCHMARKS_DIR"
+exec asv "$@"

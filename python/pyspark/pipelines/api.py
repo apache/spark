@@ -49,8 +49,12 @@ def append_flow(
     """
     if name is not None and type(name) is not str:
         raise PySparkTypeError(
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "name", "arg_type": type(name).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "name",
+                "expected_type": "str",
+                "arg_type": type(name).__name__,
+            },
         )
 
     source_code_location = get_caller_source_code_location(stacklevel=1)
@@ -80,13 +84,18 @@ def _validate_stored_dataset_args(
 ) -> None:
     if name is not None and type(name) is not str:
         raise PySparkTypeError(
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "name", "arg_type": type(name).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "name",
+                "expected_type": "str",
+                "arg_type": type(name).__name__,
+            },
         )
     if table_properties is not None and not isinstance(table_properties, dict):
         raise PySparkTypeError(
-            errorClass="NOT_DICT",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "dict",
                 "arg_name": "table_properties",
                 "arg_type": type(table_properties).__name__,
             },
@@ -96,8 +105,7 @@ def _validate_stored_dataset_args(
 
 
 @overload
-def table(query_function: QueryFunction) -> None:
-    ...
+def table(query_function: QueryFunction) -> None: ...
 
 
 @overload
@@ -111,8 +119,7 @@ def table(
     partition_cols: Optional[List[str]] = None,
     cluster_by: Optional[List[str]] = None,
     schema: Optional[Union[StructType, str]] = None,
-) -> Callable[[QueryFunction], None]:
-    ...
+) -> Callable[[QueryFunction], None]: ...
 
 
 def table(
@@ -202,8 +209,7 @@ def table(
 
 
 @overload
-def materialized_view(query_function: QueryFunction) -> None:
-    ...
+def materialized_view(query_function: QueryFunction) -> None: ...
 
 
 @overload
@@ -217,8 +223,7 @@ def materialized_view(
     partition_cols: Optional[List[str]] = None,
     cluster_by: Optional[List[str]] = None,
     schema: Optional[Union[StructType, str]] = None,
-) -> Callable[[QueryFunction], None]:
-    ...
+) -> Callable[[QueryFunction], None]: ...
 
 
 def materialized_view(
@@ -310,8 +315,7 @@ def materialized_view(
 @overload
 def temporary_view(
     query_function: QueryFunction,
-) -> None:
-    ...
+) -> None: ...
 
 
 @overload
@@ -321,8 +325,7 @@ def temporary_view(
     name: Optional[str] = None,
     comment: Optional[str] = None,
     spark_conf: Optional[Dict[str, str]] = None,
-) -> Callable[[QueryFunction], None]:
-    ...
+) -> Callable[[QueryFunction], None]: ...
 
 
 def temporary_view(
@@ -351,8 +354,12 @@ def temporary_view(
     """
     if name is not None and type(name) is not str:
         raise PySparkTypeError(
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "name", "arg_type": type(name).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "name",
+                "expected_type": "str",
+                "arg_type": type(name).__name__,
+            },
         )
 
     source_code_location = get_caller_source_code_location(stacklevel=1)
@@ -435,13 +442,18 @@ def create_streaming_table(
     """
     if type(name) is not str:
         raise PySparkTypeError(
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "name", "arg_type": type(name).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "name",
+                "expected_type": "str",
+                "arg_type": type(name).__name__,
+            },
         )
     if table_properties is not None and not isinstance(table_properties, dict):
         raise PySparkTypeError(
-            errorClass="NOT_DICT",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "dict",
                 "arg_name": "table_properties",
                 "arg_type": type(table_properties).__name__,
             },
@@ -480,18 +492,27 @@ def create_sink(
     """
     if type(name) is not str:
         raise PySparkTypeError(
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "name", "arg_type": type(name).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "name",
+                "expected_type": "str",
+                "arg_type": type(name).__name__,
+            },
         )
     if type(format) is not str:
         raise PySparkTypeError(
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "format", "arg_type": type(format).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "format",
+                "expected_type": "str",
+                "arg_type": type(format).__name__,
+            },
         )
     if options is not None and not isinstance(options, dict):
         raise PySparkTypeError(
-            errorClass="NOT_DICT",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "dict",
                 "arg_name": "options",
                 "arg_type": type(options).__name__,
             },

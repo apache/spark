@@ -18,6 +18,7 @@
 """
 Date/Time related functions on pandas-on-Spark Series
 """
+
 from typing import Any, Optional, Union, no_type_check
 
 import numpy as np
@@ -933,7 +934,7 @@ def _test() -> None:
         .appName("pyspark.pandas.datetimes tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.datetimes,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

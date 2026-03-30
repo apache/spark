@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.plans.physical
 
-import java.util.Objects
-
 import scala.annotation.tailrec
 import scala.collection.mutable
 
@@ -360,12 +358,11 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
  *    preserved through `GroupPartitionsExec`. The sorted order is critical for storage-partitioned
  *    join compatibility.
  *
- * 2. '''In KeyGroupedShuffleSpec''': When used within `KeyGroupedShuffleSpec`, the `partitionKeys`
- *    may not be in sorted order. This occurs because `KeyGroupedShuffleSpec` can project the
- *    partition keys by join key positions. The `EnsureRequirements` rule ensures that either the
- *    unordered keys from both sides of a join match exactly, or it builds a common ordered set of
- *    keys and pushes them down to `GroupPartitionsExec` on both sides to establish a compatible
- *    ordering.
+ * 2. '''In KeyedShuffleSpec''': When used within `KeyedShuffleSpec`, the `partitionKeys` may not be
+ *    in sorted order. This occurs because `KeyedShuffleSpec` can project the partition keys by join
+ *    key positions. The `EnsureRequirements` rule ensures that either the unordered keys from both
+ *    sides of a join match exactly, or it builds a common ordered set of keys and pushes them down
+ *    to `GroupPartitionsExec` on both sides to establish a compatible ordering.
  *
  * == Partition Keys ==
  * - `partitionKeys`: The partition keys, one per partition. May contain duplicates initially
@@ -427,7 +424,7 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
  * @param expressions Partition transform expressions (e.g., `years(col)`, `bucket(10, col)`).
  * @param partitionKeys Partition keys wrapped in InternalRowComparableWrapper for efficient
  *                      comparison and grouping. One per partition. When used as outputPartitioning,
- *                      always in sorted order. When used in KeyGroupedShuffleSpec, may be unsorted
+ *                      always in sorted order. When used in `KeyedShuffleSpec`, may be unsorted
  *                      after projection. May contain duplicates when ungrouped.
  * @param isGrouped Whether partition keys are unique (no duplicates). Computed on first
  *                  creation, then preserved through copy operations to avoid recomputation.
@@ -468,10 +465,11 @@ case class KeyedPartitioning(
 
   /**
    * Reduces this partitioning's partition keys by applying the given reducers.
-   * Returns the distinct reduced keys.
+   * Returns the reduced keys and their data types.
    */
-  def reduceKeys(reducers: Seq[Option[Reducer[_, _]]]): Seq[InternalRowComparableWrapper] =
-    KeyedPartitioning.reduceKeys(partitionKeys, expressionDataTypes, reducers).distinct
+  def reduceKeys(
+      reducers: Seq[Option[Reducer[_, _]]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) =
+    KeyedPartitioning.reduceKeys(partitionKeys, expressionDataTypes, reducers)
 
   override def satisfies0(required: Distribution): Boolean = {
     nonGroupedSatisfies(required) || groupedSatisfies(required)
@@ -509,7 +507,7 @@ case class KeyedPartitioning(
   }
 
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec = {
-    val result = KeyGroupedShuffleSpec(this, distribution)
+    val result = KeyedShuffleSpec(this, distribution)
     if (SQLConf.get.v2BucketingAllowJoinKeysSubsetOfPartitionKeys) {
       // If allowing join keys to be subset of clustering keys, we should create a new
       // `KeyedPartitioning` here that is grouped on the join keys instead, and use that as
@@ -525,16 +523,6 @@ case class KeyedPartitioning(
       result
     }
   }
-
-  override def equals(that: Any): Boolean = that match {
-    case k: KeyedPartitioning if this.expressions == k.expressions =>
-      this.partitionKeys == k.partitionKeys
-
-    case _ => false
-  }
-
-  override def hashCode(): Int =
-    Objects.hash(expressions, partitionKeys)
 }
 
 object KeyedPartitioning {
@@ -599,10 +587,14 @@ object KeyedPartitioning {
   def reduceKeys(
       keys: Seq[InternalRowComparableWrapper],
       dataTypes: Seq[DataType],
-      reducers: Seq[Option[Reducer[_, _]]]): Seq[InternalRowComparableWrapper] = {
+      reducers: Seq[Option[Reducer[_, _]]]): (Seq[DataType], Seq[InternalRowComparableWrapper]) = {
+    val reducedDataTypes = dataTypes.zip(reducers).map {
+      case (_, Some(reducer: Reducer[Any, Any])) => reducer.resultType()
+      case (t, _) => t
+    }
     val comparableKeyWrapperFactory =
-      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes)
-    keys.map { key =>
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(reducedDataTypes)
+    val reducedKeys = keys.map { key =>
       val keyValues = key.row.toSeq(dataTypes)
       val reducedKey = keyValues.zip(reducers).map {
         case (v, Some(reducer: Reducer[Any, Any])) => reducer.reduce(v)
@@ -610,6 +602,8 @@ object KeyedPartitioning {
       }.toArray
       comparableKeyWrapperFactory(new GenericInternalRow(reducedKey))
     }
+
+    (reducedDataTypes, reducedKeys)
   }
 }
 
@@ -954,7 +948,7 @@ case class CoalescedHashShuffleSpec(
  * @param joinKeyPositions position of join keys among cluster keys.
  *                         This is set if joining on a subset of cluster keys is allowed.
  */
-case class KeyGroupedShuffleSpec(
+case class KeyedShuffleSpec(
     partitioning: KeyedPartitioning,
     distribution: ClusteredDistribution,
     joinKeyPositions: Option[Seq[Int]] = None) extends ShuffleSpec {
@@ -992,7 +986,7 @@ case class KeyGroupedShuffleSpec(
     //    3.3 each pair of partition expressions at the same index must share compatible
     //        transform functions.
     //  4. the partition values from both sides are following the same order.
-    case otherSpec @ KeyGroupedShuffleSpec(otherPartitioning, otherDistribution, _) =>
+    case otherSpec @ KeyedShuffleSpec(otherPartitioning, otherDistribution, _) =>
       distribution.clustering.length == otherDistribution.clustering.length &&
         numPartitions == other.numPartitions && areKeysCompatible(otherSpec) &&
           partitioning.partitionKeys == otherPartitioning.partitionKeys
@@ -1003,7 +997,7 @@ case class KeyGroupedShuffleSpec(
 
   // Whether the partition keys (i.e., partition expressions) are compatible between this and the
   // `other` spec.
-  def areKeysCompatible(other: KeyGroupedShuffleSpec): Boolean = {
+  def areKeysCompatible(other: KeyedShuffleSpec): Boolean = {
     val expressions = partitioning.expressions
     val otherExpressions = other.partitioning.expressions
 
@@ -1028,6 +1022,11 @@ case class KeyGroupedShuffleSpec(
         } else {
           left.isSameFunction(right)
         }
+      case (_: AttributeReference, _: TransformExpression) |
+           (_: TransformExpression, _: AttributeReference) =>
+        SQLConf.get.v2BucketingPushPartValuesEnabled &&
+          !SQLConf.get.v2BucketingPartiallyClusteredDistributionEnabled &&
+          SQLConf.get.v2BucketingAllowCompatibleTransforms
       case _ => false
     }
 
@@ -1047,11 +1046,26 @@ case class KeyGroupedShuffleSpec(
    *
    * @param other other key-grouped shuffle spec
    */
-  def reducers(other: KeyGroupedShuffleSpec): Option[Seq[Option[Reducer[_, _]]]] = {
-     val results = partitioning.expressions.zip(other.partitioning.expressions).map {
-       case (e1: TransformExpression, e2: TransformExpression) => e1.reducers(e2)
-       case (_, _) => None
-     }
+  def reducers(other: KeyedShuffleSpec): Option[Seq[Option[Reducer[_, _]]]] = {
+    val results = partitioning.expressions.zip(other.partitioning.expressions).map {
+      case (e1: TransformExpression, e2: TransformExpression) => e1.reducers(e2)
+
+      // Identity transform on this side, arbitrary transform on the other side: create a reducer
+      // that applies the other's transform to the raw identity values. The symmetric case
+      // (TransformExpression, AttributeReference) is handled when the other side calls reducers.
+      // Each partition expression is guaranteed to have exactly one leaf child (asserted in
+      // keyPositions), so `a` lives at position 0 in the row we construct.
+      case (a: AttributeReference, t: TransformExpression) =>
+        val reducerExpr = t.transform { case _: AttributeReference => a }
+        val boundExpr = BindReferences.bindReference(reducerExpr, AttributeSeq(Seq(a)))
+        Some(new Reducer[Any, Any] {
+          override def reduce(v: Any): Any = boundExpr.eval(new GenericInternalRow(Array[Any](v)))
+          override def resultType(): DataType = reducerExpr.dataType
+          override def displayName(): String = reducerExpr.toString
+        })
+
+      case (_, _) => None
+    }
 
     // optimize to not return a value, if none of the partition expressions are reducible
     if (results.forall(p => p.isEmpty)) None else Some(results)

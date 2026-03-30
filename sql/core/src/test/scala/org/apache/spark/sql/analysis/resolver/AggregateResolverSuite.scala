@@ -18,12 +18,16 @@
 package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.analysis.resolver.{Resolver, ResolverRunner}
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
+import org.apache.spark.sql.catalyst.analysis.resolver.{
+  Resolver,
+  ResolverRunner
+}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.ExprUtils.toSQLExpr
 import org.apache.spark.sql.catalyst.expressions.aggregate.AnyValue
-import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class AggregateResolverSuite extends QueryTest with SharedSparkSession {
@@ -33,23 +37,20 @@ class AggregateResolverSuite extends QueryTest with SharedSparkSession {
   )
 
   test("Valid group by") {
-    val resolverRunner = createResolverRunner()
     val query = table.groupBy("a".attr)("a".attr)
-    resolverRunner.resolve(query)
+    runResolver(query)
   }
 
   test("Valid group by all") {
-    val resolverRunner = createResolverRunner()
     val query = table.groupBy("all".attr)("a".attr)
-    resolverRunner.resolve(query)
+    runResolver(query)
   }
 
   test("Group by aggregate function") {
-    val resolverRunner = createResolverRunner()
     val query = table.groupBy($"count".function(intToLiteral(1)))(intToLiteral(1))
     checkError(
       exception = intercept[AnalysisException] {
-        resolverRunner.resolve(query)
+        runResolver(query)
       },
       condition = "GROUP_BY_AGGREGATE",
       parameters = Map("sqlExpr" -> $"count".function(intToLiteral(1)).sql)
@@ -57,11 +58,10 @@ class AggregateResolverSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Select a column which is not in the group by clause") {
-    val resolverRunner = createResolverRunner()
     val query = table.groupBy("b".attr)("a".attr)
     checkError(
       exception = intercept[AnalysisException] {
-        resolverRunner.resolve(query)
+        runResolver(query)
       },
       condition = "MISSING_AGGREGATION",
       parameters = Map(
@@ -72,12 +72,11 @@ class AggregateResolverSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Nested aggregate function") {
-    val resolverRunner = createResolverRunner()
     val query =
       table.groupBy("a".attr)($"count".function($"count".function(intToLiteral(1))))
     checkError(
       exception = intercept[AnalysisException] {
-        resolverRunner.resolve(query)
+        runResolver(query)
       },
       condition = "NESTED_AGGREGATE_FUNCTION",
       parameters = Map.empty
@@ -85,11 +84,10 @@ class AggregateResolverSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Aggregate function with nondeterministic expression") {
-    val resolverRunner = createResolverRunner()
     val query = table.groupBy("a".attr)($"count".function(rand(1)))
     checkError(
       exception = intercept[AnalysisException] {
-        resolverRunner.resolve(query)
+        runResolver(query)
       },
       condition = "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
       parameters = Map("sqlExpr" -> toSQLExpr($"count".function(rand(1))))
@@ -97,17 +95,15 @@ class AggregateResolverSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Valid group by ordinal") {
-    val resolverRunner = createResolverRunner()
     val query = table.groupBy(intToLiteral(1))(intToLiteral(1))
-    resolverRunner.resolve(query)
+    runResolver(query)
   }
 
   test("Group by ordinal which refers to aggregate function") {
-    val resolverRunner = createResolverRunner()
     val query = table.groupBy(intToLiteral(1))($"count".function(intToLiteral(1)))
     checkError(
       exception = intercept[AnalysisException] {
-        resolverRunner.resolve(query)
+        runResolver(query)
       },
       condition = "GROUP_BY_POS_AGGREGATE",
       parameters =
@@ -116,11 +112,10 @@ class AggregateResolverSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Group by ordinal out of range") {
-    val resolverRunner = createResolverRunner()
     val query = table.groupBy(intToLiteral(100))(intToLiteral(1))
     checkError(
       exception = intercept[AnalysisException] {
-        resolverRunner.resolve(query)
+        runResolver(query)
       },
       condition = "GROUP_BY_POS_OUT_OF_RANGE",
       parameters = Map("index" -> "100", "size" -> "1")
@@ -128,22 +123,27 @@ class AggregateResolverSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Group by ordinal with a star in the aggregate expression list") {
-    val resolverRunner = createResolverRunner()
     val query = table.groupBy(intToLiteral(1))(star())
     checkError(
       exception = intercept[AnalysisException] {
-        resolverRunner.resolve(query)
+        runResolver(query)
       },
       condition = "STAR_GROUP_BY_POS",
       parameters = Map.empty
     )
   }
 
-  private def createResolverRunner(): ResolverRunner = {
-    val resolver = new Resolver(
-      catalogManager = spark.sessionState.catalogManager,
-      extensions = spark.sessionState.analyzer.singlePassResolverExtensions
+  private def runResolver(plan: LogicalPlan): LogicalPlan = {
+    val resolverRunner = new ResolverRunner(
+      resolver = new Resolver(
+        catalogManager = spark.sessionState.catalogManager,
+        extensions = spark.sessionState.analyzer.singlePassResolverExtensions
+      )
     )
-    new ResolverRunner(resolver)
+    resolverRunner.resolve(
+      plan = plan,
+      analyzerBridgeState = None,
+      tracker = new QueryPlanningTracker
+    )
   }
 }

@@ -56,16 +56,18 @@ class IllegalStateErrorsSuite extends SparkFunSuite {
     assert(error.getMessage.contains(currentStatus.toString))
   }
 
-  test("executionStateTransitionInvalidSessionNotStarted should construct error correctly") {
+  test("executionStateTransitionInvalidSessionStatus should construct error correctly") {
     val sessionId = "session-456"
     val sessionStatus = SessionStatus.Pending
+    val validStatuses = List(SessionStatus.Started, SessionStatus.Closed)
     val eventStatus = ExecuteStatus.Started
-    val error = IllegalStateErrors.executionStateTransitionInvalidSessionNotStarted(
+    val error = IllegalStateErrors.executionStateTransitionInvalidSessionStatus(
       sessionId,
       sessionStatus,
+      validStatuses,
       eventStatus)
     val expectedCondition = "SPARK_CONNECT_ILLEGAL_STATE." +
-      "STATE_CONSISTENCY_EXECUTION_STATE_TRANSITION_INVALID_SESSION_NOT_STARTED"
+      "STATE_CONSISTENCY_EXECUTION_STATE_TRANSITION_INVALID_SESSION_STATUS_MISMATCH"
     assert(error.getCondition.contains(expectedCondition))
     assert(error.getMessage.contains(sessionId))
     assert(error.getMessage.contains(sessionStatus.toString))
@@ -176,9 +178,10 @@ class IllegalStateErrorsSuite extends SparkFunSuite {
         ExecuteStatus.Pending,
         List(ExecuteStatus.Started),
         ExecuteStatus.Analyzed),
-      IllegalStateErrors.executionStateTransitionInvalidSessionNotStarted(
+      IllegalStateErrors.executionStateTransitionInvalidSessionStatus(
         "session",
         SessionStatus.Pending,
+        List(SessionStatus.Started, SessionStatus.Closed),
         ExecuteStatus.Started),
       IllegalStateErrors.executeHolderAlreadyExists("op"),
       IllegalStateErrors.executeHolderAlreadyExistsGraphId("graph"),

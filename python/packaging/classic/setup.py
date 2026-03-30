@@ -390,7 +390,6 @@ try:
             "Programming Language :: Python :: 3.13",
             "Programming Language :: Python :: 3.14",
             "Programming Language :: Python :: Implementation :: CPython",
-            "Programming Language :: Python :: Implementation :: PyPy",
             "Typing :: Typed",
         ],
         cmdclass={

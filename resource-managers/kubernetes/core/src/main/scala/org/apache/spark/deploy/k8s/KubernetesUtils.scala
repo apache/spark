@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s
 
-import java.io.{File, IOException}
+import java.io.File
 import java.net.URI
 import java.security.SecureRandom
 import java.util.{Collections, HexFormat, UUID}
@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, EnvVar, EnvVarBuilder, EnvVarSourceBuilder, HasMetadata, OwnerReferenceBuilder, Pod, PodBuilder, Quantity}
 import io.fabric8.kubernetes.client.KubernetesClient
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
@@ -37,7 +37,7 @@ import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 import org.apache.spark.util.DependencyUtils.downloadFile
-import org.apache.spark.util.Utils.getHadoopFileSystem
+import org.apache.spark.util.Utils.{getHadoopFileSystem, uploadFileToHadoopCompatibleFS}
 
 /**
  * :: DeveloperApi ::
@@ -331,23 +331,6 @@ object KubernetesUtils extends Logging {
             "spark.kubernetes.file.upload.path property.")
         }
       case _ => throw new SparkException("Spark configuration is missing...")
-    }
-  }
-
-  /**
-   * Upload a file to a Hadoop-compatible filesystem.
-   */
-  private def uploadFileToHadoopCompatibleFS(
-      src: Path,
-      dest: Path,
-      fs: FileSystem,
-      delSrc : Boolean = false,
-      overwrite: Boolean = true): Unit = {
-    try {
-      fs.copyFromLocalFile(delSrc, overwrite, src, dest)
-    } catch {
-      case e: IOException =>
-        throw new SparkException(s"Error uploading file ${src.getName}", e)
     }
   }
 

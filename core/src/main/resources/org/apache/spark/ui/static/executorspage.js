@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, Mustache, sorttable */
+/* global $, sorttable */
 
 import {
   createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, createTemplateURI,
@@ -269,9 +269,11 @@ $.extend($.fn.dataTableExt.oSort, {
   }
 });
 
-$(document).ajaxStop($.unblockUI);
+$(document).ajaxStop(function () {
+  $("#loading-overlay").addClass("d-none");
+});
 $(document).ajaxStart(function () {
-  $.blockUI({message: '<h3>Loading Executors Page...</h3>'});
+  $("#loading-overlay").removeClass("d-none");
 });
 
 function logsExist(execs) {
@@ -567,10 +569,9 @@ $(document).ready(function () {
         "allTotalExcluded": deadTotalExcluded
       };
 
-      var data = {executors: response, "execSummary": [activeSummary, deadSummary, totalSummary]};
       $.get(createTemplateURI(appId, "executorspage"), function (template) {
 
-        executorsSummary.append(Mustache.render($(template).filter("#executors-summary-template").html(), data));
+        executorsSummary.append($(template).filter("#executors-summary-template").html());
         var selector = "#active-executors-table";
         var conf = {
           "data": response,

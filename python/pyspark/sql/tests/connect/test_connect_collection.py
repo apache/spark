@@ -358,9 +358,9 @@ class SparkConnectCollectionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
                     count = 0
                     for row in iterator:
                         # This will raise an exception if the type is not as expected
-                        assert isinstance(
-                            row.b, expected_type
-                        ), f"Expected {expected_type_name}, got {type(row.b).__name__}"
+                        assert isinstance(row.b, expected_type), (
+                            f"Expected {expected_type_name}, got {type(row.b).__name__}"
+                        )
                         count += 1
                     # Ensure we actually processed rows
                     assert count > 0, "No rows were processed"

@@ -72,9 +72,23 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
       c.putBooleans(rowId, i, currentByte, bitOffset);
       bitOffset = (bitOffset + i) & 7;
     }
-    for (; i + 7 < total; i += 8) {
-      updateCurrentByte();
-      c.putBooleans(rowId + i, currentByte);
+    // Batch-read all full bytes in a single getBuffer call instead of per-byte in.read().
+    // getBuffer returns a slice with position=0 and remaining=fullBytes.
+    int fullBytes = (total - i) / 8;
+    if (fullBytes > 0) {
+      ByteBuffer buffer = getBuffer(fullBytes);
+      if (buffer.hasArray()) {
+        byte[] array = buffer.array();
+        int offset = buffer.arrayOffset() + buffer.position();
+        for (int j = 0; j < fullBytes; j++) {
+          c.putBooleans(rowId + i + j * 8, array[offset + j]);
+        }
+      } else {
+        for (int j = 0; j < fullBytes; j++) {
+          c.putBooleans(rowId + i + j * 8, buffer.get());
+        }
+      }
+      i += fullBytes * 8;
     }
     if (i < total) {
       updateCurrentByte();

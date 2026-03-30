@@ -42,7 +42,8 @@ class InternalFunction:
             sc = SparkContext._active_spark_context
             return Column(
                 sc._jvm.PythonSQLUtils.internalFn(  # type: ignore
-                    name, _to_seq(sc, cols, _to_java_column)  # type: ignore
+                    name,
+                    _to_seq(sc, cols, _to_java_column),  # type: ignore
                 )
             )
 

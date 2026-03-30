@@ -622,7 +622,9 @@ private[spark] object ClosureCleaner extends Logging {
       lambdaProxy: SerializedLambda): Option[F] = {
     val javaVersion = Runtime.version().feature()
     val useClone = System.getProperty("spark.cloneBasedClosureCleaner.enabled") == "true" ||
-      System.getenv("SPARK_CLONE_BASED_CLOSURE_CLEANER") == "1" || javaVersion >= 22
+      System.getenv("SPARK_CLONE_BASED_CLOSURE_CLEANER") == "1" || javaVersion >= 22 ||
+      (javaVersion >= 18 &&
+        System.getProperty("jdk.reflect.useDirectMethodHandle", "true") == "true")
 
     if (useClone) {
       val factory = makeClonedIndyLambdaFactory(indyLambda.getClass, lambdaProxy)

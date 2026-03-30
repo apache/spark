@@ -1186,16 +1186,16 @@ Project [id#x, id#x AS id2#x]
 -- !query
 DROP VIEW s1
 -- !query analysis
-DropTempViewCommand s1
+DropTempViewCommand s1, false
 
 
 -- !query
 DROP VIEW s2
 -- !query analysis
-DropTempViewCommand s2
+DropTempViewCommand s2, false
 
 
 -- !query
 DROP VIEW s3
 -- !query analysis
-DropTempViewCommand s3
+DropTempViewCommand s3, false

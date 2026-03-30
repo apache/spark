@@ -153,15 +153,13 @@ class ScalarArrowUDFTestsMixin:
         # |    |    |-- x: struct (nullable = false)
         # |    |    |    |-- c: integer (nullable = false)
         # |    |    |    |-- d: integer (nullable = false)
-        df = self.spark.sql(
-            """
+        df = self.spark.sql("""
             SELECT STRUCT(a, STRUCT(b, STRUCT(c, d) AS x) AS y) AS s
             FROM VALUES
             (1, 2, 3, 4),
             (-1, -2, -3, -4)
             AS tab(a, b, c, d)
-        """
-        )
+        """)
 
         schema = StructType(
             [
@@ -232,11 +230,9 @@ class ScalarArrowUDFTestsMixin:
         # |-- a: array (nullable = false)
         # |    |-- element: array (containsNull = false)
         # |    |    |-- element: integer (containsNull = true)
-        df = self.spark.sql(
-            """
+        df = self.spark.sql("""
             SELECT ARRAY(ARRAY(1,2,3),ARRAY(4,NULL),ARRAY(5,6,NULL)) AS arr
-            """
-        )
+            """)
 
         str_repr = arrow_udf(lambda s: pa.array(str(x.as_py()) for x in s), StringType())
         result = df.select(str_repr("arr").alias("s"))
@@ -272,15 +268,13 @@ class ScalarArrowUDFTestsMixin:
     def test_arrow_udf_input_dates(self):
         import pyarrow as pa
 
-        df = self.spark.sql(
-            """
+        df = self.spark.sql("""
             SELECT * FROM VALUES
             (1, DATE('2022-02-22')),
             (2, DATE('2023-02-22')),
             (3, DATE('2024-02-22'))
             AS tab(i, date)
-            """
-        )
+            """)
 
         @arrow_udf("int")
         def extract_year(d):
@@ -297,15 +291,13 @@ class ScalarArrowUDFTestsMixin:
     def test_arrow_udf_output_dates(self):
         import pyarrow as pa
 
-        df = self.spark.sql(
-            """
+        df = self.spark.sql("""
             SELECT * FROM VALUES
             (2022, 1, 5),
             (2023, 2, 6),
             (2024, 3, 7)
             AS tab(y, m, d)
-            """
-        )
+            """)
 
         @arrow_udf("date")
         def build_date(y, m, d):
@@ -329,15 +321,13 @@ class ScalarArrowUDFTestsMixin:
     def test_arrow_udf_input_timestamps(self):
         import pyarrow as pa
 
-        df = self.spark.sql(
-            """
+        df = self.spark.sql("""
             SELECT * FROM VALUES
             (1, TIMESTAMP('2019-04-12 15:50:01')),
             (2, TIMESTAMP('2020-04-12 15:50:02')),
             (3, TIMESTAMP('2021-04-12 15:50:03'))
             AS tab(i, ts)
-            """
-        )
+            """)
 
         @arrow_udf("int")
         def extract_second(d):
@@ -357,15 +347,13 @@ class ScalarArrowUDFTestsMixin:
 
         tz = self.spark.conf.get("spark.sql.session.timeZone")
 
-        df = self.spark.sql(
-            """
+        df = self.spark.sql("""
             SELECT * FROM VALUES
             (2022, 1, 5, 15, 0, 1),
             (2023, 2, 6, 16, 1, 2),
             (2024, 3, 7, 17, 2, 3)
             AS tab(y, m, d, h, mi, s)
-            """
-        )
+            """)
 
         @arrow_udf("timestamp")
         def build_ts(y, m, d, h, mi, s):
@@ -397,15 +385,13 @@ class ScalarArrowUDFTestsMixin:
     def test_arrow_udf_output_timestamps_ntz(self):
         import pyarrow as pa
 
-        df = self.spark.sql(
-            """
+        df = self.spark.sql("""
             SELECT * FROM VALUES
             (2022, 1, 5, 15, 0, 1),
             (2023, 2, 6, 16, 1, 2),
             (2024, 3, 7, 17, 2, 3)
             AS tab(y, m, d, h, mi, s)
-            """
-        )
+            """)
 
         @arrow_udf("timestamp_ntz")
         def build_ts(y, m, d, h, mi, s):
@@ -436,15 +422,13 @@ class ScalarArrowUDFTestsMixin:
     def test_arrow_udf_input_times(self):
         import pyarrow as pa
 
-        df = self.spark.sql(
-            """
+        df = self.spark.sql("""
             SELECT * FROM VALUES
             (1, TIME '12:34:56'),
             (2, TIME '1:2:3'),
             (3, TIME '0:58:59')
             AS tab(i, ts)
-            """
-        )
+            """)
 
         @arrow_udf("int")
         def extract_second(v):
@@ -465,15 +449,13 @@ class ScalarArrowUDFTestsMixin:
     def test_arrow_udf_output_times(self):
         import pyarrow as pa
 
-        df = self.spark.sql(
-            """
+        df = self.spark.sql("""
             SELECT * FROM VALUES
             (12, 34, 56),
             (1, 2, 3),
             (0, 58, 59)
             AS tab(h, mi, s)
-            """
-        )
+            """)
 
         @arrow_udf("time")
         def build_time(h, mi, s):

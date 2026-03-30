@@ -44,9 +44,10 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
   private final val ROW_FROM_TARGET = "__row_from_target"
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    // aligned is false when schema evolution is pending (see ResolveRowLevelCommandAssignments)
     case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
-      notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned &&
-        !m.needSchemaEvolution && matchedActions.isEmpty && notMatchedActions.size == 1 &&
+        notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned &&
+        matchedActions.isEmpty && notMatchedActions.size == 1 &&
         notMatchedBySourceActions.isEmpty =>
 
       EliminateSubqueryAliases(aliasedTable) match {
@@ -79,8 +80,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       }
 
     case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
-        notMatchedBySourceActions, _)
-      if m.resolved && m.rewritable && m.aligned && !m.needSchemaEvolution &&
+        notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned &&
         matchedActions.isEmpty && notMatchedBySourceActions.isEmpty =>
 
       EliminateSubqueryAliases(aliasedTable) match {
@@ -121,9 +121,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       }
 
     case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
-        notMatchedBySourceActions, _)
-      if m.resolved && m.rewritable && m.aligned && !m.needSchemaEvolution =>
-
+        notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned =>
       EliminateSubqueryAliases(aliasedTable) match {
         case r @ ExtractV2Table(tbl: SupportsRowLevelOperations) =>
           validateMergeIntoConditions(m)

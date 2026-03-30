@@ -19,6 +19,7 @@
 Spark related features. Usually, the features here are missing in pandas
 but Spark has it.
 """
+
 from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, Callable, Generic, List, Optional, Union
 
@@ -1257,7 +1258,7 @@ def _test() -> None:
     path = tempfile.mkdtemp()
     globs["path"] = path
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.spark.accessors,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

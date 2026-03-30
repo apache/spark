@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, Identifier, InMemoryCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, Identifier, InMemoryChangelogCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -134,7 +134,7 @@ class ProtoToParsedPlanTestSuite
   private val emptyProps: util.Map[String, String] = util.Collections.emptyMap()
 
   private val analyzer = {
-    val inMemoryCatalog = new InMemoryCatalog
+    val inMemoryCatalog = new InMemoryChangelogCatalog
     inMemoryCatalog.initialize("primary", CaseInsensitiveStringMap.empty())
     inMemoryCatalog.createNamespace(Array("tempdb"), emptyProps)
     inMemoryCatalog.createTable(

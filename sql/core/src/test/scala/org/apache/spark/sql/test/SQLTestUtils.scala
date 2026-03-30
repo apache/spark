@@ -33,7 +33,7 @@ import org.scalatest.{BeforeAndAfterAll, Suite, Tag}
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{classic, AnalysisException, Row}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
@@ -227,6 +227,8 @@ private[sql] trait SQLTestUtilsBase
   with BeforeAndAfterAll
   with SQLTestData
   with PlanTestBase { self: Suite =>
+
+  override protected def spark: classic.SparkSession
 
   protected def sparkContext = spark.sparkContext
 

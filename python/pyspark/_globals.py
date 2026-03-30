@@ -57,7 +57,7 @@ class _NoValueType:
     def __new__(cls):
         # ensure that only one instance exists
         if not cls.__instance:
-            cls.__instance = super(_NoValueType, cls).__new__(cls)
+            cls.__instance = super().__new__(cls)
         return cls.__instance
 
     # needed for python 2 to preserve identity through a pickle

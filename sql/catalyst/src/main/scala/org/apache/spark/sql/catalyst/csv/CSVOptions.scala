@@ -88,7 +88,7 @@ class CSVOptions(
       case Some(null) => default
       case Some(value) if value.length == 0 => '\u0000'
       case Some(value) if value.length == 1 => value.charAt(0)
-      case _ => throw QueryExecutionErrors.paramExceedOneCharError(paramName)
+      case Some(value) => throw QueryExecutionErrors.paramExceedOneCharError(paramName, value)
     }
   }
 
@@ -144,7 +144,8 @@ class CSVOptions(
     case Some(null) => None
     case Some(value) if value.length == 0 => None
     case Some(value) if value.length == 1 => Some(value.charAt(0))
-    case _ => throw QueryExecutionErrors.paramExceedOneCharError(CHAR_TO_ESCAPE_QUOTE_ESCAPING)
+    case Some(value) => throw QueryExecutionErrors.paramExceedOneCharError(
+      CHAR_TO_ESCAPE_QUOTE_ESCAPING, value)
   }
   val comment = getChar(COMMENT, '\u0000')
 

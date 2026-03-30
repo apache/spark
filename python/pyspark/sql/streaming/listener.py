@@ -64,7 +64,8 @@ class StreamingQueryListener(ABC):
     """
 
     def _set_spark_session(
-        self, session: "SparkSession"  # type: ignore[name-defined] # noqa: F821
+        self,
+        session: "SparkSession",  # type: ignore[name-defined] # noqa: F821
     ) -> None:
         if self.spark is None:
             self.spark = session
@@ -134,10 +135,8 @@ class StreamingQueryListener(ABC):
         if hasattr(self, "_jlistenerobj"):
             return self._jlistenerobj
 
-        self._jlistenerobj: "JavaObject" = (
-            SparkContext._jvm.PythonStreamingQueryListenerWrapper(  # type: ignore[union-attr]
-                JStreamingQueryListener(self)
-            )
+        self._jlistenerobj: "JavaObject" = SparkContext._jvm.PythonStreamingQueryListenerWrapper(  # type: ignore[union-attr]
+            JStreamingQueryListener(self)
         )
         return self._jlistenerobj
 
@@ -518,15 +517,17 @@ class StreamingQueryProgress(dict):
             sink=SinkProgress.fromJson(j["sink"]),
             numInputRows=j["numInputRows"] if "numInputRows" in j else None,
             inputRowsPerSecond=j["inputRowsPerSecond"] if "inputRowsPerSecond" in j else None,
-            processedRowsPerSecond=j["processedRowsPerSecond"]
-            if "processedRowsPerSecond" in j
-            else None,
-            observedMetrics={
-                k: Row(*row_dict.keys())(*row_dict.values())  # Assume no nested rows
-                for k, row_dict in j["observedMetrics"].items()
-            }
-            if "observedMetrics" in j
-            else {},
+            processedRowsPerSecond=(
+                j["processedRowsPerSecond"] if "processedRowsPerSecond" in j else None
+            ),
+            observedMetrics=(
+                {
+                    k: Row(*row_dict.keys())(*row_dict.values())  # Assume no nested rows
+                    for k, row_dict in j["observedMetrics"].items()
+                }
+                if "observedMetrics" in j
+                else {}
+            ),
         )
 
     @property
@@ -1128,7 +1129,7 @@ def _test() -> None:
 
     globs["spark"] = spark
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.streaming.listener,
         globs=globs,
     )

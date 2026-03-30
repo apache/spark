@@ -17,8 +17,12 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.Range
+import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 
@@ -821,6 +825,22 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     assert(desc.nonEmpty, "DESCRIBE FUNCTION should return results for extension functions")
   }
 
+  test("SECTION 12f: Extension - table function can be called unqualified") {
+    // Extension table function registered in TestExtensions (3-part key: system.builtin)
+    checkAnswer(
+      sql("SELECT * FROM test_ext_table_func()"),
+      Seq(Row(0L), Row(1L), Row(2L)))
+  }
+
+  test("SECTION 12g: Extension - table function with builtin qualification") {
+    checkAnswer(
+      sql("SELECT * FROM builtin.test_ext_table_func()"),
+      Seq(Row(0L), Row(1L), Row(2L)))
+    checkAnswer(
+      sql("SELECT * FROM system.builtin.test_ext_table_func()"),
+      Seq(Row(0L), Row(1L), Row(2L)))
+  }
+
   test("SECTION 13a: Legacy mode - CREATE TEMPORARY FUNCTION blocked when config is true") {
     withSQLConf("spark.sql.functionResolution.sessionOrder" -> "first") {
       // Try to create a SQL temp function that shadows a builtin
@@ -1070,6 +1090,8 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
 
       // 'system.builtin.abs' should still resolve to the true system builtin
       checkAnswer(sql("SELECT system.builtin.abs(-5)"), Row(5))
+      // Drop function before dropping DB so registry cache stays clean
+      sql("DROP FUNCTION IF EXISTS custom_builtin.abs")
     }
   }
 
@@ -1094,15 +1116,152 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
       } finally {
         sql("DROP TEMPORARY FUNCTION my_func")
       }
+      // Drop persistent function before dropping DB so registry cache stays clean
+      sql("DROP FUNCTION IF EXISTS custom_session.my_func")
     }
   }
 
   test("SECTION 15c: Fallback to Session Catalog - missing persistent func in 'builtin'") {
     withDatabase("builtin") {
       sql("CREATE DATABASE builtin")
-      // builtin.abs does NOT exist in the persistent 'builtin' database
-      // So 'builtin.abs' should fall back to the session catalog's builtin namespace
+      // builtin.abs does NOT exist in the persistent 'builtin' database.
+      // With default persistentCatalogFirst=false, builtin.abs resolves to system builtin.
       checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
+    }
+  }
+
+  test("SECTION 16: Default persistentCatalogFirst is false - system wins without config") {
+    withDatabase("builtin") {
+      sql("CREATE DATABASE builtin")
+      sql("CREATE FUNCTION builtin.abs(x INT) RETURNS INT RETURN x * 100")
+      checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
+      checkAnswer(sql("SELECT system.builtin.abs(-5)"), Row(5))
+      sql("DROP FUNCTION IF EXISTS builtin.abs")
+    }
+  }
+
+  test("SECTION 16a: persistentCatalogFirst=false (explicit) - system catalog wins") {
+    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "false") {
+      withDatabase("builtin") {
+        sql("CREATE DATABASE builtin")
+        sql("CREATE FUNCTION builtin.abs(x INT) RETURNS INT RETURN x * 100")
+        checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
+        checkAnswer(sql("SELECT system.builtin.abs(-5)"), Row(5))
+        sql("DROP FUNCTION IF EXISTS builtin.abs")
+      }
+    }
+  }
+
+  test("SECTION 16b: persistentCatalogFirst=true (legacy) - persistent catalog wins") {
+    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "true") {
+      withDatabase("builtin") {
+        sql("CREATE DATABASE builtin")
+        sql("CREATE FUNCTION builtin.abs(x INT) RETURNS INT RETURN x * 100")
+        checkAnswer(sql("SELECT builtin.abs(5)"), Row(500))
+        checkAnswer(sql("SELECT system.builtin.abs(-5)"), Row(5))
+        sql("DROP FUNCTION IF EXISTS builtin.abs")
+      }
+    }
+  }
+
+  test("SECTION 16c: persistentCatalogFirst=false - session namespace prioritization") {
+    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "false") {
+      withDatabase("session") {
+        sql("CREATE DATABASE session")
+        sql("CREATE FUNCTION session.test_func() RETURNS STRING RETURN 'persistent'")
+        sql("CREATE TEMPORARY FUNCTION test_func() RETURNS STRING RETURN 'temp'")
+        try {
+          checkAnswer(sql("SELECT session.test_func()"), Row("temp"))
+          checkAnswer(sql("SELECT system.session.test_func()"), Row("temp"))
+        } finally {
+          sql("DROP TEMPORARY FUNCTION test_func")
+        }
+        sql("DROP FUNCTION IF EXISTS session.test_func")
+      }
+    }
+  }
+
+  test("SECTION 16d: persistentCatalogFirst=true - persistent catalog wins") {
+    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "true") {
+      withDatabase("session") {
+        sql("CREATE DATABASE session")
+        sql("CREATE FUNCTION session.test_func() RETURNS STRING RETURN 'persistent'")
+        checkAnswer(sql("SELECT session.test_func()"), Row("persistent"))
+        sql("DROP FUNCTION IF EXISTS session.test_func")
+      }
+    }
+  }
+
+  test("SECTION 16e: persistentCatalogFirst=false - fallback when persistent doesn't exist") {
+    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "false") {
+      withDatabase("builtin") {
+        sql("CREATE DATABASE builtin")
+        checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
+        checkAnswer(sql("SELECT builtin.coalesce(1, 2)"), Row(1))
+      }
+    }
+  }
+
+  test("SECTION 16f: persistentCatalogFirst=true - fallback when persistent doesn't exist") {
+    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "true") {
+      withDatabase("builtin") {
+        sql("CREATE DATABASE builtin")
+        checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
+        checkAnswer(sql("SELECT builtin.coalesce(1, 2)"), Row(1))
+      }
+    }
+  }
+
+  test("SECTION 16g: persistentCatalogFirst=true - persistent wins over temp") {
+    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "true") {
+      withDatabase("session") {
+        sql("CREATE DATABASE session")
+        sql("CREATE FUNCTION session.test_func() RETURNS STRING RETURN 'persistent'")
+        sql("CREATE TEMPORARY FUNCTION test_func() RETURNS STRING RETURN 'temp'")
+        try {
+          checkAnswer(sql("SELECT session.test_func()"), Row("persistent"))
+        } finally {
+          sql("DROP TEMPORARY FUNCTION test_func")
+        }
+        sql("DROP FUNCTION IF EXISTS session.test_func")
+      }
+    }
+  }
+
+  test("SECTION 16h: persistentCatalogFirst=false - table function resolves to system builtin") {
+    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "false") {
+      withDatabase("builtin") {
+        sql("CREATE DATABASE builtin")
+        // No persistent table function named range; builtin.range(3) resolves to system
+        checkAnswer(sql("SELECT * FROM builtin.range(3)"), Seq(Row(0), Row(1), Row(2)))
+        checkAnswer(sql("SELECT * FROM system.builtin.range(3)"), Seq(Row(0), Row(1), Row(2)))
+      }
+    }
+  }
+
+  test("SECTION 16i: persistentCatalogFirst=true - persistent table function wins") {
+    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "true") {
+      withDatabase("builtin") {
+        sql("CREATE DATABASE builtin")
+        sql("CREATE FUNCTION builtin.my_tvf() RETURNS TABLE(id INT) RETURN SELECT 1 AS id")
+        try {
+          checkAnswer(sql("SELECT * FROM builtin.my_tvf()"), Row(1))
+          checkAnswer(sql("SELECT * FROM system.builtin.range(2)"), Seq(Row(0), Row(1)))
+        } finally {
+          sql("DROP FUNCTION IF EXISTS builtin.my_tvf")
+        }
+      }
+    }
+  }
+
+  test("SECTION 16j: Non-default catalog - builtin still resolves to system when prioritized") {
+    withSQLConf(
+      "spark.sql.catalog.othercat" -> classOf[InMemoryTableCatalog].getName,
+      SQLConf.DEFAULT_CATALOG.key -> "othercat",
+      "spark.sql.legacy.persistentCatalogFirst" -> "false") {
+      // Current catalog is othercat (no builtin namespace); builtin.abs resolves to system
+      checkAnswer(sql("SELECT builtin.abs(-5)"), Row(5))
+      checkAnswer(sql("SELECT system.builtin.abs(-5)"), Row(5))
     }
   }
 }
@@ -1113,10 +1272,10 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
  */
 class TestExtensions extends (SparkSessionExtensions => Unit) {
   override def apply(extensions: SparkSessionExtensions): Unit = {
-    // Register a mock extension function
+    // Register a mock extension scalar function
     // Use the full 11-parameter ExpressionInfo constructor
     extensions.injectFunction(
-      (org.apache.spark.sql.catalyst.FunctionIdentifier("test_ext_func"),
+      (FunctionIdentifier("test_ext_func"),
        new ExpressionInfo(
          "org.apache.spark.sql.FunctionQualificationSuite",  // className
          "",                                                  // db
@@ -1130,6 +1289,23 @@ class TestExtensions extends (SparkSessionExtensions => Unit) {
          "",                                                  // deprecated
          ""),                                                 // source (empty is allowed)
        (exprs: Seq[Expression]) => Literal(9999, IntegerType))
+    )
+    // Register a mock extension table function (returns 3 rows: 0, 1, 2)
+    extensions.injectTableFunction(
+      (FunctionIdentifier("test_ext_table_func"),
+       new ExpressionInfo(
+         "org.apache.spark.sql.FunctionQualificationSuite",
+         "",
+         "test_ext_table_func",
+         "Returns a 3-row table for testing",
+         "",
+         "",
+         "",
+         "table_funcs",
+         "4.2.0",
+         "",
+         ""),
+       (_: Seq[Expression]) => Range(0, 3, 1, None, Range.getOutputAttrs, isStreaming = false))
     )
   }
 }

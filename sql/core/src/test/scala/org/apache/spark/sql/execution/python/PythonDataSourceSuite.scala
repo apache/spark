@@ -533,7 +533,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
          |        return []
          |
          |    def read(self, partition):
-         |        if partition is None:
+         |        if partition.value is None:
          |            yield ("success", )
          |        else:
          |            yield ("failed", )

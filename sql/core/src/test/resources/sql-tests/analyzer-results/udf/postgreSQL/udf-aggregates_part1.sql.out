@@ -409,7 +409,7 @@ Aggregate [count(1) AS count(1)#xL, sum(x#x) AS sum(x)#xL, regr_sxx(cast(y#x as 
 -- !query
 DROP VIEW regr_test
 -- !query analysis
-DropTempViewCommand regr_test
+DropTempViewCommand regr_test, false
 
 
 -- !query

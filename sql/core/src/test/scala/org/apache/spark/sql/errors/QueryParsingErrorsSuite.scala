@@ -672,6 +672,48 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       context = ExpectedContext(fragment = "struct", start = 30, stop = 35))
   }
 
+  test("INCOMPLETE_TYPE_DEFINITION: error position for multi-line CREATE FUNCTION parameter") {
+    // The incomplete STRUCT is on line 3. The error should reference its position, not line 2.
+    val sqlText =
+      """CREATE OR REPLACE FUNCTION error_log_udf_v2(
+        |        log_struct STRUCT<level STRING, message STRING>,
+        |    request_vars_struct STRUCT
+        |)
+        |RETURNS STRING
+        |  RETURN CONCAT(
+        |       'Error: ', log_struct.level, ' ', log_struct.message, ' ', request_vars_struct
+        |   )""".stripMargin
+    checkError(
+      exception = parseException(sqlText),
+      condition = "INCOMPLETE_TYPE_DEFINITION.STRUCT",
+      sqlState = "42K01",
+      context = ExpectedContext(fragment = "STRUCT", start = 126, stop = 131))
+  }
+
+  test("INCOMPLETE_TYPE_DEFINITION: error position for multi-line CREATE FUNCTION return type") {
+    val sqlText =
+      """CREATE OR REPLACE FUNCTION my_func(x INT)
+        |RETURNS STRUCT
+        |  RETURN x""".stripMargin
+    checkError(
+      exception = parseException(sqlText),
+      condition = "INCOMPLETE_TYPE_DEFINITION.STRUCT",
+      sqlState = "42K01",
+      context = ExpectedContext(fragment = "STRUCT", start = 50, stop = 55))
+  }
+
+  test("INCOMPLETE_TYPE_DEFINITION: error position for multi-line CREATE FUNCTION return params") {
+    val sqlText =
+      """CREATE OR REPLACE FUNCTION my_func(x INT)
+        |RETURNS TABLE(result STRUCT)
+        |  RETURN SELECT x""".stripMargin
+    checkError(
+      exception = parseException(sqlText),
+      condition = "INCOMPLETE_TYPE_DEFINITION.STRUCT",
+      sqlState = "42K01",
+      context = ExpectedContext(fragment = "STRUCT", start = 63, stop = 68))
+  }
+
   test("INCOMPLETE_TYPE_DEFINITION: map type definition is incomplete") {
     // Cast simple map without specifying element type
     checkError(

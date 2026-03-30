@@ -804,8 +804,7 @@ class GroupedAggArrowUDFTestsMixin:
     def test_time_min(self):
         import pyarrow as pa
 
-        df = self.spark.sql(
-            """
+        df = self.spark.sql("""
             SELECT * FROM VALUES
             (1, TIME '12:34:56'),
             (1, TIME '1:2:3'),
@@ -813,8 +812,7 @@ class GroupedAggArrowUDFTestsMixin:
             (2, TIME '10:58:59'),
             (2, TIME '10:00:03')
             AS tab(i, t)
-            """
-        )
+            """)
 
         @arrow_udf("time", ArrowUDFType.GROUPED_AGG)
         def agg_min_time(v):

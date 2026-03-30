@@ -359,6 +359,8 @@ object JsonToStructs {
        {"a":1}
       > SELECT _FUNC_(array(map('a', 1)));
        [{"a":1}]
+      > SELECT _FUNC_(named_struct('b', 1, 'a', 2), map('sortKeys', 'true'));
+       {"a":2,"b":1}
   """,
   group = "json_funcs",
   since = "2.2.0")

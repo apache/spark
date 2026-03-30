@@ -42,7 +42,7 @@ jobs:
         run-id: ${{ github.event.workflow_run.id }}
         pattern: "test-*"
     - name: Publish test report
-      uses: scacap/action-surefire-report@v1
+      uses: scacap/action-surefire-report@5609ce4db72c09db044803b344a8968fd1f315da
       with:
         check_name: Report test results
         github_token: ${{ secrets.GITHUB_TOKEN }}

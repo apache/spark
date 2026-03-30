@@ -24,6 +24,16 @@ from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class FrameCumulativeMixin:
+    def test_cumulative_reduction_preserves_none_name(self):
+        pdf = pd.DataFrame({"A": [2.0, 5.0, 1.0], "B": [1.0, None, 0.0]})
+        psdf = ps.from_pandas(pdf)
+
+        expected = pdf.cumsum().sum()
+        actual = psdf.cumsum().sum()
+
+        self.assert_eq(actual, expected)
+        self.assertEqual(actual._to_pandas().name, expected.name)
+
     def _test_cummin(self, pdf, psdf):
         self.assert_eq(pdf.cummin(), psdf.cummin())
         self.assert_eq(pdf.cummin(skipna=False), psdf.cummin(skipna=False))

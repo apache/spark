@@ -238,7 +238,23 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("asinh") {
-    testUnary(Asinh, (x: Double) => StrictMath.log(x + math.sqrt(x * x + 1.0)))
+    // fdlibm-aligned reference function
+    def asinhRef(x: Double): Double = {
+      val ax = Math.abs(x)
+      val w = if (ax.isInfinite || ax.isNaN) {
+        ax
+      } else if (ax < 1.0 / (1 << 28)) {
+        ax
+      } else if (ax > (1 << 28)) {
+        StrictMath.log(ax) + StrictMath.log(2.0)
+      } else if (ax > 2.0) {
+        StrictMath.log(2.0 * ax + 1.0 / (math.sqrt(x * x + 1.0) + ax))
+      } else {
+        StrictMath.log1p(ax + x * x / (1.0 + math.sqrt(1.0 + x * x)))
+      }
+      Math.copySign(w, x)
+    }
+    testUnary(Asinh, asinhRef)
     checkConsistencyBetweenInterpretedAndCodegen(Asinh, DoubleType)
 
     checkEvaluation(Asinh(Double.NegativeInfinity), Double.NegativeInfinity)
@@ -280,8 +296,25 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("acosh") {
-    testUnary(Acosh, (x: Double) => StrictMath.log(x + math.sqrt(x * x - 1.0)))
-    checkConsistencyBetweenInterpretedAndCodegen(Cosh, DoubleType)
+    // fdlibm-aligned reference function
+    def acoshRef(x: Double): Double = {
+      if (x < 1.0) {
+        Double.NaN
+      } else if (x >= (1 << 28)) {
+        StrictMath.log(x) + StrictMath.log(2.0)
+      } else if (x == 1.0) {
+        0.0
+      } else if (x > 2.0) {
+        val t = x * x
+        StrictMath.log(2.0 * x - 1.0 / (x + math.sqrt(t - 1.0)))
+      } else {
+        val t = x - 1.0
+        StrictMath.log1p(t + math.sqrt(2.0 * t + t * t))
+      }
+    }
+    testUnary(Acosh, acoshRef, (10 to 20).map(_ * 0.1))
+    testUnary(Acosh, acoshRef, (-20 to 9).map(_ * 0.1), expectNaN = true)
+    checkConsistencyBetweenInterpretedAndCodegen(Acosh, DoubleType)
 
     val nullLit = Literal.create(null, NullType)
     val doubleNullLit = Literal.create(null, DoubleType)
@@ -1010,4 +1043,64 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         s"Expression $expr should be context independent foldable")
     }
   }
+
+  test("SPARK-55557: hyperbolic functions should not overflow with large inputs") {
+    checkEvaluation(Asinh(Double.MaxValue), 710.4758600739439)
+    checkEvaluation(Asinh(Math.sqrt(Double.MaxValue)), 355.58450362725193)
+    checkEvaluation(Acosh(Double.MaxValue), 710.4758600739439)
+    checkEvaluation(Acosh(Math.sqrt(Double.MaxValue)), 355.58450362725193)
+    checkEvaluation(Asinh(Double.MinValue), -710.4758600739439)
+    checkEvaluation(Asinh(-Math.sqrt(Double.MaxValue)), -355.58450362725193)
+    // Large negative values below the overflow threshold
+    checkEvaluation(Asinh(-1E100), -230.95165647996453)
+    checkEvaluation(Asinh(-1E50), -115.82240183026224)
+    checkNaN(Acosh(Double.MinValue))
+    checkNaN(Acosh(-Math.sqrt(Double.MaxValue) + 1))
+    checkNaN(Acosh(-Math.sqrt(Double.MaxValue) + 2))
+  }
+
+  test("SPARK-56089: multiple Asinh/Acosh in same codegen scope should not collide") {
+    // When multiple Asinh/Acosh expressions are codegen'd in the same scope with
+    // non-nullable children, nullSafeCodeGen emits code without an if-block wrapper.
+    // Without ctx.freshName(), hardcoded variable names (ax, w, t) cause
+    // "Redefinition of local variable" compilation errors.
+    checkEvaluation(
+      Add(Asinh(Literal(1.0)), Asinh(Literal(2.0))),
+      0.881373587019543 + 1.4436354751788103)
+    checkEvaluation(
+      Add(Acosh(Literal(1.5)), Acosh(Literal(2.0))),
+      0.9624236501192069 + 1.3169578969248166)
+  }
+
+  test("SPARK-56089: asinh/acosh fdlibm algorithm coverage") {
+    // asinh: hardcoded reference values cross-verified against C libm (glibc/musl fdlibm)
+    checkEvaluation(Asinh(Literal(0.5)), 0.48121182505960347, EmptyRow)
+    checkEvaluation(Asinh(Literal(1.0)), 0.881373587019543, EmptyRow)
+    checkEvaluation(Asinh(Literal(2.0)), 1.4436354751788103, EmptyRow)
+    checkEvaluation(Asinh(Literal(10.0)), 2.99822295029797, EmptyRow)
+    checkEvaluation(Asinh(Literal(1e8)), 19.11382792451231, EmptyRow)
+    // |x| < 2^-28 (identity branch)
+    checkEvaluation(Asinh(Literal(1.0e-10)), 1.0e-10, EmptyRow)
+    // |x| > 2^28 branch
+    val asinhExpected = Math.log(Double.MaxValue) + StrictMath.log(2.0)
+    checkEvaluation(Asinh(Literal(Double.MaxValue)), asinhExpected, EmptyRow)
+    checkEvaluation(Asinh(Literal(-Double.MaxValue)), -asinhExpected, EmptyRow)
+    // infinity
+    checkEvaluation(Asinh(Literal(Double.PositiveInfinity)), Double.PositiveInfinity, EmptyRow)
+    checkEvaluation(Asinh(Literal(Double.NegativeInfinity)), Double.NegativeInfinity, EmptyRow)
+
+    // acosh: hardcoded reference values cross-verified against C libm (glibc/musl fdlibm)
+    checkEvaluation(Acosh(Literal(1.0)), 0.0, EmptyRow)
+    checkEvaluation(Acosh(Literal(1.5)), 0.9624236501192069, EmptyRow)
+    checkEvaluation(Acosh(Literal(2.0)), 1.3169578969248166, EmptyRow)
+    checkEvaluation(Acosh(Literal(10.0)), 2.993222846126381, EmptyRow)
+    checkEvaluation(Acosh(Literal(1e8)), 19.11382792451231, EmptyRow)
+    // x >= 2^28 branch
+    val acoshExpected = Math.log(Double.MaxValue) + StrictMath.log(2.0)
+    checkEvaluation(Acosh(Literal(Double.MaxValue)), acoshExpected, EmptyRow)
+    checkEvaluation(Acosh(Literal(Double.PositiveInfinity)), Double.PositiveInfinity)
+    // x < 1 => NaN
+    checkEvaluation(Acosh(Literal(0.5)), Double.NaN, EmptyRow)
+  }
+
 }

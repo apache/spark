@@ -90,8 +90,12 @@ class Observation:
         if name is not None:
             if not isinstance(name, str):
                 raise PySparkTypeError(
-                    errorClass="NOT_STR",
-                    messageParameters={"arg_name": "name", "arg_type": type(name).__name__},
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "arg_name": "name",
+                        "expected_type": "str",
+                        "arg_type": type(name).__name__,
+                    },
                 )
             if name == "":
                 raise PySparkValueError(
@@ -164,7 +168,7 @@ def _test() -> None:
     sc = SparkContext("local[4]", "PythonTest")
     globs["spark"] = SparkSession(sc)
 
-    (failure_count, test_count) = doctest.testmod(pyspark.sql.observation, globs=globs)
+    failure_count, test_count = doctest.testmod(pyspark.sql.observation, globs=globs)
     sc.stop()
     if failure_count:
         sys.exit(-1)

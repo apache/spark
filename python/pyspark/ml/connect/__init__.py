@@ -16,6 +16,11 @@
 #
 
 """Spark Connect Python Client - ML module"""
+
+from pyspark.sql.connect.utils import check_dependencies
+
+check_dependencies()
+
 from pyspark.ml.connect.base import (
     Estimator,
     Transformer,

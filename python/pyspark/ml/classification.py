@@ -1261,8 +1261,7 @@ class LogisticRegression(
         lowerBoundsOnIntercepts: Optional[Vector] = ...,
         upperBoundsOnIntercepts: Optional[Vector] = ...,
         maxBlockSizeInMB: float = ...,
-    ):
-        ...
+    ): ...
 
     @overload
     def __init__(
@@ -1288,8 +1287,7 @@ class LogisticRegression(
         lowerBoundsOnIntercepts: Optional[Vector] = ...,
         upperBoundsOnIntercepts: Optional[Vector] = ...,
         maxBlockSizeInMB: float = ...,
-    ):
-        ...
+    ): ...
 
     @keyword_only
     def __init__(
@@ -1360,8 +1358,7 @@ class LogisticRegression(
         lowerBoundsOnIntercepts: Optional[Vector] = ...,
         upperBoundsOnIntercepts: Optional[Vector] = ...,
         maxBlockSizeInMB: float = ...,
-    ) -> "LogisticRegression":
-        ...
+    ) -> "LogisticRegression": ...
 
     @overload
     def setParams(
@@ -1387,8 +1384,7 @@ class LogisticRegression(
         lowerBoundsOnIntercepts: Optional[Vector] = ...,
         upperBoundsOnIntercepts: Optional[Vector] = ...,
         maxBlockSizeInMB: float = ...,
-    ) -> "LogisticRegression":
-        ...
+    ) -> "LogisticRegression": ...
 
     @keyword_only
     @since("1.3.0")
@@ -3569,7 +3565,7 @@ class OneVsRest(
                 weightCol = self.getWeightCol()
             else:
                 warnings.warn(
-                    "weightCol is ignored, " "as it is not supported by {} now.".format(classifier)
+                    "weightCol is ignored, as it is not supported by {} now.".format(classifier)
                 )
 
         if weightCol:
@@ -4351,7 +4347,7 @@ if __name__ == "__main__":
     temp_path = tempfile.mkdtemp()
     globs["temp_path"] = temp_path
     try:
-        (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+        failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
         spark.stop()
     finally:
         from shutil import rmtree

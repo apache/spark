@@ -288,7 +288,8 @@ object Literal {
         assert(u.ignoreNulls.isEmpty)
         assert(u.orderingWithinGroup.isEmpty)
         assert(!u.isInternal)
-        FunctionRegistry.builtin.lookupFunction(FunctionIdentifier(u.nameParts.head), u.arguments)
+        FunctionRegistry.builtin.lookupFunction(
+          FunctionIdentifier(u.nameParts.head), u.arguments)
     }
   }
 }

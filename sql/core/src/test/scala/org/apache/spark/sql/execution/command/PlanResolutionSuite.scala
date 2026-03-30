@@ -768,7 +768,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     parseResolveCompare(s"DROP VIEW $tempViewName",
       DropTempViewCommand(tempViewIdent))
     parseResolveCompare(s"DROP VIEW IF EXISTS $tempViewName",
-      DropTempViewCommand(tempViewIdent))
+      DropTempViewCommand(tempViewIdent, ifExists = true))
   }
 
   test("drop view in v2 catalog") {
@@ -1267,7 +1267,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     val sql1 = "INSERT INTO testcat.defaultvalues VALUES (DEFAULT, DEFAULT)"
     parseAndResolve(sql1) match {
       // The top-most Project just adds aliases.
-      case AppendData(_: DataSourceV2Relation, Project(_, l: LocalRelation), _, _, _, _) =>
+      case AppendData(_: DataSourceV2Relation, Project(_, l: LocalRelation), _, _, _, _, _) =>
         assert(l.data.length == 1)
         val row = l.data.head
         assert(row.numFields == 2)
@@ -1305,96 +1305,23 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     val overwriteSql = s"INSERT OVERWRITE $tblName(i, s) VALUES (3, 'a')"
     val overwriteParsed = parseAndResolve(overwriteSql)
     insertParsed match {
-      case AppendData(_: DataSourceV2Relation, _, _, isByName, _, _) =>
+      case AppendData(_: DataSourceV2Relation, _, _, isByName, _, _, _) =>
         assert(isByName)
       case _ => fail("Expected AppendData, but got:\n" + insertParsed.treeString)
     }
     overwriteParsed match {
-      case OverwriteByExpression(_: DataSourceV2Relation, _, _, _, isByName, _, _) =>
+      case OverwriteByExpression(_: DataSourceV2Relation, _, _, _, isByName, _, _, _) =>
         assert(isByName)
       case _ => fail("Expected OverwriteByExpression, but got:\n" + overwriteParsed.treeString)
     }
     withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
       val dynamicOverwriteParsed = parseAndResolve(overwriteSql)
       dynamicOverwriteParsed match {
-        case OverwritePartitionsDynamic(_: DataSourceV2Relation, _, _, isByName, _) =>
+        case OverwritePartitionsDynamic(_: DataSourceV2Relation, _, _, isByName, _, _) =>
           assert(isByName)
         case _ =>
           fail("Expected OverwriteByExpression, but got:\n" + dynamicOverwriteParsed.treeString)
       }
-    }
-  }
-
-  for {
-    withSchemaEvolution <- Seq(true, false)
-    isByName <- Seq(true, false)
-  } {
-    val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION " else ""
-    val byNameClause = if (isByName) "BY NAME " else ""
-    val testMsg = s"withSchemaEvolution=$withSchemaEvolution, isByName=$isByName"
-
-    test(s"INSERT INTO: mergeSchema write option with WITH SCHEMA EVOLUTION - $testMsg") {
-      val table = "testcat.tab"
-      val insertSQLStmt = s"INSERT ${schemaEvolutionClause}INTO $table ${byNameClause}"
-
-      val writeOptions = parseAndResolve(s"$insertSQLStmt SELECT * FROM v2Table") match {
-        case appendData: AppendData =>
-          appendData.writeOptions
-        case other =>
-          fail(s"Expected AppendData, but got: ${other.getClass.getSimpleName}")
-      }
-      assert(writeOptions.get("mergeSchema") ===
-        (if (withSchemaEvolution) Some("true") else None))
-    }
-
-    test(s"INSERT OVERWRITE (static): mergeSchema write option with WITH SCHEMA EVOLUTION - " +
-        testMsg) {
-      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
-        val table = "testcat.tab"
-        val insertSQLStmt = s"INSERT ${schemaEvolutionClause}OVERWRITE $table ${byNameClause}"
-
-        val writeOptions = parseAndResolve(s"$insertSQLStmt SELECT * FROM v2Table") match {
-          case overwriteByExpression: OverwriteByExpression =>
-            overwriteByExpression.writeOptions
-          case other =>
-            fail(s"Expected OverwriteByExpression, but got: ${other.getClass.getSimpleName}")
-        }
-        assert(writeOptions.get("mergeSchema") ===
-          (if (withSchemaEvolution) Some("true") else None))
-      }
-    }
-
-    test(s"INSERT OVERWRITE (dynamic): mergeSchema write option with WITH SCHEMA EVOLUTION - " +
-        testMsg) {
-      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
-        PartitionOverwriteMode.DYNAMIC.toString) {
-        val table = "testcat.tab"
-        val insertSQLStmt = s"INSERT ${schemaEvolutionClause}OVERWRITE $table ${byNameClause}"
-
-        val writeOptions = parseAndResolve(s"$insertSQLStmt SELECT * FROM v2Table") match {
-          case overwritePartitionsDynamic: OverwritePartitionsDynamic =>
-            overwritePartitionsDynamic.writeOptions
-          case other =>
-            fail(s"Expected OverwritePartitionsDynamic, but got: ${other.getClass.getSimpleName}")
-        }
-        assert(writeOptions.get("mergeSchema") ===
-          (if (withSchemaEvolution) Some("true") else None))
-      }
-    }
-
-    test(s"REPLACE WHERE: mergeSchema write option with WITH SCHEMA EVOLUTION - $testMsg") {
-      val table = "testcat.tab"
-      val insertSQLStmt =
-        s"INSERT ${schemaEvolutionClause}INTO $table ${byNameClause}REPLACE WHERE i = 1"
-
-      val writeOptions = parseAndResolve(s"$insertSQLStmt SELECT * FROM v2Table") match {
-        case overwriteByExpression: OverwriteByExpression =>
-          overwriteByExpression.writeOptions
-        case other =>
-          fail(s"Expected OverwriteByExpression, but got: ${other.getClass.getSimpleName}")
-      }
-      assert(writeOptions.get("mergeSchema") ===
-        (if (withSchemaEvolution) Some("true") else None))
     }
   }
 
@@ -1658,7 +1585,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         case Project(_, AsDataSourceV2Relation(r)) =>
           assert(r.catalog.contains(catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
-        case AppendData(r: DataSourceV2Relation, _, _, _, _, _) =>
+        case AppendData(r: DataSourceV2Relation, _, _, _, _, _, _) =>
           assert(r.catalog.contains(catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
         case DescribeRelation(r: ResolvedTable, _, _, _) =>

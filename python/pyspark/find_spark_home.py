@@ -24,13 +24,13 @@ import os
 import sys
 
 
-def _find_spark_home():
+def _find_spark_home() -> str:
     """Find the SPARK_HOME."""
     # If the environment has SPARK_HOME set trust it.
     if "SPARK_HOME" in os.environ:
         return os.environ["SPARK_HOME"]
 
-    def is_spark_home(path):
+    def is_spark_home(path: str) -> bool:
         """Takes a path and returns true if the provided path could be a reasonable SPARK_HOME"""
         return os.path.isfile(os.path.join(path, "bin/spark-submit")) and (
             os.path.isdir(os.path.join(path, "jars"))
@@ -52,19 +52,16 @@ def _find_spark_home():
         ]
 
     # Add the path of the PySpark module if it exists
-    import_error_raised = False
     from importlib.util import find_spec
 
-    try:
-        module_home = os.path.dirname(find_spec("pyspark").origin)
+    spec = find_spec("pyspark")
+    if spec is not None and spec.origin is not None:
+        module_home = os.path.dirname(spec.origin)
         paths.append(os.path.join(module_home, spark_dist_dir))
         paths.append(module_home)
         # If we are installed in edit mode also look two dirs up
         # Downloading different versions are not supported in edit mode.
         paths.append(os.path.join(module_home, "../../"))
-    except ImportError:
-        # Not pip installed no worries
-        import_error_raised = True
 
     # Normalize the paths
     paths = [os.path.abspath(p) for p in paths]
@@ -73,21 +70,20 @@ def _find_spark_home():
         return next(path for path in paths if is_spark_home(path))
     except StopIteration:
         print("Could not find valid SPARK_HOME while searching {0}".format(paths), file=sys.stderr)
-        if import_error_raised:
-            print(
-                "\nDid you install PySpark via a package manager such as pip or Conda? If so,\n"
-                "PySpark was not found in your Python environment. It is possible your\n"
-                "Python environment does not properly bind with your package manager.\n"
-                "\nPlease check your default 'python' and if you set PYSPARK_PYTHON and/or\n"
-                "PYSPARK_DRIVER_PYTHON environment variables, and see if you can import\n"
-                "PySpark, for example, 'python -c 'import pyspark'.\n"
-                "\nIf you cannot import, you can install by using the Python executable directly,\n"
-                "for example, 'python -m pip install pyspark [--user]'. Otherwise, you can also\n"
-                "explicitly set the Python executable, that has PySpark installed, to\n"
-                "PYSPARK_PYTHON or PYSPARK_DRIVER_PYTHON environment variables, for example,\n"
-                "'PYSPARK_PYTHON=python3 pyspark'.\n",
-                file=sys.stderr,
-            )
+        print(
+            "\nDid you install PySpark via a package manager such as pip or Conda? If so,\n"
+            "PySpark was not found in your Python environment. It is possible your\n"
+            "Python environment does not properly bind with your package manager.\n"
+            "\nPlease check your default 'python' and if you set PYSPARK_PYTHON and/or\n"
+            "PYSPARK_DRIVER_PYTHON environment variables, and see if you can import\n"
+            "PySpark, for example, 'python -c 'import pyspark'.\n"
+            "\nIf you cannot import, you can install by using the Python executable directly,\n"
+            "for example, 'python -m pip install pyspark [--user]'. Otherwise, you can also\n"
+            "explicitly set the Python executable, that has PySpark installed, to\n"
+            "PYSPARK_PYTHON or PYSPARK_DRIVER_PYTHON environment variables, for example,\n"
+            "'PYSPARK_PYTHON=python3 pyspark'.\n",
+            file=sys.stderr,
+        )
         sys.exit(-1)
 
 

@@ -76,16 +76,19 @@ class LowLatencyMemoryStream[A: Encoder](
   private val records =
     Seq.fill(numPartitions)(new ListBuffer[(UnsafeRow, Long)]())
 
+  @GuardedBy("this")
+  private var numRecords: Long = 0L
+
   private val recordEndpoint = new LowLatencyMemoryStreamEndpoint(records, this)
   @volatile private var endpointRef: RpcEndpointRef = _
 
   override def addData(data: IterableOnce[A]): Offset = synchronized {
     // Distribute data evenly among partition lists.
     val timestamp = clock.getTimeMillis()
-    data.iterator.to(Seq).zipWithIndex.map {
-      case (item, index) =>
-        val partitionId = index % numPartitions
-        records(partitionId) += ((toRow(item).copy().asInstanceOf[UnsafeRow], timestamp))
+    data.iterator.foreach { item =>
+      val partitionId: Int = (numRecords % numPartitions).toInt
+      records(partitionId) += ((toRow(item).copy().asInstanceOf[UnsafeRow], timestamp))
+      numRecords += 1
     }
 
     // The new target offset is the offset where all records in all partitions have been processed.
@@ -102,6 +105,7 @@ class LowLatencyMemoryStream[A: Encoder](
     val timestamp = clock.getTimeMillis()
     data.iterator.foreach { item =>
       records(partitionId) += ((toRow(item).copy().asInstanceOf[UnsafeRow], timestamp))
+      numRecords += 1
     }
 
     // The new target offset is the offset where all records in all partitions have been processed.

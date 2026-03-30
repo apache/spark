@@ -18,7 +18,11 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, SemiStructuredExtract}
+import org.apache.spark.sql.catalyst.expressions.{
+  Expression,
+  Literal,
+  SemiStructuredExtract
+}
 import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
 import org.apache.spark.sql.types.VariantType
 import org.apache.spark.unsafe.types.UTF8String

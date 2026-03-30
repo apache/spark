@@ -18,6 +18,7 @@
 """
 String functions on pandas-on-Spark Series
 """
+
 from functools import wraps
 from typing import (
     Any,
@@ -43,7 +44,6 @@ from pyspark.sql.types import StringType, BinaryType, ArrayType, LongType, MapTy
 from pyspark.sql import functions as F
 from pyspark.sql.functions import pandas_udf
 import pyspark.pandas as ps
-
 
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
@@ -2423,7 +2423,7 @@ def _test() -> None:
         .appName("pyspark.pandas.strings tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.strings,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

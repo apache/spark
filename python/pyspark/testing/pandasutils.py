@@ -23,7 +23,6 @@ from contextlib import contextmanager
 import decimal
 from typing import Any, Union
 
-
 try:
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
 

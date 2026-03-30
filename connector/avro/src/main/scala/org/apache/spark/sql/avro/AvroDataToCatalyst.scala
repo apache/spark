@@ -19,7 +19,6 @@ package org.apache.spark.sql.avro
 
 import scala.util.control.NonFatal
 
-import org.apache.avro.Schema
 import org.apache.avro.generic.GenericDatumReader
 import org.apache.avro.io.{BinaryDecoder, DecoderFactory}
 
@@ -57,8 +56,7 @@ case class AvroDataToCatalyst(
 
   private lazy val avroOptions = AvroOptions(options)
 
-  @transient private lazy val actualSchema =
-    new Schema.Parser().setValidateDefaults(false).parse(jsonFormatSchema)
+  @transient private lazy val actualSchema = AvroUtils.parseAvroSchema(jsonFormatSchema)
 
   @transient private lazy val expectedSchema = avroOptions.schema.getOrElse(actualSchema)
 

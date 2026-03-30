@@ -17,9 +17,6 @@
 """
 User-defined table function related classes and functions
 """
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
 
 import warnings
 from typing import List, Type, TYPE_CHECKING, Optional, Union, Any
@@ -39,7 +36,6 @@ from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
 from pyspark.sql.udtf import UDTFRegistration as PySparkUDTFRegistration, _validate_udtf_handler
 from pyspark.sql.types import DataType, StructType
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkAttributeError
-
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName

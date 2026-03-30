@@ -125,14 +125,10 @@ class NumericOps(DataTypeOps):
         _sanitize_list_like(right)
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Addition can not be applied to given types.")
-        spark_session = left._internal.spark_frame.sparkSession
         new_right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
 
         def wrapped_add(lc: PySparkColumn, rc: Any) -> PySparkColumn:
-            expr = PySparkColumn.__add__(lc, rc)
-            if is_ansi_mode_enabled(spark_session):
-                expr = _cast_back_float(expr, left.dtype, right)
-            return expr
+            return _cast_back_float(PySparkColumn.__add__(lc, rc), left.dtype, right)
 
         return column_op(wrapped_add)(left, new_right)
 
@@ -140,14 +136,10 @@ class NumericOps(DataTypeOps):
         _sanitize_list_like(right)
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Subtraction can not be applied to given types.")
-        spark_session = left._internal.spark_frame.sparkSession
         new_right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
 
         def wrapped_sub(lc: PySparkColumn, rc: Any) -> PySparkColumn:
-            expr = PySparkColumn.__sub__(lc, rc)
-            if is_ansi_mode_enabled(spark_session):
-                expr = _cast_back_float(expr, left.dtype, right)
-            return expr
+            return _cast_back_float(PySparkColumn.__sub__(lc, rc), left.dtype, right)
 
         return column_op(wrapped_sub)(left, new_right)
 
@@ -162,10 +154,9 @@ class NumericOps(DataTypeOps):
                 expr = F.when(F.lit(right_op == 0), F.lit(None)).otherwise(
                     ((left_op % right_op) + right_op) % right_op
                 )
-                expr = _cast_back_float(expr, left.dtype, right)
             else:
                 expr = ((left_op % right_op) + right_op) % right_op
-            return expr
+            return _cast_back_float(expr, left.dtype, right)
 
         new_right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
 
@@ -190,14 +181,10 @@ class NumericOps(DataTypeOps):
         _sanitize_list_like(right)
         if not isinstance(right, numbers.Number):
             raise TypeError("Addition can not be applied to given types.")
-        spark_session = left._internal.spark_frame.sparkSession
         new_right = transform_boolean_operand_to_numeric(right)
 
         def wrapped_radd(lc: PySparkColumn, rc: Any) -> PySparkColumn:
-            expr = PySparkColumn.__radd__(lc, rc)
-            if is_ansi_mode_enabled(spark_session):
-                expr = _cast_back_float(expr, left.dtype, right)
-            return expr
+            return _cast_back_float(PySparkColumn.__radd__(lc, rc), left.dtype, right)
 
         return column_op(wrapped_radd)(left, new_right)
 
@@ -205,14 +192,10 @@ class NumericOps(DataTypeOps):
         _sanitize_list_like(right)
         if not isinstance(right, numbers.Number):
             raise TypeError("Subtraction can not be applied to given types.")
-        spark_session = left._internal.spark_frame.sparkSession
         new_right = transform_boolean_operand_to_numeric(right)
 
         def wrapped_rsub(lc: PySparkColumn, rc: Any) -> PySparkColumn:
-            expr = PySparkColumn.__rsub__(lc, rc)
-            if is_ansi_mode_enabled(spark_session):
-                expr = _cast_back_float(expr, left.dtype, right)
-            return expr
+            return _cast_back_float(PySparkColumn.__rsub__(lc, rc), left.dtype, right)
 
         return column_op(wrapped_rsub)(left, new_right)
 
@@ -220,14 +203,10 @@ class NumericOps(DataTypeOps):
         _sanitize_list_like(right)
         if not isinstance(right, numbers.Number):
             raise TypeError("Multiplication can not be applied to given types.")
-        spark_session = left._internal.spark_frame.sparkSession
         new_right = transform_boolean_operand_to_numeric(right)
 
         def wrapped_rmul(lc: PySparkColumn, rc: Any) -> PySparkColumn:
-            expr = PySparkColumn.__mul__(lc, rc)
-            if is_ansi_mode_enabled(spark_session):
-                expr = _cast_back_float(expr, left.dtype, right)
-            return expr
+            return _cast_back_float(PySparkColumn.__mul__(lc, rc), left.dtype, right)
 
         return column_op(wrapped_rmul)(left, new_right)
 
@@ -256,10 +235,9 @@ class NumericOps(DataTypeOps):
                 result = F.when(
                     left_op != 0, ((F.lit(right_op) % left_op) + left_op) % left_op
                 ).otherwise(F.lit(None))
-                result = _cast_back_float(result, left.dtype, right)
-                return result
             else:
-                return ((right_op % left_op) + left_op) % left_op
+                result = ((right_op % left_op) + left_op) % left_op
+            return _cast_back_float(result, left.dtype, right)
 
         return column_op(safe_rmod)(left, new_right)
 
@@ -472,10 +450,7 @@ class FractionalOps(NumericOps):
         new_right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
 
         def wrapped_mul(lc: PySparkColumn, rc: Any) -> PySparkColumn:
-            expr = PySparkColumn.__mul__(lc, rc)
-            if is_ansi:
-                expr = _cast_back_float(expr, left.dtype, right)
-            return expr
+            return _cast_back_float(PySparkColumn.__mul__(lc, rc), left.dtype, right)
 
         return column_op(wrapped_mul)(left, new_right)
 

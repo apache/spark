@@ -414,7 +414,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 DROP VIEW IF EXISTS xmlTable
 -- !query analysis
-DropTempViewCommand xmlTable
+DropTempViewCommand xmlTable, true
 
 
 -- !query

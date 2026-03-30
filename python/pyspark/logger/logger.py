@@ -318,7 +318,7 @@ def _test() -> None:
     import pyspark.logger.logger
 
     globs = pyspark.logger.logger.__dict__.copy()
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.logger.logger, globs=globs, optionflags=doctest.ELLIPSIS
     )
 

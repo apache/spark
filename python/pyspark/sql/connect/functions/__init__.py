@@ -16,6 +16,7 @@
 #
 
 """PySpark Functions with Spark Connect"""
+
 from pyspark.testing.utils import should_test_connect
 
 if should_test_connect:

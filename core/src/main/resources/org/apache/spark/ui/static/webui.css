@@ -514,3 +514,12 @@ a.downloadbutton {
 .tab-content {
   margin-top: 10px;
 }
+
+#loading-overlay {
+  z-index: 1050;
+  background-color: rgba(255, 255, 255, 0.75);
+}
+
+[data-bs-theme="dark"] #loading-overlay {
+  background-color: rgba(0, 0, 0, 0.75);
+}

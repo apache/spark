@@ -203,10 +203,10 @@ abstract class InMemoryBaseTable(
       case YearsTransform(ref) =>
         extractor(ref.fieldNames, cleanedSchema, row) match {
           case (days: Int, DateType) =>
-            ChronoUnit.YEARS.between(EPOCH_LOCAL_DATE, DateTimeUtils.daysToLocalDate(days))
+            ChronoUnit.YEARS.between(EPOCH_LOCAL_DATE, DateTimeUtils.daysToLocalDate(days)).toInt
           case (micros: Long, TimestampType) =>
             val localDate = DateTimeUtils.microsToInstant(micros).atZone(UTC).toLocalDate
-            ChronoUnit.YEARS.between(EPOCH_LOCAL_DATE, localDate)
+            ChronoUnit.YEARS.between(EPOCH_LOCAL_DATE, localDate).toInt
           case (v, t) =>
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
@@ -225,7 +225,7 @@ abstract class InMemoryBaseTable(
           case (days, DateType) =>
             days
           case (micros: Long, TimestampType) =>
-            ChronoUnit.DAYS.between(Instant.EPOCH, DateTimeUtils.microsToInstant(micros))
+            ChronoUnit.DAYS.between(Instant.EPOCH, DateTimeUtils.microsToInstant(micros)).toInt
           case (v, t) =>
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }

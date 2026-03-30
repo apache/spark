@@ -232,8 +232,12 @@ class SparkConnectErrorTests(ReusedConnectTestCase):
 
         self.check_error(
             exception=e1.exception,
-            errorClass="NOT_LIST_OF_COLUMN_OR_STR",
-            messageParameters={"arg_name": "columns"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "cols",
+                "arg_type": "NoneType",
+            },
         )
 
     def test_ym_interval_in_collect(self):

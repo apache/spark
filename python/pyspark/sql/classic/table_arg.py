@@ -21,7 +21,6 @@ from pyspark.sql.classic.column import _to_java_column, _to_seq
 from pyspark.sql.table_arg import TableArg as ParentTableArg
 from pyspark.sql.utils import get_active_spark_context
 
-
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
     from pyspark.sql._typing import ColumnOrName

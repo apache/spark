@@ -17,7 +17,6 @@
 import contextlib
 import io
 import os
-import platform
 import tempfile
 import unittest
 import logging
@@ -28,7 +27,7 @@ from decimal import Decimal
 from typing import Callable, Iterable, List, Union, Iterator, Tuple
 
 from pyspark.errors import AnalysisException, PythonException
-from pyspark.profiler import has_memory_profiler
+from pyspark.memory_profiler_ext import has_memory_profiler
 from pyspark.sql.datasource import (
     CaseInsensitiveDict,
     DataSource,
@@ -72,8 +71,7 @@ class BasePythonDataSourceTestsMixin:
     spark: SparkSession
 
     def test_basic_data_source_class(self):
-        class MyDataSource(DataSource):
-            ...
+        class MyDataSource(DataSource): ...
 
         options = dict(a=1, b=2)
         ds = MyDataSource(options=options)
@@ -89,7 +87,7 @@ class BasePythonDataSourceTestsMixin:
     def test_basic_data_source_reader_class(self):
         class MyDataSourceReader(DataSourceReader):
             def read(self, partition):
-                yield None,
+                yield (None,)
 
         reader = MyDataSourceReader()
         self.assertEqual(list(reader.read(None)), [(None,)])
@@ -162,7 +160,7 @@ class BasePythonDataSourceTestsMixin:
                 if partition_func is not None:
                     return partition_func()
                 else:
-                    raise NotImplementedError
+                    return [InputPartition(None)]
 
             def read(self, partition):
                 return read_func(self.schema, partition)
@@ -825,9 +823,6 @@ class BasePythonDataSourceTestsMixin:
         rounded = df.select("d").first().d
         self.assertEqual(rounded, Decimal("1.233999999999999986"))
 
-    @unittest.skipIf(
-        "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
-    )
     def test_data_source_segfault(self):
         import ctypes
 
@@ -835,8 +830,9 @@ class BasePythonDataSourceTestsMixin:
             (True, "Segmentation fault"),
             (False, "Consider setting .* for the better Python traceback."),
         ]:
-            with self.subTest(enabled=enabled), self.sql_conf(
-                {"spark.sql.execution.pyspark.udf.faulthandler.enabled": enabled}
+            with (
+                self.subTest(enabled=enabled),
+                self.sql_conf({"spark.sql.execution.pyspark.udf.faulthandler.enabled": enabled}),
             ):
                 with self.subTest(worker="pyspark.sql.worker.create_data_source"):
 
@@ -895,7 +891,7 @@ class BasePythonDataSourceTestsMixin:
                     class TestReader2(DataSourceReader):
                         def read(self, partition):
                             ctypes.string_at(0)
-                            yield "x",
+                            yield ("x",)
 
                     self.spark.dataSource.register(TestDataSource)
 
@@ -919,10 +915,9 @@ class BasePythonDataSourceTestsMixin:
 
                     self.spark.dataSource.register(TestDataSource)
 
-                    with self.assertRaisesRegex(Exception, expected):
-                        self.spark.range(10).write.format("test").mode("append").saveAsTable(
-                            "test_table"
-                        )
+                    with tempfile.TemporaryDirectory(prefix="test_segfault_") as d:
+                        with self.assertRaisesRegex(Exception, expected):
+                            self.spark.range(10).write.format("test").mode("append").save(d)
 
                 with self.subTest(worker="pyspark.sql.worker.commit_data_source_write"):
 
@@ -943,10 +938,9 @@ class BasePythonDataSourceTestsMixin:
 
                     self.spark.dataSource.register(TestDataSource)
 
-                    with self.assertRaisesRegex(Exception, expected):
-                        self.spark.range(10).write.format("test").mode("append").saveAsTable(
-                            "test_table"
-                        )
+                    with tempfile.TemporaryDirectory(prefix="test_segfault_") as d:
+                        with self.assertRaisesRegex(Exception, expected):
+                            self.spark.range(10).write.format("test").mode("append").save(d)
 
     @unittest.skipIf(is_remote_only(), "Requires JVM access")
     def test_data_source_reader_with_logging(self):
@@ -1040,7 +1034,7 @@ class BasePythonDataSourceTestsMixin:
                             {"class_name": "TestJsonReader", "func_name": "partitions"},
                         ),
                         (
-                            "TestJsonReader.read: None",
+                            "TestJsonReader.read: InputPartition(value=None)",
                             {"class_name": "TestJsonReader", "func_name": "read"},
                         ),
                     ]
@@ -1151,7 +1145,7 @@ class BasePythonDataSourceTestsMixin:
                             {"class_name": "TestJsonReader", "func_name": "partitions"},
                         ),
                         (
-                            "TestJsonReader.read: None",
+                            "TestJsonReader.read: InputPartition(value=None)",
                             {"class_name": "TestJsonReader", "func_name": "read"},
                         ),
                     ]
@@ -1356,14 +1350,25 @@ class BasePythonDataSourceTestsMixin:
             self.assertEqual(stdout, "")
 
 
-class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):
-    ...
+class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase): ...
 
 
 class PythonDataSourceTestsWithSimpleWorker(PythonDataSourceTests):
     @classmethod
     def conf(self):
         return super().conf().set("spark.python.use.daemon", "false")
+
+    # Simple Worker is super slow because there's no reuse of workers
+    # so we skip some tests that create many workers
+
+    def test_filter_type(self):
+        pass
+
+    def test_unsupported_filter(self):
+        pass
+
+    def test_filter_value_type(self):
+        pass
 
 
 if __name__ == "__main__":

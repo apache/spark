@@ -166,8 +166,7 @@ class SQLContext:
         cls: Type["SQLContext"], sc: "SparkContext", **static_conf: Any
     ) -> "SQLContext":
         if (
-            cls._instantiatedContext is None
-            or SQLContext._instantiatedContext._sc._jsc is None  # type: ignore[union-attr]
+            cls._instantiatedContext is None or SQLContext._instantiatedContext._sc._jsc is None  # type: ignore[union-attr]
         ):
             assert sc._jvm is not None
             # There can be only one running Spark context. That will automatically
@@ -318,8 +317,7 @@ class SQLContext:
         data: Union["RDD[RowLike]", Iterable["RowLike"]],
         schema: Union[List[str], Tuple[str, ...]] = ...,
         samplingRatio: Optional[float] = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
@@ -328,8 +326,7 @@ class SQLContext:
         schema: Union[StructType, str],
         *,
         verifySchema: bool = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
@@ -340,14 +337,12 @@ class SQLContext:
         ],
         schema: Union[AtomicType, str],
         verifySchema: bool = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
         self, data: Union["PandasDataFrameLike", "pa.Table"], samplingRatio: Optional[float] = ...
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
@@ -355,8 +350,7 @@ class SQLContext:
         data: Union["PandasDataFrameLike", "pa.Table"],
         schema: Union[StructType, str],
         verifySchema: bool = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     def createDataFrame(  # type: ignore[misc]
         self,
@@ -815,7 +809,7 @@ def _test() -> None:
     ]
     globs["jsonStrings"] = jsonStrings
     globs["json"] = sc.parallelize(jsonStrings)
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.context,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

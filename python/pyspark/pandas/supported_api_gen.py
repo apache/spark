@@ -18,6 +18,7 @@
 """
 Generate 'Supported pandas APIs' documentation file
 """
+
 import warnings
 from enum import Enum, unique
 from inspect import getmembers, isclass, isfunction, signature
@@ -374,8 +375,10 @@ def _write_table(
         else:
             lines.append("    * - :func:`%s`\n" % func_str)
         lines.append("      - %s\n" % status.implemented)
-        lines.append("      - \n") if not status.missing else lines.append(
-            "      - %s\n" % status.missing
+        (
+            lines.append("      - \n")
+            if not status.missing
+            else lines.append("      - %s\n" % status.missing)
         )
     w_fd.writelines(lines)
 
@@ -432,7 +435,7 @@ def _test() -> None:
     import pyspark.pandas.supported_api_gen
 
     globs = pyspark.pandas.supported_api_gen.__dict__.copy()
-    (failure_count, test_count) = doctest.testmod(pyspark.pandas.supported_api_gen, globs=globs)
+    failure_count, test_count = doctest.testmod(pyspark.pandas.supported_api_gen, globs=globs)
     if failure_count:
         sys.exit(-1)
 

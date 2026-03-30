@@ -49,6 +49,7 @@ UNCACHE TABLE t1;
 ### Related Statements
 
 * [CACHE TABLE](sql-ref-syntax-aux-cache-cache-table.html)
+* [SHOW CACHED TABLES](sql-ref-syntax-aux-show-cached-tables.html)
 * [CLEAR CACHE](sql-ref-syntax-aux-cache-clear-cache.html)
 * [REFRESH TABLE](sql-ref-syntax-aux-cache-refresh-table.html)
 * [REFRESH](sql-ref-syntax-aux-cache-refresh.html)

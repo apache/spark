@@ -737,7 +737,7 @@ def _test() -> None:
 
     globs = pyspark.sql.tvf.__dict__.copy()
     globs["spark"] = SparkSession.builder.master("local[4]").appName("sql.tvf tests").getOrCreate()
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.tvf,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

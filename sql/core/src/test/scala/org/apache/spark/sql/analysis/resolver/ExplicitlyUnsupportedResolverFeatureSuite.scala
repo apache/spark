@@ -45,27 +45,31 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends QueryTest with SharedSpa
     }
   }
 
-  private def checkResolution(sqlText: String, shouldPass: Boolean = false): Unit = {
+  private def checkResolution(
+      sqlText: String,
+      shouldPass: Boolean = false,
+      expectedMessage: Option[String] = None): Unit = {
     val unresolvedPlan = spark.sessionState.sqlParser.parsePlan(sqlText)
-    checkResolution(unresolvedPlan, shouldPass)
+    checkPlanResolution(unresolvedPlan, shouldPass, expectedMessage)
   }
 
-  private def checkResolution(plan: LogicalPlan, shouldPass: Boolean): Unit = {
-    def noopWrapper(body: => Unit) = body
-
-    val wrapper = if (shouldPass) {
-      noopWrapper _
-    } else {
-      intercept[ExplicitlyUnsupportedResolverFeature] _
-    }
-
+  private def checkPlanResolution(
+      plan: LogicalPlan,
+      shouldPass: Boolean,
+      expectedMessage: Option[String]): Unit = {
     val resolver = new Resolver(
       spark.sessionState.catalogManager,
       extensions = spark.sessionState.analyzer.singlePassResolverExtensions,
       metadataResolverExtensions = spark.sessionState.analyzer.singlePassMetadataResolverExtensions
     )
-    wrapper {
+
+    if (shouldPass) {
       resolver.lookupMetadataAndResolve(plan)
+    } else {
+      val exception = intercept[ExplicitlyUnsupportedResolverFeature] {
+        resolver.lookupMetadataAndResolve(plan)
+      }
+      assert(exception.getMessage.contains(expectedMessage.get))
     }
   }
 }

@@ -80,12 +80,10 @@ class GroupedData(PandasGroupedOpsMixin):
             return super().__repr__()
 
     @overload
-    def agg(self, *exprs: Column) -> "DataFrame":
-        ...
+    def agg(self, *exprs: Column) -> "DataFrame": ...
 
     @overload
-    def agg(self, __exprs: Dict[str, str]) -> "DataFrame":
-        ...
+    def agg(self, __exprs: Dict[str, str]) -> "DataFrame": ...
 
     def agg(self, *exprs: Union[Column, Dict[str, str]]) -> "DataFrame":
         """Compute aggregates and returns the result as a :class:`DataFrame`.
@@ -546,7 +544,7 @@ def _test() -> None:
     spark = SparkSession.builder.master("local[4]").appName("sql.group tests").getOrCreate()
     globs["spark"] = spark
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.group,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
