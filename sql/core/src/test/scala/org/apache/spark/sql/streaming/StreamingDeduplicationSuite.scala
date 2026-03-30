@@ -60,6 +60,27 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest
     )
   }
 
+  test("same NaN bit patterns should be treated as duplicates") {
+    val inputData = MemoryStream[(Float, Int)]
+    val result = inputData.toDS().toDF("value", "id").dropDuplicates("value")
+
+    val canonicalNaN = java.lang.Float.intBitsToFloat(0x7fc00000)
+    val otherNan = java.lang.Float.intBitsToFloat(0x7fc00000)
+    assert(java.lang.Float.isNaN(canonicalNaN) && java.lang.Float.isNaN(otherNan))
+    assert(java.lang.Float.floatToRawIntBits(canonicalNaN) ==
+      java.lang.Float.floatToRawIntBits(otherNan))
+
+    testStream(result, Append)(
+      AddData(inputData, (canonicalNaN, 1)),
+      CheckLastBatch((canonicalNaN, 1)),
+      assertNumStateRows(total = 1, updated = 1),
+      AddData(inputData, (otherNan, 2)),
+      CheckLastBatch(),
+      assertNumStateRows(total = 1, updated = 0),
+      CheckAnswer((canonicalNaN, 1))
+    )
+  }
+
   test("different NaN bit patterns should be deduplicated") {
     val inputData = MemoryStream[(Float, Int)]
     val result = inputData.toDS().toDF("value", "id").dropDuplicates("value")
