@@ -475,6 +475,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ANALYZER_DUAL_RUN_LEGACY_PLAN_NORMALIZATION =
+    buildConf("spark.sql.analyzer.singlePassResolver.legacyPlanNormalization")
+      .internal()
+      .doc(
+        "When true, use the legacy plan normalization in HybridAnalyzer that relies on " +
+        "transformUpWithSubqueries with explicit pattern matching. When false, use the new " +
+        "normalization approach with custom recursion and a top-down flag for project list " +
+        "normalization."
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val MULTI_COMMUTATIVE_OP_OPT_THRESHOLD =
     buildConf("spark.sql.analyzer.canonicalization.multiCommutativeOpMemoryOptThreshold")
       .internal()

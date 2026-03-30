@@ -117,6 +117,125 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
     assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
   }
 
+  test("Normalize ordering in a project list of an inner Project under Project and Filter") {
+    val baselinePlan =
+      LocalRelation($"col1".int, $"col2".string)
+        .select($"col1", $"col2")
+        .where($"col1" === 1)
+        .select($"col1")
+    val testPlan =
+      LocalRelation($"col1".int, $"col2".string)
+        .select($"col2", $"col1")
+        .where($"col1" === 1)
+        .select($"col1")
+
+    assert(baselinePlan != testPlan)
+    assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
+  }
+
+  test("SubqueryAlias resets normalizeProjectList flag for inner Project") {
+    // Project under SubqueryAlias should NOT be normalized even when above a Project.
+    // The SubqueryAlias boundary preserves the schema, so column order matters.
+    val baselinePlan = LocalRelation($"col1".int, $"col2".string)
+      .select($"col1", $"col2")
+      .subquery("t")
+      .select($"col1")
+    val testPlan = LocalRelation($"col1".int, $"col2".string)
+      .select($"col2", $"col1")
+      .subquery("t")
+      .select($"col1")
+
+    // The inner Project has different column order, and SubqueryAlias resets the flag,
+    // so normalization should NOT make them equal.
+    assert(NormalizePlan(baselinePlan) != NormalizePlan(testPlan))
+  }
+
+  test("SubqueryAlias resets normalizeProjectList flag for inner Aggregate") {
+    // Aggregate under SubqueryAlias should NOT have its list normalized.
+    val baselinePlan = LocalRelation($"col1".int, $"col2".string)
+      .groupBy($"col1", $"col2")($"col1", $"col2")
+      .subquery("t")
+      .select($"col1")
+    val testPlan = LocalRelation($"col1".int, $"col2".string)
+      .groupBy($"col1", $"col2")($"col2", $"col1")
+      .subquery("t")
+      .select($"col1")
+
+    assert(NormalizePlan(baselinePlan) != NormalizePlan(testPlan))
+  }
+
+  test("Nested SubqueryAlias resets flag even under multiple Projects") {
+    // Project -> Project -> SubqueryAlias -> Project: the innermost Project should NOT
+    // be normalized because SubqueryAlias resets the flag.
+    val baselinePlan = LocalRelation($"col1".int, $"col2".string)
+      .select($"col1", $"col2")
+      .subquery("t")
+      .select($"col1", $"col2")
+      .select($"col1")
+    val testPlan = LocalRelation($"col1".int, $"col2".string)
+      .select($"col2", $"col1")
+      .subquery("t")
+      .select($"col1", $"col2")
+      .select($"col1")
+
+    // The inner Project (below SubqueryAlias) differs in order and should NOT be normalized.
+    assert(NormalizePlan(baselinePlan) != NormalizePlan(testPlan))
+  }
+
+  test("Project above SubqueryAlias IS normalized when under another Project") {
+    // Project -> Project -> SubqueryAlias -> relation
+    // The middle Project (between outer Project and SubqueryAlias) should still be normalized
+    // because it's under a Project, and SubqueryAlias only resets the flag for its children.
+    val baselinePlan = LocalRelation($"col1".int, $"col2".string)
+      .subquery("t")
+      .select($"col1", $"col2")
+      .select($"col1")
+    val testPlan = LocalRelation($"col1".int, $"col2".string)
+      .subquery("t")
+      .select($"col2", $"col1")
+      .select($"col1")
+
+    assert(baselinePlan != testPlan)
+    assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
+  }
+
+  test("SubqueryAlias resets flag but Project above SubqueryAlias still normalizes with Filter") {
+    // Aggregate -> Filter -> SubqueryAlias -> Project: the Project under SubqueryAlias
+    // should NOT be normalized, but the structure above SubqueryAlias works normally.
+    val baselinePlan = LocalRelation($"col1".int, $"col2".string)
+      .select($"col1", $"col2")
+      .subquery("t")
+      .where($"col1" === 1)
+      .groupBy($"col1")($"col1")
+    val testPlan = LocalRelation($"col1".int, $"col2".string)
+      .select($"col2", $"col1")
+      .subquery("t")
+      .where($"col1" === 1)
+      .groupBy($"col1")($"col1")
+
+    // Inner Project under SubqueryAlias is NOT normalized, so plans differ.
+    assert(NormalizePlan(baselinePlan) != NormalizePlan(testPlan))
+  }
+
+  test("Double SubqueryAlias both reset the flag independently") {
+    // Project -> SubqueryAlias -> Project -> SubqueryAlias -> Project
+    // Both inner Projects should NOT be normalized.
+    val baselinePlan = LocalRelation($"col1".int, $"col2".string)
+      .select($"col1", $"col2")
+      .subquery("inner")
+      .select($"col1", $"col2")
+      .subquery("outer")
+      .select($"col1")
+    val testPlan = LocalRelation($"col1".int, $"col2".string)
+      .select($"col2", $"col1")
+      .subquery("inner")
+      .select($"col2", $"col1")
+      .subquery("outer")
+      .select($"col1")
+
+    assert(NormalizePlan(baselinePlan) != NormalizePlan(testPlan))
+  }
+
   test("Normalize InheritAnalysisRules expressions") {
     val castWithoutTimezone =
       Cast(child = Literal(1), dataType = BooleanType, ansiEnabled = conf.ansiEnabled)

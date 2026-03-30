@@ -328,7 +328,11 @@ class HybridAnalyzer(
    */
   protected[sql] def normalizePlan(plan: LogicalPlan) =
     AnalysisHelper.allowInvokingTransformsInAnalyzer {
-      NormalizePlan(plan)
+      if (conf.getConf(SQLConf.ANALYZER_DUAL_RUN_LEGACY_PLAN_NORMALIZATION)) {
+        NormalizePlan(plan)
+      } else {
+        NormalizePlan.normalizationWithCustomRecursion(plan)
+      }
     }
 
   private def recordDuration[T](thunk: => T): (Long, T) = {

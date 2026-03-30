@@ -33,7 +33,100 @@ object NormalizePlan extends PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = {
     val withNormalizedExpressions = normalizeExpressions(plan)
     val withNormalizedExprIds = normalizeExprIds(withNormalizedExpressions)
-    normalizePlan(withNormalizedExprIds)
+    legacyNormalizePlan(withNormalizedExprIds)
+  }
+
+  /**
+   * Legacy plan normalization that uses [[LogicalPlan.transformUpWithSubqueries]] with explicit
+   * pattern matching for specific parent-child combinations to normalize inner [[Project]] and
+   * [[Aggregate]] nodes.
+   */
+  private def legacyNormalizePlan(plan: LogicalPlan): LogicalPlan = {
+    val cteIdNormalizer = new CteIdNormalizer
+    plan.transformUpWithSubqueries {
+      case Filter(condition: Expression, child: LogicalPlan) =>
+        Filter(
+          splitConjunctivePredicates(condition)
+            .map(rewriteBinaryComparison)
+            .sortBy(_.hashCode())
+            .reduce(And),
+          child
+        )
+      case sample: Sample =>
+        sample.copy(seed = 0L)
+      case Join(left, right, joinType, condition, hint) if condition.isDefined =>
+        val newJoinType = joinType match {
+          case ExistenceJoin(a: Attribute) =>
+            val newAttr = AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0))
+            ExistenceJoin(newAttr)
+          case other => other
+        }
+
+        val newCondition =
+          splitConjunctivePredicates(condition.get)
+            .map(rewriteBinaryComparison)
+            .sortBy(_.hashCode())
+            .reduce(And)
+        Join(left, right, newJoinType, Some(newCondition), hint)
+      case project: Project
+          if project.containsTag(ResolverTag.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION) =>
+        project.child
+
+      case aggregate @ Aggregate(_, _, innerProject: Project, _) =>
+        aggregate.copy(child = normalizeProjectListOrder(innerProject))
+
+      case project @ Project(_, innerProject: Project) =>
+        project.copy(child = normalizeProjectListOrder(innerProject))
+
+      case project @ Project(_, innerAggregate: Aggregate) =>
+        project.copy(child = normalizeAggregateListOrder(innerAggregate))
+
+      case project @ Project(_, filter @ Filter(_, innerProject: Project)) =>
+        project.copy(child = filter.copy(child = normalizeProjectListOrder(innerProject)))
+
+      /**
+       * ORDER BY covered by an output-retaining project on top of GROUP BY
+       */
+      case project @ Project(_, sort @ Sort(_, _, innerAggregate: Aggregate, _)) =>
+        project.copy(child = sort.copy(child = normalizeAggregateListOrder(innerAggregate)))
+
+      /**
+       * HAVING covered by an output-retaining project on top of GROUP BY
+       */
+      case project @ Project(_, filter @ Filter(_, innerAggregate: Aggregate)) =>
+        project.copy(child = filter.copy(child = normalizeAggregateListOrder(innerAggregate)))
+
+      /**
+       * HAVING ... ORDER BY covered by an output-retaining project on top of GROUP BY
+       */
+      case project @ Project(
+            _,
+            sort @ Sort(_, _, filter @ Filter(_, innerAggregate: Aggregate), _)
+          ) =>
+        project.copy(
+          child =
+            sort.copy(child = filter.copy(child = normalizeAggregateListOrder(innerAggregate)))
+        )
+
+      case c: KeepAnalyzedQuery => c.storeAnalyzedQuery()
+      case localRelation: LocalRelation if !localRelation.data.isEmpty =>
+        val unsafeProjection = UnsafeProjection.create(localRelation.schema)
+        localRelation.copy(data = localRelation.data.map { row =>
+          unsafeProjection(row)
+        })
+      case cteRelationDef: CTERelationDef =>
+        cteIdNormalizer.normalizeDef(cteRelationDef)
+      case unionLoop: UnionLoop =>
+        cteIdNormalizer.normalizeUnionLoop(
+          unionLoop.copy(outputAttrIds = Seq.fill(unionLoop.outputAttrIds.size)(ExprId(0)))
+        )
+      case cteRelationRef: CTERelationRef =>
+        cteIdNormalizer.normalizeRef(cteRelationRef)
+      case unionLoopRef: UnionLoopRef =>
+        cteIdNormalizer.normalizeUnionLoopRef(unionLoopRef)
+      case normalizeableRelation: NormalizeableRelation =>
+        normalizeableRelation.normalize()
+    }
   }
 
   /**
@@ -126,96 +219,120 @@ object NormalizePlan extends PredicateHelper {
    * - CTERelationRef ids will be remapped based on the new CTERelationDef IDs. This is possible,
    *   because WithCTE returns cteDefs as first children, and the defs will be traversed before the
    *   refs.
-   * - Normalizes inner [[Project]] nodes by sorting project lists alphabetically.
-   * - Normalizes inner [[Aggregate]] nodes by sorting aggregate expressions lists alphabetically.
+   * - Normalizes inner [[Project]] and [[Aggregate]] nodes by sorting their output lists
+   *   alphabetically when they are below another [[Project]] or [[Aggregate]].
+   *   The normalization flag is reset at [[SubqueryAlias]] boundaries to preserve the schema.
    */
   def normalizePlan(plan: LogicalPlan): LogicalPlan = {
     val cteIdNormalizer = new CteIdNormalizer
-    plan.transformUpWithSubqueries {
-      case Filter(condition: Expression, child: LogicalPlan) =>
-        Filter(
-          splitConjunctivePredicates(condition)
-            .map(rewriteBinaryComparison)
-            .sortBy(_.hashCode())
-            .reduce(And),
-          child
-        )
-      case sample: Sample =>
-        sample.copy(seed = 0L)
-      case Join(left, right, joinType, condition, hint) if condition.isDefined =>
-        val newJoinType = joinType match {
-          case ExistenceJoin(a: Attribute) =>
-            val newAttr = AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0))
-            ExistenceJoin(newAttr)
-          case other => other
-        }
+    normalizeRecursive(plan, normalizeProjectList = false, cteIdNormalizer)
+  }
 
-        val newCondition =
-          splitConjunctivePredicates(condition.get)
-            .map(rewriteBinaryComparison)
-            .sortBy(_.hashCode())
-            .reduce(And)
-        Join(left, right, newJoinType, Some(newCondition), hint)
-      case project: Project
-          if project.containsTag(ResolverTag.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION) =>
-        project.child
+  /**
+   * Full normalization pipeline using custom recursion with a top-down flag
+   * to normalize inner [[Project]] and [[Aggregate]] nodes. The flag is propagated
+   * top-down and reset at [[SubqueryAlias]] boundaries to preserve the schema.
+   */
+  def normalizationWithCustomRecursion(plan: LogicalPlan): LogicalPlan = {
+    val withNormalizedExpressions = normalizeExpressions(plan)
+    val withNormalizedExprIds = normalizeExprIds(withNormalizedExpressions)
+    normalizePlan(withNormalizedExprIds)
+  }
 
-      case aggregate @ Aggregate(_, _, innerProject: Project, _) =>
-        aggregate.copy(child = normalizeProjectListOrder(innerProject))
+  /**
+   * Recursively normalizes the plan. The `normalizeProjectList` flag is propagated top-down:
+   * it starts as false. When a [[Project]] or [[Aggregate]] is encountered, the flag is set to
+   * true for children. When a [[SubqueryAlias]] is encountered, the flag is
+   * reset to false (since the schema must be preserved at subquery boundaries). All other nodes
+   * pass the flag through unchanged.
+   *
+   * When the flag is true and we encounter a [[Project]] or [[Aggregate]], we normalize its
+   * output list order.
+   *
+   * Deduplication projects (tagged with [[ResolverTag.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION]])
+   * are removed and recursion continues with their child. This case must be handled before
+   * child processing because the deduplication project should pass the flag through unchanged,
+   * whereas a regular [[Project]] would set it to true.
+   *
+   * Children are recursed into before the current node is normalized (bottom-up processing
+   * order) to preserve CTE ID normalization ordering. Plan expressions within the current
+   * node's expressions are normalized with the flag reset to false (independent scope).
+   */
+  private def normalizeRecursive(
+      plan: LogicalPlan,
+      normalizeProjectList: Boolean,
+      cteIdNormalizer: CteIdNormalizer): LogicalPlan = plan match {
+    case project: Project
+        if project.containsTag(ResolverTag.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION) =>
+      normalizeRecursive(project.child, normalizeProjectList, cteIdNormalizer)
+    case _ =>
+      val shouldNormalizeChildProjectList = plan match {
+        case _: Project | _: Aggregate => true
+        case _: SubqueryAlias => false
+        case _ => normalizeProjectList
+      }
 
-      case project @ Project(_, innerProject: Project) =>
-        project.copy(child = normalizeProjectListOrder(innerProject))
+      val withNormalizedChildren = plan.mapChildren { child =>
+        normalizeRecursive(child, shouldNormalizeChildProjectList, cteIdNormalizer)
+      }
 
-      case project @ Project(_, innerAggregate: Aggregate) =>
-        project.copy(child = normalizeAggregateListOrder(innerAggregate))
+      val withNormalizedSubqueries = withNormalizedChildren.transformExpressions {
+        case subqueryExpression: SubqueryExpression =>
+          subqueryExpression.withNewPlan(
+            normalizeRecursive(subqueryExpression.plan, normalizeProjectList = false,
+              cteIdNormalizer))
+      }
 
-      /**
-       * ORDER BY covered by an output-retaining project on top of GROUP BY
-       */
-      case project @ Project(_, sort @ Sort(_, _, innerAggregate: Aggregate, _)) =>
-        project.copy(child = sort.copy(child = normalizeAggregateListOrder(innerAggregate)))
+      withNormalizedSubqueries match {
+        case Filter(condition: Expression, child: LogicalPlan) =>
+          Filter(
+            splitConjunctivePredicates(condition)
+              .map(rewriteBinaryComparison)
+              .sortBy(_.hashCode())
+              .reduce(And),
+            child
+          )
+        case sample: Sample =>
+          sample.copy(seed = 0L)
+        case Join(left, right, joinType, condition, hint) if condition.isDefined =>
+          val newJoinType = joinType match {
+            case ExistenceJoin(a: Attribute) =>
+              val newAttr =
+                AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0))
+              ExistenceJoin(newAttr)
+            case other => other
+          }
 
-      /**
-       * HAVING covered by an output-retaining project on top of GROUP BY
-       */
-      case project @ Project(_, filter @ Filter(_, innerAggregate: Aggregate)) =>
-        project.copy(child = filter.copy(child = normalizeAggregateListOrder(innerAggregate)))
-
-      /**
-       * HAVING ... ORDER BY covered by an output-retaining project on top of GROUP BY
-       */
-      case project @ Project(
-            _,
-            sort @ Sort(_, _, filter @ Filter(_, innerAggregate: Aggregate), _)
-          ) =>
-        project.copy(
-          child =
-            sort.copy(child = filter.copy(child = normalizeAggregateListOrder(innerAggregate)))
-        )
-
-      case c: KeepAnalyzedQuery => c.storeAnalyzedQuery()
-      case localRelation: LocalRelation if !localRelation.data.isEmpty =>
-        /**
-         * A substitute for the [[LocalRelation.data]]. [[GenericInternalRow]] is incomparable for
-         * maps, because [[ArrayBasedMapData]] doesn't define [[equals]].
-         */
-        val unsafeProjection = UnsafeProjection.create(localRelation.schema)
-        localRelation.copy(data = localRelation.data.map { row =>
-          unsafeProjection(row)
-        })
-      case cteRelationDef: CTERelationDef =>
-        cteIdNormalizer.normalizeDef(cteRelationDef)
-      case unionLoop: UnionLoop =>
-        cteIdNormalizer.normalizeUnionLoop(
-          unionLoop.copy(outputAttrIds = Seq.fill(unionLoop.outputAttrIds.size)(ExprId(0)))
-        )
-      case cteRelationRef: CTERelationRef =>
-        cteIdNormalizer.normalizeRef(cteRelationRef)
-      case unionLoopRef: UnionLoopRef =>
-        cteIdNormalizer.normalizeUnionLoopRef(unionLoopRef)
-      case normalizeableRelation: NormalizeableRelation =>
-        normalizeableRelation.normalize()
-    }
+          val newCondition =
+            splitConjunctivePredicates(condition.get)
+              .map(rewriteBinaryComparison)
+              .sortBy(_.hashCode())
+              .reduce(And)
+          Join(left, right, newJoinType, Some(newCondition), hint)
+        case project: Project if normalizeProjectList =>
+          normalizeProjectListOrder(project)
+        case aggregate: Aggregate if normalizeProjectList =>
+          normalizeAggregateListOrder(aggregate)
+        case c: KeepAnalyzedQuery => c.storeAnalyzedQuery()
+        case localRelation: LocalRelation if !localRelation.data.isEmpty =>
+          val unsafeProjection = UnsafeProjection.create(localRelation.schema)
+          localRelation.copy(data = localRelation.data.map { row =>
+            unsafeProjection(row)
+          })
+        case cteRelationDef: CTERelationDef =>
+          cteIdNormalizer.normalizeDef(cteRelationDef)
+        case unionLoop: UnionLoop =>
+          cteIdNormalizer.normalizeUnionLoop(
+            unionLoop.copy(outputAttrIds = Seq.fill(unionLoop.outputAttrIds.size)(ExprId(0)))
+          )
+        case cteRelationRef: CTERelationRef =>
+          cteIdNormalizer.normalizeRef(cteRelationRef)
+        case unionLoopRef: UnionLoopRef =>
+          cteIdNormalizer.normalizeUnionLoopRef(unionLoopRef)
+        case normalizeableRelation: NormalizeableRelation =>
+          normalizeableRelation.normalize()
+        case other => other
+      }
   }
 
   /**
