@@ -2842,6 +2842,30 @@
     ],
     "sqlState" : "21S01"
   },
+  "INSERT_REPLACE_ON_BY_NAME_NOT_ENABLED" : {
+    "message" : [
+      "INSERT INTO ... BY NAME REPLACE ON is not enabled. Set 'spark.sql.insertIntoReplaceOnByName.enabled' to true to enable it."
+    ],
+    "sqlState" : "0A000"
+  },
+  "INSERT_REPLACE_ON_NOT_ENABLED" : {
+    "message" : [
+      "INSERT INTO ... REPLACE ON is not enabled. Set 'spark.sql.insertIntoReplaceOn.enabled' to true to enable it."
+    ],
+    "sqlState" : "0A000"
+  },
+  "INSERT_REPLACE_USING_BY_NAME_NOT_ENABLED" : {
+    "message" : [
+      "INSERT INTO ... BY NAME REPLACE USING is not enabled. Set 'spark.sql.insertIntoReplaceUsingByName.enabled' to true to enable it."
+    ],
+    "sqlState" : "0A000"
+  },
+  "INSERT_REPLACE_USING_NOT_ENABLED" : {
+    "message" : [
+      "INSERT INTO ... REPLACE USING is not enabled. Set 'spark.sql.insertIntoReplaceUsing.enabled' to true to enable it."
+    ],
+    "sqlState" : "0A000"
+  },
   "INSUFFICIENT_TABLE_PROPERTY" : {
     "message" : [
       "Can't find table property:"
@@ -7894,6 +7918,12 @@
       }
     },
     "sqlState" : "42809"
+  },
+  "UNSUPPORTED_INSERT_REPLACE_ON_OR_USING" : {
+    "message" : [
+      "INSERT INTO ... REPLACE ON/USING is unsupported for this table format."
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_INSERT_WITH_SCHEMA_EVOLUTION" : {
     "message" : [

@@ -997,6 +997,38 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  for ((label, insertClause) <- Seq(
+      ("REPLACE ON", "AS t REPLACE ON t.i = 1"),
+      ("REPLACE USING", "AS t REPLACE USING (i)"))) {
+    test(s"INSERT INTO ... $label is unsupported for V1 tables") {
+      withTable("test_table") {
+        val schema = new StructType().add("i", "int").add("j", "string")
+        val newTable = CatalogTable(
+          identifier = TableIdentifier("test_table", Some("default")),
+          tableType = CatalogTableType.MANAGED,
+          storage = CatalogStorageFormat(
+            locationUri = None,
+            inputFormat = None,
+            outputFormat = None,
+            serdeName = None,
+            serde = None,
+            compressed = false,
+            properties = Map.empty),
+          schema = schema,
+          provider = Some(classOf[SimpleInsertSource].getName))
+
+        spark.sessionState.catalog.createTable(newTable, false)
+
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"INSERT INTO test_table $insertClause SELECT 1, 'a'")
+          },
+          condition = "UNSUPPORTED_INSERT_REPLACE_ON_OR_USING"
+        )
+      }
+    }
+  }
+
   test("Allow user to insert specified columns into insertable view") {
     sql("INSERT OVERWRITE TABLE jsonTable SELECT a, DEFAULT FROM jt")
     checkAnswer(

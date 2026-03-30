@@ -475,6 +475,28 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       )
   }
 
+  testPartitionedTable("INSERT INTO ... REPLACE ON is currently unsupported") {
+    tableName =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO $tableName AS t REPLACE ON t.a = 1 " +
+            s"SELECT 25, 26, 27, 28")
+        },
+        condition = "UNSUPPORTED_INSERT_REPLACE_ON_OR_USING"
+      )
+  }
+
+  testPartitionedTable("INSERT INTO ... REPLACE USING is currently unsupported") {
+    tableName =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO $tableName AS t REPLACE USING (a) " +
+            s"SELECT 25, 26, 27, 28")
+        },
+        condition = "UNSUPPORTED_INSERT_REPLACE_ON_OR_USING"
+      )
+  }
+
   testPartitionedTable("insertInto() should match columns by position and ignore column names") {
     tableName =>
       withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
