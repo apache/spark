@@ -23,15 +23,68 @@ from typing import Any, Dict, List, Union, Optional, Tuple, Iterator
 from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import (
+    AtomicType,
     StructType,
     Row,
 )
 from pyspark.sql.pandas.types import convert_pandas_using_numpy_type
+from pyspark.sql.utils import has_numpy
 from pyspark.serializers import CPickleSerializer
 from pyspark.errors import PySparkRuntimeError
 import uuid
 
 __all__ = ["StatefulProcessorApiClient", "StatefulProcessorHandleState"]
+
+if has_numpy:
+    import numpy as np
+
+    def _normalize_value(v: Any) -> Any:
+        # Convert NumPy types to Python primitive types.
+        if isinstance(v, np.generic):
+            return v.tolist()
+        # Named tuples (collections.namedtuple or typing.NamedTuple) and Row both
+        # require positional arguments and cannot be instantiated
+        # with a generator expression.
+        if isinstance(v, Row) or (isinstance(v, tuple) and hasattr(v, "_fields")):
+            return type(v)(*[_normalize_value(e) for e in v])
+        # List / tuple: recursively normalize each element
+        if isinstance(v, (list, tuple)):
+            return type(v)(_normalize_value(e) for e in v)
+        # Dict: normalize both keys and values
+        if isinstance(v, dict):
+            return {_normalize_value(k): _normalize_value(val) for k, val in v.items()}
+        # Address a couple of pandas dtypes too.
+        elif hasattr(v, "to_pytimedelta"):
+            return v.to_pytimedelta()
+        elif hasattr(v, "to_pydatetime"):
+            return v.to_pydatetime()
+        return v
+
+    def _normalize_value_simple(v: Any) -> Any:
+        """Fast path for flat schemas: check for numpy scalars and pandas dtypes only."""
+        if isinstance(v, np.generic):
+            return v.tolist()
+        if hasattr(v, "to_pytimedelta"):
+            return v.to_pytimedelta()
+        if hasattr(v, "to_pydatetime"):
+            return v.to_pydatetime()
+        return v
+
+    def _normalize_tuple(data: Tuple) -> Tuple:
+        return tuple(_normalize_value(v) for v in data)
+
+    def _normalize_tuple_simple(data: Tuple) -> Tuple:
+        return tuple(_normalize_value_simple(v) for v in data)
+else:
+    def _normalize_tuple(data: Tuple) -> Tuple:
+        return data  # toInternal handles tuples natively
+
+    _normalize_tuple_simple = _normalize_tuple
+
+
+def _is_simple_schema(schema: StructType) -> bool:
+    """True if every field is an atomic type (no nested structs, arrays, or maps)."""
+    return all(isinstance(f.dataType, AtomicType) for f in schema.fields)
 
 
 class StatefulProcessorHandleState(Enum):
@@ -80,6 +133,10 @@ class StatefulProcessorApiClient:
         # and the index of the last row that was read.
         self.list_timer_iterator_cursors: Dict[str, Tuple[Any, int, bool]] = {}
         self.expiry_timer_iterator_cursors: Dict[str, Tuple[Any, int, bool]] = {}
+
+        # Cache of schema-id -> fast-serialize callable, so we avoid
+        # repeated attribute lookups on every _serialize_to_bytes call.
+        self._serializer_cache: Dict[int, Any] = {}
 
         # statefulProcessorApiClient is initialized per batch per partition,
         # so we will have new timestamps for a new batch
@@ -487,43 +544,24 @@ class StatefulProcessorApiClient:
     def _receive_str(self) -> str:
         return self.utf8_deserializer.loads(self.sockfile)
 
+    def _get_serializer(self, schema: StructType) -> Any:
+        schema_id = id(schema)
+        serializer = self._serializer_cache.get(schema_id)
+        if serializer is not None:
+            return serializer
+
+        to_internal = schema.toInternal
+        dumps = self.pickleSer.dumps
+        normalize = _normalize_tuple_simple if _is_simple_schema(schema) else _normalize_tuple
+
+        def _fast_serialize(data: Tuple) -> bytes:
+            return dumps(to_internal(normalize(data)))
+
+        self._serializer_cache[schema_id] = _fast_serialize
+        return _fast_serialize
+
     def _serialize_to_bytes(self, schema: StructType, data: Tuple) -> bytes:
-        from pyspark.testing.utils import have_numpy
-
-        if have_numpy:
-            import numpy as np
-
-            def normalize_value(v: Any) -> Any:
-                # Convert NumPy types to Python primitive types.
-                if isinstance(v, np.generic):
-                    return v.tolist()
-                # Named tuples (collections.namedtuple or typing.NamedTuple) and Row both
-                # require positional arguments and cannot be instantiated
-                # with a generator expression.
-                if isinstance(v, Row) or (isinstance(v, tuple) and hasattr(v, "_fields")):
-                    return type(v)(*[normalize_value(e) for e in v])
-                # List / tuple: recursively normalize each element
-                if isinstance(v, (list, tuple)):
-                    return type(v)(normalize_value(e) for e in v)
-                # Dict: normalize both keys and values
-                if isinstance(v, dict):
-                    return {normalize_value(k): normalize_value(val) for k, val in v.items()}
-                # Address a couple of pandas dtypes too.
-                elif hasattr(v, "to_pytimedelta"):
-                    return v.to_pytimedelta()
-                elif hasattr(v, "to_pydatetime"):
-                    return v.to_pydatetime()
-                else:
-                    return v
-
-            converted = [normalize_value(v) for v in data]
-        else:
-            converted = list(data)
-
-        field_names = [f.name for f in schema.fields]
-        row_value = Row(**dict(zip(field_names, converted)))
-
-        return self.pickleSer.dumps(schema.toInternal(row_value))
+        return self._get_serializer(schema)(data)
 
     def _deserialize_from_bytes(self, value: bytes) -> Any:
         return self.pickleSer.loads(value)

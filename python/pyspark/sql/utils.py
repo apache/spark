@@ -50,6 +50,14 @@ from pyspark.util import is_remote_only, JVM_INT_MAX
 from pyspark.errors.exceptions.captured import CapturedException  # noqa: F401
 from pyspark.find_spark_home import _find_spark_home
 
+has_numpy: bool = False
+try:
+    import numpy as np  # noqa: F401
+
+    has_numpy = True
+except ImportError:
+    pass
+
 if TYPE_CHECKING:
     from py4j.java_collections import JavaArray
     from py4j.java_gateway import (
