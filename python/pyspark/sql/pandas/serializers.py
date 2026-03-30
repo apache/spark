@@ -20,7 +20,7 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 """
 
 from itertools import groupby
-from typing import IO, TYPE_CHECKING, Any, Iterator, List, Optional, Tuple
+from typing import IO, TYPE_CHECKING, Any, Iterable, Iterator, List, Optional, Tuple
 
 import pyspark
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
@@ -137,8 +137,9 @@ class ArrowStreamSerializer(Serializer):
         super().__init__()
         self._write_start_stream: bool = write_start_stream
 
-    def dump_stream(self, iterator: Iterator["pa.RecordBatch"], stream: IO[bytes]) -> None:
+    def dump_stream(self, iterator: Iterable["pa.RecordBatch"], stream: IO[bytes]) -> None:
         """Optionally prepend START_ARROW_STREAM, then write batches."""
+        iterator = iter(iterator)
         if self._write_start_stream:
             iterator = self._write_stream_start(iterator, stream)
         import pyarrow as pa

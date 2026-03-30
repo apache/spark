@@ -537,7 +537,7 @@ class StatefulProcessorApiClient:
             pd.DataFrame(state, columns=column_names), schema
         )
         batch = pa.RecordBatch.from_pandas(pandas_df)
-        self.serializer.dump_stream(iter([batch]), cast(IO[bytes], self.sockfile))
+        self.serializer.dump_stream([batch], cast(IO[bytes], self.sockfile))
         self.sockfile.flush()
 
     def _read_arrow_state(self) -> Any:
