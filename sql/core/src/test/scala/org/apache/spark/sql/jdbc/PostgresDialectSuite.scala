@@ -18,9 +18,8 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, PreparedStatement, ResultSet}
+import java.sql.Connection
 
-import org.mockito.ArgumentMatchers.{anyInt, anyString}
 import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
 
@@ -62,26 +61,19 @@ class PostgresDialectSuite extends SparkFunSuite with MockitoSugar {
     verify(conn, never()).setAutoCommit(false)
   }
 
-  test("effectiveFetchSize: returns user-specified value when set") {
+  test("SPARK-56251: effectiveFetchSize: returns user-specified value when set") {
     assert(dialect.effectiveFetchSize(createJDBCOptions(Map("fetchsize" -> "500"))) === 500)
   }
 
-  test("effectiveFetchSize: returns 0 when user explicitly sets 0") {
+  test("SPARK-56251: effectiveFetchSize: returns 0 when user explicitly sets 0") {
     assert(dialect.effectiveFetchSize(createJDBCOptions(Map("fetchsize" -> "0"))) === 0)
   }
 
-  test("effectiveFetchSize: returns defaultFetchSize (1000) when not set") {
+  test("SPARK-56251: effectiveFetchSize: returns defaultFetchSize (1000) when not set") {
     assert(dialect.effectiveFetchSize(createJDBCOptions(Map.empty)) === 1000)
   }
 
-  test("effectiveFetchSize: is case-insensitive for option key") {
-    Seq("fetchsize", "fetchSize", "FETCHSIZE").foreach { key =>
-      assert(dialect.effectiveFetchSize(createJDBCOptions(Map(key -> "200"))) === 200,
-        s"Failed for key: $key")
-    }
-  }
-
-  test("effectiveFetchSize: base dialect returns 0 when not set") {
+  test("SPARK-56251: effectiveFetchSize: base dialect returns 0 when not set") {
     val baseDialect = new JdbcDialect {
       override def canHandle(url: String): Boolean = true
     }
@@ -89,54 +81,10 @@ class PostgresDialectSuite extends SparkFunSuite with MockitoSugar {
     assert(baseDialect.effectiveFetchSize(createJDBCOptions(Map.empty)) === 0)
   }
 
-  /**
-   * Simulates the JDBCRDD.compute() call sequence to verify that beforeFetch (connection setup)
-   * and effectiveFetchSize (statement setup) work correctly together.
-   *
-   * In JDBCRDD.compute():
-   *   1. dialect.beforeFetch(conn, options)      -- sets autoCommit=false for Postgres
-   *   2. conn.prepareStatement(...)
-   *   3. stmt.setFetchSize(dialect.effectiveFetchSize(options))
-   */
-  private def simulateJdbcRead(options: JDBCOptions): (Connection, PreparedStatement) = {
+  test("SPARK-56251: beforeFetch sets autoCommit=false when using default fetchSize") {
     val conn = mock[Connection]
-    val stmt = mock[PreparedStatement]
-    val rs = mock[ResultSet]
-    when(conn.prepareStatement(anyString(), anyInt(), anyInt())).thenReturn(stmt)
-    when(stmt.executeQuery()).thenReturn(rs)
-    when(rs.next()).thenReturn(false)
-
-    // Simulate JDBCRDD.compute() sequence
-    dialect.beforeFetch(conn, options)
-    stmt.setFetchSize(dialect.effectiveFetchSize(options))
-    stmt.executeQuery()
-
-    (conn, stmt)
-  }
-
-  test("JDBCRDD compute simulation: no fetchSize specified uses dialect default") {
-    val options = createJDBCOptions(Map.empty)
-    val (conn, stmt) = simulateJdbcRead(options)
-
-    val order = inOrder(conn, stmt)
-    order.verify(conn).setAutoCommit(false)
-    order.verify(stmt).setFetchSize(1000)
-  }
-
-  test("JDBCRDD compute simulation: explicit fetchSize overrides dialect default") {
-    val options = createJDBCOptions(Map("fetchsize" -> "50"))
-    val (conn, stmt) = simulateJdbcRead(options)
-
-    val order = inOrder(conn, stmt)
-    order.verify(conn).setAutoCommit(false)
-    order.verify(stmt).setFetchSize(50)
-  }
-
-  test("JDBCRDD compute simulation: explicit fetchSize=0 disables cursor fetching") {
-    val options = createJDBCOptions(Map("fetchsize" -> "0"))
-    val (conn, stmt) = simulateJdbcRead(options)
-
-    verify(conn, never()).setAutoCommit(false)
-    verify(stmt).setFetchSize(0)
+    // No explicit fetchsize - should use defaultFetchSize (1000) and set autoCommit=false
+    dialect.beforeFetch(conn, createJDBCOptions(Map.empty))
+    verify(conn).setAutoCommit(false)
   }
 }

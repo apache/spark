@@ -531,7 +531,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("Dialect defaultFetchSize is applied when user does not specify fetchsize") {
+  test("SPARK-56251: Dialect defaultFetchSize is applied when user does not specify fetchsize") {
     @volatile var capturedFetchSize: Int = -1
 
     val testDialect = new JdbcDialect {
@@ -555,7 +555,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("User-specified fetchsize takes precedence over dialect defaultFetchSize") {
+  test("SPARK-56251: User-specified fetchsize takes precedence over dialect defaultFetchSize") {
     @volatile var capturedFetchSize: Int = -1
 
     val testDialect = new JdbcDialect {
