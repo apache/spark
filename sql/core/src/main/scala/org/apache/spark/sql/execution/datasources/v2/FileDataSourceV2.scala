@@ -27,15 +27,16 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkException, SparkUpgradeException}
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -109,12 +110,35 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
       schema: StructType,
       partitioning: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    // If the table is already loaded during schema inference, return it directly.
-    if (t != null) {
+    // Reuse the cached table from inferSchema() when available,
+    // since it has the correct fileIndex (e.g., MetadataLogFileIndex
+    // for streaming sink output). Only create a fresh table when
+    // no cached table exists (pure write path).
+    val opts = new CaseInsensitiveStringMap(properties)
+    val table = if (t != null) {
       t
     } else {
-      getTable(new CaseInsensitiveStringMap(properties), schema)
+      try {
+        getTable(opts, schema)
+      } catch {
+        case _: SparkUnsupportedOperationException =>
+          getTable(opts)
+      }
     }
+    if (partitioning.nonEmpty) {
+      table match {
+        case ft: FileTable =>
+          ft.userSpecifiedPartitioning =
+            partitioning.map {
+              case IdentityTransform(FieldReference(Seq(col))) => col
+              case x =>
+                throw new IllegalArgumentException(
+                  "Unsupported partition transform: " + x)
+            }.toImmutableArraySeq
+        case _ =>
+      }
+    }
+    table
   }
 }
 

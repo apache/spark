@@ -487,10 +487,10 @@ case class DataSource(
     val caseSensitive = conf.caseSensitiveAnalysis
     PartitioningUtils.validatePartitionColumn(data.schema, partitionColumns, caseSensitive)
 
-    val fileIndex = catalogTable.map(_.identifier).map { tableIdent =>
-      sparkSession.table(tableIdent).queryExecution.analyzed.collect {
+    val fileIndex = catalogTable.map(_.identifier).flatMap { tableIdent =>
+      sparkSession.table(tableIdent).queryExecution.analyzed.collectFirst {
         case LogicalRelationWithTable(t: HadoopFsRelation, _) => t.location
-      }.head
+      }
     }
     // For partitioned relation r, r.schema's column ordering can be different from the column
     // ordering of data.logicalPlan (partition columns are all moved after data column).  This

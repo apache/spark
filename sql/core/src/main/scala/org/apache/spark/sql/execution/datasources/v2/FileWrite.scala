@@ -30,28 +30,50 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.connector.write.{BatchWrite, LogicalWriteInfo, Write}
+import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
+import org.apache.spark.sql.connector.expressions.{Expressions, SortDirection}
+import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
+import org.apache.spark.sql.connector.write.{BatchWrite, LogicalWriteInfo, RequiresDistributionAndOrdering, Write}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, DataSource, OutputWriterFactory, WriteJobDescription}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SerializableConfiguration
 
-trait FileWrite extends Write {
+trait FileWrite extends Write
+    with RequiresDistributionAndOrdering {
   def paths: Seq[String]
   def formatName: String
   def supportsDataType: DataType => Boolean
   def allowDuplicatedColumnNames: Boolean = false
   def info: LogicalWriteInfo
+  def partitionSchema: StructType
+  def customPartitionLocations: Map[Map[String, String], String] = Map.empty
+  def dynamicPartitionOverwrite: Boolean = false
+  def isTruncate: Boolean = false
 
   private val schema = info.schema()
   private val queryId = info.queryId()
   val options = info.options()
 
   override def description(): String = formatName
+
+  override def requiredDistribution(): Distribution =
+    Distributions.unspecified()
+
+  override def requiredOrdering(): Array[V2SortOrder] = {
+    if (partitionSchema.isEmpty) {
+      Array.empty
+    } else {
+      partitionSchema.fieldNames.map { col =>
+        Expressions.sort(
+          Expressions.column(col),
+          SortDirection.ASCENDING)
+      }
+    }
+  }
 
   override def toBatch: BatchWrite = {
     val sparkSession = SparkSession.active
@@ -60,12 +82,33 @@ trait FileWrite extends Write {
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
+
+    // Ensure the output path exists. For new writes (Append to a new path, Overwrite on a new
+    // path), the path may not exist yet.
+    val fs = path.getFileSystem(hadoopConf)
+    val qualifiedPath = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    if (!fs.exists(qualifiedPath)) {
+      fs.mkdirs(qualifiedPath)
+    }
+
+    // For truncate (full overwrite), delete existing data before writing.
+    if (isTruncate && fs.exists(qualifiedPath)) {
+      fs.listStatus(qualifiedPath).foreach { status =>
+        // Preserve hidden files/dirs (e.g., _SUCCESS, .spark-staging-*)
+        if (!status.getPath.getName.startsWith("_") &&
+            !status.getPath.getName.startsWith(".")) {
+          fs.delete(status.getPath, true)
+        }
+      }
+    }
+
     val job = getJobInstance(hadoopConf, path)
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
-      outputPath = paths.head)
-    lazy val description =
+      outputPath = paths.head,
+      dynamicPartitionOverwrite = dynamicPartitionOverwrite)
+    val description =
       createWriteJobDescription(sparkSession, hadoopConf, job, paths.head, options.asScala.toMap)
 
     committer.setupJob(job)
@@ -93,14 +136,18 @@ trait FileWrite extends Write {
         s"got: ${paths.mkString(", ")}")
     }
     if (!allowDuplicatedColumnNames) {
-      SchemaUtils.checkColumnNameDuplication(
-        schema.fields.map(_.name).toImmutableArraySeq, caseSensitiveAnalysis)
+      SchemaUtils.checkSchemaColumnNameDuplication(
+        schema, caseSensitiveAnalysis)
+    }
+    if (!sqlConf.allowCollationsInMapKeys) {
+      SchemaUtils.checkNoCollationsInMapKeys(schema)
     }
     DataSource.validateSchema(formatName, schema, sqlConf)
 
-    // TODO: [SPARK-36340] Unify check schema filed of DataSource V2 Insert.
+    val partColNames = partitionSchema.fieldNames.toSet
     schema.foreach { field =>
-      if (!supportsDataType(field.dataType)) {
+      if (!partColNames.contains(field.name) &&
+          !supportsDataType(field.dataType)) {
         throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(formatName, field)
       }
     }
@@ -121,26 +168,45 @@ trait FileWrite extends Write {
       pathName: String,
       options: Map[String, String]): WriteJobDescription = {
     val caseInsensitiveOptions = CaseInsensitiveMap(options)
-    // Note: prepareWrite has side effect. It sets "job".
-    val outputWriterFactory =
-      prepareWrite(sparkSession.sessionState.conf, job, caseInsensitiveOptions, schema)
     val allColumns = toAttributes(schema)
+    val partitionColumnNames = partitionSchema.fields.map(_.name).toSet
+    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+    // Build partition columns using names from partitionSchema (e.g., "p" from
+    // partitionBy("p")), not from allColumns (e.g., "P" from the DataFrame).
+    // This ensures directory names match the partitionBy argument case.
+    val partitionColumns = if (partitionColumnNames.nonEmpty) {
+      allColumns.flatMap { col =>
+        val partName = if (caseSensitive) {
+          partitionColumnNames.find(_ == col.name)
+        } else {
+          partitionColumnNames.find(_.equalsIgnoreCase(col.name))
+        }
+        partName.map(n => col.withName(n))
+      }
+    } else {
+      Seq.empty
+    }
+    val dataColumns = allColumns.filterNot { col =>
+      if (caseSensitive) partitionColumnNames.contains(col.name)
+      else partitionColumnNames.exists(_.equalsIgnoreCase(col.name))
+    }
+    // Note: prepareWrite has side effect. It sets "job".
+    val dataSchema = StructType(dataColumns.map(col => schema(col.name)))
+    val outputWriterFactory =
+      prepareWrite(sparkSession.sessionState.conf, job, caseInsensitiveOptions, dataSchema)
     val metrics: Map[String, SQLMetric] = BasicWriteJobStatsTracker.metrics
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
     val statsTracker = new BasicWriteJobStatsTracker(serializableHadoopConf, metrics)
-    // TODO: after partitioning is supported in V2:
-    //       1. filter out partition columns in `dataColumns`.
-    //       2. Don't use Seq.empty for `partitionColumns`.
     new WriteJobDescription(
       uuid = UUID.randomUUID().toString,
       serializableHadoopConf = new SerializableConfiguration(job.getConfiguration),
       outputWriterFactory = outputWriterFactory,
       allColumns = allColumns,
-      dataColumns = allColumns,
-      partitionColumns = Seq.empty,
+      dataColumns = dataColumns,
+      partitionColumns = partitionColumns,
       bucketSpec = None,
       path = pathName,
-      customPartitionLocations = Map.empty,
+      customPartitionLocations = customPartitionLocations,
       maxRecordsPerFile = caseInsensitiveOptions.get("maxRecordsPerFile").map(_.toLong)
         .getOrElse(sparkSession.sessionState.conf.maxRecordsPerFile),
       timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)

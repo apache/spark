@@ -24,6 +24,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{QualifiedTableName, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, SessionCatalog}
@@ -33,7 +34,7 @@ import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -77,7 +78,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
   private def getDataSourceOptions(
       properties: Map[String, String],
       storage: CatalogStorageFormat): CaseInsensitiveStringMap = {
-    val propertiesWithPath = properties ++
+    val propertiesWithPath = storage.properties ++ properties ++
       storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
     new CaseInsensitiveStringMap(propertiesWithPath.asJava)
   }
@@ -93,32 +94,50 @@ class V2SessionCatalog(catalog: SessionCatalog)
       // table here. To avoid breaking it we do not resolve the table provider and still return
       // `V1Table` if the custom session catalog is present.
       if (table.provider.isDefined && !hasCustomSessionCatalog) {
-        val qualifiedTableName = QualifiedTableName(
-          table.identifier.catalog.get, table.database, table.identifier.table)
-        // Check if the table is in the v1 table cache to skip the v2 table lookup.
-        if (catalog.getCachedTable(qualifiedTableName) != null) {
-          return V1Table(table)
-        }
         DataSourceV2Utils.getTableProvider(table.provider.get, conf) match {
           case Some(provider) =>
-            // Get the table properties during creation and append the path option
-            // to the properties.
-            val dsOptions = getDataSourceOptions(table.properties, table.storage)
-            // If the source accepts external table metadata, we can pass the schema and
-            // partitioning information stored in Hive to `getTable` to avoid expensive
-            // schema/partitioning inference.
-            if (provider.supportsExternalMetadata()) {
-              provider.getTable(
-                table.schema,
-                getV2Partitioning(table),
-                dsOptions.asCaseSensitiveMap())
-            } else {
-              provider.getTable(
-                provider.inferSchema(dsOptions),
-                provider.inferPartitioning(dsOptions),
-                dsOptions.asCaseSensitiveMap())
+            val dsOptions = getDataSourceOptions(
+              table.properties, table.storage)
+            val v2Table =
+              if (provider.supportsExternalMetadata()) {
+                provider.getTable(
+                  table.schema,
+                  getV2Partitioning(table),
+                  dsOptions.asCaseSensitiveMap())
+              } else {
+                provider.getTable(
+                  provider.inferSchema(dsOptions),
+                  provider.inferPartitioning(dsOptions),
+                  dsOptions.asCaseSensitiveMap())
+              }
+            v2Table match {
+              case ft: FileTable =>
+                ft.catalogTable = Some(table)
+                if (table.partitionColumnNames.nonEmpty) {
+                  try {
+                    val parts = catalog
+                      .listPartitions(table.identifier)
+                    if (parts.nonEmpty) {
+                      ft.useCatalogFileIndex = true
+                    }
+                  } catch {
+                    case _: Exception =>
+                  }
+                }
+              case _ =>
             }
+            v2Table
           case _ =>
+            // No V2 provider available. Use V1 table cache
+            // for performance if the table is already cached.
+            val qualifiedTableName = QualifiedTableName(
+              table.identifier.catalog.get,
+              table.database,
+              table.identifier.table)
+            if (catalog.getCachedTable(
+                qualifiedTableName) != null) {
+              return V1Table(table)
+            }
             V1Table(table)
         }
       } else {
@@ -215,6 +234,17 @@ class V2SessionCatalog(catalog: SessionCatalog)
             partitions
           }
           val table = tableProvider.getTable(schema, partitions, dsOptions)
+          table match {
+            case ft: FileTable =>
+              schema.foreach { field =>
+                if (!ft.supportsDataType(field.dataType)) {
+                  throw QueryCompilationErrors
+                    .dataTypeUnsupportedByDataSourceError(
+                      ft.formatName, field)
+                }
+              }
+            case _ =>
+          }
           // Check if the schema of the created table matches the given schema.
           val tableSchema = table.columns().asSchema
           if (!DataType.equalsIgnoreNullability(table.columns().asSchema, schema)) {
@@ -225,6 +255,26 @@ class V2SessionCatalog(catalog: SessionCatalog)
 
       case _ =>
         // The provider is not a V2 provider so we return the schema and partitions as is.
+        // Validate data types using the V1 FileFormat, matching V1 CreateDataSourceTableCommand
+        // behavior (which validates via DataSource.resolveRelation).
+        if (schema.nonEmpty) {
+          val ds = DataSource(
+            SparkSession.active,
+            userSpecifiedSchema = Some(schema),
+            className = provider)
+          ds.providingInstance() match {
+            case format: FileFormat =>
+              schema.foreach { field =>
+                if (!format.supportDataType(field.dataType)) {
+                  throw QueryCompilationErrors
+                    .dataTypeUnsupportedByDataSourceError(
+                      format.toString, field)
+                }
+              }
+            case _ =>
+          }
+        }
+        DataSource.validateSchema(provider, schema, conf)
         (schema, partitions)
     }
 

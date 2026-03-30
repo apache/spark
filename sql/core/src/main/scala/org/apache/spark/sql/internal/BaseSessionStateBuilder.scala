@@ -225,7 +225,6 @@ abstract class BaseSessionStateBuilder(
       new ResolveDataSource(session) +:
         new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
-        new FallBackFileSourceV2(session) +:
         ResolveEncodersInScalaAgg +:
         new ResolveSessionCatalog(this.catalogManager) +:
         ResolveWriteToStream +:

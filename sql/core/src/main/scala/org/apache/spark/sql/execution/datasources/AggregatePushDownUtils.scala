@@ -44,11 +44,14 @@ object AggregatePushDownUtils {
     var finalSchema = new StructType()
 
     def getStructFieldForCol(colName: String): StructField = {
-      schema.apply(colName)
+      // Use case-insensitive lookup to handle partition column name case
+      // differences (e.g., directory name "P" vs query column "p").
+      schema.find(_.name.equalsIgnoreCase(colName)).getOrElse(schema.apply(colName))
     }
 
     def isPartitionCol(colName: String) = {
-      partitionNames.contains(colName)
+      partitionNames.contains(colName) ||
+        partitionNames.exists(_.equalsIgnoreCase(colName))
     }
 
     def processMinOrMax(agg: AggregateFunc): Boolean = {

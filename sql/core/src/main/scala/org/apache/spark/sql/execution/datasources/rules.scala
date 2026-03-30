@@ -31,13 +31,14 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, InputFileBlockLeng
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.expressions.{FieldReference, RewritableTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
-import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, MetadataBuilder, StructField, StructType}
@@ -57,8 +58,10 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       val result = plan match {
         case u: UnresolvedRelation if maybeSQLFile(u) =>
           try {
-            val ds = resolveDataSource(u)
-            Some(LogicalRelation(ds.resolveRelation()))
+            resolveAsV2(u).orElse {
+              val ds = resolveDataSource(u)
+              Some(LogicalRelation(ds.resolveRelation()))
+            }
           } catch {
             case e: SparkUnsupportedOperationException =>
               u.failAnalysis(
@@ -88,6 +91,22 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
   private def maybeSQLFile(u: UnresolvedRelation): Boolean = {
     conf.runSQLonFile && u.multipartIdentifier.size == 2
+  }
+
+  private def resolveAsV2(u: UnresolvedRelation): Option[LogicalPlan] = {
+    val ident = u.multipartIdentifier
+    val format = ident.head
+    val path = ident.last
+    DataSource.lookupDataSourceV2(format, conf).flatMap {
+      case p: FileDataSourceV2 =>
+        DataSourceV2Utils.loadV2Source(
+          sparkSession, p,
+          userSpecifiedSchema = None,
+          extraOptions = CaseInsensitiveMap(u.options.asScala.toMap),
+          source = format,
+          path)
+      case _ => None
+    }
   }
 
   private def resolveDataSource(unresolved: UnresolvedRelation): DataSource = {
@@ -126,6 +145,12 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(u.multipartIdentifier))
       } catch {
         case _: ClassNotFoundException => r
+      }
+    case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _, _, _)
+        if maybeSQLFile(u) =>
+      UnresolvedRelationResolution.unapply(u) match {
+        case Some(resolved) => i.copy(table = resolved)
+        case None => i
       }
     case UnresolvedRelationResolution(resolvedRelation) =>
       resolvedRelation

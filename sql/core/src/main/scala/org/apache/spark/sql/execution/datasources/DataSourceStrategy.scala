@@ -54,7 +54,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.v2.{ExtractV2Table, PushedDownOperators}
+import org.apache.spark.sql.execution.datasources.v2.{ExtractV2Table, FileTable, PushedDownOperators}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
@@ -359,6 +359,13 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
     // The sourceIdentifyingName defaults to Unassigned.
     case u: UnresolvedCatalogRelation if u.isStreaming =>
       getStreamingRelation(u.tableMeta, u.options, Unassigned)
+
+    // TODO(SPARK-56233): Add MICRO_BATCH_READ capability to FileTable
+    // so streaming reads don't need V1 fallback.
+    case StreamingRelationV2(
+        _, _, ft: FileTable, extraOptions, _, _, _, None, name)
+        if ft.catalogTable.isDefined =>
+      getStreamingRelation(ft.catalogTable.get, extraOptions, name)
 
     case s @ StreamingRelationV2(
         _, _, table, extraOptions, _, _, _,
