@@ -404,7 +404,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       load(appId)
      } catch {
       case _: NoSuchElementException if this.conf.get(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED) =>
-        loadFromFallbackLocation(appId, attemptId, logPath)
+        loadFromFallbackLocation(appId, attemptId, logPath) match {
+          case Some(wrapper) => wrapper
+          case None => return None
+        }
       case _: NoSuchElementException =>
         return None
     }
@@ -426,13 +429,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           createInMemoryStore(attempt)
       }
     } catch {
-      case _: FileNotFoundException if this.conf.get(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED) =>
-        if (app.attempts.head.info.appSparkVersion == "unknown") {
-          listing.synchronized {
-            listing.delete(classOf[ApplicationInfoWrapper], appId)
-          }
-        }
-        return None
       case _: FileNotFoundException =>
         return None
     }
@@ -453,18 +449,20 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   private def loadFromFallbackLocation(appId: String, attemptId: Option[String], logPath: String)
-    : ApplicationInfoWrapper = {
-    val date = new Date(0)
-    val lastUpdate = new Date()
-    val (logSourceName, logSourceFullPath) = getLogDirInfo(logPath)
-    val info = ApplicationAttemptInfo(
-      attemptId, date, date, lastUpdate, 0, "spark", false, "unknown",
-      Some(logSourceName), Some(logSourceFullPath))
-    addListing(new ApplicationInfoWrapper(
-      ApplicationInfo(appId, appId, None, None, None, None, List.empty),
-      List(new AttemptInfoWrapper(info, logPath, 0, Some(1), None, None, None, None,
-        logSourceName, logSourceFullPath))))
-    load(appId)
+    : Option[ApplicationInfoWrapper] = {
+    // Call mergeApplicationListing to populate accurate metadata immediately.
+    // logSourceFullPath is empty because on-demand loading has no prior knowledge of the
+    // source directory; resolveLogPath will scan all directories to find the log.
+    val (dirFs, fullPath) = resolveLogPath(logPath, "")
+    try {
+      EventLogFileReader(dirFs, dirFs.getFileStatus(fullPath)).foreach { reader =>
+        mergeApplicationListing(reader, clock.getTimeMillis(), enableOptimizations = true)
+      }
+      Some(load(appId))
+    } catch {
+      case _: FileNotFoundException | _: NoSuchElementException =>
+        None
+    }
   }
 
   override def getEmptyListingHtml(): Seq[Node] = {
