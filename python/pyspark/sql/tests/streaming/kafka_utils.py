@@ -45,6 +45,8 @@ import logging
 import time
 from typing import List, Tuple, Callable, Any
 
+from pyspark.sql import SparkSession
+
 logger = logging.getLogger(__name__)
 
 
@@ -250,7 +252,7 @@ class KafkaUtils:
 
     def get_all_records(
         self,
-        spark: "SparkSession",
+        spark: SparkSession,
         topic: str,
         key_deserializer: str = "STRING",
         value_deserializer: str = "STRING",
