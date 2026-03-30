@@ -24,6 +24,7 @@ AT	false
 ATOMIC	false
 AUTHORIZATION	false
 BEGIN	false
+BERNOULLI	false
 BETWEEN	false
 BIGINT	false
 BINARY	false
@@ -347,6 +348,7 @@ STRUCT	false
 SUBSTR	false
 SUBSTRING	false
 SYNC	false
+SYSTEM	false
 SYSTEM_TIME	false
 SYSTEM_VERSION	false
 TABLE	false

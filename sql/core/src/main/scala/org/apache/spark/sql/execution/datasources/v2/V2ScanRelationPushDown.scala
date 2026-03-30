@@ -23,11 +23,12 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, COLUMN_NAMES, GROUP_BY_EXPRS, JOIN_CONDITION, JOIN_TYPE, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, ExprId, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, SampleMethod, Sort, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
@@ -811,7 +812,44 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
   }
 
+  private def findScanBuilderHolder(plan: LogicalPlan): Option[ScanBuilderHolder] = {
+    plan match {
+      case s: ScanBuilderHolder => Some(s)
+      case s: SubqueryAlias => findScanBuilderHolder(s.child)
+      case p: Project => findScanBuilderHolder(p.child)
+      case f: Filter => findScanBuilderHolder(f.child)
+      case _ => None
+    }
+  }
+
   def pushDownSample(plan: LogicalPlan): LogicalPlan = plan.transform {
+    case sample: Sample if sample.sampleMethod == SampleMethod.System =>
+      findScanBuilderHolder(sample.child) match {
+        case Some(sHolder) =>
+          val tableSample = TableSampleInfo(
+            sample.lowerBound,
+            sample.upperBound,
+            sample.withReplacement,
+            sample.seed,
+            sampleMethod = sample.sampleMethod)
+          val pushed = PushDownUtils.pushTableSample(sHolder.builder, tableSample)
+          if (pushed) {
+            sHolder.pushedSample = Some(tableSample)
+            sample.child
+          } else {
+            throw new AnalysisException(
+              errorClass = "_LEGACY_ERROR_TEMP_0035",
+              messageParameters = Map("message" ->
+                ("TABLESAMPLE SYSTEM requires a data source that supports " +
+                "table sample pushdown (SupportsPushDownTableSample).")))
+          }
+        case None =>
+          throw new AnalysisException(
+            errorClass = "_LEGACY_ERROR_TEMP_0035",
+            messageParameters = Map("message" ->
+              "TABLESAMPLE SYSTEM is only supported for DSv2 data source scan relations."))
+      }
+
     case sample: Sample => sample.child match {
       case PhysicalOperation(_, Nil, sHolder: ScanBuilderHolder) =>
         val tableSample = TableSampleInfo(
@@ -826,7 +864,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         } else {
           sample
         }
-
       case _ => sample
     }
   }

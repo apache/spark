@@ -1912,6 +1912,14 @@ object SubqueryAlias {
   }
 }
 
+sealed trait SampleMethod extends Serializable
+object SampleMethod {
+  /** Row-level sampling (BERNOULLI). Each row independently selected. No I/O savings. */
+  case object Bernoulli extends SampleMethod
+  /** System-level sampling (SYSTEM). Entire partitions/splits included or skipped. */
+  case object System extends SampleMethod
+}
+
 /**
  * Sample the dataset.
  *
@@ -1921,13 +1929,15 @@ object SubqueryAlias {
  * @param withReplacement Whether to sample with replacement.
  * @param seed the random seed
  * @param child the LogicalPlan
+ * @param sampleMethod the sampling method (Bernoulli or System)
  */
 case class Sample(
     lowerBound: Double,
     upperBound: Double,
     withReplacement: Boolean,
     seed: Long,
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    sampleMethod: SampleMethod = SampleMethod.Bernoulli) extends UnaryNode {
 
   val eps = RandomSampler.roundingEpsilon
   val fraction = upperBound - lowerBound

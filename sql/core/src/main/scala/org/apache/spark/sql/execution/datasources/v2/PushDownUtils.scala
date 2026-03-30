@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression}
+import org.apache.spark.sql.catalyst.plans.logical.SampleMethod
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.{IdentityTransform, SortOrder, Transform}
@@ -205,7 +206,8 @@ object PushDownUtils {
     scanBuilder match {
       case s: SupportsPushDownTableSample =>
         s.pushTableSample(
-          sample.lowerBound, sample.upperBound, sample.withReplacement, sample.seed)
+          sample.lowerBound, sample.upperBound, sample.withReplacement, sample.seed,
+          sample.sampleMethod == SampleMethod.System)
       case _ => false
     }
   }

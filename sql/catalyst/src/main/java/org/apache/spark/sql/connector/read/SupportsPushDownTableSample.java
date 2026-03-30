@@ -36,4 +36,24 @@ public interface SupportsPushDownTableSample extends ScanBuilder {
       double upperBound,
       boolean withReplacement,
       long seed);
+
+  /**
+   * Pushes down SAMPLE to the data source with sample method awareness.
+   * Data sources can override this to distinguish SYSTEM (block) from BERNOULLI (row) sampling.
+   * By default, rejects SYSTEM sampling for backward compatibility and delegates BERNOULLI to
+   *   the 4-parameter version.
+   */
+  default boolean pushTableSample(
+      double lowerBound,
+      double upperBound,
+      boolean withReplacement,
+      long seed,
+      boolean isSystemSampling) {
+    if (isSystemSampling) {
+      // If the data source hasn't overridden this method, it must have not added support
+      // for SYSTEM sampling. Don't apply sample pushdown.
+      return false;
+    }
+    return pushTableSample(lowerBound, upperBound, withReplacement, seed);
+  }
 }

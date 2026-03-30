@@ -1039,7 +1039,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.FilterExec(f.typedCondition(f.deserializer), planLater(f.child)) :: Nil
       case e @ logical.Expand(_, _, child) =>
         execution.ExpandExec(e.projections, e.output, planLater(child)) :: Nil
-      case logical.Sample(lb, ub, withReplacement, seed, child) =>
+      case logical.Sample(lb, ub, withReplacement, seed, child, sampleMethod) =>
+        if (sampleMethod == logical.SampleMethod.System) {
+          // Defensive Check: TABLESAMPLE SYSTEM node wasn't able to be pushed into
+          // V2ScanRelationPushDown earlier. This means the data source is either not DSv2 or
+          // not able to support block/split sampling. Now it fell through to the row-based
+          // sampling. Therefore error out.
+          throw new AnalysisException(
+            errorClass = "_LEGACY_ERROR_TEMP_0035",
+            messageParameters = Map("message" ->
+              ("TABLESAMPLE SYSTEM (block sampling) must be pushed down to a DSv2 data source. " +
+              "It cannot be executed as row-level sampling.")))
+        }
         execution.SampleExec(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data, _, stream) =>
         LocalTableScanExec(output, data, stream) :: Nil
