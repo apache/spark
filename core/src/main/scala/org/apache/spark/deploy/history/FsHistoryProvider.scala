@@ -109,6 +109,20 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val logDirs = conf.get(History.HISTORY_LOG_DIR)
     .split(",").map(_.trim).filter(_.nonEmpty).toSeq
 
+  private val scanDisabledPathPatterns = conf.get(History.SCAN_DISABLED_PATH_PATTERNS)
+    .map(_.r)
+
+  /** Check if scanning is disabled for a directory by matching its path against patterns. */
+  private def isScanDisabled(dir: String): Boolean = {
+    if (scanDisabledPathPatterns.isEmpty) return false
+    val qualifiedPath = {
+      val path = new Path(dir)
+      val dirFs = logDirFs(dir)
+      path.makeQualified(dirFs.getUri, dirFs.getWorkingDirectory).toString
+    }
+    scanDisabledPathPatterns.exists(_.pattern.matcher(qualifiedPath).matches())
+  }
+
   private val historyUiAclsEnable = conf.get(History.HISTORY_SERVER_UI_ACLS_ENABLE)
   private val historyUiAdminAcls = conf.get(History.HISTORY_SERVER_UI_ADMIN_ACLS)
   private val historyUiAdminAclsGroups = conf.get(History.HISTORY_SERVER_UI_ADMIN_ACLS_GROUPS)
@@ -559,10 +573,17 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private[history] def checkForLogs(): Unit = {
     val newLastScanTime = clock.getTimeMillis()
     val allNotStale = mutable.HashSet[String]()
+    val skippedDirs = mutable.ArrayBuffer[String]()
 
     logDirs.foreach { dir =>
       try {
-        checkForLogsInDir(dir, newLastScanTime, allNotStale)
+        if (isScanDisabled(dir)) {
+          logDebug(log"Skipping scan for directory ${MDC(HISTORY_DIR, dir)}" +
+            log" (scan disabled for this directory)")
+          skippedDirs += dir
+        } else {
+          checkForLogsInDir(dir, newLastScanTime, allNotStale)
+        }
       } catch {
         case e: IOException =>
           logError(log"Error checking for logs in directory ${MDC(HISTORY_DIR, dir)}", e)
@@ -572,6 +593,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // Delete all information about applications whose log files disappeared from storage.
     // This is done after scanning ALL directories to avoid incorrectly marking entries from
     // other directories as stale.
+    // Entries from scan-disabled directories are excluded from stale detection because
+    // they are never scanned and their lastProcessed time is never updated.
     val stale = listing.synchronized {
       KVUtils.viewToSeq(listing.view(classOf[LogInfo])
         .index("lastProcessed")
@@ -579,6 +602,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
     stale.filterNot(isProcessing)
       .filterNot(info => allNotStale.contains(info.logPath))
+      .filterNot(info => skippedDirs.exists(dir =>
+        logDirForPath(new Path(info.logPath)) == dir))
       .foreach { log =>
         log.appId.foreach { appId =>
           cleanAppData(appId, log.attemptId, log.logPath)
