@@ -1116,7 +1116,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             sdf = sdf.select(SF.covar(F.col(sdf.columns[0]), F.col(sdf.columns[1]), ddof))
             return sdf.head(1)[0][0]
 
-    # TODO: NaN and None when ``arg`` is an empty dict
     # TODO: Support ps.Series ``arg``
     def map(
         self, arg: Union[Dict, Callable[[Any], Any], pd.Series], na_action: Optional[str] = None
@@ -1211,6 +1210,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dtype: object
         """
         if isinstance(arg, (dict, pd.Series)):
+            if (
+                isinstance(arg, dict)
+                and len(arg) == 0
+                and not hasattr(arg, "__missing__")
+                and LooseVersion(pd.__version__) >= "3.0.0"
+            ):
+                # pandas 3 returns an all-NaN float64 Series for ``Series.map({})``.
+                return self._with_new_scol(F.lit(None).cast(DoubleType()))
+
             is_start = True
             # In case dictionary is empty.
             current = F.when(F.lit(False), F.lit(None).cast(self.spark.data_type))
@@ -6422,14 +6430,17 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         10    10
         dtype: int64
         """
-        warnings.warn(
-            "The behavior of Series.argsort in the presence of NA values is deprecated. "
-            "In a future version, NA values will be ordered last instead of set to -1.",
-            FutureWarning,
-        )
-        notnull = self.loc[self.notnull()]
+        if LooseVersion(pd.__version__) < "3.0.0":
+            warnings.warn(
+                "The behavior of Series.argsort in the presence of NA values is deprecated. "
+                "In a future version, NA values will be ordered last instead of set to -1.",
+                FutureWarning,
+            )
+            source = self.loc[self.notnull()]
+        else:
+            source = self
 
-        sdf_for_index = notnull._internal.spark_frame.select(notnull._internal.index_spark_columns)
+        sdf_for_index = source._internal.spark_frame.select(source._internal.index_spark_columns)
 
         tmp_join_key = verify_temp_column_name(sdf_for_index, "__tmp_join_key__")
         sdf_for_index = InternalFrame.attach_distributed_sequence_column(
@@ -6446,8 +6457,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         # |               4|                4|
         # +----------------+-----------------+
 
-        sdf_for_data = notnull._internal.spark_frame.select(
-            notnull.spark.column.alias("values"), NATURAL_ORDER_COLUMN_NAME
+        sdf_for_data = source._internal.spark_frame.select(
+            source.spark.column.alias("values"), NATURAL_ORDER_COLUMN_NAME
         )
         sdf_for_data = InternalFrame.attach_distributed_sequence_column(
             sdf_for_data, SPARK_DEFAULT_SERIES_NAME
@@ -6463,9 +6474,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         # |  4|     2|     128849018880|
         # +---+------+-----------------+
 
-        sdf_for_data = sdf_for_data.sort(
-            scol_for(sdf_for_data, "values"), NATURAL_ORDER_COLUMN_NAME
-        ).drop("values", NATURAL_ORDER_COLUMN_NAME)
+        value_scol = scol_for(sdf_for_data, "values")
+        if LooseVersion(pd.__version__) < "3.0.0":
+            sdf_for_data = sdf_for_data.sort(value_scol, NATURAL_ORDER_COLUMN_NAME)
+        else:
+            sdf_for_data = sdf_for_data.sort(value_scol.asc_nulls_last(), NATURAL_ORDER_COLUMN_NAME)
+        sdf_for_data = sdf_for_data.drop("values", NATURAL_ORDER_COLUMN_NAME)
 
         tmp_join_key = verify_temp_column_name(sdf_for_data, "__tmp_join_key__")
         sdf_for_data = InternalFrame.attach_distributed_sequence_column(sdf_for_data, tmp_join_key)
@@ -6492,10 +6506,13 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
         psser = first_series(DataFrame(internal))
 
-        return cast(
-            Series,
-            ps.concat([psser, self.loc[self.isnull()].spark.transform(lambda _: F.lit(-1))]),
-        )
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return cast(
+                Series,
+                ps.concat([psser, self.loc[self.isnull()].spark.transform(lambda _: F.lit(-1))]),
+            )
+        else:
+            return psser
 
     def argmax(self, axis: Axis = None, skipna: bool = True) -> int:
         """

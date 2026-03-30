@@ -33,7 +33,11 @@ from pyspark.pandas.data_type_ops.base import (
     _as_string_type,
     _sanitize_list_like,
 )
-from pyspark.pandas.typedef import handle_dtype_as_extension_dtype, pandas_on_spark_type
+from pyspark.pandas.typedef import (
+    handle_dtype_as_extension_dtype,
+    is_str_dtype,
+    pandas_on_spark_type,
+)
 from pyspark.sql.types import BooleanType
 
 
@@ -128,7 +132,10 @@ class StringOps(DataTypeOps):
             if handle_dtype_as_extension_dtype(dtype):
                 scol = index_ops.spark.column.cast(spark_type)
             else:
-                scol = F.when(index_ops.spark.column.isNull(), F.lit(False)).otherwise(
+                # pandas 3 maps `str` to StringDtype, where astype(bool)
+                # treats missing values as True.
+                null_value = F.lit(True) if is_str_dtype(self.dtype) else F.lit(False)
+                scol = F.when(index_ops.spark.column.isNull(), null_value).otherwise(
                     F.length(index_ops.spark.column) > 0
                 )
             return index_ops._with_new_scol(

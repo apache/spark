@@ -23,7 +23,7 @@ from itertools import groupby
 from typing import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple
 
 import pyspark
-from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.serializers import (
     Serializer,
     read_int,
@@ -37,7 +37,6 @@ from pyspark.sql.conversion import (
     ArrowTableToRowsConversion,
     ArrowBatchTransformer,
     PandasToArrowConversion,
-    coerce_arrow_array,
 )
 from pyspark.sql.pandas.types import (
     from_arrow_schema,
@@ -162,14 +161,19 @@ class ArrowStreamSerializer(Serializer):
             if writer is not None:
                 writer.close()
 
+    @classmethod
+    def _read_arrow_stream(cls, stream) -> Iterator["pa.RecordBatch"]:
+        """Read a plain Arrow IPC stream, yielding one RecordBatch per message."""
+        import pyarrow as pa
+
+        reader = pa.ipc.open_stream(stream)
+        for batch in reader:
+            yield batch
+
     def load_stream(self, stream):
         """Load batches: plain stream if num_dfs=0, grouped otherwise."""
         if self._num_dfs == 0:
-            import pyarrow as pa
-
-            reader = pa.ipc.open_stream(stream)
-            for batch in reader:
-                yield batch
+            yield from self._read_arrow_stream(stream)
         elif self._num_dfs == 1:
             # Grouped loading: yield single dataframe groups
             for (batches,) in self._load_group_dataframes(stream, num_dfs=1):
@@ -193,14 +197,11 @@ class ArrowStreamSerializer(Serializer):
             if dataframes_in_group == num_dfs:
                 if num_dfs == 1:
                     # Single dataframe: can use lazy iterator
-                    yield (ArrowStreamSerializer.load_stream(self, stream),)
+                    yield (self._read_arrow_stream(stream),)
                 else:
                     # Multiple dataframes: must eagerly load sequentially
                     # to maintain correct stream position
-                    yield tuple(
-                        list(ArrowStreamSerializer.load_stream(self, stream))
-                        for _ in range(num_dfs)
-                    )
+                    yield tuple(list(self._read_arrow_stream(stream)) for _ in range(num_dfs))
             elif dataframes_in_group > 0:
                 raise PySparkValueError(
                     errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
@@ -259,7 +260,7 @@ class ArrowStreamUDTFSerializer(ArrowStreamUDFSerializer):
     """
 
     def load_stream(self, stream):
-        return ArrowStreamSerializer.load_stream(self, stream)
+        return self._read_arrow_stream(stream)
 
 
 class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
@@ -299,40 +300,9 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                 assert isinstance(arrow_return_type, pa.StructType), (
                     f"Expected pa.StructType, got {type(arrow_return_type)}"
                 )
-
-                # Handle empty struct case specially
-                if batch.num_columns == 0:
-                    coerced_batch = batch  # skip type coercion
-                else:
-                    expected_field_names = [field.name for field in arrow_return_type]
-                    actual_field_names = batch.schema.names
-
-                    if expected_field_names != actual_field_names:
-                        raise PySparkTypeError(
-                            "Target schema's field names are not matching the record batch's "
-                            "field names. "
-                            f"Expected: {expected_field_names}, but got: {actual_field_names}."
-                        )
-
-                    coerced_arrays = []
-                    for i, field in enumerate(arrow_return_type):
-                        try:
-                            coerced_arrays.append(
-                                coerce_arrow_array(
-                                    batch.column(i),
-                                    field.type,
-                                    safecheck=True,
-                                )
-                            )
-                        except (pa.ArrowInvalid, pa.ArrowTypeError) as e:
-                            raise PySparkTypeError(
-                                f"Result type of column '{field.name}' does not "
-                                f"match the expected type. Expected: {field.type}, "
-                                f"got: {batch.column(i).type}."
-                            ) from e
-                    coerced_batch = pa.RecordBatch.from_arrays(
-                        coerced_arrays, names=expected_field_names
-                    )
+                coerced_batch = ArrowBatchTransformer.enforce_schema(
+                    batch, pa.schema(arrow_return_type), safecheck=True
+                )
                 yield coerced_batch, arrow_return_type
 
         return super().dump_stream(apply_type_coercion(), stream)
@@ -615,13 +585,13 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
         def create_batch(
             arr_tuples: List[Tuple["pa.Array", "pa.DataType"]],
         ) -> "pa.RecordBatch":
-            arrs = [
-                coerce_arrow_array(
-                    arr, arrow_type, safecheck=self._safecheck, arrow_cast=self._arrow_cast
-                )
-                for arr, arrow_type in arr_tuples
-            ]
-            return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
+            names = ["_%d" % i for i in range(len(arr_tuples))]
+            arrs = [arr for arr, _ in arr_tuples]
+            batch = pa.RecordBatch.from_arrays(arrs, names)
+            target_schema = pa.schema([pa.field(n, t) for n, (_, t) in zip(names, arr_tuples)])
+            return ArrowBatchTransformer.enforce_schema(
+                batch, target_schema, safecheck=self._safecheck, arrow_cast=self._arrow_cast
+            )
 
         def normalize(packed):
             if len(packed) == 2 and isinstance(packed[1], pa.DataType):

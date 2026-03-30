@@ -23,7 +23,6 @@ import faulthandler
 import gc
 import itertools
 import os
-import platform
 import re
 import sys
 import threading
@@ -274,10 +273,6 @@ def try_simplify_traceback(tb: TracebackType) -> Optional[TracebackType]:
     >>> exc_info_b.count("pyspark/util.py")
     1
     """
-    if "pypy" in platform.python_implementation().lower():
-        # Traceback modification is not supported with PyPy in PySpark.
-        return None
-
     import pyspark
 
     root = os.path.dirname(pyspark.__file__)
@@ -352,7 +347,7 @@ def _parse_memory(s: str) -> int:
     return int(float(s[:-1]) * units[s[-1].lower()])
 
 
-def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = None) -> Callable:
+def inheritable_thread_target(f: Union[Callable, "SparkSession"]) -> Callable:
     """
     Return thread target wrapper which is recommended to be used in PySpark when the
     pinned thread mode is enabled. The wrapper function, before calling original
@@ -360,7 +355,7 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
     to JVM thread such as ``InheritableThreadLocal``, or thread local such as tags
     with Spark Connect.
 
-    When the pinned thread mode is off, it return the original ``f``.
+    When the pinned thread mode is off, the target wrapper is a no-op.
 
     .. versionadded:: 3.2.0
 
@@ -497,7 +492,14 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
 
         return wrapped
     else:
-        return f  # type: ignore[return-value]
+        if isinstance(f, SparkSession):
+
+            def outer(ff: Callable) -> Callable:
+                return ff
+
+            return outer
+        else:
+            return f
 
 
 def handle_worker_exception(
@@ -1038,15 +1040,14 @@ enable_faulthandler = _faulthandler_helper.enable_faulthandler
 
 
 if __name__ == "__main__":
-    if "pypy" not in platform.python_implementation().lower():
-        import doctest
-        import pyspark.util
-        from pyspark.core.context import SparkContext
+    import doctest
+    import pyspark.util
+    from pyspark.core.context import SparkContext
 
-        globs = pyspark.util.__dict__.copy()
-        globs["sc"] = SparkContext("local[4]", "PythonTest")
-        failure_count, test_count = doctest.testmod(pyspark.util, globs=globs)
-        globs["sc"].stop()
+    globs = pyspark.util.__dict__.copy()
+    globs["sc"] = SparkContext("local[4]", "PythonTest")
+    failure_count, test_count = doctest.testmod(pyspark.util, globs=globs)
+    globs["sc"].stop()
 
-        if failure_count:
-            sys.exit(-1)
+    if failure_count:
+        sys.exit(-1)

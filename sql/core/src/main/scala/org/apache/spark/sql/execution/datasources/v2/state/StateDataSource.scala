@@ -95,7 +95,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       stateStoreReaderInfo.stateStoreColFamilySchemaOpt,
       stateStoreReaderInfo.stateSchemaProviderOpt,
       stateStoreReaderInfo.joinColFamilyOpt,
-      stateStoreReaderInfo.allColumnFamiliesReaderInfo)
+      stateStoreReaderInfo.allColumnFamiliesReaderInfo,
+      stateStoreReaderInfo.joinStateFormatVersion)
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
@@ -110,11 +111,13 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       val (keySchema, valueSchema) = sourceOptions.joinSide match {
         case JoinSideValues.left =>
           StreamStreamJoinStateHelper.readKeyValueSchema(session, stateCheckpointLocation.toString,
-            sourceOptions.operatorId, LeftSide, oldSchemaFilePaths)
+            sourceOptions.operatorId, LeftSide, oldSchemaFilePaths,
+            joinStateFormatVersion = stateStoreReaderInfo.joinStateFormatVersion)
 
         case JoinSideValues.right =>
           StreamStreamJoinStateHelper.readKeyValueSchema(session, stateCheckpointLocation.toString,
-            sourceOptions.operatorId, RightSide, oldSchemaFilePaths)
+            sourceOptions.operatorId, RightSide, oldSchemaFilePaths,
+            joinStateFormatVersion = stateStoreReaderInfo.joinStateFormatVersion)
 
         case JoinSideValues.none =>
           // we should have the schema for the state store if joinSide is none
@@ -162,9 +165,9 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
   /**
    * Returns true if this is a read-all-column-families request for a stream-stream join
-   * that uses virtual column families (state format version 3).
+   * that uses virtual column families (state format version >= 3).
    */
-  private def isReadAllColFamiliesOnJoinV3(
+  private def isReadAllColFamiliesOnJoinWithVCF(
       sourceOptions: StateSourceOptions,
       storeMetadata: Array[StateMetadataTableEntry]): Boolean = {
     sourceOptions.internalOnlyReadAllColumnFamilies &&
@@ -243,9 +246,9 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
         opMetadata.operatorName match {
           case opName: String if opName ==
             StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME =>
-            // Verify that the storename is valid
             val possibleStoreNames = SymmetricHashJoinStateManager.allStateStoreNames(
-              LeftSide, RightSide)
+              LeftSide, RightSide) ++
+              SymmetricHashJoinStateManager.allStateStoreNamesV4(LeftSide, RightSide)
             if (!possibleStoreNames.contains(name)) {
               val errorMsg = s"Store name $name not allowed for join operator. Allowed names are " +
                 s"$possibleStoreNames. " +
@@ -393,7 +396,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
         // However, Join V3 does not have a "default" column family. Therefore, we pick the first
         // schema as resultSchema which will be used as placeholder schema for default schema
         // in StatePartitionAllColumnFamiliesReader
-        val resultSchema = if (isReadAllColFamiliesOnJoinV3(sourceOptions, storeMetadata)) {
+        val resultSchema = if (isReadAllColFamiliesOnJoinWithVCF(sourceOptions, storeMetadata)) {
           stateSchema.head
         } else {
           stateSchema.filter(_.colFamilyName == stateVarName).head
@@ -408,17 +411,18 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       }
     }
 
+    val joinFormatVersion = getStateFormatVersion(
+      storeMetadata,
+      sourceOptions.resolvedCpLocation,
+      sourceOptions.batchId
+    )
+
     val allColFamilyReaderInfoOpt: Option[AllColumnFamiliesReaderInfo] =
       if (sourceOptions.internalOnlyReadAllColumnFamilies) {
         assert(storeMetadata.nonEmpty, "storeMetadata shouldn't be empty")
         val operatorName = storeMetadata.head.operatorName
-        val stateFormatVersion = getStateFormatVersion(
-          storeMetadata,
-          sourceOptions.resolvedCpLocation,
-          sourceOptions.batchId
-        )
         Some(AllColumnFamiliesReaderInfo(
-          stateStoreColFamilySchemas, stateVariableInfos, operatorName, stateFormatVersion))
+          stateStoreColFamilySchemas, stateVariableInfos, operatorName, joinFormatVersion))
       } else {
         None
       }
@@ -428,7 +432,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       transformWithStateVariableInfoOpt,
       stateSchemaProvider,
       joinColFamilyOpt,
-      allColFamilyReaderInfoOpt
+      allColFamilyReaderInfoOpt,
+      joinFormatVersion
     )
   }
 
@@ -819,7 +824,8 @@ case class StateStoreReaderInfo(
     stateSchemaProviderOpt: Option[StateSchemaProvider],
     joinColFamilyOpt: Option[String], // Only used for join op with state format v3
     // List of all column family schemas - used when internalOnlyReadAllColumnFamilies=true
-    allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo]
+    allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo],
+    joinStateFormatVersion: Option[Int] = None
 )
 
 object StateDataSource {

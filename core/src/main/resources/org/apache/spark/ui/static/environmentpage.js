@@ -19,27 +19,39 @@
 
 import { getStandAloneAppId, setDataTableDefaults } from "./utils.js";
 
-function createRESTEndPointForEnvironmentPage(appId) {
+function getAppAndAttemptFromUrl(appId) {
   var words = document.baseURI.split("/");
+  var urlAppId = null;
+  var attemptId = null;
+  var baseURI = null;
+
   var ind = words.indexOf("proxy");
-  var newBaseURI;
   if (ind > 0) {
-    appId = words[ind + 1];
-    newBaseURI = words.slice(0, ind + 2).join("/");
-    return newBaseURI + "/api/v1/applications/" + appId + "/environment";
+    urlAppId = words[ind + 1];
+    baseURI = words.slice(0, ind + 2).join("/");
+    return { appId: urlAppId, attemptId: attemptId, baseURI: baseURI };
   }
+
   ind = words.indexOf("history");
   if (ind > 0) {
-    appId = words[ind + 1];
-    var attemptId = words[ind + 2];
-    newBaseURI = words.slice(0, ind).join("/");
-    if (isNaN(attemptId)) {
-      return newBaseURI + "/api/v1/applications/" + appId + "/environment";
-    } else {
-      return newBaseURI + "/api/v1/applications/" + appId + "/" + attemptId + "/environment";
+    urlAppId = words[ind + 1];
+    baseURI = words.slice(0, ind).join("/");
+    if (ind + 2 < words.length && !isNaN(words[ind + 2])) {
+      attemptId = words[ind + 2];
     }
   }
-  return uiRoot + "/api/v1/applications/" + appId + "/environment";
+
+  return { appId: urlAppId || appId, attemptId: attemptId, baseURI: baseURI };
+}
+
+function createRESTEndPointForEnvironmentPage(appId) {
+  var info = getAppAndAttemptFromUrl(appId);
+  var base = info.baseURI || uiRoot;
+  var path = "/api/v1/applications/" + info.appId;
+  if (info.attemptId) {
+    path += "/" + info.attemptId;
+  }
+  return base + path + "/environment";
 }
 
 function updateBadge(tabId, count) {
@@ -75,6 +87,37 @@ function formatResourceProfile(rp) {
     lines.push("\t" + r.resourceName + ": [amount: " + r.amount + "]");
   });
   return lines.join("\n");
+}
+
+function escapeConfigValue(value) {
+  if (value == null) return "";
+  return String(value)
+    .replace(/\\/g, "\\\\")
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r")
+    .replace(/\t/g, "\\t");
+}
+
+function exportSparkProperties(appId, sparkProps) {
+  var info = getAppAndAttemptFromUrl(appId);
+  var fileName = info.appId +
+    (info.attemptId ? "_" + info.attemptId : "") + "-spark-defaults.conf";
+  var header = "# Exported from Spark UI (" + info.appId +
+    (info.attemptId ? ", attempt " + info.attemptId : "") +
+    ") on " + new Date().toISOString() + "\n";
+  var lines = sparkProps.map(function (prop) {
+    return prop[0] + "=" + escapeConfigValue(prop[1]);
+  });
+  var content = header + lines.join("\n") + "\n";
+  var blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 100);
 }
 
 function initDataTable(paneId, tableId, data, columns, dtOpts) {
@@ -158,6 +201,17 @@ $(document).ready(function () {
       });
 
       updateBadge("spark-props-tab", sparkProps.length);
+
+      if (sparkProps.length > 0) {
+        var exportBtn = $("<button>")
+          .addClass("btn btn-sm btn-outline-primary mb-2")
+          .text("Export")
+          .attr("title", "Download as spark-defaults.conf")
+          .on("click", function () {
+            exportSparkProperties(appId, sparkProps);
+          });
+        $("#spark-props").prepend(exportBtn);
+      }
 
       // Resource Profiles
       var profiles = response.resourceProfiles || [];

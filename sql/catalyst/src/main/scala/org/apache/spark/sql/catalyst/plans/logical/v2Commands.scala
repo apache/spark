@@ -616,6 +616,41 @@ case class CreateTable(
 }
 
 /**
+ * Create a new table with the same schema/partitioning as an existing table or view,
+ * for use with a v2 catalog.
+ *
+ * @param name        Target table identifier. Starts as UnresolvedIdentifier, resolved to
+ *                    ResolvedIdentifier by ResolveCatalogs.
+ * @param source      Source table or view. Starts as UnresolvedTableOrView, resolved to
+ *                    ResolvedTable / ResolvedPersistentView / ResolvedTempView by ResolveRelations.
+ * @param location    User-specified LOCATION. None if not specified.
+ * @param provider    User-specified USING provider. None if not specified.
+ * @param serdeInfo   User-specified STORED AS / ROW FORMAT (Hive-style). None if not specified.
+ *                    Kept separate from [[location]] so that [[ResolveSessionCatalog]] can
+ *                    reconstruct the full
+ *                    [[org.apache.spark.sql.catalyst.catalog.CatalogStorageFormat]]
+ *                    for the V1 fallback path without pulling V1 catalog types into this plan.
+ * @param properties  User-specified TBLPROPERTIES.
+ * @param ifNotExists IF NOT EXISTS flag.
+ */
+case class CreateTableLike(
+    name: LogicalPlan,
+    source: LogicalPlan,
+    location: Option[String],
+    provider: Option[String],
+    serdeInfo: Option[SerdeInfo],
+    properties: Map[String, String],
+    ifNotExists: Boolean) extends BinaryCommand {
+
+  override def left: LogicalPlan = name
+  override def right: LogicalPlan = source
+
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): CreateTableLike =
+    copy(name = newLeft, source = newRight)
+}
+
+/**
  * Create a new table from a select query with a v2 catalog.
  */
 case class CreateTableAsSelect(
@@ -1016,7 +1051,7 @@ case class MergeIntoTable(
 
   // Guard that assignments are either resolved or candidates for evolution before
   // evaluating schema evolution. We need to use resolved assignment values to check
-  // candidates, see MergeIntoTable.isSchemaEvolutionCandidate for details.
+  // candidates; see `isSchemaEvolutionCandidate` in the MergeIntoTable companion object.
   override lazy val schemaEvolutionReady: Boolean = {
     targetTable.resolved && sourceTable.resolved && actionsSchemaEvolutionReady
   }
@@ -1651,6 +1686,18 @@ object ShowPartitions {
   def getOutputAttrs: Seq[Attribute] = {
     Seq(AttributeReference("partition", StringType, nullable = false)())
   }
+}
+
+/**
+ * The logical plan of the SHOW CACHED TABLES command.
+ *
+ * Lists in-memory cache entries that were registered with an explicit table or view name
+ * (for example via `CACHE TABLE` or `Catalog.cacheTable`).
+ */
+case object ShowCachedTables extends LeafCommand {
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("tableName", StringType, nullable = false)(),
+    AttributeReference("storageLevel", StringType, nullable = false)())
 }
 
 /**
