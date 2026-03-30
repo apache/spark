@@ -193,11 +193,13 @@ object PushDownUtils extends Logging {
     val (partFilters, nonPartitionFilters) =
       DataSourceUtils.getPartitionFiltersAndDataFilters(partitionAttributes, normalized)
     val (pushable, nonPushable) = partFilters.partition(isPushablePartitionFilter)
-    val partitionPredicates = pushable.map(PartitionPredicateImpl(_, partitionFields))
+    val (partitionPredicates, errorPartitionPredicates) = pushable.partitionMap { e =>
+      PartitionPredicateImpl(e, partitionFields).toLeft(e)
+    }
     val rejectedPartitionFilters = scanBuilder.pushPredicates(partitionPredicates.toArray).map {
       p => p.asInstanceOf[PartitionPredicateImpl].expression
     }.toSeq
-    (nonPartitionFilters ++ nonPushable ++ rejectedPartitionFilters)
+    (nonPartitionFilters ++ nonPushable ++ errorPartitionPredicates ++ rejectedPartitionFilters)
       .filter(normalizedToOriginal.contains)
       .map(normalizedToOriginal)
   }

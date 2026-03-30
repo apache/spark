@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.internal.connector
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Expression => CatalystExpression, ExprId, Predicate => CatalystPredicate}
@@ -96,32 +95,32 @@ class PartitionPredicateImpl private (
   override def toString(): String = s"PartitionPredicate(${catalystExpr.sql})"
 }
 
-object PartitionPredicateImpl {
+object PartitionPredicateImpl extends Logging {
 
   def apply(catalystExpr: CatalystExpression,
       partitionFields: Seq[PartitionPredicateField])
-  : PartitionPredicateImpl = {
-    validateAndCreate(catalystExpr, partitionFields)
-  }
-
-  private def validateAndCreate(
-      catalystExpr: CatalystExpression,
-      partitionFields: Seq[PartitionPredicateField])
-  : PartitionPredicateImpl = {
+  : Option[PartitionPredicateImpl] = {
     if (partitionFields.isEmpty) {
-      throw SparkException.internalError(
-        s"Cannot evaluate partition predicate ${catalystExpr.sql}: partition fields are empty")
+      logWarning(
+        log"Cannot create partition predicate ${MDC(LogKeys.EXPR, catalystExpr.sql)}: " +
+        log"partition fields are empty. Skipping pushdown for this predicate.")
+      return None
     }
 
     val partitionExprIds = partitionFields.map(_.attrRef.exprId).toSet
     val unmatchedRefs = catalystExpr.references.filterNot(r => partitionExprIds.contains(r.exprId))
     if (unmatchedRefs.nonEmpty) {
-      throw SparkException.internalError(
-        s"Cannot evaluate partition predicate ${catalystExpr.sql}: expression references " +
-          s"${unmatchedRefs.map(_.name).mkString(", ")} not found in partition fields " +
-          s"${partitionFields.map(_.fieldNames.mkString(".")).mkString(", ")}")
+      logWarning(
+        log"Cannot create partition predicate ${MDC(LogKeys.EXPR, catalystExpr.sql)}: " +
+        log"expression references " +
+        log"${MDC(LogKeys.FIELD_NAME, unmatchedRefs.map(_.name).mkString(", "))} " +
+        log"not found in partition fields " +
+        log"${MDC(LogKeys.PARTITION_SPECIFICATION,
+          partitionFields.map(_.fieldNames.mkString(".")).mkString(", "))}. " +
+        log"Skipping pushdown for this predicate.")
+      return None
     }
 
-    new PartitionPredicateImpl(catalystExpr, partitionFields)
+    Some(new PartitionPredicateImpl(catalystExpr, partitionFields))
   }
 }

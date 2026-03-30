@@ -57,7 +57,7 @@ class PartitionPredicateImplSuite extends SparkFunSuite {
     val ref = DataTypeUtils.toAttribute(StructField("p", IntegerType, nullable = true))
     val expr = GreaterThan(ref, Literal(5))
     val fields = Seq(PartitionPredicateField(Seq("p"), ref))
-    val predicate = PartitionPredicateImpl(expr, fields)
+    val predicate = PartitionPredicateImpl(expr, fields).get
 
     val deserialized = serializer.deserialize[PartitionPredicateImpl](
       serializer.serialize(predicate))
@@ -78,7 +78,7 @@ class PartitionPredicateImplSuite extends SparkFunSuite {
     val ref = DataTypeUtils.toAttribute(StructField("ts.timezone", StringType, nullable = false))
     val expr = GreaterThan(ref, Literal("x"))
     val fields = Seq(PartitionPredicateField(Seq("ts", "timezone"), ref))
-    val predicate = PartitionPredicateImpl(expr, fields)
+    val predicate = PartitionPredicateImpl(expr, fields).get
 
     val deserialized = serializer.deserialize[PartitionPredicateImpl](
       serializer.serialize(predicate))
