@@ -4248,7 +4248,7 @@ def stddev(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        standard deviation of given column.
+        A new column of DoubleType representing the standard deviation of the given column.
 
     Examples
     --------
@@ -4321,7 +4321,7 @@ def stddev_samp(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        standard deviation of given column.
+        A new column of DoubleType representing the standard deviation of the given column.
 
     See Also
     --------
@@ -4362,7 +4362,7 @@ def stddev_pop(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        standard deviation of given column.
+        A new column of DoubleType representing the standard deviation of the given column.
 
     See Also
     --------
@@ -4402,7 +4402,7 @@ def variance(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        variance of given column.
+        A new column of DoubleType representing the variance of the given column.
 
     See Also
     --------
@@ -4445,7 +4445,7 @@ def var_samp(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        variance of given column.
+        A new column of DoubleType representing the variance of the given column.
 
     See Also
     --------
@@ -4485,7 +4485,7 @@ def var_pop(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        variance of given column.
+        A new column of DoubleType representing the variance of the given column.
 
     See Also
     --------
