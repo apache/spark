@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace,
   GlobalTempView, LocalTempView, PersistedView,
   PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute,
-  UnresolvedIdentifier, UnresolvedNamespace, UnresolvedProcedure}
+  UnresolvedIdentifier, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedProcedure}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -1435,7 +1435,7 @@ class SparkSqlAstBuilder extends AstBuilder {
           isExtended)
       }
     } else {
-      val partitionSpec = if (ctx.partitionSpec != null) {
+      val rawSpec = if (ctx.partitionSpec != null) {
         // According to the syntax, visitPartitionSpec returns `Map[String, Option[String]]`.
         visitPartitionSpec(ctx.partitionSpec).map {
           case (key, Some(value)) => key -> value
@@ -1446,8 +1446,10 @@ class SparkSqlAstBuilder extends AstBuilder {
         Map.empty[String, String]
       }
       if (asJson) {
-        DescribeRelationJsonCommand(relation, partitionSpec, isExtended)
+        // DescribeRelationJsonCommand uses the raw Map directly (V1 path only).
+        DescribeRelationJsonCommand(relation, rawSpec, isExtended)
       } else {
+        val partitionSpec = if (rawSpec.nonEmpty) Some(UnresolvedPartitionSpec(rawSpec)) else None
         DescribeRelation(relation, partitionSpec, isExtended)
       }
     }

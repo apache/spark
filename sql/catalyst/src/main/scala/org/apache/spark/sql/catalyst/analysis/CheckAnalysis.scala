@@ -362,10 +362,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           u.multipartIdentifier,
           ddlSearchPathForError(catalogPathForError))
 
-      case d: DescribeRelation if !d.relation.resolved =>
+      case d: DescribeRelation if !d.table.resolved =>
         // DESCRIBE TABLE / DESC TABLE: same search path as SELECT
         // (searchPathForUnresolvedRelation). Relation may be wrapped in SubqueryAlias (e.g. Hive).
-        firstUnresolvedTableOrView(d.relation).foreach { u =>
+        firstUnresolvedTableOrView(d.table).foreach { u =>
           u.tableNotFound(
             u.multipartIdentifier,
             searchPathForUnresolvedRelation(u.multipartIdentifier))
@@ -413,7 +413,15 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       case u: UnresolvedInlineTable if unresolvedInlineTableContainsScalarSubquery(u) =>
         throw QueryCompilationErrors.inlineTableContainsScalarSubquery(u)
 
-      case command: V2PartitionCommand =>
+      case d: DescribeRelation if d.partitionSpec.isDefined =>
+        d.table match {
+          case r @ ResolvedTable(_, _, table, _)
+              if !table.isInstanceOf[SupportsPartitionManagement] =>
+            throw QueryCompilationErrors.describePartitionNotSupportedForV2Table(r.name)
+          case _ =>
+        }
+
+      case command: V2PartitionCommand if !command.isInstanceOf[DescribeRelation] =>
         command.table match {
           case r @ ResolvedTable(_, _, table, _) => table match {
             case t: SupportsPartitionManagement =>

@@ -1849,6 +1849,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "DESCRIBE_PARTITION_NOT_SUPPORTED_FOR_V2_TABLE" : {
+    "message" : [
+      "DESCRIBE TABLE ... PARTITION is not supported for table <tableName> because it does not implement partition management."
+    ],
+    "sqlState" : "0A000"
+  },
   "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED" : {
     "message" : [
       "Distinct window functions are not supported: <windowExpr>."

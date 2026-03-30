@@ -21,33 +21,65 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.ResolvedPartitionSpec
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, ClusterBySpec}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, ResolveDefaultColumns}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, SupportsRead, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, SupportsPartitionManagement, SupportsRead, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, IdentityTransform}
 import org.apache.spark.sql.connector.read.SupportsReportStatistics
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
 case class DescribeTableExec(
     output: Seq[Attribute],
     table: Table,
-    isExtended: Boolean) extends LeafV2CommandExec {
+    isExtended: Boolean,
+    partitionSpec: Option[ResolvedPartitionSpec] = None) extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     addSchema(rows)
     addPartitioning(rows)
     addClustering(rows)
 
-    if (isExtended) {
+    if (partitionSpec.isDefined) {
+      addPartitionDetails(rows)
+    } else if (isExtended) {
       addMetadataColumns(rows)
       addTableDetails(rows)
       addTableStats(rows)
       addTableConstraints(rows)
     }
     rows.toSeq
+  }
+
+  private def addPartitionDetails(rows: ArrayBuffer[InternalRow]): Unit = {
+    // Guaranteed by DataSourceV2Strategy to be SupportsPartitionManagement
+    val partTable = table.asInstanceOf[SupportsPartitionManagement]
+    val spec = partitionSpec.get  // guaranteed nonEmpty by caller
+
+    // Validates the partition exists - throws NoSuchPartitionException if not found
+    val metadata = partTable.loadPartitionMetadata(spec.ident)
+
+    if (isExtended) {
+      val partSchema = partTable.partitionSchema()
+      val timeZoneId = conf.sessionLocalTimeZone
+      // Render partition values by casting the typed InternalRow back to strings
+      val partValueStr = spec.names.zipWithIndex.map { case (name, i) =>
+        val dataType = partSchema(partSchema.fieldIndex(name)).dataType
+        val value = spec.ident.get(i, dataType)
+        val strVal = Cast(Literal(value, dataType), StringType, Some(timeZoneId)).eval()
+        s"$name=${if (strVal == null) "null" else strVal.toString}"
+      }.mkString("[", ", ", "]")
+      rows += emptyRow()
+      rows += toCatalystRow("# Detailed Partition Information", "", "")
+      rows += toCatalystRow("Partition Values", partValueStr, "")
+      metadata.asScala.toSeq.sortBy(_._1).foreach { case (k, v) =>
+        rows += toCatalystRow(k, v, "")
+      }
+    }
   }
 
   private def addTableDetails(rows: ArrayBuffer[InternalRow]): Unit = {

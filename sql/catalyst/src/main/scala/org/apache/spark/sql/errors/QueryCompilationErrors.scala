@@ -1549,10 +1549,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "filters" -> filters.mkString("[", ", ", "]")))
   }
 
-  def describeDoesNotSupportPartitionForV2TablesError(): Throwable = {
+  def describePartitionNotSupportedForV2Table(tableName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1111",
-      messageParameters = Map.empty)
+      errorClass = "DESCRIBE_PARTITION_NOT_SUPPORTED_FOR_V2_TABLE",
+      messageParameters = Map("tableName" -> tableName))
   }
 
   def cannotReplaceMissingTableError(
