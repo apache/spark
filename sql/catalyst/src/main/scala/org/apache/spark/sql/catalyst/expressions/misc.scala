@@ -234,6 +234,28 @@ case class CurrentCatalog()
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
+/**
+ * Returns the current SQL path as a comma-separated list of qualified schema names
+ * (catalog.schema). Responsive to USE SCHEMA / USE CATALOG when PATH feature is enabled.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_() - Returns the current SQL path (qualified schema names).",
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       system.builtin,system.session,spark_catalog.default
+  """,
+  since = "4.2.0",
+  group = "misc_funcs")
+case class CurrentPath()
+  extends LeafExpression
+  with DefaultStringProducingExpression
+  with Unevaluable {
+  override def nullable: Boolean = false
+  override def prettyName: String = "current_path"
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
+}
+
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """_FUNC_() - Returns an universally unique identifier (UUID) string. The value is returned as a canonical UUID 36-character string.""",

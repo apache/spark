@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
@@ -56,13 +58,13 @@ import org.apache.spark.sql.connector.catalog.functions.{
   UnboundFunction
 }
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 
 class FunctionResolution(
     override val catalogManager: CatalogManager,
-    relationResolution: RelationResolution)
+    relationResolution: RelationResolution,
+    conf: org.apache.spark.sql.internal.SQLConf)
     extends DataTypeErrorsBase with LookupCatalog with Logging {
   private val v1SessionCatalog = catalogManager.v1SessionCatalog
 
@@ -83,8 +85,9 @@ class FunctionResolution(
   /**
    * Produces the ordered list of candidate names for resolution. Expansion happens in two cases:
    *
-   * 1. Single-part names: expanded via the search path, where each search path entry is
-   *    fully qualified so appending the name produces fully qualified candidates.
+   * 1. Single-part names: expanded via [[SQLConf.sqlResolutionPathEntries]] (same list as
+   *    relation resolution), where each path entry is fully qualified so appending the name
+   *    produces fully qualified candidates.
    * 2. `builtin.name` or `session.name`: prepending `system` creates a fully qualified
    *    system catalog candidate. The original 2-part name is also kept as a persistent
    *    catalog candidate (qualified downstream). Order is controlled by
@@ -92,14 +95,22 @@ class FunctionResolution(
    *
    * All other multi-part names are returned as-is for downstream resolution.
    */
+  private def sqlResolutionPathEntriesForAnalysis: Seq[Seq[String]] = {
+    val pathDefault = currentCatalogPath
+    conf.sqlResolutionPathEntries(
+      pathDefault.head,
+      pathDefault.tail.toSeq,
+      catalogManager.currentCatalog.name,
+      catalogManager.currentNamespace.toSeq)
+  }
+
   private def resolutionCandidates(nameParts: Seq[String]): Seq[Seq[String]] = {
     if (nameParts.size == 1) {
-      val searchPath = SQLConf.get.resolutionSearchPath(currentCatalogPath)
-      searchPath.map(_ ++ nameParts)
+      sqlResolutionPathEntriesForAnalysis.map(_ ++ nameParts)
     } else if (nameParts.size == 2 &&
         FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
       val systemCandidate = CatalogManager.SYSTEM_CATALOG_NAME +: nameParts
-      if (SQLConf.get.prioritizeSystemCatalog) {
+      if (conf.prioritizeSystemCatalog) {
         Seq(systemCandidate, nameParts)
       } else {
         Seq(nameParts, systemCandidate)
@@ -174,9 +185,10 @@ class FunctionResolution(
           case None =>
         }
       }
-      val searchPath = SQLConf.get.resolutionSearchPath(currentCatalogPath)
       throw QueryCompilationErrors.unresolvedRoutineError(
-        unresolvedFunc.nameParts, searchPath.map(toSQLId), unresolvedFunc.origin)
+        unresolvedFunc.nameParts,
+        sqlResolutionPathEntriesForAnalysis.map(toSQLId),
+        unresolvedFunc.origin)
     }
   }
 
@@ -345,6 +357,25 @@ class FunctionResolution(
     }
 
     // Check external catalog for persistent functions
+    if (nameParts.length == 1) {
+      // Must match [[resolutionCandidates]] / [[resolveFunction]]: single-part names use PATH +
+      // session order, not only the current namespace (LookupCatalog single-part rule).
+      for (candidate <- resolutionCandidates(nameParts)) {
+        try {
+          candidate match {
+            case CatalogAndIdentifier(catalog, ident) =>
+              if (catalog.asFunctionCatalog.functionExists(ident)) {
+                return FunctionType.Persistent
+              }
+            case _ =>
+          }
+        } catch {
+          case NonFatal(_) =>
+        }
+      }
+      return FunctionType.NotFound
+    }
+
     val CatalogAndIdentifier(catalog, ident) = relationResolution.expandIdentifier(nameParts)
     if (catalog.asFunctionCatalog.functionExists(ident)) {
       return FunctionType.Persistent

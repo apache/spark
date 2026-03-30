@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.SparkCharVarcharUtils.replaceCharVarch
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -78,6 +79,12 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       if (withinLocalVariableScope) {
         throw new AnalysisException(
           "UNSUPPORTED_FEATURE.SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE", Map.empty)
+      }
+      if (nameParts.length == 1 &&
+          !SQLConf.get.sessionScopeUnqualifiedAllowed(
+            catalogManager.currentCatalog.name(),
+            catalogManager.currentNamespace.toSeq)) {
+        throw QueryCompilationErrors.unresolvedVariableError(nameParts, Seq("SYSTEM", "SESSION"))
       }
       val resolved = catalogManager.tempVariableManager.qualify(nameParts.last)
       assertValidSessionVariableNameParts(nameParts, resolved)

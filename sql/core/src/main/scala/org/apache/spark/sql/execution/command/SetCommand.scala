@@ -108,8 +108,8 @@ case class SetCommand(kv: Option[(String, Option[String])])
         }
         if (varName.nonEmpty && varName.length <= 3) {
           val variableResolution = new VariableResolution(
-            sparkSession.sessionState.analyzer.catalogManager.tempVariableManager
-          )
+            sparkSession.sessionState.analyzer.catalogManager.tempVariableManager,
+            sparkSession.sessionState.analyzer.catalogManager)
           val variable = variableResolution.lookupVariable(
             nameParts = varName
           )
@@ -118,6 +118,11 @@ case class SetCommand(kv: Option[(String, Option[String])])
               errorClass = "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
               messageParameters = Map("variableName" -> toSQLId(varName)))
           }
+        }
+        if (key == SQLConf.SESSION_PATH.key) {
+          throw new AnalysisException(
+            errorClass = "UNSUPPORTED_FEATURE.SET_PATH_VIA_SET",
+            messageParameters = Map.empty)
         }
         if (sparkSession.conf.get(CATALOG_IMPLEMENTATION.key).equals("hive") &&
             key.startsWith("hive.")) {

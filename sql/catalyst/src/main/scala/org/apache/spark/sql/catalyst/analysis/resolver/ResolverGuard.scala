@@ -474,10 +474,10 @@ class ResolverGuard(
   private def checkUnresolvedFunction(unresolvedFunction: UnresolvedFunction) = {
     val nameParts = unresolvedFunction.nameParts
     val funcName = nameParts.last.toLowerCase(Locale.ROOT)
-
-    if (nameParts.length == 1) {
-      // Unqualified: same as master (unsupported, non-builtin, or check children)
-      if (isUnsupportedFunction(funcName)) {
+    if (nameParts.size == 1) {
+      // Unqualified: reject if unsupported, else non-builtin or check children (same as master)
+      if (ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(funcName) ||
+          isUnsupportedFunction(funcName)) {
         Some(s"unsupported function ${funcName}")
       } else if (!isBuiltinFunction(funcName)) {
         Some("non-builtin function")
@@ -493,7 +493,7 @@ class ResolverGuard(
         unresolvedFunction.children.collectFirst { case CheckExpression(reason) => reason }
       }
     } else if (FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
-      // Session-qualified: allow through (system-first behavior)
+      // Session-qualified: allow through (PATH + system-first)
       unresolvedFunction.children.collectFirst { case CheckExpression(reason) => reason }
     } else {
       Some("multi-part function name")

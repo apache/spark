@@ -33,10 +33,11 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpr
 import org.apache.spark.sql.catalyst.plans.logical.{AnalysisOnlyCommand, CreateTempView, CTEInChildren, CTERelationDef, LogicalPlan, Project, View, WithCTE}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{MetadataBuilder, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
@@ -473,6 +474,9 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
    * @param properties the `properties` in CatalogTable.
    * @param session the spark session.
    * @param analyzedPlan the analyzed logical plan that represents the child of a view.
+   * @param stripSystemSessionFromStoredPath when true (persisted views), omit `system.session`
+   *                                           from [[VIEW_RESOLUTION_PATH]]; temporary views keep
+   *                                           it so nested temp resolution still works.
    * @return new view properties including view default database and query column names properties.
    */
   def generateViewProperties(
@@ -483,7 +487,8 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
       viewSchemaMode: ViewSchemaMode,
       tempViewNames: Seq[Seq[String]] = Seq.empty,
       tempFunctionNames: Seq[String] = Seq.empty,
-      tempVariableNames: Seq[Seq[String]] = Seq.empty): Map[String, String] = {
+      tempVariableNames: Seq[Seq[String]] = Seq.empty,
+      stripSystemSessionFromStoredPath: Boolean = true): Map[String, String] = {
 
     val conf = session.sessionState.conf
 
@@ -501,13 +506,35 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
 
     // Generate the view default catalog and namespace, as well as captured SQL configs.
     val manager = session.sessionState.catalogManager
-    removeReferredTempNames(removeSQLConfigs(removeQueryColumnNames(properties))) ++
+    val expandedPathEntries = if (conf.pathEnabled) {
+      val entries = conf.sqlResolutionPathEntries(
+        manager.currentCatalog.name,
+        manager.currentNamespace.toSeq)
+      if (stripSystemSessionFromStoredPath) {
+        entries.filterNot(CatalogManager.isSystemSessionPathEntry)
+      } else {
+        entries
+      }
+    } else {
+      Seq.empty
+    }
+    val resolutionPathProps =
+      if (expandedPathEntries.nonEmpty) {
+        Map(VIEW_RESOLUTION_PATH -> SQLConf.formatSessionPath(expandedPathEntries))
+      } else {
+        Map.empty[String, String]
+      }
+
+    removeReferredTempNames(removeSQLConfigs(removeQueryColumnNames(properties))).filterNot {
+      case (k, _) => k == VIEW_RESOLUTION_PATH
+    } ++
       catalogAndNamespaceToProps(
         manager.currentCatalog.name, manager.currentNamespace.toImmutableArraySeq) ++
       sqlConfigsToProps(conf, VIEW_SQL_CONFIG_PREFIX) ++
       queryColumnNameProps ++
       referredTempNamesToProps(tempViewNames, tempFunctionNames, tempVariableNames) ++
-      viewSchemaModeToProps(viewSchemaMode)
+      viewSchemaModeToProps(viewSchemaMode) ++
+      resolutionPathProps
   }
 
   /**
@@ -743,8 +770,15 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
     // TBLPROPERTIES is not allowed for temporary view, so we don't use it for
     // generating temporary view properties
     val newProperties = generateViewProperties(
-      Map.empty, session, analyzedPlan.schema.fieldNames, viewSchema.fieldNames, SchemaUnsupported,
-      tempViews, tempFunctions, tempVariables)
+      Map.empty,
+      session,
+      analyzedPlan.schema.fieldNames,
+      viewSchema.fieldNames,
+      SchemaUnsupported,
+      tempViews,
+      tempFunctions,
+      tempVariables,
+      stripSystemSessionFromStoredPath = false)
 
     CatalogTable(
       identifier = viewName,

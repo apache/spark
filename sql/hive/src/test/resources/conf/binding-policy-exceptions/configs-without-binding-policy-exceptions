@@ -1116,7 +1116,6 @@ spark.sql.variant.pushVariantIntoScan
 spark.sql.variant.shredding.maxSchemaDepth
 spark.sql.variant.shredding.maxSchemaWidth
 spark.sql.variant.writeShredding.enabled
-spark.sql.view.maxNestedViewDepth
 spark.sql.warehouse.dir
 spark.sql.windowExec.buffer.in.memory.threshold
 spark.sql.windowExec.buffer.spill.size.threshold

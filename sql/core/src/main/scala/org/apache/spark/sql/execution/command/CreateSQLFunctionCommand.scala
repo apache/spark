@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{LateralJoin, LocalRelation, LogicalPlan, OneRowRelation, Project, Range, UnresolvedWith, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ATTRIBUTE
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.CreateUserDefinedFunctionCommand._
@@ -512,10 +513,31 @@ case class CreateSQLFunctionCommand(
     }
     val tempVars = ViewHelper.collectTemporaryVariables(analyzed)
 
+    val expandedPathEntries = if (conf.pathEnabled) {
+      val entries = conf.sqlResolutionPathEntries(
+        manager.currentCatalog.name,
+        manager.currentNamespace.toSeq)
+      if (isTemp) {
+        entries
+      } else {
+        entries.filterNot(CatalogManager.isSystemSessionPathEntry)
+      }
+    } else {
+      Seq.empty
+    }
+    val resolutionPathProps =
+      if (expandedPathEntries.nonEmpty) {
+        Map(SQLFunction.FUNCTION_RESOLUTION_PATH ->
+          org.apache.spark.sql.internal.SQLConf.formatSessionPath(expandedPathEntries))
+      } else {
+        Map.empty[String, String]
+      }
+
     sqlConfigsToProps(conf, SQL_CONFIG_PREFIX) ++
       catalogAndNamespaceToProps(
         manager.currentCatalog.name,
         manager.currentNamespace.toIndexedSeq) ++
-      referredTempNamesToProps(tempViews, tempFunctions, tempVars)
+      referredTempNamesToProps(tempViews, tempFunctions, tempVars) ++
+      resolutionPathProps
   }
 }

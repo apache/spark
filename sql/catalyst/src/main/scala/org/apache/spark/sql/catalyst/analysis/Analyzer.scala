@@ -139,17 +139,22 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
  *                              even if a temp view `t` has been created.
  * @param outerPlan The query plan from the outer query that can be used to resolve star
  *                  expressions in a subquery.
+ * @param resolutionPathEntries When resolving a view body, the ordered path for unqualified
+ *                              relation names (see [[AnalysisContext.withAnalysisContext]]).
+ *                              [[None]] outside views: compute from session
+ *                              [[SQLConf.sqlResolutionPathEntries]].
  */
 case class AnalysisContext(
     isDefault: Boolean = false,
     catalogAndNamespace: Seq[String] = Nil,
+    resolutionPathEntries: Option[Seq[Seq[String]]] = None,
     nestedViewDepth: Int = 0,
     maxNestedViewDepth: Int = -1,
     relationCache: mutable.Map[(Seq[String], Option[TimeTravelSpec]), LogicalPlan] =
       mutable.Map.empty,
     referredTempViewNames: Seq[Seq[String]] = Seq.empty,
     // 1. If we are resolving a view, this field will be restored from the view metadata,
-    //    by calling `AnalysisContext.withAnalysisContext(viewDesc)`.
+    //    by calling `AnalysisContext.withAnalysisContext(viewDesc, catalogManager)`.
     // 2. If we are not resolving a view, this field will be updated everytime the analyzer
     //    lookup a temporary function. And export to the view metadata.
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
@@ -195,7 +200,61 @@ object AnalysisContext {
 
   private def set(context: AnalysisContext): Unit = value.set(context)
 
-  def withAnalysisContext[A](viewDesc: CatalogTable)(f: => A): A = {
+  /**
+   * Snapshot of [[SQLConf.sqlResolutionPathEntries]] for a view body. Call under the view's
+   * effective SQLConf (e.g. inside [[SQLConf.withExistingConf]]([[View.effectiveSQLConf]])).
+   */
+  def snapshotViewResolutionPath(
+      viewDesc: CatalogTable,
+      catalogManager: CatalogManager): Seq[Seq[String]] = {
+    viewDesc.viewStoredResolutionPath match {
+      case Some(pathStr) if pathStr.trim.nonEmpty =>
+        SQLConf.parseSessionPath(pathStr)
+      case _ =>
+        val conf = SQLConf.get
+        val p = viewDesc.viewCatalogAndNamespace
+        if (p.nonEmpty) {
+          conf.sqlResolutionPathEntries(
+            p.head,
+            p.tail.toSeq,
+            catalogManager.currentCatalog.name,
+            catalogManager.currentNamespace.toSeq)
+        } else {
+          conf.sqlResolutionPathEntries(
+            catalogManager.currentCatalog.name,
+            catalogManager.currentNamespace.toSeq)
+        }
+    }
+  }
+
+  /**
+   * Snapshot of SQL PATH for analyzing a persistent or temporary [[SQLFunction]] body when
+   * [[SQLConf.PATH_ENABLED]] is true (see [[withAnalysisContext]](function, catalogManager)).
+   */
+  def snapshotFunctionResolutionPath(
+      function: SQLFunction,
+      catalogManager: CatalogManager): Seq[Seq[String]] = {
+    function.functionStoredResolutionPath match {
+      case Some(pathStr) if pathStr.trim.nonEmpty =>
+        SQLConf.parseSessionPath(pathStr)
+      case _ =>
+        val conf = SQLConf.get
+        val p = SQLFunction.catalogAndNamespaceFromProps(function.properties)
+        if (p.nonEmpty) {
+          conf.sqlResolutionPathEntries(
+            p.head,
+            p.tail.toSeq,
+            catalogManager.currentCatalog.name,
+            catalogManager.currentNamespace.toSeq)
+        } else {
+          conf.sqlResolutionPathEntries(
+            catalogManager.currentCatalog.name,
+            catalogManager.currentNamespace.toSeq)
+        }
+    }
+  }
+
+  def withAnalysisContext[A](viewDesc: CatalogTable, catalogManager: CatalogManager)(f: => A): A = {
     val originContext = value.get()
     val maxNestedViewDepth = if (originContext.maxNestedViewDepth == -1) {
       // Here we start to resolve views, get `maxNestedViewDepth` from configs.
@@ -203,9 +262,11 @@ object AnalysisContext {
     } else {
       originContext.maxNestedViewDepth
     }
+    val pathSnap = snapshotViewResolutionPath(viewDesc, catalogManager)
     val context = AnalysisContext(
       isDefault = false,
       catalogAndNamespace = viewDesc.viewCatalogAndNamespace,
+      resolutionPathEntries = Some(pathSnap),
       nestedViewDepth = originContext.nestedViewDepth + 1,
       maxNestedViewDepth = maxNestedViewDepth,
       relationCache = originContext.relationCache,
@@ -217,11 +278,26 @@ object AnalysisContext {
     try f finally { set(originContext) }
   }
 
-  def withAnalysisContext[A](function: SQLFunction)(f: => A): A = {
+  def withAnalysisContext[A](function: SQLFunction, catalogManager: CatalogManager)(f: => A): A = {
     val originContext = value.get()
-    val context = originContext.copy(collation = function.collation)
-    set(context)
-    try f finally { set(originContext) }
+    if (SQLConf.get.pathEnabled) {
+      val catNs = SQLFunction.catalogAndNamespaceFromProps(function.properties)
+      val pathSnap = snapshotFunctionResolutionPath(function, catalogManager)
+      val context = originContext.copy(
+        isDefault = false,
+        catalogAndNamespace = catNs,
+        resolutionPathEntries = Some(pathSnap),
+        referredTempViewNames = function.functionReferredTempViewNames,
+        referredTempFunctionNames = mutable.Set(function.functionReferredTempFunctionNames: _*),
+        referredTempVariableNames = function.functionReferredTempVariableNames,
+        collation = function.collation.orElse(originContext.collation))
+      set(context)
+      try f finally { set(originContext) }
+    } else {
+      val context = originContext.copy(collation = function.collation)
+      set(context)
+      try f finally { set(originContext) }
+    }
   }
 
   def withNewAnalysisContext[A](f: => A): A = {
@@ -290,13 +366,20 @@ object Analyzer {
  */
 class Analyzer(
     override val catalogManager: CatalogManager,
-    private[sql] val sharedRelationCache: RelationCache = RelationCache.empty)
+    private[sql] val sharedRelationCache: RelationCache = RelationCache.empty,
+    private[sql] val sessionConf: Option[SQLConf] = None)
   extends RuleExecutor[LogicalPlan]
   with CheckAnalysis with AliasHelper with SQLConfHelper with ColumnResolutionHelper {
 
+  /** Conf to use for path-based resolution and error messages; uses session conf when available. */
+  private[sql] def resolutionConf: SQLConf = sessionConf.getOrElse(SQLConf.get)
+
+  override protected def confForRoutineResolution: SQLConf = resolutionConf
+
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
   private val relationResolution = new RelationResolution(catalogManager, sharedRelationCache)
-  private val functionResolution = new FunctionResolution(catalogManager, relationResolution)
+  private val functionResolution = new FunctionResolution(catalogManager, relationResolution,
+    resolutionConf)
 
   override protected def validatePlanChanges(
       previousPlan: LogicalPlan,
@@ -317,20 +400,22 @@ class Analyzer(
     if (plan.analyzed) {
       plan
     } else {
+      def runAnalysis(): LogicalPlan = HybridAnalyzer.fromLegacyAnalyzer(
+        legacyAnalyzer = this, tracker = tracker).apply(plan)
+      def runWithConf(): LogicalPlan = sessionConf match {
+        case Some(c) => SQLConf.withExistingConf(c) { runAnalysis() }
+        case None => runAnalysis()
+      }
       if (AnalysisContext.get.isDefault) {
         AnalysisContext.reset()
         try {
-          AnalysisHelper.markInAnalyzer {
-            HybridAnalyzer.fromLegacyAnalyzer(legacyAnalyzer = this, tracker = tracker).apply(plan)
-          }
+          AnalysisHelper.markInAnalyzer { runWithConf() }
         } finally {
           AnalysisContext.reset()
         }
       } else {
         AnalysisContext.withNewAnalysisContext {
-          AnalysisHelper.markInAnalyzer {
-            HybridAnalyzer.fromLegacyAnalyzer(legacyAnalyzer = this, tracker = tracker).apply(plan)
-          }
+          AnalysisHelper.markInAnalyzer { runWithConf() }
         }
       }
     }
@@ -980,13 +1065,18 @@ class Analyzer(
     // This is done by keeping the catalog and namespace in `AnalysisContext`, and analyzer will
     // look at `AnalysisContext.catalogAndNamespace` when resolving relations with single-part name.
     // If `AnalysisContext.catalogAndNamespace` is non-empty, analyzer will expand single-part names
-    // with it, instead of current catalog and namespace.
+    // with it, instead of current catalog and namespace. Unqualified relation PATH is snapshotted
+    // in `AnalysisContext.resolutionPathEntries` while resolving each view body.
     private def resolveViews(
         plan: LogicalPlan,
         options: CaseInsensitiveStringMap): LogicalPlan = plan match {
       case view: View if !view.child.resolved =>
-        ViewResolution
-          .resolve(view, options, resolveChild = executeSameContext, checkAnalysis = checkAnalysis)
+        ViewResolution.resolve(
+          view,
+          options,
+          catalogManager,
+          resolveChild = executeSameContext,
+          checkAnalysis = checkAnalysis)
       // V2TableReference is a placeholder for DSv2 tables that needs to be resolved to
       // DataSourceV2Relation on each view access. Only dataframe temp view may contain it
       // as it stores resolved plans directly.
@@ -2064,9 +2154,19 @@ class Analyzer(
                   throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), f)
 
                 case FunctionType.NotFound =>
-                  val catalogPath =
-                    catalogManager.currentCatalog.name +: catalogManager.currentNamespace
-                  val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
+                  val ctx = AnalysisContext.get.catalogAndNamespace
+                  val pathDefault =
+                    if (ctx.nonEmpty) ctx
+                    else {
+                      (catalogManager.currentCatalog.name +:
+                        catalogManager.currentNamespace).toSeq
+                    }
+                  val searchPath = resolutionConf
+                    .sqlResolutionPathEntries(
+                      pathDefault.head,
+                      pathDefault.tail.toSeq,
+                      catalogManager.currentCatalog.name,
+                      catalogManager.currentNamespace.toSeq)
                     .map(_.quoted)
                   throw QueryCompilationErrors.unresolvedRoutineError(
                     nameParts,
@@ -2484,7 +2584,7 @@ class Analyzer(
           Analyzer.retainResolutionConfigsForAnalysis(newConf = newConf, existingConf = conf)
         }
         SQLConf.withExistingConf(newConf) {
-          AnalysisContext.withAnalysisContext(f.function) {
+          AnalysisContext.withAnalysisContext(f.function, catalogManager) {
             executeSameContext(plan)
           }
         }
@@ -2785,7 +2885,7 @@ class Analyzer(
         val resolved = SQLConf.withExistingConf(newConf) {
           val plan = v1SessionCatalog.makeSQLTableFunctionPlan(name, function, inputs, output)
           SQLFunctionContext.withSQLFunction {
-            AnalysisContext.withAnalysisContext(function) {
+            AnalysisContext.withAnalysisContext(function, catalogManager) {
               executeSameContext(plan)
             }
           }

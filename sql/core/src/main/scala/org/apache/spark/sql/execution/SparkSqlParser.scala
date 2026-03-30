@@ -357,6 +357,19 @@ class SparkSqlAstBuilder extends AstBuilder {
    *   SET TIME ZONE INTERVAL 10 HOURS;
    * }}}
    */
+  override def visitSetPath(ctx: SetPathContext): LogicalPlan = withOrigin(ctx) {
+    val elements = (0 until ctx.pathElement().size()).map { i =>
+      val pe = ctx.pathElement(i)
+      if (pe.DEFAULT_PATH() != null) PathElement.DefaultPath
+      else if (pe.SYSTEM_PATH() != null) PathElement.SystemPath
+      else if (pe.PATH() != null) PathElement.PathRef
+      else if (pe.CURRENT_DATABASE() != null) PathElement.CurrentDatabase
+      else if (pe.CURRENT_SCHEMA() != null) PathElement.CurrentSchema
+      else PathElement.SchemaInPath(visitMultipartIdentifier(pe.multipartIdentifier()))
+    }
+    SetPathCommand(elements.toSeq)
+  }
+
   override def visitSetTimeZone(ctx: SetTimeZoneContext): LogicalPlan = withOrigin(ctx) {
     val key = SQLConf.SESSION_LOCAL_TIMEZONE.key
     if (ctx.interval != null) {

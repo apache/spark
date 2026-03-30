@@ -185,7 +185,7 @@ abstract class BaseSessionStateBuilder(
    *
    * Note: this depends on the `conf` and `catalog` fields.
    */
-  protected def analyzer: Analyzer = new Analyzer(catalogManager, sharedRelationCache) {
+  protected def analyzer: Analyzer = new Analyzer(catalogManager, sharedRelationCache, Some(conf)) {
     override val hintResolutionRules: Seq[Rule[LogicalPlan]] =
       customHintResolutionRules
 

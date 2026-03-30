@@ -53,8 +53,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -86,6 +85,7 @@ class Resolver(
     override val extensions: Seq[ResolverExtension] = Seq.empty,
     metadataResolverExtensions: Seq[ResolverExtension] = Seq.empty,
     externalRelationResolution: Option[RelationResolution] = None,
+    conf: SQLConf = SQLConf.get,
     extendedRewriteRules: Seq[Rule[LogicalPlan]] = Seq.empty,
     tracker: Option[QueryPlanningTracker] = None)
     extends LogicalPlanResolver
@@ -96,6 +96,7 @@ class Resolver(
   private val subqueryRegistry = new SubqueryRegistry
   private val scopes = new NameScopeStack(
     tempVariableManager = catalogManager.tempVariableManager,
+    catalogManager = catalogManager,
     subqueryRegistry = subqueryRegistry,
     planLogger = planLogger
   )
@@ -105,7 +106,7 @@ class Resolver(
   private val relationResolution = externalRelationResolution.getOrElse {
     Resolver.createRelationResolution(catalogManager, sharedRelationCache)
   }
-  private val functionResolution = new FunctionResolution(catalogManager, relationResolution)
+  private val functionResolution = new FunctionResolution(catalogManager, relationResolution, conf)
   private val expressionResolver = new ExpressionResolver(this, functionResolution, planLogger)
   private val aggregateResolver = new AggregateResolver(this, expressionResolver)
   private val expressionIdAssigner = expressionResolver.getExpressionIdAssigner
@@ -585,7 +586,9 @@ class Resolver(
           val multipartId = unresolvedRelation.multipartIdentifier
           val catalogPath = (catalogManager.currentCatalog.name() +:
             catalogManager.currentNamespace).toSeq
-          val searchPath = SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
+          val searchPath = SQLConf.get
+            .sqlResolutionPathEntries(catalogPath.head, catalogPath.tail.toSeq)
+            .map(toSQLId)
           unresolvedRelation.tableNotFound(multipartId, searchPath)
       }
 

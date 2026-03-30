@@ -1083,7 +1083,8 @@ class SessionCatalog(
     SQLConf.withExistingConf(
       View.effectiveSQLConf(
         configs = viewConfigs,
-        isTempView = false
+        isTempView = false,
+        storedResolutionPath = metadata.viewStoredResolutionPath
       )
     ) {
       CurrentOrigin.withOrigin(origin) {
@@ -1153,7 +1154,8 @@ class SessionCatalog(
       View.effectiveSQLConf(
         configs = viewConfigs,
         isTempView = isTempView,
-        createSparkVersion = metadata.createVersion
+        createSparkVersion = metadata.createVersion,
+        storedResolutionPath = metadata.viewStoredResolutionPath
       )
     ) {
         CurrentOrigin.withOrigin(origin) {
@@ -1195,7 +1197,8 @@ class SessionCatalog(
         val viewConf = View.effectiveSQLConf(
           configs = metadata.viewSQLConfigs,
           isTempView = isTempView,
-          createSparkVersion = metadata.createVersion
+          createSparkVersion = metadata.createVersion,
+          storedResolutionPath = metadata.viewStoredResolutionPath
         )
         val normalizeColName: String => String = if (viewConf.caseSensitiveAnalysis) {
           identity

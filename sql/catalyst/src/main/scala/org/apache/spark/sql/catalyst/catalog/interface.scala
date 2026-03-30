@@ -610,6 +610,14 @@ case class CatalogTable(
     }
   }
 
+  /**
+   * Frozen SQL PATH stored when the view was created with [[SQLConf.PATH_ENABLED]].
+   * Comma-separated `catalog.schema` segments; virtual markers (e.g. `system.current_schema`)
+   * are materialized and, for persisted views, `system.session` is omitted.
+   */
+  def viewStoredResolutionPath: Option[String] =
+    properties.get(CatalogTable.VIEW_RESOLUTION_PATH)
+
   /** Syntactic sugar to update a field in `storage`. */
   def withNewStorage(
       locationUri: Option[URI] = storage.locationUri,
@@ -674,6 +682,11 @@ case class CatalogTable(
       if (viewCatalogAndNamespaceInfos.nonEmpty) {
         import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
         map += "View Catalog and Namespace" -> JString(viewCatalogAndNamespaceInfos.quoted)
+      }
+      if (SQLConf.get.pathEnabled) {
+        viewStoredResolutionPath.foreach { pathStr =>
+          map += "SQL Path" -> JString(pathStr)
+        }
       }
       val viewQueryOutputColumns: JValue = Try {
         if (viewSchemaMode == SchemaEvolution) {
@@ -764,6 +777,9 @@ object CatalogTable {
   val VIEW_REFERRED_TEMP_VARIABLE_NAMES = VIEW_PREFIX + "referredTempVariablesNames"
 
   val VIEW_SCHEMA_MODE = VIEW_PREFIX + "schemaMode"
+
+  /** Frozen expanded PATH at view creation (PATH feature); not a SQL config property. */
+  val VIEW_RESOLUTION_PATH = VIEW_PREFIX + "resolutionPath"
 
   val VIEW_STORING_ANALYZED_PLAN = VIEW_PREFIX + "storingAnalyzedPlan"
 
