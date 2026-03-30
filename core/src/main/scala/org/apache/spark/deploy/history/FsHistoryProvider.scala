@@ -429,8 +429,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           createInMemoryStore(attempt)
       }
     } catch {
-      case _: FileNotFoundException if this.conf.get(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED) =>
-        return None
       case _: FileNotFoundException =>
         return None
     }
