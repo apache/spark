@@ -450,9 +450,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private def loadFromFallbackLocation(appId: String, attemptId: Option[String], logPath: String)
     : Option[ApplicationInfoWrapper] = {
-    // Instead of creating dummy metadata (sparkVersion="unknown", etc.) and waiting for the
-    // next scan cycle to populate accurate information, call mergeApplicationListing directly
-    // to populate accurate metadata immediately.
+    // Call mergeApplicationListing to populate accurate metadata immediately.
     // logSourceFullPath is empty because on-demand loading has no prior knowledge of the
     // source directory; resolveLogPath will scan all directories to find the log.
     val (dirFs, fullPath) = resolveLogPath(logPath, "")
