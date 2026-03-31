@@ -70,7 +70,11 @@ abstract class AutoSnapshotLoader(
    * this to return an enriched set of snapshots (e.g., by building a fuller lineage
    * that was initially sparse for optimization).
    *
-   * The default delegates to [[getEligibleSnapshots]].
+   * The default delegates to [[getEligibleSnapshots]], which means it re-calls that method
+   * rather than reusing the initial list. This is intentional: V2 overrides this method to
+   * enrich the lineage first, then re-discovers snapshots from the enriched lineage.
+   * For V1 callers (which do not override), the re-call is benign since
+   * [[getEligibleSnapshots]] returns a consistent result from DFS listing.
    *
    * @param versionToLoad The version being loaded
    * @return Eligible snapshot versions for repair

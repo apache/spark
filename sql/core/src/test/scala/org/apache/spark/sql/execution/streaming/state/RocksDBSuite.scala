@@ -4117,10 +4117,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           db.doMaintenance() // upload snapshot 4.zip
         }
 
-        def corruptFile(file: File): Unit =
-          // overwrite the file content to become empty
-          new PrintWriter(file) { close() }
-
         // corrupt snapshot 4.zip
         corruptFile(new File(remoteDir, "4.zip"))
 
@@ -4202,9 +4198,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           db.doMaintenance() // upload snapshot 4_{uuid}.zip
         }
 
-        def corruptFile(file: File): Unit =
-          new PrintWriter(file) { close() }
-
         // Corrupt the latest V2 snapshot (version 4)
         val uuid4 = versionToUniqueId(4)
         corruptFile(new File(remoteDir, s"4_${uuid4}.zip"))
@@ -4279,9 +4272,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           }
         }
 
-        def corruptFile(file: File): Unit =
-          new PrintWriter(file) { close() }
-
         // Corrupt snapshots at version 6 and 4
         val uuid6 = versionToUniqueId(6)
         val uuid4 = versionToUniqueId(4)
@@ -4355,9 +4345,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           db.commit()
           db.doMaintenance() // snapshot at 4
         }
-
-        def corruptFile(file: File): Unit =
-          new PrintWriter(file) { close() }
 
         // Corrupt snapshot at version 4
         val uuid4 = versionToUniqueId(4)
@@ -4483,9 +4470,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           db.doMaintenance() // snapshot at 4
         }
 
-        def corruptFile(file: File): Unit =
-          new PrintWriter(file) { close() }
-
         // Corrupt snapshot at version 4 (to trigger auto-repair)
         val uuid4 = versionToUniqueId(4)
         corruptFile(new File(remoteDir, s"4_${uuid4}.zip"))
@@ -4498,25 +4482,13 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         val uuid2 = versionToUniqueId(2)
         corruptFile(new File(remoteDir, s"2_${uuid2}.changelog"))
 
-        // Auto-repair should still succeed by catching the getFullLineage failure
-        // and falling back to version 0 + replay from whatever changelogs are available.
-        // Note: version 2's snapshot is still intact, but it's not discoverable
-        // because getFullLineage failed to enrich the sparse lineage.
-        // Version 0 is always available as a fallback. Changelog replay from version 0
-        // uses changelogs 1, 3, 4 (changelog 2 is corrupt but we don't cross it since
-        // version 2's data is already included in changelog 1 and 3's cumulative state).
-        // Actually, replay from version 0 needs ALL changelogs 1-4, so if changelog 2
-        // is corrupt, version 0 fallback also fails. But version 2's snapshot is intact
-        // and if the sparse lineage includes it, we can load from snapshot 2.
-        // Since the sparse lineage only has version 4, and getFullLineage failed,
-        // the only fallback is version 0 + full replay which needs all changelogs.
-        // Changelog 2 is corrupt, so this path also fails.
-        // The test verifies getFullLineage failure is handled gracefully (logged, not thrown).
+        // When getFullLineage fails and the sparse lineage has no valid repair path,
+        // auto-repair should fail gracefully with StateStoreAutoSnapshotRepairFailed.
+        // Here: snapshot 4 is corrupt, getFullLineage fails (corrupt changelog 2),
+        // sparse lineage only knows version 4, and version 0 + full replay also fails
+        // because changelog 2 is corrupt.
         withDB(remoteDir, enableStateStoreCheckpointIds = true,
             versionToUniqueId = versionToUniqueId) { db =>
-          // All repair paths fail: snapshot 4 corrupt, getFullLineage fails,
-          // sparse lineage only knows version 4, version 0 + full replay fails
-          // because changelog 2 is corrupt.
           intercept[StateStoreAutoSnapshotRepairFailed] {
             db.load(4)
           }
@@ -5093,6 +5065,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
   def toStr(kv: ByteArrayPair): (String, String) = (toStr(kv.key), toStr(kv.value))
 
   def iterator(db: RocksDB): Iterator[(String, String)] = db.iterator().map(toStr)
+
+  /** Overwrite a file with empty content to simulate corruption. */
+  def corruptFile(file: File): Unit =
+    new PrintWriter(file) { close() }
 
   def listFiles(file: File): Seq[File] = {
     if (!file.exists()) return Seq.empty
