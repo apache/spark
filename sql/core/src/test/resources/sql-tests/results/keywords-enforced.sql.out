@@ -55,6 +55,7 @@ CLUSTERED	false
 CODEGEN	false
 COLLATE	true
 COLLATION	true
+COLLATIONS	true
 COLLECTION	false
 COLUMN	true
 COLUMNS	false
