@@ -61,7 +61,7 @@ ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.5 goog
 # Python deps for Kafka streaming tests
 ARG KAFKA_TEST_PKGS="testcontainers[kafka]>=3.7.0 kafka-python-ng>=2.0.2"
 
-RUN python3.12 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS $KAFKA_TEST_PKGS lxml  && \
+RUN python3.12 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS $KAFKA_TEST_PKGS lxml && \
     python3.12 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.12 -m pip install torcheval && \
     python3.12 -m pip cache purge
