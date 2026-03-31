@@ -2725,8 +2725,14 @@ class AstBuilder extends DataTypeAstBuilder
         // inline table comes in two styles:
         // style 1: values (1), (2), (3)  -- multiple columns are supported
         // style 2: values 1, 2, 3  -- only a single column is supported here
-        case struct: CreateNamedStruct => struct.valExprs // style 1
-        case child => Seq(child)                          // style 2
+        // Strip Alias wrappers from row values — CreateStruct.apply preserves them for
+        // expressions like `(1 AS id, 'a' AS name)`, but they are redundant here since
+        // column names are determined by the table alias or generated defaults.
+        case struct: CreateNamedStruct => struct.valExprs.map {
+          case a: Alias => a.child
+          case other => other
+        } // style 1
+        case child => Seq(child) // style 2
       }
     }
 

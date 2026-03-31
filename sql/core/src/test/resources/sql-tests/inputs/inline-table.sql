@@ -66,3 +66,12 @@ select count(distinct ct) from values now(), now(), now() as data(ct);
 
 -- current_timestamp() should be kept as tempResolved inline expression.
 select count(distinct ct) from values current_timestamp(), current_timestamp() as data(ct);
+
+-- aliased expressions in multi-column rows with current_timestamp (non-foldable)
+select a from (values (1 as id, current_timestamp() as ts), (2 as id, current_timestamp() as ts)) as t(a, b);
+
+-- aliased expressions in multi-column rows
+select * from values (1 as id, 'a' as name), (2 as id, 'b' as name) as t(a, b);
+
+-- aliased expressions without table alias
+select * from values (1 as a, 2 as b);
