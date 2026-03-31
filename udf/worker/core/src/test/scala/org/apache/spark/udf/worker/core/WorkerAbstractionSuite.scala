@@ -16,13 +16,10 @@
  */
 package org.apache.spark.udf.worker.core
 
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.udf.worker.UDFWorkerSpecification
+import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-/**
- * :: Experimental ::
- * Typed Scala wrapper around the protobuf [[UDFWorkerSpecification]].
- */
-@Experimental
-class WorkerSpec(val proto: UDFWorkerSpecification) {
+class WorkerAbstractionSuite
+    extends AnyFunSuite { // scalastyle:ignore funsuite
+
+  test("dummy") {}
 }

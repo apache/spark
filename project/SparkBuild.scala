@@ -59,13 +59,17 @@ object BuildCommons {
     Seq("connect-common", "connect", "connect-client-jdbc", "connect-client-jvm", "connect-shims")
       .map(ProjectRef(buildLocation, _))
 
+  val udfWorkerProjects@Seq(udfWorkerProto, udfWorkerCore) =
+    Seq("udf-worker-proto", "udf-worker-core").map(ProjectRef(buildLocation, _))
+
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
     commonUtils, commonUtilsJava, variant, pipelines, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
     "tags", "sketch", "kvstore", "common-utils", "common-utils-java", "variant", "pipelines"
-  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ connectProjects
+  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ connectProjects ++
+    udfWorkerProjects
 
   val optionallyEnabledProjects@Seq(kubernetes, yarn,
     sparkGangliaLgpl, streamingKinesisAsl, profiler,
@@ -405,7 +409,8 @@ object SparkBuild extends PomBuild {
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, tokenProviderKafka010, sqlKafka010, pipelines, connectCommon, connect,
-      connectJdbc, connectClient, variant, connectShims, profiler, commonUtilsJava
+      connectJdbc, connectClient, variant, connectShims, profiler, commonUtilsJava,
+      udfWorkerProto, udfWorkerCore
     ).contains(x)
   }
 
@@ -457,6 +462,9 @@ object SparkBuild extends PomBuild {
 
   /* Protobuf settings */
   enable(SparkProtobuf.settings)(protobuf)
+
+  /* UDF Worker Proto settings */
+  enable(UDFWorkerProto.settings)(udfWorkerProto)
 
   enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
 
@@ -1065,6 +1073,26 @@ object SparkProtobuf {
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
       case _ => MergeStrategy.first
     },
+  ) ++ {
+    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
+    if (sparkProtocExecPath.isDefined) {
+      Seq(
+        PB.protocExecutable := file(sparkProtocExecPath.get)
+      )
+    } else {
+      Seq.empty
+    }
+  }
+}
+
+object UDFWorkerProto {
+  import BuildCommons.protoVersion
+  lazy val settings = Seq(
+    PB.protocVersion := BuildCommons.protoVersion,
+    libraryDependencies += "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf",
+    (Compile / PB.targets) := Seq(
+      PB.gens.java -> target.value / "generated-sources"
+    )
   ) ++ {
     val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
     if (sparkProtocExecPath.isDefined) {

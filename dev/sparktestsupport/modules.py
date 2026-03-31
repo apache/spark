@@ -222,6 +222,17 @@ variant = Module(
     sbt_test_goals=["variant/test"],
 )
 
+udf_worker = Module(
+    name="udf-worker",
+    dependencies=[tags],
+    source_file_regexes=[
+        "udf/worker/",
+    ],
+    sbt_test_goals=[
+        "udf-worker-core/test",
+    ],
+)
+
 core = Module(
     name="core",
     dependencies=[kvstore, network_common, network_shuffle, unsafe, launcher, utils],

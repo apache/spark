@@ -111,6 +111,7 @@
     <module>connector/kafka-0-10-sql</module>
     <module>connector/avro</module>
     <module>connector/protobuf</module>
+    <module>udf/worker</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 

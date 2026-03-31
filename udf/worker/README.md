@@ -33,12 +33,14 @@ udf/worker/
 
 SBT:
 ```
-build/sbt "project udf-worker-core" compile
+build/sbt "udf-worker-core/compile"
+build/sbt "udf-worker-core/test"
 ```
 
 Maven:
 ```
-mvn -pl udf/worker -am compile
+./build/mvn -pl udf/worker/proto,udf/worker/core -am compile
+./build/mvn -pl udf/worker/proto,udf/worker/core -am test
 ```
 
 ## Design references
