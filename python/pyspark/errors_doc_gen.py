@@ -1,6 +1,6 @@
+import importlib.resources
+import json
 import re
-
-from pyspark.errors.error_classes import ERROR_CLASSES_MAP
 
 
 def generate_errors_doc(output_rst_file_path: str) -> None:
@@ -47,7 +47,13 @@ When writing PySpark errors, developers must use an error class from the list. I
 """
     with open(output_rst_file_path, "w") as f:
         f.write(header + "\n\n")
-        for error_key, error_details in ERROR_CLASSES_MAP.items():
+        python_error_classes_json = (
+            importlib.resources.files("pyspark.errors")
+            .joinpath("error-conditions.json")
+            .read_text()
+        )
+        python_error_classes_map = json.loads(python_error_classes_json)
+        for error_key, error_details in python_error_classes_map.items():
             f.write(error_key + "\n")
             # The length of the error class name and underline must be the same
             # to satisfy the RST format.
