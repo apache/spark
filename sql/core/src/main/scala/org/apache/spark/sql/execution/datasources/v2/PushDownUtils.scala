@@ -130,7 +130,7 @@ object PushDownUtils extends Logging {
   }
 
   /**
-   * Return a Seq of [[PartitionPredicateField]] representing partition transform expression types,
+   * Returns a Seq of [[PartitionPredicateField]] representing partition transform expression types,
    * if schema is supported for [[PartitionPredicate]] push down. None if not supported.
    */
   def getPartitionPredicateSchema(relation: DataSourceV2Relation)
@@ -210,7 +210,7 @@ object PushDownUtils extends Logging {
       !f.exists(_.isInstanceOf[PythonUDF])
 
   /**
-   * Replaces all partition column references with canonical [[AttributeReference]]
+   * Replaces all partition column references with canonical [[AttributeReference]]s
    * provided by the matching [[PartitionPredicateField]].
    *
    * Nested struct accesses on partition fields are replaced with flat [[AttributeReference]]s

@@ -283,7 +283,7 @@ object DataSourceUtils extends PredicateHelper {
    * Splits `normalizedFilters` into partition filters and data filters by matching
    * [[AttributeReference]] against the given `partitionSchema` by their names.
    *
-   * This is suitable for the V1 path where partition columns have non-nested name.
+   * This is suitable for the V1 path where partition columns have non-nested names.
    */
   def getPartitionFiltersAndDataFilters(
       partitionSchema: StructType,

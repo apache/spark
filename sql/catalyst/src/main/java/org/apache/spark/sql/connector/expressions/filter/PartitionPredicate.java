@@ -79,7 +79,7 @@ public abstract class PartitionPredicate extends Predicate {
    * Evaluates this predicate against a single partition's keys.
    * <p>
    * The caller must pass the <b>full</b> partition key: one value per partition transform in
-   * {@link Table#partitioning()}, in order. A key for only a subset of referenced columns is not
+   * {@link Table#partitioning()}, in order. A key for only a subset of referenced fields is not
    * supported.
    *
    * @param partitionKey the full partition key for one partition, ordered according to

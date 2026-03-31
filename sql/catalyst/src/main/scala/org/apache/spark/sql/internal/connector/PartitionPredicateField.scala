@@ -18,7 +18,6 @@
 package org.apache.spark.sql.internal.connector
 
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.types.StructField
 
 /**
  * Metadata for one partition field.
@@ -31,8 +30,4 @@ import org.apache.spark.sql.types.StructField
  */
 case class PartitionPredicateField(
     fieldNames: Seq[String],
-    attrRef: AttributeReference) {
-
-  lazy val structField: StructField =
-    StructField(attrRef.name, attrRef.dataType, attrRef.nullable)
-}
+    attrRef: AttributeReference)

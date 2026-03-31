@@ -19,7 +19,7 @@ package org.apache.spark.sql.internal.connector
 
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Expression => CatalystExpression, ExprId, Predicate => CatalystPredicate}
+import org.apache.spark.sql.catalyst.expressions.{BindReferences, Expression => CatalystExpression, ExprId, Predicate => CatalystPredicate}
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
 
@@ -40,12 +40,7 @@ class PartitionPredicateImpl private (
 
   /** Bound predicate, computed once and reused for all partition rows. */
   @transient private lazy val boundPredicate: InternalRow => Boolean = {
-    val boundExpr = catalystExpr.transform {
-      case a: AttributeReference =>
-        val index = exprIdToIndex.getOrElse(a.exprId,
-          throw new IllegalStateException(s"Field ${a.name} not found in partition schema"))
-        BoundReference(index, partitionFields(index).attrRef.dataType, nullable = a.nullable)
-    }
+    val boundExpr = BindReferences.bindReference(catalystExpr, partitionFields.map(_.attrRef))
     val predicate = CatalystPredicate.createInterpreted(boundExpr)
     predicate.eval
   }
