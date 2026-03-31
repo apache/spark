@@ -516,7 +516,7 @@ class StatefulProcessorApiClient:
                 else:
                     return v
 
-            converted = [normalize_value(v) for v in data]
+            converted = tuple(normalize_value(v) for v in data)
         else:
             converted = data
 
