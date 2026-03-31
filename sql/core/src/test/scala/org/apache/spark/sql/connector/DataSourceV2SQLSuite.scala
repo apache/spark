@@ -3245,7 +3245,7 @@ class DataSourceV2SQLSuiteV1Filter
     assert(utf8Row.getString(3) == "ACCENT_SENSITIVE")
     assert(utf8Row.getString(4) == "CASE_SENSITIVE")
 
-    val likeResult = sql("SHOW COLLATIONS LIKE 'UNICODE%'").collect()
+    val likeResult = sql("SHOW COLLATIONS LIKE 'UNICODE*'").collect()
     assert(likeResult.nonEmpty)
     assert(likeResult.forall(_.getString(0).startsWith("UNICODE")))
 
