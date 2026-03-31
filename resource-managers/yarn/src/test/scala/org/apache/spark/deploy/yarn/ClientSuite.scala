@@ -823,6 +823,112 @@ class ClientSuite extends SparkFunSuite
     }
   }
 
+  test("SPARK-53209: ActiveProcessorCount not set by default") {
+    withSparkHome { sparkHome =>
+      val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> sparkHome))
+        .set("spark.app.name", "test-app")
+        .set(SUBMIT_DEPLOY_MODE, "client")
+        .set(AM_CORES, 3)
+        .set(DRIVER_CORES, 4)  // This should be ignored in client mode
+
+      val client = createClient(sparkConf)
+      val containerLaunchContext = createContainerLaunchContextForTest(client)
+
+      val commands = containerLaunchContext.getCommands.asScala
+      commands should not contain ("-XX:ActiveProcessorCount=")
+    }
+  }
+
+  test("SPARK-53209: ActiveProcessorCount is set to AM cores in client mode") {
+    withSparkHome { sparkHome =>
+      val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> sparkHome))
+        .set("spark.yarn.am.limitActiveProcessorCount.enabled", "true")
+        .set("spark.app.name", "test-app")
+        .set(SUBMIT_DEPLOY_MODE, "client")
+        .set(AM_CORES, 3)
+        .set(DRIVER_CORES, 4)  // This should be ignored in client mode
+
+      val client = createClient(sparkConf)
+      val containerLaunchContext = createContainerLaunchContextForTest(client)
+
+      val commands = containerLaunchContext.getCommands.asScala
+      commands should contain ("-XX:ActiveProcessorCount=3")
+    }
+  }
+
+  test("SPARK-53209: ActiveProcessorCount is set to driver cores in cluster mode") {
+    withSparkHome { sparkHome =>
+      val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> sparkHome))
+        .set("spark.driver.limitActiveProcessorCount.enabled", "true")
+        .set("spark.app.name", "test-app")
+        .set(SUBMIT_DEPLOY_MODE, "cluster")
+        .set(AM_CORES, 3)       // This should be ignored in cluster mode
+        .set(DRIVER_CORES, 4)
+
+      val client = createClient(sparkConf)
+      val containerLaunchContext = createContainerLaunchContextForTest(client)
+
+      val commands = containerLaunchContext.getCommands.asScala
+      commands should contain ("-XX:ActiveProcessorCount=4")
+    }
+  }
+
+  test("SPARK-53209: ActiveProcessorCount defaults to 1 in client mode when AM cores not set") {
+    withSparkHome { sparkHome =>
+      val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> sparkHome))
+        .set("spark.yarn.am.limitActiveProcessorCount.enabled", "true")
+        .set("spark.app.name", "test-app")
+        .set(SUBMIT_DEPLOY_MODE, "client")
+
+      val client = createClient(sparkConf)
+      val containerLaunchContext = createContainerLaunchContextForTest(client)
+
+      val commands = containerLaunchContext.getCommands.asScala
+      commands should contain ("-XX:ActiveProcessorCount=1")
+    }
+  }
+
+  test("SPARK-53209: ActiveProcessorCount defaults to 1 in cluster mode" +
+      " when driver cores not set") {
+    withSparkHome { sparkHome =>
+      val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> sparkHome))
+        .set("spark.driver.limitActiveProcessorCount.enabled", "true")
+        .set("spark.app.name", "test-app")
+        .set(SUBMIT_DEPLOY_MODE, "cluster")
+
+      val client = createClient(sparkConf)
+      val containerLaunchContext = createContainerLaunchContextForTest(client)
+
+      val commands = containerLaunchContext.getCommands.asScala
+      commands should contain ("-XX:ActiveProcessorCount=1")
+    }
+  }
+
+  private def withSparkHome(f: String => Unit): Unit = {
+    withTempDir { dir =>
+      // Create jars dir and RELEASE file to avoid IllegalStateException.
+      val jarsDir = new File(dir, "jars")
+      assert(jarsDir.mkdir())
+      new FileOutputStream(new File(dir, "RELEASE")).close()
+      f(dir.getAbsolutePath)
+    }
+  }
+
+  private def createStagingDir(): String = {
+    val stagingDir = Utils.createTempDir()
+    stagingDir.getAbsolutePath
+  }
+
+  private def createContainerLaunchContextForTest(client: Client): ContainerLaunchContext = {
+    val stagingDirPathField = classOf[Client]
+      .getDeclaredField("org$apache$spark$deploy$yarn$Client$$stagingDirPath")
+    stagingDirPathField.setAccessible(true)
+    stagingDirPathField.set(client, new Path(createStagingDir()))
+    val _createContainerLaunchContext =
+      PrivateMethod[ContainerLaunchContext](Symbol("createContainerLaunchContext"))
+    client invokePrivate _createContainerLaunchContext()
+  }
+
   private val matching = Seq(
     ("files URI match test1", "file:///file1", "file:///file2"),
     ("files URI match test2", "file:///c:file1", "file://c:file2"),

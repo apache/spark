@@ -23,6 +23,7 @@ from pyspark.sql import Row
 import pyspark.sql.functions as F
 from pyspark.sql.types import (
     DecimalType,
+    IntegerType,
     StructType,
     StructField,
     StringType,
@@ -257,6 +258,28 @@ class DataFrameCreationTestsMixin:
                 sdf.withColumn("test", F.col("dict_col")[F.col("str_col")]).collect(),
                 [Row(str_col="second", dict_col={"first": 0.7, "second": 0.3}, test=0.3)],
             )
+
+    def test_empty_dataframe_with_struct_type(self):
+        schema = StructType(
+            [
+                StructField("name", StringType(), True),
+                StructField("age", IntegerType(), True),
+            ]
+        )
+        df = self.spark.emptyDataFrame(schema)
+        self.assertEqual(df.schema, schema)
+        self.assertEqual(df.count(), 0)
+        self.assertEqual(df.collect(), [])
+
+    def test_empty_dataframe_with_ddl_string(self):
+        df = self.spark.emptyDataFrame("name STRING, age INT")
+        self.assertEqual(len(df.schema.fields), 2)
+        self.assertEqual(df.schema.fields[0].name, "name")
+        self.assertIsInstance(df.schema.fields[0].dataType, StringType)
+        self.assertEqual(df.schema.fields[1].name, "age")
+        self.assertIsInstance(df.schema.fields[1].dataType, IntegerType)
+        self.assertEqual(df.count(), 0)
+        self.assertEqual(df.collect(), [])
 
     def test_empty_schema(self):
         schema = StructType()

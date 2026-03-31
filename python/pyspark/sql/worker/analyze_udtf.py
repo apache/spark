@@ -17,7 +17,7 @@
 
 import inspect
 from textwrap import dedent
-from typing import Dict, List, IO, Tuple
+from typing import Any, Dict, List, IO, Protocol, Tuple
 
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.logger.worker_io import capture_outputs, context_provider as default_context_provider
@@ -39,7 +39,12 @@ from pyspark.worker_util import (
 )
 
 
-def read_udtf(infile: IO) -> type:
+class UDTFHandler(Protocol):
+    @staticmethod
+    def analyze(*args: Any, **kwargs: Any) -> AnalyzeResult: ...
+
+
+def read_udtf(infile: IO) -> type[UDTFHandler]:
     """Reads the Python UDTF and checks if its valid or not."""
     # Receive Python UDTF
     handler = read_command(pickleSer, infile)
@@ -111,7 +116,7 @@ def _main(infile: IO, outfile: IO) -> None:
     # Check that the arguments provided to the UDTF call match the expected parameters defined
     # in the static 'analyze' method signature.
     try:
-        inspect.signature(handler.analyze).bind(*args, **kwargs)  # type: ignore[attr-defined]
+        inspect.signature(handler.analyze).bind(*args, **kwargs)
     except TypeError as e:
         # The UDTF call's arguments did not match the expected signature.
         raise PySparkValueError(
@@ -131,7 +136,7 @@ def _main(infile: IO, outfile: IO) -> None:
 
     with capture_outputs(context_provider):
         # Invoke the UDTF's 'analyze' method.
-        result = handler.analyze(*args, **kwargs)  # type: ignore[attr-defined]
+        result = handler.analyze(*args, **kwargs)
 
     # Check invariants about the 'analyze' method after running it.
     if not isinstance(result, AnalyzeResult):

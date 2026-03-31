@@ -155,6 +155,11 @@ private[yarn] class ExecutorRunnable(
     // Extra options for the JVM
     val javaOpts = ListBuffer[String]()
 
+    // Set Active Processor Count
+    if (sparkConf.get(EXECUTOR_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED)) {
+      javaOpts += s"-XX:ActiveProcessorCount=${executorCores}"
+    }
+
     // Set the JVM memory
     val executorMemoryString = s"${executorMemory}m"
     javaOpts += "-Xmx" + executorMemoryString
