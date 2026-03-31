@@ -485,7 +485,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
         sqlState = "0A000",
         parameters = Map(
-          "tableName" -> s"`default`.`$tableName`",
+          "tableName" -> s"`spark_catalog`.`default`.`$tableName`",
           "operation" -> "INSERT INTO ... REPLACE ON/USING")
       )
   }
@@ -500,7 +500,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
         sqlState = "0A000",
         parameters = Map(
-          "tableName" -> s"`default`.`$tableName`",
+          "tableName" -> s"`spark_catalog`.`default`.`$tableName`",
           "operation" -> "INSERT INTO ... REPLACE ON/USING")
       )
   }
