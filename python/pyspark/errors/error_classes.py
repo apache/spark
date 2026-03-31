@@ -28,7 +28,7 @@ from pyspark.find_spark_home import _find_spark_home
 #   This discrepancy will be resolved as part of: https://issues.apache.org/jira/browse/SPARK-47429
 
 
-def get_error_classes():
+def get_error_classes() -> dict[str, dict]:
     python_error_classes_json = (
         importlib.resources.files("pyspark.errors").joinpath("error-conditions.json").read_text()
     )
