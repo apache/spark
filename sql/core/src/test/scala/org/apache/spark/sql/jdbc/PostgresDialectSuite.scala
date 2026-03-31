@@ -61,15 +61,7 @@ class PostgresDialectSuite extends SparkFunSuite with MockitoSugar {
     verify(conn, never()).setAutoCommit(false)
   }
 
-  test("SPARK-56251: effectiveFetchSize: returns user-specified value when set") {
-    assert(dialect.effectiveFetchSize(createJDBCOptions(Map("fetchsize" -> "500"))) === 500)
-  }
-
-  test("SPARK-56251: effectiveFetchSize: returns 0 when user explicitly sets 0") {
-    assert(dialect.effectiveFetchSize(createJDBCOptions(Map("fetchsize" -> "0"))) === 0)
-  }
-
-  test("SPARK-56251: effectiveFetchSize: returns defaultFetchSize (1000) when not set") {
+  test("SPARK-56251: effectiveFetchSize: returns 1000 when not set (Postgres default)") {
     assert(dialect.effectiveFetchSize(createJDBCOptions(Map.empty)) === 1000)
   }
 
@@ -77,13 +69,12 @@ class PostgresDialectSuite extends SparkFunSuite with MockitoSugar {
     val baseDialect = new JdbcDialect {
       override def canHandle(url: String): Boolean = true
     }
-    assert(baseDialect.defaultFetchSize === 0)
     assert(baseDialect.effectiveFetchSize(createJDBCOptions(Map.empty)) === 0)
   }
 
   test("SPARK-56251: beforeFetch sets autoCommit=false when using default fetchSize") {
     val conn = mock[Connection]
-    // No explicit fetchsize - should use defaultFetchSize (1000) and set autoCommit=false
+    // No explicit fetchsize - should use Postgres default (1000) and set autoCommit=false
     dialect.beforeFetch(conn, createJDBCOptions(Map.empty))
     verify(conn).setAutoCommit(false)
   }

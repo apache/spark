@@ -531,14 +531,16 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-56251: Dialect defaultFetchSize is applied when user does not specify fetchsize") {
+  test("SPARK-56251: Dialect effectiveFetchSize is applied when user does not specify fetchsize") {
     @volatile var capturedFetchSize: Int = -1
 
     val testDialect = new JdbcDialect {
       override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
-      override val defaultFetchSize: Int = 100
       override def effectiveFetchSize(options: JDBCOptions): Int = {
-        val result = super.effectiveFetchSize(options)
+        val result = options.parameters.get(JDBCOptions.JDBC_BATCH_FETCH_SIZE) match {
+          case Some(v) => v.toInt
+          case None => 100
+        }
         capturedFetchSize = result
         result
       }
@@ -555,14 +557,16 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-56251: User-specified fetchsize takes precedence over dialect defaultFetchSize") {
+  test("SPARK-56251: User-specified fetchsize takes precedence over dialect effectiveFetchSize") {
     @volatile var capturedFetchSize: Int = -1
 
     val testDialect = new JdbcDialect {
       override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
-      override val defaultFetchSize: Int = 100
       override def effectiveFetchSize(options: JDBCOptions): Int = {
-        val result = super.effectiveFetchSize(options)
+        val result = options.parameters.get(JDBCOptions.JDBC_BATCH_FETCH_SIZE) match {
+          case Some(v) => v.toInt
+          case None => 100
+        }
         capturedFetchSize = result
         result
       }

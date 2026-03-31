@@ -85,8 +85,6 @@ private class AggregatedDialect(dialects: List[JdbcDialect])
     dialects.head.getTruncateQuery(table, cascade)
   }
 
-  override def defaultFetchSize: Int = dialects.head.defaultFetchSize
-
   override def effectiveFetchSize(options: JDBCOptions): Int = {
     dialects.head.effectiveFetchSize(options)
   }
