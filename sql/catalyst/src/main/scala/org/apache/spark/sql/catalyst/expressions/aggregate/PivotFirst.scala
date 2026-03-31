@@ -97,7 +97,7 @@ case class PivotFirst(
     HashMap(pivotColumnValues.zipWithIndex: _*)
   }
 
-  // Null-safe lookup into pivotIndex. When pivotIndex is a TreeMap, its comparison-based lookup 
+  // Null-safe lookup into pivotIndex. When pivotIndex is a TreeMap, its comparison-based lookup
   // throws NPE on null keys. Returning -1 for null is safe on the TreeMap path because null can
   // never be a TreeMap key (insertion would also NPE), so it can never match any pivot value.
   // Otherwise, pivotIndex is a HashMap that handles null keys safely via hash-based lookup.
