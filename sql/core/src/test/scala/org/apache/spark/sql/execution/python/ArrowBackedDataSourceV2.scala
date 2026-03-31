@@ -21,7 +21,8 @@ import java.util
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector._
 
-import org.apache.spark.sql.connector.catalog.{Table, TableCapability, TableProvider}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.types._
