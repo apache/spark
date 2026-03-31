@@ -2477,19 +2477,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                     order_column, NATURAL_ORDER_COLUMN_NAME
                 )
 
-                has_na_name = "__has_na_{}__".format(name)
-                sdf = sdf.withColumn(has_na_name, scol.isNull()).withColumn(
+                sdf = sdf.withColumn(
                     name,
                     F.when(F.row_number().over(window) == 1, scol_for(sdf, index)).otherwise(None),
                 )
-                if pd_version < "2.3.0" or skipna:
-                    stat_exprs.append(F.max(scol_for(sdf, name)).alias(name))
-                else:
-                    stat_exprs.append(
-                        F.when(F.max(scol_for(sdf, has_na_name)), None)
-                        .otherwise(F.max(scol_for(sdf, name)))
-                        .alias(name)
-                    )
+                stat_exprs.append(F.max(scol_for(sdf, name)).alias(name))
             else:
                 # pandas 3 skipna=False: raise on any NA, otherwise return all-missing labels
                 stat_exprs.append(
@@ -2580,19 +2572,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                     order_column, NATURAL_ORDER_COLUMN_NAME
                 )
 
-                has_na_name = "__has_na_{}__".format(name)
-                sdf = sdf.withColumn(has_na_name, scol.isNull()).withColumn(
+                sdf = sdf.withColumn(
                     name,
                     F.when(F.row_number().over(window) == 1, scol_for(sdf, index)).otherwise(None),
                 )
-                if pd_version < "2.3.0" or skipna:
-                    stat_exprs.append(F.max(scol_for(sdf, name)).alias(name))
-                else:
-                    stat_exprs.append(
-                        F.when(F.max(scol_for(sdf, has_na_name)), None)
-                        .otherwise(F.max(scol_for(sdf, name)))
-                        .alias(name)
-                    )
+                stat_exprs.append(F.max(scol_for(sdf, name)).alias(name))
             else:
                 # pandas 3 skipna=False: raise on any NA, otherwise return all-missing labels
                 stat_exprs.append(

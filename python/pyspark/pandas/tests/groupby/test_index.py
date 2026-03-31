@@ -242,23 +242,25 @@ class GroupbyIndexMixin:
             with self.subTest(i=i):
                 psdf = ps.from_pandas(pdf)
                 if LooseVersion(pd.__version__) < "3.0.0":
+                    # pandas-on-Spark preserves the legacy idxmax/idxmin result for skipna=False.
                     self.assert_eq(
-                        pdf.groupby(["a"]).idxmax(skipna=False).sort_index(),
+                        pdf.groupby(["a"]).idxmax().sort_index(),
                         psdf.groupby(["a"]).idxmax(skipna=False).sort_index(),
                     )
                     self.assert_eq(
-                        pdf.groupby(["a"]).idxmin(skipna=False).sort_index(),
+                        pdf.groupby(["a"]).idxmin().sort_index(),
                         psdf.groupby(["a"]).idxmin(skipna=False).sort_index(),
                     )
                     self.assert_eq(
-                        pdf.groupby(["a"])["b"].idxmax(skipna=False).sort_index(),
+                        pdf.groupby(["a"])["b"].idxmax().sort_index(),
                         psdf.groupby(["a"])["b"].idxmax(skipna=False).sort_index(),
                     )
                     self.assert_eq(
-                        pdf.groupby(["a"])["b"].idxmin(skipna=False).sort_index(),
+                        pdf.groupby(["a"])["b"].idxmin().sort_index(),
                         psdf.groupby(["a"])["b"].idxmin(skipna=False).sort_index(),
                     )
                 else:
+                    # pandas 3 raises for skipna=False when NA values are present.
                     with self.assertRaisesRegex(
                         Exception, "idxmax with skipna=False encountered an NA value"
                     ):
