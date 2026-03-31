@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, TypeUtils}
-import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.types._
 
 object PivotFirst {
