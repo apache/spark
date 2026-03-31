@@ -532,7 +532,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-56251: Dialect getFetchSize is applied when user does not specify fetchsize") {
-    @volatile var capturedFetchSize: Int = -1
+    JDBCSuite.capturedFetchSize = -1
 
     val testDialect = new JdbcDialect {
       override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
@@ -541,7 +541,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
           case Some(v) => v.toInt
           case None => 100
         }
-        capturedFetchSize = result
+        JDBCSuite.capturedFetchSize = result
         result
       }
     }
@@ -550,15 +550,16 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     try {
       val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties())
       assert(df.collect().length === 3)
-      assert(capturedFetchSize === 100,
-        s"Expected getFetchSize to return 100 (dialect default), got $capturedFetchSize")
+      assert(JDBCSuite.capturedFetchSize === 100,
+        s"Expected getFetchSize to return 100 (dialect default), " +
+          s"got ${JDBCSuite.capturedFetchSize}")
     } finally {
       JdbcDialects.unregisterDialect(testDialect)
     }
   }
 
   test("SPARK-56251: User-specified fetchsize takes precedence over dialect getFetchSize") {
-    @volatile var capturedFetchSize: Int = -1
+    JDBCSuite.capturedFetchSize = -1
 
     val testDialect = new JdbcDialect {
       override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
@@ -567,7 +568,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
           case Some(v) => v.toInt
           case None => 100
         }
-        capturedFetchSize = result
+        JDBCSuite.capturedFetchSize = result
         result
       }
     }
@@ -578,8 +579,9 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       properties.setProperty(JDBCOptions.JDBC_BATCH_FETCH_SIZE, "42")
       val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties)
       assert(df.collect().length === 3)
-      assert(capturedFetchSize === 42,
-        s"Expected getFetchSize to return 42 (user-specified), got $capturedFetchSize")
+      assert(JDBCSuite.capturedFetchSize === 42,
+        s"Expected getFetchSize to return 42 (user-specified), " +
+          s"got ${JDBCSuite.capturedFetchSize}")
     } finally {
       JdbcDialects.unregisterDialect(testDialect)
     }
@@ -2363,4 +2365,10 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       )
     }
   }
+}
+
+object JDBCSuite {
+  // SPARK-56251: Spark tasks use deserialized dialect instances, so closure-captured variables
+  // from the test method won't be updated. Use a companion object singleton to pass values instead.
+  @volatile var capturedFetchSize: Int = -1
 }
