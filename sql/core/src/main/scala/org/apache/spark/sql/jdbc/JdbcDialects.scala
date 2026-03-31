@@ -342,7 +342,8 @@ abstract class JdbcDialect extends Serializable with Logging {
    * Dialects can override this to provide a sensible default when the user does not
    * explicitly set the fetchSize option.
    */
-  def effectiveFetchSize(options: JDBCOptions): Int = options.fetchSize
+  @Since("4.2.0")
+  def getFetchSize(options: JDBCOptions): Int = options.fetchSize
 
   /**
    * Override connection specific properties to run before a select is made.  This is in place to

@@ -61,15 +61,15 @@ class PostgresDialectSuite extends SparkFunSuite with MockitoSugar {
     verify(conn, never()).setAutoCommit(false)
   }
 
-  test("SPARK-56251: effectiveFetchSize: returns 1000 when not set (Postgres default)") {
-    assert(dialect.effectiveFetchSize(createJDBCOptions(Map.empty)) === 1000)
+  test("SPARK-56251: getFetchSize: returns 1000 when not set (Postgres default)") {
+    assert(dialect.getFetchSize(createJDBCOptions(Map.empty)) === 1000)
   }
 
-  test("SPARK-56251: effectiveFetchSize: base dialect returns 0 when not set") {
+  test("SPARK-56251: getFetchSize: base dialect returns 0 when not set") {
     val baseDialect = new JdbcDialect {
       override def canHandle(url: String): Boolean = true
     }
-    assert(baseDialect.effectiveFetchSize(createJDBCOptions(Map.empty)) === 0)
+    assert(baseDialect.getFetchSize(createJDBCOptions(Map.empty)) === 0)
   }
 
   test("SPARK-56251: beforeFetch sets autoCommit=false when using default fetchSize") {

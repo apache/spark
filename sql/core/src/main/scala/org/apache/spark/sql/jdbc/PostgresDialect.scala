@@ -196,11 +196,11 @@ private case class PostgresDialect()
   // the user does not explicitly set the fetchSize option.
   private val POSTGRES_DEFAULT_FETCH_SIZE = 1000
 
-  override def effectiveFetchSize(options: JDBCOptions): Int = {
+  override def getFetchSize(options: JDBCOptions): Int = {
     options.parameters.get(JDBCOptions.JDBC_BATCH_FETCH_SIZE) match {
       case Some(v) => v.toInt
       case None =>
-        logWarning(s"No fetchSize option set for PostgreSQL JDBC read. " +
+        logInfo(s"No fetchSize option set for PostgreSQL JDBC read. " +
           s"Defaulting to $POSTGRES_DEFAULT_FETCH_SIZE to avoid loading all rows into memory. " +
           s"Set the 'fetchsize' option explicitly to override this behavior.")
         POSTGRES_DEFAULT_FETCH_SIZE
@@ -216,7 +216,7 @@ private case class PostgresDialect()
     //
     // See: https://jdbc.postgresql.org/documentation/head/query.html#query-with-cursor
     //
-    if (effectiveFetchSize(options) > 0) {
+    if (getFetchSize(options) > 0) {
       connection.setAutoCommit(false)
     }
   }

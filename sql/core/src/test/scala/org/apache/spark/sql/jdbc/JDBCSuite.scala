@@ -531,12 +531,12 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-56251: Dialect effectiveFetchSize is applied when user does not specify fetchsize") {
+  test("SPARK-56251: Dialect getFetchSize is applied when user does not specify fetchsize") {
     @volatile var capturedFetchSize: Int = -1
 
     val testDialect = new JdbcDialect {
       override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
-      override def effectiveFetchSize(options: JDBCOptions): Int = {
+      override def getFetchSize(options: JDBCOptions): Int = {
         val result = options.parameters.get(JDBCOptions.JDBC_BATCH_FETCH_SIZE) match {
           case Some(v) => v.toInt
           case None => 100
@@ -551,18 +551,18 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties())
       assert(df.collect().length === 3)
       assert(capturedFetchSize === 100,
-        s"Expected effectiveFetchSize to return 100 (dialect default), got $capturedFetchSize")
+        s"Expected getFetchSize to return 100 (dialect default), got $capturedFetchSize")
     } finally {
       JdbcDialects.unregisterDialect(testDialect)
     }
   }
 
-  test("SPARK-56251: User-specified fetchsize takes precedence over dialect effectiveFetchSize") {
+  test("SPARK-56251: User-specified fetchsize takes precedence over dialect getFetchSize") {
     @volatile var capturedFetchSize: Int = -1
 
     val testDialect = new JdbcDialect {
       override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
-      override def effectiveFetchSize(options: JDBCOptions): Int = {
+      override def getFetchSize(options: JDBCOptions): Int = {
         val result = options.parameters.get(JDBCOptions.JDBC_BATCH_FETCH_SIZE) match {
           case Some(v) => v.toInt
           case None => 100
@@ -579,7 +579,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties)
       assert(df.collect().length === 3)
       assert(capturedFetchSize === 42,
-        s"Expected effectiveFetchSize to return 42 (user-specified), got $capturedFetchSize")
+        s"Expected getFetchSize to return 42 (user-specified), got $capturedFetchSize")
     } finally {
       JdbcDialects.unregisterDialect(testDialect)
     }
