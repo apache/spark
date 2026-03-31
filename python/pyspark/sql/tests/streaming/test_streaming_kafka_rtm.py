@@ -139,13 +139,7 @@ class StreamingKafkaTests(StreamingKafkaTestsMixin, ReusedSQLTestCase):
         """
 
         # produce test data to source_topic
-        for i in range(10):
-            self.kafka_utils.producer.send(
-                self.source_topic,
-                key=i,
-                value=i,
-            ).get(timeout=10)
-        self.kafka_utils.producer.flush()
+        self.kafka_utils.send_messages(self.source_topic, [(i, i) for i in range(10)])
 
         # Build streaming query for Kafka to Kafka.
         kafka_source = (

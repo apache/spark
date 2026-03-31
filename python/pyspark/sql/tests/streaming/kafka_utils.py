@@ -114,29 +114,33 @@ class KafkaUtils:
             ) from e
 
         # Start Kafka container with specific version for test stability
-        self._kafka_container = KafkaContainer(f"confluentinc/cp-kafka:{self.kafka_version}")
-        self._kafka_container.start()
+        try:
+            self._kafka_container = KafkaContainer(f"confluentinc/cp-kafka:{self.kafka_version}")
+            self._kafka_container.start()
 
-        # Get bootstrap server address
-        self.broker = self._kafka_container.get_bootstrap_server()
+            # Get bootstrap server address
+            self.broker = self._kafka_container.get_bootstrap_server()
 
-        # Initialize admin client for topic management
-        self._admin_client = KafkaAdminClient(
-            bootstrap_servers=self.broker,
-            request_timeout_ms=10000,
-            api_version_auto_timeout_ms=10000,
-        )
+            # Initialize admin client for topic management
+            self._admin_client = KafkaAdminClient(
+                bootstrap_servers=self.broker,
+                request_timeout_ms=10000,
+                api_version_auto_timeout_ms=10000,
+            )
 
-        # Initialize producer for sending test messages
-        self._producer = KafkaProducer(
-            bootstrap_servers=self.broker,
-            key_serializer=lambda k: str(k).encode("utf-8") if k is not None else None,
-            value_serializer=lambda v: str(v).encode("utf-8") if v is not None else None,
-            request_timeout_ms=10000,
-            max_block_ms=10000,
-        )
+            # Initialize producer for sending test messages
+            self._producer = KafkaProducer(
+                bootstrap_servers=self.broker,
+                key_serializer=lambda k: str(k).encode("utf-8") if k is not None else None,
+                value_serializer=lambda v: str(v).encode("utf-8") if v is not None else None,
+                request_timeout_ms=10000,
+                max_block_ms=10000,
+            )
 
-        self.initialized = True
+            self.initialized = True
+        except Exception:
+            self.teardown()
+            raise
 
     def teardown(self) -> None:
         """
@@ -316,7 +320,7 @@ class KafkaUtils:
         Example:
             kafka_utils.assert_eventually(
                 lambda: kafka_utils.get_all_records(spark, topic),
-                {"key1": "value1"}
+                [("key1", "value1"), ("key2", "value2")]
             )
         """
         deadline = time.time() + timeout
