@@ -97,19 +97,23 @@ case class ArrowEvalPythonExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     if (child.supportsColumnar) {
-      // Columnar path: process ColumnarBatch directly, potentially extracting
-      // Arrow FieldVectors without row conversion.
-      val inputRDD = child.executeColumnar()
-      if (conf.usePartitionEvaluator) {
-        inputRDD.mapPartitionsWithEvaluator(columnarEvaluatorFactory)
-      } else {
-        inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
-          columnarEvaluatorFactory.createEvaluator().eval(index, iter)
-        }
-      }
+      // Columnar path: produce ColumnarBatch via doExecuteColumnar(), then flatten to rows.
+      // This mirrors DBR's approach in ArrowEvalPythonExec.doExecute().
+      doExecuteColumnar().flatMap(_.rowIterator().asScala)
     } else {
       // Row-based path: unchanged.
       super.doExecute()
+    }
+  }
+
+  override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    val inputRDD = child.executeColumnar()
+    if (conf.usePartitionEvaluator) {
+      inputRDD.mapPartitionsWithEvaluator(columnarEvaluatorFactory)
+    } else {
+      inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
+        columnarEvaluatorFactory.createEvaluator().eval(index, iter)
+      }
     }
   }
 

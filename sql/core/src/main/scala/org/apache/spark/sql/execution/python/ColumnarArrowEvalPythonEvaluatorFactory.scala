@@ -16,33 +16,40 @@
  */
 package org.apache.spark.sql.execution.python
 
-import java.io.File
+import java.util.ArrayDeque
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, SparkEnv, TaskContext}
+import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.{DataType, StructField, StructType, UserDefinedType}
 import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
-import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 
 /**
- * Evaluator factory for Arrow Python UDFs that processes [[ColumnarBatch]] input directly.
+ * Evaluator factory for Arrow Python UDFs that processes [[ColumnarBatch]] input
+ * and produces [[ColumnarBatch]] output, staying fully in columnar format.
  *
  * When UDF inputs are simple column references and the batch is Arrow-backed,
- * this avoids the columnar-to-row-to-columnar round-trip by extracting Arrow
- * FieldVectors directly from [[ArrowColumnVector]] columns.
+ * this avoids the columnar-to-row-to-columnar round-trip entirely:
+ * - UDF input columns: extracted as Arrow FieldVectors and sent directly via IPC.
+ * - Pass-through columns: kept as ColumnVector references (no row conversion).
+ * - Output: pass-through ColumnVectors + UDF result ColumnVectors combined into
+ *   a new [[ColumnarBatch]].
  *
  * When UDF inputs contain complex expressions (not simple column references),
- * falls back to converting ColumnarBatch to rows and delegating to the existing
- * row-based [[ArrowEvalPythonEvaluatorFactory]].
+ * the UDF inputs are serialized via the row-based ArrowWriter fallback, but
+ * pass-through columns are still kept in columnar format.
+ *
+ * Note: DBR handles complex expressions by inserting a Project node upstream
+ * (via PhotonStageCompiler.extractUDFInputsIntoProject) to pre-evaluate them.
+ * A similar physical plan rule could be added to OSS Spark in the future to
+ * eliminate the fallback path.
  */
 private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
     childOutput: Seq[Attribute],
@@ -56,15 +63,14 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
-  extends PartitionEvaluatorFactory[ColumnarBatch, InternalRow] {
+  extends PartitionEvaluatorFactory[ColumnarBatch, ColumnarBatch] {
 
-  override def createEvaluator(): PartitionEvaluator[ColumnarBatch, InternalRow] =
+  override def createEvaluator(): PartitionEvaluator[ColumnarBatch, ColumnarBatch] =
     new ColumnarArrowEvalPythonPartitionEvaluator
 
   private class ColumnarArrowEvalPythonPartitionEvaluator
-      extends PartitionEvaluator[ColumnarBatch, InternalRow] {
+      extends PartitionEvaluator[ColumnarBatch, ColumnarBatch] {
 
-    /** Collect chained Python functions and their children (same as EvalPythonEvaluatorFactory). */
     private def collectFunctions(
         udf: PythonUDF): ((ChainedPythonFunctions, Long), Seq[Expression]) = {
       udf.children match {
@@ -79,16 +85,9 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
 
     override def eval(
         partitionIndex: Int,
-        iters: Iterator[ColumnarBatch]*): Iterator[InternalRow] = {
+        iters: Iterator[ColumnarBatch]*): Iterator[ColumnarBatch] = {
       val inputIter = iters.head
       val context = TaskContext.get()
-
-      // Buffer input rows to combine with UDF output later (same as EvalPythonEvaluatorFactory).
-      val queue = HybridRowQueue(
-        context.taskMemoryManager(),
-        new File(Utils.getLocalDir(SparkEnv.get.conf)),
-        childOutput.length)
-      context.addTaskCompletionListener[Unit] { _ => queue.close() }
 
       val (pyFuncs, inputs) = udfs.map(collectFunctions).unzip
 
@@ -115,20 +114,28 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         StructField(s"_$i", dt)
       }.toArray)
 
+      val outputTypes = output.drop(childOutput.length).map(_.dataType.transformRecursively {
+        case udt: UserDefinedType[_] => udt.sqlType
+      })
+
+      // Queue to buffer pass-through columns from input batches.
+      // Each entry is (ColumnVector[], numRows) corresponding to one input ColumnarBatch.
+      val passThruQueue = new ArrayDeque[(Array[ColumnVector], Int)]()
+
       // Try to resolve all UDF inputs as simple column references.
       val inputColumnIndices = resolveColumnIndices(allInputs.toSeq)
 
-      if (inputColumnIndices.isDefined) {
-        // Columnar path: all UDF inputs are simple column references.
+      val resultIter = if (inputColumnIndices.isDefined) {
         evalColumnar(
-          inputIter, context, queue, pyFuncs, argMetas,
-          udfInputSchema, inputColumnIndices.get)
+          inputIter, context, pyFuncs, argMetas, udfInputSchema,
+          inputColumnIndices.get, passThruQueue)
       } else {
-        // Fallback: complex expressions exist, convert to rows.
         evalRowFallback(
-          inputIter, context, queue, pyFuncs, argMetas, allInputs.toSeq,
-          udfInputSchema)
+          inputIter, context, pyFuncs, argMetas, allInputs.toSeq,
+          udfInputSchema, passThruQueue)
       }
+
+      combineResults(resultIter, outputTypes, passThruQueue)
     }
 
     /**
@@ -148,118 +155,98 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
 
     /**
      * Columnar path: extract Arrow vectors directly from ColumnarBatch and send to Python.
+     * Pass-through columns are kept as ColumnVector references -- no row conversion.
      */
     private def evalColumnar(
         inputIter: Iterator[ColumnarBatch],
         context: TaskContext,
-        queue: HybridRowQueue,
         pyFuncs: Seq[(ChainedPythonFunctions, Long)],
         argMetas: Array[Array[ArgumentMetadata]],
         udfInputSchema: StructType,
-        columnIndices: Array[Int]): Iterator[InternalRow] = {
+        columnIndices: Array[Int],
+        passThruQueue: ArrayDeque[(Array[ColumnVector], Int)]): Iterator[ColumnarBatch] = {
 
-      val unsafeProj = UnsafeProjection.create(childOutput, childOutput)
-
-      // Wrap iterator: buffer rows in queue, then pass batch to runner.
+      // Wrap iterator: save pass-through columns, then pass batch to runner.
       val bufferedIter = inputIter.map { batch =>
-        val rowIter = batch.rowIterator().asScala
-        while (rowIter.hasNext) {
-          queue.add(unsafeProj(rowIter.next()).copy())
-        }
+        val passThruCols = childOutput.indices.map(i => batch.column(i)).toArray
+        passThruQueue.add((passThruCols, batch.numRows()))
         batch
       }
 
       val pyRunner = new ColumnarArrowPythonWithNamedArgumentRunner(
-        pyFuncs,
-        evalType,
-        argMetas,
-        udfInputSchema,
-        sessionLocalTimeZone,
-        largeVarTypes,
-        pythonRunnerConf,
-        pythonMetrics,
-        jobArtifactUUID,
-        sessionUUID,
-        columnIndices)
+        pyFuncs, evalType, argMetas, udfInputSchema, sessionLocalTimeZone,
+        largeVarTypes, pythonRunnerConf, pythonMetrics, jobArtifactUUID,
+        sessionUUID, columnIndices)
 
-      val outputTypes = output.drop(childOutput.length).map(_.dataType.transformRecursively {
-        case udt: UserDefinedType[_] => udt.sqlType
-      })
-
-      val columnarBatchIter = pyRunner.compute(bufferedIter, context.partitionId(), context)
-
-      val joined = new JoinedRow
-      val resultProj = UnsafeProjection.create(output, output)
-
-      columnarBatchIter.flatMap { batch =>
-        val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
-        if (!equalsIgnoreCompatibleCollation(outputTypes, actualDataTypes)) {
-          throw QueryExecutionErrors.arrowDataTypeMismatchError(
-            "pandas_udf()", outputTypes, actualDataTypes)
-        }
-        batch.rowIterator.asScala
-      }.map { outputRow =>
-        resultProj(joined(queue.remove(), outputRow))
-      }
+      pyRunner.compute(bufferedIter, context.partitionId(), context)
     }
 
     /**
-     * Fallback path: convert ColumnarBatch to rows and use existing row-based evaluation.
-     * Used when UDF inputs contain complex expressions that cannot be resolved to
-     * simple column indices.
+     * Fallback path: UDF inputs contain complex expressions. Convert to rows for
+     * UDF input serialization, but still keep pass-through columns in columnar format.
      */
     private def evalRowFallback(
         inputIter: Iterator[ColumnarBatch],
         context: TaskContext,
-        queue: HybridRowQueue,
         pyFuncs: Seq[(ChainedPythonFunctions, Long)],
         argMetas: Array[Array[ArgumentMetadata]],
         allInputs: Seq[Expression],
-        udfInputSchema: StructType): Iterator[InternalRow] = {
+        udfInputSchema: StructType,
+        passThruQueue: ArrayDeque[(Array[ColumnVector], Int)]): Iterator[ColumnarBatch] = {
 
       val projection = MutableProjection.create(allInputs, childOutput)
       projection.initialize(context.partitionId())
 
-      val outputTypes = output.drop(childOutput.length).map(_.dataType.transformRecursively {
-        case udt: UserDefinedType[_] => udt.sqlType
-      })
-
-      // Convert ColumnarBatch to rows, buffer + project.
-      val unsafeProj = UnsafeProjection.create(childOutput, childOutput)
+      // Convert ColumnarBatch to rows for UDF input, save pass-through columns.
       val projectedRowIter = inputIter.flatMap { batch =>
-        batch.rowIterator().asScala
-      }.map { inputRow =>
-        queue.add(unsafeProj(inputRow).copy())
-        projection(inputRow)
+        val passThruCols = childOutput.indices.map(i => batch.column(i)).toArray
+        passThruQueue.add((passThruCols, batch.numRows()))
+        batch.rowIterator().asScala.map(projection)
       }
 
       val batchIter = Iterator(projectedRowIter)
-
       val pyRunner = new ArrowPythonWithNamedArgumentRunner(
-        pyFuncs,
-        evalType,
-        argMetas,
-        udfInputSchema,
-        sessionLocalTimeZone,
-        largeVarTypes,
-        pythonRunnerConf,
-        pythonMetrics,
-        jobArtifactUUID,
+        pyFuncs, evalType, argMetas, udfInputSchema, sessionLocalTimeZone,
+        largeVarTypes, pythonRunnerConf, pythonMetrics, jobArtifactUUID,
         sessionUUID) with BatchedPythonArrowInput
-      val columnarBatchIter = pyRunner.compute(batchIter, context.partitionId(), context)
 
-      val joined = new JoinedRow
-      val resultProj = UnsafeProjection.create(output, output)
+      pyRunner.compute(batchIter, context.partitionId(), context)
+    }
 
-      columnarBatchIter.flatMap { batch =>
-        val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
+    /**
+     * Combine pass-through columns with UDF result columns into output ColumnarBatches.
+     *
+     * For scalar Arrow UDFs, Python preserves batch boundaries: one input batch
+     * produces one output batch with the same number of rows. This method pops
+     * pass-through columns from the queue and combines them with UDF result columns.
+     */
+    private def combineResults(
+        resultIter: Iterator[ColumnarBatch],
+        outputTypes: Seq[DataType],
+        passThruQueue: ArrayDeque[(Array[ColumnVector], Int)]): Iterator[ColumnarBatch] = {
+
+      resultIter.map { resultBatch =>
+        val actualDataTypes = (0 until resultBatch.numCols()).map(
+          i => resultBatch.column(i).dataType())
         if (!equalsIgnoreCompatibleCollation(outputTypes, actualDataTypes)) {
           throw QueryExecutionErrors.arrowDataTypeMismatchError(
             "pandas_udf()", outputTypes, actualDataTypes)
         }
-        batch.rowIterator.asScala
-      }.map { outputRow =>
-        resultProj(joined(queue.remove(), outputRow))
+
+        val numResultRows = resultBatch.numRows()
+        val resultCols = (0 until resultBatch.numCols()).map(
+          i => resultBatch.column(i)).toArray
+
+        // Pop the corresponding pass-through columns.
+        val (passThruCols, passThruRows) = passThruQueue.poll()
+        assert(passThruRows == numResultRows,
+          s"Batch size mismatch: pass-through has $passThruRows rows " +
+          s"but UDF result has $numResultRows rows. " +
+          s"This can happen when Arrow output batch slicing is enabled.")
+
+        // Combine: [pass-through columns | UDF result columns]
+        val allCols = passThruCols ++ resultCols
+        new ColumnarBatch(allCols, numResultRows)
       }
     }
   }
