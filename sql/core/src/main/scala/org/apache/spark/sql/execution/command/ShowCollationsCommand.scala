@@ -41,7 +41,8 @@ case class ShowCollationsCommand(pattern: Option[String]) extends LeafRunnableCo
     val collations = CollationFactory.listCollations().asScala
       .map(CollationFactory.loadCollationMeta)
     val filtered = pattern
-      .map(p => collations.filter(m => StringUtils.filterPattern(Seq(m.collationName), p).nonEmpty))
+      .map(p => collations.filter(m =>
+        StringUtils.filterPattern(Seq(m.collationName), p.replace('%', '*')).nonEmpty))
       .getOrElse(collations)
     filtered.map { m =>
       Row(
