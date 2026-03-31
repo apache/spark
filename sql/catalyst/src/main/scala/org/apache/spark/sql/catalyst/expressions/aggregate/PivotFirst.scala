@@ -88,7 +88,7 @@ case class PivotFirst(
   override val dataType: DataType = ArrayType(valueDataType)
 
   private val usesTreeMap: Boolean =
-    !UnsafeRowUtils.isBinaryStable(pivotColumn.dataType) ||
+    !TypeUtils.typeWithProperEquals(pivotColumn.dataType) ||
       !pivotColumn.dataType.isInstanceOf[AtomicType]
 
   val pivotIndex: Map[Any, Int] = if (usesTreeMap) {
