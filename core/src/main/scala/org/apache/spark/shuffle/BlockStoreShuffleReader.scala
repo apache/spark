@@ -70,6 +70,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
 
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
+    logError("=== AKHIL [11] BlockStoreShuffleReader.read: shuffleId=" + dep.shuffleId + " taskContext.partitionId=" + context.partitionId() + " ===")
     val wrappedStreams = new ShuffleBlockFetcherIterator(
       context,
       blockManager.blockStoreClient,

@@ -533,6 +533,7 @@ private[spark] class DAGScheduler(
     val numTasks = rdd.partitions.length
     val parents = getOrCreateParentStages(shuffleDeps, jobId)
     val id = nextStageId.getAndIncrement()
+    logError("=== AKHIL [6b] createShuffleMapStage: shuffleId=" + shuffleDep.shuffleId + " rdd=" + rdd + " numTasks=" + numTasks + " parents=" + parents + " ===")
     val stage = new ShuffleMapStage(
       id, rdd, numTasks, parents, jobId, rdd.creationSite, shuffleDep, mapOutputTracker,
       resourceProfile.id)
@@ -964,6 +965,7 @@ private[spark] class DAGScheduler(
     eagerlyComputePartitionsForRddAndAncestors(rdd)
 
     val jobId = nextJobId.getAndIncrement()
+    logError("=== AKHIL [5] DAGScheduler.submitJob: jobId=" + jobId + " rdd=" + rdd + " partitions=" + partitions.size + " ===")
     if (partitions.isEmpty) {
       val clonedProperties = Utils.cloneProperties(properties)
       if (sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION) == null) {
@@ -1381,6 +1383,7 @@ private[spark] class DAGScheduler(
     try {
       // New stage creation may throw an exception if, for example, jobs are run on a
       // HadoopRDD whose underlying HDFS files have been deleted.
+      logError("=== AKHIL [6] handleJobSubmitted: jobId=" + jobId + " finalRDD=" + finalRDD + " ===")
       finalStage = createResultStage(finalRDD, func, partitions, jobId, callSite)
     } catch {
       case e: BarrierJobSlotsNumberCheckFailed =>
@@ -1419,6 +1422,7 @@ private[spark] class DAGScheduler(
     // Job submitted, clear internal data.
     barrierJobIdToNumTasksCheckFailures.remove(jobId)
 
+    logError("=== AKHIL [7] handleJobSubmitted: finalStage=" + finalStage + " parents=" + finalStage.parents + " missingParents=" + getMissingParentStages(finalStage) + " ===")
     val job = new ActiveJob(jobId, finalStage, callSite, listener, artifacts, properties)
     clearCacheLocs()
     logInfo(
@@ -1625,6 +1629,7 @@ private[spark] class DAGScheduler(
 
     // Figure out the indexes of partition ids to compute.
     val partitionsToCompute: Seq[Int] = stage.findMissingPartitions()
+    logError("=== AKHIL [8] submitMissingTasks: stage=" + stage + " partitionsToCompute=" + partitionsToCompute + " ===")
 
     // Use the scheduling pool, job group, description, etc. from an ActiveJob associated
     // with this Stage
@@ -2172,6 +2177,7 @@ private[spark] class DAGScheduler(
   private[scheduler] def handleTaskCompletion(event: CompletionEvent): Unit = {
     val task = event.task
     val stageId = task.stageId
+    logError("=== AKHIL [9] handleTaskCompletion: task=" + task + " stageId=" + stageId + " partition=" + task.partitionId + " reason=" + event.reason + " ===")
 
     outputCommitCoordinator.taskCompleted(
       stageId,

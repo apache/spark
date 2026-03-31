@@ -422,6 +422,7 @@ abstract class RDD[T: ClassTag](
    * Return a new RDD by applying a function to all elements of this RDD.
    */
   def map[U: ClassTag](f: T => U): RDD[U] = withScope {
+    logError("=== AKHIL [2] RDD.map called on " + this + " ===")
     val cleanF = sc.clean(f)
     new MapPartitionsRDD[U, T](
       this,

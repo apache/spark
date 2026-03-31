@@ -1017,6 +1017,7 @@ class SparkContext(config: SparkConf) extends Logging {
       seq: Seq[T],
       numSlices: Int = defaultParallelism): RDD[T] = withScope {
     assertNotStopped()
+    logError("=== AKHIL [1] parallelize: " + seq.size + " elements, " + numSlices + " slices ===")
     new ParallelCollectionRDD[T](this, seq, numSlices, Map[Int, Seq[String]]())
   }
 
@@ -2493,6 +2494,7 @@ class SparkContext(config: SparkConf) extends Logging {
       logInfo(log"RDD's recursive dependencies:\n" +
         log"${MDC(LogKeys.RDD_DEBUG_STRING, rdd.toDebugString)}")
     }
+    logError("=== AKHIL [4] SparkContext.runJob: rdd=" + rdd + " partitions=" + partitions.size + " callSite=" + callSite.shortForm + " ===")
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, resultHandler, localProperties.get)
     progressBar.foreach(_.finishAll())
     rdd.doCheckpoint()
@@ -2848,6 +2850,9 @@ class SparkContext(config: SparkConf) extends Logging {
    * @return the cleaned closure
    */
   private[spark] def clean[F <: AnyRef](f: F, checkSerializable: Boolean = true): F = {
+    // logError("=== AKHIL [2a] sc.clean called on  " + this + " ===")
+    // logError("=== AKHIL [2b] what is f  " + f + " ===")
+    // logError("=== AKHIL [2c] what is checkSerializable  " + checkSerializable + " ===")
     SparkClosureCleaner.clean(f, checkSerializable)
   }
 

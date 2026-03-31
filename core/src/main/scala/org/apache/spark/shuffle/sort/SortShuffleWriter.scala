@@ -75,6 +75,7 @@ private[spark] class SortShuffleWriter[K, V, C](
         context, aggregator = None, Some(dep.partitioner), ordering = None,
         dep.serializer, dep.rowBasedChecksums)
     }
+    logError("=== AKHIL [10a] SortShuffleWriter.write: shuffleId=" + dep.shuffleId + " mapId=" + mapId + " numReducePartitions=" + dep.partitioner.numPartitions + " mapSideCombine=" + dep.mapSideCombine + " ===")
     sorter.insertAll(records)
 
     // Don't bother including the time to open the merged output file in the shuffle write time,
@@ -84,6 +85,7 @@ private[spark] class SortShuffleWriter[K, V, C](
       dep.shuffleId, mapId, dep.partitioner.numPartitions)
     sorter.writePartitionedMapOutput(dep.shuffleId, mapId, mapOutputWriter, writeMetrics)
     partitionLengths = mapOutputWriter.commitAllPartitions(sorter.getChecksums).getPartitionLengths
+    logError("=== AKHIL [10b] SortShuffleWriter.write DONE: shuffleId=" + dep.shuffleId + " mapId=" + mapId + " partitionLengths=" + partitionLengths.mkString("[", ",", "]") + " ===")
     mapStatus =
       MapStatus(blockManager.shuffleServerId, partitionLengths, mapId, getAggregatedChecksumValue)
   }

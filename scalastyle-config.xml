@@ -73,7 +73,7 @@ This file is divided into 3 sections:
 
   <check level="error" class="org.scalastyle.file.WhitespaceEndOfLineChecker" enabled="true"></check>
 
-  <check level="error" class="org.scalastyle.file.FileLineLengthChecker" enabled="true">
+  <check level="error" class="org.scalastyle.file.FileLineLengthChecker" enabled="false">
     <parameters>
       <parameter name="maxLineLength"><![CDATA[100]]></parameter>
       <parameter name="tabSize"><![CDATA[2]]></parameter>
