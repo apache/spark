@@ -61,19 +61,20 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
     getTaskResultExecutor.execute(new Runnable {
       override def run(): Unit = Utils.logUncaughtExceptions {
         try {
-          val (result, size) = serializer.get().deserialize[TaskResult[_]](serializedData) match {
+          val resultAndSize = serializer.get().deserialize[TaskResult[_]](serializedData) match {
             case directResult: DirectTaskResult[_] =>
               if (!taskSetManager.canFetchMoreResults(directResult.valueByteBuffer.size)) {
                 // kill the task so that it will not become zombie task
                 scheduler.handleFailedTask(taskSetManager, tid, TaskState.KILLED, TaskKilled(
                   "Tasks result size has exceeded maxResultSize"))
-                return
+                None
+              } else {
+                // deserialize "value" without holding any lock so that it won't block other
+                // threads. We should call it here, so that when it's called again in
+                // "TaskSetManager.handleSuccessfulTask", it does not need to deserialize it.
+                directResult.value(taskResultSerializer.get())
+                Some((directResult, serializedData.limit().toLong))
               }
-              // deserialize "value" without holding any lock so that it won't block other threads.
-              // We should call it here, so that when it's called again in
-              // "TaskSetManager.handleSuccessfulTask", it does not need to deserialize the value.
-              directResult.value(taskResultSerializer.get())
-              (directResult, serializedData.limit().toLong)
             case IndirectTaskResult(blockId, size) =>
               if (!taskSetManager.canFetchMoreResults(size)) {
                 // dropped by executor if size is larger than maxResultSize
@@ -81,44 +82,48 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
                 // kill the task so that it will not become zombie task
                 scheduler.handleFailedTask(taskSetManager, tid, TaskState.KILLED, TaskKilled(
                   "Tasks result size has exceeded maxResultSize"))
-                return
+                None
+              } else {
+                logDebug(s"Fetching indirect task result for ${taskSetManager.taskName(tid)}")
+                scheduler.handleTaskGettingResult(taskSetManager, tid)
+                val serializedTaskResult = sparkEnv.blockManager.getRemoteBytes(blockId)
+                if (serializedTaskResult.isEmpty) {
+                  /* We won't be able to get the task result if the machine that ran the task failed
+                   * between when the task ended and when we tried to fetch the result, or if the
+                   * block manager had to flush the result. */
+                  scheduler.handleFailedTask(
+                    taskSetManager, tid, TaskState.FINISHED, TaskResultLost)
+                  None
+                } else {
+                  val deserializedResult = SerializerHelper
+                    .deserializeFromChunkedBuffer[DirectTaskResult[_]](
+                      serializer.get(),
+                      serializedTaskResult.get)
+                  // force deserialization of referenced value
+                  deserializedResult.value(taskResultSerializer.get())
+                  sparkEnv.blockManager.master.removeBlock(blockId)
+                  Some((deserializedResult, size))
+                }
               }
-              logDebug(s"Fetching indirect task result for ${taskSetManager.taskName(tid)}")
-              scheduler.handleTaskGettingResult(taskSetManager, tid)
-              val serializedTaskResult = sparkEnv.blockManager.getRemoteBytes(blockId)
-              if (serializedTaskResult.isEmpty) {
-                /* We won't be able to get the task result if the machine that ran the task failed
-                 * between when the task ended and when we tried to fetch the result, or if the
-                 * block manager had to flush the result. */
-                scheduler.handleFailedTask(
-                  taskSetManager, tid, TaskState.FINISHED, TaskResultLost)
-                return
-              }
-              val deserializedResult = SerializerHelper
-                .deserializeFromChunkedBuffer[DirectTaskResult[_]](
-                  serializer.get(),
-                  serializedTaskResult.get)
-              // force deserialization of referenced value
-              deserializedResult.value(taskResultSerializer.get())
-              sparkEnv.blockManager.master.removeBlock(blockId)
-              (deserializedResult, size)
           }
 
-          // Set the task result size in the accumulator updates received from the executors.
-          // We need to do this here on the driver because if we did this on the executors then
-          // we would have to serialize the result again after updating the size.
-          result.accumUpdates = result.accumUpdates.map { a =>
-            if (a.name == Some(InternalAccumulator.RESULT_SIZE)) {
-              val acc = a.asInstanceOf[LongAccumulator]
-              assert(acc.sum == 0L, "task result size should not have been set on the executors")
-              acc.setValue(size)
-              acc
-            } else {
-              a
+          resultAndSize.foreach { case (result, size) =>
+            // Set the task result size in the accumulator updates received from the executors.
+            // We need to do this here on the driver because if we did this on the executors then
+            // we would have to serialize the result again after updating the size.
+            result.accumUpdates = result.accumUpdates.map { a =>
+              if (a.name == Some(InternalAccumulator.RESULT_SIZE)) {
+                val acc = a.asInstanceOf[LongAccumulator]
+                assert(acc.sum == 0L, "task result size should not have been set on the executors")
+                acc.setValue(size)
+                acc
+              } else {
+                a
+              }
             }
-          }
 
-          scheduler.handleSuccessfulTask(taskSetManager, tid, result)
+            scheduler.handleSuccessfulTask(taskSetManager, tid, result)
+          }
         } catch {
           case cnf: ClassNotFoundException =>
             val loader = Thread.currentThread.getContextClassLoader
