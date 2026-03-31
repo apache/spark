@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.types._
 
 object PivotFirst {
@@ -86,20 +87,27 @@ case class PivotFirst(
 
   override val dataType: DataType = ArrayType(valueDataType)
 
-  val pivotIndex: Map[Any, Int] = if (pivotColumn.dataType.isInstanceOf[AtomicType]) {
-    HashMap(pivotColumnValues.zipWithIndex: _*)
-  } else {
-    TreeMap(pivotColumnValues.zipWithIndex: _*)(
-      TypeUtils.getInterpretedOrdering(pivotColumn.dataType))
+  val pivotIndex: Map[Any, Int] = {
+    val dt = pivotColumn.dataType
+    if (UnsafeRowUtils.isBinaryStable(dt) &&
+        dt.isInstanceOf[AtomicType]) {
+      HashMap(pivotColumnValues.zipWithIndex: _*)
+    } else {
+      TreeMap(pivotColumnValues.zipWithIndex: _*)(
+        TypeUtils.getInterpretedOrdering(dt))
+    }
   }
 
-  // Null-safe lookup into pivotIndex. For atomic types, pivotIndex is a HashMap which
-  // handles null keys safely via hash-based lookup. For non-atomic types, pivotIndex is a TreeMap
-  // whose comparison-based lookup throws NPE on null keys. Returning -1 for null is safe on the
-  // TreeMap path because null can never be a TreeMap key (insertion would also NPE), so it can
-  // never match any pivot value.
+  private val usesTreeMap: Boolean =
+    !UnsafeRowUtils.isBinaryStable(pivotColumn.dataType) ||
+      !pivotColumn.dataType.isInstanceOf[AtomicType]
+
+  // Null-safe lookup into pivotIndex. When pivotIndex is a TreeMap
+  // its comparison-based lookup throws NPE on null keys. Return -1
+  // for null on the TreeMap path since null can never be a valid
+  // pivot value in a TreeMap (insertion would also NPE).
   private def findPivotIndex(key: Any): Int = key match {
-    case null if !pivotColumn.dataType.isInstanceOf[AtomicType] => -1
+    case null if usesTreeMap => -1
     case _ => pivotIndex.getOrElse(key, -1)
   }
 
