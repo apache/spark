@@ -21,6 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{JobArtifactSet, SparkException, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -88,6 +89,42 @@ case class ArrowEvalPythonExec(
         session.sessionUUID
     }
   }
+
+  // When the child supports columnar output (e.g., Arrow-backed DSv2 connectors),
+  // accept columnar input to avoid the ColumnarToRow -> ArrowWriter round-trip.
+  override def supportsColumnar: Boolean = child.supportsColumnar
+  override def supportsRowBased: Boolean = true
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    if (child.supportsColumnar) {
+      // Columnar path: process ColumnarBatch directly, potentially extracting
+      // Arrow FieldVectors without row conversion.
+      val inputRDD = child.executeColumnar()
+      if (conf.usePartitionEvaluator) {
+        inputRDD.mapPartitionsWithEvaluator(columnarEvaluatorFactory)
+      } else {
+        inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
+          columnarEvaluatorFactory.createEvaluator().eval(index, iter)
+        }
+      }
+    } else {
+      // Row-based path: unchanged.
+      super.doExecute()
+    }
+  }
+
+  private lazy val columnarEvaluatorFactory = new ColumnarArrowEvalPythonEvaluatorFactory(
+    child.output,
+    udfs,
+    output,
+    conf.arrowMaxRecordsPerBatch,
+    evalType,
+    conf.sessionLocalTimeZone,
+    conf.arrowUseLargeVarTypes,
+    ArrowPythonRunner.getPythonRunnerConfMap(conf),
+    pythonMetrics,
+    jobArtifactUUID,
+    sessionUUID)
 
   override protected def evaluatorFactory: EvalPythonEvaluatorFactory = {
     new ArrowEvalPythonEvaluatorFactory(
