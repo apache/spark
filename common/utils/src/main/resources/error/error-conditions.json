@@ -7904,12 +7904,6 @@
     },
     "sqlState" : "42809"
   },
-  "UNSUPPORTED_INSERT_REPLACE_ON_OR_USING" : {
-    "message" : [
-      "INSERT INTO ... REPLACE ON/USING is unsupported for this table format."
-    ],
-    "sqlState" : "0A000"
-  },
   "UNSUPPORTED_INSERT_WITH_SCHEMA_EVOLUTION" : {
     "message" : [
       "INSERT WITH SCHEMA EVOLUTION ... is unsupported for this table format."

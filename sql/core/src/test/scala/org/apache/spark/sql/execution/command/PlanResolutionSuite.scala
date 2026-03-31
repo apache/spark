@@ -57,6 +57,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
 
   private val table: Table = {
     val t = mock(classOf[SupportsDelete])
+    when(t.name()).thenReturn("tab")
     when(t.columns()).thenReturn(
       Array(Column.create("i", IntegerType), Column.create("s", StringType)))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
@@ -1332,7 +1333,11 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           "INSERT INTO testcat.tab AS t REPLACE ON t.i = 1 " +
             "SELECT * FROM v2Table")
       },
-      condition = "UNSUPPORTED_INSERT_REPLACE_ON_OR_USING"
+      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      sqlState = "0A000",
+      parameters = Map(
+        "tableName" -> "`tab`",
+        "operation" -> "INSERT INTO ... REPLACE ON/USING")
     )
   }
 
@@ -1343,7 +1348,11 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           "INSERT INTO testcat.tab AS t REPLACE USING (i) " +
             "SELECT * FROM v2Table")
       },
-      condition = "UNSUPPORTED_INSERT_REPLACE_ON_OR_USING"
+      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      sqlState = "0A000",
+      parameters = Map(
+        "tableName" -> "`tab`",
+        "operation" -> "INSERT INTO ... REPLACE ON/USING")
     )
   }
 

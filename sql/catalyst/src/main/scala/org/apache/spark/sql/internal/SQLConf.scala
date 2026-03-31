@@ -4823,7 +4823,7 @@ object SQLConf {
 
   val INSERT_INTO_REPLACE_ON_ENABLED =
     buildConf("spark.sql.insertIntoReplaceOn.enabled")
-      .doc("Enable the SQL syntax INSERT INTO ... REPLACE ON. " +
+      .doc("Enable the SQL syntax INSERT INTO ... REPLACE ON (...). " +
         "The command atomically inserts new rows into a table after deleting all existing rows " +
         "that match the new rows according to the specified matching condition. The " +
         "inserted rows are specified by a VALUES expression or the result of a query.")

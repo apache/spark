@@ -1023,7 +1023,11 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql(s"INSERT INTO test_table $insertClause SELECT 1, 'a'")
           },
-          condition = "UNSUPPORTED_INSERT_REPLACE_ON_OR_USING"
+          condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+          sqlState = "0A000",
+          parameters = Map(
+            "tableName" -> "`default`.`test_table`",
+            "operation" -> "INSERT INTO ... REPLACE ON/USING")
         )
       }
     }

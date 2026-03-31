@@ -1156,7 +1156,8 @@ class Analyzer(
           if i.table.isInstanceOf[DataSourceV2Relation] &&
             i.query.resolved &&
             i.replaceCriteriaOpt.isDefined =>
-        throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing()
+        throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(
+          i.table.asInstanceOf[DataSourceV2Relation].table.name())
 
       case i: InsertIntoStatement
           if i.table.isInstanceOf[DataSourceV2Relation] &&
