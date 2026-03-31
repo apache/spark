@@ -21,7 +21,6 @@ import java.nio.ByteBuffer
 import java.util.concurrent.{ExecutorService, RejectedExecutionException}
 
 import scala.language.existentials
-import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
@@ -124,10 +123,9 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
           case cnf: ClassNotFoundException =>
             val loader = Thread.currentThread.getContextClassLoader
             taskSetManager.abort("ClassNotFound with classloader: " + loader)
-          // Matching NonFatal so we don't catch the ControlThrowable from the "return" above.
-          case NonFatal(ex) =>
-            logError("Exception while getting task result", ex)
-            taskSetManager.abort("Exception while getting task result: %s".format(ex))
+          case t: Throwable if !Utils.isFatalError(t) =>
+            logError("Exception while getting task result", t)
+            taskSetManager.abort("Exception while getting task result: %s".format(t))
         }
       }
     })
@@ -151,7 +149,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
             logError(
               log"Could not deserialize TaskEndReason: ClassNotFound with classloader " +
                 log"${MDC(CLASS_LOADER, loader)}")
-          case _: Exception => // No-op
+          case _: Throwable => // No-op
         } finally {
           // If there's an error while deserializing the TaskEndReason, this Runnable
           // will die. Still tell the scheduler about the task failure, to avoid a hang

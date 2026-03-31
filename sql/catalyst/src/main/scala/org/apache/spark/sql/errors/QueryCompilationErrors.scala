@@ -859,8 +859,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def windowFunctionNotAllowedError(clauseName: String): Throwable = {
     new AnalysisException(
-      errorClass = "WINDOW_FUNCTION_NOT_ALLOWED",
-      messageParameters = Map("clauseName" -> toSQLId(clauseName)))
+      errorClass = "WINDOW_FUNCTION_NOT_ALLOWED_IN_CLAUSE",
+      messageParameters = Map("clauseName" -> toSQLStmt(clauseName)))
   }
 
   def qualifyClauseWithoutWindowFunctionError(condition: Expression): Throwable = {

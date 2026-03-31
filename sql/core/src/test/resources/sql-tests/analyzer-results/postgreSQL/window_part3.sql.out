@@ -314,6 +314,7 @@ org.apache.spark.sql.AnalysisException
 }
 
 
+
 -- !query
 SELECT * FROM empsalary INNER JOIN tenk1 ON row_number() OVER (ORDER BY salary) < 10
 -- !query analysis
@@ -381,6 +382,7 @@ org.apache.spark.sql.AnalysisException
 }
 
 
+
 -- !query
 SELECT * FROM empsalary WHERE rank() OVER (ORDER BY random())
 -- !query analysis
@@ -392,6 +394,7 @@ org.apache.spark.sql.AnalysisException
     "clauseName" : "WHERE"
   }
 }
+
 
 
 -- !query

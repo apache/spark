@@ -1542,6 +1542,7 @@ org.apache.spark.sql.AnalysisException
 }
 
 
+
 -- !query
 table t
 |> where sum(x) over w = 1
@@ -1572,6 +1573,7 @@ org.apache.spark.sql.AnalysisException
     "clauseName" : "WHERE"
   }
 }
+
 
 
 -- !query
