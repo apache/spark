@@ -98,7 +98,6 @@ case class ArrowEvalPythonExec(
   override protected def doExecute(): RDD[InternalRow] = {
     if (child.supportsColumnar) {
       // Columnar path: produce ColumnarBatch via doExecuteColumnar(), then flatten to rows.
-      // This mirrors DBR's approach in ArrowEvalPythonExec.doExecute().
       doExecuteColumnar().flatMap(_.rowIterator().asScala)
     } else {
       // Row-based path: unchanged.

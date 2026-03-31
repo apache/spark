@@ -45,11 +45,6 @@ import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
  * When UDF inputs contain complex expressions (not simple column references),
  * the UDF inputs are serialized via the row-based ArrowWriter fallback, but
  * pass-through columns are still kept in columnar format.
- *
- * Note: DBR handles complex expressions by inserting a Project node upstream
- * (via PhotonStageCompiler.extractUDFInputsIntoProject) to pre-evaluate them.
- * A similar physical plan rule could be added to OSS Spark in the future to
- * eliminate the fallback path.
  */
 private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
     childOutput: Seq[Attribute],
@@ -184,6 +179,12 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
     /**
      * Fallback path: UDF inputs contain complex expressions. Convert to rows for
      * UDF input serialization, but still keep pass-through columns in columnar format.
+     *
+     * TODO: Add a physical plan rule that inserts a ProjectExec before
+     *   ArrowEvalPythonExec to pre-evaluate complex UDF input expressions into
+     *   simple column references. This would eliminate this fallback entirely,
+     *   allowing the fully columnar evalColumnar() path to always be used when
+     *   the child supports columnar output.
      */
     private def evalRowFallback(
         inputIter: Iterator[ColumnarBatch],
