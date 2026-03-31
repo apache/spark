@@ -426,8 +426,10 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
   }
 
   test("pivot with explicit values under UNICODE_CI collation") {
+    // scalastyle:off nonascii
     val precomposed = "\u00FCber"  // über (precomposed)
     val decomposed = "u\u0308ber" // über (decomposed)
+    // scalastyle:on nonascii
     withTable("uci_pivot") {
       sql(
         """CREATE TABLE uci_pivot (
