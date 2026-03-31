@@ -338,7 +338,7 @@ abstract class JdbcDialect extends Serializable with Logging {
 
   /**
    * Returns the effective fetch size for reading from the JDBC source.
-   * By default, returns the user-specified fetchSize from [[JDBCOptions]].
+   * By default, returns the user-specified fetchSize from JDBCOptions.
    * Dialects can override this to provide a sensible default when the user does not
    * explicitly set the fetchSize option.
    */
