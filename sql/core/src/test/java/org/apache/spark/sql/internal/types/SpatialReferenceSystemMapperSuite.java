@@ -162,38 +162,38 @@ public class SpatialReferenceSystemMapperSuite {
     }
   }
 
-    /**
-     * Validates expected registry scale: geographic SRID count and CRS string-id counts by
-     * authority prefix (empty authority for {@code SRID:0}, plus OGC, EPSG, ESRI).
-     */
-    @Test
-    public void testSpatialReferenceSystemContents() {
-      SpatialReferenceSystemCache cache = SpatialReferenceSystemCache.getInstance();
-      Map<Integer, SpatialReferenceSystemInformation> sridToSrs = cache.getSridToSrs();
+  /**
+   * Validates expected registry scale: geographic SRID count and CRS string-id counts by
+   * authority prefix (empty authority for {@code SRID:0}, plus OGC, EPSG, ESRI).
+   */
+  @Test
+  public void testSpatialReferenceSystemContents() {
+    SpatialReferenceSystemCache cache = SpatialReferenceSystemCache.getInstance();
+    Map<Integer, SpatialReferenceSystemInformation> sridToSrs = cache.getSridToSrs();
 
-      int emptyAuthoritySrid0 = 0;
-      int ogc = 0;
-      int epsg = 0;
-      int esri = 0;
-      for (SpatialReferenceSystemInformation srs : sridToSrs.values()) {
-        String stringId = srs.stringId();
-        if ("SRID:0".equals(stringId)) {
-          emptyAuthoritySrid0++;
-        } else if (stringId.startsWith("OGC:")) {
-          ogc++;
-        } else if (stringId.startsWith("EPSG:")) {
-          epsg++;
-        } else if (stringId.startsWith("ESRI:")) {
-          esri++;
-        }
+    int emptyAuthoritySrid0 = 0;
+    int ogc = 0;
+    int epsg = 0;
+    int esri = 0;
+    for (SpatialReferenceSystemInformation srs : sridToSrs.values()) {
+      String stringId = srs.stringId();
+      if ("SRID:0".equals(stringId)) {
+        emptyAuthoritySrid0++;
+      } else if (stringId.startsWith("OGC:")) {
+        ogc++;
+      } else if (stringId.startsWith("EPSG:")) {
+        epsg++;
+      } else if (stringId.startsWith("ESRI:")) {
+        esri++;
       }
-      Assertions.assertEquals(1, emptyAuthoritySrid0, "SRID:0 (empty authority)");
-      Assertions.assertEquals(3, ogc, "OGC CRS string IDs");
-      Assertions.assertEquals(7720, epsg, "EPSG CRS string IDs");
-      Assertions.assertEquals(2919, esri, "ESRI CRS string IDs");
-      Assertions.assertEquals(
-          10643,
-          sridToSrs.size(),
-          "total SRID entries (SRID:0 + OGC + EPSG + ESRI)");
     }
+    Assertions.assertEquals(1, emptyAuthoritySrid0, "SRID:0 (empty authority)");
+    Assertions.assertEquals(3, ogc, "OGC CRS string IDs");
+    Assertions.assertEquals(7720, epsg, "EPSG CRS string IDs");
+    Assertions.assertEquals(2919, esri, "ESRI CRS string IDs");
+    Assertions.assertEquals(
+        10643,
+        sridToSrs.size(),
+        "total SRID entries (SRID:0 + OGC + EPSG + ESRI)");
+  }
 }
