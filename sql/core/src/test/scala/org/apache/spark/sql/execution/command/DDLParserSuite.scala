@@ -826,8 +826,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       parser.parsePlan("SHOW COLLATIONS"),
       ShowCollationsCommand(None))
     comparePlans(
-      parser.parsePlan("SHOW COLLATIONS LIKE 'UNICODE%'"),
-      ShowCollationsCommand(Some("UNICODE%")))
+      parser.parsePlan("SHOW COLLATIONS LIKE 'UNICODE*'"),
+      ShowCollationsCommand(Some("UNICODE*")))
     comparePlans(
       parser.parsePlan("SHOW COLLATIONS LIKE 'UTF8_BINARY'"),
       ShowCollationsCommand(Some("UTF8_BINARY")))
