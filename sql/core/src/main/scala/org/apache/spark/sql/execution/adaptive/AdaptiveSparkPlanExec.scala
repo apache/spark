@@ -1076,8 +1076,12 @@ case class AdaptiveSparkPlanExec(
       Seq(stage.broadcast.child.logicalLink, stage.broadcast.logicalLink, stage.logicalLink)
         .flatten
         .foreach { logicalPlan =>
-          if (!failedLogicalPlans.exists(_.sameResult(logicalPlan))) {
-            failedLogicalPlans.append(logicalPlan)
+          val normalizedPlan =
+            logicalPlan.transformDown {
+              case stage: LogicalQueryStage => stage.logicalPlan
+            }
+          if (!failedLogicalPlans.exists(_.sameResult(normalizedPlan))) {
+            failedLogicalPlans.append(normalizedPlan)
           }
         }
     }
@@ -1087,7 +1091,10 @@ case class AdaptiveSparkPlanExec(
   private def shouldDisableBroadcastForJoinSide(
       side: LogicalPlan,
       failedLogicalPlans: Seq[LogicalPlan]): Boolean = {
-    failedLogicalPlans.exists(side.sameResult)
+    val normalizedSide = side.transformDown {
+      case stage: LogicalQueryStage => stage.logicalPlan
+    }
+    failedLogicalPlans.exists(normalizedSide.sameResult)
   }
 
   private def toNoBroadcastHashHint(hint: Option[HintInfo]): Option[HintInfo] = {

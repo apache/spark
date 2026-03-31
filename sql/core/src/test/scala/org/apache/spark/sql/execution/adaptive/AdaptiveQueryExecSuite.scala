@@ -738,6 +738,45 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("Fallback to shuffled join should match failed relation with nested logical query stages") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+        SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+        SQLConf.ADAPTIVE_BROADCAST_JOIN_FALLBACK_TO_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
+      val joinDf = sql(
+        "SELECT /*+ BROADCAST(t2) */ * " +
+          "FROM testData t1 " +
+          "JOIN (SELECT a, b FROM testData2 WHERE a > 1) t2 " +
+          "ON t1.key = t2.a")
+      val adaptivePlan = joinDf.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      val addNoBroadcastHashHintsForFailedRelations =
+        PrivateMethod[LogicalPlan](Symbol("addNoBroadcastHashHintsForFailedRelations"))
+
+      val relationLogicalPlan = sql("SELECT a, b FROM testData2").queryExecution.optimizedPlan
+      val relationPhysicalPlan = sql("SELECT a, b FROM testData2").queryExecution.sparkPlan
+      val materializedRelation = LogicalQueryStage(
+        relationLogicalPlan,
+        ResultQueryStageExec(0, relationPhysicalPlan, _ => ()))
+
+      val logicalPlanWithStage = joinDf.queryExecution.optimizedPlan.transformDown {
+        case plan if plan.sameResult(relationLogicalPlan) => materializedRelation
+      }
+
+      val failedExchange = BroadcastExchangeExec(
+        IdentityBroadcastMode,
+        sql("SELECT a, b FROM testData2 WHERE a > 1").queryExecution.sparkPlan)
+      val failedStage = BroadcastQueryStageExec(0, failedExchange, failedExchange.canonicalized)
+
+      val targetedLogicalPlan = adaptivePlan.invokePrivate(
+        addNoBroadcastHashHintsForFailedRelations(logicalPlanWithStage, Seq(failedStage)))
+      val join = targetedLogicalPlan.collectFirst { case j: Join => j }.get
+
+      assert(join.hint.rightHint.exists(_.strategy.contains(NO_BROADCAST_HASH)))
+    }
+  }
+
   test("Fallback to shuffled join should recognize broadcast limit failures") {
     withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
