@@ -2165,6 +2165,32 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED =
+    buildConf("spark.sql.sources.v2.bucketing.partitionKeyOrdering.enabled")
+      .doc("When enabled, Spark derives output ordering from the partition key expressions of " +
+        "a V2 data source that reports a KeyedPartitioning but does not report explicit ordering " +
+        "via SupportsReportOrdering. Within a single partition all rows share the same key " +
+        s"value, so the data is trivially sorted by those expressions. Requires " +
+        s"${V2_BUCKETING_ENABLED.key} to be enabled.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED =
+    buildConf("spark.sql.sources.v2.bucketing.preserveKeyOrderingOnCoalesce.enabled")
+      .doc("When enabled, Spark preserves sort orders over partition key expressions when " +
+        "GroupPartitionsExec coalesces multiple input partitions into one output partition. " +
+        "Because all merged partitions share the same partition key value, sort orders over " +
+        "those key expressions remain valid after the merge. This applies to both key-derived " +
+        "ordering (from SupportsReportOrdering) and ordering derived from " +
+        s"${V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key}. Requires " +
+        s"${V2_BUCKETING_ENABLED.key} to be enabled.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val BUCKETING_MAX_BUCKETS = buildConf("spark.sql.sources.bucketing.maxBuckets")
     .doc("The maximum number of buckets allowed.")
     .version("2.4.0")
@@ -7730,6 +7756,12 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def v2BucketingAllowSorting: Boolean =
     getConf(SQLConf.V2_BUCKETING_SORTING_ENABLED)
+
+  def v2BucketingPartitionKeyOrderingEnabled: Boolean =
+    getConf(SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED)
+
+  def v2BucketingPreserveKeyOrderingOnCoalesceEnabled: Boolean =
+    getConf(SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED)
 
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)

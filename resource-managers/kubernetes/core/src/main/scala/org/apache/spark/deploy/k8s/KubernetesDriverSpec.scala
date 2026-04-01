@@ -16,6 +16,10 @@
  */
 package org.apache.spark.deploy.k8s
 
+import java.util.{List => JList, Map => JMap}
+
+import scala.jdk.CollectionConverters._
+
 import io.fabric8.kubernetes.api.model.HasMetadata
 
 import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
@@ -34,3 +38,20 @@ case class KubernetesDriverSpec(
     driverPreKubernetesResources: Seq[HasMetadata],
     driverKubernetesResources: Seq[HasMetadata],
     systemProperties: Map[String, String])
+
+@Unstable
+@DeveloperApi
+object KubernetesDriverSpec {
+  @Since("4.2.0")
+  def create(
+      pod: SparkPod,
+      driverPreKubernetesResources: JList[HasMetadata],
+      driverKubernetesResources: JList[HasMetadata],
+      systemProperties: JMap[String, String]): KubernetesDriverSpec = {
+    KubernetesDriverSpec(
+      pod,
+      driverPreKubernetesResources.asScala.toSeq,
+      driverKubernetesResources.asScala.toSeq,
+      systemProperties.asScala.toMap)
+  }
+}

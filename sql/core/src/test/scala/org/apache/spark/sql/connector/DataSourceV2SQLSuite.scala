@@ -3223,6 +3223,37 @@ class DataSourceV2SQLSuiteV1Filter
       Row("testcat"), Row("testcat2")))
   }
 
+  test("SPARK-49543: ShowCollations") {
+    val schema = new StructType()
+      .add("NAME", StringType, nullable = false)
+      .add("LANGUAGE", StringType, nullable = true)
+      .add("COUNTRY", StringType, nullable = true)
+      .add("ACCENT_SENSITIVITY", StringType, nullable = false)
+      .add("CASE_SENSITIVITY", StringType, nullable = false)
+      .add("PAD_ATTRIBUTE", StringType, nullable = false)
+      .add("ICU_VERSION", StringType, nullable = true)
+
+    val df = sql("SHOW COLLATIONS")
+    assert(df.schema === schema)
+
+    val allCollations = df.collect()
+    assert(allCollations.exists(_.getString(0) == "UTF8_BINARY"))
+    assert(allCollations.exists(_.getString(0) == "UNICODE"))
+    assert(allCollations.exists(_.getString(0) == "UNICODE_CI"))
+
+    val utf8Row = allCollations.find(_.getString(0) == "UTF8_BINARY").get
+    assert(utf8Row.getString(3) == "ACCENT_SENSITIVE")
+    assert(utf8Row.getString(4) == "CASE_SENSITIVE")
+
+    val likeResult = sql("SHOW COLLATIONS LIKE 'UNICODE*'").collect()
+    assert(likeResult.nonEmpty)
+    assert(likeResult.forall(_.getString(0).startsWith("UNICODE")))
+
+    val exactResult = sql("SHOW COLLATIONS LIKE 'UTF8_BINARY'").collect()
+    assert(exactResult.length == 1)
+    assert(exactResult.head.getString(0) == "UTF8_BINARY")
+  }
+
   test("CREATE INDEX should fail") {
     val t = "testcat.tbl"
     withTable(t) {

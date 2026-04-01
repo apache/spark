@@ -257,8 +257,6 @@ $(document).ready(function() {
           'appName:name',
           'logPath:name'
         ];
-      } else {
-        conf.columns = removeColumnByName(conf.columns, attemptIdColumnName);
       }
 
       var defaultSortColumn = completedColumnName;
@@ -266,6 +264,11 @@ $(document).ready(function() {
         defaultSortColumn = startedColumnName;
         conf.columns = removeColumnByName(conf.columns, completedColumnName);
         conf.columns = removeColumnByName(conf.columns, durationColumnName);
+        // Remove the corresponding <th> headers since Mustache conditionals are gone
+        apps.find('th').filter(function() {
+          var text = $(this).text().trim();
+          return text === 'Completed' || text === 'Duration';
+        }).remove();
       }
       conf.order = [[ getColumnIndex(conf.columns, defaultSortColumn), "desc" ]];
       conf.columnDefs = [
