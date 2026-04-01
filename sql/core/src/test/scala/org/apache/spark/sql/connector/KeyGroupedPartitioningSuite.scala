@@ -22,14 +22,14 @@ import java.util.Collections
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Literal, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.distributions.Distributions
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.Expressions._
-import org.apache.spark.sql.execution.{ExtendedMode, FormattedMode, RDDScanExec, SimpleMode, SparkPlan}
+import org.apache.spark.sql.execution.{ExtendedMode, FormattedMode, RDDScanExec, SimpleMode, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
@@ -3565,6 +3565,128 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
         assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 4))
 
         checkAnswer(df, Seq(Row(0, 0), Row(1, 1), Row(3, 3)))
+      }
+    }
+  }
+
+  test("SPARK-56241: scan with KeyedPartitioning reports key-derived outputOrdering") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(3, 'cc', 30.0, cast('2021-01-01' as timestamp)), " +
+      "(1, 'aa', 10.0, cast('2022-01-01' as timestamp)), " +
+      "(2, 'bb', 20.0, cast('2022-01-01' as timestamp))")
+
+    val df = sql(s"SELECT id, name FROM testcat.ns.$items")
+    val plan = df.queryExecution.executedPlan
+    val scans = collectScans(plan)
+    assert(scans.size === 1)
+    // With the config disabled (default), ordering derivation is suppressed.
+    assert(scans.head.outputOrdering.isEmpty)
+    // When enabled, the scan derives an ascending sort on the partition key `id`.
+    // identity transforms are unwrapped to AttributeReferences by V2ExpressionUtils.
+    withSQLConf(SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true") {
+      val scansEnabled = collectScans(df.queryExecution.executedPlan)
+      assert(scansEnabled.size === 1)
+      val ordering = scansEnabled.head.outputOrdering
+      assert(ordering.length === 1)
+      assert(ordering.head.direction === Ascending)
+      val keyExpr = ordering.head.child
+      assert(keyExpr.isInstanceOf[AttributeReference])
+      assert(keyExpr.asInstanceOf[AttributeReference].name === "id")
+    }
+  }
+
+  test("SPARK-56241: GroupPartitionsExec non-coalescing passes through child ordering, " +
+      "no pre-join SortExec needed before SortMergeJoin") {
+    // Non-identical key sets force GroupPartitionsExec to be inserted on both sides align them,
+    // but each group has exactly one partition — no coalescing.
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 10.0, cast('2021-01-01' as timestamp)), " +
+      "(2, 'bb', 20.0, cast('2021-01-01' as timestamp)), " +
+      "(3, 'cc', 30.0, cast('2021-01-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 100.0, cast('2021-01-01' as timestamp)), " +
+      "(2, 200.0, cast('2021-01-01' as timestamp))")
+
+    // GroupPartitionsExec passes through the child's key-derived outputOrdering.
+    // EnsureRequirements checks outputOrdering directly so no SortExec should be inserted before
+    // the SMJ.
+    withSQLConf(SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true") {
+      val df = sql(
+        s"""
+           |${selectWithMergeJoinHint("i", "p")}
+           |i.id, i.name
+           |FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.item_id = i.id
+           |""".stripMargin)
+
+      checkAnswer(df, Seq(Row(1, "aa"), Row(2, "bb")))
+
+      val plan = df.queryExecution.executedPlan
+      val groupPartitions = collectGroupPartitions(plan)
+      assert(groupPartitions.nonEmpty, "expected GroupPartitionsExec in plan")
+      assert(groupPartitions.forall(_.groupedPartitions.forall(_._2.size <= 1)),
+        "expected non-coalescing GroupPartitionsExec")
+      val smjs = collect(plan) { case j: SortMergeJoinExec => j }
+      assert(smjs.nonEmpty, "expected SortMergeJoinExec in plan")
+      smjs.foreach { smj =>
+        val sorts = smj.children.flatMap(child => collect(child) { case s: SortExec => s })
+        assert(sorts.isEmpty, "should not add SortExec before SMJ when ordering passes through " +
+          "non-coalescing GroupPartitions")
+      }
+    }
+  }
+
+  test("SPARK-56241: GroupPartitionsExec coalescing derives ordering from key expressions, " +
+      "no pre-join SortExec needed before SortMergeJoin") {
+    // Duplicate key 1 on both sides causes coalescing.
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 10.0, cast('2021-01-01' as timestamp)), " +
+      "(1, 'ab', 11.0, cast('2021-06-01' as timestamp)), " +
+      "(2, 'bb', 20.0, cast('2021-01-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 100.0, cast('2021-01-01' as timestamp)), " +
+      "(1, 110.0, cast('2021-06-01' as timestamp)), " +
+      "(2, 200.0, cast('2021-01-01' as timestamp))")
+
+    // GroupPartitionsExec derives outputOrdering from the key expressions after coalescing.
+    // EnsureRequirements checks outputOrdering directly so no SortExec should be inserted before
+    // the SMJ.
+    withSQLConf(
+      SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+      val df = sql(
+        s"""
+           |${selectWithMergeJoinHint("i", "p")}
+           |i.id, i.name
+           |FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.item_id = i.id
+           |""".stripMargin)
+
+      checkAnswer(df, Seq(
+        Row(1, "aa"), Row(1, "aa"), Row(1, "ab"), Row(1, "ab"),
+        Row(2, "bb")))
+
+      val plan = df.queryExecution.executedPlan
+      val groupPartitions = collectGroupPartitions(plan)
+      assert(groupPartitions.nonEmpty, "expected GroupPartitionsExec in plan")
+      assert(groupPartitions.exists(_.groupedPartitions.exists(_._2.size > 1)),
+        "expected coalescing GroupPartitionsExec")
+      val smjs = collect(plan) { case j: SortMergeJoinExec => j }
+      assert(smjs.nonEmpty, "expected SortMergeJoinExec in plan")
+      smjs.foreach { smj =>
+        val sorts = smj.children.flatMap(child => collect(child) { case s: SortExec => s })
+        assert(sorts.isEmpty, "should not add SortExec before SMJ when ordering is derived " +
+          "from coalesced partition key")
       }
     }
   }

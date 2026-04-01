@@ -502,6 +502,13 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * Create a [[ShowCollationsCommand]] logical command.
+   */
+  override def visitShowCollations(ctx: ShowCollationsContext): LogicalPlan = withOrigin(ctx) {
+    ShowCollationsCommand(Option(ctx.pattern).map(x => string(visitStringLit(x))))
+  }
+
+  /**
    * Converts a multi-part identifier to a TableIdentifier.
    *
    * If the multi-part identifier has too many parts, this will throw a ParseException.
