@@ -578,11 +578,11 @@ class DataFrameSuite extends QueryTest
 
     checkAnswer(
       arrayData.limit(1),
-      arrayData.take(1).toSeq)
+      arrayData.take(1))
 
     checkAnswer(
       mapData.limit(1),
-      mapData.take(1).toSeq)
+      mapData.take(1))
 
     // SPARK-12340: overstep the bounds of Int in SparkPlan.executeTake
     checkAnswer(
@@ -598,11 +598,11 @@ class DataFrameSuite extends QueryTest
 
     checkAnswer(
       arrayData.offset(99),
-      arrayData.collect().drop(99).toSeq)
+      arrayData.collect().drop(99))
 
     checkAnswer(
       mapData.offset(99),
-      mapData.collect().drop(99).toSeq)
+      mapData.collect().drop(99))
   }
 
   test("limit with offset") {
