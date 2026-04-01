@@ -811,7 +811,7 @@ abstract class Catalog {
    *   name of the partitioned table; may be qualified with catalog and database (namespace).
    * @since 4.2.0
    */
-  def listPartitions(tableName: String): Dataset[CatalogTablePartition] = {
+  def listPartitions(tableName: String): Dataset[TablePartition] = {
     catalogUnsupported("listPartitions")
   }
 

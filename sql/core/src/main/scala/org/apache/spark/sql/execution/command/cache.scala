@@ -40,8 +40,8 @@ case object ShowCachedTablesCommand extends LeafRunnableCommand {
   override val output: Seq[Attribute] = ShowCachedTables.output
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sharedState.cacheManager.listNamedCachedTables().map { case (name, level) =>
-      Row(name, level.description)
+    sparkSession.sharedState.cacheManager.listNamedCachedTables().map { case (parts, level) =>
+      Row(parts.mkString("."), level.description)
     }
   }
 }

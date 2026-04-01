@@ -45,13 +45,22 @@ class CatalogMetadata(val name: String, @Nullable val description: String)
  * An in-memory cached relation registered with a name, as returned by `Catalog.listCachedTables`.
  *
  * @param name
- *   table or view name used when caching (same string passed to `CACHE TABLE` / `cacheTable`).
+ *   unqualified table or view name (last component of the cached identifier).
+ * @param catalog
+ *   name of the catalog the table belongs to, or null for temp views / unqualified names.
+ * @param namespace
+ *   namespace parts the table belongs to, or null for temp views / unqualified names.
  * @param storageLevel
  *   storage level description of the cached data.
  * @since 4.2.0
  */
 @Stable
-class CachedTable(val name: String, val storageLevel: String) extends DefinedByConstructorParams {
+class CachedTable(
+    val name: String,
+    @Nullable val catalog: String,
+    @Nullable val namespace: Array[String],
+    val storageLevel: String)
+    extends DefinedByConstructorParams {
 
   override def toString: String =
     s"CachedTable[name='$name', storageLevel='$storageLevel']"
@@ -65,9 +74,9 @@ class CachedTable(val name: String, val storageLevel: String) extends DefinedByC
  * @since 4.2.0
  */
 @Stable
-class CatalogTablePartition(val partition: String) extends DefinedByConstructorParams {
+class TablePartition(val partition: String) extends DefinedByConstructorParams {
 
-  override def toString: String = s"CatalogTablePartition[partition='$partition']"
+  override def toString: String = s"TablePartition[partition='$partition']"
 }
 
 /**

@@ -30,11 +30,11 @@ import org.apache.spark.sql.catalog
 import org.apache.spark.sql.catalog.{
   CachedTable,
   CatalogMetadata,
-  CatalogTablePartition,
   Column,
   Database,
   Function,
-  Table
+  Table,
+  TablePartition
 }
 import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 import org.apache.spark.sql.catalyst.InternalRow
@@ -847,7 +847,7 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
    */
   override def cacheTable(tableName: String, storageLevel: StorageLevel): Unit = {
     sparkSession.sharedState.cacheManager.cacheQuery(
-      sparkSession.table(tableName), Some(tableName), storageLevel)
+      sparkSession.table(tableName), Some(parseIdent(tableName)), storageLevel)
   }
 
   /**
@@ -989,8 +989,15 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
   }
 
   override def listCachedTables(): Dataset[CachedTable] = {
-    val cached = sparkSession.sharedState.cacheManager.listNamedCachedTables().map { case (n, sl) =>
-      new CachedTable(n, sl.description)
+    val cached = sparkSession.sharedState.cacheManager.listNamedCachedTables().map {
+      case (parts, sl) =>
+        val simpleName = parts.last
+        val (catalogName, ns) = parts.length match {
+          case 1 => (null: String, null: Array[String])
+          case 2 => (null: String, Array(parts(0)))
+          case _ => (parts.head, parts.slice(1, parts.length - 1).toArray)
+        }
+        new CachedTable(simpleName, catalogName, ns, sl.description)
     }
     Catalog.makeDataset(cached, sparkSession)
   }
@@ -1024,12 +1031,12 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
     sparkSession.sessionState.executePlan(plan).toRdd
   }
 
-  override def listPartitions(tableName: String): Dataset[CatalogTablePartition] = {
+  override def listPartitions(tableName: String): Dataset[TablePartition] = {
     val plan = ShowPartitions(
       UnresolvedTable(toTableIdent(tableName), "Catalog.listPartitions"),
       None)
     val partitions = sparkSession.sessionState.executePlan(plan).toRdd.collect().map { row =>
-      new CatalogTablePartition(row.getString(0))
+      new TablePartition(row.getString(0))
     }
     Catalog.makeDataset(partitions.toImmutableArraySeq, sparkSession)
   }

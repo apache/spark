@@ -60,7 +60,7 @@ case class InMemoryTableScanExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override val nodeName: String = {
-    relation.cacheBuilder.tableName match {
+    relation.cacheBuilder.tableIdentifier match {
       case Some(_) =>
         "Scan " + relation.cacheBuilder.cachedName
       case _ =>

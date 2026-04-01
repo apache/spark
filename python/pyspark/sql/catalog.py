@@ -79,10 +79,12 @@ class Function(NamedTuple):
 
 class CachedTable(NamedTuple):
     name: str
+    catalog: Optional[str]
+    namespace: Optional[List[str]]
     storageLevel: str
 
 
-class CatalogTablePartition(NamedTuple):
+class TablePartition(NamedTuple):
     partition: str
 
 
@@ -209,7 +211,9 @@ class Catalog:
         out: List[CachedTable] = []
         while iter.hasNext():
             j = iter.next()
-            out.append(CachedTable(name=j.name(), storageLevel=j.storageLevel()))
+            jnamespace = j.namespace()
+            namespace = [jnamespace[i] for i in range(len(jnamespace))] if jnamespace is not None else None
+            out.append(CachedTable(name=j.name(), catalog=j.catalog(), namespace=namespace, storageLevel=j.storageLevel()))
         return out
 
     def dropTable(self, tableName: str, ifExists: bool = False, purge: bool = False) -> None:
@@ -322,7 +326,7 @@ class Catalog:
         """
         self._jcatalog.dropDatabase(dbName, ifExists, cascade)
 
-    def listPartitions(self, tableName: str) -> List[CatalogTablePartition]:
+    def listPartitions(self, tableName: str) -> List[TablePartition]:
         """Lists partition value strings for a table (same as ``SHOW PARTITIONS``).
 
         .. versionadded:: 4.2.0
@@ -335,7 +339,7 @@ class Catalog:
         Returns
         -------
         list
-            A list of :class:`CatalogTablePartition` (each ``partition`` field is a spec string).
+            A list of :class:`TablePartition` (each ``partition`` field is a spec string).
 
         Examples
         --------
@@ -350,10 +354,10 @@ class Catalog:
         >>> _ = spark.sql("DROP TABLE tbl_part_doc")
         """
         iter = self._jcatalog.listPartitions(tableName).toLocalIterator()
-        out: List[CatalogTablePartition] = []
+        out: List[TablePartition] = []
         while iter.hasNext():
             j = iter.next()
-            out.append(CatalogTablePartition(partition=j.partition()))
+            out.append(TablePartition(partition=j.partition()))
         return out
 
     def listViews(self, dbName: Optional[str] = None, pattern: Optional[str] = None) -> List[Table]:

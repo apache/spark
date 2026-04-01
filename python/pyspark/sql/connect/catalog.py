@@ -28,9 +28,9 @@ from pyspark.sql.catalog import (
     CachedTable,
     Catalog as PySparkCatalog,
     CatalogMetadata,
-    CatalogTablePartition,
     Database,
     Table,
+    TablePartition,
     Function,
     Column,
 )
@@ -325,7 +325,13 @@ class Catalog:
     def listCachedTables(self) -> List[CachedTable]:
         table = self._execute_and_fetch(plan.ListCachedTables())
         return [
-            CachedTable(table[0][i].as_py(), table[1][i].as_py()) for i in range(table.num_rows)
+            CachedTable(
+                name=table[0][i].as_py(),
+                catalog=table[1][i].as_py(),
+                namespace=list(table[2][i].as_py()) if table[2][i].as_py() is not None else None,
+                storageLevel=table[3][i].as_py(),
+            )
+            for i in range(table.num_rows)
         ]
 
     listCachedTables.__doc__ = PySparkCatalog.listCachedTables.__doc__
@@ -358,9 +364,9 @@ class Catalog:
 
     dropDatabase.__doc__ = PySparkCatalog.dropDatabase.__doc__
 
-    def listPartitions(self, tableName: str) -> List[CatalogTablePartition]:
+    def listPartitions(self, tableName: str) -> List[TablePartition]:
         table = self._execute_and_fetch(plan.ListPartitions(table_name=tableName))
-        return [CatalogTablePartition(table[0][i].as_py()) for i in range(table.num_rows)]
+        return [TablePartition(table[0][i].as_py()) for i in range(table.num_rows)]
 
     listPartitions.__doc__ = PySparkCatalog.listPartitions.__doc__
 

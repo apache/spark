@@ -32,7 +32,7 @@ case class RenameTableExec(
     oldIdent: Identifier,
     newIdent: Identifier,
     invalidateCache: () => Option[StorageLevel],
-    cacheTable: (SparkSession, LogicalPlan, Option[String], StorageLevel) => Unit)
+    cacheTable: (SparkSession, LogicalPlan, Option[Seq[String]], StorageLevel) => Unit)
   extends LeafV2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
@@ -56,7 +56,8 @@ case class RenameTableExec(
       cacheTable(
         session,
         newRelation,
-        Some(qualifiedNewIdent.quoted), oldStorageLevel)
+        Some(qualifiedNewIdent.namespace.toSeq :+ qualifiedNewIdent.name),
+        oldStorageLevel)
     }
     Seq.empty
   }

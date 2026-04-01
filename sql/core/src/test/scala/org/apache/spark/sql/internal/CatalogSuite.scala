@@ -1149,6 +1149,10 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       spark.catalog.cacheTable(t)
       val fromApi = spark.catalog.listCachedTables().collect()
       assert(fromApi.exists(_.name.contains(t)))
+      // For a simple (unqualified) name, catalog and namespace are null
+      val entry = fromApi.find(_.name.contains(t)).get
+      assert(entry.catalog === null)
+      assert(entry.namespace === null)
       val fromSql = spark
         .sql("SHOW CACHED TABLES")
         .collect()
@@ -1156,6 +1160,13 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
         .toSet
       val fromApiSet = fromApi.map(c => (c.name, c.storageLevel)).toSet
       assert(fromSql === fromApiSet)
+      // Caching with a fully-qualified name populates catalog and namespace
+      spark.catalog.uncacheTable(t)
+      spark.catalog.cacheTable(s"spark_catalog.default.$t")
+      val fqApi = spark.catalog.listCachedTables().collect()
+      val fqEntry = fqApi.find(_.name == t).get
+      assert(fqEntry.catalog === "spark_catalog")
+      assert(fqEntry.namespace.toSeq === Seq("default"))
     } finally {
       spark.catalog.uncacheTable(t)
       spark.catalog.dropTable(t, ifExists = true)

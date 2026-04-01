@@ -23,7 +23,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalog
-import org.apache.spark.sql.catalog.{CachedTable, CatalogMetadata, CatalogTablePartition, Column, Database, Function, Table}
+import org.apache.spark.sql.catalog.{CachedTable, CatalogMetadata, Column, Database, Function, Table, TablePartition}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveBooleanEncoder, StringEncoder}
@@ -796,8 +796,8 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
    *   qualified or unqualified table name
    * @since 4.2.0
    */
-  override def listPartitions(tableName: String): Dataset[CatalogTablePartition] = {
-    sparkSession.newDataset(Catalog.catalogTablePartitionEncoder) { builder =>
+  override def listPartitions(tableName: String): Dataset[TablePartition] = {
+    sparkSession.newDataset(Catalog.tablePartitionEncoder) { builder =>
       builder.getCatalogBuilder.getListPartitionsBuilder.setTableName(tableName)
     }
   }
@@ -918,10 +918,10 @@ private object Catalog {
     .encoderFor(ScalaReflection.localTypeOf[CachedTable])
     .asInstanceOf[AgnosticEncoder[CachedTable]]
 
-  private val catalogTablePartitionEncoder: AgnosticEncoder[CatalogTablePartition] =
+  private val tablePartitionEncoder: AgnosticEncoder[TablePartition] =
     ScalaReflection
-      .encoderFor(ScalaReflection.localTypeOf[CatalogTablePartition])
-      .asInstanceOf[AgnosticEncoder[CatalogTablePartition]]
+      .encoderFor(ScalaReflection.localTypeOf[TablePartition])
+      .asInstanceOf[AgnosticEncoder[TablePartition]]
 
   private val databaseEncoder: AgnosticEncoder[Database] = ScalaReflection
     .encoderFor(ScalaReflection.localTypeOf[Database])
