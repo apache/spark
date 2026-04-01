@@ -111,9 +111,6 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
     val candidateChanges = computeSchemaChanges(
       targetTable.schema,
       originalSource,
-      targetTable.schema,
-      originalSource,
-      fieldPath = Nil,
       isByName)
     targetTable match {
       case ExtractV2Table(t: SupportsSchemaEvolution) =>
@@ -131,48 +128,49 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
     }
   }
 
+  /**
+   * Computes the set of table changes needed to evolve `target` schema
+   * to accommodate `source` schema. When `isByName` is true, fields are matched
+   * by name. When false, fields are matched by position.
+   */
+  def computeSchemaChanges(
+      target: StructType,
+      source: StructType,
+      isByName: Boolean): Array[TableChange] =
+    computeSchemaChanges(
+      target,
+      source,
+      fieldPath = Nil,
+      isByName,
+      error = throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
+        target, source, null))
+
   private def computeSchemaChanges(
       currentType: DataType,
       newType: DataType,
-      originalTarget: StructType,
-      originalSource: StructType,
       fieldPath: List[String],
-      isByName: Boolean): Array[TableChange] = {
+      isByName: Boolean,
+      error: => Nothing): Array[TableChange] = {
     (currentType, newType) match {
       case (StructType(currentFields), StructType(newFields)) =>
         if (isByName) {
-          computeSchemaChangesByName(
-            currentFields, newFields, originalTarget, originalSource, fieldPath)
+          computeSchemaChangesByName(currentFields, newFields, fieldPath, error)
         } else {
-          computeSchemaChangesByPosition(
-            currentFields, newFields, originalTarget, originalSource, fieldPath)
+          computeSchemaChangesByPosition(currentFields, newFields, fieldPath, error)
         }
 
       case (ArrayType(currentElementType, _), ArrayType(newElementType, _)) =>
         computeSchemaChanges(
-          currentElementType,
-          newElementType,
-          originalTarget,
-          originalSource,
-          fieldPath :+ "element",
-          isByName)
+          currentElementType, newElementType,
+          fieldPath :+ "element", isByName, error)
 
-      case (MapType(currentKeyType, currentValueType, _),
-            MapType(newKeyType, newValueType, _)) =>
+      case (MapType(currentKeyType, currentValueType, _), MapType(newKeyType, newValueType, _)) =>
         val keyChanges = computeSchemaChanges(
-          currentKeyType,
-          newKeyType,
-          originalTarget,
-          originalSource,
-          fieldPath :+ "key",
-          isByName)
+          currentKeyType, newKeyType,
+          fieldPath :+ "key", isByName, error)
         val valueChanges = computeSchemaChanges(
-          currentValueType,
-          newValueType,
-          originalTarget,
-          originalSource,
-          fieldPath :+ "value",
-          isByName)
+          currentValueType, newValueType,
+          fieldPath :+ "value", isByName, error)
         keyChanges ++ valueChanges
 
       case (currentType: AtomicType, newType: AtomicType) if currentType != newType =>
@@ -191,8 +189,7 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
 
       case _ =>
         // Do not support change between atomic and complex types for now
-        throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
-          originalTarget, originalSource, null)
+        error
     }
   }
 
@@ -203,9 +200,8 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
   private def computeSchemaChangesByName(
       currentFields: Array[StructField],
       newFields: Array[StructField],
-      originalTarget: StructType,
-      originalSource: StructType,
-      fieldPath: List[String]): Array[TableChange] = {
+      fieldPath: List[String],
+      onIncompatible: => Nothing): Array[TableChange] = {
     val currentFieldMap = toFieldMap(currentFields)
     val newFieldMap = toFieldMap(newFields)
 
@@ -214,12 +210,8 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
       .filter(f => newFieldMap.contains(f.name))
       .flatMap { f =>
         computeSchemaChanges(
-          f.dataType,
-          newFieldMap(f.name).dataType,
-          originalTarget,
-          originalSource,
-          fieldPath :+ f.name,
-          isByName = true)
+          f.dataType, newFieldMap(f.name).dataType,
+          fieldPath :+ f.name, isByName = true, onIncompatible)
       }
 
     // Collect newly added fields
@@ -240,18 +232,13 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
   private def computeSchemaChangesByPosition(
       currentFields: Array[StructField],
       newFields: Array[StructField],
-      originalTarget: StructType,
-      originalSource: StructType,
-      fieldPath: List[String]): Array[TableChange] = {
+      fieldPath: List[String],
+      onIncompatible: => Nothing): Array[TableChange] = {
     // Update existing field types by pairing fields at the same position.
     val updates = currentFields.zip(newFields).flatMap { case (currentField, newField) =>
       computeSchemaChanges(
-        currentField.dataType,
-        newField.dataType,
-        originalTarget,
-        originalSource,
-        fieldPath :+ currentField.name,
-        isByName = false)
+        currentField.dataType, newField.dataType,
+        fieldPath :+ currentField.name, isByName = false, onIncompatible)
     }
 
     // Extra source fields beyond the target's field count are new additions.

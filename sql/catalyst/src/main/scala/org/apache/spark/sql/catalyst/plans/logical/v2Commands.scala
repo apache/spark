@@ -1041,9 +1041,10 @@ case class MergeIntoTable(
 
   override lazy val pendingSchemaChanges: Seq[TableChange] = {
     if (schemaEvolutionEnabled && schemaEvolutionReady) {
-      val referencedSourceSchema = MergeIntoTable.sourceSchemaForSchemaEvolution(this)
-      ResolveSchemaEvolution.computeSupportedSchemaChanges(
-        table, referencedSourceSchema, isByName = true).toSeq
+      val supportedChanges = ResolveSchemaEvolution.computeSupportedSchemaChanges(
+        table, sourceTable.schema, isByName = true)
+      MergeIntoTable.filterValidSchemaEvolution(
+        supportedChanges, matchedActions ++ notMatchedActions, sourceTable)
     } else {
       Seq.empty
     }
@@ -1097,52 +1098,36 @@ object MergeIntoTable {
       .toSet
   }
 
-  // A pruned version of source schema that only contains columns/nested fields
-  // explicitly and directly assigned to a target counterpart in MERGE INTO actions,
-  // which are relevant for schema evolution.
-  // Examples:
-  // * UPDATE SET target.a = source.a
-  // * UPDATE SET nested.a = source.nested.a
-  // * INSERT (a, nested.b) VALUES (source.a, source.nested.b)
-  // New columns/nested fields in this schema that are not existing in target schema
-  // will be added for schema evolution.
-  def sourceSchemaForSchemaEvolution(merge: MergeIntoTable): StructType = {
-    val actions = merge.matchedActions ++ merge.notMatchedActions
+  /**
+   * Filters schema changes to only those relevant to identity assignments
+   * (e.g. `target.x = source.x`) in the MERGE actions. Only identity assignments can
+   * introduce new columns or type changes via schema evolution.
+   *
+   * A schema change is kept if its field path is equal to or nested under the key path
+   * of an identity assignment.
+   */
+  private def filterValidSchemaEvolution(
+      changes: Array[TableChange],
+      actions: Seq[MergeAction],
+      source: LogicalPlan): Seq[TableChange] = {
     val assignments = actions.collect {
       case a: UpdateAction => a.assignments
       case a: InsertAction => a.assignments
     }.flatten
 
-    val containsStarAction = actions.exists {
-      case _: UpdateStarAction => true
-      case _: InsertStarAction => true
-      case _ => false
-    }
+    val evolutionPaths = assignments
+      .filter(isSameColumnAssignment(_, source))
+      .map(a => extractFieldPath(a.key, allowUnresolved = true))
+      .filter(_.nonEmpty)
 
-    def filterSchema(sourceSchema: StructType, basePath: Seq[String]): StructType =
-      StructType(sourceSchema.flatMap { field =>
-        val fieldPath = basePath :+ field.name
-
-        field.dataType match {
-          // Specifically assigned to in one clause:
-          // always keep, including all nested attributes
-          case _ if assignments.exists(isEqual(_, fieldPath)) => Some(field)
-          // If this is a struct and one of the children is being assigned to in a merge clause,
-          // keep it and continue filtering children.
-          case struct: StructType if assignments.exists(assign =>
-            isPrefix(fieldPath, extractFieldPath(assign.key, allowUnresolved = true))) =>
-            Some(field.copy(dataType = filterSchema(struct, fieldPath)))
-          // The field isn't assigned to directly or indirectly (i.e. its children) in any non-*
-          // clause. Check if it should be kept with any * action.
-          case struct: StructType if containsStarAction =>
-            Some(field.copy(dataType = filterSchema(struct, fieldPath)))
-          case _ if containsStarAction => Some(field)
-          // The field and its children are not assigned to in any * or non-* action, drop it.
-          case _ => None
-        }
-      })
-
-    filterSchema(merge.sourceTable.schema, Seq.empty)
+    val resolver = SQLConf.get.resolver
+    changes.filter { case change: TableChange.ColumnChange =>
+      val changePath = change.fieldNames().toSeq
+      evolutionPaths.exists { ep =>
+        ep.length <= changePath.length &&
+          ep.zip(changePath).forall { case (a, b) => resolver(a, b) }
+      }
+    }.toSeq
   }
 
   // Helper method to extract field path from an Expression.
@@ -1155,24 +1140,6 @@ object MergeIntoTable {
         extractFieldPath(child, allowUnresolved) :+ nameOpt.getOrElse(s"col$ordinal")
       case _ => Seq.empty
     }
-  }
-
-  // Helper method to check if a given field path is a prefix of another path.
-  private def isPrefix(prefix: Seq[String], path: Seq[String]): Boolean =
-    prefix.length <= path.length && prefix.zip(path).forall {
-      case (prefixNamePart, pathNamePart) =>
-        SQLConf.get.resolver(prefixNamePart, pathNamePart)
-    }
-
-  // Helper method to check if an assignment key is equal to a source column
-  // and if the assignment value is that same source column.
-  // Example: UPDATE SET target.a = source.a
-  private def isEqual(assignment: Assignment, sourceFieldPath: Seq[String]): Boolean = {
-    // key must be a non-qualified field path that may be added to target schema via evolution
-    val assignmentKeyExpr = extractFieldPath(assignment.key, allowUnresolved = true)
-    // value should always be resolved (from source)
-    val assignmentValueExpr = extractFieldPath(assignment.value, allowUnresolved = false)
-    assignmentKeyExpr == assignmentValueExpr && assignmentKeyExpr == sourceFieldPath
   }
 
   private def areSchemaEvolutionReady(
