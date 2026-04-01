@@ -111,6 +111,48 @@ class VariantInferShreddingSuite extends SharedSparkSession with ParquetTest {
     checkAnswer(spark.read.parquet(dir.getAbsolutePath), df.collect())
   }
 
+  testWithTempDir("infer shredding pure primitive root column") { dir =>
+    val df = spark.sql(
+      """
+        | select parse_json('42') as v
+        | from range(0, 20, 1, 1)
+        |""".stripMargin)
+    df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+    // Root `dataType` merges to a numeric type; inference should preserve it (typed_value),
+    // not collapse to an unshredded variant when there are no object fields.
+    val expected = LongType
+    checkFileSchema(expected, dir)
+    checkAnswer(spark.read.parquet(dir.getAbsolutePath), df.collect())
+  }
+
+  testWithTempDir("infer shredding mixed object and primitive at root") { dir =>
+    val df = spark.sql(
+      """
+        | select if(id % 2 = 0, parse_json('{"a": 1}'), parse_json('42')) as v
+        | from range(0, 20, 1, 1)
+        |""".stripMargin)
+    df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+    // Object rows and scalar rows cannot share one shredded struct; the column should stay
+    // variant (value-only) at the logical level.
+    val expected = VariantType
+    checkFileSchema(expected, dir)
+    checkAnswer(spark.read.parquet(dir.getAbsolutePath), df.collect())
+  }
+
+  testWithTempDir("infer shredding heterogeneous array elements (primitive and object)") { dir =>
+    val df = spark.sql(
+      """
+        | select parse_json('[1, {"a": 1}]') as v
+        | from range(0, 20, 1, 1)
+        |""".stripMargin)
+    df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+    // Mixed element kinds should merge to variant elements, not a struct that only reflects
+    // object fields.
+    val expected = ArrayType(VariantType, containsNull = false)
+    checkFileSchema(expected, dir)
+    checkAnswer(spark.read.parquet(dir.getAbsolutePath), df.collect())
+  }
+
   test("infer shredding does not infer rare rows") {
     Seq(2, 9, 10, 11, 19, 20, 21, 100).foreach { inverseFreq =>
       withTempDir { dir =>

@@ -109,8 +109,6 @@ class InferVariantShreddingSchema(val schema: StructType) {
       children.getOrElseUpdate(fieldName, FieldNode(NullType))
     }
 
-    def hasChildren: Boolean = children.nonEmpty
-
     def getChildren: Seq[(String, FieldNode)] = children.toSeq
 
     def getOrCreateArrayElement(): FieldNode = {
@@ -162,6 +160,9 @@ class InferVariantShreddingSchema(val schema: StructType) {
         mergeDecimalWithLong(d)
       case (StructType(fields1), StructType(fields2)) =>
         // Rely on fields being sorted by name, and merge fields with the same name recursively.
+        // In this inference path, non-empty struct merges are unused: `inferPrimitiveType` only
+        // produces empty struct markers; field lists are built in `buildSchemaFromStats` from the
+        // FieldNode tree instead.
         val newFields = new java.util.ArrayList[StructField]()
 
         var f1Idx = 0
@@ -333,7 +334,6 @@ class InferVariantShreddingSchema(val schema: StructType) {
       val simpleSchema = buildSchemaFromStats(
         rootNode,
         minCardinality,
-        numNonNullVariants,
         inArrayContext = false,
         isArray = rootNode.arrayElementNode.isDefined)
       val finalizedSchema = finalizeSimpleSchema(simpleSchema, minCardinality, maxFields)
@@ -415,14 +415,13 @@ class InferVariantShreddingSchema(val schema: StructType) {
             val element = v.getElementAtIndex(i)
             val elementTypeClass = element.getType
 
-            // For primitives, infer and merge type directly
-            // For objects/arrays, collectFieldStats handles type via field traversal
+            // Primitives merge into `dataType`; objects/arrays are merged with the recursive
+            // `buildSchemaFromStats` result in `mergeSchema` below.
             if (elementTypeClass != Type.OBJECT && elementTypeClass != Type.ARRAY) {
               val primitiveType = inferPrimitiveType(element, depth)
               arrayNode.dataType = mergeSchema(arrayNode.dataType, primitiveType)
             }
 
-            // Recurse into element to collect nested fields, now IN array context
             collectFieldStats(element, arrayNode, rowIdx, depth + 1, inArrayContext = true)
           }
         }
@@ -477,7 +476,6 @@ class InferVariantShreddingSchema(val schema: StructType) {
   private def buildSchemaFromStats(
       currentNode: FieldNode,
       minCardinality: Int,
-      numNonNullVariants: Int,
       inArrayContext: Boolean,
       isArray: Boolean): DataType = {
 
@@ -489,14 +487,22 @@ class InferVariantShreddingSchema(val schema: StructType) {
         val elementType = buildSchemaFromStats(
           arrayElementNode,
           minCardinality,
-          numNonNullVariants,
           inArrayContext = true,
           isArray = arrayElementNode.arrayElementNode.isDefined
         )
-        return ArrayType(
-          if (elementType == VariantType) arrayElementNode.dataType else elementType)
+        // Collection keeps primitives in `dataType` and structure in children;
+        // `elementType` is only known after this recursion. mergeSchema combines both
+        // into one element type so mixed arrays (e.g. `[1, {"a": 1}]`) become array<variant>,
+        val mergedElement = mergeSchema(arrayElementNode.dataType, elementType)
+        return ArrayType(mergedElement)
       }
       return currentNode.dataType
+    }
+
+    // Incompatible types merged at this node, store as variant to avoid creating
+    // a struct that is built from a subset of rows
+    if (currentNode.dataType == VariantType) {
+      return VariantType
     }
 
     // Get all direct children, filter by cardinality, sort by cardinality descending,
@@ -524,7 +530,12 @@ class InferVariantShreddingSchema(val schema: StructType) {
       .sortBy(_._1)  // Sort alphabetically
 
     if (children.isEmpty) {
-      return VariantType
+      // No child fields met minCardinality: cannot emit a typed struct. Use merged scalars from
+      // `dataType` when present; empty struct/array/null markers imply no typed columns → variant.
+      return currentNode.dataType match {
+        case _: StructType | _: ArrayType | NullType => VariantType
+        case dt => dt
+      }
     }
 
     // Build struct from children
@@ -532,13 +543,12 @@ class InferVariantShreddingSchema(val schema: StructType) {
       val fieldType = childNode.dataType match {
         case StructType(_) =>
           buildSchemaFromStats(
-            childNode, minCardinality, numNonNullVariants, inArrayContext, isArray = false)
+            childNode, minCardinality, inArrayContext, isArray = false)
 
         case ArrayType(_, _) =>
           buildSchemaFromStats(
             childNode,
             minCardinality,
-            numNonNullVariants,
             inArrayContext = true,
             isArray = childNode.arrayElementNode.isDefined)
 
