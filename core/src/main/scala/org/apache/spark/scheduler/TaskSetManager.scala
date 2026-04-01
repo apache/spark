@@ -571,7 +571,8 @@ private[spark] class TaskSetManager(
     // a good proxy to task serialization time.
     // val timeTaken = clock.getTime() - startTime
     val tName = taskName(taskId)
-    logInfo(log"Starting ${MDC(TASK_NAME, tName)} (${MDC(HOST, host)}," +
+    logInfo(SchedulableBuilder.schedulingLogStreamingContext(taskSet.properties) +
+      log"Starting ${MDC(TASK_NAME, tName)} (${MDC(HOST, host)}," +
       log"executor ${MDC(LogKeys.EXECUTOR_ID, info.executorId)}, " +
       log"partition ${MDC(PARTITION_ID, task.partitionId)}, " +
       log"${MDC(TASK_LOCALITY, taskLocality)}, " +
@@ -865,7 +866,8 @@ private[spark] class TaskSetManager(
     }
     if (!successful(index)) {
       tasksSuccessful += 1
-      logInfo(log"Finished ${MDC(TASK_NAME, taskName(info.taskId))} in " +
+      logInfo(SchedulableBuilder.schedulingLogStreamingContext(taskSet.properties) +
+        log"Finished ${MDC(TASK_NAME, taskName(info.taskId))} in " +
         log"${MDC(DURATION, info.duration)} ms on ${MDC(HOST, info.host)} " +
         log"(executor ${MDC(LogKeys.EXECUTOR_ID, info.executorId)}) " +
         log"(${MDC(NUM_SUCCESSFUL_TASKS, tasksSuccessful)}/${MDC(NUM_TASKS, numTasks)})")
