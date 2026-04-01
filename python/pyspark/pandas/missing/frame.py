@@ -37,7 +37,6 @@ class MissingPandasLikeDataFrame:
     asfreq = _unsupported_function("asfreq")
     asof = _unsupported_function("asof")
     combine = _unsupported_function("combine")
-    compare = _unsupported_function("compare")
     convert_dtypes = _unsupported_function("convert_dtypes")
     infer_objects = _unsupported_function("infer_objects")
     reorder_levels = _unsupported_function("reorder_levels")
