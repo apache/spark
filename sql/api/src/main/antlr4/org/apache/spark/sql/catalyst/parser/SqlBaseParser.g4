@@ -377,6 +377,7 @@ statement
     | SHOW CREATE TABLE identifierReference (AS SERDE)?                #showCreateTable
     | SHOW CURRENT namespace                                           #showCurrentNamespace
     | SHOW CATALOGS (LIKE? pattern=stringLit)?                            #showCatalogs
+    | SHOW COLLATIONS (LIKE? pattern=stringLit)?                          #showCollations
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) PROCEDURE identifierReference                  #describeProcedure
     | (DESC | DESCRIBE) namespace EXTENDED?
@@ -2321,6 +2322,7 @@ nonReserved
     | CODEGEN
     | COLLATE
     | COLLATION
+    | COLLATIONS
     | COLLECTION
     | COLUMN
     | COLUMNS
