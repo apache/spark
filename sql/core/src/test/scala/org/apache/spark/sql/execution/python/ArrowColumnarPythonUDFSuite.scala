@@ -22,6 +22,7 @@ import org.apache.spark.sql.execution.{ColumnarToRowExec, SparkPlan}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.StringType
 
 /**
  * End-to-end tests for the Arrow columnar Python UDF input path.
@@ -47,17 +48,20 @@ class ArrowColumnarPythonUDFSuite extends QueryTest with SharedSparkSession {
 
   private def collectNodes[T <: SparkPlan](
       plan: SparkPlan)(implicit tag: reflect.ClassTag[T]): Seq[T] = {
-    plan.collect { case p if tag.runtimeClass.isInstance(p) => p.asInstanceOf[T] }
+    plan.collect {
+      case p if tag.runtimeClass.isInstance(p) => p.asInstanceOf[T]
+    }
   }
 
   test("Arrow-backed source: no ColumnarToRowExec before ArrowEvalPythonExec") {
     assume(shouldTestPandasUDFs)
     withSQLConf(SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true") {
-      val pandasUDF = TestScalarPandasUDF(name = "arrow_test_udf")
+      val pandasUDF = TestScalarPandasUDF(
+        name = "arrow_test_udf", returnType = Some(StringType))
       registerTestUDF(pandasUDF, spark)
 
       val df = readArrowSource()
-      val result = df.select(col("id"), pandasUDF(col("id")))
+      val result = df.selectExpr("arrow_test_udf(id)")
       val plan = result.queryExecution.executedPlan
 
       // ArrowEvalPythonExec should be present.
@@ -65,30 +69,34 @@ class ArrowColumnarPythonUDFSuite extends QueryTest with SharedSparkSession {
       assert(arrowExecs.nonEmpty,
         s"Expected ArrowEvalPythonExec in plan:\n$plan")
 
-      // No ColumnarToRowExec should be between the scan and ArrowEvalPythonExec.
-      val columnarToRows = collectNodes[ColumnarToRowExec](plan)
+      // No ColumnarToRowExec should be between the scan and
+      // ArrowEvalPythonExec.
+      val arrowExec = arrowExecs.head
+      val columnarToRows = collectNodes[ColumnarToRowExec](arrowExec)
       assert(columnarToRows.isEmpty,
-        s"ColumnarToRowExec should not be present when reading from " +
-          s"Arrow-backed source:\n$plan")
+        "ColumnarToRowExec should not be present under " +
+          s"ArrowEvalPythonExec when reading from Arrow-backed source:" +
+          s"\n$plan")
     }
   }
 
   test("Arrow-backed source: correctness of scalar pandas UDF") {
     assume(shouldTestPandasUDFs)
     withSQLConf(SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true") {
-      val pandasUDF = TestScalarPandasUDF(name = "arrow_str_udf")
+      val pandasUDF = TestScalarPandasUDF(
+        name = "arrow_str_udf", returnType = Some(StringType))
       registerTestUDF(pandasUDF, spark)
 
       val df = readArrowSource(numRows = 10)
       // The test pandas UDF converts input to string.
-      val result = df.select(col("id"), pandasUDF(col("id")))
+      val result = df.selectExpr("id", "arrow_str_udf(id) as udf_id")
       val rows = result.collect()
 
       assert(rows.length == 10)
       rows.zipWithIndex.foreach { case (row, i) =>
         assert(row.getInt(0) == i, s"id mismatch at row $i")
-        // The pandas UDF converts to string.
-        assert(row.getString(1) == i.toString, s"UDF result mismatch at row $i")
+        assert(row.getString(1) == i.toString,
+          s"UDF result mismatch at row $i")
       }
     }
   }
@@ -96,16 +104,16 @@ class ArrowColumnarPythonUDFSuite extends QueryTest with SharedSparkSession {
   test("Arrow-backed source: multiple UDF columns") {
     assume(shouldTestPandasUDFs)
     withSQLConf(SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true") {
-      val udf1 = TestScalarPandasUDF(name = "arrow_udf1")
-      val udf2 = TestScalarPandasUDF(name = "arrow_udf2")
+      val udf1 = TestScalarPandasUDF(
+        name = "arrow_udf1", returnType = Some(StringType))
+      val udf2 = TestScalarPandasUDF(
+        name = "arrow_udf2", returnType = Some(StringType))
       registerTestUDF(udf1, spark)
       registerTestUDF(udf2, spark)
 
       val df = readArrowSource(numRows = 10)
-      val result = df.select(
-        col("id"),
-        udf1(col("id")),
-        udf2(col("name")))
+      val result = df.selectExpr(
+        "id", "arrow_udf1(id) as u1", "arrow_udf2(name) as u2")
       val rows = result.collect()
 
       assert(rows.length == 10)
@@ -117,29 +125,35 @@ class ArrowColumnarPythonUDFSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("Arrow-backed source: supportsColumnar is true") {
+  test("Arrow-backed source: scan supportsColumnar is true") {
     val df = readArrowSource()
     val plan = df.queryExecution.executedPlan
-    assert(plan.supportsColumnar,
-      s"Arrow-backed source should support columnar output:\n$plan")
+    // The top-level plan may be ColumnarToRowExec (for Spark's row output),
+    // but the scan underneath should support columnar.
+    val scans = plan.collect {
+      case p if p.supportsColumnar => p
+    }
+    assert(scans.nonEmpty,
+      s"Arrow-backed source should have a columnar-capable scan:\n$plan")
   }
 
-  test("Row-based source: ColumnarToRowExec is present (baseline)") {
+  test("Row-based source: child does not support columnar (baseline)") {
     assume(shouldTestPandasUDFs)
     withSQLConf(SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true") {
-      val pandasUDF = TestScalarPandasUDF(name = "row_test_udf")
+      val pandasUDF = TestScalarPandasUDF(
+        name = "row_test_udf", returnType = Some(StringType))
       registerTestUDF(pandasUDF, spark)
 
       // spark.range does not produce Arrow-backed columnar output.
       val df = spark.range(100).toDF("id")
-      val result = df.select(pandasUDF(col("id")))
+      val result = df.selectExpr("row_test_udf(id)")
       val plan = result.queryExecution.executedPlan
 
-      // Row-based source should NOT have the columnar optimization.
       val arrowExecs = collectNodes[ArrowEvalPythonExec](plan)
       arrowExecs.foreach { exec =>
         assert(!exec.child.supportsColumnar,
-          s"Row-based source child should not support columnar:\n$plan")
+          "Row-based source child should not support columnar:" +
+            s"\n$plan")
       }
     }
   }
@@ -147,11 +161,12 @@ class ArrowColumnarPythonUDFSuite extends QueryTest with SharedSparkSession {
   test("Arrow-backed source: multiple partitions") {
     assume(shouldTestPandasUDFs)
     withSQLConf(SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true") {
-      val pandasUDF = TestScalarPandasUDF(name = "arrow_multi_part_udf")
+      val pandasUDF = TestScalarPandasUDF(
+        name = "arrow_mp_udf", returnType = Some(StringType))
       registerTestUDF(pandasUDF, spark)
 
       val df = readArrowSource(numRows = 100, numPartitions = 4)
-      val result = df.select(col("id"), pandasUDF(col("id")))
+      val result = df.selectExpr("id", "arrow_mp_udf(id) as udf_id")
       val rows = result.collect().sortBy(_.getInt(0))
 
       assert(rows.length == 100)
