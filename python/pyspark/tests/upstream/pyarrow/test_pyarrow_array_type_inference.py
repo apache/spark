@@ -295,6 +295,10 @@ class PyArrowArrayTypeInferenceTests(unittest.TestCase):
         import numpy as np
         import pandas as pd
         import pyarrow as pa
+        from pyspark.loose_version import LooseVersion
+
+        # pandas >= 3 infers large_string instead of string for object-dtype string Series
+        string_type = pa.large_string() if LooseVersion(pd.__version__) >= "3.0.0" else pa.string()
 
         sg = ZoneInfo("Asia/Singapore")
         la = "America/Los_Angeles"
@@ -315,7 +319,7 @@ class PyArrowArrayTypeInferenceTests(unittest.TestCase):
             (pd.Series([np.inf, 1.0, 2.0]), pa.float64()),
             (pd.Series([-np.inf, 1.0, 2.0]), pa.float64()),
             # String
-            (pd.Series(["a", "b", "c"]), pa.string()),
+            (pd.Series(["a", "b", "c"]), string_type),
             # Boolean
             (pd.Series([True, False, True]), pa.bool_()),
             # Temporal
@@ -356,6 +360,10 @@ class PyArrowArrayTypeInferenceTests(unittest.TestCase):
         import numpy as np
         import pandas as pd
         import pyarrow as pa
+        from pyspark.loose_version import LooseVersion
+
+        # pandas >= 3 uses pyarrow-backed StringDtype, which infers large_string
+        string_type = pa.large_string() if LooseVersion(pd.__version__) >= "3.0.0" else pa.string()
 
         cases = [
             # Integer
@@ -379,8 +387,8 @@ class PyArrowArrayTypeInferenceTests(unittest.TestCase):
             (pd.Series([True, False, True], dtype=pd.BooleanDtype()), pa.bool_()),
             (pd.Series([True, False, None], dtype=pd.BooleanDtype()), pa.bool_()),
             # String
-            (pd.Series(["a", "b", "c"], dtype=pd.StringDtype()), pa.string()),
-            (pd.Series(["a", "b", None], dtype=pd.StringDtype()), pa.string()),
+            (pd.Series(["a", "b", "c"], dtype=pd.StringDtype()), string_type),
+            (pd.Series(["a", "b", None], dtype=pd.StringDtype()), string_type),
         ]
         self._run_inference_tests(cases)
 
