@@ -2913,7 +2913,14 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 batch_list = list(group_batches)
                 if not batch_list:
                     continue
-                concatenated = pa.concat_batches(batch_list)
+                if hasattr(pa, "concat_batches"):
+                    concatenated = pa.concat_batches(batch_list)
+                else:
+                    # pyarrow.concat_batches not supported before 19.0.0
+                    # remove this once we drop support for old versions
+                    concatenated = pa.RecordBatch.from_struct_array(
+                        pa.concat_arrays([b.to_struct_array() for b in batch_list])
+                    )
                 num_rows = concatenated.num_rows
 
                 result_arrays = []
