@@ -38,8 +38,6 @@ case class RenameTableExec(
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
-
     val optOldStorageLevel = invalidateCache()
     catalog.invalidateTable(oldIdent)
 

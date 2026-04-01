@@ -378,7 +378,8 @@ object InMemoryRelation {
     } else {
       qe.executedPlan
     }
-    val cacheBuilder = CachedRDDBuilder(serializer, storageLevel, child, tableIdentifier, qe.logical)
+    val cacheBuilder =
+      CachedRDDBuilder(serializer, storageLevel, child, tableIdentifier, qe.logical)
     val relation = new InMemoryRelation(child.output, cacheBuilder, optimizedPlan.outputOrdering)
     relation.statsOfPlanToCache = optimizedPlan.stats
     relation
@@ -393,7 +394,8 @@ object InMemoryRelation {
       child: SparkPlan,
       tableIdentifier: Option[Seq[String]],
       optimizedPlan: LogicalPlan): InMemoryRelation = {
-    val cacheBuilder = CachedRDDBuilder(serializer, storageLevel, child, tableIdentifier, optimizedPlan)
+    val cacheBuilder =
+      CachedRDDBuilder(serializer, storageLevel, child, tableIdentifier, optimizedPlan)
     val relation = new InMemoryRelation(child.output, cacheBuilder, optimizedPlan.outputOrdering)
     relation.statsOfPlanToCache = optimizedPlan.stats
     relation
