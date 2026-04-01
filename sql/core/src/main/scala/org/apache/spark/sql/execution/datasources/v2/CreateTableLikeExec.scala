@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, Table, TableCatalog, TableInfo, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, Table, TableCatalog, TableInfo, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
@@ -58,37 +58,12 @@ case class CreateTableLikeExec(
 
   override protected def run(): Seq[InternalRow] = {
     if (!targetCatalog.tableExists(targetIdent)) {
-      // Derive source columns; for V1Table sources apply CharVarcharUtils to preserve
-      // CHAR/VARCHAR types as declared rather than collapsed to StringType.
-      val sourceColumns = sourceTable match {
-        case v1: V1Table =>
-          CatalogV2Util.structTypeToV2Columns(CharVarcharUtils.getRawSchema(v1.catalogTable.schema))
-        case _ =>
-          sourceTable.columns()
-      }
-
-      // Build TableInfo with all explicit information for the new table:
-      //   - columns and partitioning from the source
-      //   - constraints from the source
-      //   - user-specified TBLPROPERTIES, LOCATION, and USING provider (if given)
-      //   - PROP_OWNER set to the current user (avoids requiring connectors to call
-      //     a Catalyst utility themselves)
-      // Source table properties are intentionally excluded; connectors read sourceTable
-      // to clone any additional format-specific or custom state they need.
-      val locationProp: Option[(String, String)] =
-        location.map(uri => TableCatalog.PROP_LOCATION -> CatalogUtils.URIToString(uri))
-
-      val finalProps = CatalogV2Util.withDefaultOwnership(
-        properties ++
-          provider.map(TableCatalog.PROP_PROVIDER -> _) ++
-          locationProp)
-
       try {
         val tableInfo = new TableInfo.Builder()
-          .withColumns(sourceColumns)
-          .withPartitions(sourceTable.partitioning())
-          .withConstraints(sourceTable.constraints())
-          .withProperties(finalProps.asJava)
+          .withColumns(targetColumns)
+          .withPartitions(sourceTable.partitioning)
+          .withConstraints(sourceTable.constraints)
+          .withProperties(targetProperties.asJava)
           .build()
         targetCatalog.createTableLike(targetIdent, tableInfo, sourceTable)
       } catch {
@@ -102,4 +77,22 @@ case class CreateTableLikeExec(
 
     Seq.empty
   }
+
+  // Derive target columns from source; for V1Table sources apply CharVarcharUtils to preserve
+  // CHAR/VARCHAR types as declared rather than collapsed to StringType.
+  private def targetColumns: Array[Column] =
+    sourceTable match {
+      case v1: V1Table =>
+        CatalogV2Util.structTypeToV2Columns(CharVarcharUtils.getRawSchema(v1.catalogTable.schema))
+      case _ =>
+        sourceTable.columns
+    }
+
+  // Source table properties are intentionally excluded; connectors read sourceTable
+  // to clone any additional format-specific or custom state they need.
+  private def targetProperties: Map[String, String] =
+    CatalogV2Util.withDefaultOwnership(
+      properties ++
+        provider.map(TableCatalog.PROP_PROVIDER -> _) ++
+        location.map(uri => TableCatalog.PROP_LOCATION -> CatalogUtils.URIToString(uri)))
 }
