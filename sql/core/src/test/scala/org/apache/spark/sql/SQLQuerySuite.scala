@@ -551,19 +551,19 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
     checkAnswer(
       sql("SELECT * FROM arrayData ORDER BY data[0] ASC"),
-      arrayData.as[ArrayData].collect().sortBy(_.data(0)).toSeq)
+      arrayData.as[ArrayData].collect().sortBy(_.data(0)).map(Row.fromTuple).toSeq)
 
     checkAnswer(
       sql("SELECT * FROM arrayData ORDER BY data[0] DESC"),
-      arrayData.as[ArrayData].collect().sortBy(_.data(0)).reverse.toSeq)
+      arrayData.as[ArrayData].collect().sortBy(_.data(0)).reverse.map(Row.fromTuple).toSeq)
 
     checkAnswer(
       sql("SELECT * FROM mapData ORDER BY data[1] ASC"),
-      mapData.as[MapData].collect().sortBy(_.data(1)).toSeq)
+      mapData.as[MapData].collect().sortBy(_.data(1)).map(Row.fromTuple).toSeq)
 
     checkAnswer(
       sql("SELECT * FROM mapData ORDER BY data[1] DESC"),
-      mapData.as[MapData].collect().sortBy(_.data(1)).reverse.toSeq)
+      mapData.as[MapData].collect().sortBy(_.data(1)).reverse.map(Row.fromTuple).toSeq)
   }
 
   test("external sorting") {
