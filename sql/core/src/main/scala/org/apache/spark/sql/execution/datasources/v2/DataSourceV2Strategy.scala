@@ -245,7 +245,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     // Views are wrapped in V1Table so the exec can extract schema and provider uniformly.
     case CreateTableLike(
         ResolvedIdentifier(catalog, ident), source,
-        locationStr, provider, _, properties, ifNotExists) =>
+        locationStr, provider, serdeInfo, properties, ifNotExists) =>
       val table = source match {
         case ResolvedTable(_, _, t, _) => t
         case ResolvedPersistentView(_, _, meta) => V1Table(meta)
@@ -258,7 +258,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         else uri
       }
       CreateTableLikeExec(catalog.asTableCatalog, ident, table,
-        location, provider, properties, ifNotExists) :: Nil
+        location, provider, serdeInfo, properties, ifNotExists) :: Nil
 
     case RefreshTable(r: ResolvedTable) =>
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r, includeTimeTravel = true)) :: Nil
