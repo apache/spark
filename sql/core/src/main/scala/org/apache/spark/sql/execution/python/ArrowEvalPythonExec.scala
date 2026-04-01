@@ -93,27 +93,26 @@ case class ArrowEvalPythonExec(
 
   // When the child supports columnar output (e.g., Arrow-backed DSv2 connectors),
   // accept columnar input to avoid the ColumnarToRow -> ArrowWriter round-trip.
+  // The Arrow FieldVectors are extracted directly from ArrowColumnVector and
+  // serialized to IPC, bypassing the row-based ArrowWriter conversion.
   override def supportsColumnar: Boolean = child.supportsColumnar
   override def supportsRowBased: Boolean = true
 
   override protected def doExecute(): RDD[InternalRow] = {
     if (child.supportsColumnar) {
-      // Columnar path: produce ColumnarBatch via doExecuteColumnar(), then flatten to rows.
-      doExecuteColumnar().flatMap(_.rowIterator().asScala)
+      // Columnar path: read ColumnarBatch from child, send Arrow vectors
+      // directly to Python when possible.
+      val inputRDD = child.executeColumnar()
+      if (conf.usePartitionEvaluator) {
+        inputRDD.mapPartitionsWithEvaluator(columnarEvaluatorFactory)
+      } else {
+        inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
+          columnarEvaluatorFactory.createEvaluator().eval(index, iter)
+        }
+      }
     } else {
       // Row-based path: unchanged.
       super.doExecute()
-    }
-  }
-
-  override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    val inputRDD = child.executeColumnar()
-    if (conf.usePartitionEvaluator) {
-      inputRDD.mapPartitionsWithEvaluator(columnarEvaluatorFactory)
-    } else {
-      inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
-        columnarEvaluatorFactory.createEvaluator().eval(index, iter)
-      }
     }
   }
 
