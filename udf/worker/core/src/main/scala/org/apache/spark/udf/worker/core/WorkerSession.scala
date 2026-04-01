@@ -32,4 +32,6 @@ import org.apache.spark.annotation.Experimental
  * implementation based on the [[WorkerSpecification]].
  */
 @Experimental
-abstract class WorkerSession
+abstract class WorkerSession extends AutoCloseable {
+  override def close(): Unit = {}
+}

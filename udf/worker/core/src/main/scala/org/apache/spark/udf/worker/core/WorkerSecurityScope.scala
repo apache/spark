@@ -22,7 +22,14 @@ import org.apache.spark.annotation.Experimental
  * :: Experimental ::
  * Identifies a security boundary for worker connection pooling.
  *
- * Workers are only reused within the same security scope.
+ * Workers are only reused within the same security scope. Dispatcher
+ * implementations compare scopes using `equals` to decide whether an
+ * existing worker can be shared. Subclasses '''must''' override
+ * `equals` and `hashCode` so that structurally equivalent scopes
+ * match; otherwise, worker reuse will silently fail.
  */
 @Experimental
-abstract class WorkerSecurityScope
+abstract class WorkerSecurityScope {
+  override def equals(obj: Any): Boolean
+  override def hashCode(): Int
+}
