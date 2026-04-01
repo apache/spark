@@ -294,6 +294,8 @@ object DeserializerBuildHelper {
       path: Expression,
       walkedTypePath: WalkedTypePath,
       isTopLevel: Boolean = false): Expression =
+    // Framework dispatch runs before encoder-type checks in the default path. Safe because
+    // framework types use dedicated leaf encoders, never migration shims or native primitives.
     CatalystTypeOps(enc.dataType).map(_.createDeserializer(path, walkedTypePath, isTopLevel))
       .getOrElse(createDeserializerDefault(enc, path, walkedTypePath, isTopLevel))
 

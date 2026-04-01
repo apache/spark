@@ -334,6 +334,9 @@ object SerializerBuildHelper {
    * by encoder `enc`.
    */
   private def createSerializer(enc: AgnosticEncoder[_], input: Expression): Expression =
+    // Framework dispatch runs before encoder-type checks (AgnosticExpressionPathEncoder,
+    // isNativeEncoder) in the default path. This is safe because framework types use dedicated
+    // leaf encoders (e.g., LocalTimeEncoder), never migration shims or native primitives.
     CatalystTypeOps(enc.dataType).map(_.createSerializer(input))
       .getOrElse(createSerializerDefault(enc, input))
 

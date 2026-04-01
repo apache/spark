@@ -58,7 +58,7 @@ object ArrowWriter {
       .getOrElse(createFieldWriterDefault(dt, vector))
   }
 
-  private[sql] def createFieldWriterDefault(
+  private def createFieldWriterDefault(
       dt: DataType, vector: ValueVector): ArrowFieldWriter = {
     (dt, vector) match {
       case (BooleanType, vector: BitVector) => new BooleanWriter(vector)
