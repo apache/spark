@@ -1,14 +1,14 @@
 [ {
   "attempts" : [ {
     "appSparkVersion" : "4.2.0-SNAPSHOT",
-    "logSourceFullPath" : "",
-    "logSourceName" : "",
     "completed" : true,
     "duration" : 2006,
     "endTime" : "2025-12-27T14:15:12.221GMT",
     "endTimeEpoch" : 1766844912221,
     "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "sparkUser" : "<script>alert('XSS')</script>",
     "startTime" : "2025-12-27T14:15:10.215GMT",
     "startTimeEpoch" : 1766844910215
@@ -18,14 +18,14 @@
 }, {
   "attempts" : [ {
     "appSparkVersion" : "3.3.0-SNAPSHOT",
-    "logSourceFullPath" : "",
-    "logSourceName" : "",
     "completed" : true,
     "duration" : 86045,
     "endTime" : "2022-01-13T02:05:36.564GMT",
     "endTimeEpoch" : 1642039536564,
     "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "sparkUser" : "lijunqing",
     "startTime" : "2022-01-13T02:04:10.519GMT",
     "startTimeEpoch" : 1642039450519
@@ -35,14 +35,14 @@
 }, {
   "attempts" : [ {
     "appSparkVersion" : "3.1.1.119",
-    "logSourceFullPath" : "",
-    "logSourceName" : "",
     "completed" : true,
     "duration" : 274875,
     "endTime" : "2021-08-10T23:29:30.208GMT",
     "endTimeEpoch" : 1628638170208,
     "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "sparkUser" : "john",
     "startTime" : "2021-08-10T23:24:55.333GMT",
     "startTimeEpoch" : 1628637895333
@@ -52,14 +52,14 @@
 }, {
   "attempts" : [ {
     "appSparkVersion" : "3.1.0-SNAPSHOT",
-    "logSourceFullPath" : "",
-    "logSourceName" : "",
     "completed" : true,
     "duration" : 363996,
     "endTime" : "2020-07-07T03:17:04.231GMT",
     "endTimeEpoch" : 1594091824231,
     "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "sparkUser" : "terryk",
     "startTime" : "2020-07-07T03:11:00.235GMT",
     "startTimeEpoch" : 1594091460235
@@ -69,14 +69,14 @@
 }, {
   "attempts" : [ {
     "appSparkVersion" : "3.0.0-SNAPSHOT",
-    "logSourceFullPath" : "",
-    "logSourceName" : "",
     "completed" : true,
     "duration" : 139764,
     "endTime" : "2020-01-11T17:46:42.615GMT",
     "endTimeEpoch" : 1578764802615,
     "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "sparkUser" : "tgraves",
     "startTime" : "2020-01-11T17:44:22.851GMT",
     "startTimeEpoch" : 1578764662851
@@ -86,14 +86,14 @@
 }, {
   "attempts" : [ {
     "appSparkVersion" : "3.0.0-SNAPSHOT",
-    "logSourceFullPath" : "",
-    "logSourceName" : "",
     "completed" : true,
     "duration" : 18794,
     "endTime" : "2019-07-02T21:02:35.974GMT",
     "endTimeEpoch" : 1562101355974,
     "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "sparkUser" : "tgraves",
     "startTime" : "2019-07-02T21:02:17.180GMT",
     "startTimeEpoch" : 1562101337180
@@ -103,14 +103,14 @@
 }, {
   "attempts" : [ {
     "appSparkVersion" : "3.0.0-SNAPSHOT",
-    "logSourceFullPath" : "",
-    "logSourceName" : "",
     "completed" : true,
     "duration" : 62168,
     "endTime" : "2019-04-08T20:40:46.454GMT",
     "endTimeEpoch" : 1554756046454,
     "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "sparkUser" : "systest",
     "startTime" : "2019-04-08T20:39:44.286GMT",
     "startTimeEpoch" : 1554755984286
@@ -120,14 +120,14 @@
 }, {
   "attempts" : [ {
     "appSparkVersion" : "2.3.0-SNAPSHOT",
-    "logSourceFullPath" : "",
-    "logSourceName" : "",
     "completed" : true,
     "duration" : 472819,
     "endTime" : "2018-01-18T18:38:27.938GMT",
     "endTimeEpoch" : 1516300707938,
     "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "sparkUser" : "attilapiros",
     "startTime" : "2018-01-18T18:30:35.119GMT",
     "startTimeEpoch" : 1516300235119
@@ -137,14 +137,14 @@
 }, {
   "attempts" : [ {
     "appSparkVersion" : "2.3.0-SNAPSHOT",
-    "logSourceFullPath" : "",
-    "logSourceName" : "",
     "completed" : true,
     "duration" : 535234,
     "endTime" : "2018-01-09T10:24:37.606GMT",
     "endTimeEpoch" : 1515493477606,
     "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "sparkUser" : "attilapiros",
     "startTime" : "2018-01-09T10:15:42.372GMT",
     "startTimeEpoch" : 1515492942372
@@ -154,14 +154,14 @@
 }, {
   "attempts" : [ {
     "appSparkVersion" : "2.1.0-SNAPSHOT",
-    "logSourceFullPath" : "",
-    "logSourceName" : "",
     "completed" : true,
     "duration" : 10671,
     "endTime" : "2016-11-16T22:33:40.587GMT",
     "endTimeEpoch" : 1479335620587,
     "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "sparkUser" : "jose",
     "startTime" : "2016-11-16T22:33:29.916GMT",
     "startTimeEpoch" : 1479335609916
@@ -171,14 +171,14 @@
 }, {
   "attempts" : [ {
     "appSparkVersion" : "2.1.0-SNAPSHOT",
-    "logSourceFullPath" : "",
-    "logSourceName" : "",
     "completed" : true,
     "duration" : 101795,
     "endTime" : "2016-11-15T23:22:18.874GMT",
     "endTimeEpoch" : 1479252138874,
     "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "sparkUser" : "jose",
     "startTime" : "2016-11-15T23:20:37.079GMT",
     "startTimeEpoch" : 1479252037079
@@ -188,14 +188,14 @@
 }, {
   "attempts" : [ {
     "appSparkVersion" : "1.4.0-SNAPSHOT",
-    "logSourceFullPath" : "",
-    "logSourceName" : "",
     "completed" : true,
     "duration" : 10505,
     "endTime" : "2015-05-06T13:03:11.398GMT",
     "endTimeEpoch" : 1430917391398,
     "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "sparkUser" : "irashid",
     "startTime" : "2015-05-06T13:03:00.893GMT",
     "startTimeEpoch" : 1430917380893
@@ -206,28 +206,28 @@
   "attempts" : [ {
     "appSparkVersion" : "1.4.0-SNAPSHOT",
     "attemptId" : "2",
-    "logSourceFullPath" : "",
-    "logSourceName" : "",
     "completed" : true,
     "duration" : 57,
     "endTime" : "2015-05-06T13:03:00.950GMT",
     "endTimeEpoch" : 1430917380950,
     "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "sparkUser" : "irashid",
     "startTime" : "2015-05-06T13:03:00.893GMT",
     "startTimeEpoch" : 1430917380893
   }, {
     "appSparkVersion" : "1.4.0-SNAPSHOT",
     "attemptId" : "1",
-    "logSourceFullPath" : "",
-    "logSourceName" : "",
     "completed" : true,
     "duration" : 10,
     "endTime" : "2015-05-06T13:03:00.890GMT",
     "endTimeEpoch" : 1430917380890,
     "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "sparkUser" : "irashid",
     "startTime" : "2015-05-06T13:03:00.880GMT",
     "startTimeEpoch" : 1430917380880
@@ -238,28 +238,28 @@
   "attempts" : [ {
     "appSparkVersion" : "",
     "attemptId" : "2",
-    "logSourceFullPath" : "",
-    "logSourceName" : "",
     "completed" : true,
     "duration" : 34935,
     "endTime" : "2015-03-17T23:12:25.177GMT",
     "endTimeEpoch" : 1426633945177,
     "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "sparkUser" : "irashid",
     "startTime" : "2015-03-17T23:11:50.242GMT",
     "startTimeEpoch" : 1426633910242
   }, {
     "appSparkVersion" : "",
     "attemptId" : "1",
-    "logSourceFullPath" : "",
-    "logSourceName" : "",
     "completed" : true,
     "duration" : 34935,
     "endTime" : "2015-03-16T19:25:45.177GMT",
     "endTimeEpoch" : 1426533945177,
     "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "sparkUser" : "irashid",
     "startTime" : "2015-03-16T19:25:10.242GMT",
     "startTimeEpoch" : 1426533910242
@@ -269,14 +269,14 @@
 }, {
   "attempts" : [ {
     "appSparkVersion" : "",
-    "logSourceFullPath" : "",
-    "logSourceName" : "",
     "completed" : true,
     "duration" : 8635,
     "endTime" : "2015-02-28T00:02:46.912GMT",
     "endTimeEpoch" : 1425081766912,
     "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "sparkUser" : "irashid",
     "startTime" : "2015-02-28T00:02:38.277GMT",
     "startTimeEpoch" : 1425081758277
@@ -286,14 +286,14 @@
 }, {
   "attempts" : [ {
     "appSparkVersion" : "",
-    "logSourceFullPath" : "",
-    "logSourceName" : "",
     "completed" : true,
     "duration" : 9011,
     "endTime" : "2015-02-03T16:43:08.731GMT",
     "endTimeEpoch" : 1422981788731,
     "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "sparkUser" : "irashid",
     "startTime" : "2015-02-03T16:42:59.720GMT",
     "startTimeEpoch" : 1422981779720
@@ -303,14 +303,14 @@
 }, {
   "attempts" : [ {
     "appSparkVersion" : "",
-    "logSourceFullPath" : "",
-    "logSourceName" : "",
     "completed" : true,
     "duration" : 8635,
     "endTime" : "2015-02-03T16:42:46.912GMT",
     "endTimeEpoch" : 1422981766912,
     "lastUpdated" : "",
     "lastUpdatedEpoch" : 0,
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "sparkUser" : "irashid",
     "startTime" : "2015-02-03T16:42:38.277GMT",
     "startTimeEpoch" : 1422981758277

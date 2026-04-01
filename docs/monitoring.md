@@ -1083,6 +1083,22 @@ A list of the available metrics, with a short description:
     <td>Elapsed total major GC time.
     The value is expressed in milliseconds.</td>
   </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.JITCompilationTime</td>
+    <td>Approximate accumulated elapsed time (in milliseconds) that the JIT compiler has spent compiling.
+    Returns -1 if not available on the current JVM.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.CodeCacheUsed</td>
+    <td>Code cache used memory in bytes. On Java 8, from the single "Code Cache" memory pool.
+    On Java 9+, sum of the three segmented code cache pools.</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.CodeCacheMax</td>
+    <td>Maximum code cache capacity in bytes. On Java 8, from the single "Code Cache" memory pool.
+    On Java 9+, sum of the three segmented code cache pools.
+    Compare with CodeCacheUsed to compute utilization.</td>
+  </tr>
 </table>
 The computation of RSS and Vmem are based on [proc(5)](http://man7.org/linux/man-pages/man5/proc.5.html)
 

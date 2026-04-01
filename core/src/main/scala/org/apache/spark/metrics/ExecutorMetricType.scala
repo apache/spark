@@ -16,7 +16,7 @@
  */
 package org.apache.spark.metrics
 
-import java.lang.management.{BufferPoolMXBean, ManagementFactory}
+import java.lang.management.{BufferPoolMXBean, CompilationMXBean, ManagementFactory}
 import javax.management.ObjectName
 
 import scala.collection.mutable
@@ -197,6 +197,80 @@ case object DirectPoolMemory extends MBeanExecutorMetricType(
 case object MappedPoolMemory extends MBeanExecutorMetricType(
   "java.nio:type=BufferPool,name=mapped")
 
+/**
+ * JIT Compilation metrics for monitoring JIT compiler activity.
+ *
+ * - JITCompilationTime: Approximate accumulated elapsed time (in milliseconds) spent by the
+ *     JIT compiler. Returns -1 if not available on the current JVM.
+ * - CodeCacheUsed: Total code cache used memory in bytes.
+ *     On Java 8: from the single "Code Cache" memory pool.
+ *     On Java 9+: sum of the three segmented code cache pools.
+ * - CodeCacheMax: Maximum code cache capacity in bytes.
+ *     On Java 8: from the single "Code Cache" memory pool.
+ *     On Java 9+: sum of the three segmented code cache pools.
+ */
+case object JITCompilationMetrics extends ExecutorMetricType with Logging {
+  override val names = Seq(
+    "JITCompilationTime",
+    "CodeCacheUsed",
+    "CodeCacheMax"
+  )
+
+  private val compilationBean: CompilationMXBean = ManagementFactory.getCompilationMXBean
+
+  private val SEGMENTED_CODE_CACHE_POOLS = Seq(
+    "CodeHeap 'non-nmethods'",
+    "CodeHeap 'profiled nmethods'",
+    "CodeHeap 'non-profiled nmethods'"
+  )
+
+  private val CODE_CACHE_POOL = "Code Cache"
+
+  override private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
+    val jitMetrics = new Array[Long](names.length)
+
+    if (compilationBean != null && compilationBean.isCompilationTimeMonitoringSupported) {
+      jitMetrics(0) = compilationBean.getTotalCompilationTime
+    } else {
+      jitMetrics(0) = -1L
+    }
+
+    try {
+      val pools = ManagementFactory.getMemoryPoolMXBeans.asScala
+      val poolMap = pools.map(p => p.getName -> p).toMap
+
+      val segmentedPools = SEGMENTED_CODE_CACHE_POOLS.flatMap(poolMap.get)
+      if (segmentedPools.size == SEGMENTED_CODE_CACHE_POOLS.size) {
+        jitMetrics(1) = segmentedPools.map(getPoolUsed).sum
+        jitMetrics(2) = segmentedPools.map(getPoolMax).sum
+      } else {
+        poolMap.get(CODE_CACHE_POOL) match {
+          case Some(pool) =>
+            jitMetrics(1) = getPoolUsed(pool)
+            jitMetrics(2) = getPoolMax(pool)
+          case None =>
+            logDebug(log"Code Cache memory pool not found")
+        }
+      }
+    } catch {
+      case e: Exception =>
+        logDebug(log"Exception when getting Code Cache metrics: ${MDC(ERROR, e.getMessage)}")
+    }
+
+    jitMetrics
+  }
+
+  private def getPoolUsed(pool: java.lang.management.MemoryPoolMXBean): Long = {
+    val usage = pool.getUsage
+    if (usage != null) usage.getUsed else 0L
+  }
+
+  private def getPoolMax(pool: java.lang.management.MemoryPoolMXBean): Long = {
+    val usage = pool.getUsage
+    if (usage != null && usage.getMax >= 0) usage.getMax else 0L
+  }
+}
+
 private[spark] object ExecutorMetricType {
 
   // List of all executor metric getters
@@ -212,7 +286,8 @@ private[spark] object ExecutorMetricType {
     DirectPoolMemory,
     MappedPoolMemory,
     ProcessTreeMetrics,
-    GarbageCollectionMetrics
+    GarbageCollectionMetrics,
+    JITCompilationMetrics
   )
 
   val (metricToOffset, numMetrics) = {

@@ -102,6 +102,14 @@ private[v1] class PrometheusResource extends ApiRequestContext {
         Seq("MinorGCTime", "MajorGCTime", "ConcurrentGCTime").foreach { name =>
           sb.append(s"$prefix${name}_seconds_total$labels ${m.getMetricValue(name) * 0.001}\n")
         }
+        Seq("CodeCacheUsed", "CodeCacheMax").foreach { name =>
+          sb.append(s"$prefix${name}_bytes$labels ${m.getMetricValue(name)}\n")
+        }
+        val jitCompilationTime = m.getMetricValue("JITCompilationTime")
+        if (jitCompilationTime >= 0) {
+          sb.append(s"${prefix}JITCompilationTime_seconds_total$labels " +
+            s"${jitCompilationTime * 0.001}\n")
+        }
       }
     }
     sb.toString
