@@ -371,14 +371,14 @@ python -m pytest pyspark/sql/tests/streaming/test_streaming_kafka_rtm.py -v
 ### Run Specific Test
 
 ```bash
-python -m pytest pyspark/sql/tests/streaming/test_streaming_kafka_rtm.py::StreamingKafkaTests::test_kafka_batch_read -v
+python -m pytest pyspark/sql/tests/streaming/test_streaming_kafka_rtm.py::StreamingKafkaTests::test_streaming_stateless -v
 ```
 
 ### Run with unittest
 
 ```bash
 cd $SPARK_HOME/python
-python -m unittest pyspark.sql.tests.streaming.test_streaming_kafka
+python -m unittest pyspark.sql.tests.streaming.test_streaming_kafka_rtm
 ```
 
 ## Troubleshooting
