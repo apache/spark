@@ -110,3 +110,113 @@ class PythonWorkerFactorySuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 }
+
+class PythonWorkerFactoryIdleSuite extends SparkFunSuite with SharedSparkContext {
+
+  test("isIdleFactory returns false for default artifact UUID") {
+    val factory = new PythonWorkerFactory(
+      "python3", "pyspark.worker", Map.empty[String, String], true)
+    try {
+      assert(factory.jobArtifactUUID === "default")
+      assert(!factory.isIdleFactory(0))
+    } finally {
+      factory.stop()
+    }
+  }
+
+  test("isIdleFactory returns false for session factory with recent activity") {
+    val envVars = Map("SPARK_JOB_ARTIFACT_UUID" -> "test-session-uuid")
+    val factory = new PythonWorkerFactory(
+      "python3", "pyspark.worker", envVars, true)
+    try {
+      assert(factory.jobArtifactUUID === "test-session-uuid")
+      assert(!factory.isIdleFactory(java.util.concurrent.TimeUnit.HOURS.toNanos(1)))
+    } finally {
+      factory.stop()
+    }
+  }
+
+  test("isIdleFactory returns true for session factory past timeout") {
+    val envVars = Map("SPARK_JOB_ARTIFACT_UUID" -> "test-session-uuid")
+    val factory = new PythonWorkerFactory(
+      "python3", "pyspark.worker", envVars, true)
+    try {
+      assert(factory.jobArtifactUUID === "test-session-uuid")
+      assert(factory.isIdleFactory(0))
+    } finally {
+      factory.stop()
+    }
+  }
+
+  test("destroyPythonWorkersByArtifactUUID removes only matching factories") {
+    val env = sc.env
+    val uuid1 = "session-uuid-1"
+    val uuid2 = "session-uuid-2"
+    val envVars1 = Map("SPARK_JOB_ARTIFACT_UUID" -> uuid1)
+    val envVars2 = Map("SPARK_JOB_ARTIFACT_UUID" -> uuid2)
+    val defaultEnvVars = Map("SPARK_JOB_ARTIFACT_UUID" -> "default")
+
+    // Access the internal cache via reflection
+    val pythonWorkersField = env.getClass.getDeclaredField("pythonWorkers")
+    pythonWorkersField.setAccessible(true)
+    val rawMap = pythonWorkersField.get(env)
+    val putMethod = rawMap.getClass.getMethod("put", classOf[Object], classOf[Object])
+    val sizeMethod = rawMap.getClass.getMethod("size")
+    def mapSize(): Int = sizeMethod.invoke(rawMap).asInstanceOf[Int]
+    def factoryValues(): Iterable[PythonWorkerFactory] = {
+      val valuesMethod = rawMap.getClass.getMethod("values")
+      val values = valuesMethod.invoke(rawMap)
+        .asInstanceOf[Iterable[PythonWorkerFactory]]
+      values
+    }
+
+    val sizeBefore = mapSize()
+
+    val factory1 = new PythonWorkerFactory("python3", "pyspark.worker", envVars1, true)
+    val factory2 = new PythonWorkerFactory("python3", "pyspark.worker", envVars2, true)
+    val factoryDefault = new PythonWorkerFactory(
+      "python3", "pyspark.worker", defaultEnvVars, true)
+
+    // Construct keys via reflection (PythonWorkersKey is private)
+    val keyClass = env.getClass.getDeclaredClasses
+      .find(_.getSimpleName.contains("PythonWorkersKey")).get
+    val keyConstructor = keyClass.getDeclaredConstructors.head
+    keyConstructor.setAccessible(true)
+    def makeKey(envVars: Map[String, String]): AnyRef =
+      keyConstructor.newInstance(
+        env, "python3", "pyspark.worker",
+        PythonWorkerFactory.defaultDaemonModule, envVars).asInstanceOf[AnyRef]
+
+    val key1 = makeKey(envVars1)
+    val key2 = makeKey(envVars2)
+    val keyDefault = makeKey(defaultEnvVars)
+
+    try {
+      putMethod.invoke(rawMap, key1, factory1)
+      putMethod.invoke(rawMap, key2, factory2)
+      putMethod.invoke(rawMap, keyDefault, factoryDefault)
+      assert(mapSize() === sizeBefore + 3)
+
+      // Destroy factories for uuid1 only
+      env.destroyPythonWorkersByArtifactUUID(uuid1)
+      assert(mapSize() === sizeBefore + 2)
+      assert(factoryValues().exists(_.jobArtifactUUID == uuid2))
+      assert(factoryValues().exists(_.jobArtifactUUID == "default"))
+      assert(!factoryValues().exists(_.jobArtifactUUID == uuid1))
+
+      // Destroy factories for uuid2
+      env.destroyPythonWorkersByArtifactUUID(uuid2)
+      assert(mapSize() === sizeBefore + 1)
+      assert(!factoryValues().exists(_.jobArtifactUUID == uuid2))
+      assert(factoryValues().exists(_.jobArtifactUUID == "default"))
+    } finally {
+      val removeMethod = rawMap.getClass.getMethod("remove", classOf[Object])
+      Seq(key1, key2, keyDefault).foreach { key =>
+        val removed = removeMethod.invoke(rawMap, key)
+        if (removed != null) {
+          removed.asInstanceOf[Option[PythonWorkerFactory]].foreach(_.stop())
+        }
+      }
+    }
+  }
+}

@@ -924,6 +924,16 @@ class SparkSession private(
   private[sql] def cleanupPythonWorkerLogs(): Unit = {
     PythonSQLUtils.cleanupPythonWorkerLogs(sessionUUID, sparkContext)
   }
+
+  /**
+   * Stops and removes all PythonWorkerFactory instances associated with this session's
+   * artifact UUID. Prevents daemon process leaks when Spark Connect sessions are closed.
+   */
+  private[sql] def cleanupPythonWorkers(): Unit = {
+    if (!sparkContext.isStopped) {
+      sparkContext.env.destroyPythonWorkersByArtifactUUID(sessionUUID)
+    }
+  }
 }
 
 

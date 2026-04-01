@@ -118,8 +118,22 @@ private[spark] class PythonWorkerFactory(
   private val maxIdleWorkerPoolSize =
     conf.get(PYTHON_FACTORY_IDLE_WORKER_MAX_POOL_SIZE)
   @GuardedBy("self")
-  private var lastActivityNs = 0L
+  private var lastActivityNs = System.nanoTime()
   new MonitorThread().start()
+
+  private[spark] val jobArtifactUUID: String =
+    envVars.getOrElse("SPARK_JOB_ARTIFACT_UUID", "default")
+
+  /**
+   * Returns true if this factory has a non-default artifact UUID (i.e. it belongs to a
+   * specific Spark Connect session) and has had no activity for longer than the given timeout.
+   */
+  private[spark] def isIdleFactory(timeoutNs: Long): Boolean = self.synchronized {
+    jobArtifactUUID != "default" &&
+      idleWorkers.isEmpty &&
+      daemonWorkers.isEmpty &&
+      (System.nanoTime() - lastActivityNs) > timeoutNs
+  }
 
   @GuardedBy("self")
   private val simpleWorkers = new mutable.WeakHashMap[PythonWorker, Process]()
@@ -543,6 +557,12 @@ private[spark] class PythonWorkerFactory(
 private[spark] object PythonWorkerFactory {
   val PROCESS_WAIT_TIMEOUT_MS = 10000
   val IDLE_WORKER_TIMEOUT_NS = TimeUnit.MINUTES.toNanos(1)  // kill idle workers after 1 minute
+
+  // Timeout for evicting entire PythonWorkerFactory instances that belong to closed
+  // Spark Connect sessions. Factories with a non-default SPARK_JOB_ARTIFACT_UUID that
+  // have been idle for longer than this are stopped and removed from the cache.
+  val IDLE_FACTORY_TIMEOUT_NS = TimeUnit.MINUTES.toNanos(5)
+  val IDLE_FACTORY_CHECK_INTERVAL_MS = 60000L  // check every 60 seconds
 
   private[spark] val defaultDaemonModule = "pyspark.daemon"
 }

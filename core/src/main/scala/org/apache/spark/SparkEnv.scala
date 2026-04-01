@@ -47,7 +47,7 @@ import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManager}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage._
-import org.apache.spark.util.{RpcUtils, Utils}
+import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -120,6 +120,14 @@ class SparkEnv (
       pythonExec: String, workerModule: String, daemonModule: String, envVars: Map[String, String])
   private val pythonWorkers = mutable.HashMap[PythonWorkersKey, PythonWorkerFactory]()
 
+  private val idleFactoryReaper =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("idle-python-factory-reaper")
+  idleFactoryReaper.scheduleAtFixedRate(
+    () => evictIdlePythonWorkerFactories(),
+    PythonWorkerFactory.IDLE_FACTORY_CHECK_INTERVAL_MS,
+    PythonWorkerFactory.IDLE_FACTORY_CHECK_INTERVAL_MS,
+    TimeUnit.MILLISECONDS)
+
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
   private[spark] val hadoopJobMetadata =
@@ -133,6 +141,7 @@ class SparkEnv (
 
     if (!isStopped) {
       isStopped = true
+      idleFactoryReaper.shutdown()
       pythonWorkers.values.foreach(_.stop())
       mapOutputTracker.stop()
       if (shuffleManager != null) {
@@ -242,6 +251,39 @@ class SparkEnv (
       worker: PythonWorker): Unit = {
     releasePythonWorker(
       pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, worker)
+  }
+
+  /**
+   * Stop and remove all [[PythonWorkerFactory]] instances whose environment contains the given
+   * `SPARK_JOB_ARTIFACT_UUID`. This is called when a Spark Connect session closes so that
+   * per-session daemon processes do not leak.
+   */
+  private[spark] def destroyPythonWorkersByArtifactUUID(uuid: String): Unit = {
+    synchronized {
+      val keysToRemove = pythonWorkers.collect {
+        case (key, _) if key.envVars.get("SPARK_JOB_ARTIFACT_UUID").contains(uuid) => key
+      }.toSeq
+      keysToRemove.foreach { key =>
+        pythonWorkers.remove(key).foreach(_.stop())
+      }
+    }
+  }
+
+  /**
+   * Evict [[PythonWorkerFactory]] instances that belong to a specific Spark Connect session
+   * (non-default artifact UUID) and have been idle for longer than the factory idle timeout.
+   * This handles the executor-side cleanup where session close notifications are not received.
+   */
+  private def evictIdlePythonWorkerFactories(): Unit = {
+    synchronized {
+      val keysToRemove = pythonWorkers.collect {
+        case (key, factory) if factory.isIdleFactory(
+          PythonWorkerFactory.IDLE_FACTORY_TIMEOUT_NS) => key
+      }.toSeq
+      keysToRemove.foreach { key =>
+        pythonWorkers.remove(key).foreach(_.stop())
+      }
+    }
   }
 
   private[spark] def initializeShuffleManager(): Unit = {

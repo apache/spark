@@ -418,6 +418,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     // Clean up ML cache (only if ML models were created)
     mlCache.close()
 
+    session.cleanupPythonWorkers()
     session.cleanupPythonWorkerLogs()
 
     eventManager.postClosed()
