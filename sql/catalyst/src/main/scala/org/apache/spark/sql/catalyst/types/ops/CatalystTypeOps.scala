@@ -25,9 +25,9 @@ import org.apache.spark.sql.execution.arrow.ArrowFieldWriter
 import org.apache.spark.sql.types.DataType
 
 /**
- * Optional catalyst-layer type operations for the Types Framework.
+ * Optional Catalyst-layer type operations for the Types Framework.
  *
- * This trait extends TypeOps with operations needed by catalyst-level client infrastructure:
+ * This trait extends TypeOps with operations needed by Catalyst-level client infrastructure:
  * serializer/deserializer expression building (SerializerBuildHelper, DeserializerBuildHelper)
  * and Arrow field writer creation (ArrowWriter).
  *

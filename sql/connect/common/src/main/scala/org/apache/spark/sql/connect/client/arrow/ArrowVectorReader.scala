@@ -38,7 +38,7 @@ import org.apache.spark.util.SparkStringUtils
  * the read methods. If upcasting is allowed for the given vector, then all allowed read methods
  * must be implemented.
  */
-private[arrow] abstract class ArrowVectorReader {
+private[connect] abstract class ArrowVectorReader {
   def isNull(i: Int): Boolean
   def getBoolean(i: Int): Boolean = unsupported()
   def getByte(i: Int): Byte = unsupported()
@@ -71,7 +71,7 @@ object ArrowVectorReader {
       vector: FieldVector,
       timeZoneId: String): ArrowVectorReader =
     ConnectArrowTypeOps(targetDataType)
-      .map(_.createArrowVectorReader(vector).asInstanceOf[ArrowVectorReader])
+      .map(_.createArrowVectorReader(vector))
       .getOrElse(applyDefault(targetDataType, vector, timeZoneId))
 
   private def applyDefault(
@@ -288,7 +288,7 @@ private[arrow] class TimeStampMicroVectorReader(v: TimeStampMicroVector, timeZon
   override def getString(i: Int): String = formatter.format(utcMicros(i))
 }
 
-private[arrow] class TimeVectorReader(v: TimeNanoVector)
+private[connect] class TimeVectorReader(v: TimeNanoVector)
     extends TypedArrowVectorReader[TimeNanoVector](v) {
   private lazy val formatter = TimeFormatter.getFractionFormatter()
   private def nanos(i: Int): Long = vector.get(i)

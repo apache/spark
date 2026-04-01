@@ -57,6 +57,9 @@ trait ProtoTypeOps extends Serializable {
 
   /** Returns a proto DataType inferred from a proto literal (for type inference). */
   def getProtoDataTypeFromLiteral(literal: proto.Expression.Literal): proto.DataType
+
+  /** Converts a proto DataType to a Spark DataType (reverse of toConnectProtoType). */
+  def toCatalystTypeFromProto(t: proto.DataType): DataType
 }
 
 /**
@@ -87,46 +90,39 @@ object ProtoTypeOps {
   }
 
   /**
-   * Reverse lookup: converts a proto DataType to a Spark DataType, if it belongs to a
-   * framework-managed type.
+   * Shared KindCase -> ProtoTypeOps lookup. All reverse lookups by proto enum case
+   * dispatch through this single registration point.
    */
-  def toCatalystType(t: proto.DataType): Option[DataType] = {
-    if (!SqlApiConf.get.typesFrameworkEnabled) return None
-    t.getKindCase match {
-      case proto.DataType.KindCase.TIME =>
-        val time = t.getTime
-        if (time.hasPrecision) Some(TimeType(time.getPrecision))
-        else Some(TimeType())
-      // Add new framework proto kinds here
-      case _ => None
-    }
-  }
-
-  /**
-   * Reverse lookup: returns a Scala converter for a proto literal KindCase.
-   */
-  def getScalaConverterForKind(
-      kindCase: proto.DataType.KindCase): Option[proto.Expression.Literal => Any] = {
+  private def opsForKindCase(
+      kindCase: proto.DataType.KindCase): Option[ProtoTypeOps] = {
     if (!SqlApiConf.get.typesFrameworkEnabled) return None
     kindCase match {
-      case proto.DataType.KindCase.TIME =>
-        Some(new TimeTypeConnectOps(TimeType()).getScalaConverter)
-      // Add new framework proto kinds here
+      case proto.DataType.KindCase.TIME => Some(new TimeTypeConnectOps(TimeType()))
+      // Add new framework proto kinds here - single registration for all KindCase lookups
       case _ => None
     }
   }
 
-  /**
-   * Reverse lookup: returns the proto DataType inferred from a proto literal's type case, if the
-   * literal type belongs to a framework-managed type.
-   */
-  def getProtoDataTypeFromLiteral(literal: proto.Expression.Literal): Option[proto.DataType] = {
-    if (!SqlApiConf.get.typesFrameworkEnabled) return None
-    literal.getLiteralTypeCase match {
-      case proto.Expression.Literal.LiteralTypeCase.TIME =>
-        Some(new TimeTypeConnectOps(TimeType()).getProtoDataTypeFromLiteral(literal))
-      // Add new framework literal types here
-      case _ => None
+  /** Reverse lookup: converts a proto DataType to a Spark DataType. */
+  def toCatalystType(t: proto.DataType): Option[DataType] =
+    opsForKindCase(t.getKindCase).map(_.toCatalystTypeFromProto(t))
+
+  /** Reverse lookup: returns a Scala converter for a proto literal KindCase. */
+  def getScalaConverterForKind(
+      kindCase: proto.DataType.KindCase): Option[proto.Expression.Literal => Any] =
+    opsForKindCase(kindCase).map(_.getScalaConverter)
+
+  /** Reverse lookup: returns the proto DataType inferred from a proto literal. */
+  def getProtoDataTypeFromLiteral(literal: proto.Expression.Literal): Option[proto.DataType] =
+    opsForKindCase(literalCaseToKindCase(literal.getLiteralTypeCase))
+      .map(_.getProtoDataTypeFromLiteral(literal))
+
+  /** Maps LiteralTypeCase to KindCase (1:1 for framework types). */
+  private def literalCaseToKindCase(
+      litCase: proto.Expression.Literal.LiteralTypeCase): proto.DataType.KindCase =
+    litCase match {
+      case proto.Expression.Literal.LiteralTypeCase.TIME => proto.DataType.KindCase.TIME
+      // Add new framework literal-to-kind mappings here
+      case _ => proto.DataType.KindCase.KIND_NOT_SET
     }
-  }
 }

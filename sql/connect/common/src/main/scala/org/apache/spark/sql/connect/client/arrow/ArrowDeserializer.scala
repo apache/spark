@@ -94,7 +94,7 @@ object ArrowDeserializers {
       data: AnyRef,
       timeZoneId: String): Deserializer[Any] =
     ConnectArrowTypeOps(encoder)
-      .map(_.createArrowDeserializer(encoder, data, timeZoneId).asInstanceOf[Deserializer[Any]])
+      .map(_.createArrowDeserializer(encoder, data, timeZoneId))
       .getOrElse(deserializerForDefault(encoder, data, timeZoneId))
 
   private def deserializerForDefault(

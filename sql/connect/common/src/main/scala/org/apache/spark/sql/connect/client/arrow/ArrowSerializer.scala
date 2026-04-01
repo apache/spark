@@ -242,7 +242,7 @@ object ArrowSerializer {
   // TODO throw better errors on class cast exceptions.
   private[arrow] def serializerFor[E](encoder: AgnosticEncoder[E], v: AnyRef): Serializer =
     ConnectArrowTypeOps(encoder)
-      .map(_.createArrowSerializer(v).asInstanceOf[Serializer])
+      .map(_.createArrowSerializer(v))
       .getOrElse(serializerForDefault(encoder, v))
 
   private def serializerForDefault[E](encoder: AgnosticEncoder[E], v: AnyRef): Serializer = {
@@ -568,7 +568,8 @@ object ArrowSerializer {
     def write(index: Int, value: Any): Unit
   }
 
-  private abstract class FieldSerializer[E, V <: FieldVector](val vector: V) extends Serializer {
+  private[connect] abstract class FieldSerializer[E, V <: FieldVector](val vector: V)
+      extends Serializer {
     def set(index: Int, value: E): Unit
 
     override def write(index: Int, raw: Any): Unit = {

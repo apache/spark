@@ -75,10 +75,6 @@ class TimeTypeApiOps(val t: TimeType) extends TypeApiOps with ClientTypeOps {
     new ArrowType.Time(TimeUnit.NANOSECOND, 8 * 8)
   }
 
-  override def getJdbcType: Int = java.sql.Types.TIME
-
-  override def jdbcTypeName: String = "TIME"
-
   override def needConversionInPython: Boolean = true
 
   override def makeFromJava: Any => Any = (obj: Any) =>

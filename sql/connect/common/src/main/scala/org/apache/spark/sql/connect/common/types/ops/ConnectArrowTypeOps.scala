@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.connect.common.types.ops
 
+import org.apache.arrow.vector.FieldVector
+
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.LocalTimeEncoder
+import org.apache.spark.sql.connect.client.arrow.{ArrowDeserializers, ArrowSerializer, ArrowVectorReader}
 import org.apache.spark.sql.connect.client.arrow.types.ops.TimeTypeConnectOps
 import org.apache.spark.sql.types.{DataType, TimeType}
 
@@ -28,12 +31,9 @@ import org.apache.spark.sql.types.{DataType, TimeType}
  * Handles Arrow-based data exchange on the Connect client side for framework-managed types. Used
  * by ArrowSerializer, ArrowDeserializer, and ArrowVectorReader.
  *
- * NOTE: No feature flag check -the Connect client must handle whatever types the server sends.
+ * NOTE: No feature flag check - the Connect client must handle whatever types the server sends.
  * The feature flag controls server-side engine behavior; the client always needs to handle types
  * that exist in the encoder.
- *
- * Methods return Any to avoid referencing arrow-private types from the types.ops package. Call
- * sites in the arrow package cast to the expected types.
  *
  * @since 4.2.0
  */
@@ -41,25 +41,23 @@ trait ConnectArrowTypeOps extends Serializable {
 
   def encoder: AgnosticEncoder[_]
 
-  // Note: Methods use Any parameter/return types because the concrete Arrow types
-  // (ArrowSerializer.Serializer, ArrowDeserializers.Deserializer, ArrowVectorReader) are
-  // private[arrow] and cannot be referenced from the types.ops package. Call sites in
-  // the arrow package cast to the expected types.
+  /** Creates an Arrow serializer for writing values to a vector. */
+  def createArrowSerializer(vector: AnyRef): ArrowSerializer.Serializer
 
-  /** Creates an Arrow serializer for writing values to a vector. Returns a Serializer. */
-  def createArrowSerializer(vector: Any): Any
+  /** Creates an Arrow deserializer for reading values from a vector. */
+  def createArrowDeserializer(
+      enc: AgnosticEncoder[_],
+      vector: FieldVector,
+      timeZoneId: String): ArrowDeserializers.Deserializer[Any]
 
-  /** Creates an Arrow deserializer for reading values from a vector. Returns a Deserializer. */
-  def createArrowDeserializer(enc: AgnosticEncoder[_], vector: Any, timeZoneId: String): Any
-
-  /** Creates an ArrowVectorReader for this type's vector. Returns an ArrowVectorReader. */
-  def createArrowVectorReader(vector: Any): Any
+  /** Creates an ArrowVectorReader for this type's vector. */
+  def createArrowVectorReader(vector: FieldVector): ArrowVectorReader
 }
 
 /**
  * Factory object for ConnectArrowTypeOps lookup.
  *
- * No feature flag check -the Connect client always handles registered types.
+ * No feature flag check - the Connect client always handles registered types.
  */
 object ConnectArrowTypeOps {
 

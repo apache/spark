@@ -26,8 +26,8 @@ import org.apache.spark.sql.types.{DataType, TimeType}
  * Optional client-side type operations for the Types Framework.
  *
  * This trait extends TypeApiOps with operations needed by client-facing infrastructure: Arrow
- * conversion (ArrowUtils), JDBC mapping (JdbcUtils), Python interop (EvaluatePython), Hive
- * formatting (HiveResult), and Thrift type mapping (SparkExecuteStatementOperation).
+ * conversion (ArrowUtils), Python interop (EvaluatePython), Hive formatting (HiveResult), and
+ * Thrift type mapping (SparkExecuteStatementOperation).
  *
  * Lives in sql/api so it's visible from sql/core and sql/hive-thriftserver.
  *
@@ -73,28 +73,6 @@ trait ClientTypeOps { self: TypeApiOps =>
    *   the corresponding ArrowType
    */
   def toArrowType(timeZoneId: String): ArrowType
-
-  // ==================== JDBC Mapping ====================
-
-  /**
-   * Returns the java.sql.Types constant for this type.
-   *
-   * Used by JdbcUtils.getCommonJDBCType for JDBC write path.
-   *
-   * @return
-   *   java.sql.Types constant (e.g., java.sql.Types.TIME)
-   */
-  def getJdbcType: Int
-
-  /**
-   * Returns the DDL type name string for this type.
-   *
-   * Used by JdbcUtils for CREATE TABLE DDL generation.
-   *
-   * @return
-   *   DDL type string (e.g., "TIME")
-   */
-  def jdbcTypeName: String
 
   // ==================== Python Interop ====================
 
