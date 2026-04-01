@@ -1231,9 +1231,11 @@ object SQLConf {
 
   val ADAPTIVE_BROADCAST_JOIN_FALLBACK_TO_SHUFFLE_ENABLED =
     buildConf("spark.sql.adaptive.broadcastJoin.fallbackToShuffle.enabled")
-      .doc("When true, adaptive execution retries with broadcast joins disabled if a broadcast " +
-        "query stage fails because it exceeds broadcast table row or size limits.")
+      .doc("When true, adaptive execution retries with the matching broadcast hash join disabled " +
+        "if its broadcast query stage fails because it exceeds broadcast table row or size " +
+        "limits.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 

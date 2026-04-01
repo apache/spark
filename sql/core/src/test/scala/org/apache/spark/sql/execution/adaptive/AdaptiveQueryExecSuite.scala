@@ -38,7 +38,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{
   Join,
   LogicalPlan,
   NO_BROADCAST_AND_REPLICATION,
-  NO_BROADCAST_HASH
+  NO_BROADCAST_HASH,
+  PREFER_SHUFFLE_HASH,
+  SHUFFLE_HASH,
+  SHUFFLE_MERGE
 }
 import org.apache.spark.sql.catalyst.plans.physical.IdentityBroadcastMode
 import org.apache.spark.sql.classic.Strategy
@@ -697,6 +700,12 @@ class AdaptiveQueryExecSuite
     val broadcastHint = Some(HintInfo(strategy = Some(BROADCAST)))
     val rewrittenBroadcastHint = adaptivePlan.invokePrivate(toNoBroadcastHashHint(broadcastHint))
     assert(rewrittenBroadcastHint.exists(_.strategy.contains(NO_BROADCAST_HASH)))
+
+    Seq(PREFER_SHUFFLE_HASH, SHUFFLE_HASH, SHUFFLE_MERGE).foreach { strategy =>
+      val preservedHint =
+        Some(HintInfo(strategy = Some(strategy)))
+      assert(adaptivePlan.invokePrivate(toNoBroadcastHashHint(preservedHint)) == preservedHint)
+    }
   }
 
   test("Fallback to shuffled join should keep unrelated BHJs after targeted fallback replan") {
@@ -733,6 +742,60 @@ class AdaptiveQueryExecSuite
       val targetedPlan = adaptivePlan.invokePrivate(reOptimize(targetedLogicalPlan)).get._1
 
       assert(findTopLevelBroadcastHashJoin(targetedPlan).nonEmpty)
+      assert(!adaptivePlan.invokePrivate(
+        hasFailedBroadcastRelation(targetedPlan, Seq(failedStage))))
+    }
+  }
+
+  test("Fallback to shuffled join should not disable other broadcasts from same base relation") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+        SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+        SQLConf.ADAPTIVE_BROADCAST_JOIN_FALLBACK_TO_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.PREFER_SORTMERGEJOIN.key -> "true") {
+      val df = sql(
+        "SELECT /*+ BROADCAST(failed_t2), BROADCAST(other_t2) */ failed_t2.failed_b, " +
+          "other_t2.other_a " +
+          "FROM testData t1 " +
+          "JOIN (SELECT a AS failed_a, b AS failed_b FROM testData2 WHERE a > 1) failed_t2 " +
+          "ON t1.key = failed_t2.failed_a " +
+          "JOIN (SELECT a AS other_a FROM testData2 WHERE a <= 2) other_t2 " +
+          "ON t1.key = other_t2.other_a")
+      val adaptivePlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      val logicalPlan = adaptivePlan.inputPlan.logicalLink.get
+
+      val reOptimize =
+        PrivateMethod[Option[(SparkPlan, LogicalPlan)]](Symbol("reOptimize"))
+      val hasFailedBroadcastRelation =
+        PrivateMethod[Boolean](Symbol("hasFailedBroadcastRelation"))
+      val addNoBroadcastHashHintsForFailedRelations =
+        PrivateMethod[LogicalPlan](Symbol("addNoBroadcastHashHintsForFailedRelations"))
+
+      val failedExchange = BroadcastExchangeExec(
+        IdentityBroadcastMode,
+        sql("SELECT a AS failed_a, b AS failed_b FROM testData2 WHERE a > 1")
+          .queryExecution.sparkPlan)
+      val failedStage = BroadcastQueryStageExec(0, failedExchange, failedExchange.canonicalized)
+
+      val targetedLogicalPlan = adaptivePlan.invokePrivate(
+        addNoBroadcastHashHintsForFailedRelations(logicalPlan, Seq(failedStage)))
+      val joins = targetedLogicalPlan.collect { case join: Join => join }
+      val targetedPlan = adaptivePlan.invokePrivate(reOptimize(targetedLogicalPlan)).get._1
+      val finalBhjs = findTopLevelBroadcastHashJoin(targetedPlan)
+      val finalSmjs = findTopLevelSortMergeJoin(targetedPlan)
+      val broadcastBuildOutput = finalBhjs.headOption.map { bhj =>
+        bhj.buildSide match {
+          case BuildLeft => bhj.left.output.map(_.name)
+          case BuildRight => bhj.right.output.map(_.name)
+        }
+      }.getOrElse(Nil)
+
+      assert(joins.count(_.hint.rightHint.exists(_.strategy.contains(NO_BROADCAST_HASH))) == 1)
+      assert(joins.count(_.hint.rightHint.exists(_.strategy.contains(BROADCAST))) == 1)
+      assert(finalBhjs.size == 1, s"$targetedPlan")
+      assert(broadcastBuildOutput.contains("other_a"), s"$targetedPlan")
+      assert(finalSmjs.size == 1, s"$targetedPlan")
       assert(!adaptivePlan.invokePrivate(
         hasFailedBroadcastRelation(targetedPlan, Seq(failedStage))))
     }
@@ -777,73 +840,174 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("Fallback to shuffled join should recognize broadcast limit failures") {
+  test("Fallback to shuffled join should keep unrelated BHJ for nested failed branch replan") {
+    withTempView("fallback_t1", "fallback_t2", "fallback_t3") {
+      spark.range(0, 100).selectExpr("id AS k").createOrReplaceTempView("fallback_t1")
+      spark.range(0, 50)
+        .selectExpr("id AS k", "repeat('x', 2000) AS payload")
+        .createOrReplaceTempView("fallback_t2")
+      spark.range(0, 5)
+        .selectExpr("id AS k", "concat('small_', cast(id AS string)) AS tag")
+        .createOrReplaceTempView("fallback_t3")
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+          SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+          SQLConf.ADAPTIVE_BROADCAST_JOIN_FALLBACK_TO_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.PREFER_SORTMERGEJOIN.key -> "true") {
+        val df = sql(
+          "SELECT /*+ BROADCAST(fallback_t3) */ failed_branch.k, failed_branch.payload, " +
+            "fallback_t3.tag " +
+            "FROM (" +
+            "  SELECT /*+ BROADCAST(fallback_t2) */ fallback_t1.k, fallback_t2.payload " +
+            "  FROM fallback_t1 " +
+            "  JOIN fallback_t2 ON fallback_t1.k = fallback_t2.k" +
+            ") failed_branch " +
+            "JOIN fallback_t3 ON failed_branch.k = fallback_t3.k")
+        val adaptivePlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+        val logicalPlan = adaptivePlan.inputPlan.logicalLink.get
+
+        val reOptimize =
+          PrivateMethod[Option[(SparkPlan, LogicalPlan)]](Symbol("reOptimize"))
+        val addNoBroadcastHashHintsForFailedRelations =
+          PrivateMethod[LogicalPlan](Symbol("addNoBroadcastHashHintsForFailedRelations"))
+        val hasFailedBroadcastRelation =
+          PrivateMethod[Boolean](Symbol("hasFailedBroadcastRelation"))
+
+        val failedBroadcastChild = sql("SELECT k FROM fallback_t2").queryExecution.sparkPlan
+        val failedExchange = adaptivePlan.executedPlan.collectFirst {
+          case exchange: BroadcastExchangeExec if exchange.child.sameResult(failedBroadcastChild) =>
+            exchange
+        }.getOrElse {
+          fail(s"Expected broadcast exchange for fallback_t2 branch:\n${adaptivePlan.executedPlan}")
+        }
+        val failedStage = BroadcastQueryStageExec(0, failedExchange, failedExchange.canonicalized)
+
+        val targetedLogicalPlan = adaptivePlan.invokePrivate(
+          addNoBroadcastHashHintsForFailedRelations(logicalPlan, Seq(failedStage)))
+        val joins = targetedLogicalPlan.collect { case join: Join => join }
+        val targetedPlan = adaptivePlan.invokePrivate(reOptimize(targetedLogicalPlan)).get._1
+        val finalBhjs = findTopLevelBroadcastHashJoin(targetedPlan)
+        val finalSmjs = findTopLevelSortMergeJoin(targetedPlan)
+
+        assert(joins.exists(_.hint.rightHint.exists(_.strategy.contains(NO_BROADCAST_HASH))))
+        assert(joins.exists(_.hint.rightHint.exists(_.strategy.contains(BROADCAST))))
+        assert(finalBhjs.size == 1, s"$targetedPlan")
+        assert(finalBhjs.head.output.exists(_.name == "tag"), s"$targetedPlan")
+        assert(finalSmjs.size == 1, s"$targetedPlan")
+        assert(!adaptivePlan.invokePrivate(
+          hasFailedBroadcastRelation(targetedPlan, Seq(failedStage))))
+      }
+    }
+  }
+
+  test("Fallback to shuffled join should only apply to exclusively broadcast hash join stages") {
     withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.ADAPTIVE_BROADCAST_JOIN_FALLBACK_TO_SHUFFLE_ENABLED.key -> "true") {
-      val qe = sql("SELECT key FROM testData").queryExecution
-      val broadcastInputPlan = BroadcastExchangeExec(IdentityBroadcastMode, qe.sparkPlan)
-      val adaptivePlan = AdaptiveSparkPlanExec(
-        qe.sparkPlan,
-        AdaptiveExecutionContext(spark, qe),
-        Seq.empty,
-        isSubquery = false)
-      val broadcastSubqueryAdaptivePlan = AdaptiveSparkPlanExec(
-        broadcastInputPlan,
-        AdaptiveExecutionContext(spark, qe),
-        Seq.empty,
-        isSubquery = true)
-      val regularSubqueryAdaptivePlan = AdaptiveSparkPlanExec(
-        qe.sparkPlan,
-        AdaptiveExecutionContext(spark, qe),
-        Seq.empty,
-        isSubquery = true)
-      val stage =
-        BroadcastQueryStageExec(0, broadcastInputPlan, broadcastInputPlan.canonicalized)
-      val innerBroadcastPlan =
-        BroadcastExchangeExec(
-          IdentityBroadcastMode,
-          sql("SELECT a FROM testData2").queryExecution.sparkPlan)
-      val innerStage =
-        BroadcastQueryStageExec(1, innerBroadcastPlan, innerBroadcastPlan.canonicalized)
-      val equivalentInnerBroadcastPlan =
-        BroadcastExchangeExec(IdentityBroadcastMode, qe.sparkPlan)
-      val equivalentInnerStage = BroadcastQueryStageExec(
-        2, equivalentInnerBroadcastPlan, equivalentInnerBroadcastPlan.canonicalized)
+      def buildBroadcastStage(join: BaseJoinExec): BroadcastQueryStageExec = {
+        val buildPlan = join match {
+          case bhj: BroadcastHashJoinExec =>
+            bhj.buildSide match {
+              case BuildLeft => bhj.left
+              case BuildRight => bhj.right
+            }
+          case bnlj: BroadcastNestedLoopJoinExec =>
+            bnlj.buildSide match {
+              case BuildLeft => bnlj.left
+              case BuildRight => bnlj.right
+            }
+        }
+        buildPlan.collectFirst { case stage: BroadcastQueryStageExec => stage }
+          .orElse {
+            buildPlan.collectFirst { case exchange: BroadcastExchangeExec =>
+              BroadcastQueryStageExec(0, exchange, exchange.canonicalized)
+            }
+          }.getOrElse {
+            fail(s"Expected broadcast query stage:\n$join")
+        }
+      }
+
+      val bhjDf = sql(
+        "SELECT /*+ BROADCAST(t2) */ * " +
+          "FROM testData t1 JOIN testData2 t2 ON t1.key = t2.a")
+      val bhjAdaptivePlan = bhjDf.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      val bhjStage = buildBroadcastStage(findTopLevelBroadcastHashJoin(
+        bhjAdaptivePlan.executedPlan).head)
+
+      val bnljDf = sql(
+        "SELECT /*+ BROADCAST(t2) */ * " +
+          "FROM testData t1 JOIN testData2 t2 ON t1.key > t2.a")
+      val bnljAdaptivePlan = bnljDf.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      val bnljStage = buildBroadcastStage(findTopLevelBroadcastNestedLoopJoin(
+        bnljAdaptivePlan.executedPlan).head)
+
       val shouldFallbackToShuffleJoin =
         PrivateMethod[Boolean](Symbol("shouldFallbackToShuffleJoin"))
 
-      assert(adaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
-        stage,
+      assert(bhjAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
+        bhjStage,
         QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(1, 2))))
-      assert(adaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
-        stage,
+      assert(bhjAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
+        bhjStage,
         QueryExecutionErrors.cannotBroadcastTableOverMaxTableRowsError(1, 2))))
-      assert(regularSubqueryAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
-        stage,
+      assert(!bnljAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
+        bnljStage,
         QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(1, 2))))
-      assert(regularSubqueryAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
-        stage,
+      assert(!bnljAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
+        bnljStage,
         QueryExecutionErrors.cannotBroadcastTableOverMaxTableRowsError(1, 2))))
-      // `stage` is a synthetic stage instance, not the stage currently at the plan root.
-      // Only the actual root stage instance is exempt from fallback.
-      assert(broadcastSubqueryAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
-        stage,
+
+      val mixedDf = sql(
+        "SELECT /*+ BROADCAST(eq_t2), BROADCAST(range_t2) */ t1.key " +
+          "FROM testData t1 " +
+          "JOIN (SELECT a FROM testData2) eq_t2 ON t1.key = eq_t2.a " +
+          "JOIN (SELECT a FROM testData2) range_t2 ON t1.key > range_t2.a")
+      val mixedAdaptivePlan =
+        mixedDf.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      val mixedBhjs = findTopLevelBroadcastHashJoin(mixedAdaptivePlan.executedPlan)
+      val mixedBnljs = findTopLevelBroadcastNestedLoopJoin(mixedAdaptivePlan.executedPlan)
+      val mixedBhjStage = buildBroadcastStage(mixedBhjs.head)
+      val mixedBnljStage = buildBroadcastStage(mixedBnljs.head)
+
+      assert(mixedBhjs.size == 1, s"${mixedAdaptivePlan.executedPlan}")
+      assert(mixedBnljs.size == 1, s"${mixedAdaptivePlan.executedPlan}")
+      assert(mixedBhjStage.broadcast ne mixedBnljStage.broadcast,
+        s"${mixedAdaptivePlan.executedPlan}")
+      assert(mixedBhjStage.broadcast.child.sameResult(mixedBnljStage.broadcast.child),
+        s"${mixedAdaptivePlan.executedPlan}")
+      assert(!mixedAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
+        mixedBhjStage,
         QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(1, 2))))
-      assert(broadcastSubqueryAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
-        stage,
+      assert(!mixedAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
+        mixedBhjStage,
         QueryExecutionErrors.cannotBroadcastTableOverMaxTableRowsError(1, 2))))
-      assert(broadcastSubqueryAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
-        innerStage,
+      assert(!mixedAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
+        mixedBnljStage,
         QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(1, 2))))
-      assert(broadcastSubqueryAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
-        innerStage,
+      assert(!mixedAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
+        mixedBnljStage,
         QueryExecutionErrors.cannotBroadcastTableOverMaxTableRowsError(1, 2))))
-      assert(broadcastSubqueryAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
-        equivalentInnerStage,
+
+      val subqueryQe = sql("SELECT key FROM testData").queryExecution
+      val inputPlan = BroadcastExchangeExec(IdentityBroadcastMode, subqueryQe.sparkPlan)
+      inputPlan.setLogicalLink(subqueryQe.optimizedPlan)
+      val subqueryAdaptivePlan = AdaptiveSparkPlanExec(
+        inputPlan,
+        AdaptiveExecutionContext(spark, subqueryQe),
+        Seq.empty,
+        isSubquery = true)
+      val rootStage = subqueryAdaptivePlan.finalPhysicalPlan match {
+        case stage: BroadcastQueryStageExec => stage
+        case plan =>
+          fail(s"Expected root broadcast query stage:\n$plan")
+      }
+
+      assert(!subqueryAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
+        rootStage,
         QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(1, 2))))
-      assert(broadcastSubqueryAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
-        equivalentInnerStage,
+      assert(!subqueryAdaptivePlan.invokePrivate(shouldFallbackToShuffleJoin(
+        rootStage,
         QueryExecutionErrors.cannotBroadcastTableOverMaxTableRowsError(1, 2))))
     }
   }
@@ -900,67 +1064,197 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("Fallback to shuffled join should not disable broadcast joins globally") {
-    withTempView("fallback_t1", "fallback_t2", "fallback_t3") {
+  test("Fallback to shuffled join should recover from runtime broadcast size failure " +
+      "without explicit broadcast hint") {
+    withTempView("fallback_t1", "fallback_t2") {
       spark.range(0, 100).selectExpr("id AS k").createOrReplaceTempView("fallback_t1")
       spark.range(0, 50).selectExpr("id AS k").createOrReplaceTempView("fallback_t2")
-      spark.range(0, 5).selectExpr("id AS k").createOrReplaceTempView("fallback_t3")
       withSQLConf(
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
           SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
           SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
           SQLConf.ADAPTIVE_BROADCAST_JOIN_FALLBACK_TO_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.MAX_BROADCAST_TABLE_SIZE.key -> "1",
           SQLConf.PREFER_SORTMERGEJOIN.key -> "true") {
-        withSQLConf(SQLConf.MAX_BROADCAST_TABLE_SIZE.key -> "1") {
-          val fallbackDf = sql(
-            "SELECT /*+ BROADCAST(fallback_t2) */ COUNT(*) " +
-              "FROM fallback_t1 JOIN fallback_t2 ON fallback_t1.k = fallback_t2.k")
-          checkAnswer(fallbackDf, Row(50))
-          val fallbackFinalPlan = stripAQEPlan(fallbackDf.queryExecution.executedPlan)
-          assert(findTopLevelBroadcastHashJoin(fallbackFinalPlan).isEmpty)
-          assert(findTopLevelSortMergeJoin(fallbackFinalPlan).nonEmpty)
-        }
+        val df = sql(
+          "SELECT COUNT(*) " +
+            "FROM fallback_t1 JOIN fallback_t2 ON fallback_t1.k = fallback_t2.k")
+        val adaptivePlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
 
-        withSQLConf(SQLConf.MAX_BROADCAST_TABLE_SIZE.key -> "10MB") {
-          val broadcastDf = sql(
-            "SELECT /*+ BROADCAST(fallback_t3) */ COUNT(*) " +
-              "FROM fallback_t1 JOIN fallback_t3 ON fallback_t1.k = fallback_t3.k")
-          checkAnswer(broadcastDf, Row(5))
-          val broadcastFinalPlan = stripAQEPlan(broadcastDf.queryExecution.executedPlan)
-          assert(findTopLevelBroadcastHashJoin(broadcastFinalPlan).nonEmpty)
-        }
+        assert(findTopLevelBroadcastHashJoin(adaptivePlan.executedPlan).nonEmpty)
+
+        checkAnswer(df, Row(50))
+
+        val finalPlan = stripAQEPlan(df.queryExecution.executedPlan)
+        assert(findTopLevelBroadcastHashJoin(finalPlan).isEmpty)
+        assert(findTopLevelSortMergeJoin(finalPlan).nonEmpty)
       }
     }
   }
 
-  test("Fallback to shuffled join should preserve unrelated broadcast join in same query") {
+  test("Fallback to shuffled join should not retry mixed BHJ and BNLJ consumers at runtime") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+        SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+        SQLConf.ADAPTIVE_BROADCAST_JOIN_FALLBACK_TO_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.MAX_BROADCAST_TABLE_SIZE.key -> "1") {
+      val df = sql(
+        "SELECT /*+ BROADCAST(eq_t2), BROADCAST(range_t2) */ COUNT(*) " +
+          "FROM testData t1 " +
+          "JOIN (SELECT a FROM testData2) eq_t2 ON t1.key = eq_t2.a " +
+          "JOIN (SELECT a FROM testData2) range_t2 ON t1.key > range_t2.a")
+      val adaptivePlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      val logAppender = new LogAppender("mixed BHJ BNLJ fallback")
+
+      assert(findTopLevelBroadcastHashJoin(adaptivePlan.executedPlan).size == 1)
+      assert(findTopLevelBroadcastNestedLoopJoin(adaptivePlan.executedPlan).size == 1)
+
+      withLogAppender(
+          logAppender,
+          loggerNames = Seq(AdaptiveSparkPlanExec.getClass.getName.dropRight(1)),
+          level = Some(Level.INFO)) {
+        val error = intercept[SparkException] {
+          df.collect()
+        }
+        assert(containsBroadcastLimitError(error), error)
+      }
+
+      assert(!logAppender.loggingEvents.exists { event =>
+        event.getMessage.getFormattedMessage.contains(
+          "retrying adaptive replanning with matching broadcast hash joins disabled")
+      })
+    }
+  }
+
+  test("Fallback to shuffled join should recover from nested failed broadcast branch") {
     withTempView("fallback_t1", "fallback_t2", "fallback_t3") {
+      val widePayload = "x" * 2000
       spark.range(0, 100).selectExpr("id AS k").createOrReplaceTempView("fallback_t1")
       spark.range(0, 50)
-        .selectExpr("id AS k", "repeat('x', 200) AS payload")
+        .selectExpr("id AS k", "repeat('x', 2000) AS payload")
         .createOrReplaceTempView("fallback_t2")
-      spark.range(0, 5).selectExpr("id AS k").createOrReplaceTempView("fallback_t3")
+      spark.range(0, 5)
+        .selectExpr("id AS k", "concat('small_', cast(id AS string)) AS tag")
+        .createOrReplaceTempView("fallback_t3")
       withSQLConf(
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
           SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
           SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
           SQLConf.ADAPTIVE_BROADCAST_JOIN_FALLBACK_TO_SHUFFLE_ENABLED.key -> "true",
-          SQLConf.MAX_BROADCAST_TABLE_SIZE.key -> "1KB",
+          SQLConf.MAX_BROADCAST_TABLE_SIZE.key -> "16KB",
           SQLConf.PREFER_SORTMERGEJOIN.key -> "true") {
         val df = sql(
-          "SELECT /*+ BROADCAST(fallback_t2), BROADCAST(fallback_t3) */ COUNT(*) " +
-            "FROM fallback_t1 " +
-            "JOIN fallback_t2 ON fallback_t1.k = fallback_t2.k " +
-            "JOIN fallback_t3 ON fallback_t1.k = fallback_t3.k")
+          "SELECT /*+ BROADCAST(fallback_t3) */ failed_branch.k, failed_branch.payload, " +
+            "fallback_t3.tag " +
+            "FROM (" +
+            "  SELECT /*+ BROADCAST(fallback_t2) */ fallback_t1.k, fallback_t2.payload " +
+            "  FROM fallback_t1 " +
+            "  JOIN fallback_t2 ON fallback_t1.k = fallback_t2.k" +
+            ") failed_branch " +
+            "JOIN fallback_t3 ON failed_branch.k = fallback_t3.k")
         val adaptivePlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
 
         assert(findTopLevelBroadcastHashJoin(adaptivePlan.executedPlan).size == 2)
 
-        checkAnswer(df, Row(5))
+        val expected = (0L until 5L).map(i => Row(i, widePayload, s"small_$i"))
+        checkAnswer(df, expected)
 
         val finalPlan = stripAQEPlan(df.queryExecution.executedPlan)
-        assert(findTopLevelBroadcastHashJoin(finalPlan).size == 1)
-        assert(findTopLevelSortMergeJoin(finalPlan).nonEmpty)
+        val finalBhjs = findTopLevelBroadcastHashJoin(finalPlan)
+        val finalSmjs = findTopLevelSortMergeJoin(finalPlan)
+
+        assert(findTopLevelBaseJoin(finalPlan).size == 2, s"$finalPlan")
+        assert(finalBhjs.forall(_.output.exists(_.name == "tag")), s"$finalPlan")
+        assert(finalSmjs.nonEmpty, s"$finalPlan")
+        assert(findTopLevelBroadcastNestedLoopJoin(finalPlan).isEmpty, s"$finalPlan")
+      }
+    }
+  }
+
+  test("Fallback to shuffled join should remove equivalent failed broadcast input everywhere") {
+    withTempView("fallback_t1", "fallback_t2") {
+      val largePayload = "x" * 2000
+      spark.range(0, 100).selectExpr("id AS k").createOrReplaceTempView("fallback_t1")
+      spark.range(0, 50)
+        .selectExpr("id AS k", "repeat('x', 2000) AS payload")
+        .createOrReplaceTempView("fallback_t2")
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+          SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+          SQLConf.ADAPTIVE_BROADCAST_JOIN_FALLBACK_TO_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.MAX_BROADCAST_TABLE_SIZE.key -> "16KB",
+          SQLConf.PREFER_SORTMERGEJOIN.key -> "true") {
+        val df = sql(
+          "SELECT /*+ BROADCAST(f2a), BROADCAST(f2b) */ base.k, " +
+            "f2a.payload AS payload_a, f2b.payload AS payload_b " +
+            "FROM (SELECT k FROM fallback_t1 WHERE k < 5) base " +
+            "JOIN fallback_t2 f2a ON base.k = f2a.k " +
+            "JOIN fallback_t2 f2b ON base.k = f2b.k")
+        val adaptivePlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+
+        assert(findTopLevelBroadcastHashJoin(adaptivePlan.executedPlan).size == 2)
+
+        val expected = (0L until 5L).map(i => Row(i, largePayload, largePayload))
+        checkAnswer(df, expected)
+
+        val finalPlan = stripAQEPlan(df.queryExecution.executedPlan)
+        assert(findTopLevelBaseJoin(finalPlan).size == 2, s"$finalPlan")
+        assert(findTopLevelBroadcastHashJoin(finalPlan).isEmpty, s"$finalPlan")
+        assert(findTopLevelSortMergeJoin(finalPlan).nonEmpty, s"$finalPlan")
+        assert(findTopLevelBroadcastNestedLoopJoin(finalPlan).isEmpty, s"$finalPlan")
+      }
+    }
+  }
+
+  test("Fallback to shuffled join should keep other runtime broadcasts from same base relation") {
+    withTempView("fallback_t1", "fallback_t2") {
+      val largePayload = "x" * 9000
+      spark.range(0, 10000).selectExpr("id AS k").createOrReplaceTempView("fallback_t1")
+      spark.range(0, 10000)
+        .selectExpr(
+          "CAST(id AS INT) AS k",
+          "concat(CAST(id AS STRING), repeat('x', 9000)) AS payload")
+        .createOrReplaceTempView("fallback_t2")
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "100MB",
+          SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "100MB",
+          SQLConf.ADAPTIVE_BROADCAST_JOIN_FALLBACK_TO_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.MAX_BROADCAST_TABLE_SIZE.key -> "80MB",
+          SQLConf.PREFER_SORTMERGEJOIN.key -> "true") {
+        val df = sql(
+          "SELECT /*+ BROADCAST(failed_t2) */ base.k, failed_t2.payload " +
+            "FROM (SELECT CAST(k AS INT) AS k FROM fallback_t1 WHERE k < 10000) base " +
+            "JOIN (SELECT k, payload FROM fallback_t2 WHERE k < 10000) failed_t2 " +
+            "ON base.k = failed_t2.k " +
+            "UNION ALL " +
+            "SELECT /*+ BROADCAST(other_t2) */ base.k, other_t2.tag AS payload " +
+            "FROM (SELECT CAST(k AS INT) AS k FROM fallback_t1 WHERE k < 2) base " +
+            "JOIN (" +
+            "  SELECT k, CAST(k AS STRING) AS tag " +
+            "  FROM fallback_t2 WHERE k < 2" +
+            ") other_t2 " +
+            "ON base.k = other_t2.k")
+        val adaptivePlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+
+        assert(findTopLevelBroadcastHashJoin(adaptivePlan.executedPlan).size == 2)
+
+        val expected =
+          (0 until 10000).map(i => Row(i, s"$i$largePayload")) ++
+            (0 until 2).map(i => Row(i, i.toString))
+        checkAnswer(df, expected)
+
+        val finalPlan = stripAQEPlan(df.queryExecution.executedPlan)
+        val finalBhjs = findTopLevelBroadcastHashJoin(finalPlan)
+        val finalSmjs = findTopLevelSortMergeJoin(finalPlan)
+
+        assert(findTopLevelBaseJoin(finalPlan).size == 2, s"$finalPlan")
+        assert(finalBhjs.size == 1, s"$finalPlan")
+        assert(finalBhjs.head.output.exists(_.name == "tag"), s"$finalPlan")
+        assert(finalSmjs.size == 1, s"$finalPlan")
+        assert(findTopLevelBroadcastNestedLoopJoin(finalPlan).isEmpty, s"$finalPlan")
       }
     }
   }
@@ -1017,36 +1311,49 @@ class AdaptiveQueryExecSuite
       hasFailedBroadcastRelation(sameExchange, Seq.empty[BroadcastQueryStageExec])))
   }
 
-  test("Fallback to shuffled join should persist failed broadcast relation across iterations") {
+  test("Fallback to shuffled join should ignore stale equivalent broadcast stage failures") {
     val qe = sql("SELECT key FROM testData").queryExecution
     val adaptivePlan = AdaptiveSparkPlanExec(
       qe.sparkPlan,
       AdaptiveExecutionContext(spark, qe),
       Seq.empty,
       isSubquery = false)
-    val registerFailedBroadcastStage =
-      PrivateMethod[Unit](Symbol("registerFailedBroadcastStage"))
-    val hasFailedBroadcastRelation =
-      PrivateMethod[Boolean](Symbol("hasFailedBroadcastRelation"))
+    val shouldIgnoreStaleBroadcastStageFailure =
+      PrivateMethod[Boolean](Symbol("shouldIgnoreStaleBroadcastStageFailure"))
 
-    val failedStages = new scala.collection.mutable.ArrayBuffer[BroadcastQueryStageExec]()
-    val failedExchange1 = BroadcastExchangeExec(
+    val failedExchange = BroadcastExchangeExec(
       IdentityBroadcastMode, sql("SELECT a FROM testData2").queryExecution.sparkPlan)
-    val failedStage1 = BroadcastQueryStageExec(0, failedExchange1, failedExchange1.canonicalized)
-    adaptivePlan.invokePrivate(registerFailedBroadcastStage(failedStages, failedStage1))
+    val failedStage = BroadcastQueryStageExec(0, failedExchange, failedExchange.canonicalized)
 
-    // Equivalent failed relation from a later iteration should be deduplicated.
-    val failedExchange2 = BroadcastExchangeExec(
+    val equivalentExchange = BroadcastExchangeExec(
       IdentityBroadcastMode, sql("SELECT a FROM testData2").queryExecution.sparkPlan)
-    val failedStage2 = BroadcastQueryStageExec(1, failedExchange2, failedExchange2.canonicalized)
-    adaptivePlan.invokePrivate(registerFailedBroadcastStage(failedStages, failedStage2))
+    val equivalentStage =
+      BroadcastQueryStageExec(1, equivalentExchange, equivalentExchange.canonicalized)
 
-    assert(failedStages.size == 1)
+    val otherExchange = BroadcastExchangeExec(
+      IdentityBroadcastMode, sql("SELECT key FROM testData").queryExecution.sparkPlan)
+    val otherStage = BroadcastQueryStageExec(2, otherExchange, otherExchange.canonicalized)
 
-    val sameExchange = BroadcastExchangeExec(
-      IdentityBroadcastMode, sql("SELECT a FROM testData2").queryExecution.sparkPlan)
     assert(adaptivePlan.invokePrivate(
-      hasFailedBroadcastRelation(sameExchange, failedStages.toSeq)))
+      shouldIgnoreStaleBroadcastStageFailure(
+        equivalentStage,
+        QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(1, 2),
+        Seq(failedStage))))
+    assert(adaptivePlan.invokePrivate(
+      shouldIgnoreStaleBroadcastStageFailure(
+        equivalentStage,
+        QueryExecutionErrors.cannotBroadcastTableOverMaxTableRowsError(1, 2),
+        Seq(failedStage))))
+    assert(!adaptivePlan.invokePrivate(
+      shouldIgnoreStaleBroadcastStageFailure(
+        otherStage,
+        QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(1, 2),
+        Seq(failedStage))))
+    assert(!adaptivePlan.invokePrivate(
+      shouldIgnoreStaleBroadcastStageFailure(
+        equivalentStage,
+        new SparkException("non-broadcast-limit failure"),
+        Seq(failedStage))))
   }
 
   test("Fallback to shuffled join should remove equivalent failed broadcast stages") {
@@ -1114,6 +1421,28 @@ class AdaptiveQueryExecSuite
 
     assert(remainingLogicalStages.size == 1)
     assert(remainingLogicalStages.head.physicalPlan.eq(otherStage))
+  }
+
+  private def containsBroadcastLimitError(error: Throwable): Boolean = {
+    val errors = new scala.collection.mutable.ArrayDeque[Throwable]()
+    if (error != null) {
+      errors.append(error)
+    }
+    while (errors.nonEmpty) {
+      val current = errors.removeHead()
+      if (current.isInstanceOf[org.apache.spark.SparkThrowable] &&
+          (current.asInstanceOf[org.apache.spark.SparkThrowable]
+            .getCondition == "_LEGACY_ERROR_TEMP_2248" ||
+            current.asInstanceOf[org.apache.spark.SparkThrowable]
+              .getCondition == "_LEGACY_ERROR_TEMP_2249")) {
+        return true
+      }
+      if (current.getCause != null) {
+        errors.append(current.getCause)
+      }
+      errors.appendAll(current.getSuppressed)
+    }
+    false
   }
 
   test("Union/Except/Intersect queries") {
