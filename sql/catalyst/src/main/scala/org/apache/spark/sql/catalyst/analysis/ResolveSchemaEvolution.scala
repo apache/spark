@@ -161,16 +161,25 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
 
       case (ArrayType(currentElementType, _), ArrayType(newElementType, _)) =>
         computeSchemaChanges(
-          currentElementType, newElementType,
-          fieldPath :+ "element", isByName, error)
+          currentElementType,
+          newElementType,
+          fieldPath :+ "element",
+          isByName,
+          error)
 
       case (MapType(currentKeyType, currentValueType, _), MapType(newKeyType, newValueType, _)) =>
         val keyChanges = computeSchemaChanges(
-          currentKeyType, newKeyType,
-          fieldPath :+ "key", isByName, error)
+          currentKeyType,
+          newKeyType,
+          fieldPath :+ "key",
+          isByName,
+          error)
         val valueChanges = computeSchemaChanges(
-          currentValueType, newValueType,
-          fieldPath :+ "value", isByName, error)
+          currentValueType,
+          newValueType,
+          fieldPath :+ "value",
+          isByName,
+          error)
         keyChanges ++ valueChanges
 
       case (currentType: AtomicType, newType: AtomicType) if currentType != newType =>
@@ -201,7 +210,7 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
       currentFields: Array[StructField],
       newFields: Array[StructField],
       fieldPath: List[String],
-      onIncompatible: => Nothing): Array[TableChange] = {
+      error: => Nothing): Array[TableChange] = {
     val currentFieldMap = toFieldMap(currentFields)
     val newFieldMap = toFieldMap(newFields)
 
@@ -210,8 +219,11 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
       .filter(f => newFieldMap.contains(f.name))
       .flatMap { f =>
         computeSchemaChanges(
-          f.dataType, newFieldMap(f.name).dataType,
-          fieldPath :+ f.name, isByName = true, onIncompatible)
+          f.dataType,
+          newFieldMap(f.name).dataType,
+          fieldPath :+ f.name,
+          isByName = true,
+          error)
       }
 
     // Collect newly added fields
@@ -233,12 +245,15 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
       currentFields: Array[StructField],
       newFields: Array[StructField],
       fieldPath: List[String],
-      onIncompatible: => Nothing): Array[TableChange] = {
+      error: => Nothing): Array[TableChange] = {
     // Update existing field types by pairing fields at the same position.
     val updates = currentFields.zip(newFields).flatMap { case (currentField, newField) =>
       computeSchemaChanges(
-        currentField.dataType, newField.dataType,
-        fieldPath :+ currentField.name, isByName = false, onIncompatible)
+        currentField.dataType,
+        newField.dataType,
+        fieldPath :+ currentField.name,
+        isByName = false,
+        error)
     }
 
     // Extra source fields beyond the target's field count are new additions.
