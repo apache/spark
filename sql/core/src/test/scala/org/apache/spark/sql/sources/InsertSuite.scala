@@ -1026,7 +1026,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
           sqlState = "0A000",
           parameters = Map(
-            "tableName" -> "`default`.`test_table`",
+            "tableName" -> "`spark_catalog`.`default`.`test_table`",
             "operation" -> "INSERT INTO ... REPLACE ON/USING")
         )
       }
