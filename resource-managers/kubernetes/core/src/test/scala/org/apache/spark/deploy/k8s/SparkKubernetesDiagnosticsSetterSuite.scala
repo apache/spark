@@ -20,7 +20,6 @@ import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
 import io.fabric8.kubernetes.client.dsl.base.PatchContext
-import org.apache.hadoop.util.StringUtils
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
@@ -31,6 +30,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants.EXIT_EXCEPTION_ANNOTATION
 import org.apache.spark.deploy.k8s.Fabric8Aliases.PODS
+import org.apache.spark.util.Utils
 
 class SparkKubernetesDiagnosticsSetterSuite extends SparkFunSuite
   with MockitoSugar with BeforeAndAfterEach {
@@ -78,6 +78,6 @@ class SparkKubernetesDiagnosticsSetterSuite extends SparkFunSuite
     verify(driverPodOperations).patch(any(classOf[PatchContext]), podCaptor.capture())
 
     assert(podCaptor.getValue.getMetadata.getAnnotations.get(EXIT_EXCEPTION_ANNOTATION)
-      == StringUtils.stringifyException(diagnostics))
+      == Utils.stringifyException(diagnostics))
   }
 }

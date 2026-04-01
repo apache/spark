@@ -228,7 +228,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 DROP VIEW IF EXISTS csvTable
 -- !query analysis
-DropTempViewCommand csvTable
+DropTempViewCommand csvTable, true
 
 
 -- !query

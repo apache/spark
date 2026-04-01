@@ -292,6 +292,16 @@ object StateStoreErrors {
     new StateStoreCheckpointIdsNotSupported(msg)
   }
 
+  def stateStoreBaseCheckpointIdMismatch(
+      batchVersion: Long,
+      partitionId: Int,
+      operatorId: Long,
+      expectedBaseId: String,
+      actualBaseId: String): StateStoreBaseCheckpointIdMismatch = {
+    new StateStoreBaseCheckpointIdMismatch(
+      batchVersion, partitionId, operatorId, expectedBaseId, actualBaseId)
+  }
+
   def unknownInternalColumnFamily(colFamilyName: String):
       StateStoreUnknownInternalColumnFamily = {
     new StateStoreUnknownInternalColumnFamily(colFamilyName)
@@ -647,3 +657,20 @@ class StateStoreUnknownInternalColumnFamily(colFamilyName: String)
   extends SparkRuntimeException(
     errorClass = "STATE_STORE_UNKNOWN_INTERNAL_COLUMN_FAMILY",
     messageParameters = Map("colFamilyName" -> colFamilyName))
+
+class StateStoreBaseCheckpointIdMismatch(
+    batchVersion: Long,
+    partitionId: Int,
+    operatorId: Long,
+    expectedBaseId: String,
+    actualBaseId: String)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_BASE_CHECKPOINT_ID_MISMATCH",
+    messageParameters = Map(
+      "batchVersion" -> batchVersion.toString,
+      "partitionId" -> partitionId.toString,
+      "operatorId" -> operatorId.toString,
+      "expectedBaseId" -> expectedBaseId,
+      "actualBaseId" -> actualBaseId
+    )
+  )

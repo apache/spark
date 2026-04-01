@@ -21,11 +21,7 @@ import org.scalactic.source.Position
 import org.scalatest.Tag
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.catalyst.{
-  ExtendedAnalysisException,
-  QueryPlanningTracker,
-  TableIdentifier
-}
+import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{
   AnalysisContext,
   Analyzer,
@@ -42,31 +38,34 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder}
 
-class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
-  private val col1Integer = AttributeReference("col1", IntegerType)()
-  private val col2Integer = AttributeReference("col2", IntegerType)()
-  private val col2IntegerWithMetadata = AttributeReference(
+/**
+ * Base trait for HybridAnalyzer test suites containing common test utilities and helper classes.
+ */
+trait HybridAnalyzerSuiteBase extends QueryTest with SharedSparkSession {
+  protected val col1Integer = AttributeReference("col1", IntegerType)()
+  protected val col2Integer = AttributeReference("col2", IntegerType)()
+  protected val col2IntegerWithMetadata = AttributeReference(
     "col2",
     IntegerType,
     metadata = (new MetadataBuilder).putString("comment", "this is an integer").build()
   )()
-  private val unresolvedPlan: LogicalPlan = {
+  protected val unresolvedPlan: LogicalPlan = {
     Project(
       Seq(UnresolvedStar(None)),
       LocalRelation(col1Integer)
     )
   }
-  private val malformedUnresolvedPlan: LogicalPlan =
+  protected val malformedUnresolvedPlan: LogicalPlan =
     Project(
       Seq(UnresolvedAttribute("nonexistent_col")),
       LocalRelation(col1Integer)
     )
-  private val resolvedPlan =
+  protected val resolvedPlan =
     Project(
       Seq(col1Integer),
       LocalRelation(Seq(col1Integer))
     )
-  private val malformedResolvedPlan: LogicalPlan =
+  protected val malformedResolvedPlan: LogicalPlan =
     Project(
       Seq(col1Integer),
       Project(
@@ -75,11 +74,11 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
       )
     )
 
-  private def validateSinglePassResolverBridgeState(bridgeRelations: Boolean): Unit = {
+  protected def validateSinglePassResolverBridgeState(bridgeRelations: Boolean): Unit = {
     assert(bridgeRelations == AnalysisContext.get.getSinglePassResolverBridgeState.isDefined)
   }
 
-  private class BrokenResolver(ex: Throwable, bridgeRelations: Boolean)
+  protected class BrokenResolver(ex: Throwable, bridgeRelations: Boolean = false)
       extends Resolver(spark.sessionState.catalogManager) {
     override def lookupMetadataAndResolve(
         plan: LogicalPlan,
@@ -89,14 +88,23 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  private class BrokenResolverGuard(catalogManager: CatalogManager)
+  protected class BrokenResolverGuard(catalogManager: CatalogManager)
       extends ResolverGuard(catalogManager) {
-    override def apply(plan: LogicalPlan): Boolean = {
+    override def apply(plan: LogicalPlan): ResolverGuardResult = {
       throw new Exception("Broken resolver guard")
     }
   }
 
-  private class ValidatingResolver(bridgeRelations: Boolean)
+  protected class RestrictiveResolverGuard(
+      catalogManager: CatalogManager,
+      reason: String = "test restriction")
+      extends ResolverGuard(catalogManager) {
+    override def apply(plan: LogicalPlan): ResolverGuardResult = {
+      ResolverGuardResult(Some(reason))
+    }
+  }
+
+  protected class ValidatingResolver(bridgeRelations: Boolean)
       extends Resolver(spark.sessionState.catalogManager) {
     override def lookupMetadataAndResolve(
         plan: LogicalPlan,
@@ -106,7 +114,7 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  private class HardCodedResolver(resolvedPlan: LogicalPlan, bridgeRelations: Boolean)
+  protected class HardCodedResolver(resolvedPlan: LogicalPlan, bridgeRelations: Boolean)
       extends Resolver(spark.sessionState.catalogManager) {
     override def lookupMetadataAndResolve(
         plan: LogicalPlan,
@@ -116,7 +124,7 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  private class ValidatingAnalyzer(bridgeRelations: Boolean)
+  protected class ValidatingAnalyzer(bridgeRelations: Boolean)
       extends Analyzer(spark.sessionState.catalogManager) {
     override def executeAndTrack(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
       validateSinglePassResolverBridgeState(bridgeRelations)
@@ -124,7 +132,7 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  private class BrokenAnalyzer(ex: Throwable, bridgeRelations: Boolean)
+  protected class BrokenAnalyzer(ex: Throwable, bridgeRelations: Boolean)
       extends Analyzer(spark.sessionState.catalogManager) {
     override def executeAndTrack(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
       validateSinglePassResolverBridgeState(bridgeRelations)
@@ -132,7 +140,7 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  private class CustomAnalyzer(customCode: () => Unit, bridgeRelations: Boolean)
+  protected class CustomAnalyzer(customCode: () => Unit, bridgeRelations: Boolean)
       extends Analyzer(spark.sessionState.catalogManager) {
     override def executeAndTrack(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
       validateSinglePassResolverBridgeState(bridgeRelations)
@@ -141,70 +149,93 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  private class HybridAnalyzerWithBrokenPlanNormalization(
+  protected class HybridAnalyzerWithBrokenPlanNormalization(
       legacyAnalyzer: Analyzer,
       resolverGuard: ResolverGuard,
-      resolver: Resolver)
+      resolver: Resolver,
+      tracker: QueryPlanningTracker)
       extends HybridAnalyzer(
         legacyAnalyzer = legacyAnalyzer,
         resolverGuard = resolverGuard,
         resolver = resolver,
-        tracker = new QueryPlanningTracker
+        tracker = tracker
       ) {
     override protected[sql] def normalizePlan(plan: LogicalPlan): LogicalPlan = {
       throw new Exception("Broken plan normalization")
     }
   }
 
-  private class BrokenCheckRule extends (LogicalPlan => Unit) {
+  protected class BrokenCheckRule extends (LogicalPlan => Unit) {
     def apply(plan: LogicalPlan): Unit = {
       throw new Exception("Extended resolution check failed")
     }
   }
 
-  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)(
+  protected def testDualRun(testName: String, testTags: Tag*)(testFun: => Any)(
       implicit pos: Position): Unit = {
-    super.test(testName) {
+    super.test(s"Dual run: $testName") {
       withSQLConf(
-        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "true"
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "true",
+        SQLConf.ANALYZER_DUAL_RUN_SAMPLE_RATE.key -> "1.0",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_EXPOSE_RESOLVER_GUARD_FAILURE.key -> "true"
       ) {
         testFun
       }
     }
   }
 
-  test("Both fixed-point and single-pass analyzers pass") {
+  protected def assertPlansEqual(actualPlan: LogicalPlan, expectedPlan: LogicalPlan) = {
+    assert(actualPlan.analyzed)
+    assert(NormalizePlan(actualPlan) == NormalizePlan(expectedPlan))
+  }
+}
+
+class HybridAnalyzerSuite extends HybridAnalyzerSuiteBase {
+
+  testDualRun("Both fixed-point and single-pass analyzers pass") {
+    val tracker = new QueryPlanningTracker
     assertPlansEqual(
       new HybridAnalyzer(
         new ValidatingAnalyzer(bridgeRelations = true),
         new ResolverGuard(spark.sessionState.catalogManager),
         new ValidatingResolver(bridgeRelations = true),
-        new QueryPlanningTracker
+        tracker
       ).apply(unresolvedPlan),
       resolvedPlan
     )
   }
 
-  test("Fixed-point analyzer passes, single-pass analyzer fails") {
+  testDualRun("Fixed-point analyzer passes, single-pass analyzer fails") {
+    val tracker = new QueryPlanningTracker
+    val error = intercept[ExtendedAnalysisException](
+      new HybridAnalyzer(
+        new ValidatingAnalyzer(bridgeRelations = true),
+        new ResolverGuard(spark.sessionState.catalogManager),
+        new BrokenResolver(
+          QueryCompilationErrors.unsupportedSinglePassAnalyzerFeature("test"),
+          bridgeRelations = true
+        ),
+        tracker
+      ).apply(unresolvedPlan)
+    )
+
     checkError(
-      exception = intercept[AnalysisException](
-        new HybridAnalyzer(
-          new ValidatingAnalyzer(bridgeRelations = true),
-          new ResolverGuard(spark.sessionState.catalogManager),
-          new BrokenResolver(
-            QueryCompilationErrors.unsupportedSinglePassAnalyzerFeature("test"),
-            bridgeRelations = true
-          ),
-          new QueryPlanningTracker
-        ).apply(unresolvedPlan)
-      ),
+      exception = error,
+      condition = "HYBRID_ANALYZER_EXCEPTION.SINGLE_PASS_FAILED_FIXED_POINT_SUCCEEDED",
+      parameters =
+        Map("fixedPointOutput" -> resolvedPlan.toString)
+    )
+    checkError(
+      exception = error.cause.get.asInstanceOf[AnalysisException],
       condition = "UNSUPPORTED_SINGLE_PASS_ANALYZER_FEATURE",
       parameters = Map("feature" -> "test")
     )
   }
 
-  test("Fixed-point analyzer passes, single-pass analyzer fails with Stack Overflow") {
-    intercept[StackOverflowError](
+  testDualRun("Fixed-point analyzer passes, single-pass analyzer fails with Stack Overflow") {
+    val tracker = new QueryPlanningTracker
+    val error = intercept[ExtendedAnalysisException](
       new HybridAnalyzer(
         new ValidatingAnalyzer(bridgeRelations = true),
         new ResolverGuard(spark.sessionState.catalogManager),
@@ -212,19 +243,28 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
           new StackOverflowError("Stack Overflow"),
           bridgeRelations = true
         ),
-        new QueryPlanningTracker
+        tracker
       ).apply(unresolvedPlan)
     )
+
+    checkError(
+      exception = error,
+      condition = "HYBRID_ANALYZER_EXCEPTION.SINGLE_PASS_FAILED_FIXED_POINT_SUCCEEDED",
+      parameters =
+        Map("fixedPointOutput" -> resolvedPlan.toString)
+    )
+    assert(error.cause.get.isInstanceOf[StackOverflowError])
   }
 
-  test("Fixed-point analyzer fails, single-pass analyzer passes") {
+  testDualRun("Fixed-point analyzer fails, single-pass analyzer passes") {
+    val tracker = new QueryPlanningTracker
     checkError(
       exception = intercept[AnalysisException](
         new HybridAnalyzer(
           new ValidatingAnalyzer(bridgeRelations = true),
           new ResolverGuard(spark.sessionState.catalogManager),
-          new HardCodedResolver(resolvedPlan, bridgeRelations = true),
-          new QueryPlanningTracker
+            new HardCodedResolver(resolvedPlan, bridgeRelations = true),
+          tracker
         ).apply(malformedUnresolvedPlan)
       ),
       condition = "HYBRID_ANALYZER_EXCEPTION.FIXED_POINT_FAILED_SINGLE_PASS_SUCCEEDED",
@@ -232,14 +272,15 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("Both fixed-point and single-pass analyzers fail") {
+  testDualRun("Both fixed-point and single-pass analyzers fail") {
+    val tracker = new QueryPlanningTracker
     checkError(
       exception = intercept[ExtendedAnalysisException](
         new HybridAnalyzer(
           new ValidatingAnalyzer(bridgeRelations = true),
           new ResolverGuard(spark.sessionState.catalogManager),
-          new ValidatingResolver(bridgeRelations = true),
-          new QueryPlanningTracker
+            new ValidatingResolver(bridgeRelations = true),
+          tracker
         ).apply(malformedUnresolvedPlan)
       ),
       condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
@@ -250,25 +291,8 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("Plan mismatch") {
-    checkError(
-      exception = intercept[AnalysisException](
-        new HybridAnalyzer(
-          new ValidatingAnalyzer(bridgeRelations = true),
-          new ResolverGuard(spark.sessionState.catalogManager),
-          new HardCodedResolver(malformedResolvedPlan, bridgeRelations = true),
-          new QueryPlanningTracker
-        ).apply(unresolvedPlan)
-      ),
-      condition = "HYBRID_ANALYZER_EXCEPTION.LOGICAL_PLAN_COMPARISON_MISMATCH",
-      parameters = Map(
-        "singlePassOutput" -> malformedResolvedPlan.toString,
-        "fixedPointOutput" -> resolvedPlan.toString
-      )
-    )
-  }
-
-  test("Missing metadata in output schema") {
+  testDualRun("Missing metadata in output schema") {
+    val tracker = new QueryPlanningTracker
     val plan: LogicalPlan =
       Project(
         Seq(UnresolvedAttribute("col2")),
@@ -284,8 +308,8 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
         new HybridAnalyzer(
           new ValidatingAnalyzer(bridgeRelations = true),
           new ResolverGuard(spark.sessionState.catalogManager),
-          new HardCodedResolver(resolvedPlan, bridgeRelations = true),
-          new QueryPlanningTracker
+            new HardCodedResolver(resolvedPlan, bridgeRelations = true),
+          tracker
         ).apply(plan)
       ),
       condition = "HYBRID_ANALYZER_EXCEPTION.OUTPUT_SCHEMA_COMPARISON_MISMATCH",
@@ -296,17 +320,49 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("Broken plan normalization") {
+  testDualRun("Broken plan normalization") {
+    val tracker = new QueryPlanningTracker
     intercept[Exception] {
       new HybridAnalyzerWithBrokenPlanNormalization(
         new ValidatingAnalyzer(bridgeRelations = true),
         new ResolverGuard(spark.sessionState.catalogManager),
-        new HardCodedResolver(resolvedPlan, bridgeRelations = true)
+        new HardCodedResolver(resolvedPlan, bridgeRelations = true),
+        tracker
       ).apply(unresolvedPlan)
     }
   }
 
-  test("Explicitly unsupported resolver feature") {
+  testDualRun("Broken resolver guard") {
+    val tracker = new QueryPlanningTracker
+    intercept[Exception] {
+      new HybridAnalyzer(
+        new ValidatingAnalyzer(bridgeRelations = true),
+        new BrokenResolverGuard(spark.sessionState.catalogManager),
+        new HardCodedResolver(resolvedPlan, bridgeRelations = true),
+        tracker
+      ).apply(unresolvedPlan)
+    }
+  }
+
+  testDualRun("Broken resolver guard - failure not exposed") {
+    withSQLConf(
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_EXPOSE_RESOLVER_GUARD_FAILURE.key -> "false"
+    ) {
+      val tracker = new QueryPlanningTracker
+      assertPlansEqual(
+        new HybridAnalyzer(
+          new ValidatingAnalyzer(bridgeRelations = false),
+          new BrokenResolverGuard(spark.sessionState.catalogManager),
+            new HardCodedResolver(resolvedPlan, bridgeRelations = false),
+          tracker
+        ).apply(unresolvedPlan),
+        resolvedPlan
+      )
+    }
+  }
+
+  testDualRun("Explicitly unsupported resolver feature") {
+    val tracker = new QueryPlanningTracker
     assertPlansEqual(
       new HybridAnalyzer(
         new ValidatingAnalyzer(bridgeRelations = true),
@@ -315,7 +371,7 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
           new ExplicitlyUnsupportedResolverFeature("FAILURE"),
           bridgeRelations = true
         ),
-        new QueryPlanningTracker
+        tracker
       ).apply(unresolvedPlan),
       resolvedPlan
     )
@@ -330,18 +386,20 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
       Seq(col1Integer),
       LocalRelation(Seq(col1Integer))
     )
+    val tracker = new QueryPlanningTracker
     assertPlansEqual(
       withSQLConf(
-        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false"
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false"
       ) {
         new HybridAnalyzer(
           new ValidatingAnalyzer(bridgeRelations = false),
           new ResolverGuard(spark.sessionState.catalogManager),
-          new BrokenResolver(
+            new BrokenResolver(
             new Exception("Single-pass resolver should not be invoked"),
             bridgeRelations = false
           ),
-          new QueryPlanningTracker
+          tracker
         ).apply(plan)
       },
       resolvedPlan
@@ -357,9 +415,11 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
       Seq(col1Integer),
       LocalRelation(Seq(col1Integer))
     )
+    val tracker = new QueryPlanningTracker
     assertPlansEqual(
       withSQLConf(
         SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
         SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true"
       ) {
         new HybridAnalyzer(
@@ -368,15 +428,15 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
             bridgeRelations = false
           ),
           new ResolverGuard(spark.sessionState.catalogManager),
-          new ValidatingResolver(bridgeRelations = false),
-          new QueryPlanningTracker
+            new ValidatingResolver(bridgeRelations = false),
+          tracker
         ).apply(plan)
       },
       resolvedPlan
     )
   }
 
-  test("Nested invocations") {
+  testDualRun("Nested invocations") {
     val plan = Project(
       Seq(UnresolvedStar(None)),
       LocalRelation(col1Integer)
@@ -387,9 +447,11 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
     )
 
     val nestedAnalysis = () => {
+      val nestedTracker = new QueryPlanningTracker
       assertPlansEqual(
         withSQLConf(
           SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
           SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true"
         ) {
           new HybridAnalyzer(
@@ -398,14 +460,15 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
               bridgeRelations = false
             ),
             new ResolverGuard(spark.sessionState.catalogManager),
-            new ValidatingResolver(bridgeRelations = false),
-            new QueryPlanningTracker
+                new ValidatingResolver(bridgeRelations = false),
+            nestedTracker
           ).apply(plan)
         },
         resolvedPlan
       )
     }
 
+    val tracker = new QueryPlanningTracker
     assertPlansEqual(
       new HybridAnalyzer(
         new CustomAnalyzer(
@@ -414,13 +477,13 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
         ),
         new ResolverGuard(spark.sessionState.catalogManager),
         new ValidatingResolver(bridgeRelations = true),
-        new QueryPlanningTracker
+        tracker
       ).apply(plan),
       resolvedPlan
     )
   }
 
-  test("Extended resolution checks are enabled/disabled") {
+  testDualRun("Extended resolution checks are enabled/disabled") {
     val plan: LogicalPlan = {
       Project(
         Seq(UnresolvedStar(None)),
@@ -433,12 +496,13 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
         LocalRelation(Seq(col1Integer))
       )
 
+    val tracker1 = new QueryPlanningTracker
     intercept[Exception] {
       new HybridAnalyzer(
         legacyAnalyzer = new ValidatingAnalyzer(bridgeRelations = true),
         resolverGuard = new ResolverGuard(spark.sessionState.catalogManager),
         resolver = new ValidatingResolver(bridgeRelations = true),
-        tracker = new QueryPlanningTracker,
+        tracker = tracker1,
         extendedResolutionChecks = Seq(new BrokenCheckRule)
       ).apply(plan)
     }
@@ -446,12 +510,13 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
     withSQLConf(
       SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_RUN_EXTENDED_RESOLUTION_CHECKS.key -> "false"
     ) {
+      val tracker2 = new QueryPlanningTracker
       assertPlansEqual(
         new HybridAnalyzer(
           legacyAnalyzer = new ValidatingAnalyzer(bridgeRelations = true),
           resolverGuard = new ResolverGuard(spark.sessionState.catalogManager),
           resolver = new ValidatingResolver(bridgeRelations = true),
-          tracker = new QueryPlanningTracker,
+          tracker = tracker2,
           extendedResolutionChecks = Seq(new BrokenCheckRule)
         ).apply(plan),
         resolvedPlan
@@ -459,43 +524,66 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("Tentative mode conf is not stored during view creation when explicitly set") {
-    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "true") {
-      validateConfStoredInView(
-        conf = SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key,
-        shouldStore = false
-      )
+  testDualRun("Extended resolution checks invocation count in dual-run mode") {
+    var singlePassCheckCounter = 0
+
+    val singlePassCounterCheckRule = new (LogicalPlan => Unit) {
+      def apply(plan: LogicalPlan): Unit = {
+        singlePassCheckCounter += 1
+      }
     }
+
+    val tracker = new QueryPlanningTracker
+    assertPlansEqual(
+      new HybridAnalyzer(
+        legacyAnalyzer = new ValidatingAnalyzer(bridgeRelations = true),
+        resolverGuard = new ResolverGuard(spark.sessionState.catalogManager),
+        resolver = new ValidatingResolver(bridgeRelations = true),
+        tracker = tracker,
+        extendedResolutionChecks = Seq(singlePassCounterCheckRule)
+      ).apply(unresolvedPlan),
+      resolvedPlan
+    )
+
+    assert(
+      singlePassCheckCounter == 1,
+      s"Expected check to be invoked 1 time, but was invoked $singlePassCheckCounter times"
+    )
   }
 
-  test("Dual-run mode conf is not stored during view creation when explicitly set") {
-    withSQLConf(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "true") {
-      validateConfStoredInView(
-        conf = SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key,
-        shouldStore = false
-      )
+  test("Extended resolution checks invocation count in single-pass only mode") {
+    var checkCounter = 0
+
+    val counterCheckRule = new (LogicalPlan => Unit) {
+      def apply(plan: LogicalPlan): Unit = {
+        checkCounter += 1
+      }
     }
-  }
 
-  test("Single-pass result conf is stored during view creation when explicitly set") {
-    withSQLConf(SQLConf.ANALYZER_DUAL_RUN_RETURN_SINGLE_PASS_RESULT.key -> "true") {
-      validateConfStoredInView(
-        conf = SQLConf.ANALYZER_DUAL_RUN_RETURN_SINGLE_PASS_RESULT.key,
-        shouldStore = true
-      )
-    }
-  }
+    val tracker = new QueryPlanningTracker
+    assertPlansEqual(
+      withSQLConf(
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true"
+      ) {
+        new HybridAnalyzer(
+          legacyAnalyzer = new BrokenAnalyzer(
+            new Exception("Fixed-point analyzer should not be invoked"),
+            bridgeRelations = false
+          ),
+          resolverGuard = new ResolverGuard(spark.sessionState.catalogManager),
+          resolver = new ValidatingResolver(bridgeRelations = false),
+          tracker = tracker,
+          extendedResolutionChecks = Seq(counterCheckRule)
+        ).apply(unresolvedPlan)
+      },
+      resolvedPlan
+    )
 
-  private def assertPlansEqual(actualPlan: LogicalPlan, expectedPlan: LogicalPlan) = {
-    assert(NormalizePlan(actualPlan) == NormalizePlan(expectedPlan))
-  }
-
-  private def validateConfStoredInView(conf: String, shouldStore: Boolean): Unit = {
-    withView("v1") {
-      sql("CREATE VIEW v1 AS SELECT 1")
-
-      val viewMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier("v1"))
-      assert(viewMetadata.properties.contains(s"view.sqlConfig.$conf") == shouldStore)
-    }
+    assert(
+      checkCounter == 1,
+      s"Expected check to be invoked 1 time, but was invoked $checkCounter times"
+    )
   }
 }

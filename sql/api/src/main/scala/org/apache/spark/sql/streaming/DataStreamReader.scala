@@ -120,6 +120,24 @@ abstract class DataStreamReader {
   def load(path: String): DataFrame
 
   /**
+   * Returns the row-level changes (Change Data Capture) from the specified table as a streaming
+   * `DataFrame`. Currently this API is only supported for Data Source V2 tables whose catalog
+   * implements `TableCatalog.loadChangelog()`.
+   *
+   * Use `.option()` to specify the starting version/timestamp and processing options:
+   * {{{
+   *   spark.readStream
+   *     .option("startingVersion", "10")
+   *     .changes("my_table")
+   * }}}
+   *
+   * @param tableName
+   *   a qualified or unqualified name that designates a table.
+   * @since 4.2.0
+   */
+  def changes(tableName: String): DataFrame
+
+  /**
    * Loads a JSON file stream and returns the results as a `DataFrame`.
    *
    * <a href="http://jsonlines.org/">JSON Lines</a> (newline-delimited JSON) is supported by

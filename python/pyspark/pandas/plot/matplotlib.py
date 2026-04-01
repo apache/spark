@@ -203,7 +203,7 @@ class PandasOnSparkBoxPlot(PandasBoxPlot, BoxPlotBase):
                 for stats, ci in zip(bxpstats, conf_intervals):
                     if ci is not None:
                         if len(ci) != 2:
-                            raise ValueError("each confidence interval must " "have two values")
+                            raise ValueError("each confidence interval must have two values")
                         else:
                             if ci[0] is not None:
                                 stats["cilo"] = ci[0]

@@ -166,8 +166,7 @@ class SQLContext:
         cls: Type["SQLContext"], sc: "SparkContext", **static_conf: Any
     ) -> "SQLContext":
         if (
-            cls._instantiatedContext is None
-            or SQLContext._instantiatedContext._sc._jsc is None  # type: ignore[union-attr]
+            cls._instantiatedContext is None or SQLContext._instantiatedContext._sc._jsc is None  # type: ignore[union-attr]
         ):
             assert sc._jvm is not None
             # There can be only one running Spark context. That will automatically

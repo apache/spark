@@ -195,7 +195,7 @@ class _PyArrowCastTestBase(GoldenFileTestMixin, unittest.TestCase):
                         expected = golden.loc[row_name, col_name]
                     if expected != result:
                         errors.append(
-                            f"{row_name} -> {col_name}: " f"expected '{expected}', got '{result}'"
+                            f"{row_name} -> {col_name}: expected '{expected}', got '{result}'"
                         )
 
         if generating:

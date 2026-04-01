@@ -124,6 +124,8 @@ You use SQL scripting to execute procedural logic in SQL.
  * [RESET](sql-ref-syntax-aux-conf-mgmt-reset.html)
  * [SET](sql-ref-syntax-aux-conf-mgmt-set.html)
  * [SET VAR](sql-ref-syntax-aux-set-var.html)
+ * [SHOW CACHED TABLES](sql-ref-syntax-aux-show-cached-tables.html)
+ * [SHOW COLLATIONS](sql-ref-syntax-aux-show-collations.html)
  * [SHOW COLUMNS](sql-ref-syntax-aux-show-columns.html)
  * [SHOW CREATE TABLE](sql-ref-syntax-aux-show-create-table.html)
  * [SHOW DATABASES](sql-ref-syntax-aux-show-databases.html)

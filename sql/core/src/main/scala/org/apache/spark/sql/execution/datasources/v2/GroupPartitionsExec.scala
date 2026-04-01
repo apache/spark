@@ -25,7 +25,7 @@ import org.apache.spark.rdd.{CoalescedRDD, PartitionCoalescer, PartitionGroup, R
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, Partitioning}
-import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
+import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.types.DataType
@@ -141,7 +141,7 @@ case class GroupPartitionsExec(
       )(keyedPartitioning.projectKeys)
 
     // Reduce keys if reducers are specified
-    val reducedKeys = reducers.fold(projectedKeys)(
+    val (reducedDataTypes, reducedKeys) = reducers.fold((projectedDataTypes, projectedKeys))(
       KeyedPartitioning.reduceKeys(projectedKeys, projectedDataTypes, _))
 
     val keyToPartitionIndices = reducedKeys.zipWithIndex.groupMap(_._1)(_._2)
@@ -149,7 +149,7 @@ case class GroupPartitionsExec(
     if (expectedPartitionKeys.isDefined) {
       alignToExpectedKeys(keyToPartitionIndices)
     } else {
-      (groupAndSortByKeys(keyToPartitionIndices, projectedDataTypes), true)
+      (groupAndSortByKeys(keyToPartitionIndices, reducedDataTypes), true)
     }
   }
 
@@ -184,22 +184,55 @@ case class GroupPartitionsExec(
     copy(child = newChild)
 
   override def outputOrdering: Seq[SortOrder] = {
-    // when multiple partitions are grouped together, ordering inside partitions is not preserved
     if (groupedPartitions.forall(_._2.size <= 1)) {
+      // No coalescing: each output partition is exactly one input partition. The child's
+      // within-partition ordering is fully preserved (including any key-derived ordering that
+      // `DataSourceV2ScanExecBase` already prepended).
       child.outputOrdering
     } else {
-      super.outputOrdering
+      // Coalescing: multiple input partitions are merged into one output partition. The child's
+      // within-partition ordering is lost due to concatenation -- for example, if two input
+      // partitions both share key=A and hold rows (A,1),(A,3) and (A,2),(A,5) respectively (each
+      // sorted ascending by the data column), concatenating them yields (A,1),(A,3),(A,2),(A,5)
+      // which is no longer sorted by the data column. Only sort orders over partition key
+      // expressions remain valid -- they evaluate to the same value (A) in every merged partition.
+      outputPartitioning match {
+        case p: Partitioning with Expression
+            if reducers.isEmpty && conf.v2BucketingPreserveKeyOrderingOnCoalesceEnabled =>
+          // Without reducers all merged partitions share the same original key value, so the key
+          // expressions remain constant within the output partition. The child's outputOrdering
+          // should already be in sync with the partitioning (either reported by the source or
+          // derived from it in DataSourceV2ScanExecBase), so we only need to keep the sort orders
+          // whose expression is a partition key expression -- all others are lost by concatenation.
+          val keyedPartitionings = p.collect { case k: KeyedPartitioning => k }
+          val keyExprs = ExpressionSet(keyedPartitionings.flatMap(_.expressions))
+          child.outputOrdering.filter(order => keyExprs.contains(order.child))
+        case _ =>
+          // With reducers, merged partitions share only the reduced key, not the original key
+          // expressions, which can take different values within the output partition.
+          super.outputOrdering
+      }
     }
   }
 
   override def simpleString(maxFields: Int): String = {
-    val joinKeyPositionsString =
-      joinKeyPositions.map(p => s" JoinKeyPositions: ${p.mkString("[", ",", "]")}").getOrElse("")
-    val expectedPartitionKeysString =
-      expectedPartitionKeys.map(ks => s" ExpectedPartitionKeys: ${ks.size}").getOrElse("")
-    val reducersString = reducers.map(r => s" Reducers: ${r.count(_.isDefined)}").getOrElse("")
-    s"$nodeName$joinKeyPositionsString$expectedPartitionKeysString$reducersString " +
-      s"DistributePartitions: $distributePartitions"
+    s"$nodeName${planSummaryParts(maxFields).map(" " + _).mkString("")}"
+  }
+
+  override protected def stringArgs: Iterator[Any] = planSummaryParts(Int.MaxValue)
+
+  private def planSummaryParts(joinKeyMaxFields: Int): Iterator[String] = {
+    val joinKeyStr = joinKeyPositions.map { p =>
+      s"JoinKeyPositions: ${truncatedString(p, "[", ", ", "]", joinKeyMaxFields)}"
+    }.iterator
+    val expectedStr = expectedPartitionKeys.map(ks => s"ExpectedPartitionKeys: ${ks.size}")
+    val reducersStr = reducers.map { seq =>
+      val names = seq.map(_.map(_.displayName()).getOrElse("identity"))
+      s"Reducers: ${truncatedString(names, "[", ", ", "]", joinKeyMaxFields)}"
+    }
+    val distributeStr = Iterator(s"DistributePartitions: $distributePartitions")
+    joinKeyStr ++ expectedStr ++ reducersStr ++ distributeStr
+
   }
 }
 

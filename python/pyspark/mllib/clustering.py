@@ -1020,12 +1020,10 @@ class StreamingKMeans:
     def _validate(self, dstream: Any) -> None:
         if self._model is None:
             raise ValueError(
-                "Initial centers should be set either by setInitialCenters " "or setRandomCenters."
+                "Initial centers should be set either by setInitialCenters or setRandomCenters."
             )
         if not isinstance(dstream, DStream):
-            raise TypeError(
-                "Expected dstream to be of type DStream, " "got type %s" % type(dstream)
-            )
+            raise TypeError("Expected dstream to be of type DStream, got type %s" % type(dstream))
 
     @since("1.5.0")
     def setK(self, k: int) -> "StreamingKMeans":

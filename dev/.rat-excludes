@@ -35,7 +35,6 @@ vis-timeline-graph2d.min.css
 dataTables.bootstrap5.min.css
 dataTables.bootstrap5.min.js
 dataTables.rowsGroup.js
-jquery.cookies.2.2.0.min.js
 jquery.dataTables.min.css
 jquery.dataTables.min.js
 .*\.avsc

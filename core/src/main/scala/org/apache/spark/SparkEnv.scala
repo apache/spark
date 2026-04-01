@@ -248,7 +248,7 @@ class SparkEnv (
     Preconditions.checkState(null == _shuffleManager,
       "Shuffle manager already initialized to %s", _shuffleManager)
     try {
-      _shuffleManager = ShuffleManager.create(conf, executorId == SparkContext.DRIVER_IDENTIFIER)
+      _shuffleManager = ShuffleManager.create(conf, SparkContext.isDriver(executorId))
     } finally {
       // Signal that the ShuffleManager has been initialized
       shuffleManagerInitLatch.countDown()
@@ -356,7 +356,7 @@ object SparkEnv extends Logging {
       listenerBus: LiveListenerBus = null,
       mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
 
-    val isDriver = executorId == SparkContext.DRIVER_IDENTIFIER
+    val isDriver = SparkContext.isDriver(executorId)
 
     // Listener bus is only used on the driver
     if (isDriver) {

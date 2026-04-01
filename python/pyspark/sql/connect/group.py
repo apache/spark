@@ -228,21 +228,33 @@ class GroupedData:
 
         if not isinstance(pivot_col, str):
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "pivot_col", "arg_type": type(pivot_col).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "pivot_col",
+                    "expected_type": "str",
+                    "arg_type": type(pivot_col).__name__,
+                },
             )
 
         if values is not None:
             if not isinstance(values, list):
                 raise PySparkTypeError(
-                    errorClass="NOT_LIST",
-                    messageParameters={"arg_name": "values", "arg_type": type(values).__name__},
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "expected_type": "list",
+                        "arg_name": "values",
+                        "arg_type": type(values).__name__,
+                    },
                 )
             for v in values:
                 if not isinstance(v, (bool, float, int, str)):
                     raise PySparkTypeError(
-                        errorClass="NOT_BOOL_OR_FLOAT_OR_INT_OR_STR",
-                        messageParameters={"arg_name": "value", "arg_type": type(v).__name__},
+                        errorClass="NOT_EXPECTED_TYPE",
+                        messageParameters={
+                            "expected_type": "bool, float, int or str",
+                            "arg_name": "value",
+                            "arg_type": type(v).__name__,
+                        },
                     )
 
         return GroupedData(

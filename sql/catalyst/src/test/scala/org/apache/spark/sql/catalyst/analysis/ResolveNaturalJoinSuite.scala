@@ -154,4 +154,21 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
       checkAnalysis(usingPlan, expected, caseSensitive = false)
     }
   }
+
+  test("natural join with a case insensitive analyzer") {
+    val aUpper = $"A".string
+    val r1Upper = LocalRelation(b, aUpper)
+    val naturalPlan = r1Upper.join(r2, NaturalJoin(Inner), None)
+    val expected = r1Upper.join(r2, Inner, Some(EqualTo(aUpper, a))).select(aUpper, b, c)
+    checkAnalysis(naturalPlan, expected, caseSensitive = false)
+  }
+
+  test("natural join with a case sensitive analyzer") {
+    val aUpper = $"A".string
+    val r1Upper = LocalRelation(b, aUpper)
+    // "A" and "a" should not match when case sensitive, resulting in a cross join
+    val naturalPlan = r1Upper.join(r2, NaturalJoin(Inner), None)
+    val expected = r1Upper.join(r2, Inner, None).select(b, aUpper, c, a)
+    checkAnalysis(naturalPlan, expected, caseSensitive = true)
+  }
 }

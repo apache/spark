@@ -411,7 +411,8 @@ class SparkContext:
 
         # see http://stackoverflow.com/questions/23206787/
         if isinstance(
-            threading.current_thread(), threading._MainThread  # type: ignore[attr-defined]
+            threading.current_thread(),
+            threading._MainThread,  # type: ignore[attr-defined]
         ):
             signal.signal(signal.SIGINT, signal_handler)
 
@@ -857,7 +858,8 @@ class SparkContext:
         if "__len__" not in dir(c):
             c = list(c)  # Make it a list so we can compute its length
         batchSize = max(
-            1, min(len(c) // numSlices, self._batchSize or 1024)  # type: ignore[arg-type]
+            1,
+            min(len(c) // numSlices, self._batchSize or 1024),  # type: ignore[arg-type]
         )
         serializer = BatchedSerializer(self._unbatched_serializer, batchSize)
 

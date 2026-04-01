@@ -1270,8 +1270,7 @@ class _LDAParams(HasMaxIter, HasFeaturesCol, HasSeed, HasCheckpointInterval):
     optimizer: Param[str] = Param(
         Params._dummy(),
         "optimizer",
-        "Optimizer or inference algorithm used to estimate the LDA model.  "
-        "Supported: online, em",
+        "Optimizer or inference algorithm used to estimate the LDA model.  Supported: online, em",
         typeConverter=TypeConverters.toString,
     )
     learningOffset: Param[float] = Param(

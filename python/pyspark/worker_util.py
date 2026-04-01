@@ -28,9 +28,9 @@ from typing import Any, Generator, IO, Optional
 import warnings
 
 if "SPARK_TESTING" in os.environ:
-    assert (
-        os.environ.get("SPARK_PYTHON_RUNTIME") == "PYTHON_WORKER"
-    ), "This module can only be imported in python woker"
+    assert os.environ.get("SPARK_PYTHON_RUNTIME") == "PYTHON_WORKER", (
+        "This module can only be imported in python woker"
+    )
 
 # 'resource' is a Unix specific module.
 has_resource_module = True

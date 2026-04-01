@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, d3, dagreD3, graphlibDot, uiRoot, appBasePath, sorttable */
+/* global $, d3, dagreD3, graphlibDot, uiRoot, appBasePath, sorttable, showToast */
 
 var PlanVizConstants = {
   svgMarginX: 16,
@@ -439,7 +439,18 @@ function updateDetailsPanel(nodeId, nodeDetails) {
   var showStageTask = document.getElementById("stageId-and-taskId-checkbox")
     && document.getElementById("stageId-and-taskId-checkbox").checked;
 
+  var totalMetrics = (details.metrics ? details.metrics.length : 0) +
+    (details.children || []).reduce(function (sum, childId) {
+      var child = nodeDetails[childId];
+      return sum + (child && child.metrics ? child.metrics.length : 0);
+    }, 0);
+
   var html = "";
+  // Add search box when there are many metrics
+  if (totalMetrics > 5) {
+    html += '<input type="text" id="metric-search" class="form-control form-control-sm mb-2" ' +
+      'placeholder="Filter metrics...">';
+  }
   if (details.metrics && details.metrics.length > 0) {
     html += buildMetricsTable(details.metrics, showStageTask, true);
   } else if (!details.children) {
@@ -466,6 +477,18 @@ function updateDetailsPanel(nodeId, nodeDetails) {
   if (typeof sorttable !== "undefined") {
     bodyEl.querySelectorAll("table.sortable").forEach(function (table) {
       sorttable.makeSortable(table);
+    });
+  }
+
+  // Wire up metric search/filter
+  var searchBox = document.getElementById("metric-search");
+  if (searchBox) {
+    searchBox.addEventListener("input", function () {
+      var query = this.value.toLowerCase();
+      bodyEl.querySelectorAll("table tbody tr").forEach(function (row) {
+        var metricName = row.cells[0] ? row.cells[0].textContent.toLowerCase() : "";
+        row.style.display = metricName.indexOf(query) >= 0 ? "" : "none";
+      });
     });
   }
 }
@@ -675,6 +698,32 @@ function rerenderWithDetailedLabels() {
 document.addEventListener("DOMContentLoaded", function () {
   if (shouldRenderPlanViz()) {
     renderPlanViz();
+  }
+
+  // Copy physical plan text to clipboard
+  var copyPlanBtn = document.getElementById("copy-plan-btn");
+  if (copyPlanBtn) {
+    copyPlanBtn.addEventListener("click", function () {
+      var planEl = document.getElementById("physical-plan-details");
+      var text = planEl ? planEl.textContent : "";
+      navigator.clipboard.writeText(text.trim()).then(function () {
+        if (typeof showToast === "function") {
+          showToast("Plan copied to clipboard", "success");
+        }
+      });
+    });
+  }
+
+  // Copy shareable link to clipboard
+  var copyLinkBtn = document.getElementById("copy-link-btn");
+  if (copyLinkBtn) {
+    copyLinkBtn.addEventListener("click", function () {
+      navigator.clipboard.writeText(window.location.href).then(function () {
+        if (typeof showToast === "function") {
+          showToast("Link copied to clipboard", "success");
+        }
+      });
+    });
   }
 });
 

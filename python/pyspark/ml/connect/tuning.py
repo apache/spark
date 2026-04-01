@@ -203,14 +203,10 @@ class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
 
     def _save_meta_algorithm(self, root_path: str, node_path: List[str]) -> Dict[str, Any]:
         metadata = self._get_metadata_to_save()
-        metadata[
-            "estimator"
-        ] = self.getEstimator()._save_to_node_path(  # type: ignore[attr-defined]
+        metadata["estimator"] = self.getEstimator()._save_to_node_path(  # type: ignore[attr-defined]
             root_path, node_path + ["crossvalidator_estimator"]
         )
-        metadata[
-            "evaluator"
-        ] = self.getEvaluator()._save_to_node_path(  # type: ignore[attr-defined]
+        metadata["evaluator"] = self.getEvaluator()._save_to_node_path(  # type: ignore[attr-defined]
             root_path, node_path + ["crossvalidator_evaluator"]
         )
         metadata["estimator_param_maps"] = [

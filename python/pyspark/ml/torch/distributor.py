@@ -276,7 +276,8 @@ class Distributor:
                     )
                 )
                 return
-            raise RuntimeError(textwrap.dedent(f"""
+            raise RuntimeError(
+                textwrap.dedent(f"""
                 This cluster has TLS encryption enabled;
                 however, {name} does not support
                 data encryption in transit. To override
@@ -285,7 +286,8 @@ class Distributor:
                 to 'true' in the Spark configuration. Please note this
                 will cause model parameters and possibly training
                 data to be sent between nodes unencrypted.
-                """))
+                """)
+            )
 
 
 class TorchDistributor(Distributor):

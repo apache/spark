@@ -192,6 +192,11 @@ class JSONOptions(
   val pretty: Boolean = parameters.get(PRETTY).map(_.toBoolean).getOrElse(false)
 
   /**
+   * Sorting JSON object keys alphabetically if the parameter is enabled.
+   */
+  val sortKeys: Boolean = parameters.get(SORT_KEYS).map(_.toBoolean).getOrElse(false)
+
+  /**
    * Enables inferring of TimestampType and TimestampNTZType from strings matched to the
    * corresponding timestamp pattern defined by the timestampFormat and timestampNTZFormat options
    * respectively.
@@ -303,6 +308,7 @@ object JSONOptions extends DataSourceOptions {
   val MULTI_LINE = newOption("multiLine")
   val LINE_SEP = newOption("lineSep")
   val PRETTY = newOption("pretty")
+  val SORT_KEYS = newOption("sortKeys")
   val INFER_TIMESTAMP = newOption("inferTimestamp")
   val COLUMN_NAME_OF_CORRUPT_RECORD = newOption(DataSourceOptions.COLUMN_NAME_OF_CORRUPT_RECORD)
   val TIME_ZONE = newOption("timeZone")

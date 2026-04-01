@@ -678,3 +678,17 @@ Project [k#x, v1#x, k#x, v2#x, k#x, v3#x, k#x, v4#x]
                +- Project [k#x, v4#x]
                   +- SubqueryAlias nt4
                      +- LocalRelation [k#x, v4#x]
+
+
+-- !query
+SELECT * FROM (SELECT 1 AS ID) t1 NATURAL JOIN (SELECT 1 AS id) t2
+-- !query analysis
+Project [ID#x]
++- Project [ID#x]
+   +- Join Inner, (ID#x = id#x)
+      :- SubqueryAlias t1
+      :  +- Project [1 AS ID#x]
+      :     +- OneRowRelation
+      +- SubqueryAlias t2
+         +- Project [1 AS id#x]
+            +- OneRowRelation

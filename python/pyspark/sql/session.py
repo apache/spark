@@ -1219,9 +1219,10 @@ class SparkSession(SparkConversionMixin):
 
         else:
             raise PySparkTypeError(
-                errorClass="NOT_LIST_OR_NONE_OR_STRUCT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "schema",
+                    "expected_type": "list, None or StructType",
                     "arg_type": type(schema).__name__,
                 },
             )
@@ -1261,9 +1262,10 @@ class SparkSession(SparkConversionMixin):
 
         else:
             raise PySparkTypeError(
-                errorClass="NOT_LIST_OR_NONE_OR_STRUCT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "schema",
+                    "expected_type": "list, None or StructType",
                     "arg_type": type(schema).__name__,
                 },
             )
@@ -1645,7 +1647,10 @@ class SparkSession(SparkConversionMixin):
                 data, schema, samplingRatio, verifySchema
             )
         return self._create_dataframe(
-            data, schema, samplingRatio, verifySchema  # type: ignore[arg-type]
+            data,
+            schema,  # type: ignore[arg-type]
+            samplingRatio,
+            verifySchema,
         )
 
     def _create_dataframe(
@@ -1689,7 +1694,8 @@ class SparkSession(SparkConversionMixin):
             rdd, struct = self._createFromRDD(data.map(prepare), schema, samplingRatio)
         else:
             rdd, struct = self._createFromLocal(
-                map(prepare, data), schema  # type: ignore[arg-type]
+                map(prepare, data),  # type: ignore[arg-type]
+                schema,
             )
         assert self._jvm is not None
         jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())
@@ -1697,6 +1703,50 @@ class SparkSession(SparkConversionMixin):
         df = DataFrame(jdf, self)
         df._schema = struct
         return df
+
+    def emptyDataFrame(self, schema: Union[StructType, str]) -> "ParentDataFrame":
+        """Creates an empty :class:`DataFrame` with the specified schema.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        schema : :class:`StructType` or str
+            a :class:`StructType` or a DDL-formatted string that describes the schema.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            An empty DataFrame with the specified schema.
+
+        Examples
+        --------
+        Create an empty DataFrame with a StructType schema.
+
+        >>> from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+        >>> schema = StructType([
+        ...     StructField("name", StringType(), True),
+        ...     StructField("age", IntegerType(), True)
+        ... ])
+        >>> df = spark.emptyDataFrame(schema)
+        >>> df.printSchema()
+        root
+         |-- name: string (nullable = true)
+         |-- age: integer (nullable = true)
+        >>> df.count()
+        0
+
+        Create an empty DataFrame with a DDL-formatted string schema.
+
+        >>> df = spark.emptyDataFrame("name STRING, age INT")
+        >>> df.printSchema()
+        root
+         |-- name: string (nullable = true)
+         |-- age: integer (nullable = true)
+        >>> df.count()
+        0
+        """
+        return self.createDataFrame([], schema)
 
     def sql(
         self, sqlQuery: str, args: Optional[Union[Dict[str, Any], List]] = None, **kwargs: Any
@@ -1900,8 +1950,12 @@ class SparkSession(SparkConversionMixin):
         """
         if not isinstance(tableName, str):
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "tableName", "arg_type": type(tableName).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "tableName",
+                    "expected_type": "str",
+                    "arg_type": type(tableName).__name__,
+                },
             )
 
         return DataFrame(self._jsparkSession.table(tableName), self)

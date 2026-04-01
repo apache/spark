@@ -23,6 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
 
@@ -80,9 +81,14 @@ class SessionStateSuite extends SparkFunSuite {
   test("fork new session and inherit function registry and udf") {
     val testFuncName1 = FunctionIdentifier("strlenScala")
     val testFuncName2 = FunctionIdentifier("addone")
-    // Temporary functions registered via spark.udf.register are stored with database="session"
-    val testFuncName1Qualified = FunctionIdentifier(testFuncName1.funcName, Some("session"))
-    val testFuncName2Qualified = FunctionIdentifier(testFuncName2.funcName, Some("session"))
+    // Temporary functions are stored with catalog=system, database=session (3-part identifier).
+    // The registry requires 3-part for registerFunction/dropFunction/lookupFunction.
+    def tempFuncId(name: String): FunctionIdentifier = FunctionIdentifier(
+      name, Some(CatalogManager.SESSION_NAMESPACE), Some(CatalogManager.SYSTEM_CATALOG_NAME))
+    val testFuncName1Qualified = tempFuncId(testFuncName1.funcName)
+    val testFuncName2Qualified = tempFuncId(testFuncName2.funcName)
+    assert(testFuncName1Qualified.catalog.isDefined && testFuncName1Qualified.database.isDefined,
+      "Registry requires 3-part identifier")
     try {
       activeSession.udf.register(testFuncName1.funcName, (_: String).length + (_: Int))
       val forkedSession = activeSession.cloneSession()

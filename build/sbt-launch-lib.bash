@@ -43,7 +43,8 @@ acquire_sbt_jar () {
   # artifacts from internal repos only.
   # Ex:
   #   DEFAULT_ARTIFACT_REPOSITORY=https://artifacts.internal.com/libs-release/
-  URL1=${DEFAULT_ARTIFACT_REPOSITORY:-https://maven-central.storage-download.googleapis.com/maven2/}org/scala-sbt/sbt-launch/${SBT_VERSION}/sbt-launch-${SBT_VERSION}.jar
+  DEFAULT_ARTIFACT_REPOSITORY=${DEFAULT_ARTIFACT_REPOSITORY:-https://maven-central.storage-download.googleapis.com/maven2/}
+  URL1=${DEFAULT_ARTIFACT_REPOSITORY%/}/org/scala-sbt/sbt-launch/${SBT_VERSION}/sbt-launch-${SBT_VERSION}.jar
   JAR=build/sbt-launch-${SBT_VERSION}.jar
 
   sbt_jar=$JAR

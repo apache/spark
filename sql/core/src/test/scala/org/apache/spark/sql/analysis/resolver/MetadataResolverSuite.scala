@@ -21,7 +21,10 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{
+  AnalysisContext,
+  UnresolvedRelation
+}
 import org.apache.spark.sql.catalyst.analysis.resolver._
 import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}

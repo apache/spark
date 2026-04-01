@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import java.util.ArrayList
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
+import org.apache.spark.sql.catalyst.analysis.resolver.AliasKind._
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression}
 
 /**
  * Base class for lateral column alias registry. This class is extended by 2 implementations:
@@ -30,7 +31,8 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
  *  LCA resolution is disabled by [[SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED]].
  */
 abstract class LateralColumnAliasRegistry {
-  def withNewLcaScope(isTopLevelAlias: Boolean)(body: => Alias): Alias
+  def withNewLcaScope[T <: NamedExpression](
+      aliasKind: AliasKind = AliasKind.Explicit)(body: => T): T
 
   def getAttribute(attributeName: String): Option[Attribute]
 
@@ -39,6 +41,8 @@ abstract class LateralColumnAliasRegistry {
   def markAttributeLaterallyReferenced(attribute: Attribute): Unit
 
   def isAttributeLaterallyReferenced(attribute: Attribute): Boolean
+
+  def getAllLaterallyReferencedAttributes: Seq[Attribute]
 
   protected def throwLcaResolutionNotEnabled(): Nothing = {
     throw SparkException.internalError("Lateral column alias resolution is not enabled.")

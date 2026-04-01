@@ -82,7 +82,6 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
         locationUri = None,
         inputFormat = Some(classOf[TextInputFormat].getName),
         outputFormat = Some(classOf[HiveIgnoreKeyTextOutputFormat[_, _]].getName),
-        serdeName = None,
         serde = Some(classOf[LazySimpleSerDe].getName),
         compressed = false,
         properties = Map.empty
@@ -370,7 +369,6 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
     locationUri = None,
     inputFormat = None,
     outputFormat = None,
-    serdeName = None,
     serde = None,
     compressed = false,
     properties = Map.empty)
@@ -385,7 +383,6 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
         locationUri = None,
         inputFormat = Some(classOf[TextInputFormat].getName),
         outputFormat = Some(classOf[HiveIgnoreKeyTextOutputFormat[_, _]].getName),
-        serdeName = None,
         serde = Some(classOf[LazySimpleSerDe].getName),
         compressed = false,
         properties = Map.empty

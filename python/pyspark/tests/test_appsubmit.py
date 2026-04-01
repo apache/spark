@@ -79,7 +79,8 @@ class SparkSubmitTests(unittest.TestCase):
         group_id, artifact_id, version = artifact_name.split(":")
         self.createTempFile(
             "%s-%s.pom" % (artifact_id, version),
-            ("""
+            (
+                """
             |<?xml version="1.0" encoding="UTF-8"?>
             |<project xmlns="http://maven.apache.org/POM/4.0.0"
             |       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -90,7 +91,9 @@ class SparkSubmitTests(unittest.TestCase):
             |   <artifactId>%s</artifactId>
             |   <version>%s</version>
             |</project>
-            """ % (group_id, artifact_id, version)).lstrip(),
+            """
+                % (group_id, artifact_id, version)
+            ).lstrip(),
             os.path.join(group_id, artifact_id, version),
         )
         self.createFileInZip(

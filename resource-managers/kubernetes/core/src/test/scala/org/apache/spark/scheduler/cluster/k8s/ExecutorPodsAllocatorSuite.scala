@@ -899,7 +899,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     val getReusablePVCs =
       PrivateMethod[mutable.Buffer[PersistentVolumeClaim]](Symbol("getReusablePVCs"))
     when(persistentVolumeClaimList.getItems).thenThrow(new KubernetesClientException("Error"))
-    podsAllocatorUnderTest invokePrivate getReusablePVCs("appId", Seq.empty[String])
+    podsAllocatorUnderTest invokePrivate getReusablePVCs("appId", Set.empty[String])
   }
 
   test("SPARK-41388: getReusablePVCs should ignore recently created PVCs in the previous batch") {
@@ -914,7 +914,8 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     pvc2.getMetadata.setCreationTimestamp(now.toString)
 
     when(persistentVolumeClaimList.getItems).thenReturn(Seq(pvc1, pvc2).asJava)
-    val reusablePVCs = podsAllocatorUnderTest invokePrivate getReusablePVCs("appId", Seq.empty)
+    val reusablePVCs =
+      podsAllocatorUnderTest invokePrivate getReusablePVCs("appId", Set.empty[String])
     assert(reusablePVCs.size == 1)
     assert(reusablePVCs.head.getMetadata.getName == "pvc-1")
   }

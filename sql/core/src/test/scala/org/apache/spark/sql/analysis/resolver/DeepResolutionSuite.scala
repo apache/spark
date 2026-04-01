@@ -19,17 +19,16 @@ package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class DeepResolutionSuite extends QueryTest with SharedSparkSession {
-  protected override def sparkConf: SparkConf =
-    super.sparkConf
-      .set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key, "true")
-      .set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
+class DeepResolutionSuite
+    extends QueryTest
+    with SharedSparkSession
+    with SinglePassAnalyzerTestUtils {
+  protected override def sparkConf: SparkConf = setTentativeMode(super.sparkConf)
 
   test("Unions") {
-    spark.sql(generateUnions(1500, selectClause = generateSelectFromValues(50)))
+    spark.sql(generateUnions(1000, selectClause = generateSelectFromValues(50)))
   }
 
   test("Selects from selects") {

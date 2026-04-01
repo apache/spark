@@ -706,9 +706,7 @@ class TransformWithStateStateVariableTestsMixin:
                     "id AS groupingKey",
                     "map_key.name AS mapKey",
                     "map_value.value.count AS mapValue",
-                ).sort(
-                    "groupingKey"
-                ).collect() == [
+                ).sort("groupingKey").collect() == [
                     Row(groupingKey="0", mapKey="key2", mapValue=2),
                     Row(groupingKey="1", mapKey="key2", mapValue=2),
                 ]
@@ -801,9 +799,7 @@ class TransformWithStateStateVariableTestsMixin:
                     "key.id AS groupingKey", "list_value.temperature AS valueList"
                 ).sort("groupingKey").withColumn(
                     "valueSortedList", array_sort(col("valueList"))
-                ).select(
-                    "groupingKey", "valueSortedList"
-                ).collect() == [
+                ).select("groupingKey", "valueSortedList").collect() == [
                     Row(groupingKey="0", valueSortedList=[20, 20, 120, 120, 222]),
                     Row(groupingKey="1", valueSortedList=[20, 20, 120, 120, 222]),
                 ]

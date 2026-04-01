@@ -35,6 +35,7 @@ BUCKETS	false
 BY	false
 BYTE	false
 CACHE	false
+CACHED	false
 CALL	true
 CALLED	false
 CASCADE	false
@@ -43,6 +44,7 @@ CAST	true
 CATALOG	false
 CATALOGS	false
 CHANGE	false
+CHANGES	false
 CHAR	false
 CHARACTER	false
 CHECK	true
@@ -53,6 +55,7 @@ CLUSTERED	false
 CODEGEN	false
 COLLATE	true
 COLLATION	true
+COLLATIONS	true
 COLLECTION	false
 COLUMN	true
 COLUMNS	false
@@ -120,6 +123,7 @@ EVOLUTION	false
 EXCEPT	true
 EXCHANGE	false
 EXCLUDE	false
+EXCLUSIVE	false
 EXECUTE	true
 EXISTS	false
 EXIT	false
@@ -168,6 +172,7 @@ IMMEDIATE	false
 IMPORT	false
 IN	true
 INCLUDE	false
+INCLUSIVE	false
 INCREMENT	false
 INDEX	false
 INDEXES	false
@@ -428,6 +433,7 @@ CAST
 CHECK
 COLLATE
 COLLATION
+COLLATIONS
 COLUMN
 CONSTRAINT
 CREATE

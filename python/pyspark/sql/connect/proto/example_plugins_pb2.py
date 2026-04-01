@@ -38,6 +38,7 @@ _sym_db = _symbol_database.Default()
 from pyspark.sql.connect.proto import relations_pb2 as spark_dot_connect_dot_relations__pb2
 from pyspark.sql.connect.proto import expressions_pb2 as spark_dot_connect_dot_expressions__pb2
 
+
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
     b'\n#spark/connect/example_plugins.proto\x12\rspark.connect\x1a\x1dspark/connect/relations.proto\x1a\x1fspark/connect/expressions.proto"i\n\x15\x45xamplePluginRelation\x12-\n\x05input\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationR\x05input\x12!\n\x0c\x63ustom_field\x18\x02 \x01(\tR\x0b\x63ustomField"m\n\x17\x45xamplePluginExpression\x12/\n\x05\x63hild\x18\x01 \x01(\x0b\x32\x19.spark.connect.ExpressionR\x05\x63hild\x12!\n\x0c\x63ustom_field\x18\x02 \x01(\tR\x0b\x63ustomField"9\n\x14\x45xamplePluginCommand\x12!\n\x0c\x63ustom_field\x18\x01 \x01(\tR\x0b\x63ustomFieldB6\n\x1eorg.apache.spark.connect.protoP\x01Z\x12internal/generatedb\x06proto3'
 )
@@ -49,9 +50,9 @@ _builder.BuildTopDescriptorsAndMessages(
 )
 if not _descriptor._USE_C_DESCRIPTORS:
     _globals["DESCRIPTOR"]._loaded_options = None
-    _globals["DESCRIPTOR"]._serialized_options = (
-        b"\n\036org.apache.spark.connect.protoP\001Z\022internal/generated"
-    )
+    _globals[
+        "DESCRIPTOR"
+    ]._serialized_options = b"\n\036org.apache.spark.connect.protoP\001Z\022internal/generated"
     _globals["_EXAMPLEPLUGINRELATION"]._serialized_start = 118
     _globals["_EXAMPLEPLUGINRELATION"]._serialized_end = 223
     _globals["_EXAMPLEPLUGINEXPRESSION"]._serialized_start = 225

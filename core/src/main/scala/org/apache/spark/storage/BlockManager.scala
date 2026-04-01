@@ -213,7 +213,7 @@ private[spark] class BlockManager(
 
   // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)`
   private[spark] val externalShuffleServiceEnabled: Boolean = externalBlockStoreClient.isDefined
-  private val isDriver = executorId == SparkContext.DRIVER_IDENTIFIER
+  private val isDriver = SparkContext.isDriver(executorId)
 
   private val remoteReadNioBufferConversion =
     conf.get(Network.NETWORK_REMOTE_READ_NIO_BUFFER_CONVERSION)

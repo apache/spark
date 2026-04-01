@@ -674,9 +674,9 @@ class InternalFrame:
 
         # index_spark_columns
 
-        assert all(
-            isinstance(index_scol, PySparkColumn) for index_scol in index_spark_columns
-        ), index_spark_columns
+        assert all(isinstance(index_scol, PySparkColumn) for index_scol in index_spark_columns), (
+            index_spark_columns
+        )
 
         self._index_spark_columns: List[PySparkColumn] = index_spark_columns
 
@@ -822,9 +822,9 @@ class InternalFrame:
             len(index_spark_columns),
             len(index_names),
         )
-        assert all(
-            is_name_like_tuple(index_name, check_type=True) for index_name in index_names
-        ), index_names
+        assert all(is_name_like_tuple(index_name, check_type=True) for index_name in index_names), (
+            index_names
+        )
 
         self._index_names: List[Optional[Label]] = index_names
 
@@ -894,9 +894,9 @@ class InternalFrame:
         AssertionError: '__index_level_0__' already exists...
         """
         index_column = SPARK_DEFAULT_INDEX_NAME
-        assert (
-            index_column not in sdf.columns
-        ), "'%s' already exists in the Spark column names '%s'" % (index_column, sdf.columns)
+        assert index_column not in sdf.columns, (
+            "'%s' already exists in the Spark column names '%s'" % (index_column, sdf.columns)
+        )
 
         if default_index_type is None:
             default_index_type = ps.get_option("compute.default_index_type")

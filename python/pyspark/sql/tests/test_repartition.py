@@ -36,8 +36,12 @@ class DataFrameRepartitionTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "numPartitions", "arg_type": "list"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "numPartitions",
+                "arg_type": "list",
+            },
         )
 
     def test_repartition_by_range(self):
@@ -79,8 +83,12 @@ class DataFrameRepartitionTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_INT_OR_STR",
-            messageParameters={"arg_name": "numPartitions", "arg_type": "list"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column, int or str",
+                "arg_name": "numPartitions",
+                "arg_type": "list",
+            },
         )
 
     def test_repartition_by_id(self):
@@ -151,8 +159,12 @@ class DataFrameRepartitionTestsMixin:
             df.repartitionById("5", col("id").cast("int"))
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_INT",
-            messageParameters={"arg_name": "numPartitions", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "int",
+                "arg_name": "numPartitions",
+                "arg_type": "str",
+            },
         )
 
         with self.assertRaises(PySparkValueError) as pe:

@@ -2178,6 +2178,15 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         val metricPair = store
           .metrics.customMetrics.find(_._1.name == "rocksdbNumInternalColFamiliesKeys")
         assert(metricPair.isDefined && metricPair.get._2 === 4)
+        // Verify external/internal column family count metrics
+        val externalColFamilyCount = store
+          .metrics.customMetrics.find(_._1.name == "rocksdbNumExternalColumnFamilies")
+        // 2 external col families: default + testColFamily
+        assert(externalColFamilyCount.isDefined && externalColFamilyCount.get._2 === 2)
+        val internalColFamilyCount = store
+          .metrics.customMetrics.find(_._1.name == "rocksdbNumInternalColumnFamilies")
+        // 1 internal col family: $testIndex
+        assert(internalColFamilyCount.isDefined && internalColFamilyCount.get._2 === 1)
         val store1 = provider.getStore(1)
         assert(rowPairsToDataSet(store1.iterator(cfName)) ===
           Set(("a", 0) -> 1, ("b", 0) -> 2, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))

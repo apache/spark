@@ -158,6 +158,55 @@ class ArrowBatchTransformerTests(unittest.TestCase):
         self.assertEqual(wrapped.num_rows, 0)
         self.assertEqual(wrapped.num_columns, 1)
 
+    def test_enforce_schema_nested_cast(self):
+        """Nested struct and list types are cast recursively by Arrow."""
+        import pyarrow as pa
+
+        inner = pa.struct([("a", pa.int32()), ("b", pa.float32())])
+        batch = pa.RecordBatch.from_arrays(
+            [
+                pa.array([{"a": 1, "b": 2.0}], type=inner),
+                pa.array([[1, 2]], type=pa.list_(pa.int32())),
+            ],
+            names=["s", "l"],
+        )
+        target = pa.schema(
+            [
+                ("s", pa.struct([("a", pa.int64()), ("b", pa.float64())])),
+                ("l", pa.list_(pa.int64())),
+            ]
+        )
+        result = ArrowBatchTransformer.enforce_schema(batch, target)
+        self.assertEqual(result.schema, target)
+
+    def test_enforce_schema_arrow_cast_false(self):
+        """arrow_cast=False raises on type mismatch instead of casting."""
+        import pyarrow as pa
+
+        batch = pa.RecordBatch.from_arrays([pa.array([1], type=pa.int32())], names=["x"])
+        target = pa.schema([("x", pa.int64())])
+        with self.assertRaises(PySparkTypeError):
+            ArrowBatchTransformer.enforce_schema(batch, target, arrow_cast=False)
+
+    def test_enforce_schema_safecheck(self):
+        """safecheck=True rejects overflow; safecheck=False allows it."""
+        import pyarrow as pa
+
+        batch = pa.RecordBatch.from_arrays([pa.array([999], type=pa.int64())], names=["x"])
+        target = pa.schema([("x", pa.int8())])
+        with self.assertRaises(PySparkTypeError):
+            ArrowBatchTransformer.enforce_schema(batch, target, safecheck=True)
+        result = ArrowBatchTransformer.enforce_schema(batch, target, safecheck=False)
+        self.assertEqual(result.schema, target)
+
+    def test_enforce_schema_missing_column(self):
+        """Missing column raises PySparkTypeError."""
+        import pyarrow as pa
+
+        batch = pa.RecordBatch.from_arrays([pa.array([1])], names=["a"])
+        with self.assertRaises(PySparkTypeError):
+            ArrowBatchTransformer.enforce_schema(batch, pa.schema([("missing", pa.int64())]))
+
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 @unittest.skipIf(not have_pandas, pandas_requirement_message)
@@ -191,11 +240,11 @@ class PandasToArrowConversionTests(unittest.TestCase):
         result = PandasToArrowConversion.convert(df, schema)
         self.assertEqual(result.num_rows, 0)
 
-        # Empty schema (0 columns)
-        # TODO(SPARK-55350): Pandas - > PyArrow should preserve row count with 0 columns. It is a bug.
+        # Empty schema (0 columns) should preserve row count
+        df = pd.DataFrame({"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]})
         result = PandasToArrowConversion.convert(df, StructType([]))
         self.assertEqual(result.num_columns, 0)
-        self.assertEqual(result.num_rows, 0)
+        self.assertEqual(result.num_rows, 3)
 
     def test_convert_assign_cols_by_name(self):
         """Test assign_cols_by_name reorders columns to match schema."""

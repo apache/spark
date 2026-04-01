@@ -91,8 +91,9 @@ class PandasNotImplementedError(NotImplementedError):
                     )
         elif scalar_name is not None:
             msg = (
-                "The scalar `{0}.{1}` is not reimplemented in pyspark.pandas;"
-                " use `pd.{1}`.".format(class_name, scalar_name)
+                "The scalar `{0}.{1}` is not reimplemented in pyspark.pandas; use `pd.{1}`.".format(
+                    class_name, scalar_name
+                )
             )
         else:
             if deprecated:

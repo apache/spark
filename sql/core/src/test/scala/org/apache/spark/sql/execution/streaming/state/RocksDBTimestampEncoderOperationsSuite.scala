@@ -68,9 +68,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
 
   private def newDir(): String = Utils.createTempDir().getCanonicalPath
 
-  // TODO: [SPARK-55145] Address the new state format with Avro and enable the test with Avro
-  //  encoding
-  Seq("unsaferow").foreach { encoding =>
+  Seq("unsaferow", "avro").foreach { encoding =>
     Seq("prefix", "postfix").foreach { encoderType =>
       test(s"Event time as $encoderType: basic put and get operations (encoding = $encoding)") {
         tryWithProviderResource(
@@ -223,9 +221,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
     }
   }
 
-  // TODO: [SPARK-55145] Address the new state format with Avro and enable the test with Avro
-  //  encoding
-  Seq("unsaferow").foreach { encoding =>
+  Seq("unsaferow", "avro").foreach { encoding =>
     test(s"Event time as prefix: iterator operations (encoding = $encoding)") {
       tryWithProviderResource(
         newStoreProviderWithTimestampEncoder(
@@ -558,9 +554,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
     }
   }
 
-  // TODO: [SPARK-55145] Address the new state format with Avro and enable the test with Avro
-  //  encoding
-  Seq("unsaferow").foreach { encoding =>
+  Seq("unsaferow", "avro").foreach { encoding =>
     Seq("prefix", "postfix").foreach { encoderType =>
       Seq(false, true).foreach { useMultipleValuesPerKey =>
         val multiValueSuffix = if (useMultipleValuesPerKey) " and multiple values" else ""

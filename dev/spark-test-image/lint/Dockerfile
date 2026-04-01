@@ -77,7 +77,6 @@ RUN python3.12 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 RUN python3.12 -m pip install \
-    'black==26.3.1' \
     'flake8==3.9.0' \
     'ruff==0.14.8' \
     'googleapis-common-protos-stubs==2.2.0' \

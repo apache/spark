@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect.planner
 import java.io.SequenceInputStream
 import java.util.UUID
 import java.util.concurrent.Semaphore
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -1044,10 +1045,10 @@ class SparkConnectServiceSuite
       .build()
 
     // Capture job execution metrics
-    var numTasks = 0
+    val numTasks = new AtomicInteger(0)
     val listener = new SparkListener {
       override def onTaskEnd(taskEnd: org.apache.spark.scheduler.SparkListenerTaskEnd): Unit = {
-        numTasks += 1
+        numTasks.incrementAndGet()
       }
     }
     spark.sparkContext.addSparkListener(listener)
@@ -1055,7 +1056,7 @@ class SparkConnectServiceSuite
     try {
       val instance = new SparkConnectService(false)
       val responses = mutable.Buffer.empty[proto.ExecutePlanResponse]
-      var done = false
+      @volatile var done = false
       instance.executePlan(
         request,
         new StreamObserver[proto.ExecutePlanResponse] {
@@ -1072,15 +1073,18 @@ class SparkConnectServiceSuite
       // Verify result
       assert(responses.exists(_.hasArrowBatch))
 
+      // Wait for listener bus to process all events
+      spark.sparkContext.listenerBus.waitUntilEmpty()
+
       // Verify optimization:
       // If executeCollect/executeTake is used, it should only scan the first partition (1 task).
       // If execute() is used, it might scan all partitions (100 tasks) for LocalLimit
       // or trigger Shuffle.
       // We expect significantly fewer tasks than numPartitions.
       assert(
-        numTasks < numPartitions,
-        s"Expected fewer tasks than partitions ($numPartitions), but got $numTasks")
-      assert(numTasks >= 1)
+        numTasks.get() < numPartitions,
+        s"Expected fewer tasks than partitions ($numPartitions), but got ${numTasks.get()}")
+      assert(numTasks.get() >= 1)
     } finally {
       spark.sparkContext.removeSparkListener(listener)
     }
@@ -1124,10 +1128,10 @@ class SparkConnectServiceSuite
       .build()
 
     // Capture job execution metrics
-    var numTasks = 0
+    val numTasks = new AtomicInteger(0)
     val listener = new SparkListener {
       override def onTaskEnd(taskEnd: org.apache.spark.scheduler.SparkListenerTaskEnd): Unit = {
-        numTasks += 1
+        numTasks.incrementAndGet()
       }
     }
     spark.sparkContext.addSparkListener(listener)
@@ -1135,7 +1139,7 @@ class SparkConnectServiceSuite
     try {
       val instance = new SparkConnectService(false)
       val responses = mutable.Buffer.empty[proto.ExecutePlanResponse]
-      var done = false
+      @volatile var done = false
       instance.executePlan(
         request,
         new StreamObserver[proto.ExecutePlanResponse] {
@@ -1152,14 +1156,17 @@ class SparkConnectServiceSuite
       // Verify result
       assert(responses.exists(_.hasArrowBatch))
 
+      // Wait for listener bus to process all events
+      spark.sparkContext.listenerBus.waitUntilEmpty()
+
       // Verify optimization:
       // If executeCollect/executeTail is used, it should only scan the last partition (1 task).
       // If execute() is used, it might scan all partitions (100 tasks) or trigger Shuffle.
       // We expect significantly fewer tasks than numPartitions.
       assert(
-        numTasks < numPartitions,
-        s"Expected fewer tasks than partitions ($numPartitions), but got $numTasks")
-      assert(numTasks >= 1)
+        numTasks.get() < numPartitions,
+        s"Expected fewer tasks than partitions ($numPartitions), but got ${numTasks.get()}")
+      assert(numTasks.get() >= 1)
     } finally {
       spark.sparkContext.removeSparkListener(listener)
     }

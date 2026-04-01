@@ -17,6 +17,7 @@
 
 import pandas as pd
 
+from pyspark.loose_version import LooseVersion
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -65,7 +66,11 @@ class FrameIdxMaxMinMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(psdf.idxmax(axis=1), pdf.idxmax(axis=1))
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(psdf.idxmax(axis=1), pdf.idxmax(axis=1))
+        else:
+            with self.assertRaisesRegex(Exception, "Encountered all NA values"):
+                psdf.idxmax(axis=1).to_pandas()
 
         # Test with ties (first occurrence should win)
         pdf = pd.DataFrame(
@@ -197,7 +202,11 @@ class FrameIdxMaxMinMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(psdf.idxmin(axis=1), pdf.idxmin(axis=1))
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(psdf.idxmin(axis=1), pdf.idxmin(axis=1))
+        else:
+            with self.assertRaisesRegex(Exception, "Encountered all NA values"):
+                psdf.idxmin(axis=1).to_pandas()
 
         # Test with ties (first occurrence should win)
         pdf = pd.DataFrame(

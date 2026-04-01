@@ -200,7 +200,9 @@ def infer_pandas_eval_type(
     return None
 
 
-def infer_arrow_eval_type(sig: Signature, type_hints: Dict[str, Any]) -> Optional[
+def infer_arrow_eval_type(
+    sig: Signature, type_hints: Dict[str, Any]
+) -> Optional[
     Union[
         "ArrowScalarUDFType",
         "ArrowScalarIterUDFType",

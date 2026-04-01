@@ -145,7 +145,15 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("asinh") {
     testOneToOneMathFunction(asinh,
-      (x: Double) => math.log(x + math.sqrt(x * x + 1)) )
+      (x: Double) => {
+        val ax = Math.abs(x)
+        val w = if (ax.isInfinite || ax.isNaN) ax
+        else if (ax < 1.0 / (1 << 28)) ax
+        else if (ax > (1 << 28)) StrictMath.log(ax) + StrictMath.log(2.0)
+        else if (ax > 2.0) StrictMath.log(2.0 * ax + 1.0 / (math.sqrt(x * x + 1.0) + ax))
+        else StrictMath.log1p(ax + x * x / (1.0 + math.sqrt(1.0 + x * x)))
+        Math.copySign(w, x)
+      })
   }
 
   test("cos") {
@@ -167,7 +175,13 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("acosh") {
     testOneToOneMathFunction(acosh,
-      (x: Double) => math.log(x + math.sqrt(x * x - 1)) )
+      (x: Double) => {
+        if (x < 1.0) Double.NaN
+        else if (x >= (1 << 28)) StrictMath.log(x) + StrictMath.log(2.0)
+        else if (x == 1.0) 0.0
+        else if (x > 2.0) StrictMath.log(2.0 * x - 1.0 / (x + math.sqrt(x * x - 1.0)))
+        else { val t = x - 1.0; StrictMath.log1p(t + math.sqrt(2.0 * t + t * t)) }
+      })
   }
 
   test("tan") {

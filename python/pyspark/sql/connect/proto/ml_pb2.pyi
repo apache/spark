@@ -68,15 +68,12 @@ class MlCommand(google.protobuf.message.Message):
         @property
         def estimator(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlOperator:
             """(Required) Estimator information (its type should be OPERATOR_TYPE_ESTIMATOR)"""
-
         @property
         def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams:
             """(Optional) parameters of the Estimator"""
-
         @property
         def dataset(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
             """(Required) the training dataset"""
-
         def __init__(
             self,
             *,
@@ -136,9 +133,8 @@ class MlCommand(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            obj_refs: (
-                collections.abc.Iterable[pyspark.sql.connect.proto.ml_common_pb2.ObjectRef] | None
-            ) = ...,
+            obj_refs: collections.abc.Iterable[pyspark.sql.connect.proto.ml_common_pb2.ObjectRef]
+            | None = ...,
             evict_only: builtins.bool | None = ...,
         ) -> None: ...
         def HasField(
@@ -206,11 +202,9 @@ class MlCommand(google.protobuf.message.Message):
         @property
         def operator(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlOperator:
             """Estimator or evaluator"""
-
         @property
         def obj_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef:
             """The cached model"""
-
         @property
         def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams:
             """(Optional) The parameters of operator which could be estimator/evaluator or a cached model"""
@@ -223,7 +217,6 @@ class MlCommand(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
             """(Optional) The options of the writer"""
-
         def __init__(
             self,
             *,
@@ -325,15 +318,12 @@ class MlCommand(google.protobuf.message.Message):
         @property
         def evaluator(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlOperator:
             """(Required) Evaluator information (its type should be OPERATOR_TYPE_EVALUATOR)"""
-
         @property
         def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams:
             """(Optional) parameters of the Evaluator"""
-
         @property
         def dataset(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
             """(Required) the evaluating dataset"""
-
         def __init__(
             self,
             *,
@@ -517,7 +507,9 @@ class MlCommand(google.protobuf.message.Message):
             b"write",
         ],
     ) -> None: ...
-    def WhichOneof(self, oneof_group: typing_extensions.Literal["command", b"command"]) -> (
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["command", b"command"]
+    ) -> (
         typing_extensions.Literal[
             "fit",
             "fetch",
@@ -647,7 +639,6 @@ class MlCommandResult(google.protobuf.message.Message):
     @property
     def operator_info(self) -> global___MlCommandResult.MlOperatorInfo:
         """Operator information"""
-
     def __init__(
         self,
         *,

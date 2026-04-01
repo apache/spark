@@ -17,21 +17,18 @@
 
 package org.apache.spark.sql.execution.ui
 
-import java.util
-import java.util.{Locale, Properties}
-
-import scala.xml.Node
+import java.net.URI
+import java.util.Locale
 
 import jakarta.servlet.http.HttpServletRequest
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.scalatest.BeforeAndAfter
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.history.HistoryServerSuite.getContentAndCode
 import org.apache.spark.internal.config.Status.LIVE_UI_LOCAL_STORE_DIR
 import org.apache.spark.internal.config.UI.UI_SQL_GROUP_SUB_EXECUTION_ENABLED
-import org.apache.spark.scheduler.{JobFailed, SparkListenerJobEnd, SparkListenerJobStart}
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.status.{AppStatusStore, ElementTrackingStore}
 import org.apache.spark.tags.SlowSQLTest
@@ -42,10 +39,10 @@ abstract class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndA
 
   override def sparkConf: SparkConf = {
     // Disable async kv store write in the UI, to make tests more stable here.
-    super.sparkConf.set(org.apache.spark.internal.config.Status.ASYNC_TRACKING_ENABLED, false)
+    super.sparkConf
+      .set(org.apache.spark.internal.config.Status.ASYNC_TRACKING_ENABLED, false)
+      .set("spark.ui.enabled", "true")
   }
-
-  import testImplicits._
 
   var kvstore: ElementTrackingStore = _
 
@@ -56,7 +53,7 @@ abstract class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndA
     }
   }
 
-  test("SPARK-27019: correctly display SQL page when event reordering happens") {
+  test("SPARK-55875: render skeleton page with DataTables and script includes") {
     val statusStore = createStatusStore
     val tab = mock(classOf[SQLTab], RETURNS_SMART_NULLS)
     when(tab.sqlStore).thenReturn(statusStore)
@@ -66,12 +63,14 @@ abstract class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndA
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
 
-    val html = renderSQLPage(request, tab, statusStore).toString().toLowerCase(Locale.ROOT)
-    assert(html.contains("failed queries"))
-    assert(!html.contains("1970/01/01"))
+    val page = new AllExecutionsPage(tab)
+    val html = page.render(request).toString().toLowerCase(Locale.ROOT)
+    assert(html.contains("sql-executions-table"))
+    assert(html.contains("allexecutionspage.js"))
+    assert(html.contains("datatables"))
   }
 
-  test("SPARK-40834: prioritize `errorMessage` over job failures") {
+  test("SPARK-56137: page includes DataTables CSS and JS resources") {
     val statusStore = createStatusStore
     val tab = mock(classOf[SQLTab], RETURNS_SMART_NULLS)
     when(tab.sqlStore).thenReturn(statusStore)
@@ -81,187 +80,91 @@ abstract class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndA
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
 
-    Seq(Some(""), Some("testErrorMsg"), None).foreach { msg =>
-      val listener = statusStore.listener.get
-      val page = new AllExecutionsPage(tab)
-      val df = createTestDataFrame
-      listener.onOtherEvent(SparkListenerSQLExecutionStart(
-        0,
-        Some(0),
-        "test",
-        "test",
-        df.queryExecution.toString,
-        SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-        System.currentTimeMillis()))
-      listener.onJobStart(SparkListenerJobStart(
-        jobId = 0,
-        time = System.currentTimeMillis(),
-        stageInfos = Nil,
-        createProperties(0)))
-      listener.onJobEnd(SparkListenerJobEnd(
-        jobId = 0,
-        time = System.currentTimeMillis(),
-        JobFailed(new RuntimeException("Oops"))))
-      listener.onOtherEvent(SparkListenerSQLExecutionEnd(0, System.currentTimeMillis(), msg))
-      val html = page.render(request).toString().toLowerCase(Locale.ROOT)
+    val page = new AllExecutionsPage(tab)
+    val html = page.render(request).toString().toLowerCase(Locale.ROOT)
+    // DataTables CSS
+    assert(html.contains("datatables.bootstrap5.min.css"))
+    assert(html.contains("jquery.datatables.min.css"))
+    assert(html.contains("webui-datatables.css"))
+    // DataTables JS
+    assert(html.contains("jquery.datatables.min.js"))
+    assert(html.contains("datatables.bootstrap5.min.js"))
+    // jQuery
+    assert(html.contains("jquery.min.js"))
+  }
 
-      assert(html.contains("failed queries") == !msg.contains(""))
+  test("SPARK-56137: group-sub-exec config propagation") {
+    val statusStore = createStatusStore
+    val tab = mock(classOf[SQLTab], RETURNS_SMART_NULLS)
+    when(tab.sqlStore).thenReturn(statusStore)
+
+    val request = mock(classOf[HttpServletRequest])
+    when(tab.appName).thenReturn("testing")
+    when(tab.headerTabs).thenReturn(Seq.empty)
+
+    // Default config should propagate true
+    when(tab.conf).thenReturn(new SparkConf(false))
+    val page1 = new AllExecutionsPage(tab)
+    val html1 = page1.render(request).toString()
+    assert(html1.contains("data-value=\"true\""),
+      "Default group-sub-exec config should be true")
+
+    // Explicitly set to false
+    val confFalse = new SparkConf(false)
+      .set(UI_SQL_GROUP_SUB_EXECUTION_ENABLED.key, "false")
+    when(tab.conf).thenReturn(confFalse)
+    val page2 = new AllExecutionsPage(tab)
+    val html2 = page2.render(request).toString()
+    assert(html2.contains("data-value=\"false\""),
+      "Config set to false should propagate as false")
+  }
+
+  test("SPARK-56137: page renders loading spinner") {
+    val statusStore = createStatusStore
+    val tab = mock(classOf[SQLTab], RETURNS_SMART_NULLS)
+    when(tab.sqlStore).thenReturn(statusStore)
+
+    val request = mock(classOf[HttpServletRequest])
+    when(tab.conf).thenReturn(new SparkConf(false))
+    when(tab.appName).thenReturn("testing")
+    when(tab.headerTabs).thenReturn(Seq.empty)
+
+    val page = new AllExecutionsPage(tab)
+    val html = page.render(request).toString().toLowerCase(Locale.ROOT)
+    assert(html.contains("spinner-border"),
+      "Should have spinner element")
+    assert(html.contains("text-primary"),
+      "Spinner should use primary color")
+    assert(html.contains("loading..."),
+      "Should have loading text")
+  }
+
+  test("SPARK-56137: REST API returns data after SQL queries") {
+    spark.sql("SELECT 1 AS spark_56137_rest_test").collect()
+
+    val baseUrl = spark.sparkContext.ui.get.webUrl
+    val appId = spark.sparkContext.applicationId
+    val url =
+      new URI(s"$baseUrl/api/v1/applications/$appId/sql").toURL
+
+    eventually(timeout(10.seconds), interval(50.milliseconds)) {
+      val (code, resultOpt, error) = getContentAndCode(url)
+      assert(code == 200, s"Expected HTTP 200 but got: $code")
+      assert(resultOpt.nonEmpty,
+        "REST response should not be empty")
+      assert(error.isEmpty,
+        s"Error should be empty but got: $error")
+      val result = resultOpt.get
+      assert(result.startsWith("["),
+        "Response should be a JSON array")
+      assert(result.contains("\"status\""),
+        "Response should contain status field")
+      assert(result.contains("COMPLETED"),
+        "Should have completed executions")
     }
-  }
-
-  test("sorting should be successful") {
-    val statusStore = createStatusStore
-    val tab = mock(classOf[SQLTab], RETURNS_SMART_NULLS)
-    val request = mock(classOf[HttpServletRequest])
-
-    when(tab.conf).thenReturn(new SparkConf(false))
-    when(tab.sqlStore).thenReturn(statusStore)
-    when(tab.appName).thenReturn("testing")
-    when(tab.headerTabs).thenReturn(Seq.empty)
-    when(request.getParameter("failed.sort")).thenReturn("Duration")
-    val map = new util.HashMap[String, Array[String]]()
-    map.put("failed.sort", Array("duration"))
-    when(request.getParameterMap()).thenReturn(map)
-    val html = renderSQLPage(request, tab, statusStore).toString().toLowerCase(Locale.ROOT)
-    assert(!html.contains("illegalargumentexception"))
-    assert(html.contains("duration"))
-  }
-
-  test("group sub executions") {
-    val statusStore = createStatusStore
-    val tab = mock(classOf[SQLTab], RETURNS_SMART_NULLS)
-    val request = mock(classOf[HttpServletRequest])
-
-    val sparkConf = new SparkConf(false).set(UI_SQL_GROUP_SUB_EXECUTION_ENABLED, true)
-    when(tab.conf).thenReturn(sparkConf)
-    when(tab.sqlStore).thenReturn(statusStore)
-    when(tab.appName).thenReturn("testing")
-    when(tab.headerTabs).thenReturn(Seq.empty)
-
-    val listener = statusStore.listener.get
-    val page = new AllExecutionsPage(tab)
-    val df = createTestDataFrame
-    listener.onOtherEvent(SparkListenerSQLExecutionStart(
-      0,
-      Some(0),
-      "test",
-      "test",
-      df.queryExecution.toString,
-      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      System.currentTimeMillis()))
-    listener.onOtherEvent(SparkListenerSQLExecutionStart(
-      1,
-      Some(0),
-      "test",
-      "test",
-      df.queryExecution.toString,
-      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      System.currentTimeMillis()))
-    // sub execution has a missing root execution
-    listener.onOtherEvent(SparkListenerSQLExecutionStart(
-      2,
-      Some(100),
-      "test",
-      "test",
-      df.queryExecution.toString,
-      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      System.currentTimeMillis()))
-    val html = page.render(request).toString().toLowerCase(Locale.ROOT)
-    assert(html.contains("sub execution ids") && html.contains("sub-execution-list"))
-    // sub execution should still be displayed if the root execution is missing
-    assert(html.contains("id=2"))
-  }
-
-  test("SPARK-42754: group sub executions - backward compatibility") {
-    val statusStore = createStatusStore
-    val tab = mock(classOf[SQLTab], RETURNS_SMART_NULLS)
-    val request = mock(classOf[HttpServletRequest])
-
-    val sparkConf = new SparkConf(false).set(UI_SQL_GROUP_SUB_EXECUTION_ENABLED, true)
-    when(tab.conf).thenReturn(sparkConf)
-    when(tab.sqlStore).thenReturn(statusStore)
-    when(tab.appName).thenReturn("testing")
-    when(tab.headerTabs).thenReturn(Seq.empty)
-
-    val listener = statusStore.listener.get
-    val page = new AllExecutionsPage(tab)
-    val df = createTestDataFrame
-    // testing compatibility with old event logs for which rootExecutionId = None
-    // because the field is missing when generated by a Spark version not support
-    // nested execution
-    listener.onOtherEvent(SparkListenerSQLExecutionStart(
-      0,
-      None,
-      "test",
-      "test",
-      df.queryExecution.toString,
-      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      System.currentTimeMillis()))
-    listener.onOtherEvent(SparkListenerSQLExecutionStart(
-      1,
-      None,
-      "test",
-      "test",
-      df.queryExecution.toString,
-      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      System.currentTimeMillis()))
-    val html = page.render(request).toString().toLowerCase(Locale.ROOT)
-    assert(!html.contains("sub execution ids") && !html.contains("sub-execution-list"))
   }
 
   protected def createStatusStore: SQLAppStatusStore
-
-  private def createTestDataFrame: DataFrame = {
-    Seq(
-      (1, 1),
-      (2, 2)
-    ).toDF().filter("_1 > 1")
-  }
-
-  /**
-   * Render a stage page started with the given conf and return the HTML.
-   * This also runs a dummy execution page to populate the page with useful content.
-   */
-  private def renderSQLPage(
-    request: HttpServletRequest,
-    tab: SQLTab,
-    statusStore: SQLAppStatusStore): Seq[Node] = {
-
-    val listener = statusStore.listener.get
-
-    val page = new AllExecutionsPage(tab)
-    Seq(0, 1).foreach { executionId =>
-      val df = createTestDataFrame
-      listener.onOtherEvent(SparkListenerSQLExecutionStart(
-        executionId,
-        Some(executionId),
-        "test",
-        "test",
-        df.queryExecution.toString,
-        SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-        System.currentTimeMillis(),
-        Map.empty,
-        queryId = Some(df.queryExecution.queryId)))
-      listener.onOtherEvent(SparkListenerSQLExecutionEnd(
-        executionId, System.currentTimeMillis(), Some("Oops")))
-      listener.onJobStart(SparkListenerJobStart(
-        jobId = 0,
-        time = System.currentTimeMillis(),
-        stageInfos = Nil,
-        createProperties(executionId)))
-      listener.onJobEnd(SparkListenerJobEnd(
-        jobId = 0,
-        time = System.currentTimeMillis(),
-        JobFailed(new RuntimeException("Oops"))))
-    }
-    page.render(request)
-  }
-
-  private def createProperties(executionId: Long): Properties = {
-    val properties = new Properties()
-    properties.setProperty(SQLExecution.EXECUTION_ID_KEY, executionId.toString)
-    properties
-  }
 }
 
 class AllExecutionsPageWithInMemoryStoreSuite extends AllExecutionsPageSuite {
@@ -292,4 +195,3 @@ class AllExecutionsPageWithRocksDBBackendSuite extends AllExecutionsPageSuite {
     super.afterAll()
   }
 }
-

@@ -42,7 +42,7 @@ on:
         type: string
         default: ubuntu-latest
       arch:
-        description: The target architecture (x86, x64, arm64) of the Python or PyPy interpreter.
+        description: The target architecture (x86, x64, arm64) of the Python interpreter.
         required: false
         type: string
         default: x64

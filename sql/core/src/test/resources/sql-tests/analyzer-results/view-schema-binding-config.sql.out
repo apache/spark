@@ -154,7 +154,7 @@ ShowTablesCommand default, v, [namespace#x, tableName#x, isTemporary#x, informat
 -- !query
 DROP VIEW IF EXISTS v
 -- !query analysis
-DropTempViewCommand v
+DropTempViewCommand v, true
 
 
 -- !query
@@ -797,7 +797,7 @@ ShowTablesCommand default, v, [namespace#x, tableName#x, isTemporary#x, informat
 -- !query
 DROP VIEW IF EXISTS v
 -- !query analysis
-DropTempViewCommand v
+DropTempViewCommand v, true
 
 
 -- !query

@@ -208,7 +208,7 @@ class CogroupedApplyInPandasTestsMixin:
         self._test_merge_error(
             fn=merge_pandas,
             errorClass=PythonException,
-            error_message_regex="Column names of the returned pandas.DataFrame "
+            error_message_regex="Column names of the returned data "
             "do not match specified schema. Unexpected: add, more.",
         )
 
@@ -229,7 +229,7 @@ class CogroupedApplyInPandasTestsMixin:
         self._test_merge_error(
             fn=merge_pandas,
             errorClass=PythonException,
-            error_message_regex="Number of columns of the returned pandas.DataFrame "
+            error_message_regex="Number of columns of the returned data "
             "doesn't match specified schema. Expected: 4 Actual: 6",
         )
 

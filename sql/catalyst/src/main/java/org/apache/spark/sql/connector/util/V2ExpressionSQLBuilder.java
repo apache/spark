@@ -35,6 +35,7 @@ import org.apache.spark.sql.connector.expressions.NullOrdering;
 import org.apache.spark.sql.connector.expressions.SortDirection;
 import org.apache.spark.sql.connector.expressions.SortOrder;
 import org.apache.spark.sql.connector.expressions.UserDefinedScalarFunc;
+import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate;
 import org.apache.spark.sql.connector.expressions.aggregate.Avg;
 import org.apache.spark.sql.connector.expressions.aggregate.Max;
 import org.apache.spark.sql.connector.expressions.aggregate.Min;
@@ -78,6 +79,8 @@ public class V2ExpressionSQLBuilder {
       return visitLiteral(literal);
     } else if (expr instanceof NamedReference namedReference) {
       return visitNamedReference(namedReference);
+    } else if (expr instanceof PartitionPredicate partitionPredicate) {
+      return visitPartitionPredicate(partitionPredicate);
     } else if (expr instanceof Cast cast) {
       return visitCast(build(cast.expression()), cast.expressionDataType(), cast.dataType());
     } else if (expr instanceof Extract extract) {
@@ -330,6 +333,10 @@ public class V2ExpressionSQLBuilder {
   protected String visitUnexpectedExpr(Expression expr) throws IllegalArgumentException {
     throw new SparkIllegalArgumentException(
       "_LEGACY_ERROR_TEMP_3207", Map.of("expr", String.valueOf(expr)));
+  }
+
+  protected String visitPartitionPredicate(PartitionPredicate partitionPredicate) {
+    return partitionPredicate.describe();
   }
 
   protected String visitOverlay(String[] inputs) {

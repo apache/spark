@@ -2695,6 +2695,80 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  testWithStateStoreCheckpointIds(
+    "RocksDBFileManager: loading zip without checksum file succeeds when checksum enabled") { _ =>
+    withTempDir { dir =>
+      val dfsRootDir = dir.getAbsolutePath
+      val cpFiles = Seq("sst-file1.sst" -> 10, "other-file1" -> 100)
+
+      // Save checkpoint with checksum disabled (simulates a checkpoint written before
+      // checksums were enabled, i.e. an older version)
+      val fileMapping = new RocksDBFileMapping
+      val writerFileManager = new RocksDBFileManager(
+        dfsRootDir, Utils.createTempDir(), hadoopConf,
+        fileChecksumEnabled = false)
+      saveCheckpointFiles(writerFileManager, cpFiles, version = 1, numKeys = 3, fileMapping)
+      assert(!new File(dfsRootDir, "1.zip.crc").exists())
+
+      // Load with checksum enabled - should succeed without verification since no .crc exists
+      val readerFileManager = new RocksDBFileManager(
+        dfsRootDir, Utils.createTempDir(), hadoopConf,
+        fileChecksumEnabled = true,
+        fileChecksumThreadPoolSize = Some(2))
+      val verificationDir = Utils.createTempDir().getAbsolutePath
+      loadAndVerifyCheckpointFiles(
+        readerFileManager, verificationDir, version = 1, cpFiles, 3, new RocksDBFileMapping())
+    }
+  }
+
+  testWithStateStoreCheckpointIds("RocksDBFileManager: corrupted zip checksum fails on load") {
+    enableStateStoreCheckpointIds =>
+    withTempDir { dir =>
+      val dfsRootDir = dir.getAbsolutePath
+      val fileMapping = new RocksDBFileMapping
+      val fileManager = new RocksDBFileManager(
+        dfsRootDir, Utils.createTempDir(), hadoopConf,
+        fileChecksumEnabled = true,
+        fileChecksumThreadPoolSize = Some(2))
+      val cpFiles = Seq("sst-file1.sst" -> 10, "other-file1" -> 100)
+      val checkpointUniqueId =
+        if (enableStateStoreCheckpointIds) Some(java.util.UUID.randomUUID.toString) else None
+
+      saveCheckpointFiles(fileManager, cpFiles, version = 1, numKeys = 3, fileMapping,
+        checkpointUniqueId = checkpointUniqueId)
+
+      // Overwrite the checksum sidecar with a wrong value/size to simulate corruption
+      val wrongChecksumJson =
+        """{"algorithm":"CRC32C","value":0,"mainFileSize":0,""" +
+        """"timestampMs":0,"creator":{"executorId":"","taskInfo":""}}"""
+      val crcFileName = checkpointUniqueId.map(id => s"1_$id.zip.crc").getOrElse("1.zip.crc")
+      Files.writeString(new File(dfsRootDir, crcFileName).toPath, wrongChecksumJson)
+
+      if (enableStateStoreCheckpointIds) {
+        val zipName = s"1_${checkpointUniqueId.get}\\.zip"
+        val ex = intercept[SparkException] {
+          fileManager.loadCheckpointFromDfs(
+            1, Utils.createTempDir(), new RocksDBFileMapping(), checkpointUniqueId)
+        }
+        checkError(
+          exception = ex,
+          condition = "CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED",
+          parameters = Map(
+            "fileName" -> s"$dfsRootDir/$zipName",
+            "expectedSize" -> "0",
+            "expectedChecksum" -> "0",
+            "computedSize" -> "^\\d+$",
+            "computedChecksum" -> "^-?\\d+$"),
+          matchPVals = true)
+      } else {
+        // Checkpoint verification is skipped for checkpoint v1 zip
+        loadAndVerifyCheckpointFiles(
+          fileManager, Utils.createTempDir().getAbsolutePath,
+          version = 1, cpFiles, 3, new RocksDBFileMapping())
+      }
+    }
+  }
+
   testWithColumnFamilies("ensure concurrent access lock is released after Spark task completes",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     RocksDBSuite.withSingletonDB {
@@ -2923,6 +2997,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         // since we called load, loadFromSnapshot should not be populated
         assert(!m1.loadMetrics.contains("loadFromSnapshot"))
 
+        assert(m1.loadedFromDfs === 1)
         if (conf.enableChangelogCheckpointing) {
           assert(m1.loadMetrics("replayChangelog") > 0)
           assert(m1.loadMetrics("numReplayChangeLogFiles") == 1)
@@ -2930,6 +3005,12 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           assert(!m1.loadMetrics.contains("replayChangelog"))
           assert(!m1.loadMetrics.contains("numReplayChangeLogFiles"))
         }
+
+        // A reload of the same version is served from local cache - no DFS fetch
+        db.load(2)
+        db.put("c", "1")
+        db.commit()
+        assert(db.metricsOpt.get.loadedFromDfs === 0)
       }
     }
   }
@@ -2956,6 +3037,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.refreshRecordedMetricsForTest()
         val m1 = db.metricsOpt.get
         assert(m1.loadMetrics("loadFromSnapshot") > 0)
+        assert(m1.loadedFromDfs === 1)
         // since we called loadFromSnapshot, load should not be populated
         assert(!m1.loadMetrics.contains("load"))
         assert(m1.loadMetrics("replayChangelog") > 0)
@@ -4137,6 +4219,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
             db.put("e", "4")
             db.commit() // a new snapshot (5.zip) will be created since previous one is corrupt
             assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 1)
+            assert(db.metricsOpt.get.loadedFromDfs === 1)
             db.doMaintenance() // upload snapshot 5.zip
           }
 
@@ -4149,6 +4232,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
             assert(toStr(db.get("b")) == "1")
             db.commit()
             assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 1)
+            // All snapshots were corrupt; fallback to version 0 base and replay changelogs from DFS
+            assert(db.metricsOpt.get.loadedFromDfs === 1)
           }
         }
       }

@@ -258,19 +258,23 @@ class CLIUtilityTests(ReusedConnectTestCase):
             subdir2 = outer_dir / "subdir2"
             subdir2.mkdir()
             with (subdir1 / "libraries.py").open("w") as f:
-                f.write(textwrap.dedent("""
+                f.write(
+                    textwrap.dedent("""
                         from pyspark import pipelines as dp
                         @dp.materialized_view
                         def mv1():
                             raise NotImplementedError()
-                    """))
+                    """)
+                )
 
             with (subdir2 / "libraries.py").open("w") as f:
-                f.write(textwrap.dedent("""
+                f.write(
+                    textwrap.dedent("""
                         from pyspark import pipelines as dp
                         def mv2():
                             raise NotImplementedError()
-                    """))
+                    """)
+                )
 
             registry = LocalGraphElementRegistry()
             register_definitions(
@@ -333,11 +337,13 @@ class CLIUtilityTests(ReusedConnectTestCase):
             inner_dir2.mkdir()
 
             with (inner_dir1 / "defs.py").open("w") as f:
-                f.write(textwrap.dedent("""
+                f.write(
+                    textwrap.dedent("""
                         import sys
                         sys.path.append(".")
                         import mypackage.my_module
-                        """))
+                        """)
+                )
 
             inner_dir1_mypackage = inner_dir1 / "mypackage"
             inner_dir1_mypackage.mkdir()

@@ -23,6 +23,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, GreaterThan, In}
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.{FilterExec, InputAdapter, SparkPlanTest, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.test.SharedSparkSession
@@ -41,7 +42,12 @@ class BatchEvalPythonExecSuite extends SparkPlanTest
 
   override def afterAll(): Unit = {
     try {
-      spark.sessionState.functionRegistry.dropFunction(FunctionIdentifier("dummyPythonUDF"))
+      // Registry requires 3-part identifier for session/temp functions
+      val ident = FunctionIdentifier(
+        "dummyPythonUDF",
+        Some(CatalogManager.SESSION_NAMESPACE),
+        Some(CatalogManager.SYSTEM_CATALOG_NAME))
+      spark.sessionState.functionRegistry.dropFunction(ident)
     } finally {
       super.afterAll()
     }

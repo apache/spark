@@ -47,8 +47,9 @@ test('historypage template has expected column structure', function () {
   const headers = extractThTexts(template);
 
   // All columns must always be present in the template.
-  // historypage.js uses removeColumnByName() to conditionally hide
-  // Attempt ID, Completed, and Duration at runtime.
+  // Attempt ID is always shown (empty for apps without attempts).
+  // historypage.js removes Completed and Duration <th> headers at runtime
+  // for incomplete apps, matching the data column removal.
   expect(headers).toEqual([
     'Version',
     'App ID',
@@ -64,6 +65,22 @@ test('historypage template has expected column structure', function () {
   ]);
 
   expect(extractTableIds(template)).toContain('history-summary-table');
+});
+
+test('historypage JS column config matches template header count', function () {
+  // Verify that historypage.js defines the same number of data columns as <th> headers
+  // in the template. This catches the SPARK-56259 regression where removeColumnByName
+  // removed data columns without removing the corresponding <th> headers.
+  const jsSource = readStatic('historypage.js');
+
+  // Count column definitions by looking for 'name:' keys in the columns array.
+  // Each column has a unique name field.
+  const columnNames = [...jsSource.matchAll(/name:\s*['"]?(\w+)['"]?/g)]
+    .map(m => m[1])
+    .filter(n => !['columnName', 'name'].includes(n)); // exclude helper function params
+
+  // The JS defines 11 named columns (same as 11 <th> headers in the template)
+  expect(columnNames.length).toBe(11);
 });
 
 test('executorspage template has expected table structure', function () {

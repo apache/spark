@@ -119,9 +119,9 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
 
     def latestOffset(self, start: dict, limit: ReadLimit) -> dict:
         assert start is not None, "start offset should not be None"
-        assert isinstance(
-            limit, ReadAllAvailable
-        ), "simple stream reader does not support read limit"
+        assert isinstance(limit, ReadAllAvailable), (
+            "simple stream reader does not support read limit"
+        )
 
         iter, end = self.simple_reader.read(start)
         self.add_result_to_cache(start, end, iter)
@@ -163,7 +163,8 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         return it
 
     def read(
-        self, input_partition: SimpleInputPartition  # type: ignore[override]
+        self,
+        input_partition: SimpleInputPartition,  # type: ignore[override]
     ) -> Iterator[Tuple]:
         return self.simple_reader.readBetweenOffsets(input_partition.start, input_partition.end)
 

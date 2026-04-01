@@ -35,6 +35,7 @@ from typing import (
 )
 import warnings
 
+import pyspark.memory_profiler_ext
 from pyspark.accumulators import (
     Accumulator,
     AccumulatorParam,
@@ -47,7 +48,6 @@ from pyspark.profiler import (
     MemoryProfiler,
     MemUsageParam,
     PStatsParam,
-    has_memory_profiler,
 )
 
 if TYPE_CHECKING:
@@ -138,7 +138,7 @@ class WorkerMemoryProfiler:
         result_key: Union[int, str],
         func_or_code: Union[Callable, CodeType],
     ) -> None:
-        from pyspark.profiler import UDFLineProfilerV2
+        from pyspark.memory_profiler_ext import UDFLineProfilerV2
 
         self._accumulator = accumulator
         self._profiler = UDFLineProfilerV2()
@@ -245,7 +245,7 @@ class ProfilerCollector(ABC):
         with self._lock:
             code_map = self._memory_profile_results
 
-        if not has_memory_profiler and not code_map:
+        if not pyspark.memory_profiler_ext.has_memory_profiler and not code_map:
             warnings.warn(
                 "Install the 'memory_profiler' library in the cluster to enable memory profiling",
                 UserWarning,
@@ -331,7 +331,7 @@ class ProfilerCollector(ABC):
         with self._lock:
             code_map = self._memory_profile_results
 
-        if not has_memory_profiler and not code_map:
+        if not pyspark.memory_profiler_ext.has_memory_profiler and not code_map:
             warnings.warn(
                 "Install the 'memory_profiler' library in the cluster to enable memory profiling",
                 UserWarning,

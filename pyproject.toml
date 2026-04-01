@@ -35,6 +35,7 @@ exclude = [
     "*python/pyspark/sql/streaming/proto/*",
     "*venv*/*",
 ]
+line-length = 100
 
 [tool.ruff.lint]
 extend-select = [

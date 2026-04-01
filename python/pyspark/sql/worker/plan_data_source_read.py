@@ -180,11 +180,9 @@ def write_read_func_and_partitions(
     max_arrow_batch_size: int,
     binary_as_bytes: bool,
 ) -> None:
-    is_streaming = isinstance(reader, DataSourceStreamReader)
-
     # Create input converter.
     converter = ArrowTableToRowsConversion._create_converter(
-        BinaryType(), none_on_identity=False, binary_as_bytes=binary_as_bytes
+        BinaryType(), binary_as_bytes=binary_as_bytes
     )
 
     # Create output converter.
@@ -201,11 +199,11 @@ def write_read_func_and_partitions(
                 f"but found {batch.num_columns} columns and {batch.num_rows} rows."
             )
             columns = [column.to_pylist() for column in batch.columns]
-            partition_bytes = converter(columns[0][0])  # type: ignore[misc]
+            partition_bytes = converter(columns[0][0])
 
-        assert (
-            partition_bytes is not None
-        ), "The input iterator for Python data source read function is empty."
+        assert partition_bytes is not None, (
+            "The input iterator for Python data source read function is empty."
+        )
 
         # Deserialize the partition value.
         partition = pickleSer.loads(partition_bytes)
@@ -238,9 +236,14 @@ def write_read_func_and_partitions(
     command = (data_source_read_func, return_type)
     pickleSer._write_with_length(command, outfile)
 
-    if not is_streaming:
+    if not isinstance(reader, DataSourceStreamReader):
         # The partitioning of python batch source read is determined before query execution.
-        partitions = reader.partitions()  # type: ignore[call-arg]
+        try:
+            partitions = reader.partitions()
+        except NotImplementedError:
+            # Backward compatibility for data sources that raise NotImplementedError for partitions
+            # Our old base class did this so an old client may still be using it.
+            partitions = [InputPartition(None)]
         if not isinstance(partitions, list):
             raise PySparkRuntimeError(
                 errorClass="DATA_SOURCE_TYPE_MISMATCH",
@@ -333,8 +336,7 @@ def _main(infile: IO, outfile: IO) -> None:
     # Receive the configuration values.
     max_arrow_batch_size = read_int(infile)
     assert max_arrow_batch_size > 0, (
-        "The maximum arrow batch size should be greater than 0, but got "
-        f"'{max_arrow_batch_size}'"
+        f"The maximum arrow batch size should be greater than 0, but got '{max_arrow_batch_size}'"
     )
     enable_pushdown = read_bool(infile)
 

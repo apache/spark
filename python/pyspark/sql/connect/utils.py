@@ -23,7 +23,11 @@ from pyspark.errors import PySparkImportError
 
 def check_dependencies() -> None:
     main_module = sys.modules["__main__"]
-    if main_module.__spec__ is None and not hasattr(main_module, "__file__"):
+    if (
+        main_module.__spec__ is None
+        and not hasattr(main_module, "__file__")
+        and not hasattr(sys, "ps1")
+    ):
         # The main module is not initialized at all at this point. We must be running doctests.
         from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 

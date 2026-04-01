@@ -64,7 +64,8 @@ class StreamingQueryListener(ABC):
     """
 
     def _set_spark_session(
-        self, session: "SparkSession"  # type: ignore[name-defined] # noqa: F821
+        self,
+        session: "SparkSession",  # type: ignore[name-defined] # noqa: F821
     ) -> None:
         if self.spark is None:
             self.spark = session
@@ -134,10 +135,8 @@ class StreamingQueryListener(ABC):
         if hasattr(self, "_jlistenerobj"):
             return self._jlistenerobj
 
-        self._jlistenerobj: "JavaObject" = (
-            SparkContext._jvm.PythonStreamingQueryListenerWrapper(  # type: ignore[union-attr]
-                JStreamingQueryListener(self)
-            )
+        self._jlistenerobj: "JavaObject" = SparkContext._jvm.PythonStreamingQueryListenerWrapper(  # type: ignore[union-attr]
+            JStreamingQueryListener(self)
         )
         return self._jlistenerobj
 

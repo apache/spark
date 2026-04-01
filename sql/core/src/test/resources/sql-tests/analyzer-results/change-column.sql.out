@@ -269,4 +269,4 @@ DropTable false, false
 -- !query
 DROP VIEW global_temp.global_temp_view
 -- !query analysis
-DropTempViewCommand global_temp.global_temp_view
+DropTempViewCommand global_temp.global_temp_view, false

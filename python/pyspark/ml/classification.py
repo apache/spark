@@ -3565,7 +3565,7 @@ class OneVsRest(
                 weightCol = self.getWeightCol()
             else:
                 warnings.warn(
-                    "weightCol is ignored, " "as it is not supported by {} now.".format(classifier)
+                    "weightCol is ignored, as it is not supported by {} now.".format(classifier)
                 )
 
         if weightCol:

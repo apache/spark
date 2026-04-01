@@ -121,6 +121,10 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, columns)
       r.copy(name = resolvedIdentifier)
 
+    case c @ CreateTableLike(UnresolvedIdentifier(nameParts, allowTemp), _, _, _, _, _, _) =>
+      val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, Nil)
+      c.copy(name = resolvedIdentifier)
+
     case UnresolvedIdentifier(nameParts, allowTemp) =>
       resolveIdentifier(nameParts, allowTemp, Nil)
 
@@ -168,12 +172,11 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       nameParts: Seq[String],
       origin: Origin): ResolvedIdentifier = CurrentOrigin.withOrigin(origin) {
     if (nameParts.length == 1) {
-      val funcName = FunctionIdentifier(nameParts.head)
       val sessionCatalog = catalogManager.v1SessionCatalog
-      if (sessionCatalog.isBuiltinFunction(funcName)) {
+      if (sessionCatalog.isBuiltinFunction(nameParts.head)) {
         val ident = Identifier.of(Array(CatalogManager.BUILTIN_NAMESPACE), nameParts.head)
         ResolvedIdentifier(FakeSystemCatalog, ident)
-      } else if (sessionCatalog.isTemporaryFunction(funcName)) {
+      } else if (sessionCatalog.isTemporaryFunction(FunctionIdentifier(nameParts.head))) {
         val ident = Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), nameParts.head)
         ResolvedIdentifier(FakeSystemCatalog, ident)
       } else {

@@ -18,7 +18,6 @@ import unittest
 
 import numpy as np
 
-from pyspark.loose_version import LooseVersion
 from pyspark.ml.linalg import DenseVector
 from pyspark.ml.functions import array_to_vector, vector_to_array, predict_batch_udf
 from pyspark.sql.functions import array, struct, col
@@ -67,6 +66,11 @@ class ArrayVectorConversionTests(ArrayVectorConversionTestsMixin, ReusedSQLTestC
 
 
 class PredictBatchUDFTestsMixin:
+    @classmethod
+    def master(cls):
+        # test_caching requires all the workload to be executed on the same worker
+        return "local[1]"
+
     def setUp(self):
         import pandas as pd
 
@@ -225,10 +229,6 @@ class PredictBatchUDFTestsMixin:
         batch_sizes = preds["preds"].to_numpy()
         self.assertTrue(all(batch_sizes <= batch_size))
 
-    # TODO(SPARK-49793): enable the test below
-    @unittest.skipIf(
-        LooseVersion(np.__version__) >= LooseVersion("2"), "Caching does not work with numpy 2"
-    )
     def test_caching(self):
         def make_predict_fn():
             # emulate loading a model, this should only be invoked once (per worker process)
@@ -241,7 +241,8 @@ class PredictBatchUDFTestsMixin:
 
         identity = predict_batch_udf(make_predict_fn, return_type=DoubleType(), batch_size=5)
 
-        # results should be the same
+        # Notice that we can't rely on a consistent partition to worker assignment, so we need to
+        # run all the workload on the same worker to ensure the same results.
         df1 = self.df.withColumn("preds", identity(struct("a"))).toPandas()
         df2 = self.df.withColumn("preds", identity(struct("a"))).toPandas()
         self.assertTrue(df1.equals(df2))

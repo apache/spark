@@ -22,17 +22,12 @@ import time
 import unittest
 from functools import reduce
 from itertools import chain
-import platform
 
 from pyspark import SparkConf, SparkContext
 from pyspark.streaming import StreamingContext
 from pyspark.testing.streamingutils import PySparkStreamingTestCase
 
 
-@unittest.skipIf(
-    "pypy" in platform.python_implementation().lower(),
-    "The tests fail in PyPy3 implementation for an unknown reason.",
-)
 class BasicOperationTests(PySparkStreamingTestCase):
     def test_map(self):
         """Basic operation test for DStream.map."""
@@ -430,10 +425,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
         self.fail("a failed func should throw an error")
 
 
-@unittest.skipIf(
-    "pypy" in platform.python_implementation().lower(),
-    "The tests fail in PyPy3 implementation for an unknown reason.",
-)
 class WindowFunctionTests(PySparkStreamingTestCase):
     timeout = 15
 
@@ -522,10 +513,6 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         self._test_func(input, func, expected)
 
 
-@unittest.skipIf(
-    "pypy" in platform.python_implementation().lower(),
-    "The tests fail in PyPy3 implementation for an unknown reason.",
-)
 class CheckpointTests(unittest.TestCase):
     setupCalled = False
 

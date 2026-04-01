@@ -87,7 +87,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_WITH
  *    )
  *    }}}
  *
- *  - Any subquery can contain [[UnresolvedWith]] on top of it, but [[WithCTE]] is not gonna be
+ *  - Any subquery can contain [[UnresolvedWith]] on top of it, but [[WithCTE]] is not going to be
  *    1 to 1 to its unresolved counterpart. For example, if we are dealing with simple subqueries,
  *    [[CTERelationDef]]s will be merged together under a single [[WithCTE]]. The previous example
  *    would produce the following resolved plan:
