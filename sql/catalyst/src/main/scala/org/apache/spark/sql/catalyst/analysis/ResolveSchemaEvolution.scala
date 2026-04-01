@@ -119,8 +119,7 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
       case ExtractV2Table(t: SupportsSchemaEvolution) =>
         candidateChanges.filter {
           case change: ColumnChange => t.supportsColumnChange(change)
-          // Reject other table changes - computeSchemaChanges should anyway only collect column
-          // changes.
+          // Reject other table changes.
           case _ => false
         }
       case r: DataSourceV2Relation if r.autoSchemaEvolution =>
@@ -227,6 +226,7 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
     val adds = newFields
       .filterNot(f => currentFieldMap.contains(f.name))
       .map { f =>
+        // Make the type nullable, since existing rows in the table will have NULLs for this column.
         TableChange.addColumn((fieldPath :+ f.name).toArray, f.dataType.asNullable)
       }
 
