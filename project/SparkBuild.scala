@@ -1682,7 +1682,7 @@ object Unidoc {
     (JavaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
         yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectJdbc,
-        connectClient, connectShims, protobuf, profiler),
+        connectClient, connectShims, protobuf, profiler, udfWorkerProto, udfWorkerCore),
   )
 }
 
