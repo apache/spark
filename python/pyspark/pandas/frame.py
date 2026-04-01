@@ -9239,7 +9239,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         Compare to another DataFrame and show the differences.
 
-        .. versionadded:: 4.0.0
+        .. versionadded:: 4.2.0
 
         .. note:: This API is slightly different from pandas when indexes from both
             DataFrames are not identical and config 'compute.eager_check' is False.

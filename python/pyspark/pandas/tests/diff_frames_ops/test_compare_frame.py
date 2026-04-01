@@ -137,6 +137,14 @@ class CompareFrameMixin:
         self._assert_compare_eq(pdf1, pdf2, keep_equal=True)
         self._assert_compare_eq(pdf1, pdf2, keep_shape=True, keep_equal=True)
 
+    def test_compare_empty(self):
+        pdf1 = pd.DataFrame({"a": pd.Series([], dtype="int64"), "b": pd.Series([], dtype="int64")})
+        pdf2 = pd.DataFrame({"a": pd.Series([], dtype="int64"), "b": pd.Series([], dtype="int64")})
+        self._assert_compare_eq(pdf1, pdf2)
+        self._assert_compare_eq(pdf1, pdf2, keep_shape=True)
+        self._assert_compare_eq(pdf1, pdf2, keep_equal=True)
+        self._assert_compare_eq(pdf1, pdf2, keep_shape=True, keep_equal=True)
+
     def test_compare_different_index(self):
         with self.assertRaisesRegex(
             ValueError, "Can only compare identically-labeled DataFrame objects"
