@@ -43,6 +43,14 @@
       <artifactId>protobuf-java</artifactId>
       <scope>compile</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala-library</artifactId>
+    </dependency>
   </dependencies>
 
   <build>
@@ -69,14 +77,9 @@
           </execution>
         </executions>
       </plugin>
-      <!-- Proto module is Java-only (generated from protobuf); skip Scala compiler -->
       <plugin>
         <groupId>net.alchim31.maven</groupId>
         <artifactId>scala-maven-plugin</artifactId>
-        <configuration>
-          <skipMain>true</skipMain>
-          <skip>true</skip>
-        </configuration>
       </plugin>
     </plugins>
   </build>

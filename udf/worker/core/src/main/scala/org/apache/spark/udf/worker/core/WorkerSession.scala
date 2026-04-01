@@ -29,7 +29,7 @@ import org.apache.spark.annotation.Experimental
  * A WorkerSession is not 1-to-1 mapped to an actual worker process. Multiple
  * WorkerSessions may be backed by the same worker when the worker is reused.
  * Worker reuse and pooling are managed by each [[WorkerDispatcher]]
- * implementation based on the [[WorkerSpec]].
+ * implementation based on the [[WorkerSpecification]].
  */
 @Experimental
 abstract class WorkerSession

@@ -14,15 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.udf.worker.core
+package org.apache.spark.udf.worker
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.udf.worker.UDFWorkerSpecification
 
 /**
  * :: Experimental ::
  * Typed Scala wrapper around the protobuf [[UDFWorkerSpecification]].
  */
 @Experimental
-class WorkerSpec(val proto: UDFWorkerSpecification) {
+class WorkerSpecification(val proto: UDFWorkerSpecification) {
 }

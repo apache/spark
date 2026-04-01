@@ -22,8 +22,8 @@ implementation based on the worker specification.
 udf/worker/
 ├── proto/  Protobuf definition of the worker specification
 │           (UDFWorkerSpecification -- currently a placeholder).
+│           WorkerSpecification   -- typed Scala wrapper around the protobuf spec.
 └── core/   Engine-side APIs (all @Experimental):
-              WorkerSpec            -- typed Scala wrapper around the protobuf spec.
               WorkerDispatcher      -- manages workers for one spec; creates sessions.
               WorkerSession         -- represents one single UDF execution.
               WorkerSecurityScope   -- security boundary for connection pooling.
