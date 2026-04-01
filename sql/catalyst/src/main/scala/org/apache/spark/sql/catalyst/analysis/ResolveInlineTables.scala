@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.EvalHelper
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern.INLINE_TABLE_EVAL
 import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
 
@@ -29,6 +30,16 @@ import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
 object ResolveInlineTables extends Rule[LogicalPlan] with EvalHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(_.containsPattern(INLINE_TABLE_EVAL), ruleId) {
+      // For INSERT, ignore collation differences in inline table columns since the INSERT
+      // coercion will cast to the target column's collation.
+      case i @ InsertIntoStatement(_, _, _, table: UnresolvedInlineTable, _, _, _, _, _)
+          if table.expressionsResolved =>
+        // Preserve the inline table's origin so error messages point to the VALUES clause,
+        // not the INSERT statement.
+        CurrentOrigin.withOrigin(table.origin) {
+          i.copy(query = EvaluateUnresolvedInlineTable
+            .evaluateUnresolvedInlineTable(table, ignoreCollation = true))
+        }
       case table: UnresolvedInlineTable if table.expressionsResolved =>
         EvaluateUnresolvedInlineTable.evaluateUnresolvedInlineTable(table)
     }
