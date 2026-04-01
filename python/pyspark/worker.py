@@ -367,7 +367,7 @@ def wrap_scalar_pandas_udf(f, args_offsets, kwargs_offsets, return_type, runner_
 
     def verify_result_type(result):
         if not hasattr(result, "__len__"):
-            pd_type = "pandas.DataFrame" if type(return_type) == StructType else "pandas.Series"
+            pd_type = "pandas.DataFrame" if isinstance(return_type, StructType) else "pandas.Series"
             raise PySparkTypeError(
                 errorClass="UDF_RETURN_TYPE",
                 messageParameters={
@@ -399,7 +399,7 @@ def wrap_scalar_pandas_udf(f, args_offsets, kwargs_offsets, return_type, runner_
 
 
 def wrap_pandas_batch_iter_udf(f, return_type, runner_conf):
-    iter_type_label = "pandas.DataFrame" if type(return_type) == StructType else "pandas.Series"
+    iter_type_label = "pandas.DataFrame" if isinstance(return_type, StructType) else "pandas.Series"
 
     def verify_result(result):
         if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
@@ -415,7 +415,7 @@ def wrap_pandas_batch_iter_udf(f, return_type, runner_conf):
     def verify_element(elem):
         import pandas as pd
 
-        if not isinstance(elem, pd.DataFrame if type(return_type) == StructType else pd.Series):
+        if not isinstance(elem, pd.DataFrame if isinstance(return_type, StructType) else pd.Series):
             raise PySparkTypeError(
                 errorClass="UDF_RETURN_TYPE",
                 messageParameters={
@@ -438,7 +438,7 @@ def wrap_pandas_batch_iter_udf(f, return_type, runner_conf):
 def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_return_schema):
     import pandas as pd
 
-    if type(return_type) == StructType:
+    if isinstance(return_type, StructType):
         if not isinstance(result, pd.DataFrame):
             raise PySparkTypeError(
                 errorClass="UDF_RETURN_TYPE",
@@ -2925,9 +2925,9 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             # Legacy coerces String/Binary for Arrow compatibility
             coerce = (
                 str
-                if type(udf_return_type) == StringType
+                if isinstance(udf_return_type, StringType)
                 else bytes
-                if type(udf_return_type) == BinaryType
+                if isinstance(udf_return_type, BinaryType)
                 else None
             )
             udf_infos.append(
