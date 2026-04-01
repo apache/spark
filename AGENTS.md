@@ -73,7 +73,7 @@ Run a single test case:
 
 ## Pull Request Workflow
 
-PR title requires a JIRA ticket ID (e.g., `[SPARK-xxxx][SQL] Title`). Ask the user to create a new ticket or provide an existing one if not given. Follow the template in `.github/PULL_REQUEST_TEMPLATE` for the PR description.
+PR title requires a JIRA ticket ID (e.g., `[SPARK-xxxx][SQL] Title`). Ask the user to create a new ticket or provide an existing one if not given. Before writing the PR description, read `.github/PULL_REQUEST_TEMPLATE` and fill in every section from that file.
 
 DO NOT push to the upstream repo. Always push to the personal fork. Open PRs against `master` on the upstream repo.
 
