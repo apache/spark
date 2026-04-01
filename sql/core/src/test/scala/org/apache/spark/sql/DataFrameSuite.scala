@@ -45,7 +45,7 @@ import org.apache.spark.sql.expressions.{Aggregator, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
-import org.apache.spark.sql.test.SQLTestData.{ArrayData, ArrayStringWrapper, ContainerStringWrapper, StringWrapper, TestData2}
+import org.apache.spark.sql.test.SQLTestData.{ArrayStringWrapper, ContainerStringWrapper, StringWrapper, TestData2}
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -556,19 +556,19 @@ class DataFrameSuite extends QueryTest
 
     checkAnswer(
       arrayData.orderBy($"data".getItem(0).asc),
-      arrayData.as[ArrayData].collect().sortBy(_.data(0)).map(Row.fromTuple).toSeq)
+      arrayData.collect().sortBy(_.getAs[Seq[Int]](0)(0)).toSeq)
 
     checkAnswer(
       arrayData.orderBy($"data".getItem(0).desc),
-      arrayData.as[ArrayData].collect().sortBy(_.data(0)).reverse.map(Row.fromTuple).toSeq)
+      arrayData.collect().sortBy(_.getAs[Seq[Int]](0)(0)).reverse.toSeq)
 
     checkAnswer(
       arrayData.orderBy($"data".getItem(1).asc),
-      arrayData.as[ArrayData].collect().sortBy(_.data(1)).map(Row.fromTuple).toSeq)
+      arrayData.collect().sortBy(_.getAs[Seq[Int]](0)(1)).toSeq)
 
     checkAnswer(
       arrayData.orderBy($"data".getItem(1).desc),
-      arrayData.as[ArrayData].collect().sortBy(_.data(1)).reverse.map(Row.fromTuple).toSeq)
+      arrayData.collect().sortBy(_.getAs[Seq[Int]](0)(1)).reverse.toSeq)
   }
 
   test("limit") {
