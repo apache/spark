@@ -21,6 +21,8 @@ import org.apache.spark.sql.{AnalysisException, Row}
 
 abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
 
+  override protected def deltaUpdate: Boolean = true
+
   test("nullable row ID attrs") {
     createAndInitTable("pk INT, salary INT, dep STRING",
       """{ "pk": 1, "salary": 300, "dep": 'hr' }

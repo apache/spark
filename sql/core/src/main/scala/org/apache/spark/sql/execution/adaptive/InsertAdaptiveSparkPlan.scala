@@ -30,8 +30,9 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.{DataWritingCommandExec, ExecutedCommandExec}
 import org.apache.spark.sql.execution.datasources.V1WriteCommand
-import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
+import org.apache.spark.sql.execution.datasources.v2.{V2CommandExec, V2ExistingTableWriteExec}
 import org.apache.spark.sql.execution.exchange.Exchange
+import org.apache.spark.sql.execution.metric.ResolveIncrementMetric
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperator
 import org.apache.spark.sql.internal.SQLConf
 
@@ -46,12 +47,22 @@ case class InsertAdaptiveSparkPlan(
 
   override def conf: SQLConf = adaptiveExecutionContext.session.sessionState.conf
 
+  // Extra preprocessing rules to pass to the next AQE instance (e.g., metric resolution
+  // rules from a parent V2 write exec). Set before processing children, cleared after.
+  @transient private var extraPreprocessingRules: Seq[Rule[SparkPlan]] = Nil
+
   override def apply(plan: SparkPlan): SparkPlan = applyInternal(plan, false)
 
   private def applyInternal(plan: SparkPlan, isSubquery: Boolean): SparkPlan = plan match {
     case _ if !conf.adaptiveExecutionEnabled => plan
     case _: ExecutedCommandExec => plan
     case _: CommandResultExec => plan
+    case w: V2ExistingTableWriteExec if w.operationMetrics.nonEmpty =>
+      val saved = extraPreprocessingRules
+      extraPreprocessingRules = Seq(ResolveIncrementMetric(w.operationMetrics))
+      val result = w.withNewChildren(w.children.map(apply))
+      extraPreprocessingRules = saved
+      result
     case c: V2CommandExec => c.withNewChildren(c.children.map(apply))
     case c: DataWritingCommandExec
         if !c.cmd.isInstanceOf[V1WriteCommand] || !conf.plannedWriteEnabled =>
@@ -75,8 +86,7 @@ case class InsertAdaptiveSparkPlan(
           // Fall back to non-AQE mode if AQE is not supported in any of the sub-queries.
           val subqueryMap = buildSubqueryMap(plan)
           val planSubqueriesRule = PlanAdaptiveSubqueries(subqueryMap)
-          val preprocessingRules = Seq(
-            planSubqueriesRule)
+          val preprocessingRules = Seq(planSubqueriesRule) ++ extraPreprocessingRules
           // Run pre-processing rules.
           val newPlan = AdaptiveSparkPlanExec.applyPhysicalRules(plan, preprocessingRules)
           logDebug(s"Adaptive execution enabled for plan: $plan")

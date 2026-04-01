@@ -624,6 +624,7 @@ object QueryExecution {
       subquery: Boolean): Seq[Rule[SparkPlan]] = {
     // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
+    Seq(metric.ResolveIncrementMetrics) ++
     adaptiveExecutionRule.toSeq ++
     Seq(
       CoalesceBucketsInJoin,

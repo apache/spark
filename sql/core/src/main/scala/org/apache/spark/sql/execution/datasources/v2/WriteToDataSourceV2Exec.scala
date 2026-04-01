@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSER
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, MergeSummaryImpl, PhysicalWriteInfoImpl, Write, WriterCommitMessage, WriteSummary}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, MergeSummaryImpl, PhysicalWriteInfoImpl, RowLevelOperation, UpdateSummaryImpl, Write, WriterCommitMessage, WriteSummary}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -311,7 +311,10 @@ case class ReplaceDataExec(
     query: SparkPlan,
     refreshCache: () => Unit,
     projections: ReplaceDataProjections,
-    write: Write) extends V2ExistingTableWriteExec {
+    write: Write,
+    override val rowLevelCommand: Option[RowLevelOperation.Command],
+    override val operationMetrics: Map[String, SQLMetric] = Map.empty)
+  extends V2ExistingTableWriteExec {
 
   override def writingTask: WritingSparkTask[_] = {
     projections match {
@@ -334,7 +337,10 @@ case class WriteDeltaExec(
     query: SparkPlan,
     refreshCache: () => Unit,
     projections: WriteDeltaProjections,
-    write: DeltaWrite) extends V2ExistingTableWriteExec {
+    write: DeltaWrite,
+    override val rowLevelCommand: Option[RowLevelOperation.Command] = None,
+    override val operationMetrics: Map[String, SQLMetric] = Map.empty)
+  extends V2ExistingTableWriteExec {
 
   override lazy val writingTask: WritingSparkTask[_] = {
     if (projections.metadataProjection.isDefined) {
@@ -411,6 +417,7 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec {
 trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSparkPlanHelper {
   def query: SparkPlan
   def writingTask: WritingSparkTask[_] = DataWritingSparkTask
+  def rowLevelCommand: Option[RowLevelOperation.Command] = None
 
   var commitProgress: Option[StreamWriterCommitProgress] = None
 
@@ -418,8 +425,9 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
   override def output: Seq[Attribute] = Nil
 
   protected val customMetrics: Map[String, SQLMetric] = Map.empty
+  val operationMetrics: Map[String, SQLMetric] = Map.empty
 
-  override lazy val metrics = customMetrics
+  override lazy val metrics = customMetrics ++ operationMetrics
 
   protected def writeWithV2(batchWrite: BatchWrite): Seq[InternalRow] = {
     val rdd: RDD[InternalRow] = {
@@ -490,18 +498,28 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
   }
 
   private def getWriteSummary(query: SparkPlan): Option[WriteSummary] = {
-    collectFirst(query) { case m: MergeRowsExec => m }.map { n =>
-      val metrics = n.metrics
-      MergeSummaryImpl(
-        metrics.get("numTargetRowsCopied").map(_.value).getOrElse(-1L),
-        metrics.get("numTargetRowsDeleted").map(_.value).getOrElse(-1L),
-        metrics.get("numTargetRowsUpdated").map(_.value).getOrElse(-1L),
-        metrics.get("numTargetRowsInserted").map(_.value).getOrElse(-1L),
-        metrics.get("numTargetRowsMatchedUpdated").map(_.value).getOrElse(-1L),
-        metrics.get("numTargetRowsMatchedDeleted").map(_.value).getOrElse(-1L),
-        metrics.get("numTargetRowsNotMatchedBySourceUpdated").map(_.value).getOrElse(-1L),
-        metrics.get("numTargetRowsNotMatchedBySourceDeleted").map(_.value).getOrElse(-1L)
-      )
+    rowLevelCommand.flatMap {
+      case RowLevelOperation.Command.MERGE =>
+        collectFirst(query) { case m: MergeRowsExec => m }.map { n =>
+          val metrics = n.metrics
+          MergeSummaryImpl(
+            metrics.get("numTargetRowsCopied").map(_.value).getOrElse(-1L),
+            metrics.get("numTargetRowsDeleted").map(_.value).getOrElse(-1L),
+            metrics.get("numTargetRowsUpdated").map(_.value).getOrElse(-1L),
+            metrics.get("numTargetRowsInserted").map(_.value).getOrElse(-1L),
+            metrics.get("numTargetRowsMatchedUpdated").map(_.value).getOrElse(-1L),
+            metrics.get("numTargetRowsMatchedDeleted").map(_.value).getOrElse(-1L),
+            metrics.get("numTargetRowsNotMatchedBySourceUpdated").map(_.value).getOrElse(-1L),
+            metrics.get("numTargetRowsNotMatchedBySourceDeleted").map(_.value).getOrElse(-1L)
+          )
+        }
+      case RowLevelOperation.Command.UPDATE =>
+        Some(UpdateSummaryImpl(
+          operationMetrics.get("numUpdatedRows").map(_.value).get,
+          operationMetrics.get("numCopiedRows").map(_.value).get
+        ))
+      case RowLevelOperation.Command.DELETE =>
+        None
     }
   }
 }

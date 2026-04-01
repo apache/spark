@@ -19,14 +19,33 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, TableChange, TableInfo}
+import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, InMemoryTable, TableChange, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
+import org.apache.spark.sql.connector.write.UpdateSummary
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
 abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
   import testImplicits._
+
+  protected def deltaUpdate: Boolean = false
+
+  protected def getUpdateSummary(): UpdateSummary = {
+    val t = catalog.loadTable(ident).asInstanceOf[InMemoryTable]
+    t.commits.last.writeSummary.get.asInstanceOf[UpdateSummary]
+  }
+
+  protected def checkUpdateMetrics(
+      numUpdatedRows: Long,
+      numCopiedRows: Long): Unit = {
+    val summary = getUpdateSummary()
+    assert(summary.numUpdatedRows() === numUpdatedRows,
+      s"Expected numUpdatedRows=$numUpdatedRows, got ${summary.numUpdatedRows()}")
+    val expectedCopied = if (deltaUpdate) 0L else numCopiedRows
+    assert(summary.numCopiedRows() === expectedCopied,
+      s"Expected numCopiedRows=$expectedCopied, got ${summary.numCopiedRows()}")
+  }
 
   test("update table containing added column with default value") {
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
@@ -63,6 +82,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         Row(3, 300, "hr", "explicit-text"),
         Row(4, 400, "software", "explicit-text"),
         Row(5, 500, "hr", null)))
+
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
   }
 
   test("update table with expression-based default values") {
@@ -134,6 +155,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     sql(s"UPDATE $tableNameAsString SET dep = 'invalid' WHERE salary <= 1")
 
     checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Nil)
+
+    checkUpdateMetrics(numUpdatedRows = 0, numCopiedRows = 0)
   }
 
   test("update with basic filters") {
@@ -148,6 +171,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, 100, "invalid") :: Row(2, 200, "software") :: Row(3, 300, "hr") :: Nil)
+
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
   }
 
   test("update with aliases") {
@@ -162,6 +187,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, -1, "hr") :: Row(2, 200, "software") :: Row(3, -1, "hr") :: Nil)
+
+    checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 0)
   }
 
   test("update aligns assignments") {
@@ -175,6 +202,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, 10, 109, "hr") :: Row(2, 22, 222, "hr") :: Nil)
+
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
   }
 
   test("update non-existing records") {
@@ -189,6 +218,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, 100, "hr") :: Row(2, 200, "hardware") :: Row(3, null, "hr") :: Nil)
+
+    checkUpdateMetrics(numUpdatedRows = 0, numCopiedRows = 0)
   }
 
   test("update without condition") {
@@ -203,6 +234,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, -1, "hr") :: Row(2, -1, "hardware") :: Row(3, -1, "hr") :: Nil)
+
+    checkUpdateMetrics(numUpdatedRows = 3, numCopiedRows = 0)
   }
 
   test("update with NULL conditions on partition columns") {
@@ -217,12 +250,14 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, 100, null) :: Row(2, 200, "hr") :: Row(3, 300, "hardware") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 0, numCopiedRows = 0)
 
     // should update one matching row with a null-safe condition
     sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE dep <=> NULL")
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, -1, null) :: Row(2, 200, "hr") :: Row(3, 300, "hardware") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
   }
 
   test("update with NULL conditions on data columns") {
@@ -237,12 +272,14 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, null, "hr") :: Row(2, 200, "hr") :: Row(3, 300, "hardware") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 0, numCopiedRows = 0)
 
     // should update one matching row with a null-safe condition
     sql(s"UPDATE $tableNameAsString SET dep = 'invalid' WHERE salary <=> NULL")
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, null, "invalid") :: Row(2, 200, "hr") :: Row(3, 300, "hardware") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
   }
 
   test("update with IN and NOT IN predicates") {
@@ -256,16 +293,19 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, -1, "hr") :: Row(2, 200, "hardware") :: Row(3, null, "hr") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
 
     sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE salary NOT IN (null, 1)")
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, -1, "hr") :: Row(2, 200, "hardware") :: Row(3, null, "hr") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 0, numCopiedRows = 0)
 
     sql(s"UPDATE $tableNameAsString SET salary = 100 WHERE salary NOT IN (1, 10)")
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, 100, "hr") :: Row(2, 100, "hardware") :: Row(3, null, "hr") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 1)
   }
 
   test("update nested struct fields") {
@@ -280,12 +320,14 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, Row(-1, Row(Seq(-1), Map("k" -> "v"))), "hr") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
 
     // set primitive, array, map columns to NULL (proper casts should be in inserted)
     sql(s"UPDATE $tableNameAsString SET s.c1 = NULL, s.c2 = NULL WHERE pk = 1")
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, Row(null, null), "hr") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
 
     // assign an entire struct
     sql(
@@ -295,6 +337,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, Row(1, Row(Seq(1), null)), "hr") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
   }
 
   test("update fields inside NULL structs") {
@@ -306,6 +349,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, Row(-1, null), "hr") :: Nil)
+
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
   }
 
   test("update refreshes relation cache") {
@@ -341,6 +386,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
             Row(3, 200, "hardware") ::
             Row(4, 300, "hr") :: Nil)
 
+        checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 1)
+
         // verify the view reflects the changes in the table
         checkAnswer(sql("SELECT * FROM temp"), Nil)
       }
@@ -358,6 +405,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, -1, Row(300, "v1"), "hr") :: Row(2, 200, Row(200, "v2"), "software") :: Nil)
+
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
   }
 
   test("update with IN subqueries") {
@@ -385,6 +434,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "invalid") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
+      checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
 
       sql(
         s"""UPDATE $tableNameAsString
@@ -397,6 +447,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "invalid") :: Row(2, 2, "invalid") :: Row(3, null, "invalid") :: Nil)
+      checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 0)
     }
   }
 
@@ -421,6 +472,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "invalid") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
+
+      checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
     }
   }
 
@@ -447,6 +500,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "hr") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
+      checkUpdateMetrics(numUpdatedRows = 0, numCopiedRows = 0)
 
       sql(
         s"""UPDATE $tableNameAsString
@@ -457,6 +511,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "invalid") :: Row(2, 2, "invalid") :: Row(3, null, "hr") :: Nil)
+      checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 1)
 
       sql(
         s"""UPDATE $tableNameAsString
@@ -469,6 +524,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "hr") :: Row(2, 2, "hr") :: Row(3, null, "hr") :: Nil)
+      checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 0)
     }
   }
 
@@ -495,6 +551,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "hr") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
+      checkUpdateMetrics(numUpdatedRows = 0, numCopiedRows = 0)
 
       sql(
         s"""UPDATE $tableNameAsString t
@@ -505,6 +562,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "invalid") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
+      checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
 
       sql(
         s"""UPDATE $tableNameAsString t
@@ -515,6 +573,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "invalid") :: Row(2, 2, "hardware") :: Row(3, null, "invalid") :: Nil)
+      checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
 
       sql(
         s"""UPDATE $tableNameAsString t
@@ -527,6 +586,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "invalid") :: Row(2, 2, "hardware") :: Row(3, null, "invalid") :: Nil)
+      checkUpdateMetrics(numUpdatedRows = 0, numCopiedRows = 0)
     }
   }
 
@@ -555,6 +615,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "hr") :: Row(2, 2, "invalid") :: Row(3, null, "hr") :: Nil)
+      checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
 
       sql(
         s"""UPDATE $tableNameAsString t
@@ -565,6 +626,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "hr") :: Row(2, 2, "invalid") :: Row(3, null, "invalid") :: Nil)
+      checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 1)
 
       sql(
         s"""UPDATE $tableNameAsString t
@@ -577,6 +639,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "invalid") :: Row(2, 2, "invalid") :: Row(3, null, "invalid") :: Nil)
+      checkUpdateMetrics(numUpdatedRows = 3, numCopiedRows = 0)
     }
   }
 
@@ -601,6 +664,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "invalid") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
+
+      checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
     }
   }
 
@@ -617,6 +682,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT count(*) FROM $tableNameAsString WHERE value < 2.0"),
       Row(2) :: Nil)
+
+    checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 1)
   }
 
   test("SPARK-53538: update with nondeterministic assignments and no wholestage codegen") {
@@ -636,6 +703,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT count(*) FROM $tableNameAsString WHERE value < 2.0"),
       Row(2) :: Nil)
+
+    checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 1)
   }
 
   test("update with default values") {
@@ -658,6 +727,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, 42, "hr") :: Row(2, 2, "software") :: Row(3, 42, "hr") :: Nil)
+
+    checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 0)
   }
 
   test("update with current_timestamp default value using DEFAULT keyword") {
@@ -703,6 +774,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       Row(1, Row("x  ", "y"), "hr") ::
         Row(2, Row("bbb", "bbb"), "software") ::
         Row(3, Row("x  ", "y"), "hr") :: Nil)
+
+    checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 0)
   }
 
   test("update with NOT NULL checks") {
