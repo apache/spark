@@ -40,9 +40,10 @@ case class FlowSystemMetadata(
    * Returns the checkpoint root directory for a given flow
    * which is storage/_checkpoints/flow_destination_table/flow_name.
    * @return the checkpoint root directory for `flow`
+   * @throws IllegalArgumentException when the flow's destination is not among the tables or sinks
    */
-  def flowCheckpointsDirOpt(): Option[Path] = {
-    Option(if (graph.table.contains(flow.destinationIdentifier) ||
+  def flowCheckpointsDir(): Path = {
+    if (graph.table.contains(flow.destinationIdentifier) ||
       graph.sink.contains(flow.destinationIdentifier)) {
       val checkpointRoot = new Path(context.storageRoot, "_checkpoints")
       // Different tables in the pipeline can have flows with the same name, so we include
@@ -62,7 +63,7 @@ case class FlowSystemMetadata(
       throw new IllegalArgumentException(
         s"Flow ${flow.identifier} does not have a valid destination for checkpoints."
       )
-    })
+    }
   }
 
   /**
@@ -74,18 +75,8 @@ case class FlowSystemMetadata(
 
   /** Returns the location for the most recent checkpoint of a given flow. */
   def latestCheckpointLocation: String = {
-    val checkpointsDir = flowCheckpointsDirOpt().get
+    val checkpointsDir = flowCheckpointsDir()
     SystemMetadata.getLatestCheckpointDir(checkpointsDir)
-  }
-
-  /**
-   * Same as [[latestCheckpointLocation]] but returns None if the flow checkpoints directory
-   * does not exist.
-   */
-  def latestCheckpointLocationOpt(): Option[String] = {
-    flowCheckpointsDirOpt().map { flowCheckpointsDir =>
-      SystemMetadata.getLatestCheckpointDir(flowCheckpointsDir)
-    }
   }
 }
 
