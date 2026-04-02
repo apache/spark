@@ -204,6 +204,13 @@ class EvalConf(Conf):
         except ValueError:
             return port
 
+    @property
+    def input_type(self) -> Optional[DataType]:
+        input_type = self.get("input_type", None)
+        if input_type is None:
+            return None
+        return _parse_datatype_json_string(input_type)
+
 
 def report_times(outfile, boot, init, finish, processing_time_ms):
     write_int(SpecialLengths.TIMING_DATA, outfile)
@@ -2731,10 +2738,9 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
             and not runner_conf.use_legacy_pandas_udf_conversion
         ):
-            input_type = _parse_datatype_json_string(utf8_deserializer.loads(infile))
             ser = ArrowBatchUDFSerializer(
                 safecheck=runner_conf.safecheck,
-                input_type=input_type,
+                input_type=eval_conf.input_type,
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 binary_as_bytes=runner_conf.binary_as_bytes,
             )
@@ -2751,12 +2757,6 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 "row" if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF else "dict"
             )
             ndarray_as_list = eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
-            # Arrow-optimized Python UDF takes input types
-            input_type = (
-                _parse_datatype_json_string(utf8_deserializer.loads(infile))
-                if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
-                else None
-            )
 
             ser = ArrowStreamPandasUDFSerializer(
                 timezone=runner_conf.timezone,
@@ -2767,7 +2767,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 ndarray_as_list=ndarray_as_list,
                 prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
                 arrow_cast=True,
-                input_type=input_type,
+                input_type=eval_conf.input_type,
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 prefers_large_types=runner_conf.use_large_var_types,
             )

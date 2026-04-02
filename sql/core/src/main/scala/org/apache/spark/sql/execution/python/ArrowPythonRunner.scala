@@ -136,10 +136,11 @@ class ArrowPythonWithNamedArgumentRunner(
 
   override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
 
+  override protected def evalConf: Map[String, String] = super.evalConf ++ Map(
+    "input_type" -> schema.json
+  )
+
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
-    if (evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
-      PythonWorkerUtils.writeUTF(schema.json, dataOut)
-    }
     PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas)
   }
 }
