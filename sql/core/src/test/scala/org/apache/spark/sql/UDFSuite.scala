@@ -359,11 +359,11 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       sql("""
            | SELECT tmp.t.* FROM
            | (SELECT arrayDataFunc(data, nestedData) AS t FROM arrayData) tmp
-          """.stripMargin).toDF(), arrayData.toDF())
+          """.stripMargin).toDF(), arrayData)
     checkAnswer(
       sql("""
            | SELECT mapDataFunc(data) AS t FROM mapData
-          """.stripMargin).toDF(), mapData.toDF())
+          """.stripMargin).toDF(), mapData)
     checkAnswer(
       sql("""
            | SELECT tmp.t.* FROM

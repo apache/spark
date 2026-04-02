@@ -423,7 +423,7 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Test Summary
       if: always()
-      uses: test-summary/action@v2
+      uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86 # v2
       with:
         paths: |
           **/target/test-reports/*.xml
@@ -679,7 +679,7 @@ jobs:
         fi
     - name: Upload coverage to Codecov
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5
       env:
         CODECOV_TOKEN: ${{ secrets.codecov_token }}
       with:
@@ -690,7 +690,7 @@ jobs:
     - name: Upload test results to Codecov
       env: ${{ fromJSON(inputs.envs) }}
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5
       with:
         report_type: 'test_results'
         files: '**/target/test-reports/*.xml'
@@ -708,7 +708,7 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Test Summary
       if: always()
-      uses: test-summary/action@v2
+      uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86 # v2
       with:
         paths: |
           **/target/test-reports/*.xml
@@ -799,7 +799,7 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Test Summary
       if: always()
-      uses: test-summary/action@v2
+      uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86 # v2
       with:
         paths: |
           **/target/test-reports/*.xml
@@ -824,15 +824,15 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Install Buf
-      uses: bufbuild/buf-setup-action@v1
+      uses: bufbuild/buf-setup-action@a47c93e0b1648d5651a065437926377d060baa99 # v1
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
     - name: Protocol Buffers Linter
-      uses: bufbuild/buf-lint-action@v1
+      uses: bufbuild/buf-lint-action@06f9dd823d873146471cfaaf108a993fe00e5325 # v1
       with:
         input: core/src/main/protobuf
     - name: Breaking change detection against branch-4.0
-      uses: bufbuild/buf-breaking-action@v1
+      uses: bufbuild/buf-breaking-action@c57b3d842a5c3f3b454756ef65305a50a587c5ba # v1
       with:
         input: sql/connect/common/src/main
         against: 'https://github.com/apache/spark.git#branch=branch-4.0,subdir=sql/connect/common/src/main'
@@ -1324,7 +1324,7 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Test Summary
       if: always()
-      uses: test-summary/action@v2
+      uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86 # v2
       with:
         paths: |
           **/target/test-reports/*.xml
@@ -1400,7 +1400,7 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Test Summary
       if: always()
-      uses: test-summary/action@v2
+      uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86 # v2
       with:
         paths: |
           **/target/test-reports/*.xml
@@ -1464,7 +1464,7 @@ jobs:
           sudo apt update
           sudo apt-get install r-base
       - name: Start Minikube
-        uses: medyagh/setup-minikube@v0.0.21
+        uses: medyagh/setup-minikube@e9e035a86bbc3caea26a450bd4dbf9d0c453682e # v0.0.21
         with:
           kubernetes-version: "1.35.0"
           # GitHub Actions limit 4C/16G, limit to 2C/6G for better resource statistic

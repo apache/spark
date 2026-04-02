@@ -551,19 +551,19 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
     checkAnswer(
       sql("SELECT * FROM arrayData ORDER BY data[0] ASC"),
-      arrayData.collect().sortBy(_.data(0)).map(Row.fromTuple).toSeq)
+      arrayData.collect().sortBy(_.getAs[Seq[Int]](0)(0)).toSeq)
 
     checkAnswer(
       sql("SELECT * FROM arrayData ORDER BY data[0] DESC"),
-      arrayData.collect().sortBy(_.data(0)).reverse.map(Row.fromTuple).toSeq)
+      arrayData.collect().sortBy(_.getAs[Seq[Int]](0)(0)).reverse.toSeq)
 
     checkAnswer(
       sql("SELECT * FROM mapData ORDER BY data[1] ASC"),
-      mapData.collect().sortBy(_.data(1)).map(Row.fromTuple).toSeq)
+      mapData.collect().sortBy(_.getAs[Map[Int, String]](0)(1)).toSeq)
 
     checkAnswer(
       sql("SELECT * FROM mapData ORDER BY data[1] DESC"),
-      mapData.collect().sortBy(_.data(1)).reverse.map(Row.fromTuple).toSeq)
+      mapData.collect().sortBy(_.getAs[Map[Int, String]](0)(1)).reverse.toSeq)
   }
 
   test("external sorting") {
@@ -1007,7 +1007,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         StructField("f3", BooleanType, false) ::
         StructField("f4", IntegerType, true) :: Nil)
 
-      val rowRDD1 = unparsedStrings.map { r =>
+      val rowRDD1 = unparsedStrings.as[String].rdd.map { r =>
         val values = r.split(",").map(_.trim)
         val v4 = try values(3).toInt catch {
           case _: NumberFormatException => null
@@ -1037,7 +1037,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           StructField("f12", BooleanType, false) :: Nil), false) ::
         StructField("f2", MapType(StringType, IntegerType, true), false) :: Nil)
 
-      val rowRDD2 = unparsedStrings.map { r =>
+      val rowRDD2 = unparsedStrings.as[String].rdd.map { r =>
         val values = r.split(",").map(_.trim)
         val v4 = try values(3).toInt catch {
           case _: NumberFormatException => null
@@ -1064,7 +1064,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             Row(4, 2147483644) :: Nil)
 
         // The value of a MapType column can be a mutable map.
-        val rowRDD3 = unparsedStrings.map { r =>
+        val rowRDD3 = unparsedStrings.as[String].rdd.map { r =>
           val values = r.split(",").map(_.trim)
           val v4 = try values(3).toInt catch {
             case _: NumberFormatException => null
