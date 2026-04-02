@@ -60,7 +60,11 @@ class ArrowColumnarPythonUDFSuite extends QueryTest with SharedSparkSession {
       registerTestUDF(pandasUDF, spark)
 
       val df = readArrowSource()
-      val result = df.selectExpr("arrow_test_udf(id)")
+      // Select all columns to avoid column pruning inserting a
+      // ProjectExec (which does not support columnar) between the
+      // scan and ArrowEvalPythonExec.
+      val result = df.selectExpr(
+        "id", "name", "value", "arrow_test_udf(id) as udf_id")
       val plan = result.queryExecution.executedPlan
 
       // ArrowEvalPythonExec should be present.
@@ -68,14 +72,12 @@ class ArrowColumnarPythonUDFSuite extends QueryTest with SharedSparkSession {
       assert(arrowExecs.nonEmpty,
         s"Expected ArrowEvalPythonExec in plan:\n$plan")
 
-      // No ColumnarToRowExec should be between the scan and
-      // ArrowEvalPythonExec.
+      // The direct child of ArrowEvalPythonExec should support
+      // columnar (the scan), with no ColumnarToRowExec in between.
       val arrowExec = arrowExecs.head
-      val columnarToRows = collectNodes[ColumnarToRowExec](arrowExec)
-      assert(columnarToRows.isEmpty,
-        "ColumnarToRowExec should not be present under " +
-          s"ArrowEvalPythonExec when reading from Arrow-backed source:" +
-          s"\n$plan")
+      assert(arrowExec.child.supportsColumnar,
+        "ArrowEvalPythonExec child should support columnar " +
+          s"when reading from Arrow-backed source:\n$plan")
     }
   }
 
