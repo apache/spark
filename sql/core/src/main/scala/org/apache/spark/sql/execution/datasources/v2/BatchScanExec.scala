@@ -44,17 +44,22 @@ case class BatchScanExec(
 
   @transient lazy val batch: Batch = if (scan == null) null else scan.toBatch
 
-  // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
+  // SPARK-56339: Use scan-based equality instead of batch-based equality.
+  // V2ScanRelationPushDown creates a separate Scan per DataSourceV2Relation, so each
+  // subquery gets its own Scan -> Batch object. Batch reference equality prevents
+  // ReuseSubquery from detecting identical subquery plans. Scan implementations that
+  // provide content-based equals/hashCode (comparing table path, snapshot version,
+  // schemas, and pushed filters) enable proper deduplication.
   override def equals(other: Any): Boolean = other match {
     case other: BatchScanExec =>
-      this.batch != null && this.batch == other.batch &&
+      this.scan != null && this.scan == other.scan &&
           this.runtimeFilters == other.runtimeFilters &&
           this.keyGroupedPartitioning == other.keyGroupedPartitioning
     case _ =>
       false
   }
 
-  override def hashCode(): Int = Objects.hash(batch, runtimeFilters)
+  override def hashCode(): Int = Objects.hash(scan, runtimeFilters)
 
   @transient override lazy val inputPartitions: Seq[InputPartition] =
     batch.planInputPartitions().toImmutableArraySeq

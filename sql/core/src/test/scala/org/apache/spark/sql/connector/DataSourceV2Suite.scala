@@ -1101,6 +1101,33 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     checkAnswer(query, Row(9, 0))
   }
 
+  test("SPARK-56339: BatchScanExec sameResult uses scan equality for subquery reuse") {
+    // Two BatchScanExec plans from separate queries should be detected as producing
+    // the same result, enabling ReuseSubquery to deduplicate identical subqueries.
+    val df = spark.read.format(classOf[SimpleDataSourceV2].getName).load()
+    df.createOrReplaceTempView("df")
+
+    val plan1 = sql("SELECT * FROM df").queryExecution.executedPlan
+    val plan2 = sql("SELECT * FROM df").queryExecution.executedPlan
+
+    val scans1 = plan1.collect { case b: BatchScanExec => b }
+    val scans2 = plan2.collect { case b: BatchScanExec => b }
+
+    assert(scans1.nonEmpty, "Expected BatchScanExec in plan1")
+    assert(scans2.nonEmpty, "Expected BatchScanExec in plan2")
+
+    val bse1 = scans1.head
+    val bse2 = scans2.head
+
+    // The Scan objects are different references (created by separate
+    // V2ScanRelationPushDown invocations) but have the same content.
+    assert(!(bse1.scan eq bse2.scan),
+      "Scan objects should be different references to test equality semantics")
+    assert(bse1.sameResult(bse2),
+      s"BatchScanExec.sameResult should return true for identical DSv2 scans.\n" +
+      s"scan1.equals(scan2): ${bse1.scan == bse2.scan}")
+  }
+
   test(
     "SPARK-54163: check mergeScalarSubqueries is effective for OrderAndPartitionAwareDataSource"
   ) {
