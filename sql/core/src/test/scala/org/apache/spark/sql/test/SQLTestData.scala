@@ -20,7 +20,6 @@ package org.apache.spark.sql.test
 import java.nio.charset.StandardCharsets
 import java.time.{Duration, Period}
 
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSessionProvider
 import org.apache.spark.sql.classic
 import org.apache.spark.sql.classic.{DataFrame, SQLImplicits}
@@ -156,44 +155,44 @@ private[sql] trait SQLTestData extends SparkSessionProvider { self =>
     df
   }
 
-  protected lazy val arrayData: RDD[ArrayData] = {
-    val rdd = spark.sparkContext.parallelize(
+  protected lazy val arrayData: DataFrame = {
+    val df = spark.sparkContext.parallelize(
       ArrayData(Seq(1, 2, 3), Seq(Seq(1, 2, 3))) ::
-      ArrayData(Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil)
-    rdd.toDF().createOrReplaceTempView("arrayData")
-    rdd
+      ArrayData(Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil).toDF()
+    df.createOrReplaceTempView("arrayData")
+    df
   }
 
-  protected lazy val mapData: RDD[MapData] = {
-    val rdd = spark.sparkContext.parallelize(
+  protected lazy val mapData: DataFrame = {
+    val df = spark.sparkContext.parallelize(
       MapData(Map(1 -> "a1", 2 -> "b1", 3 -> "c1", 4 -> "d1", 5 -> "e1")) ::
       MapData(Map(1 -> "a2", 2 -> "b2", 3 -> "c2", 4 -> "d2")) ::
       MapData(Map(1 -> "a3", 2 -> "b3", 3 -> "c3")) ::
       MapData(Map(1 -> "a4", 2 -> "b4")) ::
-      MapData(Map(1 -> "a5")) :: Nil)
-    rdd.toDF().createOrReplaceTempView("mapData")
-    rdd
+      MapData(Map(1 -> "a5")) :: Nil).toDF()
+    df.createOrReplaceTempView("mapData")
+    df
   }
 
-  protected lazy val calendarIntervalData: RDD[IntervalData] = {
-    val rdd = spark.sparkContext.parallelize(
-      IntervalData(new CalendarInterval(1, 1, 1)) :: Nil)
-    rdd.toDF().createOrReplaceTempView("calendarIntervalData")
-    rdd
+  protected lazy val calendarIntervalData: DataFrame = {
+    val df = spark.sparkContext.parallelize(
+      IntervalData(new CalendarInterval(1, 1, 1)) :: Nil).toDF()
+    df.createOrReplaceTempView("calendarIntervalData")
+    df
   }
 
-  protected lazy val repeatedData: RDD[StringData] = {
-    val rdd = spark.sparkContext.parallelize(List.fill(2)(StringData("test")))
-    rdd.toDF().createOrReplaceTempView("repeatedData")
-    rdd
+  protected lazy val repeatedData: DataFrame = {
+    val df = spark.sparkContext.parallelize(List.fill(2)(StringData("test"))).toDF()
+    df.createOrReplaceTempView("repeatedData")
+    df
   }
 
-  protected lazy val nullableRepeatedData: RDD[StringData] = {
-    val rdd = spark.sparkContext.parallelize(
+  protected lazy val nullableRepeatedData: DataFrame = {
+    val df = spark.sparkContext.parallelize(
       List.fill(2)(StringData(null)) ++
-      List.fill(2)(StringData("test")))
-    rdd.toDF().createOrReplaceTempView("nullableRepeatedData")
-    rdd
+      List.fill(2)(StringData("test"))).toDF()
+    df.createOrReplaceTempView("nullableRepeatedData")
+    df
   }
 
   protected lazy val nullInts: DataFrame = {
@@ -231,19 +230,19 @@ private[sql] trait SQLTestData extends SparkSessionProvider { self =>
     df
   }
 
-  protected lazy val unparsedStrings: RDD[String] = {
+  protected lazy val unparsedStrings: DataFrame = {
     spark.sparkContext.parallelize(
       "1, A1, true, null" ::
       "2, B2, false, null" ::
       "3, C3, true, null" ::
-      "4, D4, true, 2147483644" :: Nil)
+      "4, D4, true, 2147483644" :: Nil).toDF("value")
   }
 
-  // An RDD with 4 elements and 8 partitions
-  protected lazy val withEmptyParts: RDD[IntField] = {
-    val rdd = spark.sparkContext.parallelize((1 to 4).map(IntField), 8)
-    rdd.toDF().createOrReplaceTempView("withEmptyParts")
-    rdd
+  // A DataFrame with 4 elements and 8 partitions
+  protected lazy val withEmptyParts: DataFrame = {
+    val df = spark.sparkContext.parallelize((1 to 4).map(IntField), 8).toDF()
+    df.createOrReplaceTempView("withEmptyParts")
+    df
   }
 
   protected lazy val person: DataFrame = {

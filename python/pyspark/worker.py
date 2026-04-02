@@ -55,6 +55,7 @@ from pyspark.sql.conversion import (
 from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import (
     ArrowStreamSerializer,
+    ArrowStreamGroupSerializer,
     ArrowStreamPandasUDFSerializer,
     ArrowStreamPandasUDTFSerializer,
     ArrowStreamGroupUDFSerializer,
@@ -2645,7 +2646,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
             PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
         ):
-            ser = ArrowStreamSerializer(write_start_stream=True, num_dfs=1)
+            ser = ArrowStreamGroupSerializer(write_start_stream=True)
         elif eval_type == PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF:
             ser = ArrowStreamAggArrowUDFSerializer(safecheck=True, arrow_cast=True)
         elif eval_type in (

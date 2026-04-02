@@ -193,7 +193,7 @@ object GeographyType extends SpatialType {
         errorClass = "ST_INVALID_SRID_VALUE",
         messageParameters = Map("srid" -> srid.toString))
     }
-    new GeographyType(GEOGRAPHY_DEFAULT_CRS, GEOGRAPHY_DEFAULT_ALGORITHM)
+    new GeographyType(crs, GEOGRAPHY_DEFAULT_ALGORITHM)
   }
 
   def apply(crs: String): GeographyType = {
