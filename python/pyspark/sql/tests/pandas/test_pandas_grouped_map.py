@@ -278,6 +278,8 @@ class ApplyInPandasTestsMixin:
         if LooseVersion(pd.__version__) < "3.0.0":
             grouped_pdf = pdf.groupby("id")
         else:
+            # pandas 3+ GroupBy.apply drops grouping columns when grouped by
+            # the same DataFrame column, so use a copied Series instead.
             grouped_pdf = pdf.groupby(pdf.id.copy())
         expected = grouped_pdf.apply(foo.func).reset_index(drop=True)
         expected = expected.assign(v=expected.v.astype("float64"))
