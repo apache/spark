@@ -27,7 +27,7 @@ import org.apache.spark.api.python.DechunkedInputStream
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.CLASS_LOADER
 import org.apache.spark.security.SocketAuthServer
-import org.apache.spark.sql.{internal, Column, DataFrame, Encoders, Row, SparkSession, TableArg}
+import org.apache.spark.sql.{internal, Column, DataFrame, DataFrameReader, Encoders, Row, SparkSession, TableArg}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -198,7 +198,7 @@ private[sql] object PythonSQLUtils extends Logging {
    * This is used by PySpark to avoid manual Dataset[String] conversion on the Python side.
    */
   def jsonFromDataFrame(
-      reader: sql.DataFrameReader,
+      reader: DataFrameReader,
       df: DataFrame): DataFrame = {
     reader.json(df.as(Encoders.STRING))
   }
