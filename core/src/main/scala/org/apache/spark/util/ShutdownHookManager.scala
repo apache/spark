@@ -250,4 +250,3 @@ private class SparkShutdownHook(
     }
   }
 }
-x
