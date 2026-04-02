@@ -2946,7 +2946,8 @@ package object config {
   private[spark] val DRIVER_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED =
     ConfigBuilder("spark.driver.limitActiveProcessorCount.enabled")
       .doc("Whether to add -XX:ActiveProcessorCount=<spark.driver.cores> to the driver JVM " +
-        "options. Currently, this only takes effect in YARN cluster mode.")
+        "options. In YARN cluster mode, the count is set to <spark.driver.cores>. " +
+        "In local mode, it is applied at submit time via SparkSubmit.")
       .version("4.2.0")
       .booleanConf
       .createWithDefault(false)

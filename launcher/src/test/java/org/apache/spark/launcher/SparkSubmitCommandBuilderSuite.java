@@ -388,6 +388,98 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     assertTrue(builder.isClientMode(userProps));
   }
 
+  @Test
+  public void testLimitActiveProcessorCountLocalMode() throws Exception {
+    // Flag disabled (default): no -XX:ActiveProcessorCount in command
+    List<String> cmd = buildCommand(
+        parser.MASTER, "local[4]",
+        SparkLauncher.NO_RESOURCE);
+    assertFalse(cmd.stream().anyMatch(a -> a.startsWith("-XX:ActiveProcessorCount")));
+
+    // Flag explicitly disabled: no -XX:ActiveProcessorCount in command
+    cmd = buildCommand(
+        parser.MASTER, "local[4]",
+        parser.CONF, "spark.driver.limitActiveProcessorCount.enabled=false",
+        SparkLauncher.NO_RESOURCE);
+    assertFalse(cmd.stream().anyMatch(a -> a.startsWith("-XX:ActiveProcessorCount")));
+
+    // Local mode (bare "local"), flag enabled, default cores (1)
+    cmd = buildCommand(
+        parser.MASTER, "local",
+        parser.CONF, "spark.driver.limitActiveProcessorCount.enabled=true",
+        SparkLauncher.NO_RESOURCE);
+    assertTrue(cmd.contains("-XX:ActiveProcessorCount=1"));
+
+    // Local mode, flag enabled, default cores (1)
+    cmd = buildCommand(
+        parser.MASTER, "local[4]",
+        parser.CONF, "spark.driver.limitActiveProcessorCount.enabled=true",
+        SparkLauncher.NO_RESOURCE);
+    assertTrue(cmd.contains("-XX:ActiveProcessorCount=1"));
+
+    // Local mode, flag enabled, custom cores via --conf spark.driver.cores=4
+    cmd = buildCommand(
+        parser.MASTER, "local[4]",
+        parser.CONF, "spark.driver.limitActiveProcessorCount.enabled=true",
+        parser.CONF, "spark.driver.cores=4",
+        SparkLauncher.NO_RESOURCE);
+    assertTrue(cmd.contains("-XX:ActiveProcessorCount=4"));
+
+    // Local mode, flag enabled, custom cores via --driver-cores
+    cmd = buildCommand(
+        parser.MASTER, "local[4]",
+        parser.CONF, "spark.driver.limitActiveProcessorCount.enabled=true",
+        parser.DRIVER_CORES, "3",
+        SparkLauncher.NO_RESOURCE);
+    assertTrue(cmd.contains("-XX:ActiveProcessorCount=3"));
+
+    // YARN client mode, flag enabled: no -XX:ActiveProcessorCount in command
+    cmd = buildCommand(
+        parser.MASTER, "yarn",
+        parser.CONF, "spark.driver.limitActiveProcessorCount.enabled=true",
+        SparkLauncher.NO_RESOURCE);
+    assertFalse(cmd.stream().anyMatch(a -> a.startsWith("-XX:ActiveProcessorCount")));
+
+    // local-cluster mode, flag enabled: no -XX:ActiveProcessorCount in command
+    cmd = buildCommand(
+        parser.MASTER, "local-cluster[2,1,1024]",
+        parser.CONF, "spark.driver.limitActiveProcessorCount.enabled=true",
+        SparkLauncher.NO_RESOURCE);
+    assertFalse(cmd.stream().anyMatch(a -> a.startsWith("-XX:ActiveProcessorCount")));
+
+    // User already set -XX:ActiveProcessorCount in extraJavaOptions: skip auto-injection
+    cmd = buildCommand(
+        parser.MASTER, "local[4]",
+        parser.CONF, "spark.driver.limitActiveProcessorCount.enabled=true",
+        parser.DRIVER_JAVA_OPTIONS, "-XX:ActiveProcessorCount=8",
+        SparkLauncher.NO_RESOURCE);
+    assertTrue(cmd.contains("-XX:ActiveProcessorCount=8"));
+    assertEquals(1, cmd.stream().filter(a -> a.startsWith("-XX:ActiveProcessorCount")).count());
+
+    // User already set -XX:ActiveProcessorCount in defaultJavaOptions: skip auto-injection
+    cmd = buildCommand(
+        parser.MASTER, "local[4]",
+        parser.CONF, "spark.driver.limitActiveProcessorCount.enabled=true",
+        parser.CONF, SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS + "=-XX:ActiveProcessorCount=5",
+        SparkLauncher.NO_RESOURCE);
+    assertTrue(cmd.contains("-XX:ActiveProcessorCount=5"));
+    assertEquals(1, cmd.stream().filter(a -> a.startsWith("-XX:ActiveProcessorCount")).count());
+
+    // Invalid spark.driver.cores: should throw
+    assertThrows(IllegalArgumentException.class, () -> buildCommand(
+        parser.MASTER, "local[4]",
+        parser.CONF, "spark.driver.limitActiveProcessorCount.enabled=true",
+        parser.CONF, "spark.driver.cores=abc",
+        SparkLauncher.NO_RESOURCE));
+
+    // Zero cores: should throw
+    assertThrows(IllegalArgumentException.class, () -> buildCommand(
+        parser.MASTER, "local[4]",
+        parser.CONF, "spark.driver.limitActiveProcessorCount.enabled=true",
+        parser.CONF, "spark.driver.cores=0",
+        SparkLauncher.NO_RESOURCE));
+  }
+
   private void testCmdBuilder(boolean isDriver, File propertiesFile) throws Exception {
     final String DRIVER_DEFAULT_PARAM = "-Ddriver-default";
     final String DRIVER_EXTRA_PARAM = "-Ddriver-extra";
@@ -530,6 +622,10 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     return newCommandBuilder(args).buildCommand(env);
   }
 
+  private List<String> buildCommand(String... args) throws Exception {
+    return buildCommand(Arrays.asList(args), new HashMap<>());
+  }
+
   private void testCLIOpts(String appResource, String opt, List<String> params) throws Exception {
     List<String> args = new ArrayList<>();
     if (appResource != null) {
@@ -543,5 +639,4 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     List<String> cmd = buildCommand(args, env);
     assertTrue(cmd.contains(opt), opt + " should be contained in the final cmd.");
   }
-
 }

@@ -339,6 +339,32 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     checkJavaOptions(driverExtraJavaOptions);
 
     if (isClientMode) {
+      if (isLocalMode(config)) {
+        String limitAPC = config.get("spark.driver.limitActiveProcessorCount.enabled");
+        if ("true".equalsIgnoreCase(limitAPC)) {
+          // Skip injection if the user already specified -XX:ActiveProcessorCount explicitly.
+          boolean alreadySet =
+            containsActiveProcessorCount(driverDefaultJavaOptions) ||
+            containsActiveProcessorCount(driverExtraJavaOptions);
+          if (!alreadySet) {
+            int cores = 1;
+            String driverCoresStr = config.get("spark.driver.cores");
+            if (driverCoresStr != null) {
+              try {
+                cores = Integer.parseInt(driverCoresStr.trim());
+              } catch (NumberFormatException e) {
+                throw new IllegalArgumentException(
+                  "Invalid value for spark.driver.cores: '" + driverCoresStr + "'", e);
+              }
+              if (cores < 1) {
+                throw new IllegalArgumentException(
+                  "spark.driver.cores must be >= 1, got: " + cores);
+              }
+            }
+            cmd.add("-XX:ActiveProcessorCount=" + cores);
+          }
+        }
+      }
       // Figuring out where the memory value come from is a little tricky due to precedence.
       // Precedence is observed in the following order:
       // - explicit configuration (setConf()), which also covers --driver-memory cli argument.
@@ -487,6 +513,23 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     return userMaster == null || userDeployMode == null || "client".equals(userDeployMode);
   }
 
+  private boolean isLocalMode(Map<String, String> userProps) {
+    String userMaster = firstNonEmpty(master, userProps.get(SparkLauncher.SPARK_MASTER));
+    // null master defaults to local[*] (see isClientMode comment above); match "local" and
+    // "local[N]"/"local[*]" but not "local-cluster[...]" which runs separate worker processes.
+    return userMaster == null ||
+      userMaster.trim().equals("local") ||
+      userMaster.trim().startsWith("local[");
+  }
+
+  private static boolean containsActiveProcessorCount(String javaOptions) {
+    if (isEmpty(javaOptions)) return false;
+    for (String opt : CommandBuilderUtils.parseOptionString(javaOptions)) {
+      if (opt.startsWith("-XX:ActiveProcessorCount=")) return true;
+    }
+    return false;
+  }
+
   /**
    * Return whether the given main class represents a thrift server.
    */
@@ -564,6 +607,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         case EXTRA_PROPERTIES_FILE -> extraPropertiesFiles.add(value);
         case LOAD_SPARK_DEFAULTS -> loadSparkDefaults = true;
         case DRIVER_MEMORY -> conf.put(SparkLauncher.DRIVER_MEMORY, value);
+        case DRIVER_CORES -> conf.put("spark.driver.cores", value); // no SparkLauncher constant
         case DRIVER_JAVA_OPTIONS -> conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, value);
         case DRIVER_LIBRARY_PATH -> conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, value);
         case DRIVER_DEFAULT_CLASS_PATH ->
