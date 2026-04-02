@@ -832,7 +832,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     assert(txnTables.size == 2)
 
     val sourceTxnTable = txnTables(sourceNameAsString)
-    val expectedNumSourceScans = if (deltaDelete) 1 else 4
+    val expectedNumSourceScans = if (deltaDelete) 1 else 2
     assert(sourceTxnTable.scanEvents.size == expectedNumSourceScans)
 
     val numSubquerySourceScans = sourceTxnTable.scanEvents.flatten.count {
@@ -842,7 +842,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     assert(numSubquerySourceScans == expectedNumSourceScans)
 
     val targetTxnTable = txnTables(tableNameAsString)
-    val expectedNumTargetScans = if (deltaDelete) 1 else 3
+    val expectedNumTargetScans = if (deltaDelete) 1 else 2
     assert(targetTxnTable.scanEvents.size == expectedNumTargetScans)
 
     checkAnswer(
@@ -877,11 +877,11 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     assert(txnTables.size == 2)
 
     val targetTxnTable = txnTables(tableNameAsString)
-    val expectedNumTargetScans = if (deltaDelete) 1 else 3
+    val expectedNumTargetScans = if (deltaDelete) 1 else 2
     assert(targetTxnTable.scanEvents.size == expectedNumTargetScans)
 
     val sourceTxnTable = txnTables(sourceNameAsString)
-    val expectedNumSourceScans = if (deltaDelete) 1 else 4
+    val expectedNumSourceScans = if (deltaDelete) 1 else 2
     assert(sourceTxnTable.scanEvents.size == expectedNumSourceScans)
 
     val numCteSourceScans = sourceTxnTable.scanEvents.flatten.count {
@@ -922,11 +922,11 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       assert(txnTables.size == 2)
 
       val targetTxnTable = txnTables(tableNameAsString)
-      val expectedNumTargetScans = if (deltaDelete) 1 else 3
+      val expectedNumTargetScans = if (deltaDelete) 1 else 2
       assert(targetTxnTable.scanEvents.size == expectedNumTargetScans)
 
       val sourceTxnTable = txnTables(sourceNameAsString)
-      val expectedNumSourceScans = if (deltaDelete) 1 else 4
+      val expectedNumSourceScans = if (deltaDelete) 1 else 2
       assert(sourceTxnTable.scanEvents.size == expectedNumSourceScans)
 
       checkAnswer(
