@@ -183,6 +183,49 @@ trait ReadStateStore {
       prefixKey: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): StateStoreIterator[UnsafeRowPair]
 
+  /**
+   * Scan key-value pairs in the range [startKey, endKey).
+   *
+   * @param startKey None to scan from the beginning of the column family,
+   *                 or Some(key) to seek to the given start position (inclusive).
+   * @param endKey   The exclusive upper bound for the scan.
+   * @param colFamilyName The column family name.
+   *
+   * Callers must ensure the column family's key encoder produces lexicographically ordered
+   * bytes for the scan range to be meaningful (e.g., timestamp-based encoders or
+   * RangeKeyScanStateEncoder).
+   */
+  def scan(
+      startKey: Option[UnsafeRow],
+      endKey: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
+    : StateStoreIterator[UnsafeRowPair] = {
+    throw StateStoreErrors.unsupportedOperationException("scan", "")
+  }
+
+  /**
+   * Scan key-value pairs in the range [startKey, endKey), expanding multi-valued entries.
+   *
+   * @param startKey None to scan from the beginning of the column family,
+   *                 or Some(key) to seek to the given start position (inclusive).
+   * @param endKey   The exclusive upper bound for the scan.
+   * @param colFamilyName The column family name.
+   *
+   * Callers must ensure the column family's key encoder produces lexicographically ordered
+   * bytes for the scan range to be meaningful (e.g., timestamp-based encoders or
+   * RangeKeyScanStateEncoder).
+   *
+   * It is expected to throw exception if Spark calls this method without setting
+   * multipleValuesPerKey as true for the column family.
+   */
+  def scanWithMultiValues(
+      startKey: Option[UnsafeRow],
+      endKey: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
+    : StateStoreIterator[UnsafeRowPair] = {
+    throw StateStoreErrors.unsupportedOperationException("scanWithMultiValues", "")
+  }
+
   /** Return an iterator containing all the key-value pairs in the StateStore. */
   def iterator(
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): StateStoreIterator[UnsafeRowPair]
@@ -409,6 +452,20 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
       prefixKey: UnsafeRow,
       colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
     store.prefixScanWithMultiValues(prefixKey, colFamilyName)
+  }
+
+  override def scan(
+      startKey: Option[UnsafeRow],
+      endKey: UnsafeRow,
+      colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+    store.scan(startKey, endKey, colFamilyName)
+  }
+
+  override def scanWithMultiValues(
+      startKey: Option[UnsafeRow],
+      endKey: UnsafeRow,
+      colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+    store.scanWithMultiValues(startKey, endKey, colFamilyName)
   }
 
   override def iteratorWithMultiValues(

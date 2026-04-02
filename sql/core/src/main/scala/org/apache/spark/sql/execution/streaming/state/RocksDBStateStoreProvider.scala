@@ -556,6 +556,63 @@ private[sql] class RocksDBStateStoreProvider
       new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
     }
 
+    override def scan(
+        startKey: Option[UnsafeRow],
+        endKey: UnsafeRow,
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      validateAndTransitionState(UPDATE)
+      verifyColFamilyOperations("scan", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      val encodedStartKey = startKey.map(kvEncoder._1.encodeKey)
+      val encodedEndKey = kvEncoder._1.encodeKey(endKey)
+
+      val rowPair = new UnsafeRowPair()
+      val rocksDbIter = rocksDB.scan(encodedStartKey, encodedEndKey, colFamilyName)
+      val iter = rocksDbIter.map { kv =>
+        rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
+          kvEncoder._2.decodeValue(kv.value))
+        rowPair
+      }
+
+      new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
+    }
+
+    override def scanWithMultiValues(
+        startKey: Option[UnsafeRow],
+        endKey: UnsafeRow,
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      validateAndTransitionState(UPDATE)
+      verifyColFamilyOperations("scanWithMultiValues", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      verify(
+        kvEncoder._2.supportsMultipleValuesPerKey,
+        "Multi-value iterator operation requires an encoder" +
+          " which supports multiple values for a single key")
+
+      val encodedStartKey = startKey.map(kvEncoder._1.encodeKey)
+      val encodedEndKey = kvEncoder._1.encodeKey(endKey)
+      val rocksDbIter = rocksDB.scan(encodedStartKey, encodedEndKey, colFamilyName)
+
+      val rowPair = new UnsafeRowPair()
+      val iter = rocksDbIter.flatMap { kv =>
+        val keyRow = kvEncoder._1.decodeKey(kv.key)
+        val valueRows = kvEncoder._2.decodeValues(kv.value)
+        valueRows.iterator.map { valueRow =>
+          rowPair.withRows(keyRow, valueRow)
+          if (!isValidated && rowPair.value != null && !useColumnFamilies) {
+            StateStoreProvider.validateStateRowFormat(
+              rowPair.key, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
+            isValidated = true
+          }
+          rowPair
+        }
+      }
+
+      new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
+    }
+
     var checkpointInfo: Option[StateStoreCheckpointInfo] = None
     private var storedMetrics: Option[RocksDBMetrics] = None
 

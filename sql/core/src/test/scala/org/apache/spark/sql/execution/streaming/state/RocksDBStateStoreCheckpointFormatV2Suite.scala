@@ -172,6 +172,20 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
     innerStore.prefixScanWithMultiValues(prefixKey, colFamilyName)
   }
 
+  override def scan(
+      startKey: Option[UnsafeRow],
+      endKey: UnsafeRow,
+      colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+    innerStore.scan(startKey, endKey, colFamilyName)
+  }
+
+  override def scanWithMultiValues(
+      startKey: Option[UnsafeRow],
+      endKey: UnsafeRow,
+      colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+    innerStore.scanWithMultiValues(startKey, endKey, colFamilyName)
+  }
+
   override def iteratorWithMultiValues(
       colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
     innerStore.iteratorWithMultiValues(colFamilyName)

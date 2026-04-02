@@ -1749,6 +1749,86 @@ class RocksDB(
     }
   }
 
+  /**
+   * Scan key-value pairs in the range [startKey, endKey).
+   *
+   * @param startKey None to seek to the beginning of the column family,
+   *                 or Some(key) to seek to the given start position (inclusive).
+   * @param endKey   The exclusive upper bound for the scan (encoded key bytes).
+   * @param cfName   The column family name.
+   * @return An iterator of ByteArrayPairs in the given range.
+   */
+  def scan(
+      startKey: Option[Array[Byte]],
+      endKey: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): NextIterator[ByteArrayPair] = {
+    updateMemoryUsageIfNeeded()
+
+    val updatedEndKey = if (useColumnFamilies) {
+      encodeStateRowWithPrefix(endKey, cfName)
+    } else {
+      endKey
+    }
+
+    val seekTarget = startKey match {
+      case Some(key) =>
+        if (useColumnFamilies) encodeStateRowWithPrefix(key, cfName) else key
+      case None =>
+        if (useColumnFamilies) encodeStateRowWithPrefix(Array.emptyByteArray, cfName)
+        else null
+    }
+
+    val upperBoundSlice = new Slice(updatedEndKey)
+    val scanReadOptions = new ReadOptions()
+    scanReadOptions.setIterateUpperBound(upperBoundSlice)
+
+    val iter = db.newIterator(scanReadOptions)
+    if (seekTarget != null) {
+      iter.seek(seekTarget)
+    } else {
+      iter.seekToFirst()
+    }
+
+    def closeResources(): Unit = {
+      iter.close()
+      scanReadOptions.close()
+      upperBoundSlice.close()
+    }
+
+    Option(TaskContext.get()).foreach { tc =>
+      tc.addTaskCompletionListener[Unit] { _ => closeResources() }
+    }
+
+    new NextIterator[ByteArrayPair] {
+      override protected def getNext(): ByteArrayPair = {
+        if (iter.isValid) {
+          val key = if (useColumnFamilies) {
+            decodeStateRowWithPrefix(iter.key)._1
+          } else {
+            iter.key
+          }
+
+          val value = if (conf.rowChecksumEnabled) {
+            KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+              readVerifier, iter.key, iter.value, delimiterSize)
+          } else {
+            iter.value
+          }
+
+          byteArrayPair.set(key, value)
+          iter.next()
+          byteArrayPair
+        } else {
+          finished = true
+          closeResources()
+          null
+        }
+      }
+
+      override protected def close(): Unit = closeResources()
+    }
+  }
+
   def release(): Unit = {}
 
   /**
