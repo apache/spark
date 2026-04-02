@@ -1027,20 +1027,11 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
         self.assertIsNone(result.iloc[1][0])
         self.assertIsNone(result.iloc[2])
 
+    def test_array_of_variant_matches_legacy(self):
+        """Verify convert_numpy matches convert_legacy for ArrayType(VariantType()).
 
-class ConvertNumpyVsLegacyTests(unittest.TestCase):
-    """Tests documenting behavioral differences between convert_numpy and convert_legacy.
-
-    TODO: Remove this test class when convert_legacy is removed.
-    """
-
-    @unittest.skipIf(
-        not have_pandas or not have_pyarrow,
-        pandas_requirement_message or pyarrow_requirement_message,
-    )
-    def test_array_of_variant_equal(self):
-        """Both paths produce equal results for ArrayType(VariantType())."""
-        import pandas as pd
+        TODO: Remove when convert_legacy is removed.
+        """
         import pyarrow as pa
 
         variant_type = pa.struct(
@@ -1076,12 +1067,11 @@ class ConvertNumpyVsLegacyTests(unittest.TestCase):
                         self.assertEqual(l[j].value, n[j].value)
                         self.assertEqual(l[j].metadata, n[j].metadata)
 
-    @unittest.skipIf(
-        not have_pandas or not have_pyarrow,
-        pandas_requirement_message or pyarrow_requirement_message,
-    )
-    def test_array_of_udt_equal(self):
-        """Both paths produce equal results for ArrayType(ExamplePointUDT())."""
+    def test_array_of_udt_matches_legacy(self):
+        """Verify convert_numpy matches convert_legacy for ArrayType(ExamplePointUDT()).
+
+        TODO: Remove when convert_legacy is removed.
+        """
         import pandas as pd
         import pyarrow as pa
 
@@ -1095,16 +1085,22 @@ class ConvertNumpyVsLegacyTests(unittest.TestCase):
         result_new = ArrowArrayToPandasConversion.convert_numpy(arr, spark_type)
         pd.testing.assert_series_equal(result_legacy, result_new)
 
+
+class ConvertNumpyVsLegacyTests(unittest.TestCase):
+    """Tests documenting known behavioral differences between convert_numpy and convert_legacy.
+
+    TODO: Remove this test class when convert_legacy is removed.
+    """
+
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
         pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_malformed_variant_error(self):
-        """Difference 3: legacy attempts PySparkValueError('MALFORMED_VARIANT');
-        convert_numpy raises KeyError."""
+        """Legacy raises TypeError (broken PySparkValueError);
+        convert_numpy now raises PySparkValueError properly."""
         import pyarrow as pa
 
-        # Construct a struct that doesn't match Variant schema
         bad_type = pa.struct([pa.field("bad_key", pa.binary(), nullable=False)])
         arr = pa.array(
             [[{"bad_key": b"\x01"}]],
@@ -1112,22 +1108,22 @@ class ConvertNumpyVsLegacyTests(unittest.TestCase):
         )
         spark_type = ArrayType(VariantType())
 
-        # convert_legacy: tries to raise PySparkValueError('MALFORMED_VARIANT')
-        # but the error class definition requires messageParameters, causing TypeError
+        # convert_legacy: broken — missing messageParameters causes TypeError
         with self.assertRaises(TypeError):
             ArrowArrayToPandasConversion.convert_legacy(arr, spark_type)
 
-        # convert_numpy: raises KeyError
-        with self.assertRaises(KeyError):
+        # convert_numpy: properly raises PySparkValueError
+        with self.assertRaises(PySparkValueError) as ctx:
             ArrowArrayToPandasConversion.convert_numpy(arr, spark_type)
+        self.assertIn("MALFORMED_VARIANT", ctx.exception.getErrorClass())
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
         pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_malformed_geography_error(self):
-        """Difference 3: legacy attempts PySparkValueError('MALFORMED_GEOGRAPHY');
-        convert_numpy raises KeyError."""
+        """Legacy raises TypeError (broken PySparkValueError);
+        convert_numpy now raises PySparkValueError properly."""
         import pyarrow as pa
 
         bad_type = pa.struct([pa.field("bad_key", pa.binary(), nullable=False)])
@@ -1137,22 +1133,22 @@ class ConvertNumpyVsLegacyTests(unittest.TestCase):
         )
         spark_type = ArrayType(GeographyType(4326))
 
-        # convert_legacy: tries to raise PySparkValueError('MALFORMED_GEOGRAPHY')
-        # but the error class definition requires messageParameters, causing TypeError
+        # convert_legacy: broken — missing messageParameters causes TypeError
         with self.assertRaises(TypeError):
             ArrowArrayToPandasConversion.convert_legacy(arr, spark_type)
 
-        # convert_numpy: raises KeyError
-        with self.assertRaises(KeyError):
+        # convert_numpy: properly raises PySparkValueError
+        with self.assertRaises(PySparkValueError) as ctx:
             ArrowArrayToPandasConversion.convert_numpy(arr, spark_type)
+        self.assertIn("MALFORMED_GEOGRAPHY", ctx.exception.getErrorClass())
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
         pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_malformed_geometry_error(self):
-        """Difference 3: legacy attempts PySparkValueError('MALFORMED_GEOMETRY');
-        convert_numpy raises KeyError."""
+        """Legacy raises TypeError (broken PySparkValueError);
+        convert_numpy now raises PySparkValueError properly."""
         import pyarrow as pa
 
         bad_type = pa.struct([pa.field("bad_key", pa.binary(), nullable=False)])
@@ -1162,14 +1158,14 @@ class ConvertNumpyVsLegacyTests(unittest.TestCase):
         )
         spark_type = ArrayType(GeometryType(0))
 
-        # convert_legacy: tries to raise PySparkValueError('MALFORMED_GEOMETRY')
-        # but the error class definition requires messageParameters, causing TypeError
+        # convert_legacy: broken — missing messageParameters causes TypeError
         with self.assertRaises(TypeError):
             ArrowArrayToPandasConversion.convert_legacy(arr, spark_type)
 
-        # convert_numpy: raises KeyError
-        with self.assertRaises(KeyError):
+        # convert_numpy: properly raises PySparkValueError
+        with self.assertRaises(PySparkValueError) as ctx:
             ArrowArrayToPandasConversion.convert_numpy(arr, spark_type)
+        self.assertIn("MALFORMED_GEOMETRY", ctx.exception.getErrorClass())
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -1194,9 +1190,9 @@ class ConvertNumpyVsLegacyTests(unittest.TestCase):
         result_legacy = converter(series)
         self.assertIsInstance(result_legacy.iloc[0][0], VariantVal)
 
-        # convert_numpy _create_element_converter: no guard, tries v["value"]
+        # convert_numpy _create_element_converter: no guard, raises PySparkValueError
         element_conv = ArrowArrayToPandasConversion._create_element_converter(VariantType())
-        with self.assertRaises(TypeError):
+        with self.assertRaises(PySparkValueError):
             element_conv(VariantVal(b"\x01", b"\x02"))
 
 

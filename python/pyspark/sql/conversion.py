@@ -1673,6 +1673,8 @@ class ArrowArrayToPandasConversion:
             def convert_variant(v: Any) -> Any:
                 if v is None:
                     return None
+                if not isinstance(v, dict) or "value" not in v or "metadata" not in v:
+                    raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
                 return VariantVal(v["value"], v["metadata"])
 
             return convert_variant
@@ -1681,6 +1683,10 @@ class ArrowArrayToPandasConversion:
             def convert_geography(v: Any) -> Any:
                 if v is None:
                     return None
+                if not isinstance(v, dict) or "wkb" not in v or "srid" not in v:
+                    raise PySparkValueError(
+                        errorClass="MALFORMED_GEOGRAPHY", messageParameters={}
+                    )
                 return Geography.fromWKB(v["wkb"], v["srid"])
 
             return convert_geography
@@ -1689,6 +1695,10 @@ class ArrowArrayToPandasConversion:
             def convert_geometry(v: Any) -> Any:
                 if v is None:
                     return None
+                if not isinstance(v, dict) or "wkb" not in v or "srid" not in v:
+                    raise PySparkValueError(
+                        errorClass="MALFORMED_GEOMETRY", messageParameters={}
+                    )
                 return Geometry.fromWKB(v["wkb"], v["srid"])
 
             return convert_geometry
@@ -1847,9 +1857,7 @@ class ArrowArrayToPandasConversion:
                 if ndarray_as_list:
                     series = arr.to_pandas(integer_object_nulls=True)
                     series = series.map(
-                        lambda x: (
-                            [element_conv(e) for e in x] if x is not None else None
-                        )
+                        lambda x: ([element_conv(e) for e in x] if x is not None else None)
                     )
                 else:
                     import numpy as np
