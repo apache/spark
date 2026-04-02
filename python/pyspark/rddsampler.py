@@ -18,7 +18,7 @@
 import sys
 import random
 import math
-from typing import Hashable, Iterable, Iterator, Optional, TypeVar
+from typing import Generic, Hashable, Iterable, Iterator, Optional, TypeVar
 
 
 T = TypeVar("T")
@@ -101,7 +101,7 @@ class RDDRangeSampler(RDDSamplerBase):
                 yield obj
 
 
-class RDDStratifiedSampler[K: Hashable](RDDSamplerBase):
+class RDDStratifiedSampler(RDDSamplerBase, Generic[K]):
     def __init__(
         self, withReplacement: bool, fractions: dict[K, float], seed: Optional[int] = None
     ) -> None:
