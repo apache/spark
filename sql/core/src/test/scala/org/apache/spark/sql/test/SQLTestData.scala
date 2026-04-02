@@ -23,7 +23,7 @@ import java.time.{Duration, Period}
 import org.apache.spark.sql
 import org.apache.spark.sql.{DataFrame, SparkSessionProvider}
 import org.apache.spark.sql.classic
-import org.apache.spark.sql.classic.SQLImplicits
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
@@ -35,51 +35,44 @@ import org.apache.spark.unsafe.types.CalendarInterval
 private[sql] trait SQLTestData extends SparkSessionProvider { self =>
   override protected def spark: sql.SparkSession
 
-  // Helper object to import SQL implicits without a concrete SparkSession
-  private object internalImplicits extends SQLImplicits {
-    override protected def session: classic.SparkSession =
-      self.spark.asInstanceOf[classic.SparkSession]
-  }
-
-  import internalImplicits._
   import SQLTestData._
 
   // Note: all test data should be lazy because the SparkSession is not set up yet.
 
   protected lazy val emptyTestData: DataFrame = {
-    val classicSpark = spark.asInstanceOf[classic.SparkSession]
-    val df = classicSpark.sparkContext.parallelize(
-      Seq.empty[Int].map(i => TestData(i, i.toString))).toDF()
+    val df = spark.createDataFrame(
+      spark.asInstanceOf[classic.SparkSession].sparkContext.parallelize(
+        Seq.empty[Int].map(i => TestData(i, i.toString))))
     df.createOrReplaceTempView("emptyTestData")
     df
   }
 
   protected lazy val testData: DataFrame = {
-    val classicSpark = spark.asInstanceOf[classic.SparkSession]
-    val df = classicSpark.sparkContext.parallelize(
-      (1 to 100).map(i => TestData(i, i.toString))).toDF()
+    val df = spark.createDataFrame(
+      spark.asInstanceOf[classic.SparkSession].sparkContext.parallelize(
+        (1 to 100).map(i => TestData(i, i.toString))))
     df.createOrReplaceTempView("testData")
     df
   }
 
   protected lazy val testData2: DataFrame = {
-    val classicSpark = spark.asInstanceOf[classic.SparkSession]
-    val df = classicSpark.sparkContext.parallelize(
-      TestData2(1, 1) ::
-      TestData2(1, 2) ::
-      TestData2(2, 1) ::
-      TestData2(2, 2) ::
-      TestData2(3, 1) ::
-      TestData2(3, 2) :: Nil, 2).toDF()
+    val df = spark.createDataFrame(
+      spark.asInstanceOf[classic.SparkSession].sparkContext.parallelize(
+        TestData2(1, 1) ::
+        TestData2(1, 2) ::
+        TestData2(2, 1) ::
+        TestData2(2, 2) ::
+        TestData2(3, 1) ::
+        TestData2(3, 2) :: Nil, 2))
     df.createOrReplaceTempView("testData2")
     df
   }
 
   protected lazy val testData3: DataFrame = {
-    val classicSpark = spark.asInstanceOf[classic.SparkSession]
-    val df = classicSpark.sparkContext.parallelize(
-      TestData3(1, None) ::
-      TestData3(2, Some(2)) :: Nil).toDF()
+    val df = spark.createDataFrame(
+      spark.asInstanceOf[classic.SparkSession].sparkContext.parallelize(
+        TestData3(1, None) ::
+        TestData3(2, Some(2)) :: Nil))
     df.createOrReplaceTempView("testData3")
     df
   }
@@ -127,39 +120,39 @@ private[sql] trait SQLTestData extends SparkSessionProvider { self =>
   }
 
   protected lazy val upperCaseData: DataFrame = {
-    val classicSpark = spark.asInstanceOf[classic.SparkSession]
-    val df = classicSpark.sparkContext.parallelize(
-      UpperCaseData(1, "A") ::
-      UpperCaseData(2, "B") ::
-      UpperCaseData(3, "C") ::
-      UpperCaseData(4, "D") ::
-      UpperCaseData(5, "E") ::
-      UpperCaseData(6, "F") :: Nil).toDF()
+    val df = spark.createDataFrame(
+      spark.asInstanceOf[classic.SparkSession].sparkContext.parallelize(
+        UpperCaseData(1, "A") ::
+        UpperCaseData(2, "B") ::
+        UpperCaseData(3, "C") ::
+        UpperCaseData(4, "D") ::
+        UpperCaseData(5, "E") ::
+        UpperCaseData(6, "F") :: Nil))
     df.createOrReplaceTempView("upperCaseData")
     df
   }
 
   protected lazy val lowerCaseData: DataFrame = {
-    val classicSpark = spark.asInstanceOf[classic.SparkSession]
-    val df = classicSpark.sparkContext.parallelize(
-      LowerCaseData(1, "a") ::
-      LowerCaseData(2, "b") ::
-      LowerCaseData(3, "c") ::
-      LowerCaseData(4, "d") :: Nil).toDF()
+    val df = spark.createDataFrame(
+      spark.asInstanceOf[classic.SparkSession].sparkContext.parallelize(
+        LowerCaseData(1, "a") ::
+        LowerCaseData(2, "b") ::
+        LowerCaseData(3, "c") ::
+        LowerCaseData(4, "d") :: Nil))
     df.createOrReplaceTempView("lowerCaseData")
     df
   }
 
   protected lazy val lowerCaseDataWithDuplicates: DataFrame = {
-    val classicSpark = spark.asInstanceOf[classic.SparkSession]
-    val df = classicSpark.sparkContext.parallelize(
-      LowerCaseData(1, "a") ::
-      LowerCaseData(2, "b") ::
-      LowerCaseData(2, "b") ::
-      LowerCaseData(3, "c") ::
-      LowerCaseData(3, "c") ::
-      LowerCaseData(3, "c") ::
-      LowerCaseData(4, "d") :: Nil).toDF()
+    val df = spark.createDataFrame(
+      spark.asInstanceOf[classic.SparkSession].sparkContext.parallelize(
+        LowerCaseData(1, "a") ::
+        LowerCaseData(2, "b") ::
+        LowerCaseData(2, "b") ::
+        LowerCaseData(3, "c") ::
+        LowerCaseData(3, "c") ::
+        LowerCaseData(3, "c") ::
+        LowerCaseData(4, "d") :: Nil))
     df.createOrReplaceTempView("lowerCaseData")
     df
   }
@@ -388,20 +381,20 @@ private[sql] trait SQLTestData extends SparkSessionProvider { self =>
       "minute",
       "second")
     .select(
-      $"class",
-      $"year-month",
-      $"year" cast YearMonthIntervalType(YEAR) as "year",
-      $"month" cast YearMonthIntervalType(MONTH) as "month",
-      $"day-second",
-      $"day-minute" cast DayTimeIntervalType(DAY, MINUTE) as "day-minute",
-      $"day-hour" cast DayTimeIntervalType(DAY, HOUR) as "day-hour",
-      $"day" cast DayTimeIntervalType(DAY) as "day",
-      $"hour-second" cast DayTimeIntervalType(HOUR, SECOND) as "hour-second",
-      $"hour-minute" cast DayTimeIntervalType(HOUR, MINUTE) as "hour-minute",
-      $"hour" cast DayTimeIntervalType(HOUR) as "hour",
-      $"minute-second" cast DayTimeIntervalType(MINUTE, SECOND) as "minute-second",
-      $"minute" cast DayTimeIntervalType(MINUTE) as "minute",
-      $"second" cast DayTimeIntervalType(SECOND) as "second")
+      col("class"),
+      col("year-month"),
+      col("year") cast YearMonthIntervalType(YEAR) as "year",
+      col("month") cast YearMonthIntervalType(MONTH) as "month",
+      col("day-second"),
+      col("day-minute") cast DayTimeIntervalType(DAY, MINUTE) as "day-minute",
+      col("day-hour") cast DayTimeIntervalType(DAY, HOUR) as "day-hour",
+      col("day") cast DayTimeIntervalType(DAY) as "day",
+      col("hour-second") cast DayTimeIntervalType(HOUR, SECOND) as "hour-second",
+      col("hour-minute") cast DayTimeIntervalType(HOUR, MINUTE) as "hour-minute",
+      col("hour") cast DayTimeIntervalType(HOUR) as "hour",
+      col("minute-second") cast DayTimeIntervalType(MINUTE, SECOND) as "minute-second",
+      col("minute") cast DayTimeIntervalType(MINUTE) as "minute",
+      col("second") cast DayTimeIntervalType(SECOND) as "second")
 
   /**
    * Initialize all test data such that all temp tables are properly registered.
