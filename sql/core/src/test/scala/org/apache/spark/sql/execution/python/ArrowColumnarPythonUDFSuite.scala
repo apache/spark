@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.python
 
 import org.apache.spark.sql.{IntegratedUDFTestUtils, QueryTest}
 import org.apache.spark.sql.execution.{ColumnarToRowExec, SparkPlan}
-import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
