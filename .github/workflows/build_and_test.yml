@@ -1463,6 +1463,15 @@ jobs:
         run: |
           sudo apt update
           sudo apt-get install r-base
+      - name: Install Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Install Python packages (Python 3.12)
+        run: |
+          python3.12 -m pip install 'numpy>=1.22' pyarrow 'pandas==2.3.3' pyyaml scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.5' 'zstandard==0.25.0'
+          python3.12 -m pip list
       - name: Start Minikube
         uses: medyagh/setup-minikube@v0.0.21
         with:
