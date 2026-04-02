@@ -52,15 +52,12 @@ from pyspark.sql.functions import pandas_udf, col
 from pyspark.sql.types import DoubleType
 
 
-ARROW_SOURCE = (
-    "org.apache.spark.sql.execution.python.ArrowBackedDataSourceV2"
-)
+ARROW_SOURCE = "org.apache.spark.sql.execution.python.ArrowBackedDataSourceV2"
 
 
 def create_spark():
     return (
-        SparkSession.builder
-        .master("local[1]")
+        SparkSession.builder.master("local[1]")
         .appName("ArrowColumnarUDFBenchmark")
         .config("spark.sql.execution.arrow.pyspark.enabled", "true")
         .config("spark.python.worker.reuse", "true")
@@ -123,8 +120,7 @@ def main():
 
     # ----- Source 1: Arrow-backed columnar DSv2 -----
     arrow_df = (
-        spark.read
-        .format(ARROW_SOURCE)
+        spark.read.format(ARROW_SOURCE)
         .option("numRows", str(args.rows))
         .option("numPartitions", str(args.partitions))
         .load()
@@ -156,13 +152,11 @@ def main():
     print()
 
     arrow_times = timed_collect(arrow_df, iterations=args.iterations)
-    arrow_avg = print_stats(
-        "Arrow columnar (direct FieldVector extraction)", arrow_times)
+    arrow_avg = print_stats("Arrow columnar (direct FieldVector extraction)", arrow_times)
     print()
 
     row_times = timed_collect(row_df, iterations=args.iterations)
-    row_avg = print_stats(
-        "Row-based (ColumnarToRow + ArrowWriter)", row_times)
+    row_avg = print_stats("Row-based (ColumnarToRow + ArrowWriter)", row_times)
     print()
 
     if arrow_avg > 0:
