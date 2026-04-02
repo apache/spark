@@ -25,8 +25,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.{RowToColumnarEvaluatorFactory, SparkPlan}
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.{StructType, UserDefinedType}
 import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
@@ -100,21 +100,35 @@ case class ArrowEvalPythonExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     if (child.supportsColumnar) {
-      // Columnar path: delegate to doExecuteColumnar, flatten to rows.
-      doExecuteColumnar().flatMap(_.rowIterator().asScala)
+      // Columnar path: process ColumnarBatch input directly.
+      val inputRDD = child.executeColumnar()
+      if (conf.usePartitionEvaluator) {
+        inputRDD.mapPartitionsWithEvaluator(columnarEvaluatorFactory)
+      } else {
+        inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
+          columnarEvaluatorFactory.createEvaluator().eval(index, iter)
+        }
+      }
     } else {
       // Row-based path: unchanged.
       super.doExecute()
     }
   }
 
+  // Required because supportsColumnar = true. Wraps doExecute() row
+  // output into ColumnarBatch for upstream columnar consumers.
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    val inputRDD = child.executeColumnar()
+    val evaluatorFactory = new RowToColumnarEvaluatorFactory(
+      conf.offHeapColumnVectorEnabled,
+      conf.columnBatchSize,
+      schema,
+      longMetric("numOutputRows"),
+      SQLMetrics.createMetric(sparkContext, "number of output batches"))
     if (conf.usePartitionEvaluator) {
-      inputRDD.mapPartitionsWithEvaluator(columnarEvaluatorFactory)
+      doExecute().mapPartitionsWithEvaluator(evaluatorFactory)
     } else {
-      inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
-        columnarEvaluatorFactory.createEvaluator().eval(index, iter)
+      doExecute().mapPartitionsWithIndexInternal { (index, iter) =>
+        evaluatorFactory.createEvaluator().eval(index, iter)
       }
     }
   }
