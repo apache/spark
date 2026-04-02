@@ -263,6 +263,44 @@ class DataFrameObservationTestsMixin:
 
         self.assertIn("test error", str(cm.exception))
 
+    def test_observe_self_join(self):
+        # SPARK-56322: self-joining an observed DataFrame
+        obs = Observation("my_observation")
+        df = (
+            self.spark.range(100)
+            .selectExpr("id", "CASE WHEN id < 10 THEN 'A' ELSE 'B' END AS group_key")
+            .observe(obs, F.count(F.lit(1)).alias("row_count"))
+        )
+
+        df1 = df.where("id < 20")
+        df2 = df.where("id % 2 == 0")
+
+        joined = df1.alias("a").join(df2.alias("b"), on=["id"], how="inner")
+        result = joined.collect()
+
+        # The join should produce rows where id < 20 AND id is even
+        expected_ids = sorted([i for i in range(20) if i % 2 == 0])
+        actual_ids = sorted([row.id for row in result])
+        self.assertEqual(actual_ids, expected_ids)
+
+        # The observation should have been collected
+        self.assertEqual(obs.get, {"row_count": 100})
+
+    def test_observe_self_join_union(self):
+        # SPARK-56322: union of observed DataFrames with same observation
+        obs = Observation("union_obs")
+        df = self.spark.range(50).observe(obs, F.count(F.lit(1)).alias("cnt"))
+
+        df1 = df.where("id < 25")
+        df2 = df.where("id >= 25")
+
+        unioned = df1.union(df2)
+        result = unioned.collect()
+
+        actual_ids = sorted([row.id for row in result])
+        self.assertEqual(actual_ids, list(range(50)))
+        self.assertEqual(obs.get, {"cnt": 50})
+
 
 class DataFrameObservationTests(
     DataFrameObservationTestsMixin,
