@@ -195,6 +195,11 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
         expected = [Row(name="Alice", age=25), Row(name="Bob", age=30)]
         self.assertEqual(sorted(result.collect(), key=lambda r: r.name), expected)
 
+    def test_json_with_dataframe_input_non_string_column(self):
+        int_df = self.connect.createDataFrame([(1,), (2,)], schema="value INT")
+        with self.assertRaises(Exception):
+            self.connect.read.json(int_df).collect()
+
     def test_json_with_dataframe_input_multiple_columns(self):
         multi_df = self.connect.createDataFrame(
             [("a", "b"), ("c", "d")], schema="col1 STRING, col2 STRING"

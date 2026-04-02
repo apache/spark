@@ -508,7 +508,10 @@ class DataFrameReader(OptionUtils):
         from pyspark.sql.dataframe import DataFrame
 
         if isinstance(path, DataFrame):
-            return self._df(self._jreader.jsonFromDataFrame(path._jdf))
+            assert self._spark._jvm is not None
+            return self._df(
+                self._spark._jvm.PythonSQLUtils.jsonFromDataFrame(self._jreader, path._jdf)
+            )
         else:
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",

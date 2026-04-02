@@ -192,15 +192,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
     sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = jsonDataset.isStreaming)
   }
 
-  /**
-   * Parses a [[DataFrame]] containing JSON strings into a structured [[DataFrame]].
-   * The input DataFrame must contain exactly one column of string type.
-   * This is used by PySpark to avoid manual Dataset[String] conversion on the Python side.
-   */
-  private[sql] def jsonFromDataFrame(df: DataFrame): DataFrame = {
-    json(df.as(Encoders.STRING))
-  }
-
   /** @inheritdoc */
   override def csv(path: String): DataFrame = super.csv(path)
 
