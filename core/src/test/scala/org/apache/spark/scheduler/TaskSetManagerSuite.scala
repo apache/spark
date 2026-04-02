@@ -2867,6 +2867,57 @@ class TaskSetManagerSuite
     assert(taskSetManager.taskSetExcludelistHelperOpt.get.isDryRun)
   }
 
+  test("SPARK-56326: Streaming query Id and batch Id are included in scheduling log " +
+    "messages") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc)
+    val testQueryId = "test-query-id-1234"
+    val testBatchId = "42"
+    // Create a TaskSet with a non-null Properties containing the streaming metadata.
+    val properties = new Properties()
+    properties.setProperty("sql.streaming.queryId", testQueryId)
+    properties.setProperty("streaming.sql.batchId", testBatchId)
+    val taskSet = new TaskSet(Array(new FakeTask(0, 0, Nil)),
+      0, 0, 0, properties, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None)
+
+    val clock = new ManualClock
+    val logAppender = new LogAppender("streaming scheduling logs", maxEvents = 1000)
+    val loggerName = classOf[TaskSetManager].getName
+
+    withLogAppender(logAppender, loggerNames = Seq(loggerName)) {
+      val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+
+      // resourceOffer triggers prepareLaunchingTask which logs "Starting ..."
+      val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)._1
+      assert(taskOption.isDefined)
+
+      clock.advance(1)
+      // handleSuccessfulTask logs "Finished ..."
+      manager.handleSuccessfulTask(0, createTaskResult(0))
+    }
+
+    val logs = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+
+    val expectedQueryPrefix = s"[queryId = ${testQueryId.take(5)}]"
+    val expectedBatchPrefix = s"[batchId = $testBatchId]"
+
+    // Verify the "Starting" log line includes query Id and batch Id
+    val startingLogs = logs.filter(msg =>
+      msg.contains("Starting") &&
+        msg.contains(expectedQueryPrefix) && msg.contains(expectedBatchPrefix))
+    assert(startingLogs.nonEmpty,
+      s"Expected 'Starting' log to contain '$expectedQueryPrefix' and '$expectedBatchPrefix'." +
+        s"\nCaptured logs:\n${logs.mkString("\n")}")
+
+    // Verify the "Finished" log line includes query Id and batch Id
+    val finishedLogs = logs.filter(msg =>
+      msg.contains("Finished") &&
+        msg.contains(expectedQueryPrefix) && msg.contains(expectedBatchPrefix))
+    assert(finishedLogs.nonEmpty,
+      s"Expected 'Finished' log to contain '$expectedQueryPrefix' and '$expectedBatchPrefix'." +
+        s"\nCaptured logs:\n${logs.mkString("\n")}")
+  }
+
 }
 
 class FakeLongTasks(stageId: Int, partitionId: Int) extends FakeTask(stageId, partitionId) {
