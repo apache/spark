@@ -286,6 +286,31 @@ class DataFrameObservationTestsMixin:
         # The observation should have been collected
         self.assertEqual(obs.get, {"row_count": 100})
 
+    def test_observe_lateral_join(self):
+        # SPARK-56322: self-joining an observed DataFrame
+        obs = Observation("lateral_join_obs")
+        df = self.spark.range(50).observe(obs, F.count(F.lit(1)).alias("row_count"))
+
+        joined = (
+            df.alias("left")
+            .lateralJoin(
+                df.alias("right").where("right.id between left.id - 1 and left.id + 1")
+            )
+            .selectExpr("left.id as left_id", "right.id as right_id")
+        )
+        result = joined.collect()
+
+        # Joins on row 0 should produce rows 0 and 1
+        bounded_matches = sorted([r.right_id for r in result if r.left_id == 0])
+        self.assertEqual(bounded_matches, [0, 1])
+
+        # Joins on row 25 should produce rows 24, 25, and 26
+        unbounded_matches = sorted([r.right_id for r in result if r.left_id == 25])
+        self.assertEqual(unbounded_matches, [24, 25, 26])
+
+        # The observation should have been collected
+        self.assertEqual(obs.get, {"row_count": 50})
+
     def test_observe_self_join_union(self):
         # SPARK-56322: union of observed DataFrames with same observation
         obs = Observation("union_obs")
