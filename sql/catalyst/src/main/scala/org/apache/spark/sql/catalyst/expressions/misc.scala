@@ -100,9 +100,12 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
   override def sql: String = {
     // When constructed from the single-argument form (just an error message string),
     // output only the original message to produce valid, roundtrippable SQL.
-    errorParms match {
-      case CreateMap(Seq(Literal(key, _), msg), _)
-        if key != null && key.toString == "errorMessage" =>
+    (errorClass, errorParms) match {
+      case (Literal(cls, _), CreateMap(Seq(Literal(key, _), msg), _))
+        if cls != null &&
+          (cls.toString == "USER_RAISED_EXCEPTION" ||
+            cls.toString == "_LEGACY_ERROR_USER_RAISED_EXCEPTION") &&
+          key != null && key.toString == "errorMessage" =>
         s"$prettyName(${msg.sql})"
       case _ =>
         super.sql
