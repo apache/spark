@@ -1463,6 +1463,10 @@ jobs:
         run: |
           sudo apt update
           sudo apt-get install r-base
+      - name: Check default Python version
+        run: |
+          echo "Default Python path: $(which python3)"
+          echo "Default Python version: $(python3 --version)"
       - name: Start Minikube
         uses: medyagh/setup-minikube@e9e035a86bbc3caea26a450bd4dbf9d0c453682e # v0.0.21
         with:
@@ -1478,6 +1482,8 @@ jobs:
       - name: Run Spark on K8S integration test
         run: |
           # Prepare PV test
+          echo "Default Python path: $(which python3)"
+          echo "Default Python version: $(python3 --version)"
           PVC_TMP_DIR=$(mktemp -d)
           export PVC_TESTS_HOST_PATH=$PVC_TMP_DIR
           export PVC_TESTS_VM_PATH=$PVC_TMP_DIR
