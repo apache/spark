@@ -47,8 +47,7 @@ case class IncrementMetricIf(condition: Expression, metric: SQLMetric)
 
   override def prettyName: String = "increment_metric_if"
 
-  override def toString: String =
-    s"increment_metric_if($condition, ${metric.name.getOrElse("metric")})"
+  override def toString: String = s"$prettyName($condition, ${metric.name.getOrElse("metric")})"
 
   override protected def evalInternal(input: InternalRow): Any = {
     val result = condition.eval(input)
@@ -102,7 +101,7 @@ case class IncrementMetricIfThenReturn(
   override def prettyName: String = "increment_metric_if_then_return"
 
   override def toString: String =
-    s"increment_metric_if_then_return($condition, $returnExpr, ${metric.name.getOrElse("metric")})"
+    s"$prettyName($condition, $returnExpr, ${metric.name.getOrElse("metric")})"
 
   override protected def evalInternal(input: InternalRow): Any = {
     val condResult = condition.eval(input)

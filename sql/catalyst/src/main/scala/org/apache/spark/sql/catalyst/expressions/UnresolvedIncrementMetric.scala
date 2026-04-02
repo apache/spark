@@ -29,7 +29,8 @@ import org.apache.spark.sql.types.DataType
  *
  * This is the unresolved form - resolved into IncrementMetricIf by a preparation rule.
  *
- * Marked as Nondeterministic to prevent the optimizer from pruning or reordering it.
+ * Marked as Nondeterministic to prevent the optimizer from pruning or reordering it, as moving this
+ * expression can result in miscounted metric values.
  * Cannot mix in [[Unevaluable]] because both [[Unevaluable]] and [[Nondeterministic]] declare
  * [[foldable]] as final.
  *
@@ -51,7 +52,7 @@ case class UnresolvedIncrementMetricIf(
 
   override def prettyName: String = "unresolved_increment_metric_if"
 
-  override def toString: String = s"unresolved_increment_metric_if($condition, $metricName)"
+  override def toString: String = s"$prettyName($condition, $metricName)"
 
   override protected def evalInternal(input: InternalRow): Any =
     throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
@@ -70,7 +71,8 @@ case class UnresolvedIncrementMetricIf(
  *
  * This is the unresolved form - resolved into IncrementMetricIfThenReturn by a preparation rule.
  *
- * Marked as Nondeterministic to prevent the optimizer from pruning or reordering it.
+ * Marked as Nondeterministic to prevent the optimizer from pruning or reordering it, as moving this
+ * expression can result in miscounted metric values.
  * Cannot mix in [[Unevaluable]] because both [[Unevaluable]] and [[Nondeterministic]] declare
  * [[foldable]] as final.
  *
@@ -96,8 +98,7 @@ case class UnresolvedIncrementMetricIfThenReturn(
 
   override def prettyName: String = "unresolved_increment_metric_if_then_return"
 
-  override def toString: String =
-    s"unresolved_increment_metric_if_then_return($condition, $returnExpr, $metricName)"
+  override def toString: String = s"$prettyName($condition, $returnExpr, $metricName)"
 
   override protected def evalInternal(input: InternalRow): Any =
     throw QueryExecutionErrors.cannotEvaluateExpressionError(this)

@@ -71,16 +71,16 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     // construct a read relation and include all required metadata columns
     val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs)
 
-    // add Filter with chained IncrementMetric expressions to the plan
+    // add Filter with IncrementMetric expressions to the plan
     val updatedRowsMetric = UnresolvedIncrementMetricIfThenReturn(
       condition = cond,
       returnExpr = Literal.TrueLiteral,
       metricName = "numUpdatedRows")
     val copiedRowsMetric = UnresolvedIncrementMetricIfThenReturn(
       condition = Not(EqualNullSafe(cond, Literal.TrueLiteral)),
-      returnExpr = updatedRowsMetric,
+      returnExpr = Literal.TrueLiteral,
       metricName = "numCopiedRows")
-    val readRelationWithMetrics = Filter(copiedRowsMetric, readRelation)
+    val readRelationWithMetrics = Filter(copiedRowsMetric, Filter(updatedRowsMetric, readRelation))
 
     // build a plan with updated and copied over records
     val updatedAndRemainingRowsPlan = buildReplaceDataUpdateProjection(
