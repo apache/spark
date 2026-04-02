@@ -290,7 +290,7 @@ object ExtractV2Scan {
     Some(scanRelation.scan)
 }
 
-object ExtractV2Relation {
+object ExtractV2ScanInfo {
   def unapply(scanRelation: DataSourceV2ScanRelation)
       : Option[(DataSourceV2Relation, Scan, Seq[AttributeReference])] =
     Some((scanRelation.relation, scanRelation.scan, scanRelation.output))

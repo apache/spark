@@ -41,7 +41,7 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
   }
 
   private def partitioning(plan: LogicalPlan) = plan.transformDown {
-    case d @ ExtractV2Relation(relation, scan: SupportsReportPartitioning, _)
+    case d @ ExtractV2ScanInfo(relation, scan: SupportsReportPartitioning, _)
         if d.keyGroupedPartitioning.isEmpty =>
       val catalystPartitioning = scan.outputPartitioning() match {
         case kgp: KeyGroupedPartitioning =>
@@ -69,7 +69,7 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
   }
 
   private def ordering(plan: LogicalPlan) = plan.transformDown {
-    case d @ ExtractV2Relation(relation, scan: SupportsReportOrdering, _) =>
+    case d @ ExtractV2ScanInfo(relation, scan: SupportsReportOrdering, _) =>
       val ordering =
         V2ExpressionUtils.toCatalystOrdering(scan.outputOrdering(), relation, relation.funCatalog)
       d.copy(ordering = Some(ordering))

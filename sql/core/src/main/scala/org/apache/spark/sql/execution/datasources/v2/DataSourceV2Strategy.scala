@@ -119,7 +119,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case PhysicalOperation(project, filters, ExtractV2Relation(
+    case PhysicalOperation(project, filters, ExtractV2ScanInfo(
       v2Relation, V1ScanWrapper(scan, pushed, pushedDownOperators), output)) =>
       val v1Relation = scan.toV1TableScan[BaseRelation with TableScan](session.sqlContext)
       if (v1Relation.schema != scan.readSchema()) {
@@ -146,7 +146,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         project, filters, dsScan, needsUnsafeConversion = false) :: Nil
 
     case PhysicalOperation(project, filters,
-        ExtractV2Relation(_, scan: LocalScan, output)) =>
+        ExtractV2ScanInfo(_, scan: LocalScan, output)) =>
       val localScanExec = LocalTableScanExec(output, scan.rows().toImmutableArraySeq, None)
       DataSourceV2Strategy.withProjectAndFilter(
         project, filters, localScanExec, needsUnsafeConversion = false) :: Nil
@@ -346,7 +346,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case DeleteFromTable(relation, condition) =>
       relation match {
-        case ExtractV2Relation(r, _, output) =>
+        case ExtractV2ScanInfo(r, _, output) =>
           val table = r.table
           if (SubqueryExpression.hasSubquery(condition)) {
             throw QueryCompilationErrors.unsupportedDeleteByConditionWithSubqueryError(condition)
