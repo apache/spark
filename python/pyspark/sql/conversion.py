@@ -1844,10 +1844,24 @@ class ArrowArrayToPandasConversion:
         elif isinstance(spark_type, ArrayType):
             element_conv = cls._create_element_converter(spark_type.elementType)
             if element_conv is not None:
-                series = arr.to_pandas(integer_object_nulls=True) if ndarray_as_list else arr.to_pandas()
-                series = series.map(
-                    lambda x: [element_conv(e) for e in x] if x is not None else None
-                )
+                if ndarray_as_list:
+                    series = arr.to_pandas(integer_object_nulls=True)
+                    series = series.map(
+                        lambda x: (
+                            [element_conv(e) for e in x] if x is not None else None
+                        )
+                    )
+                else:
+                    import numpy as np
+
+                    series = arr.to_pandas()
+                    series = series.map(
+                        lambda x: (
+                            np.asarray([element_conv(e) for e in x], dtype=object)
+                            if x is not None
+                            else None
+                        )
+                    )
             elif ndarray_as_list:
                 series = arr.to_pandas(integer_object_nulls=True)
                 series = series.map(lambda x: cls._ndarray_to_list(x) if x is not None else None)
