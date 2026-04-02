@@ -86,6 +86,16 @@ class DataFrameObservationTestsMixin:
             messageParameters={},
         )
 
+        new_observation = Observation("new")
+        with self.assertRaises(PySparkAssertionError) as pe:
+            df.observe(new_observation, 2 * F.count(F.lit(1)).alias("cnt"))
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="DUPLICATED_METRICS_NAME",
+            messageParameters={"metricName": "new"},
+        )
+
         # observation requires name (if given) to be non empty string
         with self.assertRaisesRegex(PySparkTypeError, "`name` should be str, got int"):
             Observation(123)
@@ -286,6 +296,26 @@ class DataFrameObservationTestsMixin:
         # The observation should have been collected
         self.assertEqual(obs.get, {"row_count": 100})
 
+        # Check the error conditions
+        with self.assertRaises(PySparkAssertionError) as pe:
+            joined.observe(obs, F.count(F.lit(1)).alias("row_count")).collect()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="REUSE_OBSERVATION",
+            messageParameters={},
+        )
+
+        obs2 = Observation("12345")
+        with self.assertRaises(PySparkAssertionError) as pe:
+            joined.observe(obs2, 2 * F.count(F.lit(1)).alias("row_count")).collect()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="DUPLICATED_METRICS_NAME",
+            messageParameters={"metricName": "12345"},
+        )
+
     def test_observe_lateral_join(self):
         # SPARK-56322: lateral self-joining an observed DataFrame
         obs = Observation("lateral_join_obs")
@@ -310,6 +340,26 @@ class DataFrameObservationTestsMixin:
 
         # The observation should have been collected
         self.assertEqual(obs.get, {"row_count": 50})
+
+        # Check the error conditions
+        with self.assertRaises(PySparkAssertionError) as reused:
+            joined.observe(obs, F.count(F.lit(1)).alias("row_count")).collect()
+
+        self.check_error(
+            exception=reused.exception,
+            errorClass="REUSE_OBSERVATION",
+            messageParameters={},
+        )
+
+        obs2 = Observation("12345")
+        with self.assertRaises(PySparkAssertionError) as pe:
+            joined.observe(obs2, F.count(2 * F.lit(1)).alias("row_count")).collect()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="DUPLICATED_METRICS_NAME",
+            messageParameters={"metricName": "12345"},
+        )
 
     def test_observe_self_join_union(self):
         # SPARK-56322: union of observed DataFrames with same observation
