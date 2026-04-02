@@ -58,6 +58,9 @@ case class InsertAdaptiveSparkPlan(
     case _: ExecutedCommandExec => plan
     case _: CommandResultExec => plan
     case w: V2ExistingTableWriteExec if w.operationMetrics.nonEmpty =>
+      // We need to create a preprocessing rule with the operationMetrics reference to prevent
+      // losing and re-creating metric instances. ResolveIncrementMetric resolves
+      // UnresolvedIncrementMetric expressions with the list of already existing metrics.
       val saved = extraPreprocessingRules
       extraPreprocessingRules = Seq(ResolveIncrementMetric(w.operationMetrics))
       val result = w.withNewChildren(w.children.map(apply))
