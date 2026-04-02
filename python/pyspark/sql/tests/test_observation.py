@@ -287,15 +287,13 @@ class DataFrameObservationTestsMixin:
         self.assertEqual(obs.get, {"row_count": 100})
 
     def test_observe_lateral_join(self):
-        # SPARK-56322: self-joining an observed DataFrame
+        # SPARK-56322: lateral self-joining an observed DataFrame
         obs = Observation("lateral_join_obs")
         df = self.spark.range(50).observe(obs, F.count(F.lit(1)).alias("row_count"))
 
         joined = (
             df.alias("left")
-            .lateralJoin(
-                df.alias("right").where("right.id between left.id - 1 and left.id + 1")
-            )
+            .lateralJoin(df.alias("right"), on=F.expr("right.id between left.id - 1 and left.id + 1"))
             .selectExpr("left.id as left_id", "right.id as right_id")
         )
         result = joined.collect()
