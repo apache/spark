@@ -1589,6 +1589,36 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
       q.stop()
     }
   }
+
+  test("SPARK-56243: malformed record timestamp throws detailed error") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 1)
+
+    // Nanosecond-precision timestamp that overflows millis-to-micros conversion
+    val nanoTimestamp = 1712345678123456789L
+    val record = new RecordBuilder(topic, "value").partition(0).timestamp(nanoTimestamp).build()
+    testUtils.sendMessages(Seq(record))
+
+    val kafka = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      .load()
+
+    testStream(kafka)(
+      StartStream(),
+      ExpectFailure[KafkaIllegalStateException](e => {
+        val ex = e.asInstanceOf[KafkaIllegalStateException]
+        assert(ex.getCondition === "KAFKA_MALFORMED_RECORD_TIMESTAMP")
+        assert(ex.getSqlState === "22008")
+        assert(ex.getMessage.contains(topic))
+        assert(ex.getMessage.contains(nanoTimestamp.toString))
+        assert(ex.getCause.isInstanceOf[ArithmeticException])
+      })
+    )
+  }
 }
 
 abstract class KafkaMicroBatchV1SourceSuite extends KafkaMicroBatchSourceSuiteBase {
