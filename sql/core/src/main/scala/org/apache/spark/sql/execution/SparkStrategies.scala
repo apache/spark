@@ -511,42 +511,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object StreamingDeduplicationStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case Deduplicate(keys, child) if child.isStreaming =>
-        StreamingDeduplicateExec(
-          keys, maybeNormalizeFloatingPointKeys(keys, child)) :: Nil
+        StreamingDeduplicateExec(keys, planLater(child)) :: Nil
 
       case DeduplicateWithinWatermark(keys, child) if child.isStreaming =>
-        StreamingDeduplicateWithinWatermarkExec(
-          keys, maybeNormalizeFloatingPointKeys(keys, child)) :: Nil
+        StreamingDeduplicateWithinWatermarkExec(keys, planLater(child)) :: Nil
 
       case _ => Nil
-    }
-
-    /**
-     * If any dedup key contains a floating-point type (including nested types), wraps the physical
-     * child in a ProjectExec that normalizes NaN and -0.0 so that semantically equal values produce
-     * identical UnsafeRow bytes in the state store.
-     *
-     * Note that the streaming dedupe node does not support map-typed keys, althoug the
-     * `NormalizeFloatingNumbers` helper does.
-     */
-    private def maybeNormalizeFloatingPointKeys(
-        keys: Seq[Attribute], child: LogicalPlan): SparkPlan = {
-      val physicalChild = planLater(child)
-      val normalizedProjectList = child.output.map { attr =>
-        if (keys.exists(_.exprId == attr.exprId)) {
-          NormalizeFloatingNumbers.normalize(attr) match {
-            case a: Attribute => a
-            case other => Alias(other, attr.name)(exprId = attr.exprId)
-          }
-        } else {
-          attr
-        }
-      }
-      if (normalizedProjectList.exists(!_.isInstanceOf[Attribute])) {
-        execution.ProjectExec(normalizedProjectList, physicalChild)
-      } else {
-        physicalChild
-      }
     }
   }
 
