@@ -69,7 +69,7 @@ ArrowGroupedAggUDFType = Literal[252]
 ArrowWindowAggUDFType = Literal[253]
 ArrowGroupedAggIterUDFType = Literal[254]
 
-# Arrow stream types for worker.py read_udfs() func signatures.
+# Arrow stream types
 # A single group of Arrow batches (e.g., one key group in groupBy).
 GroupedBatch = Iterator[pyarrow.RecordBatch]
 # A pair of groups for cogroup operations (e.g., cogroupBy).
