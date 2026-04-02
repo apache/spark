@@ -293,7 +293,9 @@ class DataFrameObservationTestsMixin:
 
         joined = (
             df.alias("left")
-            .lateralJoin(df.alias("right"), on=F.expr("right.id between left.id - 1 and left.id + 1"))
+            .lateralJoin(
+                df.alias("right"), on=F.expr("right.id between left.id - 1 and left.id + 1")
+            )
             .selectExpr("left.id as left_id", "right.id as right_id")
         )
         result = joined.collect()
