@@ -1463,6 +1463,10 @@ jobs:
         run: |
           sudo apt update
           sudo apt-get install r-base
+      - name: Check default Python version
+        run: |
+          echo "Default Python path: $(which python3)"
+          echo "Default Python version: $(python3 --version)"
       - name: Install Python 3.12
         uses: actions/setup-python@v6
         with:
