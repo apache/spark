@@ -111,6 +111,18 @@ class DataSourcesTestsMixin:
         expected = [Row(name="Alice", age=25), Row(name="Bob", age=30)]
         self.assertEqual(sorted(result.collect(), key=lambda r: r.name), expected)
 
+    def test_json_with_dataframe_input_multiple_columns(self):
+        multi_df = self.spark.createDataFrame(
+            [("a", "b"), ("c", "d")], schema="col1 STRING, col2 STRING"
+        )
+        with self.assertRaises(Exception):
+            self.spark.read.json(multi_df).collect()
+
+    def test_json_with_dataframe_input_zero_columns(self):
+        empty_schema_df = self.spark.range(1).select()
+        with self.assertRaises(Exception):
+            self.spark.read.json(empty_schema_df).collect()
+
     def test_multiline_csv(self):
         ages_newlines = self.spark.read.csv(
             "python/test_support/sql/ages_newlines.csv", multiLine=True

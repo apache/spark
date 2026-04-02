@@ -195,6 +195,18 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
         expected = [Row(name="Alice", age=25), Row(name="Bob", age=30)]
         self.assertEqual(sorted(result.collect(), key=lambda r: r.name), expected)
 
+    def test_json_with_dataframe_input_multiple_columns(self):
+        multi_df = self.connect.createDataFrame(
+            [("a", "b"), ("c", "d")], schema="col1 STRING, col2 STRING"
+        )
+        with self.assertRaises(Exception):
+            self.connect.read.json(multi_df).collect()
+
+    def test_json_with_dataframe_input_zero_columns(self):
+        empty_schema_df = self.connect.range(1).select()
+        with self.assertRaises(Exception):
+            self.connect.read.json(empty_schema_df).collect()
+
     def test_multi_paths(self):
         # SPARK-42041: DataFrameReader should support list of paths
 
