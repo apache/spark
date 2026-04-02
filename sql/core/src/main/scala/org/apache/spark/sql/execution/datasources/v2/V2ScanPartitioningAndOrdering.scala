@@ -69,7 +69,8 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
 
   private def ordering(plan: LogicalPlan) = plan.transformDown {
     case d @ DataSourceV2ScanRelation(relation, scan: SupportsReportOrdering, _, _, _) =>
-      val ordering = V2ExpressionUtils.toCatalystOrdering(scan.outputOrdering(), relation)
+      val ordering =
+        V2ExpressionUtils.toCatalystOrdering(scan.outputOrdering(), relation, relation.funCatalog)
       d.copy(ordering = Some(ordering))
   }
 }
