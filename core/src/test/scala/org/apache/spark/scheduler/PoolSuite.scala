@@ -367,7 +367,8 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("Fair Scheduler addTaskSetManager logs include streaming query Id and batch Id") {
+  test("SPARK-56326: Fair Scheduler addTaskSetManager logs include " +
+    "streaming query Id and batch Id") {
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
     val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE, xmlPath)
     sc = new SparkContext(LOCAL, APP_NAME, conf)
