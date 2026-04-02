@@ -896,6 +896,11 @@ def _to_corrected_pandas_type(dt: DataType) -> Optional[Any]:
             return np.dtype("timedelta64[ns]")
         else:
             return np.dtype("timedelta64[us]")
+    elif type(dt) == StringType:
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return None
+        else:
+            return pd.StringDtype(na_value=np.nan)
     else:
         return None
 
@@ -1007,7 +1012,11 @@ def _create_converter_to_pandas(
             def correct_dtype(pser: pd.Series) -> pd.Series:
                 if not isinstance(pser.dtype, pd.DatetimeTZDtype):
                     pser = pser.astype(pandas_type, copy=False)
-                return _check_series_convert_timestamps_local_tz(pser, timezone=timezone)
+                pser = _check_series_convert_timestamps_local_tz(pser, timezone=timezone)
+                if LooseVersion(pd.__version__) < "3.0.0":
+                    return pser
+                else:
+                    return pser.astype(pandas_type, copy=False)
 
         else:
 

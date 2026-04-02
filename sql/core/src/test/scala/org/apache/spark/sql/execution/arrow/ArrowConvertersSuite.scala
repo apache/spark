@@ -1304,7 +1304,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
   }
 
   test("interval is supported for arrow") {
-    val collected = calendarIntervalData.toDF().toArrowBatchRdd.collect()
+    val collected = calendarIntervalData.toArrowBatchRdd.collect()
     assert(collected.length == 1)
   }
 

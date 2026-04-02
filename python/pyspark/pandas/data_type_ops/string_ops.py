@@ -17,6 +17,7 @@
 
 from typing import Any, Union, cast
 
+import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
@@ -153,6 +154,9 @@ class StringOps(DataTypeOps):
         if LooseVersion(pd.__version__) < "3.0.0":
             return super().restore(col)
         else:
+            if is_str_dtype(col.dtype) and not is_str_dtype(self.dtype):
+                # treat missing values as None for string dtype
+                col = col.replace({np.nan: None})
             return col.astype(self.dtype)
 
 

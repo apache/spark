@@ -33,8 +33,8 @@ public class JavaGeographyTypeSuite {
 
   @Test
   public void geographyTypeWithSpecifiedValidSridTest() {
-    // Valid SRID values for GEOGRAPHY. Note that only 4326 is supported for now.
-    Stream.of(4326).forEach(srid -> {
+    // Valid SRID values for GEOGRAPHY (geographic SRIDs from the registry).
+    Stream.of(4326, 4267, 4269, 4612).forEach(srid -> {
       DataType geographyType = DataTypes.createGeographyType(srid);
       Assertions.assertEquals("GEOGRAPHY(" + srid + ")", geographyType.sql());
       Assertions.assertEquals("geography(" + srid + ")", geographyType.typeName());
@@ -62,8 +62,9 @@ public class JavaGeographyTypeSuite {
 
   @Test
   public void geographyTypeWithSpecifiedValidCrsTest() {
-    // Valid CRS values for GEOGRAPHY. Note that only "OGC:CRS84" is supported for now.
-    Stream.of("OGC:CRS84").forEach(crs -> {
+    // Valid CRS values for GEOGRAPHY (including OGC overrides and EPSG aliases).
+    Stream.of("OGC:CRS84", "OGC:CRS27", "OGC:CRS83", "EPSG:4326", "EPSG:4267", "EPSG:4269",
+        "EPSG:4612").forEach(crs -> {
       Integer srid = GeographicSpatialReferenceSystemMapper.getSrid(crs);
       DataType geographyType = DataTypes.createGeographyType(crs);
       Assertions.assertEquals("GEOGRAPHY(" + srid + ")", geographyType.sql());

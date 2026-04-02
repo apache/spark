@@ -4847,6 +4847,48 @@ object SQLConf {
       .enumConf(PartitionOverwriteMode)
       .createWithDefault(PartitionOverwriteMode.STATIC)
 
+  val INSERT_INTO_REPLACE_ON_ENABLED =
+    buildConf("spark.sql.insertIntoReplaceOn.enabled")
+      .doc("Enable the SQL syntax INSERT INTO ... REPLACE ON (...). " +
+        "The command atomically inserts new rows into a table after deleting all existing rows " +
+        "that match the new rows according to the specified matching condition. The " +
+        "inserted rows are specified by a VALUES expression or the result of a query.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
+  val INSERT_INTO_REPLACE_ON_BY_NAME_ENABLED =
+    buildConf("spark.sql.insertIntoReplaceOnByName.enabled")
+      .doc("Enable the SQL syntax INSERT INTO ... BY NAME REPLACE ON. " +
+        "Allows using the BY NAME clause with INSERT INTO REPLACE ON.")
+      .internal()
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
+  val INSERT_INTO_REPLACE_USING_ENABLED =
+    buildConf("spark.sql.insertIntoReplaceUsing.enabled")
+      .doc("Enable the SQL syntax INSERT INTO ... REPLACE USING (...). " +
+        "The command atomically inserts new rows into a table after deleting all existing rows " +
+        "that match the new rows according to the key columns specified in the statement. The " +
+        "inserted rows are specified by a VALUES expression or the result of a query.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
+  val INSERT_INTO_REPLACE_USING_BY_NAME_ENABLED =
+    buildConf("spark.sql.insertIntoReplaceUsingByName.enabled")
+      .doc("Enable the SQL syntax INSERT INTO ... BY NAME REPLACE USING (...). " +
+        "Allows using the BY NAME clause with INSERT INTO REPLACE USING.")
+      .internal()
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   object StoreAssignmentPolicy extends Enumeration {
     val ANSI, LEGACY, STRICT = Value
   }

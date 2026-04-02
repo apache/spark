@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
+import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, GreaterThan, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.IdentityColumnSpec
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
@@ -1774,7 +1774,7 @@ class DDLParserSuite extends AnalysisTest {
       OverwriteByExpression.byName(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
-        org.apache.spark.sql.catalyst.expressions.GreaterThan(
+        GreaterThan(
           UnresolvedAttribute("a"),
           Literal(5))))
   }
@@ -1785,7 +1785,29 @@ class DDLParserSuite extends AnalysisTest {
       OverwriteByExpression.byPosition(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
-        org.apache.spark.sql.catalyst.expressions.GreaterThan(
+        GreaterThan(
+          UnresolvedAttribute("a"),
+          Literal(5))))
+  }
+
+  test("insert table: REPLACE WHERE with tableAlias and BY NAME") {
+    parseCompare(
+      "INSERT INTO testcat.ns1.ns2.tbl AS t BY NAME REPLACE WHERE a > 5 SELECT * FROM source",
+      OverwriteByExpression.byName(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        GreaterThan(
+          UnresolvedAttribute("a"),
+          Literal(5))))
+  }
+
+  test("insert table: REPLACE WHERE with tableAlias without BY NAME") {
+    parseCompare(
+      "INSERT INTO testcat.ns1.ns2.tbl AS t REPLACE WHERE a > 5 SELECT * FROM source",
+      OverwriteByExpression.byPosition(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        GreaterThan(
           UnresolvedAttribute("a"),
           Literal(5))))
   }
@@ -1872,6 +1894,219 @@ class DDLParserSuite extends AnalysisTest {
         )
       }
     }
+  }
+
+  for (isByName <- Seq(true, false)) {
+    val byNameClause = if (isByName) "BY NAME " else ""
+    val sourceQuery = "SELECT * FROM source"
+    val testMsg = s"isByName=$isByName"
+
+    test(s"INSERT INTO REPLACE USING - $testMsg") {
+      val table = "testcat.ns1.ns2.tbl"
+      val insertSQLStmt = s"INSERT INTO $table AS t " +
+        s"${byNameClause}REPLACE USING (col1, col2) ${sourceQuery}"
+
+      parseCompare(
+        sql = insertSQLStmt,
+        expected = InsertIntoStatement(
+          table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+          partitionSpec = Map.empty,
+          userSpecifiedCols = Seq.empty,
+          query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+          overwrite = true,
+          ifPartitionNotExists = false,
+          byName = isByName,
+          withSchemaEvolution = false,
+          replaceCriteriaOpt = Some(InsertReplaceUsing(Seq("col1", "col2"))))
+      )
+    }
+
+    test(s"INSERT INTO REPLACE ON - $testMsg") {
+      val table = "testcat.ns1.ns2.tbl"
+      val insertSQLStmt = s"INSERT INTO $table AS t " +
+        s"${byNameClause}REPLACE ON t.col1 = col2 ${sourceQuery}"
+
+      parseCompare(
+        sql = insertSQLStmt,
+        expected = InsertIntoStatement(
+          table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+          partitionSpec = Map.empty,
+          userSpecifiedCols = Seq.empty,
+          query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+          overwrite = true,
+          ifPartitionNotExists = false,
+          byName = isByName,
+          withSchemaEvolution = false,
+          replaceCriteriaOpt = Some(InsertReplaceOn(
+            EqualTo(UnresolvedAttribute(Seq("t", "col1")), UnresolvedAttribute("col2")),
+            Some("t"))))
+      )
+    }
+
+    test(s"INSERT WITH SCHEMA EVOLUTION INTO REPLACE USING - $testMsg") {
+      val table = "testcat.ns1.ns2.tbl"
+      val insertSQLStmt = s"INSERT WITH SCHEMA EVOLUTION INTO $table " +
+        s"${byNameClause}REPLACE USING (col1) ${sourceQuery}"
+
+      parseCompare(
+        sql = insertSQLStmt,
+        expected = InsertIntoStatement(
+          table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+          partitionSpec = Map.empty,
+          userSpecifiedCols = Seq.empty,
+          query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+          overwrite = true,
+          ifPartitionNotExists = false,
+          byName = isByName,
+          withSchemaEvolution = true,
+          replaceCriteriaOpt = Some(InsertReplaceUsing(Seq("col1"))))
+      )
+    }
+
+    test(s"INSERT WITH SCHEMA EVOLUTION INTO REPLACE ON - $testMsg") {
+      val table = "testcat.ns1.ns2.tbl"
+      val insertSQLStmt = s"INSERT WITH SCHEMA EVOLUTION INTO $table AS t " +
+        s"${byNameClause}REPLACE ON t.col1 = col2 ${sourceQuery}"
+
+      parseCompare(
+        sql = insertSQLStmt,
+        expected = InsertIntoStatement(
+          table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+          partitionSpec = Map.empty,
+          userSpecifiedCols = Seq.empty,
+          query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+          overwrite = true,
+          ifPartitionNotExists = false,
+          byName = isByName,
+          withSchemaEvolution = true,
+          replaceCriteriaOpt = Some(InsertReplaceOn(
+            EqualTo(UnresolvedAttribute(Seq("t", "col1")), UnresolvedAttribute("col2")),
+            Some("t"))))
+      )
+    }
+  }
+
+  test("INSERT INTO REPLACE ON") {
+    val table = "testcat.ns1.ns2.tbl"
+    parseCompare(
+      sql = s"INSERT INTO $table REPLACE ON col1 = col2 SELECT * FROM source",
+      expected = InsertIntoStatement(
+        table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        partitionSpec = Map.empty,
+        userSpecifiedCols = Seq.empty,
+        query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        overwrite = true,
+        ifPartitionNotExists = false,
+        byName = false,
+        withSchemaEvolution = false,
+        replaceCriteriaOpt = Some(InsertReplaceOn(
+          EqualTo(UnresolvedAttribute("col1"), UnresolvedAttribute("col2")),
+          None)))
+    )
+  }
+
+  test("INSERT INTO REPLACE ON with source query alias") {
+    val table = "testcat.ns1.ns2.tbl"
+    parseCompare(
+      sql =
+        s"""INSERT INTO $table AS t
+           |REPLACE ON (t.a = s.b)
+           |(SELECT * FROM source) AS s""".stripMargin,
+      expected = InsertIntoStatement(
+        table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        partitionSpec = Map.empty,
+        userSpecifiedCols = Seq.empty,
+        query = SubqueryAlias(
+          "s",
+          Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source")))),
+        overwrite = true,
+        ifPartitionNotExists = false,
+        byName = false,
+        replaceCriteriaOpt =
+          Some(InsertReplaceOn(
+            cond =
+              EqualTo(UnresolvedAttribute(Seq("t", "a")), UnresolvedAttribute(Seq("s", "b"))),
+            tableAliasOpt = Some("t"))))
+    )
+  }
+
+  test("INSERT INTO REPLACE USING with source query alias") {
+    // Source query alias is silently ignored for REPLACE USING since the alias
+    // cannot be referenced elsewhere in the statement.
+    val table = "testcat.ns1.ns2.tbl"
+    parseCompare(
+      sql =
+        s"""INSERT INTO $table AS t
+           |REPLACE USING (col1, col2)
+           |(SELECT * FROM source) AS s""".stripMargin,
+      expected = InsertIntoStatement(
+        table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        partitionSpec = Map.empty,
+        userSpecifiedCols = Seq.empty,
+        query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        overwrite = true,
+        ifPartitionNotExists = false,
+        byName = false,
+        replaceCriteriaOpt = Some(InsertReplaceUsing(Seq("col1", "col2"))))
+    )
+  }
+
+  test("INSERT INTO REPLACE WHERE with source query alias") {
+    // Source query alias is silently ignored for REPLACE WHERE since the WHERE
+    // condition refers to the target table, not a source-target join.
+    parseCompare(
+      sql =
+        """INSERT INTO testcat.ns1.ns2.tbl
+          |REPLACE WHERE a > 5
+          |(SELECT * FROM source) AS s""".stripMargin,
+      expected = OverwriteByExpression.byPosition(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        GreaterThan(
+          UnresolvedAttribute("a"),
+          Literal(5))))
+  }
+
+  test("INSERT INTO REPLACE ON with compound condition") {
+    val table = "testcat.ns1.ns2.tbl"
+    parseCompare(
+      sql = s"INSERT INTO $table AS t REPLACE ON t.a = s.a AND t.b = s.b " +
+        "(SELECT * FROM source) AS s",
+      expected = InsertIntoStatement(
+        table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        partitionSpec = Map.empty,
+        userSpecifiedCols = Seq.empty,
+        query = SubqueryAlias(
+          "s",
+          Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source")))),
+        overwrite = true,
+        ifPartitionNotExists = false,
+        byName = false,
+        replaceCriteriaOpt =
+          Some(InsertReplaceOn(
+            cond = And(
+              EqualTo(
+                UnresolvedAttribute(Seq("t", "a")), UnresolvedAttribute(Seq("s", "a"))),
+              EqualTo(
+                UnresolvedAttribute(Seq("t", "b")), UnresolvedAttribute(Seq("s", "b")))),
+            tableAliasOpt = Some("t"))))
+    )
+  }
+
+  test("INSERT INTO REPLACE USING with single column") {
+    val table = "testcat.ns1.ns2.tbl"
+    parseCompare(
+      sql = s"INSERT INTO $table AS t REPLACE USING (id) SELECT * FROM source",
+      expected = InsertIntoStatement(
+        table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        partitionSpec = Map.empty,
+        userSpecifiedCols = Seq.empty,
+        query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        overwrite = true,
+        ifPartitionNotExists = false,
+        byName = false,
+        replaceCriteriaOpt = Some(InsertReplaceUsing(Seq("id"))))
+    )
   }
 
   test("delete from table: delete all") {
