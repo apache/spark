@@ -118,12 +118,16 @@ case class ArrowEvalPythonExec(
   // Required because supportsColumnar = true. Wraps doExecute() row
   // output into ColumnarBatch for upstream columnar consumers.
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    val numInputRows =
+      SQLMetrics.createMetric(sparkContext, "number of input rows")
+    val numOutputBatches =
+      SQLMetrics.createMetric(sparkContext, "number of output batches")
     val evaluatorFactory = new RowToColumnarEvaluatorFactory(
       conf.offHeapColumnVectorEnabled,
       conf.columnBatchSize,
       schema,
-      longMetric("numOutputRows"),
-      SQLMetrics.createMetric(sparkContext, "number of output batches"))
+      numInputRows,
+      numOutputBatches)
     if (conf.usePartitionEvaluator) {
       doExecute().mapPartitionsWithEvaluator(evaluatorFactory)
     } else {
