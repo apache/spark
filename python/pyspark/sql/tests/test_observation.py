@@ -18,6 +18,7 @@
 from pyspark.sql import Row, Observation, functions as F
 from pyspark.sql.types import StructType, LongType
 from pyspark.errors import (
+    AnalysisException,
     PySparkAssertionError,
     PySparkException,
     PySparkTypeError,
@@ -86,14 +87,14 @@ class DataFrameObservationTestsMixin:
             messageParameters={},
         )
 
-        new_observation = Observation("new")
-        with self.assertRaises(PySparkAssertionError) as pe:
-            df.observe(new_observation, 2 * F.count(F.lit(1)).alias("cnt"))
+        new_observation = Observation("metric")
+        with self.assertRaises(AnalysisException) as pe:
+            observed.observe(new_observation, 2 * F.count(F.lit(1)).alias("cnt")).collect()
 
         self.check_error(
             exception=pe.exception,
             errorClass="DUPLICATED_METRICS_NAME",
-            messageParameters={"metricName": "new"},
+            messageParameters={"metricName": "metric"},
         )
 
         # observation requires name (if given) to be non empty string
@@ -306,19 +307,19 @@ class DataFrameObservationTestsMixin:
             messageParameters={},
         )
 
-        obs2 = Observation("12345")
-        with self.assertRaises(PySparkAssertionError) as pe:
+        obs2 = Observation("my_observation")
+        with self.assertRaises(AnalysisException) as pe:
             joined.observe(obs2, 2 * F.count(F.lit(1)).alias("row_count")).collect()
 
         self.check_error(
             exception=pe.exception,
             errorClass="DUPLICATED_METRICS_NAME",
-            messageParameters={"metricName": "12345"},
+            messageParameters={"metricName": "my_observation"},
         )
 
     def test_observe_lateral_join(self):
         # SPARK-56322: lateral self-joining an observed DataFrame
-        obs = Observation("lateral_join_obs")
+        obs = Observation("lateral_join_observation")
         df = self.spark.range(50).observe(obs, F.count(F.lit(1)).alias("row_count"))
 
         joined = (
@@ -351,14 +352,14 @@ class DataFrameObservationTestsMixin:
             messageParameters={},
         )
 
-        obs2 = Observation("12345")
-        with self.assertRaises(PySparkAssertionError) as pe:
+        obs2 = Observation("lateral_join_observation")
+        with self.assertRaises(AnalysisException) as pe:
             joined.observe(obs2, F.count(2 * F.lit(1)).alias("row_count")).collect()
 
         self.check_error(
             exception=pe.exception,
             errorClass="DUPLICATED_METRICS_NAME",
-            messageParameters={"metricName": "12345"},
+            messageParameters={"metricName": "lateral_join_observation"},
         )
 
     def test_observe_self_join_union(self):
