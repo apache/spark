@@ -25,8 +25,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.{RowToColumnarEvaluatorFactory, SparkPlan}
-import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.{StructType, UserDefinedType}
 import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
@@ -100,39 +100,21 @@ case class ArrowEvalPythonExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     if (child.supportsColumnar) {
-      // Columnar path: read ColumnarBatch from child, send Arrow vectors
-      // directly to Python when possible.
-      val inputRDD = child.executeColumnar()
-      if (conf.usePartitionEvaluator) {
-        inputRDD.mapPartitionsWithEvaluator(columnarEvaluatorFactory)
-      } else {
-        inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
-          columnarEvaluatorFactory.createEvaluator().eval(index, iter)
-        }
-      }
+      // Columnar path: delegate to doExecuteColumnar, flatten to rows.
+      doExecuteColumnar().flatMap(_.rowIterator().asScala)
     } else {
       // Row-based path: unchanged.
       super.doExecute()
     }
   }
 
-  // Required because supportsColumnar = true. Converts row output to
-  // columnar batches so upstream columnar consumers can read from us.
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    val numInputRows = longMetric("numOutputRows")
-    val numOutputBatches =
-      SQLMetrics.createMetric(sparkContext, "number of output batches")
-    val evaluatorFactory = new RowToColumnarEvaluatorFactory(
-      conf.offHeapColumnVectorEnabled,
-      conf.columnBatchSize,
-      schema,
-      numInputRows,
-      numOutputBatches)
+    val inputRDD = child.executeColumnar()
     if (conf.usePartitionEvaluator) {
-      doExecute().mapPartitionsWithEvaluator(evaluatorFactory)
+      inputRDD.mapPartitionsWithEvaluator(columnarEvaluatorFactory)
     } else {
-      doExecute().mapPartitionsWithIndexInternal { (index, rowIter) =>
-        evaluatorFactory.createEvaluator().eval(index, rowIter)
+      inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
+        columnarEvaluatorFactory.createEvaluator().eval(index, iter)
       }
     }
   }
