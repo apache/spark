@@ -72,7 +72,7 @@ ArrowGroupedAggIterUDFType = Literal[254]
 # Arrow stream types
 # A single group of Arrow batches (e.g., one key group in groupBy).
 GroupedBatch = Iterator[pyarrow.RecordBatch]
-# A pair of groups for cogroup operations (e.g., cogroupBy).
+# A group of two relations for cogroup operations (e.g., cogroupBy).
 CoGroupedBatch = Tuple[Iterator[pyarrow.RecordBatch], Iterator[pyarrow.RecordBatch]]
 
 class ArrowVariadicScalarToScalarFunction(Protocol):
