@@ -206,7 +206,7 @@ class EvalConf(Conf):
 
     @property
     def input_type(self) -> Optional[DataType]:
-        input_type = self.get("input_type", None)
+        input_type = self.get("input_type", None, lower_str=False)
         if input_type is None:
             return None
         return _parse_datatype_json_string(input_type)
