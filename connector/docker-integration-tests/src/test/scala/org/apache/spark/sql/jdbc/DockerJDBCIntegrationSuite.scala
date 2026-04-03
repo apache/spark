@@ -125,7 +125,6 @@ abstract class DockerJDBCIntegrationSuite
   protected var jdbcUrl: String = _
 
   override def beforeAll(): Unit = runIfTestsEnabled(s"Prepare for ${this.getClass.getName}") {
-    super.beforeAll()
     try {
       val config = DefaultDockerClientConfig.createDefaultConfigBuilder.build
       val httpClient = new ZerodepDockerHttpClient.Builder()
@@ -207,6 +206,8 @@ abstract class DockerJDBCIntegrationSuite
       externalPort = docker.inspectContainerCmd(container.getId).exec()
         .getNetworkSettings.getPorts.getBindings
         .get(ExposedPort.tcp(db.jdbcPort)).head.getHostPortSpec.toInt
+      // Initialize SparkSession after port is known so sparkConf can read the correct url
+      super.beforeAll()
       jdbcUrl = db.getJdbcUrl(dockerIp, externalPort)
       sleepBeforeTesting()
       var conn: Connection = null
