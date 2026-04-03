@@ -171,6 +171,9 @@ class TestAutoSnapshotLoader(
   override protected def onLoadSnapshotFromCheckpointFailure(): Unit = {}
 
   override protected def getEligibleSnapshots(versionToLoad: Long): Seq[Long] = eligibleSnapshots
+
+  override protected def getEligibleSnapshotsForRepair(versionToLoad: Long): Seq[Long] =
+    getEligibleSnapshots(versionToLoad)
 }
 
 class TestLoadException(val snapshotVersion: Long)

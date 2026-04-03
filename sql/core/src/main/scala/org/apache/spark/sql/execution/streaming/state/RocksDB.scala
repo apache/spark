@@ -688,6 +688,10 @@ class RocksDB(
       override protected def getEligibleSnapshots(version: Long): Seq[Long] = {
         fileManager.getEligibleSnapshotsForVersion(version)
       }
+
+      override protected def getEligibleSnapshotsForRepair(version: Long): Seq[Long] = {
+        getEligibleSnapshots(version)
+      }
     }
 
     val (version, autoRepairCompleted) = snapshotLoader.loadSnapshot(versionToLoad)

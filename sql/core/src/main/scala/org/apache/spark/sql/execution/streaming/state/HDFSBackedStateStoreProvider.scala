@@ -756,6 +756,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         // Combine the two sets of versions, so we can check both during load
         (snapshotVersions ++ cachedVersions).distinct
       }
+
+      override protected def getEligibleSnapshotsForRepair(versionToLoad: Long): Seq[Long] = {
+        getEligibleSnapshots(versionToLoad)
+      }
     }
 
     val (loadedVersion, autoRepairCompleted) = snapshotLoader.loadSnapshot(versionToLoad)

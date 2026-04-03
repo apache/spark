@@ -4214,8 +4214,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         // With auto-repair enabled, should succeed by falling back to snapshot at version 2
         withSQLConf(SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_ENABLED.key -> true.toString,
           SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_NUM_FAILURES_BEFORE_ACTIVATING.key -> "1",
-          SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_MAX_CHANGE_FILE_REPLAY.key -> "5"
-        ) {
+          SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_MAX_CHANGE_FILE_REPLAY.key -> "5") {
           withDB(remoteDir, enableStateStoreCheckpointIds = true,
               versionToUniqueId = versionToUniqueId) { db =>
             db.load(4)
@@ -4255,8 +4254,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> false.toString,
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "2",
       SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_ENABLED.key -> true.toString,
-      SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_NUM_FAILURES_BEFORE_ACTIVATING.key -> "1"
-    ) {
+      SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_NUM_FAILURES_BEFORE_ACTIVATING.key -> "1") {
       withTempDir { dir =>
         val remoteDir = dir.getCanonicalPath
         val versionToUniqueId = mutable.Map[Long, String]()

@@ -66,21 +66,15 @@ abstract class AutoSnapshotLoader(
 
   /**
    * Called once when the first snapshot load fails and auto-repair is about to begin.
-   * Returns the eligible snapshots to use for the repair loop. Subclasses can override
-   * this to return an enriched set of snapshots (e.g., by building a fuller lineage
-   * that was initially sparse for optimization).
+   * Returns the eligible snapshots to use for the repair loop.
    *
-   * The default delegates to [[getEligibleSnapshots]], which means it re-calls that method
-   * rather than reusing the initial list. This is intentional: V2 overrides this method to
-   * enrich the lineage first, then re-discovers snapshots from the enriched lineage.
-   * For V1 callers (which do not override), the re-call is benign since
-   * [[getEligibleSnapshots]] returns a consistent result from DFS listing.
+   * V2 overrides this to enrich a sparse lineage (via getFullLineage) before
+   * re-discovering snapshots. V1 can simply delegate to [[getEligibleSnapshots]].
    *
    * @param versionToLoad The version being loaded
    * @return Eligible snapshot versions for repair
    */
-  protected def getEligibleSnapshotsForRepair(versionToLoad: Long): Seq[Long] =
-    getEligibleSnapshots(versionToLoad)
+  protected def getEligibleSnapshotsForRepair(versionToLoad: Long): Seq[Long]
 
   /**
    * Load the latest snapshot for the specified version from the checkpoint directory.
