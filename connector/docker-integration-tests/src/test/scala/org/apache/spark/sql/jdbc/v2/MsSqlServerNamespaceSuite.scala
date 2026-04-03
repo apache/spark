@@ -36,11 +36,14 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class MsSqlServerNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespaceTest {
   override val db = new MsSQLServerDatabaseOnDocker
-  val map = new CaseInsensitiveStringMap(
+  lazy val map = new CaseInsensitiveStringMap(
     Map("url" -> db.getJdbcUrl(dockerIp, externalPort),
       "driver" -> "com.microsoft.sqlserver.jdbc.SQLServerDriver").asJava)
 
-  catalog.initialize("mssql", map)
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    catalog.initialize("mssql", map)
+  }
 
   override def dataPreparation(conn: Connection): Unit = {}
 

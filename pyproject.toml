@@ -49,8 +49,6 @@ extend-select = [
 ]
 ignore = [
     "E402", # Module top level import is disabled for optional import check, etc.
-    # TODO
-    "E721", # Use isinstance for type comparison, too many for now.
     "E741", # Ambiguous variables like l, I or O.
 ]
 

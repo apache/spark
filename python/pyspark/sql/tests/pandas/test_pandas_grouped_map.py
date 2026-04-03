@@ -574,22 +574,22 @@ class ApplyInPandasTestsMixin:
         pdf = df.toPandas()
 
         def foo1(key, pdf):
-            assert type(key) == tuple
-            assert type(key[0]) == np.int64
+            assert isinstance(key, tuple)
+            assert isinstance(key[0], np.int64)
 
             return pdf.assign(
                 v1=key[0], v2=pdf.v * key[0], v3=pdf.v * pdf.id, v4=pdf.v * pdf.id.mean()
             )
 
         def foo2(key, pdf):
-            assert type(key) == tuple
-            assert type(key[0]) == np.int64
-            assert type(key[1]) == np.int32
+            assert isinstance(key, tuple)
+            assert isinstance(key[0], np.int64)
+            assert isinstance(key[1], np.int32)
 
             return pdf.assign(v1=key[0], v2=key[1], v3=pdf.v * key[0], v4=pdf.v + key[1])
 
         def foo3(key, pdf):
-            assert type(key) == tuple
+            assert isinstance(key, tuple)
             assert len(key) == 0
             return pdf.assign(v1=pdf.v * pdf.id)
 
