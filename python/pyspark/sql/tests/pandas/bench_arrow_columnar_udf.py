@@ -86,22 +86,26 @@ def print_stats(label, times):
     mn = min(times)
     mx = max(times)
     print(f"  {label}")
-    print(f"    avg = {avg * 1000:8.1f} ms   "
-          f"min = {mn * 1000:8.1f} ms   "
-          f"max = {mx * 1000:8.1f} ms   "
-          f"({len(times)} iterations)")
+    print(
+        f"    avg = {avg * 1000:8.1f} ms   "
+        f"min = {mn * 1000:8.1f} ms   "
+        f"max = {mx * 1000:8.1f} ms   "
+        f"({len(times)} iterations)"
+    )
     return avg
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Benchmark Arrow columnar vs row-based Python UDF input")
-    parser.add_argument("--rows", type=int, default=500_000,
-                        help="Number of rows (default: 500000)")
-    parser.add_argument("--iterations", type=int, default=5,
-                        help="Timed iterations (default: 5)")
-    parser.add_argument("--partitions", type=int, default=1,
-                        help="Number of partitions (default: 1)")
+        description="Benchmark Arrow columnar vs row-based Python UDF input"
+    )
+    parser.add_argument(
+        "--rows", type=int, default=500_000, help="Number of rows (default: 500000)"
+    )
+    parser.add_argument("--iterations", type=int, default=5, help="Timed iterations (default: 5)")
+    parser.add_argument(
+        "--partitions", type=int, default=1, help="Number of partitions (default: 1)"
+    )
     args = parser.parse_args()
 
     spark = create_spark()
@@ -109,8 +113,7 @@ def main():
     print("=" * 70)
     print("Arrow Columnar vs Row-Based Input for Scalar Arrow Python UDF")
     print("=" * 70)
-    print(f"  rows={args.rows}  partitions={args.partitions}  "
-          f"iterations={args.iterations}")
+    print(f"  rows={args.rows}  partitions={args.partitions}  iterations={args.iterations}")
     print()
 
     # A minimal scalar Arrow UDF -- isolates data transfer overhead.
