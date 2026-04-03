@@ -29,7 +29,7 @@ import json
 from typing import Any, Callable, Iterable, Iterator, Optional, Tuple, TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
-    from pyspark.sql.pandas._typing import GroupedBatch, CoGroupedBatch
+    from pyspark.sql.pandas._typing import GroupedBatch
 
 from pyspark.accumulators import (
     SpecialAccumulatorIds,
