@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import java.io.NotSerializableException
 import java.nio.ByteBuffer
+import java.util.Properties
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, TimeUnit}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
@@ -30,7 +31,7 @@ import org.apache.spark.InternalAccumulator
 import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.{config, Logging, LogKeys}
+import org.apache.spark.internal.{config, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.SchedulingMode._
@@ -58,10 +59,12 @@ private[spark] class TaskSetManager(
     val taskSet: TaskSet,
     val maxTaskFailures: Int,
     healthTracker: Option[HealthTracker] = None,
-    clock: Clock = new SystemClock()) extends Schedulable with Logging {
+    clock: Clock = new SystemClock())
+  extends Schedulable with StructuredStreamingIdAwareSchedulerLogging {
+
+  override def properties: Properties = taskSet.properties
 
   private val conf = sched.sc.conf
-
   val maxResultSize = conf.get(config.MAX_RESULT_SIZE)
 
   // Serializer for closures and tasks.
@@ -571,8 +574,7 @@ private[spark] class TaskSetManager(
     // a good proxy to task serialization time.
     // val timeTaken = clock.getTime() - startTime
     val tName = taskName(taskId)
-    logInfo(SchedulableBuilder.schedulingLogStreamingContext(taskSet.properties) +
-      log"Starting ${MDC(TASK_NAME, tName)} (${MDC(HOST, host)}," +
+    logInfo(log"Starting ${MDC(TASK_NAME, tName)} (${MDC(HOST, host)}," +
       log"executor ${MDC(LogKeys.EXECUTOR_ID, info.executorId)}, " +
       log"partition ${MDC(PARTITION_ID, task.partitionId)}, " +
       log"${MDC(TASK_LOCALITY, taskLocality)}, " +
@@ -866,8 +868,7 @@ private[spark] class TaskSetManager(
     }
     if (!successful(index)) {
       tasksSuccessful += 1
-      logInfo(SchedulableBuilder.schedulingLogStreamingContext(taskSet.properties) +
-        log"Finished ${MDC(TASK_NAME, taskName(info.taskId))} in " +
+      logInfo(log"Finished ${MDC(TASK_NAME, taskName(info.taskId))} in " +
         log"${MDC(DURATION, info.duration)} ms on ${MDC(HOST, info.host)} " +
         log"(executor ${MDC(LogKeys.EXECUTOR_ID, info.executorId)}) " +
         log"(${MDC(NUM_SUCCESSFUL_TASKS, tasksSuccessful)}/${MDC(NUM_TASKS, numTasks)})")

@@ -26,10 +26,8 @@ import scala.xml.{Node, XML}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkContext
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.MessageWithContext
 import org.apache.spark.internal.config.{SCHEDULER_ALLOCATION_FILE, SCHEDULER_MODE}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.util.Utils
@@ -56,40 +54,6 @@ private[spark] class FIFOSchedulableBuilder(val rootPool: Pool)
 
   override def addTaskSetManager(manager: Schedulable, properties: Properties): Unit = {
     rootPool.addSchedulable(manager)
-  }
-}
-
-private[spark] object SchedulableBuilder extends Logging {
-  val QUERY_ID_KEY = "sql.streaming.queryId"
-  val BATCH_ID_KEY = "streaming.sql.batchId"
-
-  /**
-   * Helper method used to generate a logging prefix containing the query Id and batch Id
-   * when they are set. These properties are only set for streaming queries and are used to
-   * aid in debugging multiple streaming queries running at the same time.
-   *
-   * @param properties the task properties to check for query Id and batch Id
-   * @return a log prefix containing the query Id and batch Id when both are present and
-   *         non-null; otherwise, an empty prefix
-   */
-  def schedulingLogStreamingContext(properties: Properties): MessageWithContext = {
-    if (properties == null) {
-      return log""
-    }
-
-    val queryId = Option(properties.getProperty(QUERY_ID_KEY))
-    val batchId = Option(properties.getProperty(BATCH_ID_KEY))
-
-    queryId match {
-      case Some(qId) =>
-        val prefix = log"[queryId = ${MDC(LogKeys.QUERY_ID, qId.take(5))}] "
-        batchId.fold(prefix)(bId =>
-          prefix + log"[batchId = ${MDC(LogKeys.BATCH_ID, bId)}] "
-        )
-      case _ =>
-        // Query id not set; not a streaming query so nothing to add
-        log""
-    }
   }
 }
 
@@ -263,8 +227,12 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, sc: SparkContext
     }
     parentPool.addSchedulable(manager)
 
-    logInfo(SchedulableBuilder.schedulingLogStreamingContext(properties) +
-      log"Added task set ${MDC(LogKeys.TASK_SET_MANAGER, manager.name)} to pool " +
-      log"${MDC(LogKeys.POOL_NAME, poolName)}")
+    logInfo(
+      StructuredStreamingIdAwareSchedulerLogging.constructStreamingLogEntry(
+        properties,
+        log"Added task set ${MDC(LogKeys.TASK_SET_MANAGER, manager.name)} to pool " +
+        log"${MDC(LogKeys.POOL_NAME, poolName)}"
+      )
+    )
   }
 }
