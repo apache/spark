@@ -22,7 +22,6 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 from itertools import groupby
 from typing import IO, TYPE_CHECKING, Any, Iterable, Iterator, List, Optional, Tuple
 
-import pyspark
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.serializers import (
     Serializer,
@@ -33,8 +32,6 @@ from pyspark.serializers import (
 )
 from pyspark.sql import Row
 from pyspark.sql.conversion import (
-    LocalDataToArrowConversion,
-    ArrowTableToRowsConversion,
     ArrowBatchTransformer,
     PandasToArrowConversion,
 )
@@ -598,117 +595,6 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
 
     def __repr__(self):
         return "ArrowStreamArrowUDFSerializer"
-
-
-class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
-    """
-    Serializer used by Python worker to evaluate Arrow Python UDFs
-    when the legacy pandas conversion is disabled
-    (instead of legacy ArrowStreamPandasUDFSerializer).
-
-    Parameters
-    ----------
-    safecheck : bool
-        If True, conversion from Arrow to Pandas checks for overflow/truncation
-    input_type : spark data type
-        input data type for the UDF, must be a StructType
-    int_to_decimal_coercion_enabled : bool
-        If True, applies additional coercions in Python before converting to Arrow
-        This has performance penalties.
-    binary_as_bytes : bool
-        If True, binary type will be deserialized as bytes, otherwise as bytearray.
-    """
-
-    def __init__(
-        self,
-        *,
-        safecheck: bool,
-        input_type: StructType,
-        int_to_decimal_coercion_enabled: bool,
-        binary_as_bytes: bool,
-    ):
-        super().__init__(
-            safecheck=safecheck,
-            arrow_cast=True,
-        )
-        assert isinstance(input_type, StructType)
-        self._input_type = input_type
-        self._int_to_decimal_coercion_enabled = int_to_decimal_coercion_enabled
-        self._binary_as_bytes = binary_as_bytes
-
-    def load_stream(self, stream):
-        """
-        Loads a stream of Arrow record batches and converts them to Python values.
-
-        Parameters
-        ----------
-        stream : object
-            Input stream containing Arrow record batches
-
-        Yields
-        ------
-        list
-            List of columns containing list of Python values.
-        """
-        converters = [
-            ArrowTableToRowsConversion._create_converter(
-                f.dataType, none_on_identity=True, binary_as_bytes=self._binary_as_bytes
-            )
-            for f in self._input_type
-        ]
-
-        for batch in super().load_stream(stream):
-            columns = [
-                [conv(v) for v in column.to_pylist()] if conv is not None else column.to_pylist()
-                for column, conv in zip(batch.itercolumns(), converters)
-            ]
-            if len(columns) == 0:
-                yield [[pyspark._NoValue] * batch.num_rows]
-            else:
-                yield columns
-
-    def dump_stream(self, iterator, stream):
-        """
-        Dumps an iterator of Python values as a stream of Arrow record batches.
-
-        Parameters
-        ----------
-        iterator : iterator
-            Iterator yielding tuple of (data, arrow_type, spark_type) tuples.
-            Single UDF: ((results, arrow_type, spark_type),)
-            Multiple UDFs: ((r1, t1, s1), (r2, t2, s2), ...)
-        stream : object
-            Output stream to write the Arrow record batches
-
-        Returns
-        -------
-        object
-            Result of writing the Arrow stream via ArrowStreamArrowUDFSerializer dump_stream
-        """
-        import pyarrow as pa
-
-        def create_array(results, arrow_type, spark_type):
-            conv = LocalDataToArrowConversion._create_converter(
-                spark_type,
-                none_on_identity=True,
-                int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
-            )
-            converted = [conv(res) for res in results] if conv is not None else results
-            try:
-                return pa.array(converted, type=arrow_type)
-            except pa.lib.ArrowInvalid:
-                return pa.array(converted).cast(target_type=arrow_type, safe=self._safecheck)
-
-        def py_to_batch():
-            for packed in iterator:
-                if len(packed) == 3 and isinstance(packed[1], pa.DataType):
-                    # single array UDF in a projection
-                    yield create_array(packed[0], packed[1], packed[2]), packed[1]
-                else:
-                    # multiple array UDFs in a projection
-                    yield [(create_array(*t), t[1]) for t in packed]
-
-        return super().dump_stream(py_to_batch(), stream)
 
 
 class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
