@@ -114,6 +114,22 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
   override def dropNamespace(namespace: Array[String], cascade: Boolean): Boolean = fail()
 }
 
+private object QualifyExpressionHelper {
+  def invalidResolvedAggregateFunction(expr: Expression): Option[Expression] = expr match {
+    case _: WindowExpression | _: UnresolvedWindowExpression => None
+    case agg: AggregateExpression => Some(agg)
+    case agg: AggregateFunction => Some(agg)
+    case other =>
+      other.children.to(LazyList).flatMap(invalidResolvedAggregateFunction).headOption
+  }
+
+  def validateNoStandaloneAggregateFunction(condition: Expression): Unit = {
+    invalidResolvedAggregateFunction(condition).foreach { agg =>
+      throw QueryCompilationErrors.aggregateInQualifyNotAllowedError(agg)
+    }
+  }
+}
+
 /**
  * Provides a way to keep state during the analysis, mostly for resolving views and subqueries.
  * This enables us to decouple the concerns of analysis environment from the catalog and resolve
@@ -2876,15 +2892,6 @@ class Analyzer(
    * and group by expressions from them.
   */
   object ResolveAggregateFunctions extends Rule[LogicalPlan] {
-    private def invalidResolvedQualifyAggregateFunction(expr: Expression): Option[Expression] =
-      expr match {
-        case _: WindowExpression | _: UnresolvedWindowExpression => None
-        case agg: AggregateExpression => Some(agg)
-        case agg: AggregateFunction => Some(agg)
-        case other =>
-          other.children.to(LazyList).flatMap(invalidResolvedQualifyAggregateFunction).headOption
-      }
-
     def apply(plan: LogicalPlan): LogicalPlan = {
       val collatedPlan =
         if (conf.getConf(SQLConf.RUN_COLLATION_TYPE_CASTS_BEFORE_ALIAS_ASSIGNMENT)) {
@@ -2914,9 +2921,7 @@ class Analyzer(
 
       case Filter(QualifyExpression(cond, selectListHasWindowFunction), agg: Aggregate)
         if agg.resolved && cond.resolved =>
-        invalidResolvedQualifyAggregateFunction(cond).foreach { agg =>
-          throw QueryCompilationErrors.aggregateInQualifyNotAllowedError(agg)
-        }
+        QualifyExpressionHelper.validateNoStandaloneAggregateFunction(cond)
         resolveOperatorWithAggregate(Seq(cond), agg, (newExprs, newChild) => {
           Filter(QualifyExpression(newExprs.head, selectListHasWindowFunction), newChild)
         })
@@ -3285,19 +3290,8 @@ class Analyzer(
       }
     }
 
-    private def invalidResolvedQualifyAggregateFunction(expr: Expression): Option[Expression] =
-      expr match {
-        case _: WindowExpression | _: UnresolvedWindowExpression => None
-        case agg: AggregateExpression => Some(agg)
-        case agg: AggregateFunction => Some(agg)
-        case other =>
-          other.children.to(LazyList).flatMap(invalidResolvedQualifyAggregateFunction).headOption
-      }
-
     private def validateQualifyAggregateCondition(condition: Expression): Unit = {
-      invalidResolvedQualifyAggregateFunction(condition).foreach { agg =>
-        throw QueryCompilationErrors.aggregateInQualifyNotAllowedError(agg)
-      }
+      QualifyExpressionHelper.validateNoStandaloneAggregateFunction(condition)
     }
 
     /**
@@ -3507,7 +3501,6 @@ class Analyzer(
         aggregateExprs: Seq[NamedExpression],
         qualifyCondition: Expression,
         child: LogicalPlan): LogicalPlan = {
-      val withAggregate = Aggregate(groupingExprs, aggregateExprs, child)
       validateQualifyAggregateCondition(qualifyCondition)
 
       val qualifyAlias = Alias(qualifyCondition, "__qualify_cond")()
@@ -3523,8 +3516,6 @@ class Analyzer(
         havingCondition: Expression,
         qualifyCondition: Expression,
         child: LogicalPlan): LogicalPlan = {
-      val withAggregate = Aggregate(groupingExprs, aggregateExprs, child)
-      val withFilter = Filter(havingCondition, withAggregate)
       validateQualifyAggregateCondition(qualifyCondition)
 
       val qualifyAlias = Alias(qualifyCondition, "__qualify_cond")()
@@ -4426,22 +4417,11 @@ object ResolveUnresolvedHaving extends Rule[LogicalPlan] {
  * have been materialized.
  */
 object ResolveQualifyExpressions extends Rule[LogicalPlan] {
-  private def invalidResolvedQualifyAggregateFunction(expr: Expression): Option[Expression] =
-    expr match {
-      case _: WindowExpression | _: UnresolvedWindowExpression => None
-      case agg: AggregateExpression => Some(agg)
-      case agg: AggregateFunction => Some(agg)
-      case other =>
-        other.children.to(LazyList).flatMap(invalidResolvedQualifyAggregateFunction).headOption
-    }
-
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(_.containsPattern(FILTER), ruleId) {
       case Filter(QualifyExpression(condition, selectListHasWindowFunction), child)
         if condition.resolved && child.resolved =>
-        invalidResolvedQualifyAggregateFunction(condition).foreach { agg =>
-          throw QueryCompilationErrors.aggregateInQualifyNotAllowedError(agg)
-        }
+        QualifyExpressionHelper.validateNoStandaloneAggregateFunction(condition)
         if (!selectListHasWindowFunction) {
           throw QueryCompilationErrors.qualifyRequiresWindowFunctionError()
         }
