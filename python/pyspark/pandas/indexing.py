@@ -536,6 +536,12 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                 else:
                     sdf = sdf.limit(sdf.count() + limit)
                 sdf = sdf.drop(NATURAL_ORDER_COLUMN_NAME)
+
+            if is_remote():
+                # Trigger plan analysis on Spark Connect here so analysis errors are caught
+                # before `InternalFrame.__init__`. `isStreaming` also caches the value used
+                # by `InternalFrame.__init__` immediately after.
+                sdf.isStreaming
         except AnalysisException:
             if is_remote():
                 from pyspark.sql.connect.column import Column as ConnectColumn

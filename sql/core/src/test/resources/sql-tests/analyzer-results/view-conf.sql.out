@@ -97,10 +97,10 @@ Project [CoLuMNa#x]
 -- !query
 DROP VIEW IF EXISTS view_ansi
 -- !query analysis
-DropTempViewCommand view_ansi
+DropTempViewCommand view_ansi, true
 
 
 -- !query
 DROP VIEW IF EXISTS view_case_sensitivity
 -- !query analysis
-DropTempViewCommand view_case_sensitivity
+DropTempViewCommand view_case_sensitivity, true

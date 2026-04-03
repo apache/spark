@@ -35,13 +35,19 @@ from pyspark.serializers import (
 )
 from pyspark.util import fail_on_stopiteration
 
-try:
-    import psutil
+process = None
 
-    process = None
 
-    def get_used_memory():
-        """Return the used memory in MiB"""
+def get_used_memory():
+    """Return the used memory in MiB"""
+    try:
+        import psutil
+
+        has_psutil = True
+    except ImportError:
+        has_psutil = False
+
+    if has_psutil:
         global process
         if process is None or process._pid != os.getpid():
             process = psutil.Process(os.getpid())
@@ -51,10 +57,7 @@ try:
             info = process.get_memory_info()
         return info.rss >> 20
 
-except ImportError:
-
-    def get_used_memory():
-        """Return the used memory in MiB"""
+    else:
         if platform.system() == "Linux":
             for line in open("/proc/self/status"):
                 if line.startswith("VmRSS:"):

@@ -79,6 +79,7 @@ CACHE TABLE testCache OPTIONS ('storageLevel' 'DISK_ONLY') SELECT * FROM testDat
 
 ### Related Statements
 
+* [SHOW CACHED TABLES](sql-ref-syntax-aux-show-cached-tables.html)
 * [CLEAR CACHE](sql-ref-syntax-aux-cache-clear-cache.html)
 * [UNCACHE TABLE](sql-ref-syntax-aux-cache-uncache-table.html)
 * [REFRESH TABLE](sql-ref-syntax-aux-cache-refresh-table.html)

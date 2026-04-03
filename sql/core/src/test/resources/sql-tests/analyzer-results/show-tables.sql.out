@@ -135,7 +135,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`show_t*`"
+    "relationName" : "`show_t*`",
+    "searchPath" : "[`system`.`session`, `spark_catalog`.`showdb`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -206,13 +207,13 @@ DropTable false, false
 -- !query
 DROP VIEW  show_t3
 -- !query analysis
-DropTempViewCommand show_t3
+DropTempViewCommand show_t3, false
 
 
 -- !query
 DROP VIEW  global_temp.show_t4
 -- !query analysis
-DropTempViewCommand global_temp.show_t4
+DropTempViewCommand global_temp.show_t4, false
 
 
 -- !query

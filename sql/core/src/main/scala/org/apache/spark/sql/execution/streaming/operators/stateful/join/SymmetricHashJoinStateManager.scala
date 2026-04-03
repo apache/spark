@@ -66,6 +66,10 @@ trait SymmetricHashJoinStateManager {
    * The matched flag will be updated to true for the values being returned, if it is semantically
    * required to do so.
    *
+   * For skipUpdatingMatchedFlag = true, the method will skip updating the matched flag for the
+   * values being returned. This is useful for the non-outer side of stream-stream join where
+   * the matched flag is never checked during state eviction.
+   *
    * It is caller's responsibility to consume the whole iterator.
    *
    * @param timestampRange Optional optimization hint as (minTimestamp, maxTimestamp), both
@@ -76,7 +80,8 @@ trait SymmetricHashJoinStateManager {
       key: UnsafeRow,
       generateJoinedRow: InternalRow => JoinedRow,
       predicate: JoinedRow => Boolean,
-      timestampRange: Option[(Long, Long)] = None): Iterator[JoinedRow]
+      timestampRange: Option[(Long, Long)] = None,
+      skipUpdatingMatchedFlag: Boolean = false): Iterator[JoinedRow]
 
   /**
    * Retrieve all joined rows for the given key and remove the matched rows from state. The joined
@@ -281,7 +286,13 @@ class SymmetricHashJoinStateManagerV4(
   // V4 uses a single store with VCFs (not separate keyToNumValues/keyWithIndexToValue stores).
   // Use the keyToNumValues checkpoint ID for loading the correct committed version.
   private val stateStoreCkptId: Option[String] = keyToNumValuesStateStoreCkptId
-  private val handlerSnapshotOptions: Option[HandlerSnapshotOptions] = None
+  private val handlerSnapshotOptions: Option[HandlerSnapshotOptions] = snapshotOptions.map { opts =>
+    HandlerSnapshotOptions(
+      snapshotVersion = opts.snapshotVersion,
+      endVersion = opts.endVersion,
+      startStateStoreCkptId = opts.startKeyToNumValuesStateStoreCkptId,
+      endStateStoreCkptId = opts.endKeyToNumValuesStateStoreCkptId)
+  }
 
   private var stateStoreProvider: StateStoreProvider = _
 
@@ -349,7 +360,8 @@ class SymmetricHashJoinStateManagerV4(
       key: UnsafeRow,
       generateJoinedRow: InternalRow => JoinedRow,
       predicate: JoinedRow => Boolean,
-      timestampRange: Option[(Long, Long)] = None): Iterator[JoinedRow] = {
+      timestampRange: Option[(Long, Long)] = None,
+      skipUpdatingMatchedFlag: Boolean = false): Iterator[JoinedRow] = {
     def getJoinedRowsFromTsAndValues(
         ts: Long,
         valuesAndMatched: Array[ValueAndMatchPair]): Iterator[JoinedRow] = {
@@ -365,7 +377,7 @@ class SymmetricHashJoinStateManagerV4(
 
             val joinedRow = generateJoinedRow(vmp.value)
             if (predicate(joinedRow)) {
-              if (!vmp.matched) {
+              if (!skipUpdatingMatchedFlag && !vmp.matched) {
                 valuesAndMatched(currentIndex) = vmp.copy(matched = true)
                 shouldUpdateValuesIntoStateStore = true
               }
@@ -387,7 +399,6 @@ class SymmetricHashJoinStateManagerV4(
 
         override protected def close(): Unit = {
           if (shouldUpdateValuesIntoStateStore) {
-            // Update back to the state store
             val updatedValuesWithMatched = valuesAndMatched.map { vmp =>
               (vmp.value, vmp.matched)
             }.toSeq
@@ -1050,17 +1061,21 @@ abstract class SymmetricHashJoinStateManagerBase(
   /**
    * Get all the matched values for given join condition, with marking matched.
    * This method is designed to mark joined rows properly without exposing internal index of row.
+   *
+   * @param skipUpdatingMatchedFlag If true, do not update the matched flag even when the row
+   *                                matches.
    */
   def getJoinedRows(
       key: UnsafeRow,
       generateJoinedRow: InternalRow => JoinedRow,
       predicate: JoinedRow => Boolean,
-      timestampRange: Option[(Long, Long)] = None): Iterator[JoinedRow] = {
+      timestampRange: Option[(Long, Long)] = None,
+      skipUpdatingMatchedFlag: Boolean = false): Iterator[JoinedRow] = {
     val numValues = keyToNumValues.get(key)
     keyWithIndexToValue.getAll(key, numValues).map { keyIdxToValue =>
       val joinedRow = generateJoinedRow(keyIdxToValue.value)
       if (predicate(joinedRow)) {
-        if (!keyIdxToValue.matched) {
+        if (!skipUpdatingMatchedFlag && !keyIdxToValue.matched) {
           keyWithIndexToValue.put(key, keyIdxToValue.valueIndex, keyIdxToValue.value,
             matched = true)
         }
@@ -1917,6 +1932,13 @@ object SymmetricHashJoinStateManager {
     }
   }
 
+  def allStateStoreNamesV4(joinSides: JoinSide*): Seq[String] = {
+    val allStateStoreTypes: Seq[StateStoreType] = Seq(KeyWithTsToValuesType, TsWithKeyType)
+    for (joinSide <- joinSides; stateStoreType <- allStateStoreTypes) yield {
+      getStateStoreName(joinSide, stateStoreType)
+    }
+  }
+
   def getSchemaForStateStores(
       joinSide: JoinSide,
       inputValueAttributes: Seq[Attribute],
@@ -1968,7 +1990,6 @@ object SymmetricHashJoinStateManager {
       inputValueAttributes: Seq[Attribute],
       joinKeys: Seq[Expression],
       stateFormatVersion: Int): Map[String, StateStoreColFamilySchema] = {
-    // Convert the original schemas for state stores into StateStoreColFamilySchema objects
     val schemas =
       getSchemaForStateStores(joinSide, inputValueAttributes, joinKeys, stateFormatVersion)
 
@@ -2145,9 +2166,13 @@ object SymmetricHashJoinStateManager {
     } else if (storeName == getStateStoreName(LeftSide, KeyWithIndexToValueType) ||
       storeName == getStateStoreName(RightSide, KeyWithIndexToValueType)) {
       KeyWithIndexToValueType
+    } else if (storeName == getStateStoreName(LeftSide, KeyWithTsToValuesType) ||
+      storeName == getStateStoreName(RightSide, KeyWithTsToValuesType)) {
+      KeyWithTsToValuesType
+    } else if (storeName == getStateStoreName(LeftSide, TsWithKeyType) ||
+      storeName == getStateStoreName(RightSide, TsWithKeyType)) {
+      TsWithKeyType
     } else {
-      // TODO: [SPARK-55628] Add support of KeyWithTsToValuesType and TsWithKeyType during
-      //  integration.
       throw new IllegalArgumentException(s"Unsupported join store name: $storeName")
     }
   }
@@ -2162,17 +2187,17 @@ object SymmetricHashJoinStateManager {
       stateFormatVersion: Int): StatePartitionKeyExtractor = {
     assert(stateFormatVersion <= 4, "State format version must be less than or equal to 4")
     val name = if (stateFormatVersion >= 3) colFamilyName else storeName
-    if (getStoreType(name) == KeyWithIndexToValueType) {
-      // For KeyWithIndex, the index is added to the join (i.e. partition) key.
-      // Drop the last field (index) to get the partition key
-      new DropLastNFieldsStatePartitionKeyExtractor(stateKeySchema, numLastColsToDrop = 1)
-    } else if (getStoreType(name) == KeyToNumValuesType) {
-      // State key is the partition key
-      new NoopStatePartitionKeyExtractor(stateKeySchema)
-    } else {
-      // TODO: [SPARK-55628] Add support of KeyWithTsToValuesType and TsWithKeyType during
-      //  integration.
-      throw new IllegalArgumentException(s"Unsupported join store name: $storeName")
+    getStoreType(name) match {
+      case KeyWithIndexToValueType =>
+        // For KeyWithIndex, the index is added to the join (i.e. partition) key.
+        // Drop the last field (index) to get the partition key
+        new DropLastNFieldsStatePartitionKeyExtractor(stateKeySchema, numLastColsToDrop = 1)
+      case KeyToNumValuesType =>
+        new NoopStatePartitionKeyExtractor(stateKeySchema)
+      case KeyWithTsToValuesType | TsWithKeyType =>
+        // For v4 stores, the logical key schema in the schema file is just the join key
+        // (timestamp is managed by the encoder), so the state key IS the partition key.
+        new NoopStatePartitionKeyExtractor(stateKeySchema)
     }
   }
 

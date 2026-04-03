@@ -43,6 +43,7 @@ spark.driver.extraClassPath
 spark.driver.extraJavaOptions
 spark.driver.extraLibraryPath
 spark.driver.host
+spark.driver.limitActiveProcessorCount.enabled
 spark.driver.log.allowErasureCoding
 spark.driver.log.dfsDir
 spark.driver.log.layout
@@ -119,6 +120,7 @@ spark.executor.id
 spark.executor.instances
 spark.executor.isolatedSessionCache.size
 spark.executor.killOnFatalError.depth
+spark.executor.limitActiveProcessorCount.enabled
 spark.executor.logs.redirectConsoleOutputs
 spark.executor.logs.rolling.enableCompression
 spark.executor.logs.rolling.maxRetainedFiles
@@ -167,6 +169,7 @@ spark.history.fs.numReplayThreads
 spark.history.fs.safemodeCheck.interval
 spark.history.fs.update.batchSize
 spark.history.fs.update.interval
+spark.history.fs.update.scanDisabledPathPatterns
 spark.history.kerberos.enabled
 spark.history.kerberos.keytab
 spark.history.kerberos.principal
@@ -1218,6 +1221,7 @@ spark.unsafe.sorter.spill.read.ahead.enabled
 spark.unsafe.sorter.spill.reader.buffer.size
 spark.user.groups.mapping
 spark.worker.executorStateSync.maxAttempts
+spark.yarn.am.limitActiveProcessorCount.enabled
 spark.yarn.dist.forceDownloadSchemes
 spark.yarn.dist.pyFiles
 spark.yarn.isPython

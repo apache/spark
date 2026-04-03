@@ -18,7 +18,6 @@
 from decimal import Decimal
 import datetime
 import os
-import platform
 import shutil
 import tempfile
 import unittest
@@ -3121,9 +3120,6 @@ class BaseUDTFTestsMixin:
         res = self.spark.sql("select i, to_json(v['v1']) from test_udtf_struct(8)")
         assertDataFrameEqual(res, [Row(i=n, s=f'{{"a":"{chr(99 + n)}"}}') for n in range(8)])
 
-    @unittest.skipIf(
-        "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
-    )
     def test_udtf_segfault(self):
         for enabled, expected in [
             (True, "Segmentation fault"),

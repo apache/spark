@@ -279,6 +279,12 @@ object DataSourceUtils extends PredicateHelper {
     }
   }
 
+  /**
+   * Splits `normalizedFilters` into partition filters and data filters by matching
+   * [[AttributeReference]] against the given `partitionSchema` by their names.
+   *
+   * This is suitable for the V1 path where partition columns have non-nested names.
+   */
   def getPartitionFiltersAndDataFilters(
       partitionSchema: StructType,
       normalizedFilters: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
@@ -288,7 +294,22 @@ object DataSourceUtils extends PredicateHelper {
           attr
       }
     }
-    val partitionSet = AttributeSet(partitionColumns)
+    getPartitionFiltersAndDataFilters(AttributeSet(partitionColumns), normalizedFilters)
+  }
+
+  /**
+   * Splits `normalizedFilters` into partition filters and data filters by matching
+   * [[AttributeReference]] against the given `partitionAttributes` by their `ExprId`s.
+   */
+  def getPartitionFiltersAndDataFilters(
+      partitionAttributes: Seq[AttributeReference],
+      normalizedFilters: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
+    getPartitionFiltersAndDataFilters(AttributeSet(partitionAttributes), normalizedFilters)
+  }
+
+  private def getPartitionFiltersAndDataFilters(
+      partitionSet: AttributeSet,
+      normalizedFilters: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
     val (partitionFilters, dataFilters) = normalizedFilters.partition(f =>
       f.references.nonEmpty && f.references.subsetOf(partitionSet)
     )

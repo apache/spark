@@ -65,6 +65,21 @@ private[spark] object History {
     .checkValue(v => v > 0, "The update batchSize should be a positive integer.")
     .createWithDefault(Int.MaxValue)
 
+  val SCAN_DISABLED_PATH_PATTERNS =
+    ConfigBuilder("spark.history.fs.update.scanDisabledPathPatterns")
+      .doc("Comma-separated list of regular expressions matched against log directory " +
+        "paths. Directories whose full path matches any pattern will not be scanned " +
+        "periodically. Applications in these directories rely on on-demand loading " +
+        "instead of scanning and will not appear in the listing until accessed by appId. " +
+        "When accessed, accurate metadata is populated immediately. Logs that are never " +
+        "accessed are not subject to the cleaner; use external lifecycle management " +
+        "(e.g., S3 Lifecycle Policies) for those. " +
+        "Example: \"s3a://.*,gs://.*\" disables scanning for all S3 and GCS directories.")
+      .version("4.2.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   val CLEANER_ENABLED = ConfigBuilder("spark.history.fs.cleaner.enabled")
     .version("1.4.0")
     .doc("Whether the History Server should periodically clean up event logs from storage")

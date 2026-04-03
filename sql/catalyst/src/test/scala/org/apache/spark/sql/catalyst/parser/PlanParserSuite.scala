@@ -296,15 +296,25 @@ class PlanParserSuite extends AnalysisTest {
       cte(table("cte2").select(star()), false,
         "cte1" -> ((OneRowRelation().select(1), Seq.empty)),
         "cte2" -> ((table("cte1").select(star()), Seq.empty))))
-    val sql = "with cte1 (select 1), cte1 as (select 1 from cte1) select * from cte1"
+    val sql1 = "with cte1 (select 1), cte1 as (select 1 from cte1) select * from cte1"
     checkError(
-      exception = parseException(sql),
+      exception = parseException(sql1),
       condition = "DUPLICATED_CTE_NAMES",
       parameters = Map("duplicateNames" -> "`cte1`"),
       context = ExpectedContext(
-        fragment = sql,
+        fragment = sql1,
         start = 0,
         stop = 68))
+    // Case-insensitive duplicate CTE names should also be detected.
+    val sql2 = "with CTE1 (select 1), cte1 as (select 2) select * from cte1"
+    checkError(
+      exception = parseException(sql2),
+      condition = "DUPLICATED_CTE_NAMES",
+      parameters = Map("duplicateNames" -> "`cte1`"),
+      context = ExpectedContext(
+        fragment = sql2,
+        start = 0,
+        stop = 58))
   }
 
   test("simple select query") {

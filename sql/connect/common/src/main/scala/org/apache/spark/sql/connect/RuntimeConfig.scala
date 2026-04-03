@@ -116,6 +116,18 @@ class RuntimeConfig private[sql] (client: SparkConnectClient)
     }
   }
 
+  private[connect] def getConfigMap(keys: String*): Map[String, String] = {
+    val response = executeConfigRequest { builder =>
+      val getBuilder = builder.getGetBuilder
+      keys.foreach(getBuilder.addKeys)
+    }
+    val mapBuilder = Map.newBuilder[String, String]
+    response.getPairsList.forEach { kv =>
+      mapBuilder += kv.getKey -> kv.getValue
+    }
+    mapBuilder.result()
+  }
+
   /** @inheritdoc */
   def unset(key: String): Unit = {
     executeConfigRequest { builder =>

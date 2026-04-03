@@ -69,6 +69,13 @@ class AstBuilder extends DataTypeAstBuilder
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import ParserUtils._
 
+  // Note: Do NOT add withOrigin(ctx) to this method. Builders often create full command plans
+  // (e.g., ReplaceTable, CreateFunction), not just identifier plans. Wrapping the body with
+  // withOrigin(ctx) would set CurrentOrigin to the identifier reference for ALL code in the
+  // builder, including error-throwing validation. Since ParseException.getQueryContext() reads
+  // from CurrentOrigin, this would cause error contexts to point to the identifier instead of
+  // the full statement. If a specific call site needs the identifier Origin on the plan it
+  // creates, add withOrigin(ctx) inside that call site's builder lambda instead.
   protected def withIdentClause(
       ctx: IdentifierReferenceContext,
       builder: Seq[String] => LogicalPlan): LogicalPlan = {
@@ -751,7 +758,7 @@ class AstBuilder extends DataTypeAstBuilder
       (namedQuery.alias, namedQuery, rowLevelLimit)
     }
     // Check for duplicate names.
-    val duplicates = ctes.groupBy(_._1).filter(_._2.size > 1).keys
+    val duplicates = ctes.groupBy(_._1.toLowerCase(Locale.ROOT)).filter(_._2.size > 1).keys
     if (duplicates.nonEmpty) {
       throw QueryParsingErrors.duplicateCteDefinitionNamesError(
         duplicates.map(toSQLId).mkString(", "), ctx)
@@ -847,7 +854,8 @@ class AstBuilder extends DataTypeAstBuilder
       withInsertInto(body.insertInto,
         withFromStatementBody(body.fromStatementBody, from).
           optionalMap(body.fromStatementBody.queryOrganization)(
-            withQueryResultClauses(_, _, forPipeOperators = false)))
+            withQueryResultClauses(_, _, forPipeOperators = false)),
+        queryAliasCtx = null)
     }
 
     // If there are multiple INSERTS just UNION them together into one query.
@@ -863,7 +871,7 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitSingleInsertQuery(
       ctx: SingleInsertQueryContext): LogicalPlan = withOrigin(ctx) {
-    withInsertInto(ctx.insertInto(), visitQuery(ctx.query))
+    withInsertInto(ctx.insertInto(), visitQuery(ctx.query), queryAliasCtx = ctx.queryAlias)
   }
 
   /**
@@ -875,7 +883,8 @@ class AstBuilder extends DataTypeAstBuilder
       userSpecifiedCols: Seq[String],
       partitionSpec: Map[String, Option[String]],
       ifPartitionNotExists: Boolean,
-      byName: Boolean)
+      byName: Boolean,
+      replaceCriteriaOpt: Option[InsertReplaceCriteria] = None)
 
   /**
    * Parameters used for writing query to a directory: (isLocal, CatalogStorageFormat, provider).
@@ -889,8 +898,10 @@ class AstBuilder extends DataTypeAstBuilder
    *     TABLE tableIdentifier [partitionSpec [IF NOT EXISTS]]? [identifierList]
    *   INSERT [WITH SCHEMA EVOLUTION] INTO
    *     [TABLE] tableIdentifier [partitionSpec] ([BY NAME] | [identifierList])
-   *   INSERT [WITH SCHEMA EVOLUTION] INTO
-   *     [TABLE] tableIdentifier REPLACE whereClause
+   *   INSERT [WITH SCHEMA EVOLUTION] INTO [TABLE] tableIdentifier tableAlias [BY NAME]
+   *     REPLACE (WHERE | ON) booleanExpression
+   *   INSERT [WITH SCHEMA EVOLUTION] INTO [TABLE] tableIdentifier tableAlias [BY NAME]
+   *     REPLACE USING identifierList
    *   INSERT OVERWRITE [LOCAL] DIRECTORY STRING [rowFormat] [createFileFormat]
    *   INSERT OVERWRITE [LOCAL] DIRECTORY [STRING] tableProvider [OPTIONS tablePropertyList]
    * }}}
@@ -898,7 +909,8 @@ class AstBuilder extends DataTypeAstBuilder
    */
   protected def withInsertInto(
       ctx: InsertIntoContext,
-      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+      query: LogicalPlan,
+      queryAliasCtx: TableAliasContext): LogicalPlan = withOrigin(ctx) {
     ctx match {
       // We cannot push withIdentClause() into the write command because:
       //   1. `PlanWithUnresolvedIdentifier` is not a NamedRelation
@@ -907,59 +919,90 @@ class AstBuilder extends DataTypeAstBuilder
       case table: InsertIntoTableContext =>
         val insertParams = visitInsertIntoTable(table)
         withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
-          InsertIntoStatement(
-            table = createUnresolvedRelation(
-              ctx = insertParams.relationCtx,
-              ident = ident,
-              optionsClause = insertParams.options,
-              writePrivileges = Set(TableWritePrivilege.INSERT),
-              isStreaming = false),
-            partitionSpec = insertParams.partitionSpec,
-            userSpecifiedCols = insertParams.userSpecifiedCols,
+          createInsertIntoStatement(
+            insertParams = insertParams,
+            ident = ident,
             query = otherPlans.head,
             overwrite = false,
-            ifPartitionNotExists = insertParams.ifPartitionNotExists,
-            byName = insertParams.byName,
+            writePrivileges = Set(TableWritePrivilege.INSERT),
             withSchemaEvolution = table.EVOLUTION() != null)
         })
       case table: InsertOverwriteTableContext =>
         val insertParams = visitInsertOverwriteTable(table)
         withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
-          InsertIntoStatement(
-            table = createUnresolvedRelation(
-              ctx = insertParams.relationCtx,
-              ident = ident,
-              optionsClause = insertParams.options,
-              writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE),
-              isStreaming = false),
-            partitionSpec = insertParams.partitionSpec,
-            userSpecifiedCols = insertParams.userSpecifiedCols,
+          createInsertIntoStatement(
+            insertParams = insertParams,
+            ident = ident,
             query = otherPlans.head,
             overwrite = true,
-            ifPartitionNotExists = insertParams.ifPartitionNotExists,
-            byName = insertParams.byName,
+            writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE),
             withSchemaEvolution = table.EVOLUTION() != null)
         })
-      case ctx: InsertIntoReplaceWhereContext =>
-        val options = Option(ctx.optionsClause())
-        withIdentClause(ctx.identifierReference, Seq(query), (ident, otherPlans) => {
-          val table = createUnresolvedRelation(ctx.identifierReference, ident, options,
-            Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false)
-          val deleteExpr = expression(ctx.whereClause().booleanExpression())
-          val isByName = ctx.NAME() != null
-          if (isByName) {
-            OverwriteByExpression.byName(
-              table,
-              df = otherPlans.head,
-              deleteExpr,
+      case ctx: InsertIntoReplaceBooleanCondContext =>
+        // Although REPLACE WHERE and REPLACE ON share a unified grammar rule, they have
+        // different SQL semantics:
+        // - REPLACE WHERE deletes table rows that satisfy the given predicate.
+        // - REPLACE ON only deletes table rows that match at least one source row.
+        // For example, with an empty source query, REPLACE ON never deletes any table rows,
+        // while REPLACE WHERE still can.
+        val isInsertReplaceWhere = ctx.WHERE() != null
+        if (isInsertReplaceWhere) {
+          val options = Option(ctx.optionsClause())
+          withIdentClause(ctx.identifierReference, Seq(query), (ident, otherPlans) => {
+            val table = createUnresolvedRelation(
+              ctx = ctx.identifierReference,
+              ident = ident,
+              optionsClause = options,
+              writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE),
+              isStreaming = false)
+            val deleteExpr = expression(ctx.replaceCondition)
+            val isByName = ctx.NAME() != null
+            if (isByName) {
+              OverwriteByExpression.byName(
+                table,
+                df = otherPlans.head,
+                deleteExpr,
+                withSchemaEvolution = ctx.EVOLUTION() != null)
+            } else {
+              OverwriteByExpression.byPosition(
+                table,
+                query = otherPlans.head,
+                deleteExpr,
+                withSchemaEvolution = ctx.EVOLUTION() != null)
+            }
+          })
+        } else {
+          val insertParams = visitInsertIntoReplaceOn(ctx)
+          withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
+            val query = {
+              val queryAliasOpt =
+                getTableAliasWithoutColumnAlias(queryAliasCtx, "INSERT REPLACE ON")
+
+              queryAliasOpt.map { queryAlias =>
+                withOrigin(queryAliasCtx) {
+                  SubqueryAlias(queryAlias, child = otherPlans.head)
+                }
+              }.getOrElse(otherPlans.head)
+            }
+            createInsertIntoStatement(
+              insertParams = insertParams,
+              ident = ident,
+              query = query,
+              overwrite = true,
+              writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE),
               withSchemaEvolution = ctx.EVOLUTION() != null)
-          } else {
-            OverwriteByExpression.byPosition(
-              table,
-              query = otherPlans.head,
-              deleteExpr,
-              withSchemaEvolution = ctx.EVOLUTION() != null)
-          }
+          })
+        }
+      case ctx: InsertIntoReplaceUsingContext =>
+        val insertParams = visitInsertIntoReplaceUsing(ctx)
+        withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
+          createInsertIntoStatement(
+            insertParams = insertParams,
+            ident = ident,
+            query = otherPlans.head,
+            overwrite = true,
+            writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE),
+            withSchemaEvolution = ctx.EVOLUTION() != null)
         })
       case dir: InsertOverwriteDirContext =>
         val (isLocal, storage, provider) = visitInsertOverwriteDir(dir)
@@ -1021,6 +1064,94 @@ class AstBuilder extends DataTypeAstBuilder
       partitionSpec = partitionSpec,
       ifPartitionNotExists = ctx.EXISTS() != null,
       byName = ctx.NAME() != null)
+  }
+
+  /**
+   * Add an INSERT INTO REPLACE USING operation to the logical plan.
+   */
+  override def visitInsertIntoReplaceUsing(
+      ctx: InsertIntoReplaceUsingContext): InsertTableParams = withOrigin(ctx) {
+    if (!SQLConf.get.getConf(SQLConf.INSERT_INTO_REPLACE_USING_ENABLED)) {
+      throw QueryParsingErrors.insertReplaceUsingNotEnabled(ctx)
+    }
+    val byName = ctx.NAME() != null
+    if (byName && !SQLConf.get.getConf(SQLConf.INSERT_INTO_REPLACE_USING_BY_NAME_ENABLED)) {
+      throw QueryParsingErrors.insertReplaceUsingByNameNotEnabled(ctx)
+    }
+    val replaceUsingCols = visitIdentifierList(ctx.identifierList())
+
+    createInsertIntoReplaceOnOrUsingParams(
+      relationCtx = ctx.identifierReference(),
+      optionsCtx = ctx.optionsClause(),
+      byName = byName,
+      replaceCriteriaOpt = Some(InsertReplaceUsing(replaceUsingCols))
+    )
+  }
+
+  /**
+   * Add an INSERT INTO REPLACE ON operation to the logical plan.
+   */
+  def visitInsertIntoReplaceOn(
+      ctx: InsertIntoReplaceBooleanCondContext): InsertTableParams = withOrigin(ctx) {
+    if (!SQLConf.get.getConf(SQLConf.INSERT_INTO_REPLACE_ON_ENABLED)) {
+      throw QueryParsingErrors.insertReplaceOnNotEnabled(ctx)
+    }
+    val byName = ctx.NAME() != null
+    if (byName && !SQLConf.get.getConf(SQLConf.INSERT_INTO_REPLACE_ON_BY_NAME_ENABLED)) {
+      throw QueryParsingErrors.insertReplaceOnByNameNotEnabled(ctx)
+    }
+    val replaceOnCond = expression(ctx.replaceCondition)
+    val tableAliasOpt =
+      getTableAliasWithoutColumnAlias(ctx.tableAlias(), "INSERT REPLACE ON")
+
+    createInsertIntoReplaceOnOrUsingParams(
+      relationCtx = ctx.identifierReference(),
+      optionsCtx = ctx.optionsClause(),
+      byName = byName,
+      replaceCriteriaOpt = Some(InsertReplaceOn(replaceOnCond, tableAliasOpt))
+    )
+  }
+
+  private def createInsertIntoReplaceOnOrUsingParams(
+      relationCtx: IdentifierReferenceContext,
+      optionsCtx: OptionsClauseContext,
+      byName: Boolean,
+      replaceCriteriaOpt: Option[InsertReplaceCriteria]): InsertTableParams = {
+    InsertTableParams(
+      relationCtx = relationCtx,
+      options = Option(optionsCtx),
+      userSpecifiedCols = Seq.empty,
+      partitionSpec = Map[String, Option[String]](),
+      ifPartitionNotExists = false,
+      byName = byName,
+      replaceCriteriaOpt = replaceCriteriaOpt)
+  }
+
+  /**
+   * Creates an [[InsertIntoStatement]] from [[InsertTableParams]].
+   */
+  private def createInsertIntoStatement(
+      insertParams: InsertTableParams,
+      ident: Seq[String],
+      query: LogicalPlan,
+      overwrite: Boolean,
+      writePrivileges: Set[TableWritePrivilege],
+      withSchemaEvolution: Boolean): InsertIntoStatement = {
+    InsertIntoStatement(
+      table = createUnresolvedRelation(
+        ctx = insertParams.relationCtx,
+        ident = ident,
+        optionsClause = insertParams.options,
+        writePrivileges = writePrivileges,
+        isStreaming = false),
+      partitionSpec = insertParams.partitionSpec,
+      userSpecifiedCols = insertParams.userSpecifiedCols,
+      query = query,
+      overwrite = overwrite,
+      ifPartitionNotExists = insertParams.ifPartitionNotExists,
+      byName = insertParams.byName,
+      replaceCriteriaOpt = insertParams.replaceCriteriaOpt,
+      withSchemaEvolution = withSchemaEvolution)
   }
 
   /**
@@ -2718,8 +2849,14 @@ class AstBuilder extends DataTypeAstBuilder
         // inline table comes in two styles:
         // style 1: values (1), (2), (3)  -- multiple columns are supported
         // style 2: values 1, 2, 3  -- only a single column is supported here
-        case struct: CreateNamedStruct => struct.valExprs // style 1
-        case child => Seq(child)                          // style 2
+        // Strip Alias wrappers from row values — CreateStruct.apply preserves them for
+        // expressions like `(1 AS id, 'a' AS name)`, but they are redundant here since
+        // column names are determined by the table alias or generated defaults.
+        case struct: CreateNamedStruct => struct.valExprs.map {
+          case a: Alias => a.child
+          case other => other
+        } // style 1
+        case child => Seq(child) // style 2
       }
     }
 
@@ -6299,6 +6436,13 @@ class AstBuilder extends DataTypeAstBuilder
     ShowPartitions(
       createUnresolvedTable(ctx.identifierReference, "SHOW PARTITIONS"),
       partitionKeys)
+  }
+
+  /**
+   * Create a [[ShowCachedTables]] command.
+   */
+  override def visitShowCachedTables(ctx: ShowCachedTablesContext): LogicalPlan = withOrigin(ctx) {
+    ShowCachedTables
   }
 
   /**

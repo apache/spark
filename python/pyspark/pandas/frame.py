@@ -13312,6 +13312,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             nonlocal should_return_series
             nonlocal series_name
             nonlocal should_return_scalar
+            if inplace and LooseVersion(pd.__version__) >= "3.0.0":
+                # pandas 3 can reject inplace eval on a read-only batch frame,
+                # so evaluate against a writable copy.
+                pdf = pdf.copy()
             result_inner = pdf.eval(expr, inplace=inplace)
             if inplace:
                 result_inner = pdf
@@ -14035,7 +14039,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         elif isinstance(key, Series):
             return self.loc[key.astype(bool)]
         elif isinstance(key, slice):
-            if any(type(n) == int or None for n in [key.start, key.stop]):
+            if any(isinstance(n, int) or None for n in [key.start, key.stop]):
                 # Seems like pandas Frame always uses int as positional search when slicing
                 # with ints.
                 return self.iloc[key]

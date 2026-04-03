@@ -371,6 +371,25 @@ class ExecuteEventsManagerSuite
     }
   }
 
+  test("SPARK-55448: terminal events can be posted when session is Closed") {
+    val events = setupEvents(ExecuteStatus.Started, SessionStatus.Closed)
+    events.postCanceled()
+    val expectedCancelEvent = SparkListenerConnectOperationCanceled(
+      events.executeHolder.jobTag,
+      DEFAULT_QUERY_ID,
+      DEFAULT_CLOCK.getTimeMillis())
+    verify(events.executeHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
+      .post(expectedCancelEvent)
+
+    events.postClosed()
+    val expectedClosedEvent = SparkListenerConnectOperationClosed(
+      events.executeHolder.jobTag,
+      DEFAULT_QUERY_ID,
+      DEFAULT_CLOCK.getTimeMillis())
+    verify(events.executeHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
+      .post(expectedClosedEvent)
+  }
+
   test("terminationReason is None initially") {
     val events = setupEvents(ExecuteStatus.Pending)
     assert(events.terminationReason.isEmpty)

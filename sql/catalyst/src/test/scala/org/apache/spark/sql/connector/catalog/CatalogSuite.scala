@@ -1377,4 +1377,138 @@ class CatalogSuite extends SparkFunSuite {
     catalog.alterTable(testIdent, TableChange.addConstraint(constraints.apply(0), "3"))
     assert(catalog.loadTable(testIdent).version() == "4")
   }
+
+  // ---- createTableLike tests ----
+
+  test("createTableLike: user-specified properties in tableInfo are applied to target") {
+    val catalog = newCatalog()
+    val srcIdent = Identifier.of(Array("ns"), "src")
+    val dstIdent = Identifier.of(Array("ns"), "dst")
+
+    val srcProps = Map("source.key" -> "source.value").asJava
+    catalog.createTable(srcIdent, columns, emptyTrans, srcProps)
+    val sourceTable = catalog.loadTable(srcIdent)
+
+    // tableInfo has columns/partitions/constraints from source plus user-specified properties
+    val overrides = Map("user.key" -> "user.value").asJava
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(sourceTable.columns())
+      .withPartitions(sourceTable.partitioning())
+      .withConstraints(sourceTable.constraints())
+      .withProperties(overrides)
+      .build()
+    catalog.createTableLike(dstIdent, tableInfo, sourceTable)
+
+    val dst = catalog.loadTable(dstIdent)
+    assert(dst.properties.asScala("user.key") == "user.value",
+      "user-specified properties should be applied to the target")
+  }
+
+  test("createTableLike: source properties are copied to target by connector implementation") {
+    val catalog = newCatalog()
+    val srcIdent = Identifier.of(Array("ns"), "src")
+    val dstIdent = Identifier.of(Array("ns"), "dst")
+
+    val srcProps = Map("format.version" -> "2", "format.feature" -> "deletion-vectors").asJava
+    catalog.createTable(srcIdent, columns, emptyTrans, srcProps)
+    val sourceTable = catalog.loadTable(srcIdent)
+
+    // tableInfo has columns/partitions/constraints from source; no explicit property overrides
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(sourceTable.columns())
+      .withPartitions(sourceTable.partitioning())
+      .withConstraints(sourceTable.constraints())
+      .withProperties(emptyProps)
+      .build()
+    catalog.createTableLike(dstIdent, tableInfo, sourceTable)
+
+    val dst = catalog.loadTable(dstIdent)
+    assert(dst.properties.asScala("format.version") == "2",
+      "connector should copy source properties from sourceTable")
+    assert(dst.properties.asScala("format.feature") == "deletion-vectors",
+      "connector should copy source properties from sourceTable")
+  }
+
+  test("createTableLike: user-specified properties override source properties") {
+    val catalog = newCatalog()
+    val srcIdent = Identifier.of(Array("ns"), "src")
+    val dstIdent = Identifier.of(Array("ns"), "dst")
+
+    val srcProps = Map("format.version" -> "1", "source.only" -> "yes").asJava
+    catalog.createTable(srcIdent, columns, emptyTrans, srcProps)
+    val sourceTable = catalog.loadTable(srcIdent)
+
+    // user explicitly overrides format.version; columns/partitions/constraints from source
+    val overrides = Map("format.version" -> "2").asJava
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(sourceTable.columns())
+      .withPartitions(sourceTable.partitioning())
+      .withConstraints(sourceTable.constraints())
+      .withProperties(overrides)
+      .build()
+    catalog.createTableLike(dstIdent, tableInfo, sourceTable)
+
+    val dst = catalog.loadTable(dstIdent)
+    assert(dst.properties.asScala("format.version") == "2",
+      "user-specified properties should override source properties")
+    assert(dst.properties.asScala("source.only") == "yes",
+      "non-overridden source properties should still be copied")
+  }
+
+  test("createTableLike: source constraints are copied to target by connector implementation") {
+    val catalog = newCatalog()
+    val srcIdent = Identifier.of(Array("ns"), "src")
+    val dstIdent = Identifier.of(Array("ns"), "dst")
+
+    val srcTableInfo = new TableInfo.Builder()
+      .withColumns(columns)
+      .withPartitions(emptyTrans)
+      .withProperties(emptyProps)
+      .withConstraints(constraints)
+      .build()
+    catalog.createTable(srcIdent, srcTableInfo)
+    val sourceTable = catalog.loadTable(srcIdent)
+
+    // tableInfo has columns/partitions/constraints from source (Spark's responsibility now)
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(sourceTable.columns())
+      .withPartitions(sourceTable.partitioning())
+      .withConstraints(sourceTable.constraints())
+      .withProperties(emptyProps)
+      .build()
+    catalog.createTableLike(dstIdent, tableInfo, sourceTable)
+
+    val dst = catalog.loadTable(dstIdent)
+    assert(dst.constraints().toSet == constraints.toSet,
+      "constraints from source should be in tableInfo and applied to the target")
+  }
+
+  test("createTableLike: catalog without createTableLike override throws " +
+      "UnsupportedOperationException") {
+    // BasicInMemoryTableCatalog does not override createTableLike. The default implementation
+    // throws UnsupportedOperationException to signal that connectors must explicitly implement
+    // CREATE TABLE LIKE support.
+    val catalog = new BasicInMemoryTableCatalog
+    catalog.initialize("basic", CaseInsensitiveStringMap.empty())
+
+    val srcIdent = Identifier.of(Array("ns"), "src")
+    val dstIdent = Identifier.of(Array("ns"), "dst")
+
+    catalog.createTable(srcIdent, columns, emptyTrans, Map.empty[String, String].asJava)
+    val sourceTable = catalog.loadTable(srcIdent)
+
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(sourceTable.columns())
+      .withPartitions(sourceTable.partitioning())
+      .withConstraints(sourceTable.constraints())
+      .withProperties(Map.empty[String, String].asJava)
+      .build()
+    val ex = intercept[UnsupportedOperationException] {
+      catalog.createTableLike(dstIdent, tableInfo, sourceTable)
+    }
+    assert(ex.getMessage.contains("basic"),
+      "Exception should mention the catalog name")
+    assert(ex.getMessage.contains("CREATE TABLE LIKE"),
+      "Exception should mention the unsupported operation")
+  }
 }

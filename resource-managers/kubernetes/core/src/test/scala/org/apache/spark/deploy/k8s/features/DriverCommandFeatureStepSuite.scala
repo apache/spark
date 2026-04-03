@@ -112,6 +112,27 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
       mainResource, "5", "7", "9"))
   }
 
+  test("SPARK-56303: java resource with Java-friendly factory methods") {
+    val mainResource = "local:/main.jar"
+    val spec1 = applyFeatureStep(
+      JavaMainAppResource.of(mainResource),
+      appArgs = Array("5", "7"))
+    assert(spec1.pod.container.getArgs.asScala === List(
+      "driver",
+      "--properties-file", SPARK_CONF_PATH,
+      "--class", KubernetesTestConf.MAIN_CLASS,
+      mainResource, "5", "7"))
+
+    val spec2 = applyFeatureStep(
+      JavaMainAppResource.create(),
+      appArgs = Array("5", "7"))
+    assert(spec2.pod.container.getArgs.asScala === List(
+      "driver",
+      "--properties-file", SPARK_CONF_PATH,
+      "--class", KubernetesTestConf.MAIN_CLASS,
+      "spark-internal", "5", "7"))
+  }
+
   test("SPARK-25355: java resource args with proxy-user") {
     val mainResource = "local:/main.jar"
     val spec = applyFeatureStep(

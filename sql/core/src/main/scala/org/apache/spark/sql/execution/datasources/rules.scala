@@ -21,8 +21,9 @@ import java.util.Locale
 
 import scala.collection.mutable.{HashMap, HashSet}
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
@@ -466,6 +467,10 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
       throw QueryCompilationErrors.unsupportedInsertWithSchemaEvolution()
     }
 
+    if (insert.replaceCriteriaOpt.isDefined) {
+      throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(tblName)
+    }
+
     val normalizedPartSpec = normalizePartitionSpec(
       insert.partitionSpec, partColNames, tblName, conf.resolver)
 
@@ -552,7 +557,7 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoStatement(table, _, _, query, _, _, _, _)
+    case i @ InsertIntoStatement(table, _, _, query, _, _, _, _, _)
       if table.resolved && query.resolved =>
       table match {
         case relation: HiveTableRelation =>
@@ -661,7 +666,7 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
       case InsertIntoStatement(LogicalRelationWithTable(relation, _), partition,
-          _, query, _, _, _, _) =>
+          _, query, _, _, _, _, _) =>
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
           case l: LogicalRelation => l.relation
@@ -690,7 +695,7 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
               messageParameters = Map("relationId" -> toSQLId(relation.toString)))
         }
 
-      case InsertIntoStatement(t, _, _, _, _, _, _, _)
+      case InsertIntoStatement(t, _, _, _, _, _, _, _, _)
         if !t.isInstanceOf[LeafNode] ||
           t.isInstanceOf[Range] ||
           t.isInstanceOf[OneRowRelation] ||
@@ -806,7 +811,19 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
           SchemaUtils.checkColumnNameDuplication(fieldNames.toImmutableArraySeq,
             session.sessionState.conf.resolver)
           val updatedViewMeta = metaData.copy(schema = newSchema)
-          session.sessionState.catalog.alterTable(updatedViewMeta)
+          try {
+            session.sessionState.catalog.alterTable(updatedViewMeta)
+          } catch {
+            case NonFatal(e) =>
+              throw new SparkException(
+                errorClass = "FAILED_UPDATE_VIEW_SCHEMA",
+                messageParameters = Map(
+                  "viewName" -> metaData.qualifiedName,
+                  "schemaMode" -> s"WITH SCHEMA ${viewSchemaMode.toString}",
+                  "newSchema" -> newSchema.treeString,
+                  "existingSchema" -> metaData.schema.treeString),
+                cause = e)
+          }
         }
       case _ => // OK
     }

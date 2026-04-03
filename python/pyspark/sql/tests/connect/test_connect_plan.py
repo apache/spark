@@ -595,6 +595,72 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(len(data_source.paths), 1)
         self.assertEqual(data_source.paths[0], "test_path")
 
+    def test_relation_changes(self):
+        reader = DataFrameReader(self.connect)
+        df = reader.option("startingVersion", "1").option("endingVersion", "5").changes("myTable")
+        plan = df._plan.to_proto(self.connect)
+        relation_changes = plan.root.relation_changes
+        self.assertEqual(relation_changes.unparsed_identifier, "myTable")
+        self.assertEqual(relation_changes.options.get("startingVersion"), "1")
+        self.assertEqual(relation_changes.options.get("endingVersion"), "5")
+        self.assertFalse(relation_changes.is_streaming)
+
+    def test_relation_changes_no_options(self):
+        reader = DataFrameReader(self.connect)
+        df = reader.changes("catalog.schema.myTable")
+        plan = df._plan.to_proto(self.connect)
+        relation_changes = plan.root.relation_changes
+        self.assertEqual(relation_changes.unparsed_identifier, "catalog.schema.myTable")
+        self.assertEqual(len(relation_changes.options), 0)
+        self.assertFalse(relation_changes.is_streaming)
+
+    def test_relation_changes_with_timestamp_options(self):
+        reader = DataFrameReader(self.connect)
+        df = (
+            reader.option("startingTimestamp", "2024-01-01T00:00:00Z")
+            .option("endingTimestamp", "2024-06-01T00:00:00Z")
+            .changes("myTable")
+        )
+        plan = df._plan.to_proto(self.connect)
+        relation_changes = plan.root.relation_changes
+        self.assertEqual(relation_changes.options.get("startingTimestamp"), "2024-01-01T00:00:00Z")
+        self.assertEqual(relation_changes.options.get("endingTimestamp"), "2024-06-01T00:00:00Z")
+
+    def test_relation_changes_oneof_is_relation_changes(self):
+        reader = DataFrameReader(self.connect)
+        df = reader.option("startingVersion", "1").changes("myTable")
+        plan = df._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.WhichOneof("rel_type"), "relation_changes")
+
+    def test_relation_changes_streaming(self):
+        from pyspark.sql.connect.plan import RelationChanges
+
+        plan = RelationChanges("myTable", {"startingVersion": "10"}, is_streaming=True).plan(
+            self.connect
+        )
+        relation_changes = plan.relation_changes
+        self.assertEqual(relation_changes.unparsed_identifier, "myTable")
+        self.assertEqual(relation_changes.options.get("startingVersion"), "10")
+        self.assertTrue(relation_changes.is_streaming)
+
+    def test_relation_changes_streaming_via_stream_reader(self):
+        from pyspark.sql.connect.streaming.readwriter import DataStreamReader
+
+        reader = DataStreamReader(self.connect)
+        df = reader.option("startingVersion", "1").changes("myTable")
+        plan = df._plan.to_proto(self.connect)
+        relation_changes = plan.root.relation_changes
+        self.assertEqual(relation_changes.unparsed_identifier, "myTable")
+        self.assertEqual(relation_changes.options.get("startingVersion"), "1")
+        self.assertTrue(relation_changes.is_streaming)
+
+    def test_relation_changes_plan_print(self):
+        from pyspark.sql.connect.plan import RelationChanges
+
+        rc = RelationChanges("myTable", {"startingVersion": "1"})
+        self.assertIn("RelationChanges", rc.print())
+        self.assertIn("myTable", rc.print())
+
     def test_all_the_plans(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         df = df.select(df.col1).filter(df.col2 == 2).sort(df.col3.asc())

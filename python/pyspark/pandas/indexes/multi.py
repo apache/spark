@@ -804,7 +804,7 @@ class MultiIndex(Index):
                     (  'lama', 'speed')],
                    )
         """
-        if type(self) != type(other):
+        if type(self) is not type(other):
             raise NotImplementedError(
                 "Doesn't support symmetric_difference between Index & MultiIndex for now"
             )

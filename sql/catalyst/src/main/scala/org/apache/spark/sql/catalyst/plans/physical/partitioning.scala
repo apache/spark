@@ -1022,6 +1022,11 @@ case class KeyedShuffleSpec(
         } else {
           left.isSameFunction(right)
         }
+      case (_: AttributeReference, _: TransformExpression) |
+           (_: TransformExpression, _: AttributeReference) =>
+        SQLConf.get.v2BucketingPushPartValuesEnabled &&
+          !SQLConf.get.v2BucketingPartiallyClusteredDistributionEnabled &&
+          SQLConf.get.v2BucketingAllowCompatibleTransforms
       case _ => false
     }
 
@@ -1042,10 +1047,25 @@ case class KeyedShuffleSpec(
    * @param other other key-grouped shuffle spec
    */
   def reducers(other: KeyedShuffleSpec): Option[Seq[Option[Reducer[_, _]]]] = {
-     val results = partitioning.expressions.zip(other.partitioning.expressions).map {
-       case (e1: TransformExpression, e2: TransformExpression) => e1.reducers(e2)
-       case (_, _) => None
-     }
+    val results = partitioning.expressions.zip(other.partitioning.expressions).map {
+      case (e1: TransformExpression, e2: TransformExpression) => e1.reducers(e2)
+
+      // Identity transform on this side, arbitrary transform on the other side: create a reducer
+      // that applies the other's transform to the raw identity values. The symmetric case
+      // (TransformExpression, AttributeReference) is handled when the other side calls reducers.
+      // Each partition expression is guaranteed to have exactly one leaf child (asserted in
+      // keyPositions), so `a` lives at position 0 in the row we construct.
+      case (a: AttributeReference, t: TransformExpression) =>
+        val reducerExpr = t.transform { case _: AttributeReference => a }
+        val boundExpr = BindReferences.bindReference(reducerExpr, AttributeSeq(Seq(a)))
+        Some(new Reducer[Any, Any] {
+          override def reduce(v: Any): Any = boundExpr.eval(new GenericInternalRow(Array[Any](v)))
+          override def resultType(): DataType = reducerExpr.dataType
+          override def displayName(): String = reducerExpr.toString
+        })
+
+      case (_, _) => None
+    }
 
     // optimize to not return a value, if none of the partition expressions are reducible
     if (results.forall(p => p.isEmpty)) None else Some(results)

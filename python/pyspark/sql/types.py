@@ -1587,8 +1587,12 @@ class StructType(DataType):
             return StructType(self.fields[key])
         else:
             raise PySparkTypeError(
-                errorClass="NOT_INT_OR_SLICE_OR_STR",
-                messageParameters={"arg_name": "key", "arg_type": type(key).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "int, slice or str",
+                    "arg_name": "key",
+                    "arg_type": type(key).__name__,
+                },
             )
 
     def simpleString(self) -> str:

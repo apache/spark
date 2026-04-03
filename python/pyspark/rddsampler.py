@@ -18,27 +18,34 @@
 import sys
 import random
 import math
+from typing import Generic, Hashable, Iterable, Iterator, Optional, TypeVar
+
+
+T = TypeVar("T")
+K = TypeVar("K", bound=Hashable)
 
 
 class RDDSamplerBase:
-    def __init__(self, withReplacement, seed=None):
+    def __init__(self, withReplacement: bool, seed: Optional[int] = None) -> None:
         self._seed = seed if seed is not None else random.randint(0, sys.maxsize)
         self._withReplacement = withReplacement
-        self._random = None
+        self._random: Optional[random.Random] = None
 
-    def initRandomGenerator(self, split):
+    def initRandomGenerator(self, split: int) -> None:
         self._random = random.Random(self._seed ^ split)
 
         # mixing because the initial seeds are close to each other
         for _ in range(10):
             self._random.randint(0, 1)
 
-    def getUniformSample(self):
+    def getUniformSample(self) -> float:
+        assert self._random is not None
         return self._random.random()
 
-    def getPoissonSample(self, mean):
+    def getPoissonSample(self, mean: float) -> int:
         # Using Knuth's algorithm described in
         # http://en.wikipedia.org/wiki/Poisson_distribution
+        assert self._random is not None
         if mean < 20.0:
             # one exp and k+1 random calls
             lda = math.exp(-mean)
@@ -56,16 +63,16 @@ class RDDSamplerBase:
                 p += self._random.expovariate(mean)
         return k
 
-    def func(self, split, iterator):
+    def func(self, split: int, iterator: Iterable[T]) -> Iterator[T]:
         raise NotImplementedError
 
 
 class RDDSampler(RDDSamplerBase):
-    def __init__(self, withReplacement, fraction, seed=None):
+    def __init__(self, withReplacement: bool, fraction: float, seed: Optional[int] = None) -> None:
         RDDSamplerBase.__init__(self, withReplacement, seed)
         self._fraction = fraction
 
-    def func(self, split, iterator):
+    def func(self, split: int, iterator: Iterable[T]) -> Iterator[T]:
         self.initRandomGenerator(split)
         if self._withReplacement:
             for obj in iterator:
@@ -82,24 +89,26 @@ class RDDSampler(RDDSamplerBase):
 
 
 class RDDRangeSampler(RDDSamplerBase):
-    def __init__(self, lowerBound, upperBound, seed=None):
+    def __init__(self, lowerBound: float, upperBound: float, seed: Optional[int] = None) -> None:
         RDDSamplerBase.__init__(self, False, seed)
         self._lowerBound = lowerBound
         self._upperBound = upperBound
 
-    def func(self, split, iterator):
+    def func(self, split: int, iterator: Iterable[T]) -> Iterator[T]:
         self.initRandomGenerator(split)
         for obj in iterator:
             if self._lowerBound <= self.getUniformSample() < self._upperBound:
                 yield obj
 
 
-class RDDStratifiedSampler(RDDSamplerBase):
-    def __init__(self, withReplacement, fractions, seed=None):
+class RDDStratifiedSampler(RDDSamplerBase, Generic[K]):
+    def __init__(
+        self, withReplacement: bool, fractions: dict[K, float], seed: Optional[int] = None
+    ) -> None:
         RDDSamplerBase.__init__(self, withReplacement, seed)
         self._fractions = fractions
 
-    def func(self, split, iterator):
+    def func(self, split: int, iterator: Iterable[tuple[K, T]]) -> Iterator[tuple[K, T]]:  # type: ignore[override]
         self.initRandomGenerator(split)
         if self._withReplacement:
             for key, val in iterator:

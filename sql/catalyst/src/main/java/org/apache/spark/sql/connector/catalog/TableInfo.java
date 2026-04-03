@@ -61,7 +61,7 @@ public class TableInfo {
   public Constraint[] constraints() { return constraints; }
 
   public static class Builder {
-    private Column[] columns;
+    private Column[] columns = new Column[0];
     private Map<String, String> properties = new HashMap<>();
     private Transform[] partitions = new Transform[0];
     private Constraint[] constraints = new Constraint[0];

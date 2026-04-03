@@ -1887,6 +1887,23 @@ private[spark] object Utils
   }
 
   /**
+   * Upload a file to a Hadoop-compatible filesystem.
+   */
+  def uploadFileToHadoopCompatibleFS(
+      src: Path,
+      dest: Path,
+      fs: FileSystem,
+      delSrc: Boolean = false,
+      overwrite: Boolean = true): Unit = {
+    try {
+      fs.copyFromLocalFile(delSrc, overwrite, src, dest)
+    } catch {
+      case e: IOException =>
+        throw new SparkException(s"Error uploading file ${src.getName}", e)
+    }
+  }
+
+  /**
    * Whether the underlying JVM prefer IPv6 addresses.
    */
   val preferIPv6 = "true".equals(System.getProperty("java.net.preferIPv6Addresses"))
@@ -3093,8 +3110,19 @@ private[spark] object Utils
    * addressing the directory here. Also, we rely on the caller side to address any exceptions.
    */
   def unzipFilesFromFile(fs: FileSystem, dfsZipFile: Path, localDir: File): Seq[File] = {
+    val files = unzipFilesFromInputStream(fs.open(dfsZipFile), localDir)
+    logDebug(log"Unzipped from ${MDC(PATH, dfsZipFile)}\n\t${MDC(PATHS, files.mkString("\n\t"))}")
+    files
+  }
+
+  /**
+   * Decompress a zip input stream into a local dir. File names are read from the zip entries.
+   * Note, we skip addressing the directory here. Also, we rely on the caller side to address
+   * any exceptions.
+   */
+  def unzipFilesFromInputStream(inputStream: InputStream, localDir: File): Seq[File] = {
     val files = new ArrayBuffer[File]()
-    val in = new ZipInputStream(fs.open(dfsZipFile))
+    val in = new ZipInputStream(inputStream)
     var out: OutputStream = null
     try {
       var entry = in.getNextEntry()
@@ -3111,7 +3139,6 @@ private[spark] object Utils
         entry = in.getNextEntry()
       }
       in.close() // so that any error in closing does not get ignored
-      logDebug(log"Unzipped from ${MDC(PATH, dfsZipFile)}\n\t${MDC(PATHS, files.mkString("\n\t"))}")
     } finally {
       // Close everything no matter what happened
       Utils.closeQuietly(in)

@@ -94,11 +94,21 @@ package object util extends Logging {
     case Literal(v, t: NumericType) if v != null => PrettyAttribute(v.toString, t)
     case Literal(null, dataType) => PrettyAttribute("NULL", dataType)
     case e: GetStructField =>
-      val name = e.name.getOrElse(e.childSchema(e.ordinal).name)
-      PrettyAttribute(
-        usePrettyExpression(e.child, shouldTrimTempResolvedColumn).sql + "." + name,
-        e.dataType
-      )
+      e.child.dataType match {
+        case st: StructType =>
+          val name = e.name.getOrElse(st(e.ordinal).name)
+          PrettyAttribute(
+            usePrettyExpression(e.child, shouldTrimTempResolvedColumn).sql + "." + name,
+            st(e.ordinal).dataType
+          )
+        case _ =>
+          // Child type was changed by a plan transformation.
+          val name = e.name.getOrElse(s"_${e.ordinal}")
+          PrettyAttribute(
+            usePrettyExpression(e.child, shouldTrimTempResolvedColumn).sql + "." + name,
+            e.child.dataType
+          )
+      }
     case e: GetArrayStructFields =>
       PrettyAttribute(
         s"${usePrettyExpression(e.child, shouldTrimTempResolvedColumn)}.${e.field.name}",

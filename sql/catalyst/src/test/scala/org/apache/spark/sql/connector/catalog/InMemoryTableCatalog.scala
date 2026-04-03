@@ -238,6 +238,19 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamespaces
   with ProcedureCatalog {
 
+  override def createTableLike(
+      ident: Identifier,
+      tableInfo: TableInfo,
+      sourceTable: Table): Table = {
+    // columns, partitioning, constraints, explicit properties, and owner are all provided in
+    // tableInfo by Spark. Merge source properties so that connector-specific custom state
+    // (e.g. format.version, format.feature) is cloned; tableInfo properties win on conflict.
+    val mergedProps =
+      (sourceTable.properties().asScala ++ tableInfo.properties().asScala).asJava
+    createTable(ident, tableInfo.columns(), tableInfo.partitions(), mergedProps,
+      Distributions.unspecified(), Array.empty, None, None, tableInfo.constraints())
+  }
+
   override def capabilities: java.util.Set[TableCatalogCapability] = {
     Set(
       TableCatalogCapability.SUPPORT_COLUMN_DEFAULT_VALUE,

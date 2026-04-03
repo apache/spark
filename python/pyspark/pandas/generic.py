@@ -3102,7 +3102,9 @@ class Frame(object, metaclass=ABCMeta):
             # Otherwise, there is no change.
             self_top_two = cast("Series", self).head(2)
             has_single_value = len(self_top_two) == 1
-            return cast(Union[Scalar, ps.Series], self_top_two[0] if has_single_value else self)
+            return cast(
+                Union[Scalar, ps.Series], self_top_two.iloc[0] if has_single_value else self
+            )
 
     def truncate(
         self,

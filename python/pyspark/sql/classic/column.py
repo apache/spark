@@ -69,8 +69,12 @@ def _to_java_column(col: "ColumnOrName") -> "JavaObject":
         jcol = _create_column_from_name(col)
     else:
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "col", "arg_type": type(col).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "col",
+                "arg_type": type(col).__name__,
+            },
         )
     return jcol
 
@@ -375,14 +379,22 @@ class Column(ParentColumn):
     def withField(self, fieldName: str, col: ParentColumn) -> ParentColumn:
         if not isinstance(fieldName, str):
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "fieldName", "arg_type": type(fieldName).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "fieldName",
+                    "expected_type": "str",
+                    "arg_type": type(fieldName).__name__,
+                },
             )
 
         if not isinstance(col, Column):
             raise PySparkTypeError(
-                errorClass="NOT_COLUMN",
-                messageParameters={"arg_name": "col", "arg_type": type(col).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "Column",
+                    "arg_name": "col",
+                    "arg_type": type(col).__name__,
+                },
             )
 
         return Column(self._jc.withField(fieldName, col._jc))
@@ -450,7 +462,7 @@ class Column(ParentColumn):
         startPos = enum_to_value(startPos)
         length = enum_to_value(length)
 
-        if type(startPos) != type(length):
+        if type(startPos) is not type(length):
             raise PySparkTypeError(
                 errorClass="NOT_SAME_TYPE",
                 messageParameters={
@@ -466,8 +478,12 @@ class Column(ParentColumn):
             jc = self._jc.substr(startPos._jc, cast(ParentColumn, length)._jc)
         else:
             raise PySparkTypeError(
-                errorClass="NOT_COLUMN_OR_INT",
-                messageParameters={"arg_name": "startPos", "arg_type": type(startPos).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "Column or int",
+                    "arg_name": "startPos",
+                    "arg_type": type(startPos).__name__,
+                },
             )
         return Column(jc)
 
@@ -553,8 +569,12 @@ class Column(ParentColumn):
             jc = self._jc.cast(jdt)
         else:
             raise PySparkTypeError(
-                errorClass="NOT_DATATYPE_OR_STR",
-                messageParameters={"arg_name": "dataType", "arg_type": type(dataType).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "DataType or str",
+                    "arg_name": "dataType",
+                    "arg_type": type(dataType).__name__,
+                },
             )
         return Column(jc)
 
@@ -569,8 +589,12 @@ class Column(ParentColumn):
             jc = self._jc.try_cast(jdt)
         else:
             raise PySparkTypeError(
-                errorClass="NOT_DATATYPE_OR_STR",
-                messageParameters={"arg_name": "dataType", "arg_type": type(dataType).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "DataType or str",
+                    "arg_name": "dataType",
+                    "arg_type": type(dataType).__name__,
+                },
             )
         return Column(jc)
 
@@ -587,8 +611,12 @@ class Column(ParentColumn):
     def when(self, condition: ParentColumn, value: Any) -> ParentColumn:
         if not isinstance(condition, Column):
             raise PySparkTypeError(
-                errorClass="NOT_COLUMN",
-                messageParameters={"arg_name": "condition", "arg_type": type(condition).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "Column",
+                    "arg_name": "condition",
+                    "arg_type": type(condition).__name__,
+                },
             )
         v = value._jc if isinstance(value, Column) else enum_to_value(value)
         jc = self._jc.when(condition._jc, v)
@@ -604,8 +632,12 @@ class Column(ParentColumn):
 
         if not isinstance(window, WindowSpec):
             raise PySparkTypeError(
-                errorClass="NOT_WINDOWSPEC",
-                messageParameters={"arg_name": "window", "arg_type": type(window).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "window",
+                    "expected_type": "WindowSpec",
+                    "arg_type": type(window).__name__,
+                },
             )
         jc = self._jc.over(window._jspec)
         return Column(jc)

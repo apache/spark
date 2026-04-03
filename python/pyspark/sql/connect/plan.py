@@ -408,6 +408,31 @@ class Read(LogicalPlan):
         return f"{' ' * indent}<Read table_name={self.table_name}>\n"
 
 
+class RelationChanges(LogicalPlan):
+    def __init__(
+        self,
+        table_name: str,
+        options: Optional[Dict[str, str]] = None,
+        is_streaming: Optional[bool] = None,
+    ) -> None:
+        super().__init__(None)
+        self.table_name = table_name
+        self.options = options or {}
+        self._is_streaming = is_streaming
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.relation_changes.unparsed_identifier = self.table_name
+        if self._is_streaming is not None:
+            plan.relation_changes.is_streaming = self._is_streaming
+        for k, v in self.options.items():
+            plan.relation_changes.options[k] = v
+        return plan
+
+    def print(self, indent: int = 0) -> str:
+        return f"{' ' * indent}<RelationChanges table_name={self.table_name}>\n"
+
+
 class LocalRelation(LogicalPlan):
     """Creates a LocalRelation plan object based on a PyArrow Table."""
 
@@ -2479,6 +2504,167 @@ class ListCatalogs(LogicalPlan):
         plan.catalog.list_catalogs.SetInParent()
         if self._pattern is not None:
             plan.catalog.list_catalogs.pattern = self._pattern
+        return plan
+
+
+class ListCachedTables(LogicalPlan):
+    def __init__(self) -> None:
+        super().__init__(None)
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.catalog.list_cached_tables.SetInParent()
+        return plan
+
+
+class DropTable(LogicalPlan):
+    def __init__(self, table_name: str, if_exists: bool = False, purge: bool = False) -> None:
+        super().__init__(None)
+        self._table_name = table_name
+        self._if_exists = if_exists
+        self._purge = purge
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.catalog.drop_table.CopyFrom(
+            proto.DropTable(
+                table_name=self._table_name,
+                if_exists=self._if_exists,
+                purge=self._purge,
+            )
+        )
+        return plan
+
+
+class DropView(LogicalPlan):
+    def __init__(self, view_name: str, if_exists: bool = False) -> None:
+        super().__init__(None)
+        self._view_name = view_name
+        self._if_exists = if_exists
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.catalog.drop_view.CopyFrom(
+            proto.DropView(view_name=self._view_name, if_exists=self._if_exists)
+        )
+        return plan
+
+
+class CreateDatabase(LogicalPlan):
+    def __init__(
+        self,
+        db_name: str,
+        if_not_exists: bool = False,
+        properties: Optional[Dict[str, str]] = None,
+    ) -> None:
+        super().__init__(None)
+        self._db_name = db_name
+        self._if_not_exists = if_not_exists
+        self._properties = properties or {}
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        cmd = proto.CreateDatabase(
+            db_name=self._db_name,
+            if_not_exists=self._if_not_exists,
+        )
+        for k, v in self._properties.items():
+            cmd.properties[k] = v
+        plan.catalog.create_database.CopyFrom(cmd)
+        return plan
+
+
+class DropDatabase(LogicalPlan):
+    def __init__(self, db_name: str, if_exists: bool = False, cascade: bool = False) -> None:
+        super().__init__(None)
+        self._db_name = db_name
+        self._if_exists = if_exists
+        self._cascade = cascade
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.catalog.drop_database.CopyFrom(
+            proto.DropDatabase(
+                db_name=self._db_name,
+                if_exists=self._if_exists,
+                cascade=self._cascade,
+            )
+        )
+        return plan
+
+
+class ListPartitions(LogicalPlan):
+    def __init__(self, table_name: str) -> None:
+        super().__init__(None)
+        self._table_name = table_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.catalog.list_partitions.table_name = self._table_name
+        return plan
+
+
+class ListViews(LogicalPlan):
+    def __init__(self, db_name: Optional[str] = None, pattern: Optional[str] = None) -> None:
+        super().__init__(None)
+        self._db_name = db_name
+        self._pattern = pattern
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.catalog.list_views.SetInParent()
+        if self._db_name is not None:
+            plan.catalog.list_views.db_name = self._db_name
+        if self._pattern is not None:
+            plan.catalog.list_views.pattern = self._pattern
+        return plan
+
+
+class GetTableProperties(LogicalPlan):
+    def __init__(self, table_name: str) -> None:
+        super().__init__(None)
+        self._table_name = table_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.catalog.get_table_properties.table_name = self._table_name
+        return plan
+
+
+class GetCreateTableString(LogicalPlan):
+    def __init__(self, table_name: str, as_serde: bool = False) -> None:
+        super().__init__(None)
+        self._table_name = table_name
+        self._as_serde = as_serde
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.catalog.get_create_table_string.table_name = self._table_name
+        plan.catalog.get_create_table_string.as_serde = self._as_serde
+        return plan
+
+
+class TruncateTable(LogicalPlan):
+    def __init__(self, table_name: str) -> None:
+        super().__init__(None)
+        self._table_name = table_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.catalog.truncate_table.table_name = self._table_name
+        return plan
+
+
+class AnalyzeTable(LogicalPlan):
+    def __init__(self, table_name: str, no_scan: bool = False) -> None:
+        super().__init__(None)
+        self._table_name = table_name
+        self._no_scan = no_scan
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.catalog.analyze_table.table_name = self._table_name
+        plan.catalog.analyze_table.no_scan = self._no_scan
         return plan
 
 

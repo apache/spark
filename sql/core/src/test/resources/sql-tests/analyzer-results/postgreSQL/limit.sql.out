@@ -181,7 +181,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 DROP VIEW INT8_TBL
 -- !query analysis
-DropTempViewCommand INT8_TBL
+DropTempViewCommand INT8_TBL, false
 
 
 -- !query

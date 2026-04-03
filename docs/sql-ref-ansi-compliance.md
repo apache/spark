@@ -440,6 +440,7 @@ Below is a list of all the keywords in Spark SQL.
 |BY|non-reserved|non-reserved|reserved|
 |BYTE|non-reserved|non-reserved|non-reserved|
 |CACHE|non-reserved|non-reserved|non-reserved|
+|CACHED|non-reserved|non-reserved|non-reserved|
 |CALL|reserved|non-reserved|reserved|
 |CALLED|non-reserved|non-reserved|non-reserved|
 |CASCADE|non-reserved|non-reserved|non-reserved|
@@ -459,6 +460,7 @@ Below is a list of all the keywords in Spark SQL.
 |CODEGEN|non-reserved|non-reserved|non-reserved|
 |COLLATE|reserved|non-reserved|reserved|
 |COLLATION|reserved|non-reserved|reserved|
+|COLLATIONS|reserved|non-reserved|non-reserved|
 |COLLECTION|non-reserved|non-reserved|non-reserved|
 |COLUMN|reserved|non-reserved|reserved|
 |COLUMNS|non-reserved|non-reserved|non-reserved|
