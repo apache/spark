@@ -20,7 +20,6 @@ package org.apache.spark.sql.test
 import java.nio.charset.StandardCharsets
 import java.time.{Duration, Period}
 
-import org.apache.spark.sql
 import org.apache.spark.sql.{DataFrame, SparkSessionProvider}
 import org.apache.spark.sql.classic
 import org.apache.spark.sql.functions.col
@@ -33,8 +32,6 @@ import org.apache.spark.unsafe.types.CalendarInterval
  * A collection of sample data used in SQL tests.
  */
 private[sql] trait SQLTestData extends SparkSessionProvider { self =>
-  override protected def spark: sql.SparkSession
-
   import SQLTestData._
 
   // Note: all test data should be lazy because the SparkSession is not set up yet.
