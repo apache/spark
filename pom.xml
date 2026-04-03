@@ -3503,6 +3503,19 @@
       </properties>
     </profile>
 
+    <profile>
+      <id>maven-mirror</id>
+      <activation>
+        <property><name>env.MAVEN_MIRROR_URL</name></property>
+      </activation>
+      <repositories>
+        <repository>
+          <id>maven-mirror</id>
+          <url>${env.MAVEN_MIRROR_URL}</url>
+        </repository>
+      </repositories>
+    </profile>
+
     <!--
      SPARK-34774 Add this property to ensure change-scala-version.sh can replace the public `scala.version`
      property correctly.

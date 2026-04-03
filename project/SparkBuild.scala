@@ -301,14 +301,16 @@ object SparkBuild extends PomBuild {
     unidocGenjavadocVersion := "0.19",
 
     // Override SBT's default resolvers:
-    resolvers := Seq(
-      // Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
-      // See https://storage-download.googleapis.com/maven-central/index.html for more info.
-      "gcs-maven-central-mirror" at "https://maven-central.storage-download.googleapis.com/maven2/",
-      DefaultMavenRepository,
-      Resolver.mavenLocal,
-      Resolver.file("ivyLocal", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
-    ),
+    resolvers :=
+      sys.env.get("MAVEN_MIRROR_URL").map("maven-mirror" at _).toSeq ++
+      Seq(
+        // Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
+        // See https://storage-download.googleapis.com/maven-central/index.html for more info.
+        "gcs-maven-central-mirror" at "https://maven-central.storage-download.googleapis.com/maven2/",
+        DefaultMavenRepository,
+        Resolver.mavenLocal,
+        Resolver.file("ivyLocal", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
+      ),
     externalResolvers := resolvers.value,
     otherResolvers := SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))).value,
     (MavenCompile / publishLocalConfiguration) := PublishConfiguration()
