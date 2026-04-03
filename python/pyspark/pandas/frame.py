@@ -9287,7 +9287,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Align the differences on columns
 
-        >>> df1.compare(df2).sort_index()
+        >>> df1.compare(df2).sort_index()  # doctest: +NORMALIZE_WHITESPACE
           col1       col2
           self other self other
         0    a     c  NaN   NaN
@@ -9295,18 +9295,18 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Keep all original rows
 
-        >>> df1.compare(df2, keep_shape=True).sort_index()
-          col1       col2        col3
-          self other self other  self other
-        0    a     c  NaN   NaN  None  None
-        1 None  None  NaN   NaN  None  None
-        2 None  None  3.0   1.0  None  None
-        3 None  None  NaN   NaN  None  None
-        4 None  None  NaN   NaN  None  None
+        >>> df1.compare(df2, keep_shape=True).sort_index()  # doctest: +NORMALIZE_WHITESPACE
+          col1       col2       col3
+          self other self other self other
+        0    a     c  NaN   NaN  NaN   NaN
+        1  NaN   NaN  NaN   NaN  NaN   NaN
+        2  NaN   NaN  3.0   1.0  NaN   NaN
+        3  NaN   NaN  NaN   NaN  NaN   NaN
+        4  NaN   NaN  NaN   NaN  NaN   NaN
 
         Keep all original rows and all original values
 
-        >>> df1.compare(df2, keep_shape=True, keep_equal=True).sort_index()
+        >>> df1.compare(df2, keep_shape=True, keep_equal=True).sort_index()  # doctest: +NORMALIZE_WHITESPACE
           col1       col2       col3
           self other self other self other
         0    a     c  1.0   1.0  1.0   1.0
