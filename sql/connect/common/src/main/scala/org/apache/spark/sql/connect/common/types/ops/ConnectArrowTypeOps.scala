@@ -47,7 +47,7 @@ trait ConnectArrowTypeOps extends Serializable {
   /** Creates an Arrow deserializer for reading values from a vector. */
   def createArrowDeserializer(
       enc: AgnosticEncoder[_],
-      vector: FieldVector,
+      data: AnyRef,
       timeZoneId: String): ArrowDeserializers.Deserializer[Any]
 
   /** Creates an ArrowVectorReader for this type's vector. */

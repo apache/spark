@@ -112,9 +112,10 @@ private[connect] class TimeTypeConnectOps(val t: TimeType)
 
   override def createArrowDeserializer(
       enc: AgnosticEncoder[_],
-      vector: FieldVector,
+      data: AnyRef,
       timeZoneId: String): ArrowDeserializers.Deserializer[Any] = {
-    new ArrowDeserializers.LeafFieldDeserializer[LocalTime](enc, vector, timeZoneId) {
+    val v = data.asInstanceOf[FieldVector]
+    new ArrowDeserializers.LeafFieldDeserializer[LocalTime](enc, v, timeZoneId) {
       override def value(i: Int): LocalTime = reader.getLocalTime(i)
     }
   }
