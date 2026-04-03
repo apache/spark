@@ -90,11 +90,10 @@ object ProtoTypeOps {
   }
 
   /**
-   * Shared KindCase -> ProtoTypeOps lookup. All reverse lookups by proto enum case
-   * dispatch through this single registration point.
+   * Shared KindCase -> ProtoTypeOps lookup. All reverse lookups by proto enum case dispatch
+   * through this single registration point.
    */
-  private def opsForKindCase(
-      kindCase: proto.DataType.KindCase): Option[ProtoTypeOps] = {
+  private def opsForKindCase(kindCase: proto.DataType.KindCase): Option[ProtoTypeOps] = {
     if (!SqlApiConf.get.typesFrameworkEnabled) return None
     kindCase match {
       case proto.DataType.KindCase.TIME => Some(new TimeTypeConnectOps(TimeType()))

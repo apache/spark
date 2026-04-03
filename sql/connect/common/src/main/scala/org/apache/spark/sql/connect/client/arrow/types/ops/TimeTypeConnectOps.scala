@@ -101,8 +101,7 @@ private[connect] class TimeTypeConnectOps(val t: TimeType)
 
   // ==================== ConnectArrowTypeOps ====================
 
-  override def createArrowSerializer(
-      vector: AnyRef): ArrowSerializer.Serializer = {
+  override def createArrowSerializer(vector: AnyRef): ArrowSerializer.Serializer = {
     val v = vector.asInstanceOf[TimeNanoVector]
     new ArrowSerializer.FieldSerializer[LocalTime, TimeNanoVector](v) {
       override def set(index: Int, value: LocalTime): Unit =
