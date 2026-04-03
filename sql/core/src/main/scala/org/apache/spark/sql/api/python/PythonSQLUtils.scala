@@ -195,11 +195,16 @@ private[sql] object PythonSQLUtils extends Logging {
 
   /**
    * Parses a [[DataFrame]] containing JSON strings into a structured [[DataFrame]].
+   * The input DataFrame must have exactly one column of StringType.
    * This is used by PySpark to avoid manual Dataset[String] conversion on the Python side.
    */
   def jsonFromDataFrame(
       reader: DataFrameReader,
       df: DataFrame): DataFrame = {
+    require(df.schema.fields.length == 1,
+      s"Input DataFrame must have exactly one column, but got ${df.schema.fields.length}")
+    require(df.schema.fields.head.dataType == org.apache.spark.sql.types.StringType,
+      s"Input DataFrame column must be StringType, but got ${df.schema.fields.head.dataType}")
     reader.json(df.as(Encoders.STRING))
   }
 
