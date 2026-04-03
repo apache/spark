@@ -2700,7 +2700,9 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             prefers_large_types=runner_conf.use_large_var_types,
         )
 
-        def grouped_func(split_index: int, data: Iterator["GroupedBatch"]) -> Iterator[pa.RecordBatch]:
+        def grouped_func(
+            split_index: int, data: Iterator["GroupedBatch"]
+        ) -> Iterator[pa.RecordBatch]:
             for group in data:
                 batch_list = list(group)
                 if not batch_list:
@@ -2743,7 +2745,9 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             args = tuple(batch.column(o) for o in args_offsets)
             return args[0] if len(args) == 1 else args
 
-        def grouped_func(split_index: int, data: Iterator["GroupedBatch"]) -> Iterator[pa.RecordBatch]:
+        def grouped_func(
+            split_index: int, data: Iterator["GroupedBatch"]
+        ) -> Iterator[pa.RecordBatch]:
             for group in data:
                 batch_iter = map(extract_args, group)
                 result = udf_func(batch_iter)
@@ -2769,7 +2773,9 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             prefers_large_types=runner_conf.use_large_var_types,
         )
 
-        def grouped_func(split_index: int, data: Iterator["GroupedBatch"]) -> Iterator[pa.RecordBatch]:
+        def grouped_func(
+            split_index: int, data: Iterator["GroupedBatch"]
+        ) -> Iterator[pa.RecordBatch]:
             for group in data:
                 batch_list = list(group)
                 if not batch_list:
