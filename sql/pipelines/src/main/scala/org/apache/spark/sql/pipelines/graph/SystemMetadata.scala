@@ -37,9 +37,8 @@ case class FlowSystemMetadata(
 ) extends SystemMetadata with Logging {
 
   /**
-   * Returns the checkpoint root directory for a given flow
-   * which is storage/_checkpoints/flow_destination_table/flow_name.
-   * @return the checkpoint root directory for `flow`
+   * @return the checkpoint root directory for this flow
+   *         (of the form storage/_checkpoints/flow_destination_table/flow_name)
    * @throws IllegalArgumentException when the flow's destination is neither a table nor sink
    */
   def flowCheckpointsDir(): Path = {
