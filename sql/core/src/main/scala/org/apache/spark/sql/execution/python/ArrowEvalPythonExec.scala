@@ -100,8 +100,14 @@ case class ArrowEvalPythonExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     if (child.supportsColumnar) {
-      // Columnar path: delegate to doExecuteColumnar, flatten to rows.
-      doExecuteColumnar().flatMap(_.rowIterator().asScala)
+      // Columnar path: delegate to doExecuteColumnar, flatten to
+      // UnsafeRow. ColumnarBatchRow from rowIterator() is NOT
+      // UnsafeRow, and downstream operators (e.g., outer
+      // EvalPythonExec) may cast to UnsafeRow.
+      doExecuteColumnar().mapPartitionsInternal { batchIter =>
+        val toUnsafe = UnsafeProjection.create(schema)
+        batchIter.flatMap(_.rowIterator().asScala.map(toUnsafe))
+      }
     } else {
       // Row-based path: unchanged.
       super.doExecute()
