@@ -660,7 +660,7 @@ class SymmetricHashJoinStateManagerV4(
         private val iter = if (minTs == Long.MinValue && maxTs == Long.MaxValue) {
           stateStore.prefixScanWithMultiValues(key, colFamilyName)
         } else {
-          val startKeyRow = createKeyRow(key, minTs)
+          val startKeyRow = createKeyRow(key, minTs).copy()
           val endKeyRow = createKeyRow(key, maxTs + 1)
           stateStore.scanWithMultiValues(Some(startKeyRow), endKeyRow, colFamilyName)
         }
@@ -774,8 +774,9 @@ class SymmetricHashJoinStateManagerV4(
     }
 
     private lazy val dummyKeyRow: UnsafeRow = {
+      val defaultValues = keySchema.fields.map(f => Literal.default(f.dataType).eval())
       val projection = UnsafeProjection.create(keySchema)
-      projection(new GenericInternalRow(keySchema.length)).copy()
+      projection(new GenericInternalRow(defaultValues)).copy()
     }
 
     case class EvictedKeysResult(key: UnsafeRow, timestamp: Long, numValues: Int)
