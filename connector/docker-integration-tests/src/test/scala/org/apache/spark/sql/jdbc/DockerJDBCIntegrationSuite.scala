@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.net.ServerSocket
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
 import java.util.concurrent.TimeUnit
@@ -120,12 +119,7 @@ abstract class DockerJDBCIntegrationSuite
 
   private var docker: DockerClient = _
   // Configure networking (necessary for boot2docker / Docker Machine)
-  protected lazy val externalPort: Int = {
-    val sock = new ServerSocket(0)
-    val port = sock.getLocalPort
-    sock.close()
-    port
-  }
+  protected var externalPort: Int = -1
   private var container: CreateContainerResponse = _
   private var pulled: Boolean = false
   protected var jdbcUrl: String = _
@@ -181,7 +175,7 @@ abstract class DockerJDBCIntegrationSuite
         .newHostConfig()
         .withNetworkMode("bridge")
         .withPrivileged(db.privileged)
-        .withPortBindings(PortBinding.parse(s"$externalPort:${db.jdbcPort}"))
+        .withPortBindings(PortBinding.parse(s"0:${db.jdbcPort}"))
 
       if (db.usesIpc) {
         hostConfig.withIpcMode("host")
@@ -209,6 +203,10 @@ abstract class DockerJDBCIntegrationSuite
         val response = docker.inspectContainerCmd(container.getId).exec()
         assert(response.getState.getRunning)
       }
+      // Resolve the actual port assigned by Docker to avoid TOCTOU race conditions
+      externalPort = docker.inspectContainerCmd(container.getId).exec()
+        .getNetworkSettings.getPorts.getBindings
+        .get(ExposedPort.tcp(db.jdbcPort)).head.getHostPortSpec.toInt
       jdbcUrl = db.getJdbcUrl(dockerIp, externalPort)
       sleepBeforeTesting()
       var conn: Connection = null

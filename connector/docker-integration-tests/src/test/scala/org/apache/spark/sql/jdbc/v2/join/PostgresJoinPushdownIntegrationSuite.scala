@@ -36,7 +36,7 @@ class PostgresJoinPushdownIntegrationSuite
     with JDBCV2JoinPushdownIntegrationSuiteBase {
   override val db = new PostgresDatabaseOnDocker
 
-  override val url = db.getJdbcUrl(dockerIp, externalPort)
+  override lazy val url = db.getJdbcUrl(dockerIp, externalPort)
 
   override val jdbcDialect: JdbcDialect = PostgresDialect()
 
