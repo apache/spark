@@ -311,8 +311,8 @@ class DataFrameReader(OptionUtils):
         if isinstance(path, str):
             return self._df(self._jreader.load(path))
         elif path is not None:
-            if type(path) != list:
-                path = [path]  # type: ignore[list-item]
+            if not isinstance(path, list):
+                path = [path]
             assert self._spark._sc._jvm is not None
             return self._df(self._jreader.load(self._spark._sc._jvm.PythonUtils.toSeq(path)))
         else:
@@ -464,7 +464,7 @@ class DataFrameReader(OptionUtils):
         )
         if isinstance(path, str):
             path = [path]
-        if type(path) == list:
+        if isinstance(path, list):
             assert self._spark._sc._jvm is not None
             return self._df(self._jreader.json(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
@@ -861,7 +861,7 @@ class DataFrameReader(OptionUtils):
         )
         if isinstance(path, str):
             path = [path]
-        if type(path) == list:
+        if isinstance(path, list):
             assert self._spark._sc._jvm is not None
             return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
@@ -989,7 +989,7 @@ class DataFrameReader(OptionUtils):
         )
         if isinstance(path, str):
             path = [path]
-        if type(path) == list:
+        if isinstance(path, list):
             assert self._spark._sc._jvm is not None
             return self._df(self._jreader.xml(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
