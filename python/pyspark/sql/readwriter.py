@@ -361,7 +361,7 @@ class DataFrameReader(OptionUtils):
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
-        .. versionchanged:: 4.1.0
+        .. versionchanged:: 4.2.0
             Supports DataFrame input.
 
         Parameters

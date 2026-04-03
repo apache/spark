@@ -167,7 +167,7 @@ class DataFrameReader(OptionUtils):
 
     def json(
         self,
-        path: PathOrPaths,
+        path: Union[PathOrPaths, "DataFrame"],
         schema: Optional[Union[StructType, str]] = None,
         primitivesAsString: Optional[Union[bool, str]] = None,
         prefersDecimal: Optional[Union[bool, str]] = None,

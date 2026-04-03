@@ -1760,15 +1760,7 @@ class SparkConnectPlanner(
       localMap.foreach { case (key, value) => reader.option(key, value) }
       reader
     }
-    def ds: Dataset[String] = {
-      val input = transformRelation(rel.getInput)
-      val inputSchema = Dataset.ofRows(session, input).schema
-      require(inputSchema.fields.length == 1,
-        s"Input DataFrame must have exactly one column, but got ${inputSchema.fields.length}")
-      require(inputSchema.fields.head.dataType == org.apache.spark.sql.types.StringType,
-        s"Input DataFrame column must be StringType, but got ${inputSchema.fields.head.dataType}")
-      Dataset(session, input)(Encoders.STRING)
-    }
+    def ds: Dataset[String] = Dataset(session, transformRelation(rel.getInput))(Encoders.STRING)
 
     rel.getFormat match {
       case ParseFormat.PARSE_FORMAT_CSV =>

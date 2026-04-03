@@ -113,19 +113,19 @@ class DataSourcesTestsMixin:
 
     def test_json_with_dataframe_input_non_string_column(self):
         int_df = self.spark.createDataFrame([(1,), (2,)], schema="value INT")
-        with self.assertRaises(Exception):
+        with self.assertRaisesRegex(Exception, "UNSUPPORTED_DESERIALIZER.DATA_TYPE_MISMATCH"):
             self.spark.read.json(int_df).collect()
 
     def test_json_with_dataframe_input_multiple_columns(self):
         multi_df = self.spark.createDataFrame(
             [("a", "b"), ("c", "d")], schema="col1 STRING, col2 STRING"
         )
-        with self.assertRaises(Exception):
+        with self.assertRaisesRegex(Exception, "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH"):
             self.spark.read.json(multi_df).collect()
 
     def test_json_with_dataframe_input_zero_columns(self):
         empty_schema_df = self.spark.range(1).select()
-        with self.assertRaises(Exception):
+        with self.assertRaisesRegex(Exception, "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH"):
             self.spark.read.json(empty_schema_df).collect()
 
     def test_multiline_csv(self):
