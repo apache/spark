@@ -25,7 +25,18 @@ import operator
 import random
 import sys
 import heapq
-from typing import Any, Callable, Generic, Hashable, Iterable, Iterator, Optional, TypeVar, Union
+from typing import (
+    Any,
+    Callable,
+    Generic,
+    Hashable,
+    IO,
+    Iterable,
+    Iterator,
+    Optional,
+    TypeVar,
+    Union,
+)
 
 from pyspark.serializers import (
     BatchedSerializer,
@@ -216,7 +227,7 @@ class ExternalMerger(Merger, Generic[K, V, C]):
     def __init__(
         self,
         aggregator: Aggregator[C, V],
-        memory_limit: float = 512,
+        memory_limit: int = 512,
         serializer: Any = None,
         localdirs: Optional[list[str]] = None,
         scale: int = 1,
@@ -225,7 +236,7 @@ class ExternalMerger(Merger, Generic[K, V, C]):
     ) -> None:
         Merger.__init__(self, aggregator)
         self.memory_limit = memory_limit
-        self.serializer = _compressed_serializer(serializer)
+        self.serializer: BatchedSerializer = _compressed_serializer(serializer)
         self.localdirs = localdirs or _get_local_dirs(str(id(self)))
         # number of partitions when spill data into disks
         self.partitions = partitions
@@ -260,7 +271,7 @@ class ExternalMerger(Merger, Generic[K, V, C]):
         creator, comb = self.agg.createCombiner, self.agg.mergeValue
         batch: float
         c, data, pdata, hfun, batch = 0, self.data, self.pdata, self._partition, self.batch
-        limit = self.memory_limit
+        limit: float = self.memory_limit
 
         for k, v in iterator:
             d = pdata[hfun(k)] if pdata else data
@@ -472,7 +483,7 @@ class ExternalSorter(Generic[V]):
     True
     """
 
-    def __init__(self, memory_limit: float, serializer: Any = None):
+    def __init__(self, memory_limit: int, serializer: Optional[BatchedSerializer] = None):
         self.memory_limit = memory_limit
         self.local_dirs = _get_local_dirs("sort")
         self.serializer = _compressed_serializer(serializer)
@@ -501,7 +512,8 @@ class ExternalSorter(Generic[V]):
         """
         global MemoryBytesSpilled, DiskBytesSpilled
         batch, limit = 100, self._next_limit()
-        chunks, current_chunk = [], []
+        chunks: list[Iterable[V]] = []
+        current_chunk: list[V] = []
         iterator = iter(iterator)
         while True:
             # pick elements in batch
@@ -518,7 +530,7 @@ class ExternalSorter(Generic[V]):
                 with open(path, "wb") as f:
                     self.serializer.dump_stream(current_chunk, f)
 
-                def load(f):
+                def load(f: IO) -> Iterator[V]:
                     for v in self.serializer.load_stream(f):
                         yield v
                     # close the file explicit once we consume all the items
@@ -574,8 +586,8 @@ class ExternalList(Generic[V]):
     def __init__(self, values: list[V]):
         self.values = values
         self.count = len(values)
-        self._file = None
-        self._ser = None
+        self._file: Optional[IO] = None
+        self._ser: Optional[BatchedSerializer] = None
 
     def __getstate__(self) -> tuple[list[V], int, bytes]:
         if self._file is not None:
@@ -591,13 +603,15 @@ class ExternalList(Generic[V]):
         self.values, self.count, serialized = item
         if serialized:
             self._open_file()
+            assert self._file is not None
             self._file.write(serialized)
         else:
             self._file = None
             self._ser = None
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[V]:
         if self._file is not None:
+            assert self._ser is not None
             self._file.flush()
             # read all items from disks first
             with os.fdopen(os.dup(self._file.fileno()), "rb") as f:
@@ -608,17 +622,17 @@ class ExternalList(Generic[V]):
         for v in self.values:
             yield v
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.count
 
-    def append(self, value):
+    def append(self, value: V) -> None:
         self.values.append(value)
         self.count += 1
         # dump them into disk if the key is huge
         if len(self.values) >= self.LIMIT:
             self._spill()
 
-    def _open_file(self):
+    def _open_file(self) -> None:
         dirs = _get_local_dirs("objects")
         d = dirs[id(self) % len(dirs)]
         if not os.path.exists(d):
@@ -628,16 +642,19 @@ class ExternalList(Generic[V]):
         self._ser = BatchedSerializer(CompressedSerializer(CPickleSerializer()), 1024)
         os.unlink(p)
 
-    def __del__(self):
+    def __del__(self) -> None:
         if self._file:
             self._file.close()
             self._file = None
 
-    def _spill(self):
+    def _spill(self) -> None:
         """dump the values into disk"""
         global MemoryBytesSpilled, DiskBytesSpilled
         if self._file is None:
             self._open_file()
+
+        assert self._file is not None
+        assert self._ser is not None
 
         used_memory = get_used_memory()
         pos = self._file.tell()
@@ -648,7 +665,7 @@ class ExternalList(Generic[V]):
         MemoryBytesSpilled += max(used_memory - get_used_memory(), 0) << 20
 
 
-class ExternalListOfList(ExternalList):
+class ExternalListOfList(ExternalList[list[V]]):
     """
     An external list for list.
 
@@ -664,22 +681,22 @@ class ExternalListOfList(ExternalList):
     210
     """
 
-    def __init__(self, values):
+    def __init__(self, values: list[list[V]]):
         ExternalList.__init__(self, values)
         self.count = sum(len(i) for i in values)
 
-    def append(self, value):
+    def append(self, value: list[V]) -> None:
         ExternalList.append(self, value)
         # already counted 1 in ExternalList.append
         self.count += len(value) - 1
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[V]:  # type: ignore[override]
         for values in ExternalList.__iter__(self):
             for v in values:
                 yield v
 
 
-class GroupByKey:
+class GroupByKey(Generic[K, V]):
     """
     Group a sorted iterator as [(k1, it1), (k2, it2), ...]
 
@@ -692,24 +709,27 @@ class GroupByKey:
     [(0, [0, 1, 2]), (1, [3, 4, 5])]
     """
 
-    def __init__(self, iterator):
+    def __init__(self, iterator: Iterable[tuple[K, list[V]]]):
         self.iterator = iterator
 
-    def __iter__(self):
-        key, values = None, None
+    def __iter__(self) -> Iterator[tuple[K, ExternalListOfList[V]]]:
+        key: Optional[K] = None
+        values: Optional[ExternalListOfList[V]] = None
         for k, v in self.iterator:
             if values is not None and k == key:
                 values.append(v)
             else:
                 if values is not None:
+                    assert key is not None
                     yield (key, values)
                 key = k
                 values = ExternalListOfList([v])
         if values is not None:
+            assert key is not None
             yield (key, values)
 
 
-class ExternalGroupBy(ExternalMerger):
+class ExternalGroupBy(ExternalMerger[K, V, C]):
     """
     Group by the items by key. If any partition of them can not been
     hold in memory, it will do sort based group by.
@@ -748,15 +768,15 @@ class ExternalGroupBy(ExternalMerger):
 
     SORT_KEY_LIMIT = 1000
 
-    def flattened_serializer(self):
+    def flattened_serializer(self) -> FlattenedValuesSerializer:
         assert isinstance(self.serializer, BatchedSerializer)
         ser = self.serializer
         return FlattenedValuesSerializer(ser, 20)
 
-    def _object_size(self, obj):
+    def _object_size(self, obj: Any) -> int:
         return len(obj)
 
-    def _spill(self):
+    def _spill(self) -> None:
         """
         dump already partitioned data into disks.
         """
@@ -780,7 +800,7 @@ class ExternalGroupBy(ExternalMerger):
             self._sorted = len(self.data) < self.SORT_KEY_LIMIT
             if self._sorted:
                 self.serializer = self.flattened_serializer()
-                for k in sorted(self.data.keys()):
+                for k in sorted(self.data.keys()):  # type: ignore[type-var]
                     h = self._partition(k)
                     self.serializer.dump_stream([(k, self.data[k])], streams[h])
             else:
@@ -814,7 +834,7 @@ class ExternalGroupBy(ExternalMerger):
         gc.collect()  # release the memory as much as possible
         MemoryBytesSpilled += max(used_memory - get_used_memory(), 0) << 20
 
-    def _merged_items(self, index):
+    def _merged_items(self, index: int) -> Iterable[tuple[K, C]]:
         size = sum(
             os.path.getsize(os.path.join(self._get_spill_dir(j), str(index)))
             for j in range(self.spills)
@@ -834,10 +854,10 @@ class ExternalGroupBy(ExternalMerger):
                 self.mergeCombiners(self.serializer.load_stream(f), 0)
         return self.data.items()
 
-    def _merge_sorted_items(self, index):
+    def _merge_sorted_items(self, index: int) -> Iterable[tuple[K, C]]:
         """load a partition from disk, then sort and group by key"""
 
-        def load_partition(j):
+        def load_partition(j: int) -> Iterable[tuple[K, V]]:
             path = self._get_spill_dir(j)
             p = os.path.join(path, str(index))
             with open(p, "rb", 65536) as f:
@@ -845,6 +865,7 @@ class ExternalGroupBy(ExternalMerger):
                     yield v
 
         disk_items = [load_partition(j) for j in range(self.spills)]
+        sorted_items: Iterable[tuple[K, V]]
 
         if self._sorted:
             # all the partitions are already sorted
@@ -854,9 +875,9 @@ class ExternalGroupBy(ExternalMerger):
             # Flatten the combined values, so it will not consume huge
             # memory during merging sort.
             ser = self.flattened_serializer()
-            sorter = ExternalSorter(self.memory_limit, ser)
+            sorter: ExternalSorter[tuple[K, V]] = ExternalSorter(self.memory_limit, ser)
             sorted_items = sorter.sorted(itertools.chain(*disk_items), key=operator.itemgetter(0))
-        return ((k, vs) for k, vs in GroupByKey(sorted_items))
+        return ((k, vs) for k, vs in GroupByKey[K, V](sorted_items))
 
 
 if __name__ == "__main__":
