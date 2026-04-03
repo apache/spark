@@ -4244,6 +4244,94 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             return self._to_internal_pandas().style
 
+    def set_axis(
+        self,
+        labels: Union[pd.Index, List[Any], "Index"],
+        *,
+        axis: Axis = 0,
+    ) -> "DataFrame":
+        """
+        Assign desired index to given axis.
+
+        Parameters
+        ----------
+        labels : list-like or Index
+            The values for the new index.
+        axis : {{0 or 'index', 1 or 'columns'}}, default 0
+            The axis to update.
+
+        Returns
+        -------
+        DataFrame
+            A new DataFrame with the updated axis labels.
+
+        Raises
+        ------
+        ValueError
+            If the length of `labels` does not match the length of the axis being updated.
+
+        See Also
+        --------
+        DataFrame.rename : Alter the axis labels of :class:`DataFrame`.
+        DataFrame.set_index : Set the DataFrame index using existing columns.
+
+        Examples
+        --------
+        >>> df = ps.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
+
+        Replace column labels (axis=1):
+
+        >>> df.set_axis(["a", "b"], axis=1)
+           a  b
+        0  1  4
+        1  2  5
+        2  3  6
+
+        Replace index labels (axis=0):
+
+        >>> df.set_axis(["x", "y", "z"], axis=0)  # doctest: +SKIP
+           A  B
+        x  1  4
+        y  2  5
+        z  3  6
+        """
+        axis = validate_axis(axis)
+        if axis == 1:
+            psdf = self.copy()
+            psdf.columns = labels
+            return psdf
+        else:
+            pdf_labels = labels.to_pandas() if isinstance(labels, ps.Index) else pd.Index(labels)
+
+            psdf = self.reset_index(drop=True)
+            sdf = psdf._internal.spark_frame
+
+            seq_col = verify_temp_column_name(sdf, "__set_axis_seq__")
+            sdf = InternalFrame.attach_distributed_sequence_column(sdf, seq_col)
+
+            pdf_index = pdf_labels.to_frame(index=False)
+            # Use temp names to avoid collisions with existing columns.
+            temp_index_columns = [
+                verify_temp_column_name(sdf, "__set_axis_index_{}__".format(i))
+                for i in range(len(pdf_index.columns))
+            ]
+            pdf_index.columns = temp_index_columns
+            pdf_index[seq_col] = range(len(pdf_index))
+            sdf_labels = default_session().createDataFrame(pdf_index)
+
+            joined = sdf.join(sdf_labels, on=seq_col, how="inner").drop(seq_col)
+
+            internal = psdf._internal.copy(
+                spark_frame=joined,
+                index_spark_columns=[joined[n] for n in temp_index_columns],
+                index_names=[(n,) if not isinstance(n, tuple) else n for n in pdf_labels.names],
+                index_fields=[
+                    InternalField.from_struct_field(joined.schema[n]) for n in temp_index_columns
+                ],
+                data_spark_columns=[joined[n] for n in psdf._internal.data_spark_column_names],
+            )
+            return DataFrame(internal)
+
     def set_index(
         self,
         keys: Union[Name, List[Name]],
@@ -14201,10 +14289,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def _infer_objects_fallback(self, *args: Any, **kwargs: Any) -> "DataFrame":
         _f = self._build_fallback_method("infer_objects")
-        return _f(*args, **kwargs)
-
-    def _set_axis_fallback(self, *args: Any, **kwargs: Any) -> "DataFrame":
-        _f = self._build_fallback_method("set_axis")
         return _f(*args, **kwargs)
 
     def __getattr__(self, key: str) -> Any:

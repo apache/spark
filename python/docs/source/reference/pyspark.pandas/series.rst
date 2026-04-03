@@ -197,6 +197,7 @@ Reindexing / Selection / Label manipulation
    Series.reindex
    Series.reindex_like
    Series.reset_index
+   Series.set_axis
    Series.sample
    Series.searchsorted
    Series.swaplevel

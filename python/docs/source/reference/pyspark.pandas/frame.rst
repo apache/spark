@@ -203,6 +203,7 @@ Reindexing / Selection / Label manipulation
    DataFrame.rename
    DataFrame.rename_axis
    DataFrame.reset_index
+   DataFrame.set_axis
    DataFrame.set_index
    DataFrame.swapaxes
    DataFrame.swaplevel

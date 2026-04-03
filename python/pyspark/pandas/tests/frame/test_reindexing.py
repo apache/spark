@@ -956,6 +956,51 @@ class FrameReindexingMixin:
         with self.assertRaises(NotImplementedError):
             psdf.sample(n=1)
 
+    def test_set_axis(self):
+        pdf = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
+        psdf = ps.from_pandas(pdf)
+
+        # axis=1: replace column labels
+        self.assert_eq(
+            pdf.set_axis(["a", "b"], axis=1),
+            psdf.set_axis(["a", "b"], axis=1),
+        )
+
+        # axis=1: replace with pd.Index (preserves name)
+        self.assert_eq(
+            pdf.set_axis(pd.Index(["x", "y"], name="cols"), axis=1),
+            psdf.set_axis(pd.Index(["x", "y"], name="cols"), axis=1),
+        )
+
+        # axis=1: MultiIndex columns
+        midx = pd.MultiIndex.from_tuples([("X", "a"), ("Y", "b")])
+        self.assert_eq(
+            pdf.set_axis(midx, axis=1),
+            psdf.set_axis(midx, axis=1),
+        )
+
+        # axis=0: replace index labels
+        self.assert_eq(
+            pdf.set_axis(["x", "y", "z"], axis=0),
+            psdf.set_axis(["x", "y", "z"], axis=0).sort_index(),
+        )
+
+        # axis=0: default axis is 0
+        self.assert_eq(
+            pdf.set_axis(["x", "y", "z"]),
+            psdf.set_axis(["x", "y", "z"]).sort_index(),
+        )
+
+        # axis=0: replace with pd.Index (preserves name)
+        self.assert_eq(
+            pdf.set_axis(pd.Index(["a", "b", "c"], name="idx"), axis=0),
+            psdf.set_axis(pd.Index(["a", "b", "c"], name="idx"), axis=0).sort_index(),
+        )
+
+        # axis=1: length mismatch error
+        with self.assertRaises(ValueError):
+            psdf.set_axis(["a"], axis=1)
+
 
 class FrameReidexingTests(
     FrameReindexingMixin,

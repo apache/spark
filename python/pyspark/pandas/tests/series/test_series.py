@@ -874,6 +874,26 @@ class SeriesTestsMixin:
         ):
             psser.transform(lambda x: x + 1, axis=1)
 
+    def test_set_axis(self):
+        pser = pd.Series([1, 2, 3], name="x")
+        psser = ps.from_pandas(pser)
+
+        # axis=0: replace index labels
+        self.assert_eq(
+            pser.set_axis(["a", "b", "c"]),
+            psser.set_axis(["a", "b", "c"]).sort_index(),
+        )
+
+        # axis=0: replace with pd.Index (preserves name)
+        self.assert_eq(
+            pser.set_axis(pd.Index(["a", "b", "c"], name="idx")),
+            psser.set_axis(pd.Index(["a", "b", "c"], name="idx")).sort_index(),
+        )
+
+        # preserves Series name
+        result = psser.set_axis(["a", "b", "c"])
+        self.assertEqual(result.name, "x")
+
 
 class SeriesTests(
     SeriesTestsMixin,

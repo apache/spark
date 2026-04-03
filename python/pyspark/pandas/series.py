@@ -1260,6 +1260,53 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         self.rename(name, inplace=True)
 
     # TODO: Currently, changing index labels taking dictionary/Series is not supported.
+    def set_axis(
+        self,
+        labels: Union[pd.Index, List[Any], "ps.Index"],
+        *,
+        axis: Axis = 0,
+    ) -> "Series":
+        """
+        Assign desired index to given axis.
+
+        Parameters
+        ----------
+        labels : list-like or Index
+            The values for the new index.
+        axis : {{0 or 'index'}}, default 0
+            The axis to update. For Series, only 0/'index' is valid.
+
+        Returns
+        -------
+        Series
+            A new Series with the updated axis labels.
+
+        Raises
+        ------
+        ValueError
+            If the length of `labels` does not match the length of the axis being updated,
+            or if axis is not 0/'index'.
+
+        See Also
+        --------
+        Series.rename : Alter Series index labels or name.
+
+        Examples
+        --------
+        >>> s = ps.Series([1, 2, 3])
+
+        >>> s.set_axis(["a", "b", "c"])  # doctest: +SKIP
+        a    1
+        b    2
+        c    3
+        dtype: int64
+        """
+        axis = validate_axis(axis)
+        if axis != 0:
+            raise ValueError("No axis named {0} for object type Series".format(axis))
+        return first_series(self.to_frame().set_axis(labels, axis=0)).rename(self.name)
+
+    # TODO: Currently, changing index labels taking dictionary/Series is not supported.
     def rename(
         self, index: Optional[Union[Name, Callable[[Any], Any]]] = None, **kwargs: Any
     ) -> "Series":
