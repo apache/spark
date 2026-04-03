@@ -759,28 +759,6 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
         return "ArrowStreamPandasUDTFSerializer"
 
 
-# Serializer for SQL_GROUPED_AGG_ARROW_UDF, SQL_WINDOW_AGG_ARROW_UDF,
-# and SQL_GROUPED_AGG_ARROW_ITER_UDF
-class ArrowStreamAggArrowUDFSerializer(ArrowStreamArrowUDFSerializer):
-    def load_stream(self, stream):
-        """
-        Yield an iterator that produces one tuple of column arrays per batch.
-        Each group yields Iterator[Tuple[pa.Array, ...]], allowing UDF to process batches one by one
-        without consuming all batches upfront.
-        """
-        for batches in ArrowStreamGroupSerializer.load_stream(self, stream):
-            # Lazily read and convert Arrow batches one at a time from the stream
-            # This avoids loading all batches into memory for the group
-            columns_iter = (batch.columns for batch in batches)
-            yield columns_iter
-            # Make sure the batches are fully iterated before getting the next group
-            for _ in columns_iter:
-                pass
-
-    def __repr__(self):
-        return "ArrowStreamAggArrowUDFSerializer"
-
-
 # Serializer for SQL_GROUPED_AGG_PANDAS_UDF, SQL_WINDOW_AGG_PANDAS_UDF,
 # and SQL_GROUPED_AGG_PANDAS_ITER_UDF
 class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
