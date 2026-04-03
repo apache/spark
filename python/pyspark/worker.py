@@ -2700,7 +2700,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             prefers_large_types=runner_conf.use_large_var_types,
         )
 
-        def func(split_index: int, data: Iterator["GroupedBatch"]) -> Iterator[pa.RecordBatch]:
+        def grouped_func(split_index: int, data: Iterator["GroupedBatch"]) -> Iterator[pa.RecordBatch]:
             for group in data:
                 batch_list = list(group)
                 if not batch_list:
@@ -2725,7 +2725,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 yield ArrowBatchTransformer.enforce_schema(batch, return_schema)
 
         # profiling is not supported for UDF
-        return func, None, ser, ser
+        return grouped_func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF:
         import pyarrow as pa
@@ -2743,7 +2743,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             args = tuple(batch.column(o) for o in args_offsets)
             return args[0] if len(args) == 1 else args
 
-        def func(split_index: int, data: Iterator["GroupedBatch"]) -> Iterator[pa.RecordBatch]:
+        def grouped_func(split_index: int, data: Iterator["GroupedBatch"]) -> Iterator[pa.RecordBatch]:
             for group in data:
                 batch_iter = map(extract_args, group)
                 result = udf_func(batch_iter)
@@ -2754,7 +2754,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 yield ArrowBatchTransformer.enforce_schema(batch, return_schema)
 
         # profiling is not supported for UDF
-        return func, None, ser, ser
+        return grouped_func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF:
         import pyarrow as pa
@@ -2769,7 +2769,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             prefers_large_types=runner_conf.use_large_var_types,
         )
 
-        def func(split_index: int, data: Iterator["GroupedBatch"]) -> Iterator[pa.RecordBatch]:
+        def grouped_func(split_index: int, data: Iterator["GroupedBatch"]) -> Iterator[pa.RecordBatch]:
             for group in data:
                 batch_list = list(group)
                 if not batch_list:
@@ -2820,7 +2820,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 yield ArrowBatchTransformer.enforce_schema(batch, return_schema)
 
         # profiling is not supported for UDF
-        return func, None, ser, ser
+        return grouped_func, None, ser, ser
 
     if (
         eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
