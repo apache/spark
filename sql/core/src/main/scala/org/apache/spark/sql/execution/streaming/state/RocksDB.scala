@@ -1754,20 +1754,27 @@ class RocksDB(
    *
    * @param startKey None to seek to the beginning of the column family,
    *                 or Some(key) to seek to the given start position (inclusive).
-   * @param endKey   The exclusive upper bound for the scan (encoded key bytes).
+   * @param endKey   None to scan to the end of the column family,
+   *                 or Some(key) as the exclusive upper bound for the scan (encoded key bytes).
    * @param cfName   The column family name.
    * @return An iterator of ByteArrayPairs in the given range.
    */
   def scan(
       startKey: Option[Array[Byte]],
-      endKey: Array[Byte],
+      endKey: Option[Array[Byte]],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): NextIterator[ByteArrayPair] = {
     updateMemoryUsageIfNeeded()
 
-    val updatedEndKey = if (useColumnFamilies) {
-      encodeStateRowWithPrefix(endKey, cfName)
-    } else {
-      endKey
+    val upperBoundBytes: Option[Array[Byte]] = endKey match {
+      case Some(key) =>
+        Some(if (useColumnFamilies) encodeStateRowWithPrefix(key, cfName) else key)
+      case None =>
+        if (useColumnFamilies) {
+          val cfPrefix = encodeStateRowWithPrefix(Array.emptyByteArray, cfName)
+          RocksDB.prefixUpperBound(cfPrefix)
+        } else {
+          None
+        }
     }
 
     val seekTarget = startKey match {
@@ -1778,9 +1785,9 @@ class RocksDB(
         else null
     }
 
-    val upperBoundSlice = new Slice(updatedEndKey)
+    val upperBoundSlice = upperBoundBytes.map(new Slice(_))
     val scanReadOptions = new ReadOptions()
-    scanReadOptions.setIterateUpperBound(upperBoundSlice)
+    upperBoundSlice.foreach(scanReadOptions.setIterateUpperBound)
 
     val iter = db.newIterator(scanReadOptions)
     if (seekTarget != null) {
@@ -1792,7 +1799,7 @@ class RocksDB(
     def closeResources(): Unit = {
       iter.close()
       scanReadOptions.close()
-      upperBoundSlice.close()
+      upperBoundSlice.foreach(_.close())
     }
 
     Option(TaskContext.get()).foreach { tc =>

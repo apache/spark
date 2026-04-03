@@ -188,7 +188,8 @@ trait ReadStateStore {
    *
    * @param startKey None to scan from the beginning of the column family,
    *                 or Some(key) to seek to the given start position (inclusive).
-   * @param endKey   The exclusive upper bound for the scan.
+   * @param endKey   None to scan to the end of the column family,
+   *                 or Some(key) as the exclusive upper bound for the scan.
    * @param colFamilyName The column family name.
    *
    * Callers must ensure the column family's key encoder produces lexicographically ordered
@@ -197,7 +198,7 @@ trait ReadStateStore {
    */
   def scan(
       startKey: Option[UnsafeRow],
-      endKey: UnsafeRow,
+      endKey: Option[UnsafeRow],
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
     : StateStoreIterator[UnsafeRowPair] = {
     throw StateStoreErrors.unsupportedOperationException("scan", "")
@@ -208,7 +209,8 @@ trait ReadStateStore {
    *
    * @param startKey None to scan from the beginning of the column family,
    *                 or Some(key) to seek to the given start position (inclusive).
-   * @param endKey   The exclusive upper bound for the scan.
+   * @param endKey   None to scan to the end of the column family,
+   *                 or Some(key) as the exclusive upper bound for the scan.
    * @param colFamilyName The column family name.
    *
    * Callers must ensure the column family's key encoder produces lexicographically ordered
@@ -220,7 +222,7 @@ trait ReadStateStore {
    */
   def scanWithMultiValues(
       startKey: Option[UnsafeRow],
-      endKey: UnsafeRow,
+      endKey: Option[UnsafeRow],
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
     : StateStoreIterator[UnsafeRowPair] = {
     throw StateStoreErrors.unsupportedOperationException("scanWithMultiValues", "")
@@ -456,14 +458,14 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
 
   override def scan(
       startKey: Option[UnsafeRow],
-      endKey: UnsafeRow,
+      endKey: Option[UnsafeRow],
       colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
     store.scan(startKey, endKey, colFamilyName)
   }
 
   override def scanWithMultiValues(
       startKey: Option[UnsafeRow],
-      endKey: UnsafeRow,
+      endKey: Option[UnsafeRow],
       colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
     store.scanWithMultiValues(startKey, endKey, colFamilyName)
   }

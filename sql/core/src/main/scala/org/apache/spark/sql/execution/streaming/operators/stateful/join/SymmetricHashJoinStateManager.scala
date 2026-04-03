@@ -662,7 +662,7 @@ class SymmetricHashJoinStateManagerV4(
         } else {
           val startKeyRow = createKeyRow(key, minTs).copy()
           val endKeyRow = createKeyRow(key, maxTs + 1)
-          stateStore.scanWithMultiValues(Some(startKeyRow), endKeyRow, colFamilyName)
+          stateStore.scanWithMultiValues(Some(startKeyRow), Some(endKeyRow), colFamilyName)
         }
 
         private var currentTs = -1L
@@ -784,7 +784,7 @@ class SymmetricHashJoinStateManagerV4(
     // NOTE: This assumes we consume the whole iterator to trigger completion.
     def scanEvictedKeys(endTimestamp: Long): Iterator[EvictedKeysResult] = {
       val endKeyRow = createKeyRow(dummyKeyRow, endTimestamp + 1)
-      val evictIterator = stateStore.scanWithMultiValues(None, endKeyRow, colFamilyName)
+      val evictIterator = stateStore.scanWithMultiValues(None, Some(endKeyRow), colFamilyName)
       new NextIterator[EvictedKeysResult]() {
         var currentKeyRow: UnsafeRow = null
         var currentEventTime: Long = -1L

@@ -591,7 +591,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
           val prefixKey = keyToRow("key1", 1)
           val startKey = keyAndTimestampToRow("key1", 1, 0L)
           val endKey = keyAndTimestampToRow("key1", 1, 1001L)
-          val iter = store.scanWithMultiValues(Some(startKey), endKey)
+          val iter = store.scanWithMultiValues(Some(startKey), Some(endKey))
 
           val results = iter.map { pair =>
             (pair.key.getLong(2), pair.value.getInt(0))
@@ -628,7 +628,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
           // Scan with Some(startKey) covering full range
           val startKey = keyAndTimestampToRow("key1", 1, Long.MinValue)
           val endKey = keyAndTimestampToRow("key1", 1, Long.MaxValue)
-          val iter = store.scanWithMultiValues(Some(startKey), endKey)
+          val iter = store.scanWithMultiValues(Some(startKey), Some(endKey))
           val results = iter.map(_.key.getLong(2)).toList
           iter.close()
 
@@ -657,7 +657,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
           // Scan range that contains no entries
           val startKey = keyAndTimestampToRow("key1", 1, 1500L)
           val endKey = keyAndTimestampToRow("key1", 1, 1600L)
-          val iter = store.scanWithMultiValues(Some(startKey), endKey)
+          val iter = store.scanWithMultiValues(Some(startKey), Some(endKey))
           assert(!iter.hasNext)
           iter.close()
         } finally {
@@ -685,7 +685,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
 
           // Scan from beginning (None) up to 301 (exclusive), covering [..300]
           val endKey = keyAndTimestampToRow("key1", 1, 301L)
-          val iter = store.scanWithMultiValues(None, endKey)
+          val iter = store.scanWithMultiValues(None, Some(endKey))
           val results = iter.map(_.key.getLong(2)).toList
           iter.close()
 
@@ -715,7 +715,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
           // Scan with endKey at timestamp 201 with dummyKey - should include
           // everything up to timestamp 200 regardless of join key
           val endKey = keyAndTimestampToRow("key1", 1, 201L)
-          val iter = store.scanWithMultiValues(None, endKey)
+          val iter = store.scanWithMultiValues(None, Some(endKey))
           val results = iter.map { pair =>
             (pair.key.getString(0), pair.key.getLong(2))
           }.toList
@@ -747,7 +747,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
 
           val startKey = keyAndTimestampToRow("key1", 1, 200L)
           val endKey = keyAndTimestampToRow("key1", 1, 401L)
-          val iter = store.scan(Some(startKey), endKey)
+          val iter = store.scan(Some(startKey), Some(endKey))
           val results = iter.map { pair =>
             (pair.key.getLong(2), pair.value.getInt(0))
           }.toList
@@ -778,7 +778,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
           // Scan negative range only: [-300, 0)
           val startKey = keyAndTimestampToRow("key1", 1, -300L)
           val endKey = keyAndTimestampToRow("key1", 1, 0L)
-          val iter = store.scan(Some(startKey), endKey)
+          val iter = store.scan(Some(startKey), Some(endKey))
           val results = iter.map(_.key.getLong(2)).toList
           iter.close()
 

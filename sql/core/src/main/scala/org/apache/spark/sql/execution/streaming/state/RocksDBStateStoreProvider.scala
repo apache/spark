@@ -558,14 +558,14 @@ private[sql] class RocksDBStateStoreProvider
 
     override def scan(
         startKey: Option[UnsafeRow],
-        endKey: UnsafeRow,
+        endKey: Option[UnsafeRow],
         colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       validateAndTransitionState(UPDATE)
       verifyColFamilyOperations("scan", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val encodedStartKey = startKey.map(kvEncoder._1.encodeKey)
-      val encodedEndKey = kvEncoder._1.encodeKey(endKey)
+      val encodedEndKey = endKey.map(kvEncoder._1.encodeKey)
 
       val rowPair = new UnsafeRowPair()
       val rocksDbIter = rocksDB.scan(encodedStartKey, encodedEndKey, colFamilyName)
@@ -580,7 +580,7 @@ private[sql] class RocksDBStateStoreProvider
 
     override def scanWithMultiValues(
         startKey: Option[UnsafeRow],
-        endKey: UnsafeRow,
+        endKey: Option[UnsafeRow],
         colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       validateAndTransitionState(UPDATE)
       verifyColFamilyOperations("scanWithMultiValues", colFamilyName)
@@ -592,7 +592,7 @@ private[sql] class RocksDBStateStoreProvider
           " which supports multiple values for a single key")
 
       val encodedStartKey = startKey.map(kvEncoder._1.encodeKey)
-      val encodedEndKey = kvEncoder._1.encodeKey(endKey)
+      val encodedEndKey = endKey.map(kvEncoder._1.encodeKey)
       val rocksDbIter = rocksDB.scan(encodedStartKey, encodedEndKey, colFamilyName)
 
       val rowPair = new UnsafeRowPair()
