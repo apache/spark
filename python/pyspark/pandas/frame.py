@@ -9273,13 +9273,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> from pyspark.pandas.config import set_option, reset_option
         >>> set_option("compute.ops_on_diff_frames", True)
         >>> df1 = ps.DataFrame(
-        ...     {"col1": ["a", "a", "b", "b", "a"],
+        ...     {"col1": [1.0, 2.0, 3.0, 4.0, 5.0],
         ...      "col2": [1.0, 2.0, 3.0, np.nan, 5.0],
         ...      "col3": [1.0, 2.0, 3.0, 4.0, 5.0]},
         ...     columns=["col1", "col2", "col3"],
         ... )
         >>> df2 = ps.DataFrame(
-        ...     {"col1": ["c", "a", "b", "b", "a"],
+        ...     {"col1": [9.0, 2.0, 3.0, 4.0, 5.0],
         ...      "col2": [1.0, 2.0, 1.0, np.nan, 5.0],
         ...      "col3": [1.0, 2.0, 3.0, 4.0, 5.0]},
         ...     columns=["col1", "col2", "col3"],
@@ -9290,7 +9290,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> df1.compare(df2).sort_index()  # doctest: +NORMALIZE_WHITESPACE
           col1       col2
           self other self other
-        0    a     c  NaN   NaN
+        0  1.0   9.0  NaN   NaN
         2  NaN   NaN  3.0   1.0
 
         Keep all original rows
@@ -9298,7 +9298,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> df1.compare(df2, keep_shape=True).sort_index()  # doctest: +NORMALIZE_WHITESPACE
           col1       col2       col3
           self other self other self other
-        0    a     c  NaN   NaN  NaN   NaN
+        0  1.0   9.0  NaN   NaN  NaN   NaN
         1  NaN   NaN  NaN   NaN  NaN   NaN
         2  NaN   NaN  3.0   1.0  NaN   NaN
         3  NaN   NaN  NaN   NaN  NaN   NaN
@@ -9309,11 +9309,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> df1.compare(df2, keep_shape=True, keep_equal=True).sort_index()  # doctest: +NORMALIZE_WHITESPACE
           col1       col2       col3
           self other self other self other
-        0    a     c  1.0   1.0  1.0   1.0
-        1    a     a  2.0   2.0  2.0   2.0
-        2    b     b  3.0   1.0  3.0   3.0
-        3    b     b  NaN   NaN  4.0   4.0
-        4    a     a  5.0   5.0  5.0   5.0
+        0  1.0   9.0  1.0   1.0  1.0   1.0
+        1  2.0   2.0  2.0   2.0  2.0   2.0
+        2  3.0   3.0  3.0   1.0  3.0   3.0
+        3  4.0   4.0  NaN   NaN  4.0   4.0
+        4  5.0   5.0  5.0   5.0  5.0   5.0
 
         >>> reset_option("compute.ops_on_diff_frames")
         """
