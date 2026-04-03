@@ -124,7 +124,7 @@ case class ArrowEvalPythonExec(
       child.output,
       udfs,
       output,
-      StructType.fromAttributes(output),
+      output.toStructType,
       conf.arrowMaxRecordsPerBatch,
       evalType,
       conf.sessionLocalTimeZone,
