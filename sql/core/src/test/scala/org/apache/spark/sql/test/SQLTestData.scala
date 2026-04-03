@@ -39,6 +39,10 @@ private[sql] trait SQLTestData extends SparkSessionProvider { self =>
 
   // Note: all test data should be lazy because the SparkSession is not set up yet.
 
+  // Some datasets are intentionally created from RDD instead of local collections.
+  // Using local collections produces a LocalRelation which exposes more statistics,
+  // causing optimizer tests (e.g. AdaptiveQueryExecSuite) to fail.
+
   protected lazy val emptyTestData: DataFrame = {
     val df = spark.createDataFrame(
       spark.asInstanceOf[classic.SparkSession].sparkContext.parallelize(
