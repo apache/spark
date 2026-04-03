@@ -25,6 +25,7 @@ import operator
 import random
 import sys
 import heapq
+from typing import Any, Callable, Generic, Hashable, Iterable, Iterator, Optional, TypeVar, Union
 
 from pyspark.serializers import (
     BatchedSerializer,
@@ -37,8 +38,12 @@ from pyspark.util import fail_on_stopiteration
 
 process = None
 
+C = TypeVar("C")
+K = TypeVar("K", bound=Hashable)
+V = TypeVar("V")
 
-def get_used_memory():
+
+def get_used_memory() -> int:
     """Return the used memory in MiB"""
     try:
         import psutil
@@ -75,7 +80,7 @@ def get_used_memory():
         return 0
 
 
-def _get_local_dirs(sub):
+def _get_local_dirs(sub: str) -> list[str]:
     """Get all the directories"""
     path = os.environ.get("SPARK_LOCAL_DIRS", "/tmp")
     dirs = path.split(",")
@@ -94,7 +99,7 @@ MemoryBytesSpilled = 0
 DiskBytesSpilled = 0
 
 
-class Aggregator:
+class Aggregator(Generic[C, V]):
     """
     Aggregator has tree functions to merge values into combiner.
 
@@ -103,7 +108,12 @@ class Aggregator:
     mergeCombiners:  (combiner, combiner) -> combiner
     """
 
-    def __init__(self, createCombiner, mergeValue, mergeCombiners):
+    def __init__(
+        self,
+        createCombiner: Callable[[V], C],
+        mergeValue: Callable[[C, V], C],
+        mergeCombiners: Callable[[C, C], C],
+    ):
         self.createCombiner = fail_on_stopiteration(createCombiner)
         self.mergeValue = fail_on_stopiteration(mergeValue)
         self.mergeCombiners = fail_on_stopiteration(mergeCombiners)
@@ -115,38 +125,38 @@ class SimpleAggregator(Aggregator):
     same type with values
     """
 
-    def __init__(self, combiner):
+    def __init__(self, combiner: Callable[[Union[V, C], C], C]):
         Aggregator.__init__(self, lambda x: x, combiner, combiner)
 
 
-class Merger:
+class Merger(Generic[K, V, C]):
     """
     Merge shuffled data together by aggregator
     """
 
-    def __init__(self, aggregator):
+    def __init__(self, aggregator: Aggregator):
         self.agg = aggregator
 
-    def mergeValues(self, iterator):
+    def mergeValues(self, iterator: Iterable[tuple[K, V]]) -> None:
         """Combine the items by creator and combiner"""
         raise NotImplementedError
 
-    def mergeCombiners(self, iterator):
+    def mergeCombiners(self, iterator: Iterable[tuple[K, C]]) -> None:
         """Merge the combined items by mergeCombiner"""
         raise NotImplementedError
 
-    def items(self):
+    def items(self) -> Iterator[V]:
         """Return the merged items ad iterator"""
         raise NotImplementedError
 
 
-def _compressed_serializer(self, serializer=None):
+def _compressed_serializer(serializer: Any = None) -> AutoBatchedSerializer:
     # always use CPickleSerializer to simplify implementation
     ser = CPickleSerializer()
     return AutoBatchedSerializer(CompressedSerializer(ser))
 
 
-class ExternalMerger(Merger):
+class ExternalMerger(Merger, Generic[K, V, C]):
     """
     External merger will dump the aggregated data into disks when
     memory usage goes above the limit, then merge them together.
@@ -205,14 +215,14 @@ class ExternalMerger(Merger):
 
     def __init__(
         self,
-        aggregator,
-        memory_limit=512,
-        serializer=None,
-        localdirs=None,
-        scale=1,
-        partitions=59,
-        batch=1000,
-    ):
+        aggregator: Aggregator[C, V],
+        memory_limit: float = 512,
+        serializer: Any = None,
+        localdirs: Optional[list[str]] = None,
+        scale: int = 1,
+        partitions: int = 59,
+        batch: int = 1000,
+    ) -> None:
         Merger.__init__(self, aggregator)
         self.memory_limit = memory_limit
         self.serializer = _compressed_serializer(serializer)
@@ -224,19 +234,19 @@ class ExternalMerger(Merger):
         # scale is used to scale down the hash of key for recursive hash map
         self.scale = scale
         # un-partitioned merged data
-        self.data = {}
+        self.data: dict[K, C] = {}
         # partitioned merged data, list of dicts
-        self.pdata = []
+        self.pdata: list[dict[K, C]] = []
         # number of chunks dumped into disks
         self.spills = 0
         # randomize the hash of key, id(o) is the address of o (aligned by 8)
         self._seed = id(self) + 7
 
-    def _get_spill_dir(self, n):
+    def _get_spill_dir(self, n: int) -> str:
         """Choose one directory for spill by number n"""
         return os.path.join(self.localdirs[n % len(self.localdirs)], str(n))
 
-    def _next_limit(self):
+    def _next_limit(self) -> float:
         """
         Return the next memory limit. If the memory is not released
         after spilling, it will dump the data only when the used memory
@@ -244,10 +254,11 @@ class ExternalMerger(Merger):
         """
         return max(self.memory_limit, get_used_memory() * 1.05)
 
-    def mergeValues(self, iterator):
+    def mergeValues(self, iterator: Iterable[tuple[K, V]]) -> None:
         """Combine the items by creator and combiner"""
         # speedup attribute lookup
         creator, comb = self.agg.createCombiner, self.agg.mergeValue
+        batch: float
         c, data, pdata, hfun, batch = 0, self.data, self.pdata, self._partition, self.batch
         limit = self.memory_limit
 
@@ -268,22 +279,25 @@ class ExternalMerger(Merger):
         if get_used_memory() >= limit:
             self._spill()
 
-    def _partition(self, key):
+    def _partition(self, key: K) -> int:
         """Return the partition for key"""
         return hash((key, self._seed)) % self.partitions
 
-    def _object_size(self, obj):
+    def _object_size(self, obj: Any) -> int:
         """How much of memory for this obj, assume that all the objects
         consume similar bytes of memory
         """
         return 1
 
-    def mergeCombiners(self, iterator, limit=None):
+    def mergeCombiners(
+        self, iterator: Iterable[tuple[K, C]], limit: Optional[float] = None
+    ) -> None:
         """Merge (K,V) pair by mergeCombiner"""
         if limit is None:
             limit = self.memory_limit
         # speedup attribute lookup
         comb, hfun, objsize = self.agg.mergeCombiners, self._partition, self._object_size
+        batch: float
         c, data, pdata, batch = 0, self.data, self.pdata, self.batch
         for k, v in iterator:
             d = pdata[hfun(k)] if pdata else data
@@ -304,7 +318,7 @@ class ExternalMerger(Merger):
         if limit and get_used_memory() >= limit:
             self._spill()
 
-    def _spill(self):
+    def _spill(self) -> None:
         """
         dump already partitioned data into disks.
 
@@ -351,13 +365,13 @@ class ExternalMerger(Merger):
         gc.collect()  # release the memory as much as possible
         MemoryBytesSpilled += max(used_memory - get_used_memory(), 0) << 20
 
-    def items(self):
+    def items(self) -> Iterator[tuple[K, C]]:
         """Return all merged items as iterator"""
         if not self.pdata and not self.spills:
             return iter(self.data.items())
         return self._external_items()
 
-    def _external_items(self):
+    def _external_items(self) -> Iterator[tuple[K, C]]:
         """Return all partitioned items as iterator"""
         assert not self.data
         if any(self.pdata):
@@ -378,7 +392,7 @@ class ExternalMerger(Merger):
         finally:
             self._cleanup()
 
-    def _merged_items(self, index):
+    def _merged_items(self, index: int) -> Iterable[tuple[K, C]]:
         self.data = {}
         limit = self._next_limit()
         for j in range(self.spills):
@@ -400,7 +414,7 @@ class ExternalMerger(Merger):
 
         return self.data.items()
 
-    def _recursive_merged_items(self, index):
+    def _recursive_merged_items(self, index: int) -> Iterator[tuple[K, C]]:
         """
         merge the partitioned items and return the as iterator
 
@@ -408,7 +422,7 @@ class ExternalMerger(Merger):
         partitioned and merged recursively.
         """
         subdirs = [os.path.join(d, "parts", str(index)) for d in self.localdirs]
-        m = ExternalMerger(
+        m = ExternalMerger[K, V, C](
             self.agg,
             self.memory_limit,
             self.serializer,
@@ -432,13 +446,13 @@ class ExternalMerger(Merger):
 
         return m._external_items()
 
-    def _cleanup(self):
+    def _cleanup(self) -> None:
         """Clean up all the files in disks"""
         for d in self.localdirs:
             shutil.rmtree(d, True)
 
 
-class ExternalSorter:
+class ExternalSorter(Generic[V]):
     """
     ExternalSorter will divide the elements into chunks, sort them in
     memory and dump them into disks, finally merge them back.
@@ -458,19 +472,19 @@ class ExternalSorter:
     True
     """
 
-    def __init__(self, memory_limit, serializer=None):
+    def __init__(self, memory_limit: float, serializer: Any = None):
         self.memory_limit = memory_limit
         self.local_dirs = _get_local_dirs("sort")
         self.serializer = _compressed_serializer(serializer)
 
-    def _get_path(self, n):
+    def _get_path(self, n: int) -> str:
         """Choose one directory for spill by number n"""
         d = self.local_dirs[n % len(self.local_dirs)]
         if not os.path.exists(d):
             os.makedirs(d)
         return os.path.join(d, str(n))
 
-    def _next_limit(self):
+    def _next_limit(self) -> float:
         """
         Return the next memory limit. If the memory is not released
         after spilling, it will dump the data only when the used memory
@@ -478,7 +492,9 @@ class ExternalSorter:
         """
         return max(self.memory_limit, get_used_memory() * 1.05)
 
-    def sorted(self, iterator, key=None, reverse=False):
+    def sorted(
+        self, iterator: Iterable[V], key: Optional[Callable[[V], Any]] = None, reverse: bool = False
+    ) -> Iterable[V]:
         """
         Sort the elements in iterator, do external sort when the memory
         goes above the limit.
@@ -528,7 +544,7 @@ class ExternalSorter:
         return heapq.merge(*chunks, key=key, reverse=reverse)
 
 
-class ExternalList:
+class ExternalList(Generic[V]):
     """
     ExternalList can have many items which cannot be hold in memory in
     the same time.
@@ -555,13 +571,13 @@ class ExternalList:
 
     LIMIT = 10240
 
-    def __init__(self, values):
+    def __init__(self, values: list[V]):
         self.values = values
         self.count = len(values)
         self._file = None
         self._ser = None
 
-    def __getstate__(self):
+    def __getstate__(self) -> tuple[list[V], int, bytes]:
         if self._file is not None:
             self._file.flush()
             with os.fdopen(os.dup(self._file.fileno()), "rb") as f:
@@ -571,7 +587,7 @@ class ExternalList:
             serialized = b""
         return self.values, self.count, serialized
 
-    def __setstate__(self, item):
+    def __setstate__(self, item: tuple[list[V], int, bytes]) -> None:
         self.values, self.count, serialized = item
         if serialized:
             self._open_file()
