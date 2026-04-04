@@ -6757,6 +6757,21 @@
     ],
     "sqlState" : "XXKST"
   },
+  "STREAM_STREAM_JOIN_INCONSISTENT_STATE" : {
+    "message" : [
+      "Detected inconsistency in stream-stream join state."
+    ],
+    "subClass" : {
+      "NULL_VALUE" : {
+        "message" : [
+          "Value at index <valueIndex> is null while numValues is <numValues>.",
+          "joinSide=<joinSide>, storeVersion=<storeVersion>, partitionId=<partitionId>.",
+          "Enable <configKey> as a workaround to skip null values."
+        ]
+      }
+    },
+    "sqlState" : "XXKST"
+  },
   "STRUCT_ARRAY_LENGTH_MISMATCH" : {
     "message" : [
       "Input row doesn't have expected number of values required by the schema. <expected> fields are required while <actual> values are provided."
