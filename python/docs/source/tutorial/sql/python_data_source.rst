@@ -219,15 +219,9 @@ Create a fake data source writer that processes each partition of data, counts t
 Implement a Streaming Reader
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This is a dummy streaming data reader that makes 2 rows available in every micro-batch.
-Spark passes the previous end offset and a :class:`ReadLimit` into
-``latestOffset(start, limit)``, and the reader should respect that limit when
-computing the next end offset.
+This is a dummy streaming data reader that generates 2 rows in every microbatch. The streamReader instance has an integer offset that increases by 2 in every microbatch.
 
 .. code-block:: python
-
-    from pyspark.sql.datasource import InputPartition
-    from pyspark.sql.streaming.datasource import ReadAllAvailable, ReadLimit, ReadMaxRows
 
     class RangePartition(InputPartition):
         def __init__(self, start: int, end: int):
@@ -236,8 +230,7 @@ computing the next end offset.
 
     class FakeStreamReader(DataSourceStreamReader):
         def __init__(self, schema, options):
-            self.schema = schema
-            self.options = options
+            self.current = 0
 
         def initialOffset(self) -> dict:
             """
@@ -245,22 +238,12 @@ computing the next end offset.
             """
             return {"offset": 0}
 
-        def latestOffset(self, start: dict, limit: ReadLimit) -> dict:
+        def latestOffset(self) -> dict:
             """
-            Return the ending offset for the next micro-batch while respecting
-            the engine-provided read limit.
+            Return the current latest offset that the next microbatch will read to.
             """
-            start_idx = start["offset"]
-            latest_available = start_idx + 2
-
-            if isinstance(limit, ReadMaxRows):
-                end_idx = min(start_idx + limit.max_rows, latest_available)
-            elif isinstance(limit, ReadAllAvailable):
-                end_idx = latest_available
-            else:
-                end_idx = latest_available
-
-            return {"offset": end_idx}
+            self.current += 2
+            return {"offset": self.current}
 
         def partitions(self, start: dict, end: dict) -> list[InputPartition]:
             """
@@ -342,7 +325,7 @@ This is the same dummy streaming reader that generates 2 rows every batch implem
             """
             Takes start and end offset as input and read an iterator of data
             deterministically.
-            This is called when query replay batches during restart or after failure.
+            This is called whe query replay batches during restart or after failure.
             """
             start_idx = start["offset"]
             end_idx = end["offset"]
