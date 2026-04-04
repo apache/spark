@@ -7005,13 +7005,13 @@
   },
   "TRUNCATE_PARTITIONS_NOT_SUPPORTED" : {
     "message" : [
-      "Truncate partitions is not supported."
+      "Truncating partitions is not supported."
     ],
     "sqlState" : "0A000"
   },
   "TRUNCATE_PARTITION_NOT_SUPPORTED" : {
     "message" : [
-      "Truncate partition is not supported."
+      "Truncating partition is not supported."
     ],
     "sqlState" : "0A000"
   },
