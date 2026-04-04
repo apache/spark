@@ -338,6 +338,48 @@ This is the same dummy streaming reader that generates 2 rows every batch implem
             """
             pass
 
+Admission Control for Streaming Readers
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To limit the amount of data processed per micro-batch, implement ``getDefaultReadLimit()`` in your stream reader:
+
+.. code-block:: python
+
+    from pyspark.sql.streaming.datasource import ReadAllAvailable, ReadLimit, ReadMaxRows
+
+    class MyStreamReader(DataSourceStreamReader):
+
+        def getDefaultReadLimit(self) -> ReadLimit:
+            """Limit each micro-batch to 100 rows."""
+            return ReadMaxRows(100)
+
+        def latestOffset(self, start: dict, limit: ReadLimit) -> dict:
+            """
+            Return the latest offset, respecting the provided limit.
+            """
+            current = start["offset"]
+
+            if isinstance(limit, ReadMaxRows):
+                # Respect the row limit for admission control
+                end = min(current + limit.max_rows, self.max_available)
+            elif isinstance(limit, ReadAllAvailable):
+                # Read all available data (used by Trigger.Once)
+                end = self.max_available
+            else:
+                # Fallback to default batch size
+                end = min(current + 100, self.max_available)
+
+            return {"offset": end}
+
+This is useful for:
+
+- **Controlling data ingestion rate**: Prevent overwhelming downstream systems
+- **Memory management**: Limit batch sizes to avoid out-of-memory errors
+- **Backpressure handling**: Process data at a sustainable rate
+
+For a complete working example, see:
+``examples/src/main/python/sql/streaming/structured_blockchain_admission_control.py``
+
 Implement a Streaming Writer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

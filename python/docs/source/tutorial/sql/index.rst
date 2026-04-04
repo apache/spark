@@ -27,6 +27,5 @@ Spark SQL
    arrow_python_udtf
    python_udtf
    python_data_source
-   streaming_admission_control
    type_conversions
 
