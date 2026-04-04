@@ -2877,8 +2877,8 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             with ThreadPoolExecutor(max_workers=runner_conf.arrow_concurrency_level) as pool:
                 return list(pool.map(lambda row: udf_func(*row), rows))
 
-        def func(split_index: int, batches: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
-            for input_batch in batches:
+        def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+            for input_batch in data:
                 num_rows = input_batch.num_rows
 
                 # --- Input: Arrow -> Python columns ---
@@ -2962,8 +2962,8 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             with ThreadPoolExecutor(max_workers=runner_conf.arrow_concurrency_level) as pool:
                 return list(pool.map(lambda row: udf_func(*row), rows))
 
-        def func(split_index: int, batches: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
-            for input_batch in batches:
+        def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+            for input_batch in data:
                 # --- Input: Arrow -> pandas columns ---
                 pandas_columns = ArrowBatchTransformer.to_pandas(
                     input_batch,
