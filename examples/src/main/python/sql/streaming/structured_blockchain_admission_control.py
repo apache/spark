@@ -41,7 +41,7 @@ Expected output:
 
 import hashlib
 import time
-from typing import Iterator, List, Sequence, Tuple
+from typing import Iterator, Sequence, Tuple
 
 from pyspark.sql import SparkSession
 from pyspark.sql.datasource import DataSource, DataSourceStreamReader, InputPartition
@@ -176,30 +176,21 @@ def main() -> None:
 
     df = spark.readStream.format("blockchain_example").load()
 
-    blocks_processed: List[int] = []
+    query = (
+        df.writeStream
+        .format("console")
+        .queryName("admission_control_test")
+        .start()
+    )
 
-    def process_batch(batch_df, batch_id: int) -> None:
-        count = batch_df.count()
-        if count > 0:
-            block_nums = [row.block_number for row in batch_df.collect()]
-            blocks_processed.extend(block_nums)
-            print(f"  Batch {batch_id}: {count} blocks (blocks {min(block_nums)}-{max(block_nums)})")
+    print("Streaming query started. Check the Streaming UI to verify:")
+    print("- Each batch should process exactly 20 blocks")
+    print()
 
-    query = df.writeStream.foreachBatch(process_batch).start()
+    time.sleep(30)
 
-    try:
-        time.sleep(30)
-    finally:
-        query.stop()
-        query.awaitTermination()
-
-    print("\n" + "-" * 40)
-    print("Summary")
-    print("-" * 40)
-    print(f"Total blocks processed: {len(blocks_processed)}")
-    if blocks_processed:
-        print(f"Block range: {min(blocks_processed)} to {max(blocks_processed)}")
-    print("Admission control limited each batch to 20 blocks")
+    query.stop()
+    print("\nQuery stopped - check Streaming UI for results")
     print("=" * 70)
 
     spark.stop()
