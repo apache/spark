@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRe
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.ExpressionUtils.expression
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
@@ -201,10 +202,12 @@ private[sql] object PythonSQLUtils extends Logging {
   def jsonFromDataFrame(
       reader: DataFrameReader,
       df: DataFrame): DataFrame = {
-    require(df.schema.fields.length == 1,
-      s"Input DataFrame must have exactly one column, but got ${df.schema.fields.length}")
-    require(df.schema.fields.head.dataType == org.apache.spark.sql.types.StringType,
-      s"Input DataFrame column must be StringType, but got ${df.schema.fields.head.dataType}")
+    if (df.schema.fields.length != 1) {
+      throw QueryCompilationErrors.parseInputNotSingleColumnError(df.schema.fields.length)
+    }
+    if (df.schema.fields.head.dataType != org.apache.spark.sql.types.StringType) {
+      throw QueryCompilationErrors.parseInputNotStringTypeError(df.schema.fields.head.dataType)
+    }
     reader.json(df.as(Encoders.STRING))
   }
 
