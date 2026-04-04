@@ -1200,11 +1200,14 @@ object DependencyOverrides {
         SbtPomKeys.effectivePom.value.getProperties.get("avro.version").asInstanceOf[String]
       val slf4jVersion =
         SbtPomKeys.effectivePom.value.getProperties.get("slf4j.version").asInstanceOf[String]
+      val xzVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("xz.version").asInstanceOf[String]
       Seq(
         "com.google.guava" % "guava" % guavaVersion,
         "jline" % "jline" % jlineVersion,
         "org.apache.avro" % "avro" % avroVersion,
         "org.slf4j" % "slf4j-api" % slf4jVersion,
+        "org.tukaani" % "xz" % xzVersion,
         "org.scala-lang" % "scalap" % scalaVersion.value
       ) ++ jacksonDeps.key.value
     }
@@ -1222,7 +1225,9 @@ object ExcludedDependencies {
       ExclusionRule(organization = "ch.qos.logback"),
       ExclusionRule("org.lz4", "lz4-java"),
       ExclusionRule("org.slf4j", "slf4j-simple"),
-      ExclusionRule("javax.servlet", "javax.servlet-api"))
+      ExclusionRule("javax.servlet", "javax.servlet-api"),
+      ExclusionRule("io.netty", "netty-codec-protobuf"),
+      ExclusionRule("io.netty", "netty-codec-marshalling"))
   )
 }
 

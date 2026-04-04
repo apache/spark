@@ -239,6 +239,7 @@
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
     <kubernetes-client.version>7.6.1</kubernetes-client.version>
     <vertx.version>4.5.26</vertx.version>
+    <xz.version>1.12</xz.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -1602,7 +1603,7 @@
       <dependency>
         <groupId>org.tukaani</groupId>
         <artifactId>xz</artifactId>
-        <version>1.12</version>
+        <version>${xz.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.zookeeper</groupId>
