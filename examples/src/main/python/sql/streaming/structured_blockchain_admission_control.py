@@ -65,7 +65,7 @@ class BlockchainStreamReader(DataSourceStreamReader):
     the number of blocks processed per micro-batch.
     """
 
-    CHAIN_HEIGHT = 100  # Total blocks available
+    CHAIN_HEIGHT = 10000  # Total blocks available
 
     def initialOffset(self) -> dict:
         """Return the starting block number for new queries."""
@@ -169,7 +169,7 @@ def main() -> None:
     print("\n" + "=" * 70)
     print("BLOCKCHAIN STREAMING WITH ADMISSION CONTROL")
     print("=" * 70)
-    print("\nData Source: Simulated blockchain with 100 blocks")
+    print("\nData Source: Simulated blockchain with 10000 blocks")
     print("Admission Control: getDefaultReadLimit() returns ReadMaxRows(20)")
     print("Expected: Each batch processes exactly 20 blocks")
     print()
@@ -188,7 +188,7 @@ def main() -> None:
     query = df.writeStream.foreachBatch(process_batch).start()
 
     try:
-        time.sleep(10)
+        time.sleep(30)
     finally:
         query.stop()
         query.awaitTermination()
