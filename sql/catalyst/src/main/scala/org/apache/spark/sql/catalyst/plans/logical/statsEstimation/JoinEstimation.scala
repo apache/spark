@@ -173,6 +173,12 @@ case class JoinEstimation(join: Join) extends Logging {
    * estimated by ndv of join key A.k1 and B.k1, card2 is the cardinality estimated by histograms
    * of join key A.k2 and B.k2, then the result cardinality would be min(card1, card2).
    *
+   * When equi-join keys exist but lack column statistics (e.g. under AQE where ExchangeQueryStageExec
+   * only provides sizeInBytes and rowCount), falling back to a cartesian product T(A) * T(B) would
+   * significantly overestimate the result size. In this case we assume V(A.k) ~= T(A) and
+   * V(B.k) ~= T(B) (i.e. join keys are approximately unique on each side), and use max(T(A), T(B))
+   * as a reasonable conservative estimate of the result cardinality.
+   *
    * @param keyPairs pairs of join keys
    *
    * @return join cardinality, and column stats for join keys after the join
@@ -182,7 +188,12 @@ case class JoinEstimation(join: Join) extends Logging {
       keyPairs: Seq[(AttributeReference, AttributeReference)],
       leftSideUniqueness: Boolean,
       rightSideUniqueness: Boolean): (BigInt, AttributeMap[ColumnStat]) = {
-    // If there's no column stats available for join keys, estimate as cartesian product.
+    if (keyPairs.isEmpty) {
+      // No column stats available for join keys. Use max(T(A), T(B)) instead of the
+      // cartesian product T(A) * T(B), which would otherwise cause severe overestimation
+      // in downstream joins and aggregations.
+      return (leftStats.rowCount.get.max(rightStats.rowCount.get), AttributeMap.empty)
+    }
     var joinCard: BigInt = (leftSideUniqueness, rightSideUniqueness) match {
       case (true, true) => leftStats.rowCount.get.min(rightStats.rowCount.get)
       case (true, false) => rightStats.rowCount.get

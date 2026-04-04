@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.ResolvedNamespace
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeMap, AttributeReference, Literal, SortOrder}
-import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.internal.SQLConf
@@ -376,6 +376,40 @@ test("range with invalid long value") {
       join,
       expectedStatsCboOn = Statistics(4871880, Some(tableRowCnt), join.stats.attributeStats),
       expectedStatsCboOff = Statistics(sizeInBytes = 4059900 * 2))
+  }
+
+  test("SPARK-56355: equi-join estimation without column stats should not use cartesian product") {
+    val leftKey = attr("left_key")
+    val rightKey = attr("right_key")
+
+    val leftRowCount = 1000
+    val rightRowCount = 500
+    val leftSize = leftRowCount * (8 + 4)
+    val rightSize = rightRowCount * (8 + 4)
+
+    val left = StatsTestPlan(
+      outputList = Seq(leftKey),
+      rowCount = leftRowCount,
+      attributeStats = AttributeMap(Nil),
+      size = Some(leftSize))
+
+    val right = StatsTestPlan(
+      outputList = Seq(rightKey),
+      rowCount = rightRowCount,
+      attributeStats = AttributeMap(Nil),
+      size = Some(rightSize))
+
+    val expectedOutputRows = leftRowCount
+    val expectedSizeInBytes = expectedOutputRows * (8 + 4 + 4)
+
+    Seq(Inner, LeftOuter).foreach { joinType =>
+      val join = Join(left, right, joinType, Some(leftKey === rightKey), JoinHint.NONE)
+
+      checkStats(
+        join,
+        expectedStatsCboOn = Statistics(expectedSizeInBytes, Some(expectedOutputRows)),
+        expectedStatsCboOff = Statistics(leftSize * rightSize))
+    }
   }
 
   test("row size and column stats estimation for sort") {
