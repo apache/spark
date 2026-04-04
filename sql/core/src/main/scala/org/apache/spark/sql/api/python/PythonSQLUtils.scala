@@ -33,9 +33,9 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRe
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.ExpressionUtils.expression
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.python.EvaluatePython
