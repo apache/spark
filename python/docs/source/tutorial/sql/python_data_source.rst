@@ -219,9 +219,15 @@ Create a fake data source writer that processes each partition of data, counts t
 Implement a Streaming Reader
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This is a dummy streaming data reader that generates 2 rows in every microbatch. The streamReader instance has an integer offset that increases by 2 in every microbatch.
+This is a dummy streaming data reader that makes 2 rows available in every micro-batch.
+Spark passes the previous end offset and a :class:`ReadLimit` into
+``latestOffset(start, limit)``, and the reader should respect that limit when
+computing the next end offset.
 
 .. code-block:: python
+
+    from pyspark.sql.datasource import InputPartition
+    from pyspark.sql.streaming.datasource import ReadAllAvailable, ReadLimit, ReadMaxRows
 
     class RangePartition(InputPartition):
         def __init__(self, start: int, end: int):
@@ -230,7 +236,8 @@ This is a dummy streaming data reader that generates 2 rows in every microbatch.
 
     class FakeStreamReader(DataSourceStreamReader):
         def __init__(self, schema, options):
-            self.current = 0
+            self.schema = schema
+            self.options = options
 
         def initialOffset(self) -> dict:
             """
@@ -238,12 +245,22 @@ This is a dummy streaming data reader that generates 2 rows in every microbatch.
             """
             return {"offset": 0}
 
-        def latestOffset(self) -> dict:
+        def latestOffset(self, start: dict, limit: ReadLimit) -> dict:
             """
-            Return the current latest offset that the next microbatch will read to.
+            Return the ending offset for the next micro-batch while respecting
+            the engine-provided read limit.
             """
-            self.current += 2
-            return {"offset": self.current}
+            start_idx = start["offset"]
+            latest_available = start_idx + 2
+
+            if isinstance(limit, ReadMaxRows):
+                end_idx = min(start_idx + limit.max_rows, latest_available)
+            elif isinstance(limit, ReadAllAvailable):
+                end_idx = latest_available
+            else:
+                end_idx = latest_available
+
+            return {"offset": end_idx}
 
         def partitions(self, start: dict, end: dict) -> list[InputPartition]:
             """
@@ -325,7 +342,7 @@ This is the same dummy streaming reader that generates 2 rows every batch implem
             """
             Takes start and end offset as input and read an iterator of data
             deterministically.
-            This is called whe query replay batches during restart or after failure.
+            This is called when query replay batches during restart or after failure.
             """
             start_idx = start["offset"]
             end_idx = end["offset"]
@@ -341,7 +358,9 @@ This is the same dummy streaming reader that generates 2 rows every batch implem
 Admission Control for Streaming Readers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-To limit the amount of data processed per micro-batch, implement ``getDefaultReadLimit()`` in your stream reader:
+To limit the amount of data processed per micro-batch, implement
+``getDefaultReadLimit()`` and have ``latestOffset(start, limit)`` honor the
+engine-provided ``ReadLimit``:
 
 .. code-block:: python
 
@@ -350,8 +369,8 @@ To limit the amount of data processed per micro-batch, implement ``getDefaultRea
     class MyStreamReader(DataSourceStreamReader):
 
         def getDefaultReadLimit(self) -> ReadLimit:
-            """Limit each micro-batch to 100 rows."""
-            return ReadMaxRows(100)
+            """Limit each micro-batch to at most 20 rows."""
+            return ReadMaxRows(20)
 
         def latestOffset(self, start: dict, limit: ReadLimit) -> dict:
             """
@@ -360,16 +379,21 @@ To limit the amount of data processed per micro-batch, implement ``getDefaultRea
             current = start["offset"]
 
             if isinstance(limit, ReadMaxRows):
-                # Respect the row limit for admission control
+                # Respect the row limit for admission control.
                 end = min(current + limit.max_rows, self.max_available)
             elif isinstance(limit, ReadAllAvailable):
-                # Read all available data (used by Trigger.Once)
+                # The engine requested every remaining row.
                 end = self.max_available
             else:
-                # Fallback to default batch size
-                end = min(current + 100, self.max_available)
+                # Fallback to the same default batch size.
+                end = min(current + 20, self.max_available)
 
             return {"offset": end}
+
+When Spark uses the default ``ReadMaxRows(20)`` limit, each full micro-batch
+reads 20 rows, and the final micro-batch reads only the remaining rows when
+fewer than 20 are left. If Spark passes ``ReadAllAvailable``, the reader
+should return all remaining rows instead.
 
 This is useful for:
 

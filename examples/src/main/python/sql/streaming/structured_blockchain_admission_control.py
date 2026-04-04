@@ -20,10 +20,10 @@ Demonstrates admission control using a simulated blockchain data source.
 
 This example shows how to build a custom streaming data source that
 simulates reading blockchain blocks while respecting admission control
-limits using getDefaultReadLimit() and ReadMaxRows.
+limits using getDefaultReadLimit() and ReadMaxRows(20).
 
 Key concepts demonstrated:
-- getDefaultReadLimit() returning ReadMaxRows to limit blocks per micro-batch
+- getDefaultReadLimit() returning ReadMaxRows(20) to limit blocks per micro-batch
 - latestOffset(start, limit) respecting the ReadLimit parameter
 - Controlled data ingestion rate for backpressure management
 
@@ -32,11 +32,12 @@ Usage:
         structured_blockchain_admission_control.py
 
 Expected output:
-    Each micro-batch processes exactly 20 blocks (controlled by admission control):
+    Each micro-batch processes up to 20 blocks (controlled by admission control):
         Batch 0: blocks 0-19
         Batch 1: blocks 20-39
         Batch 2: blocks 40-59
         ...
+    The final batch may contain fewer than 20 blocks when the chain is exhausted.
 """
 
 import hashlib
@@ -171,7 +172,7 @@ def main() -> None:
     print("=" * 70)
     print("\nData Source: Simulated blockchain with 10000 blocks")
     print("Admission Control: getDefaultReadLimit() returns ReadMaxRows(20)")
-    print("Expected: Each batch processes exactly 20 blocks")
+    print("Expected: Each batch processes up to 20 blocks")
     print()
 
     df = spark.readStream.format("blockchain_example").load()
@@ -184,7 +185,8 @@ def main() -> None:
     )
 
     print("Streaming query started. Check the Streaming UI to verify:")
-    print("- Each batch should process exactly 20 blocks")
+    print("- Each full batch should process 20 blocks")
+    print("- The final batch may be smaller when fewer than 20 blocks remain")
     print()
 
     time.sleep(30)
