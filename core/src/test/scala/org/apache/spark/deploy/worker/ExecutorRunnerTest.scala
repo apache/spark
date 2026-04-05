@@ -21,6 +21,7 @@ import java.io.File
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.{ApplicationDescription, Command, DeployTestUtils, ExecutorState}
+import org.apache.spark.internal.config.EXECUTOR_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED
 import org.apache.spark.resource.ResourceProfile
 
 class ExecutorRunnerTest extends SparkFunSuite {
@@ -38,5 +39,30 @@ class ExecutorRunnerTest extends SparkFunSuite {
       appDesc.command, new SecurityManager(conf), 1234, sparkHome, er.substituteVariables)
     val builderCommand = builder.command()
     assert(builderCommand.get(builderCommand.size() - 1) === appId)
+  }
+
+  test("SPARK-56157: APC flag not set by default") {
+    val runner = createExecutorRunner(new SparkConf(), cores = 2)
+    assert(runner.activeProcessorCountOpts() === Seq.empty)
+  }
+
+  test("SPARK-56157: APC flag set when enabled") {
+    val conf = new SparkConf().set(EXECUTOR_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED, true)
+    val runner = createExecutorRunner(conf, cores = 2)
+    assert(runner.activeProcessorCountOpts() === Seq("-XX:ActiveProcessorCount=2"))
+  }
+
+  test("SPARK-56157: APC flag reflects core count") {
+    val conf = new SparkConf().set(EXECUTOR_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED, true)
+    val runner = createExecutorRunner(conf, cores = 7)
+    assert(runner.activeProcessorCountOpts() === Seq("-XX:ActiveProcessorCount=7"))
+  }
+
+  private def createExecutorRunner(conf: SparkConf, cores: Int): ExecutorRunner = {
+    new ExecutorRunner(
+      "appId", 1, DeployTestUtils.createAppDesc(), cores, 1234, null,
+      "workerId", "http://", "host", 123, "publicAddress",
+      new File(sys.props.getOrElse("spark.test.home", ".")), new File("workDir"), "spark://worker",
+      conf, Seq("localDir"), ExecutorState.RUNNING, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
   }
 }

@@ -27,8 +27,9 @@ import org.mockito.invocation.InvocationOnMock
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.{Command, DriverDescription}
+import org.apache.spark.deploy.{Command, DeployTestUtils, DriverDescription}
 import org.apache.spark.deploy.master.DriverState
+import org.apache.spark.internal.config.DRIVER_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Clock
 
@@ -42,6 +43,14 @@ class DriverRunnerTest extends SparkFunSuite {
     spy[DriverRunner](new DriverRunner(conf, "driverId", new File("workDir"), new File("sparkHome"),
       driverDescription, worker, "spark://1.2.3.4/worker/", "http://publicAddress:80",
       new SecurityManager(conf)))
+  }
+
+  private def createDriverRunnerWithCores(conf: SparkConf, cores: Int): DriverRunner = {
+    val driverDesc = new DriverDescription(
+      "hdfs://some-dir/some.jar", 100, cores, false, DeployTestUtils.createDriverCommand())
+    new DriverRunner(conf, "driver-1", new File("workDir"), new File("sparkHome"),
+      driverDesc, null, "spark://worker", "http://publicAddress:80",
+      new SecurityManager(conf))
   }
 
   private def createProcessBuilderAndProcess(): (ProcessBuilderLike, Process) = {
@@ -207,5 +216,22 @@ class DriverRunnerTest extends SparkFunSuite {
       assert(runner.finalState.get === DriverState.ERROR)
       assert(runner.finalException.get.isInstanceOf[RuntimeException])
     }
+  }
+
+  test("SPARK-56157: APC flag not set by default") {
+    val runner = createDriverRunnerWithCores(new SparkConf(), cores = 2)
+    assert(runner.activeProcessorCountOpts() === Seq.empty)
+  }
+
+  test("SPARK-56157: APC flag set when enabled") {
+    val conf = new SparkConf().set(DRIVER_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED, true)
+    val runner = createDriverRunnerWithCores(conf, cores = 2)
+    assert(runner.activeProcessorCountOpts() === Seq("-XX:ActiveProcessorCount=2"))
+  }
+
+  test("SPARK-56157: APC flag reflects core count") {
+    val conf = new SparkConf().set(DRIVER_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED, true)
+    val runner = createDriverRunnerWithCores(conf, cores = 5)
+    assert(runner.activeProcessorCountOpts() === Seq("-XX:ActiveProcessorCount=5"))
   }
 }
