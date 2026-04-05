@@ -2528,6 +2528,25 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("INSERT VALUES with CAST to conflicting collated string types") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (c1 STRING COLLATE UTF8_LCASE)")
+          sql(
+            """INSERT INTO t VALUES
+              |  (CAST('a' AS STRING COLLATE UTF8_LCASE)),
+              |  (CAST('b' AS STRING COLLATE UNICODE))""".stripMargin)
+          checkAnswer(
+            sql("SELECT * FROM t"),
+            Seq(Row("a"), Row("b"))
+          )
+        }
+      }
+    }
+  }
+
   test("INSERT VALUES with mixed collations and NULLs") {
     Seq(true, false).foreach { eagerEval =>
       withSQLConf(
@@ -2558,6 +2577,25 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           sql("INSERT OVERWRITE t VALUES ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE)")
           checkAnswer(
             sql("SELECT * FROM t"),
+            Seq(Row("a"), Row("b"))
+          )
+        }
+      }
+    }
+  }
+
+  test("INSERT REPLACE WHERE VALUES with collated columns") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("testcat.t") {
+          sql("CREATE TABLE testcat.t (c1 STRING COLLATE UTF8_LCASE)")
+          sql("INSERT INTO testcat.t VALUES ('x')")
+          sql(
+            """INSERT INTO testcat.t REPLACE WHERE c1 = 'x'
+              |  VALUES ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE)""".stripMargin)
+          checkAnswer(
+            sql("SELECT * FROM testcat.t"),
             Seq(Row("a"), Row("b"))
           )
         }

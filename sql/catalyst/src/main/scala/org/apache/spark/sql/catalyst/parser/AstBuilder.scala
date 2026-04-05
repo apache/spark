@@ -2880,10 +2880,10 @@ class AstBuilder extends DataTypeAstBuilder
    * Returns whether we can eagerly evaluate the given inline table at parse time.
    *
    * Eager evaluation is not allowed if the config is disabled, or if the inline table is part of
-   * a `CREATE TABLE/VIEW` statement and contains non-collated string literals or default string
-   * producing built-in functions (e.g., `current_database()`). In those cases, the default
-   * collation of the object must be applied to the string literals. Since default collation is
-   * applied during analysis, the inline table cannot be eagerly evaluated.
+   * a `CREATE TABLE/VIEW` statement and contains expressions that need default collation
+   * resolution (e.g., string literals or casts to string types). In those cases, the default
+   * collation of the object must be applied during analysis, so the inline table cannot be
+   * eagerly evaluated.
    */
   private def canEagerlyEvaluateInlineTable(
       ctx: InlineTableContext, table: UnresolvedInlineTable): Boolean = {
@@ -2898,14 +2898,20 @@ class AstBuilder extends DataTypeAstBuilder
 
   // Checks if the VALUES clause is directly part of an INSERT statement (e.g.,
   // `INSERT INTO t VALUES (...)`) by walking up the parser context tree. Returns false if a
-  // FROM clause is found first, meaning the VALUES is inside a subquery.
+  // FROM clause is found first, meaning the VALUES is inside a subquery
+  // (e.g., `INSERT INTO t SELECT * FROM VALUES (...) AS T`).
   private def isInlineTableInsideInsertValuesClause(ctx: InlineTableContext): Boolean = {
     var currentContext: ParserRuleContext = ctx
     while (currentContext != null) {
       currentContext match {
-        case _: InsertIntoTableContext | _: InsertOverwriteTableContext |
-             _: InsertIntoReplaceUsingContext =>
-          return true
+        case c: SingleInsertQueryContext =>
+          c.insertInto() match {
+            case _: InsertIntoTableContext | _: InsertOverwriteTableContext |
+                 _: InsertIntoReplaceUsingContext | _: InsertIntoReplaceBooleanCondContext =>
+              return true
+            case _ =>
+              return false
+          }
         case _: FromClauseContext =>
           return false
         case _ =>
