@@ -549,54 +549,6 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         return "ArrowStreamPandasUDFSerializer"
 
 
-class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
-    """
-    Serializer used by Python worker to evaluate Arrow UDFs
-    """
-
-    def __init__(
-        self,
-        *,
-        safecheck,
-        arrow_cast,
-    ):
-        super().__init__()
-        self._safecheck = safecheck
-        self._arrow_cast = arrow_cast
-
-    def dump_stream(self, iterator, stream):
-        """
-        Override because Arrow UDFs require a START_ARROW_STREAM before the Arrow stream is sent.
-        This should be sent after creating the first record batch so in case of an error, it can
-        be sent back to the JVM before the Arrow stream starts.
-        """
-        import pyarrow as pa
-
-        def create_batch(
-            arr_tuples: List[Tuple["pa.Array", "pa.DataType"]],
-        ) -> "pa.RecordBatch":
-            names = ["_%d" % i for i in range(len(arr_tuples))]
-            arrs = [arr for arr, _ in arr_tuples]
-            batch = pa.RecordBatch.from_arrays(arrs, names)
-            target_schema = pa.schema([pa.field(n, t) for n, (_, t) in zip(names, arr_tuples)])
-            return ArrowBatchTransformer.enforce_schema(
-                batch, target_schema, safecheck=self._safecheck, arrow_cast=self._arrow_cast
-            )
-
-        def normalize(packed):
-            if len(packed) == 2 and isinstance(packed[1], pa.DataType):
-                return [packed]
-            return list(packed)
-
-        batches = self._write_stream_start(
-            (create_batch(normalize(packed)) for packed in iterator), stream
-        )
-        return ArrowStreamSerializer.dump_stream(self, batches, stream)
-
-    def __repr__(self):
-        return "ArrowStreamArrowUDFSerializer"
-
-
 class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
     """
     Serializer used by Python worker to evaluate Arrow-optimized Python UDTFs.
