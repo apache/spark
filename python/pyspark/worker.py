@@ -2536,8 +2536,8 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
             PythonEvalType.SQL_SCALAR_ARROW_UDF,
             PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+            PythonEvalType.SQL_ARROW_BATCHED_UDF,
         ):
-            ser = ArrowStreamSerializer(write_start_stream=True)
             ser = ArrowStreamSerializer(write_start_stream=True)
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
