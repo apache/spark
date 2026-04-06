@@ -1637,7 +1637,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     -230L, -14569L, -92L, -7434253L, 35L, 6L, 9L, -323L, 5L,
     -32L, -64L, -256L, 64L, 32L, 1024L, 4096L, 0L)
 
-  testWithColumnFamiliesAndEncodingTypes("rocksdb range scan - scan bounded range",
+  testWithColumnFamiliesAndEncodingTypes("rocksdb range scan",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
 
     tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
@@ -1652,151 +1652,50 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
             RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
         }
 
-        val timestamps = Seq(100L, 200L, 300L, 400L, 500L)
-        timestamps.foreach { ts =>
+        diverseTimestamps.foreach { ts =>
           store.put(dataToKeyRowWithRangeScan(ts, "a"), dataToValueRow(ts.toInt), cfName)
         }
 
-        val startKey = dataToKeyRowWithRangeScan(200L, "a")
-        val endKey = dataToKeyRowWithRangeScan(401L, "a")
-        val iter = store.scan(Some(startKey), Some(endKey), cfName)
-        val results = iter.map { pair =>
+        // Bounded positive range [0, 100)
+        val boundedIter = store.scan(
+          Some(dataToKeyRowWithRangeScan(0L, "a")),
+          Some(dataToKeyRowWithRangeScan(100L, "a")), cfName)
+        val boundedResults = boundedIter.map { pair =>
           (pair.key.getLong(0), pair.value.getInt(0))
         }.toList
-        iter.close()
+        boundedIter.close()
+        val expectedBoundedTs = diverseTimestamps.filter(ts => ts >= 0 && ts < 100).sorted
+        assert(boundedResults.map(_._1) === expectedBoundedTs)
+        assert(boundedResults.map(_._2) === expectedBoundedTs.map(_.toInt))
 
-        assert(results.map(_._1) === Seq(200L, 300L, 400L))
-        assert(results.map(_._2) === Seq(200, 300, 400))
-      } finally {
-        if (!store.hasCommitted) store.abort()
-      }
-    }
-  }
+        // None startKey scans from beginning to 0
+        val noneStartIter = store.scan(
+          None, Some(dataToKeyRowWithRangeScan(0L, "a")), cfName)
+        val noneStartResults = noneStartIter.map(_.key.getLong(0)).toList
+        noneStartIter.close()
+        assert(noneStartResults === diverseTimestamps.filter(_ < 0).sorted)
 
-  testWithColumnFamiliesAndEncodingTypes(
-    "rocksdb range scan - scan with None startKey scans from beginning",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+        // None endKey scans from 1000 to end
+        val noneEndIter = store.scan(
+          Some(dataToKeyRowWithRangeScan(1000L, "a")), None, cfName)
+        val noneEndResults = noneEndIter.map(_.key.getLong(0)).toList
+        noneEndIter.close()
+        assert(noneEndResults === diverseTimestamps.filter(_ >= 1000).sorted)
 
-    tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
-      RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
-      colFamiliesEnabled)) { provider =>
-      val store = provider.getStore(0)
-      try {
-        val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
-        if (colFamiliesEnabled) {
-          store.createColFamilyIfAbsent(cfName,
-            keySchemaWithRangeScan, valueSchema,
-            RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
-        }
+        // Empty range [10, 31) - no entries between 9 and 32
+        val emptyIter = store.scan(
+          Some(dataToKeyRowWithRangeScan(10L, "a")),
+          Some(dataToKeyRowWithRangeScan(31L, "a")), cfName)
+        assert(!emptyIter.hasNext)
+        emptyIter.close()
 
-        val timestamps = Seq(100L, 200L, 300L, 400L, 500L)
-        timestamps.foreach { ts =>
-          store.put(dataToKeyRowWithRangeScan(ts, "a"), dataToValueRow(ts.toInt), cfName)
-        }
-
-        val endKey = dataToKeyRowWithRangeScan(301L, "a")
-        val iter = store.scan(None, Some(endKey), cfName)
-        val results = iter.map(_.key.getLong(0)).toList
-        iter.close()
-
-        assert(results === Seq(100L, 200L, 300L))
-      } finally {
-        if (!store.hasCommitted) store.abort()
-      }
-    }
-  }
-
-  testWithColumnFamiliesAndEncodingTypes(
-    "rocksdb range scan - scan with None endKey scans to end",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
-
-    tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
-      RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
-      colFamiliesEnabled)) { provider =>
-      val store = provider.getStore(0)
-      try {
-        val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
-        if (colFamiliesEnabled) {
-          store.createColFamilyIfAbsent(cfName,
-            keySchemaWithRangeScan, valueSchema,
-            RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
-        }
-
-        val timestamps = Seq(100L, 200L, 300L, 400L, 500L)
-        timestamps.foreach { ts =>
-          store.put(dataToKeyRowWithRangeScan(ts, "a"), dataToValueRow(ts.toInt), cfName)
-        }
-
-        val startKey = dataToKeyRowWithRangeScan(300L, "a")
-        val iter = store.scan(Some(startKey), None, cfName)
-        val results = iter.map(_.key.getLong(0)).toList
-        iter.close()
-
-        assert(results === Seq(300L, 400L, 500L))
-      } finally {
-        if (!store.hasCommitted) store.abort()
-      }
-    }
-  }
-
-  testWithColumnFamiliesAndEncodingTypes("rocksdb range scan - scan empty range",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
-
-    tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
-      RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
-      colFamiliesEnabled)) { provider =>
-      val store = provider.getStore(0)
-      try {
-        val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
-        if (colFamiliesEnabled) {
-          store.createColFamilyIfAbsent(cfName,
-            keySchemaWithRangeScan, valueSchema,
-            RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
-        }
-
-        store.put(dataToKeyRowWithRangeScan(100L, "a"), dataToValueRow(100), cfName)
-        store.put(dataToKeyRowWithRangeScan(500L, "a"), dataToValueRow(500), cfName)
-
-        val startKey = dataToKeyRowWithRangeScan(200L, "a")
-        val endKey = dataToKeyRowWithRangeScan(300L, "a")
-        val iter = store.scan(Some(startKey), Some(endKey), cfName)
-        assert(!iter.hasNext)
-        iter.close()
-      } finally {
-        if (!store.hasCommitted) store.abort()
-      }
-    }
-  }
-
-  testWithColumnFamiliesAndEncodingTypes(
-    "rocksdb range scan - scan with diverse timestamps bounded range",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
-
-    tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
-      RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
-      colFamiliesEnabled)) { provider =>
-      val store = provider.getStore(0)
-      try {
-        val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
-        if (colFamiliesEnabled) {
-          store.createColFamilyIfAbsent(cfName,
-            keySchemaWithRangeScan, valueSchema,
-            RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
-        }
-
-        diverseTimestamps.zipWithIndex.foreach { case (ts, idx) =>
-          store.put(dataToKeyRowWithRangeScan(ts, "a"), dataToValueRow(idx), cfName)
-        }
-
-        // Scan negative range: [-300, 0)
-        val startKey = dataToKeyRowWithRangeScan(-300L, "a")
-        val endKey = dataToKeyRowWithRangeScan(0L, "a")
-        val iter = store.scan(Some(startKey), Some(endKey), cfName)
-        val results = iter.map(_.key.getLong(0)).toList
-        iter.close()
-
-        val expected = diverseTimestamps.filter(ts => ts >= -300 && ts < 0).sorted
-        assert(results === expected)
+        // Bounded negative range [-300, 0)
+        val negIter = store.scan(
+          Some(dataToKeyRowWithRangeScan(-300L, "a")),
+          Some(dataToKeyRowWithRangeScan(0L, "a")), cfName)
+        val negResults = negIter.map(_.key.getLong(0)).toList
+        negIter.close()
+        assert(negResults === diverseTimestamps.filter(ts => ts >= -300 && ts < 0).sorted)
       } finally {
         if (!store.hasCommitted) store.abort()
       }
@@ -1842,88 +1741,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
   }
 
   testWithColumnFamiliesAndEncodingTypes(
-    "rocksdb range scan - scanWithMultiValues bounded range",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
-
-    // Multiple values per key requires column families
-    if (colFamiliesEnabled) {
-      tryWithProviderResource(newStoreProvider(
-        StateStoreId(newDir(), Random.nextInt(), 0),
-        RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
-        keySchema = keySchemaWithRangeScan,
-        useColumnFamilies = colFamiliesEnabled,
-        useMultipleValuesPerKey = true)) { provider =>
-        val store = provider.getStore(0)
-        try {
-          val cfName = "testColFamily"
-          store.createColFamilyIfAbsent(cfName,
-            keySchemaWithRangeScan, valueSchema,
-            RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
-            useMultipleValuesPerKey = true)
-
-          val timestamps = Seq(100L, 200L, 300L, 400L, 500L)
-          timestamps.foreach { ts =>
-            store.putList(dataToKeyRowWithRangeScan(ts, "a"),
-              Array(dataToValueRow(ts.toInt), dataToValueRow(ts.toInt + 1)), cfName)
-          }
-
-          val startKey = dataToKeyRowWithRangeScan(200L, "a")
-          val endKey = dataToKeyRowWithRangeScan(401L, "a")
-          val iter = store.scanWithMultiValues(Some(startKey), Some(endKey), cfName)
-          val results = iter.map { pair =>
-            (pair.key.getLong(0), pair.value.getInt(0))
-          }.toList
-          iter.close()
-
-          val resultTimestamps = results.map(_._1).distinct
-          assert(resultTimestamps === Seq(200L, 300L, 400L))
-          assert(results.length === 6) // 3 timestamps x 2 values each
-        } finally {
-          if (!store.hasCommitted) store.abort()
-        }
-      }
-    }
-  }
-
-  testWithColumnFamiliesAndEncodingTypes(
-    "rocksdb range scan - scanWithMultiValues with None startKey",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
-
-    if (colFamiliesEnabled) {
-      tryWithProviderResource(newStoreProvider(
-        StateStoreId(newDir(), Random.nextInt(), 0),
-        RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
-        keySchema = keySchemaWithRangeScan,
-        useColumnFamilies = colFamiliesEnabled,
-        useMultipleValuesPerKey = true)) { provider =>
-        val store = provider.getStore(0)
-        try {
-          val cfName = "testColFamily"
-          store.createColFamilyIfAbsent(cfName,
-            keySchemaWithRangeScan, valueSchema,
-            RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
-            useMultipleValuesPerKey = true)
-
-          val timestamps = Seq(100L, 200L, 300L, 400L, 500L)
-          timestamps.foreach { ts =>
-            store.merge(dataToKeyRowWithRangeScan(ts, "a"), dataToValueRow(ts.toInt), cfName)
-          }
-
-          val endKey = dataToKeyRowWithRangeScan(301L, "a")
-          val iter = store.scanWithMultiValues(None, Some(endKey), cfName)
-          val results = iter.map(_.key.getLong(0)).toList
-          iter.close()
-
-          assert(results === Seq(100L, 200L, 300L))
-        } finally {
-          if (!store.hasCommitted) store.abort()
-        }
-      }
-    }
-  }
-
-  testWithColumnFamiliesAndEncodingTypes(
-    "rocksdb range scan - scanWithMultiValues with diverse timestamps",
+    "rocksdb range scan - scanWithMultiValues",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
 
     if (colFamiliesEnabled) {
@@ -1946,19 +1764,30 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
               Array(dataToValueRow(idx * 10), dataToValueRow(idx * 10 + 1)), cfName)
           }
 
-          // Scan [0, 1000] (inclusive via endKey = 1001)
-          val startKey = dataToKeyRowWithRangeScan(0L, "a")
-          val endKey = dataToKeyRowWithRangeScan(1001L, "a")
-          val iter = store.scanWithMultiValues(Some(startKey), Some(endKey), cfName)
-          val results = iter.map { pair =>
+          // Bounded range [0, 1001)
+          val boundedIter = store.scanWithMultiValues(
+            Some(dataToKeyRowWithRangeScan(0L, "a")),
+            Some(dataToKeyRowWithRangeScan(1001L, "a")), cfName)
+          val boundedResults = boundedIter.map { pair =>
             (pair.key.getLong(0), pair.value.getInt(0))
           }.toList
-          iter.close()
+          boundedIter.close()
 
           val expectedTimestamps = diverseTimestamps.filter(ts => ts >= 0 && ts <= 1000).sorted
-          val resultTimestamps = results.map(_._1).distinct
-          assert(resultTimestamps === expectedTimestamps)
-          assert(results.length === expectedTimestamps.length * 2)
+          assert(boundedResults.map(_._1).distinct === expectedTimestamps)
+          val expectedValues = diverseTimestamps.zipWithIndex
+            .filter { case (ts, _) => ts >= 0 && ts <= 1000 }
+            .sortBy(_._1)
+            .flatMap { case (_, idx) => Seq(idx * 10, idx * 10 + 1) }
+          assert(boundedResults.map(_._2) === expectedValues)
+
+          // None startKey scans from beginning to 0
+          val noneStartIter = store.scanWithMultiValues(
+            None, Some(dataToKeyRowWithRangeScan(0L, "a")), cfName)
+          val noneStartResults = noneStartIter.map(_.key.getLong(0)).toList
+          noneStartIter.close()
+
+          assert(noneStartResults.distinct === diverseTimestamps.filter(_ < 0).sorted)
         } finally {
           if (!store.hasCommitted) store.abort()
         }

@@ -567,7 +567,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
   }
 
   Seq("unsaferow", "avro").foreach { encoding =>
-    test(s"scan with postfix encoder: bounded range (encoding = $encoding)") {
+    test(s"scan with postfix encoder (encoding = $encoding)") {
       tryWithProviderResource(
         newStoreProviderWithTimestampEncoder(
           encoderType = "postfix",
@@ -577,97 +577,54 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
         val store = provider.getStore(0)
 
         try {
-          // Insert entries for key1 at various timestamps
           diverseTimestamps.zipWithIndex.foreach { case (ts, idx) =>
             val keyRow = keyAndTimestampToRow("key1", 1, ts)
             store.putList(keyRow, Array(valueToRow(idx * 10), valueToRow(idx * 10 + 1)))
           }
 
-          // Insert entries for key2 to verify isolation
+          // key2 entry to verify prefix isolation
           store.putList(keyAndTimestampToRow("key2", 1, 500L),
             Array(valueToRow(999)))
 
-          // Scan key1 in range [0, 1000] (inclusive via endKey = 1001)
-          val prefixKey = keyToRow("key1", 1)
-          val startKey = keyAndTimestampToRow("key1", 1, 0L)
-          val endKey = keyAndTimestampToRow("key1", 1, 1001L)
-          val iter = store.scanWithMultiValues(Some(startKey), Some(endKey))
-
-          val results = iter.map { pair =>
+          // Bounded range [0, 1001)
+          val boundedIter = store.scanWithMultiValues(
+            Some(keyAndTimestampToRow("key1", 1, 0L)),
+            Some(keyAndTimestampToRow("key1", 1, 1001L)))
+          val boundedResults = boundedIter.map { pair =>
             (pair.key.getLong(2), pair.value.getInt(0))
           }.toList
-          iter.close()
+          boundedIter.close()
 
-          // Timestamps in [0, 1000]: 0, 1, 2, 5, 6, 8, 9, 32, 35, 64, 90, 931
           val expectedTimestamps = diverseTimestamps.filter(ts => ts >= 0 && ts <= 1000).sorted
-          val resultTimestamps = results.map(_._1).distinct
-          assert(resultTimestamps === expectedTimestamps)
-          assert(results.length === expectedTimestamps.length * 2) // 2 values per timestamp
+          assert(boundedResults.map(_._1).distinct === expectedTimestamps)
+          val expectedValues = diverseTimestamps.zipWithIndex
+            .filter { case (ts, _) => ts >= 0 && ts <= 1000 }
+            .sortBy(_._1)
+            .flatMap { case (_, idx) => Seq(idx * 10, idx * 10 + 1) }
+          assert(boundedResults.map(_._2) === expectedValues)
+
+          // Full range [MinValue, MaxValue)
+          val fullIter = store.scanWithMultiValues(
+            Some(keyAndTimestampToRow("key1", 1, Long.MinValue)),
+            Some(keyAndTimestampToRow("key1", 1, Long.MaxValue)))
+          val fullResults = fullIter.map(_.key.getLong(2)).toList
+          fullIter.close()
+
+          assert(fullResults.distinct === diverseTimestamps.sorted)
+
+          // Empty range [10, 31) - no diverseTimestamps entries between 9 and 32
+          val emptyIter = store.scanWithMultiValues(
+            Some(keyAndTimestampToRow("key1", 1, 10L)),
+            Some(keyAndTimestampToRow("key1", 1, 31L)))
+          assert(!emptyIter.hasNext)
+          emptyIter.close()
         } finally {
           store.abort()
         }
       }
     }
 
-    test(s"scan with postfix encoder: full range falls back correctly (encoding = $encoding)") {
-      tryWithProviderResource(
-        newStoreProviderWithTimestampEncoder(
-          encoderType = "postfix",
-          useMultipleValuesPerKey = true,
-          dataEncoding = encoding)
-      ) { provider =>
-        val store = provider.getStore(0)
-
-        try {
-          val timestamps = Seq(100L, 200L, 300L)
-          timestamps.foreach { ts =>
-            store.putList(keyAndTimestampToRow("key1", 1, ts),
-              Array(valueToRow(ts.toInt)))
-          }
-
-          // Scan with Some(startKey) covering full range
-          val startKey = keyAndTimestampToRow("key1", 1, Long.MinValue)
-          val endKey = keyAndTimestampToRow("key1", 1, Long.MaxValue)
-          val iter = store.scanWithMultiValues(Some(startKey), Some(endKey))
-          val results = iter.map(_.key.getLong(2)).toList
-          iter.close()
-
-          assert(results === timestamps)
-        } finally {
-          store.abort()
-        }
-      }
-    }
-
-    test(s"scan with postfix encoder: empty range (encoding = $encoding)") {
-      tryWithProviderResource(
-        newStoreProviderWithTimestampEncoder(
-          encoderType = "postfix",
-          useMultipleValuesPerKey = true,
-          dataEncoding = encoding)
-      ) { provider =>
-        val store = provider.getStore(0)
-
-        try {
-          store.putList(keyAndTimestampToRow("key1", 1, 1000L),
-            Array(valueToRow(100)))
-          store.putList(keyAndTimestampToRow("key1", 1, 2000L),
-            Array(valueToRow(200)))
-
-          // Scan range that contains no entries
-          val startKey = keyAndTimestampToRow("key1", 1, 1500L)
-          val endKey = keyAndTimestampToRow("key1", 1, 1600L)
-          val iter = store.scanWithMultiValues(Some(startKey), Some(endKey))
-          assert(!iter.hasNext)
-          iter.close()
-        } finally {
-          store.abort()
-        }
-      }
-    }
-
-    test(s"scan with prefix encoder: None startKey scans from beginning " +
-      s"(encoding = $encoding)") {
+    test(s"scan with prefix encoder (encoding = $encoding)") {
       tryWithProviderResource(
         newStoreProviderWithTimestampEncoder(
           encoderType = "prefix",
@@ -677,53 +634,30 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
         val store = provider.getStore(0)
 
         try {
-          // Insert entries at various timestamps
           val timestamps = Seq(100L, 200L, 300L, 400L, 500L)
-          timestamps.foreach { ts =>
-            store.merge(keyAndTimestampToRow("key1", 1, ts), valueToRow(ts.toInt))
-          }
-
-          // Scan from beginning (None) up to 301 (exclusive), covering [..300]
-          val endKey = keyAndTimestampToRow("key1", 1, 301L)
-          val iter = store.scanWithMultiValues(None, Some(endKey))
-          val results = iter.map(_.key.getLong(2)).toList
-          iter.close()
-
-          assert(results === Seq(100L, 200L, 300L))
-        } finally {
-          store.abort()
-        }
-      }
-    }
-
-    test(s"scan with prefix encoder: boundary safety check (encoding = $encoding)") {
-      tryWithProviderResource(
-        newStoreProviderWithTimestampEncoder(
-          encoderType = "prefix",
-          useMultipleValuesPerKey = true,
-          dataEncoding = encoding)
-      ) { provider =>
-        val store = provider.getStore(0)
-
-        try {
-          val timestamps = Seq(100L, 200L, 300L)
           timestamps.foreach { ts =>
             store.merge(keyAndTimestampToRow("key1", 1, ts), valueToRow(ts.toInt))
           }
           store.merge(keyAndTimestampToRow("key2", 2, 150L), valueToRow(150))
 
-          // Scan with endKey at timestamp 201 with dummyKey - should include
-          // everything up to timestamp 200 regardless of join key
-          val endKey = keyAndTimestampToRow("key1", 1, 201L)
-          val iter = store.scanWithMultiValues(None, Some(endKey))
-          val results = iter.map { pair =>
+          // None startKey scans from beginning up to 301 (exclusive)
+          val iter1 = store.scanWithMultiValues(None,
+            Some(keyAndTimestampToRow("key1", 1, 301L)))
+          val results1 = iter1.map(_.key.getLong(2)).toList
+          iter1.close()
+
+          assert(results1 === Seq(100L, 150L, 200L, 300L))
+
+          // Boundary safety: endKey at 201, includes everything up to 200
+          // regardless of join key
+          val iter2 = store.scanWithMultiValues(None,
+            Some(keyAndTimestampToRow("key1", 1, 201L)))
+          val results2 = iter2.map { pair =>
             (pair.key.getString(0), pair.key.getLong(2))
           }.toList
-          iter.close()
+          iter2.close()
 
-          // Should include key1@100, key2@150, key1@200
-          assert(results.length === 3)
-          assert(results.map(_._2) === Seq(100L, 150L, 200L))
+          assert(results2.map(_._2) === Seq(100L, 150L, 200L))
         } finally {
           store.abort()
         }
@@ -740,50 +674,32 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
         val store = provider.getStore(0)
 
         try {
-          val timestamps = Seq(100L, 200L, 300L, 400L, 500L)
-          timestamps.foreach { ts =>
+          diverseTimestamps.foreach { ts =>
             store.put(keyAndTimestampToRow("key1", 1, ts), valueToRow(ts.toInt))
           }
 
-          val startKey = keyAndTimestampToRow("key1", 1, 200L)
-          val endKey = keyAndTimestampToRow("key1", 1, 401L)
-          val iter = store.scan(Some(startKey), Some(endKey))
-          val results = iter.map { pair =>
+          // Bounded positive range [0, 100)
+          val posIter = store.scan(
+            Some(keyAndTimestampToRow("key1", 1, 0L)),
+            Some(keyAndTimestampToRow("key1", 1, 100L)))
+          val posResults = posIter.map { pair =>
             (pair.key.getLong(2), pair.value.getInt(0))
           }.toList
-          iter.close()
+          posIter.close()
 
-          assert(results.map(_._1) === Seq(200L, 300L, 400L))
-          assert(results.map(_._2) === Seq(200, 300, 400))
-        } finally {
-          store.abort()
-        }
-      }
-    }
+          val expectedPosTs = diverseTimestamps.filter(ts => ts >= 0 && ts < 100).sorted
+          assert(posResults.map(_._1) === expectedPosTs)
+          assert(posResults.map(_._2) === expectedPosTs.map(_.toInt))
 
-    test(s"scan with diverse timestamps and bounded range (encoding = $encoding)") {
-      tryWithProviderResource(
-        newStoreProviderWithTimestampEncoder(
-          encoderType = "postfix",
-          useMultipleValuesPerKey = false,
-          dataEncoding = encoding)
-      ) { provider =>
-        val store = provider.getStore(0)
+          // Bounded negative range [-300, 0)
+          val negIter = store.scan(
+            Some(keyAndTimestampToRow("key1", 1, -300L)),
+            Some(keyAndTimestampToRow("key1", 1, 0L)))
+          val negResults = negIter.map(_.key.getLong(2)).toList
+          negIter.close()
 
-        try {
-          diverseTimestamps.zipWithIndex.foreach { case (ts, idx) =>
-            store.put(keyAndTimestampToRow("key1", 1, ts), valueToRow(idx))
-          }
-
-          // Scan negative range only: [-300, 0)
-          val startKey = keyAndTimestampToRow("key1", 1, -300L)
-          val endKey = keyAndTimestampToRow("key1", 1, 0L)
-          val iter = store.scan(Some(startKey), Some(endKey))
-          val results = iter.map(_.key.getLong(2)).toList
-          iter.close()
-
-          val expected = diverseTimestamps.filter(ts => ts >= -300 && ts < 0).sorted
-          assert(results === expected)
+          val expectedNegTs = diverseTimestamps.filter(ts => ts >= -300 && ts < 0).sorted
+          assert(negResults === expectedNegTs)
         } finally {
           store.abort()
         }
