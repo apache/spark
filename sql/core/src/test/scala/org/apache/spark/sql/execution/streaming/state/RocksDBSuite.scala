@@ -4480,11 +4480,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         val uuid2 = versionToUniqueId(2)
         corruptFile(new File(remoteDir, s"2_${uuid2}.changelog"))
 
-        // When getFullLineage fails and the sparse lineage has no valid repair path,
-        // auto-repair should fail gracefully with StateStoreAutoSnapshotRepairFailed.
-        // Here: snapshot 4 is corrupt, getFullLineage fails (corrupt changelog 2),
-        // sparse lineage only knows version 4, and version 0 + full replay also fails
-        // because changelog 2 is corrupt.
+        // When getFullLineage fails, we fall back to the sparse lineage which only
+        // contains the target version. The version 0 fallback is rejected by the
+        // lineage-completeness check inside loadSnapshotFromCheckpoint (sparse lineage
+        // doesn't cover versions 1..3), so auto-repair fails with
+        // StateStoreAutoSnapshotRepairFailed.
         withDB(remoteDir, enableStateStoreCheckpointIds = true,
             versionToUniqueId = versionToUniqueId) { db =>
           intercept[StateStoreAutoSnapshotRepairFailed] {

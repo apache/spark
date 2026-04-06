@@ -54,27 +54,39 @@ abstract class AutoSnapshotLoader(
   /**
    * Attempt to load the specified snapshot version from the checkpoint directory.
    * Should throw an exception if the snapshot is corrupt.
+   * @param snapshotVersion The snapshot version to load
+   * @param uniqueId The unique checkpoint ID for V2, or None for V1
    * @note Must support loading version 0
    * */
-  protected def loadSnapshotFromCheckpoint(snapshotVersion: Long): Unit
+  protected def loadSnapshotFromCheckpoint(
+      snapshotVersion: Long, uniqueId: Option[String]): Unit
 
   /** Called when load fails, to do any necessary cleanup/variable reset */
   protected def onLoadSnapshotFromCheckpointFailure(): Unit
 
-  /** Get a list of eligible snapshot versions in the checkpoint directory that can be loaded */
-  protected def getEligibleSnapshots(versionToLoad: Long): Seq[Long]
+  /**
+   * Get a list of eligible snapshot (version, uniqueId) pairs in the checkpoint directory
+   * that can be loaded. For V1, uniqueId is None.
+   */
+  protected def getEligibleSnapshots(
+      versionToLoad: Long): Seq[(Long, Option[String])]
 
   /**
-   * Called once when the first snapshot load fails and auto-repair is about to begin.
-   * Returns the eligible snapshots to use for the repair loop.
+   * Returns additional eligible snapshots discovered during auto-repair.
+   * Called once when the first snapshot load fails and auto-repair begins.
    *
-   * V2 overrides this to enrich a sparse lineage (via getFullLineage) before
-   * re-discovering snapshots. V1 can simply delegate to [[getEligibleSnapshots]].
+   * V2 overrides this to enrich a sparse lineage (via getFullLineage) and return
+   * newly-discovered snapshots. The results are merged with the initial eligible
+   * snapshots (duplicates are removed by version).
+   *
+   * Default: no additional snapshots, which avoids redundant DFS listings for
+   * V1 and HDFS callers that have no additional snapshots to discover.
    *
    * @param versionToLoad The version being loaded
-   * @return Eligible snapshot versions for repair
+   * @return Additional eligible snapshot (version, uniqueId) pairs for repair
    */
-  protected def getEligibleSnapshotsForRepair(versionToLoad: Long): Seq[Long]
+  protected def getAdditionalEligibleSnapshots(
+      versionToLoad: Long): Seq[(Long, Option[String])] = Seq.empty
 
   /**
    * Load the latest snapshot for the specified version from the checkpoint directory.
@@ -86,9 +98,9 @@ abstract class AutoSnapshotLoader(
    * */
   def loadSnapshot(versionToLoad: Long): (Long, Boolean) = {
     val eligibleSnapshots =
-      (getEligibleSnapshots(versionToLoad) :+ 0L) // always include the initial snapshot
-      .distinct // Ensure no duplicate version numbers
-      .sorted(Ordering[Long].reverse)
+      (getEligibleSnapshots(versionToLoad) :+ (0L, Option.empty[String]))
+      .distinctBy(_._1) // Ensure no duplicate version numbers
+      .sortBy(_._1)(Ordering[Long].reverse)
 
     // Start with the latest snapshot
     val firstEligibleSnapshot = eligibleSnapshots.head
@@ -102,8 +114,8 @@ abstract class AutoSnapshotLoader(
       beforeLoad() // if this fails, then we should fail
       try {
         // try to load the first eligible snapshot
-        loadSnapshotFromCheckpoint(firstEligibleSnapshot)
-        loadedSnapshot = Some(firstEligibleSnapshot)
+        loadSnapshotFromCheckpoint(firstEligibleSnapshot._1, firstEligibleSnapshot._2)
+        loadedSnapshot = Some(firstEligibleSnapshot._1)
       } catch {
         // Swallow only if auto snapshot repair is enabled
         // If auto snapshot repair is not enabled, we should fail immediately
@@ -111,7 +123,7 @@ abstract class AutoSnapshotLoader(
           onLoadSnapshotFromCheckpointFailure()
           numFailuresForFirstSnapshot += 1
           logError(log"Failed to load snapshot version " +
-            log"${MDC(VERSION_NUM, firstEligibleSnapshot)}, " +
+            log"${MDC(VERSION_NUM, firstEligibleSnapshot._1)}, " +
             log"attempt ${MDC(NUM_RETRY, numFailuresForFirstSnapshot)} out of " +
             log"${MDC(NUM_RETRIES, maxNumFailures)} attempts", e)
           lastException = e
@@ -126,40 +138,41 @@ abstract class AutoSnapshotLoader(
       // we would only get here if auto snapshot repair is enabled
       assert(autoSnapshotRepairEnabled)
 
-      // getEligibleSnapshotsForRepair may return a different list than the original
-      // getEligibleSnapshots (e.g., V2 enriches a sparse lineage to discover more
-      // snapshots). We filter by value rather than using .tail because the first
-      // snapshot we already tried may appear at any position in the new list.
+      // Merge initial eligible snapshots with any additional ones discovered during
+      // repair (e.g., V2 enriches a sparse lineage to discover more snapshots).
+      // Deduplicate by version and filter out the first snapshot we already tried.
       val remainingEligibleSnapshots =
-        (getEligibleSnapshotsForRepair(versionToLoad) :+ 0L)
-        .distinct
-        .sorted(Ordering[Long].reverse)
-        .filter(_ != firstEligibleSnapshot)
+        (eligibleSnapshots ++ getAdditionalEligibleSnapshots(versionToLoad)
+          :+ (0L, Option.empty[String]))
+        .distinctBy(_._1)
+        .sortBy(_._1)(Ordering[Long].reverse)
+        .filter(_._1 != firstEligibleSnapshot._1)
 
       // select remaining snapshots that are within the maxChangeFileReplay limit
       val selectedRemainingSnapshots = remainingEligibleSnapshots.filter(
-        s => versionToLoad - s <= maxChangeFileReplay)
+        s => versionToLoad - s._1 <= maxChangeFileReplay)
 
       logInfo(log"Attempting to auto repair snapshot by skipping " +
-        log"snapshot version ${MDC(VERSION_NUM, firstEligibleSnapshot)} " +
+        log"snapshot version ${MDC(VERSION_NUM, firstEligibleSnapshot._1)} " +
         log"and trying to load with one of the selected snapshots " +
-        log"${MDC(VERSION_NUM, selectedRemainingSnapshots)}, out of eligible snapshots " +
-        log"${MDC(VERSION_NUM, remainingEligibleSnapshots)}. " +
+        log"${MDC(VERSION_NUM, selectedRemainingSnapshots.map(_._1))}, " +
+        log"out of eligible snapshots " +
+        log"${MDC(VERSION_NUM, remainingEligibleSnapshots.map(_._1))}. " +
         log"maxChangeFileReplay: ${MDC(VERSION_NUM, maxChangeFileReplay)}")
 
       // Now try to load using any of the selected snapshots,
       // remember they are sorted in descending order
-      for (snapshotVersion <- selectedRemainingSnapshots if loadedSnapshot.isEmpty) {
+      for (snapshot <- selectedRemainingSnapshots if loadedSnapshot.isEmpty) {
         beforeLoad() // if this fails, then we should fail
         try {
-          loadSnapshotFromCheckpoint(snapshotVersion)
-          loadedSnapshot = Some(snapshotVersion)
+          loadSnapshotFromCheckpoint(snapshot._1, snapshot._2)
+          loadedSnapshot = Some(snapshot._1)
           logInfo(log"Successfully loaded snapshot version " +
-            log"${MDC(VERSION_NUM, snapshotVersion)}. Repair complete.")
+            log"${MDC(VERSION_NUM, snapshot._1)}. Repair complete.")
         } catch {
           case NonFatal(e) =>
             logError(log"Failed to load snapshot version " +
-              log"${MDC(VERSION_NUM, snapshotVersion)}, will retry repair with " +
+              log"${MDC(VERSION_NUM, snapshot._1)}, will retry repair with " +
               log"the next eligible snapshot version", e)
             onLoadSnapshotFromCheckpointFailure()
             lastException = e
@@ -169,12 +182,14 @@ abstract class AutoSnapshotLoader(
       if (loadedSnapshot.isEmpty) {
         // we tried all eligible snapshots and failed to load any of them
         logError(log"Auto snapshot repair failed to load any snapshot:" +
-          log" latestSnapshotVersion: ${MDC(VERSION_NUM, firstEligibleSnapshot)}, " +
-          log"attemptedSnapshots: ${MDC(VERSION_NUM, selectedRemainingSnapshots)}, " +
-          log"eligibleSnapshots:  ${MDC(VERSION_NUM, remainingEligibleSnapshots)}, " +
+          log" latestSnapshotVersion: ${MDC(VERSION_NUM, firstEligibleSnapshot._1)}, " +
+          log"attemptedSnapshots: ${MDC(VERSION_NUM, selectedRemainingSnapshots.map(_._1))}, " +
+          log"eligibleSnapshots:  ${MDC(VERSION_NUM, remainingEligibleSnapshots.map(_._1))}, " +
           log"maxChangeFileReplay: ${MDC(VERSION_NUM, maxChangeFileReplay)}", lastException)
         throw StateStoreErrors.autoSnapshotRepairFailed(
-          loggingId, firstEligibleSnapshot, selectedRemainingSnapshots, remainingEligibleSnapshots,
+          loggingId, firstEligibleSnapshot._1,
+          selectedRemainingSnapshots.map(_._1),
+          remainingEligibleSnapshots.map(_._1),
           lastException)
       } else {
         autoRepairCompleted = true
