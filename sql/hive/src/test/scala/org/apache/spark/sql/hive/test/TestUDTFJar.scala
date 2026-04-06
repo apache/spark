@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.test
 
 import java.io.File
+import java.lang.management.ManagementFactory
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 
@@ -42,8 +43,8 @@ object TestUDTFJar {
 
   val jar: File = {
     val jarFile = File.createTempFile("TestUDTF", ".jar", Utils.createTempDir())
-    val classpath = java.lang.management.ManagementFactory.getRuntimeMXBean.getClassPath
-      .split(java.io.File.pathSeparator).map(p => new File(p).toURI.toURL).toSeq
+    val classpath = ManagementFactory.getRuntimeMXBean.getClassPath
+      .split(File.pathSeparator).map(p => new File(p).toURI.toURL).toSeq
     TestUtils.createJarWithJavaSources(source, jarFile, classpath)
     jarFile
   }

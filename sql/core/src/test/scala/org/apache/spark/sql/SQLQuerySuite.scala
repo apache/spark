@@ -18,7 +18,10 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.lang.management.ManagementFactory
 import java.net.{MalformedURLException, URI}
+import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Paths}
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
 import java.util.Locale
@@ -56,7 +59,7 @@ import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-import org.apache.spark.util.{ResetSystemProperties, Utils}
+import org.apache.spark.util.{ResetSystemProperties, SparkTestUtils, Utils}
 
 @ExtendedSQLTest
 class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper
@@ -3871,13 +3874,11 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       .getResource(resourceName)
     assert(sourceUrl != null, s"Resource not found: $resourceName")
     val source = Map(sumFuncClass ->
-      new String(java.nio.file.Files.readAllBytes(
-        java.nio.file.Paths.get(sourceUrl.toURI)),
-        java.nio.charset.StandardCharsets.UTF_8))
-    val classpath = java.lang.management.ManagementFactory.getRuntimeMXBean.getClassPath
-      .split(java.io.File.pathSeparator).map(p => new java.io.File(p).toURI.toURL).toSeq
-    val jarFile = new java.io.File(Utils.createTempDir(), "SPARK-33084.jar")
-    org.apache.spark.util.SparkTestUtils.createJarWithJavaSources(source, jarFile, classpath)
+      new String(Files.readAllBytes(Paths.get(sourceUrl.toURI)), StandardCharsets.UTF_8))
+    val classpath = ManagementFactory.getRuntimeMXBean.getClassPath
+      .split(File.pathSeparator).map(p => new File(p).toURI.toURL).toSeq
+    val jarFile = new File(Utils.createTempDir(), "SPARK-33084.jar")
+    SparkTestUtils.createJarWithJavaSources(source, jarFile, classpath)
     val functionName = "test_udf"
     withTempDir { dir =>
       System.setProperty("ivy.home", dir.getAbsolutePath)
