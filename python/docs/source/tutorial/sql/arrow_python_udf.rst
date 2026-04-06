@@ -21,7 +21,7 @@ Arrow Python UDFs
 
 .. currentmodule:: pyspark.sql.functions
 
-.. versionadded:: 4.1.0
+.. versionadded:: 4.2.0
 
 Native Arrow UDFs operate directly on ``pyarrow.Array`` objects without converting to Pandas or
 row-by-row Python objects. This preserves the columnar layout end-to-end, avoids unnecessary data
