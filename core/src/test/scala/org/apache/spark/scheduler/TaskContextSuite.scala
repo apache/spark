@@ -150,6 +150,32 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(e.getMessage.contains("exception in task"))
   }
 
+  test("all TaskInterruptListeners should be called even if some fail") {
+    val context = TaskContext.empty()
+    val listener = mock(classOf[TaskInterruptListener])
+    context.addTaskInterruptListener(new TaskInterruptListener {
+      override def onTaskInterrupted(context: TaskContext): Unit =
+        throw new Exception("exception in listener1")
+    })
+    context.addTaskInterruptListener(listener)
+    context.addTaskInterruptListener(new TaskInterruptListener {
+      override def onTaskInterrupted(context: TaskContext): Unit =
+        throw new Exception("exception in listener3")
+    })
+
+    val e = intercept[TaskCompletionListenerException] {
+      context.markInterrupted("test interrupt")
+    }
+
+    // Make sure listener 2 was called.
+    verify(listener, times(1)).onTaskInterrupted(any())
+
+    // also need to check failure in TaskInterruptListener does not mask earlier exception
+    assert(e.getMessage.contains("exception in listener1"))
+    assert(e.getMessage.contains("exception in listener3"))
+    assert(e.getMessage.contains("test interrupt"))
+  }
+
   test("FailureListener throws after task body fails") {
     val context = TaskContext.empty()
     val listenerCalls = ArrayBuffer.empty[String]

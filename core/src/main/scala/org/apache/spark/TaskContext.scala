@@ -27,7 +27,7 @@ import org.apache.spark.metrics.source.Source
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.Task
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.util.{AccumulatorV2, TaskCompletionListener, TaskFailureListener}
+import org.apache.spark.util.{AccumulatorV2, TaskCompletionListener, TaskFailureListener, TaskInterruptListener}
 
 
 object TaskContext {
@@ -168,6 +168,17 @@ abstract class TaskContext extends Serializable {
       override def onTaskFailure(context: TaskContext, error: Throwable): Unit = f(context, error)
     })
   }
+
+  /**
+   * Adds a listener to be executed when the task is interrupted.
+   *
+   * There are no ordering guarantees for task interrupt listeners. Listeners are guaranteed to
+   * execute sequentially with other task completion, failure, or interrupt listeners. Listeners may
+   * be invoked concurrently with the task itself.
+   *
+   * Exceptions thrown by the listener will result in failure of the task.
+   */
+  def addTaskInterruptListener(listener: TaskInterruptListener): TaskContext
 
   /** Runs a task with this context, ensuring failure and completion listeners get triggered. */
   private[spark] def runTaskWithListeners[T](task: Task[T]): T = {

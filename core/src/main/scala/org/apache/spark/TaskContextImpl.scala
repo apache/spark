@@ -73,6 +73,9 @@ private[spark] class TaskContextImpl(
   /** List of callback functions to execute when the task fails. */
   @transient private val onFailureCallbacks = new Stack[TaskFailureListener]
 
+  /** List of callback functions to execute when the task is interrupted. */
+  @transient private val onInterruptCallbacks = new Stack[TaskInterruptListener]
+
   /**
    * The thread currently executing task completion or failure listeners, if any.
    *
@@ -126,6 +129,20 @@ private[spark] class TaskContextImpl(
     this
   }
 
+  override def addTaskInterruptListener(listener: TaskInterruptListener): this.type = {
+    synchronized {
+      // If there is already a thread invoking listeners, adding the new listener to
+      // `onInterruptCallbacks` will cause that thread to execute the new listener, and the call to
+      // `invokeTaskInterruptListeners()` below will be a no-op.
+      //
+      // If there is no such thread, the call to `invokeTaskInterruptListeners()` below will execute
+      // all listeners, including the new listener.
+      onInterruptCallbacks.push(listener)
+      reasonIfKilled
+    }.foreach(reason => invokeTaskInterruptListeners(new TaskKilledException(reason)))
+    this
+  }
+
   override def resourcesJMap(): java.util.Map[String, ResourceInformation] = {
     resources.asJava
   }
@@ -163,6 +180,14 @@ private[spark] class TaskContextImpl(
     // lock. `invokeListeners()` acquires the lock before accessing the contents.
     invokeListeners(onFailureCallbacks, "TaskFailureListener", Option(error)) {
       _.onTaskFailure(this, error)
+    }
+  }
+
+  private def invokeTaskInterruptListeners(error: Throwable): Unit = {
+    // It is safe to access the reference to `onInterruptCallbacks` without holding the TaskContext
+    // lock. `invokeListeners()` acquires the lock before accessing the contents.
+    invokeListeners(onInterruptCallbacks, "TaskInterruptListener", Option(error)) {
+      _.onTaskInterrupted(this)
     }
   }
 
@@ -272,6 +297,7 @@ private[spark] class TaskContextImpl(
 
   private[spark] override def markInterrupted(reason: String): Unit = {
     reasonIfKilled = Some(reason)
+    invokeTaskInterruptListeners(new TaskKilledException(reason))
   }
 
   private[spark] override def killTaskIfInterrupted(): Unit = {

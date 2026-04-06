@@ -53,7 +53,9 @@ object MimaExcludes {
     // [SPARK-55793][CORE] Add multiple log directories support to SHS
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.apply"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.copy"),
-    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo$")
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo$"),
+    // [SPARK-56330][CORE] Add TaskInterruptListener to TaskContext for interrupt notifications
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.addTaskInterruptListener")
   )
 
   // Exclude rules for 4.1.x from 4.0.0

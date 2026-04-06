@@ -24,6 +24,6 @@ import org.apache.spark.annotation.DeveloperApi
  * Exception thrown when a task is explicitly killed (i.e., task failure is expected).
  */
 @DeveloperApi
-class TaskKilledException(val reason: String) extends RuntimeException {
+class TaskKilledException(val reason: String) extends RuntimeException(reason) {
   def this() = this("unknown reason")
 }
