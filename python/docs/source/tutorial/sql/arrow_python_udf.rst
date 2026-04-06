@@ -67,6 +67,9 @@ Arrow UDFs can return struct types:
 
 .. code-block:: python
 
+    import pyarrow as pa
+    from pyspark.sql.functions import arrow_udf
+
     @arrow_udf("first string, last string")
     def split_expand(v: pa.Array) -> pa.Array:
         b = pa.compute.ascii_split_whitespace(v)
@@ -86,6 +89,7 @@ Arrow UDFs support keyword arguments:
 
 .. code-block:: python
 
+    import pyarrow as pa
     from pyspark.sql import functions as sf
     from pyspark.sql.functions import arrow_udf
     from pyspark.sql.types import IntegerType
@@ -115,6 +119,7 @@ This is useful when the UDF execution requires expensive initialization.
 
     import pyarrow as pa
     from pyspark.sql.functions import arrow_udf
+    from typing import Iterator
 
     @arrow_udf("long")
     def plus_one(iterator: Iterator[pa.Array]) -> Iterator[pa.Array]:
@@ -200,6 +205,9 @@ The return type can also be a complex type such as struct:
 
 .. code-block:: python
 
+    import pyarrow as pa
+    from pyspark.sql.functions import arrow_udf
+
     @arrow_udf("struct<m1: double, m2: double>")
     def min_max_udf(v: pa.Array) -> pa.Scalar:
         m1 = pa.compute.min(v)
@@ -221,7 +229,9 @@ This UDF can also be used as window functions:
 
 .. code-block:: python
 
+    import pyarrow as pa
     from pyspark.sql import Window
+    from pyspark.sql.functions import arrow_udf
 
     @arrow_udf("double")
     def mean_udf(v: pa.Array) -> float:
