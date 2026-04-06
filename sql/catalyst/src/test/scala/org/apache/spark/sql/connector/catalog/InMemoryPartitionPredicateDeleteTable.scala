@@ -84,7 +84,7 @@ class InMemoryPartitionPredicateDeleteTable(
       candidateKeys
     }
 
-    // Handle data predicates (simulate data source with data column statistics)
+    // Handle data predicates (simulate a data source handling data filters with data statistics)
     if (dataStdPreds.isEmpty) {
       dataMap --= keysToProcess
     } else {

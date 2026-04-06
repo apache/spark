@@ -45,10 +45,15 @@ object OptimizeMetadataOnlyDeleteFromTable extends Rule[LogicalPlan] with Predic
           val normalizedPredicates = DataSourceStrategy.normalizeExprs(predicates, relation.output)
           val filtersOpt = tryTranslateToV2(normalizedPredicates)
           if (filtersOpt.exists(table.canDeleteWhere)) {
+            logDebug(s"Switching to delete with filters: " +
+              s"${filtersOpt.get.mkString("[", ", ", "]")}")
             DeleteFromTableWithFilters(relation, filtersOpt.get.toImmutableArraySeq)
           } else {
             tryDeleteWithPartitionPredicates(table, relation, normalizedPredicates)
-              .getOrElse(rowLevelPlan)
+              .getOrElse {
+                logDebug(s"Falling back to row-level delete on ${relation.table.name()}")
+                rowLevelPlan
+              }
           }
 
         case _: TruncatableTable if cond == TrueLiteral =>
@@ -93,6 +98,8 @@ object OptimizeMetadataOnlyDeleteFromTable extends Rule[LogicalPlan] with Predic
       combined = partPredicates.toArray ++ dataV2Filters
       if table.canDeleteWhere(combined)
     } yield {
+      logDebug(s"Switching to delete with PartitionPredicate filters: " +
+        s"${combined.mkString("[", ", ", "]")}")
       DeleteFromTableWithFilters(relation, combined.toImmutableArraySeq)
     }
   }

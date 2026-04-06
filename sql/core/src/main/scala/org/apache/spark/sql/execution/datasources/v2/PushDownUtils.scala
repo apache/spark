@@ -149,7 +149,7 @@ object PushDownUtils extends Logging {
         case _ => None
       }
       if (fields.length == transforms.length) {
-        Some(fields.toSeq).filter(_.nonEmpty)
+        Some(fields.toSeq)
       } else {
         None
       }
