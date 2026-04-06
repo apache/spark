@@ -331,14 +331,14 @@ This is useful for grouped aggregations with multiple input columns.
 
 
 Arrow Function APIs
-===================
+-------------------
 
 Arrow Function APIs apply Python native functions directly on Arrow data at the DataFrame level.
 They work similarly to Pandas Function APIs but use ``pyarrow.RecordBatch`` and ``pyarrow.Table``
 instead of Pandas DataFrames.
 
 Map
----
+~~~
 
 .. currentmodule:: pyspark.sql
 
@@ -365,7 +365,7 @@ Map
 For detailed usage, please see :meth:`DataFrame.mapInArrow`.
 
 Grouped Map
------------
+~~~~~~~~~~~
 
 ``DataFrame.groupBy().applyInArrow()`` maps each group using a function that takes a
 ``pyarrow.Table`` and returns a ``pyarrow.Table``.
@@ -417,7 +417,7 @@ The function can also accept grouping keys as the first argument:
 For detailed usage, please see :meth:`GroupedData.applyInArrow`.
 
 Co-grouped Map
---------------
+~~~~~~~~~~~~~~
 
 ``DataFrame.groupBy().cogroup().applyInArrow()`` allows two DataFrames to be cogrouped by a
 common key and then a Python function applied to each cogroup. The function takes two
