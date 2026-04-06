@@ -186,7 +186,7 @@
           <artifactId>hadoop-cos</artifactId>
         </exclusion>
         <!--
-          SPARK-55657: `hadoop-tos`is not a dependency of `hadoop-cloud-storage` 3.4.3,
+          SPARK-55657: `hadoop-tos` is not a dependency of `hadoop-cloud-storage` 3.4.3,
           manually exclude it to avoid recurring issues similar to HADOOP-18159 in Spark.
         -->
         <exclusion>
