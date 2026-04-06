@@ -201,13 +201,9 @@ object DataSourceUtils extends PredicateHelper {
 
   def shouldIgnoreCorruptFileException(e: Throwable): Boolean = e match {
     case _: RuntimeException | _: IOException | _: InternalError =>
-      val msg = e.getMessage
-      if (msg != null && msg.contains(
-          "Cannot reserve additional contiguous bytes in the vectorized reader")) {
-        false
-      } else {
-        true
-      }
+      val m = e.getMessage
+      m == null || !m.contains(
+        "Cannot reserve additional contiguous bytes in the vectorized reader")
     case _ => false
   }
 
