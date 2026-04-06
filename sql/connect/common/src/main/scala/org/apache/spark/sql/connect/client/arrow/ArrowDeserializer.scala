@@ -33,6 +33,7 @@ import org.apache.arrow.vector.{FieldVector, VectorSchemaRoot}
 import org.apache.arrow.vector.complex.{ListVector, MapVector, StructVector}
 import org.apache.arrow.vector.ipc.ArrowReader
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
@@ -330,9 +331,22 @@ object ArrowDeserializers {
         }
 
       case (r @ RowEncoder(fields), StructVectors(struct, vectors)) =>
-        val lookup = createFieldLookup(vectors)
-        val deserializers = fields.toArray.map { field =>
-          deserializerFor(field.enc, lookup(field.name), timeZoneId)
+        // Row allows duplicate column names, so bind by position rather than by name.
+        if (fields.length > vectors.length) {
+          throw new SparkRuntimeException(
+            errorClass = "ARROW_SCHEMA_FIELD_COUNT_MISMATCH",
+            messageParameters = Map(
+              "encoderFieldCount" -> fields.length.toString,
+              "arrowColumnCount" -> vectors.length.toString))
+        }
+        val deserializers = fields.toArray.zip(vectors).map { case (field, vector) =>
+          if (!field.name.equalsIgnoreCase(vector.getName)) {
+            throw new SparkRuntimeException(
+              errorClass = "ARROW_SCHEMA_FIELD_NAME_MISMATCH",
+              messageParameters =
+                Map("encoderFieldName" -> field.name, "arrowColumnName" -> vector.getName))
+          }
+          deserializerFor(field.enc, vector, timeZoneId)
         }
         new StructFieldSerializer[Any](struct) {
           def value(i: Int): Any = {

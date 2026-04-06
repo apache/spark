@@ -567,7 +567,7 @@ private[sql] object CatalogV2Util {
    *  - ROW FORMAT SERDE: hive.serde
    *  - SERDEPROPERTIES: add "option." prefix
    */
-  private def convertToProperties(serdeInfo: Option[SerdeInfo]): Map[String, String] = {
+  def convertToProperties(serdeInfo: Option[SerdeInfo]): Map[String, String] = {
     serdeInfo match {
       case Some(s) =>
         s.formatClasses.map { f =>

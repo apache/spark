@@ -605,7 +605,7 @@ class WindowPandasUDFTestsMixin:
                 mean_udf = pandas_udf(lambda v: value, t, PandasUDFType.GROUPED_AGG)
                 result = df.select(mean_udf(df["v"]).over(w)).first()[0]
                 assert result == Decimal("1.0")
-                assert type(result) == Decimal
+                assert isinstance(result, Decimal)
 
     def test_arrow_cast_str_to_numeric(self):
         df = self.data

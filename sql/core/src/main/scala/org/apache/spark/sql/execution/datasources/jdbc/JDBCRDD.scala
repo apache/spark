@@ -343,7 +343,7 @@ class JDBCRDD(
     logInfo(log"Generated JDBC query to fetch data: ${MDC(SQL_TEXT, sqlText)}")
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
-    stmt.setFetchSize(options.fetchSize)
+    stmt.setFetchSize(dialect.getFetchSize(options))
     stmt.setQueryTimeout(options.queryTimeout)
 
     rs = SQLMetrics.withTimingNs(queryExecutionTimeMetric) {
