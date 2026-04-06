@@ -2547,6 +2547,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 or eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
                 or eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
             )
+
             ser = ArrowStreamPandasUDFSerializer(
                 timezone=runner_conf.timezone,
                 safecheck=runner_conf.safecheck,
@@ -2860,7 +2861,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             ArrowTableToRowsConversion._create_converter(
                 f.dataType, none_on_identity=True, binary_as_bytes=runner_conf.binary_as_bytes
             )
-            for f in input_type
+            for f in eval_conf.input_type
         ]
 
         @fail_on_stopiteration
@@ -2963,7 +2964,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 pandas_columns = ArrowBatchTransformer.to_pandas(
                     input_batch,
                     timezone=runner_conf.timezone,
-                    schema=input_type,
+                    schema=eval_conf.input_type,
                     struct_in_pandas="row",
                     ndarray_as_list=True,
                     prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
