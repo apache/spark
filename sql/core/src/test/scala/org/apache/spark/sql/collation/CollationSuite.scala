@@ -2592,7 +2592,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           sql("CREATE TABLE testcat.t (c1 STRING COLLATE UTF8_LCASE)")
           sql("INSERT INTO testcat.t VALUES ('x')")
           sql(
-            """INSERT INTO testcat.t REPLACE WHERE c1 = 'x'
+            """INSERT INTO testcat.t REPLACE WHERE TRUE
               |  VALUES ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE)""".stripMargin)
           checkAnswer(
             sql("SELECT * FROM testcat.t"),
@@ -2690,6 +2690,23 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
             queryContext = Array(ExpectedContext(
               "VALUES\n  ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE) AS T(c1)"))
           )
+        }
+      }
+    }
+  }
+
+  test("CTAS with DEFAULT COLLATION and plain string literals in inline table") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          sql(
+            """CREATE TABLE t DEFAULT COLLATION UTF8_LCASE AS
+              |SELECT * FROM VALUES ('a'), ('b') AS T(c1) WHERE c1 = 'A'
+              |""".stripMargin)
+          checkAnswer(sql("SELECT COUNT(*) FROM t"), Seq(Row(1)))
+          checkAnswer(sql("SELECT DISTINCT COLLATION(c1) FROM t"),
+            Row(s"${fullyQualifiedPrefix}UTF8_LCASE"))
         }
       }
     }
