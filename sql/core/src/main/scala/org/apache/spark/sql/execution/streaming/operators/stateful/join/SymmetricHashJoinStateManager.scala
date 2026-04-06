@@ -25,7 +25,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{END_INDEX, START_INDEX, STATE_STORE_ID}
+import org.apache.spark.internal.LogKeys.{END_INDEX, INDEX, JOIN_SIDE, KEY, NUM_VALUES, PARTITION_ID, START_INDEX, STATE_STORE_ID, STATE_STORE_VERSION}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, SafeProjection, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -1025,7 +1025,9 @@ abstract class SymmetricHashJoinStateManagerBase(
       override def getNext(): JoinedRow = {
         while (index < numValues) {
           val valuePair = keyWithIndexToValue.get(key, index)
-          if (valuePair == null && storeConf.skipNullsForStreamStreamJoins) {
+          if (valuePair == null) {
+            handleNullValuePair(key, index, numValues)
+            skippedNullValueCount.foreach(_ += 1L)
             index += 1
           } else if (valuePair.matched) {
             // See the NOTE in the method doc about rationale.
@@ -1265,8 +1267,10 @@ abstract class SymmetricHashJoinStateManagerBase(
       /**
        * Find the next value satisfying the condition, updating `currentKey` and `numValues` if
        * needed. Returns null when no value can be found.
-       * Note that we will skip nulls explicitly if config setting for the same is
-       * set to true via STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS.
+       *
+       * Null values from the state store are handled by [[handleNullValuePair]]:
+       * skipped if STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS is enabled,
+       * otherwise an exception is thrown with diagnostic context.
        */
       private def findNextValueForIndex(): ValueAndMatchPair = {
         // Loop across all values for the current key, and then all other keys, until we find a
@@ -1277,7 +1281,9 @@ abstract class SymmetricHashJoinStateManagerBase(
           if (hasMoreValuesForCurrentKey) {
             // First search the values for the current key.
             val valuePair = keyWithIndexToValue.get(currentKey, index)
-            if (valuePair == null && storeConf.skipNullsForStreamStreamJoins) {
+            if (valuePair == null) {
+              handleNullValuePair(currentKey, index, numValues)
+              skippedNullValueCount.foreach(_ += 1L)
               index += 1
             } else if (removalCondition(valuePair.value)) {
               return valuePair
@@ -1327,6 +1333,40 @@ abstract class SymmetricHashJoinStateManagerBase(
 
   /** Projects the key of unsafe row to internal row for printable log message. */
   def getInternalRowOfKeyWithIndex(currentKey: UnsafeRow): InternalRow = keyProjection(currentKey)
+
+  @volatile private var nullValueWarningLogged = false
+
+  /**
+   * Called when keyWithIndexToValue.get(key, index) returns null even though
+   * keyToNumValues claims there should be a value at that index.
+   *
+   * Logs a warning (once per instance) with diagnostic context, then either
+   * returns normally (if skipNullsForStreamStreamJoins is enabled, caller skips)
+   * or throws a [[StreamStreamJoinInconsistentStateNullValue]].
+   */
+  protected def handleNullValuePair(
+      key: UnsafeRow,
+      nullIndex: Long,
+      numValues: Long): Unit = {
+    if (!nullValueWarningLogged) {
+      nullValueWarningLogged = true
+      logWarning(log"Null value detected in stream-stream join state: " +
+        log"joinSide=${MDC(JOIN_SIDE, joinSide)}, key=${MDC(KEY, keyProjection(key))}, " +
+        log"index=${MDC(INDEX, nullIndex)}, numValues=${MDC(NUM_VALUES, numValues)}, " +
+        log"storeVersion=${MDC(STATE_STORE_VERSION, stateInfo.get.storeVersion)}, " +
+        log"partitionId=${MDC(PARTITION_ID, partitionId)}")
+    }
+
+    if (!storeConf.skipNullsForStreamStreamJoins) {
+      throw StateStoreErrors.streamStreamJoinNullValue(
+        valueIndex = nullIndex,
+        numValues = numValues,
+        joinSide = joinSide.toString,
+        storeVersion = stateInfo.get.storeVersion,
+        partitionId = partitionId,
+        configKey = SQLConf.STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS.key)
+    }
+  }
 
   /** Commit all the changes to all the state stores */
   def commit(): Unit
@@ -1609,8 +1649,6 @@ abstract class SymmetricHashJoinStateManagerBase(
     /**
      * Get all values and indices for the provided key.
      * Should not return null.
-     * Note that we will skip nulls explicitly if config setting for the same is
-     * set to true via STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS.
      */
     def getAll(key: UnsafeRow, numValues: Long): Iterator[KeyWithIndexAndValue] = {
       new NextIterator[KeyWithIndexAndValue] {
@@ -1623,7 +1661,8 @@ abstract class SymmetricHashJoinStateManagerBase(
             val keyWithIndex = keyWithIndexRow(key, index)
             val valuePair =
               valueRowConverter.convertValue(stateStore.get(keyWithIndex, colFamilyName))
-            if (valuePair == null && storeConf.skipNullsForStreamStreamJoins) {
+            if (valuePair == null) {
+              handleNullValuePair(key, index, numValues)
               skippedNullValueCount.foreach(_ += 1L)
               index += 1
             } else {

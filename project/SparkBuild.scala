@@ -301,14 +301,16 @@ object SparkBuild extends PomBuild {
     unidocGenjavadocVersion := "0.19",
 
     // Override SBT's default resolvers:
-    resolvers := Seq(
-      // Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
-      // See https://storage-download.googleapis.com/maven-central/index.html for more info.
-      "gcs-maven-central-mirror" at "https://maven-central.storage-download.googleapis.com/maven2/",
-      DefaultMavenRepository,
-      Resolver.mavenLocal,
-      Resolver.file("ivyLocal", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
-    ),
+    resolvers :=
+      sys.env.get("MAVEN_MIRROR_URL").map("maven-mirror" at _).toSeq ++
+      Seq(
+        // Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
+        // See https://storage-download.googleapis.com/maven-central/index.html for more info.
+        "gcs-maven-central-mirror" at "https://maven-central.storage-download.googleapis.com/maven2/",
+        DefaultMavenRepository,
+        Resolver.mavenLocal,
+        Resolver.file("ivyLocal", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
+      ),
     externalResolvers := resolvers.value,
     otherResolvers := SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))).value,
     (MavenCompile / publishLocalConfiguration) := PublishConfiguration()
@@ -1192,17 +1194,23 @@ object DependencyOverrides {
     dependencyOverrides ++= {
       val guavaVersion = sys.props.get("guava.version").getOrElse(
         SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String])
+      val gsonVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("gson.version").asInstanceOf[String]
       val jlineVersion =
         SbtPomKeys.effectivePom.value.getProperties.get("jline.version").asInstanceOf[String]
       val avroVersion =
         SbtPomKeys.effectivePom.value.getProperties.get("avro.version").asInstanceOf[String]
       val slf4jVersion =
         SbtPomKeys.effectivePom.value.getProperties.get("slf4j.version").asInstanceOf[String]
+      val xzVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("xz.version").asInstanceOf[String]
       Seq(
         "com.google.guava" % "guava" % guavaVersion,
+        "com.google.code.gson" % "gson" % gsonVersion,
         "jline" % "jline" % jlineVersion,
         "org.apache.avro" % "avro" % avroVersion,
         "org.slf4j" % "slf4j-api" % slf4jVersion,
+        "org.tukaani" % "xz" % xzVersion,
         "org.scala-lang" % "scalap" % scalaVersion.value
       ) ++ jacksonDeps.key.value
     }
@@ -1220,7 +1228,9 @@ object ExcludedDependencies {
       ExclusionRule(organization = "ch.qos.logback"),
       ExclusionRule("org.lz4", "lz4-java"),
       ExclusionRule("org.slf4j", "slf4j-simple"),
-      ExclusionRule("javax.servlet", "javax.servlet-api"))
+      ExclusionRule("javax.servlet", "javax.servlet-api"),
+      ExclusionRule("io.netty", "netty-codec-protobuf"),
+      ExclusionRule("io.netty", "netty-codec-marshalling"))
   )
 }
 

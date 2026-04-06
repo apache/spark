@@ -1573,8 +1573,7 @@ class TaskSetManagerSuite
   }
 
   test("SPARK-21563 context's added jars shouldn't change mid-TaskSet") {
-    val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
-    assume(jarPath != null)
+    val jarPath = TestUtils.createJarWithClasses(Seq("TaskSetManagerSuite_SPARK21563"))
     sc = new SparkContext("local", "test")
     val addedJarsPreTaskSet = Map[String, Long](sc.allAddedJars.toSeq: _*)
     assert(addedJarsPreTaskSet.size === 0)

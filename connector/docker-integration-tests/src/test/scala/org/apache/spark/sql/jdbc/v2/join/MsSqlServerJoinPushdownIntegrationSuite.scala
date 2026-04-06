@@ -38,7 +38,7 @@ class MsSqlServerJoinPushdownIntegrationSuite
     with JDBCV2JoinPushdownIntegrationSuiteBase {
   override val db = new MsSQLServerDatabaseOnDocker
 
-  override val url = db.getJdbcUrl(dockerIp, externalPort)
+  override lazy val url = db.getJdbcUrl(dockerIp, externalPort)
 
   override val jdbcDialect: JdbcDialect = MsSqlServerDialect()
 

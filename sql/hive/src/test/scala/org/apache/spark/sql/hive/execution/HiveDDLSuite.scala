@@ -47,7 +47,7 @@ import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
 import org.apache.spark.sql.hive.orc.OrcFileOperator
-import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton, TestHiveSparkSession}
+import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton, TestUDTFJar}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
@@ -3246,12 +3246,12 @@ class HiveDDLSuite
   }
 
   test("SPARK-34261: Avoid side effect if create exists temporary function") {
-    assume(Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar") != null)
     withUserDefinedFunction("f1" -> true) {
       sql("CREATE TEMPORARY FUNCTION f1 AS 'org.apache.hadoop.hive.ql.udf.UDFUUID'")
 
-      val jarName = "TestUDTF.jar"
-      val jar = spark.asInstanceOf[TestHiveSparkSession].getHiveFile(jarName).toURI.toString
+      val udtfJar = TestUDTFJar.jar
+      val jarName = udtfJar.getName
+      val jar = udtfJar.toURI.toString
       spark.sparkContext.allAddedJars.keys.find(_.contains(jarName))
         .foreach(k => spark.sparkContext.addedJars.get("default").foreach(_.remove(k)))
       assert(!spark.sparkContext.listJars().exists(_.contains(jarName)))

@@ -37,7 +37,7 @@ class MySQLJoinPushdownIntegrationSuite
     with JDBCV2JoinPushdownIntegrationSuiteBase {
   override val db = new MySQLDatabaseOnDocker
 
-  override val url = db.getJdbcUrl(dockerIp, externalPort)
+  override lazy val url = db.getJdbcUrl(dockerIp, externalPort)
 
   override val jdbcDialect: JdbcDialect = MySQLDialect()
 
