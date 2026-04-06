@@ -591,17 +591,36 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
             Some(keyAndTimestampToRow("key1", 1, 0L)),
             Some(keyAndTimestampToRow("key1", 1, 1001L)))
           val boundedResults = boundedIter.map { pair =>
-            (pair.key.getLong(2), pair.value.getInt(0))
+            (pair.key.getString(0), pair.key.getLong(2), pair.value.getInt(0))
           }.toList
           boundedIter.close()
 
           val expectedTimestamps = diverseTimestamps.filter(ts => ts >= 0 && ts <= 1000).sorted
-          assert(boundedResults.map(_._1).distinct === expectedTimestamps)
+          assert(boundedResults.map(_._2).distinct === expectedTimestamps)
           val expectedValues = diverseTimestamps.zipWithIndex
             .filter { case (ts, _) => ts >= 0 && ts <= 1000 }
             .sortBy(_._1)
             .flatMap { case (_, idx) => Seq(idx * 10, idx * 10 + 1) }
-          assert(boundedResults.map(_._2) === expectedValues)
+          assert(boundedResults.map(_._3) === expectedValues)
+          assert(boundedResults.forall(_._1 == "key1"))
+
+          // Exact bound: startKey is inclusive, endKey is exclusive.
+          // 9 exists in diverseTimestamps, 90 exists in diverseTimestamps.
+          val exactIter = store.scanWithMultiValues(
+            Some(keyAndTimestampToRow("key1", 1, 9L)),
+            Some(keyAndTimestampToRow("key1", 1, 90L)))
+          val exactResults = exactIter.map(_.key.getLong(2)).toList
+          exactIter.close()
+          val exactResultsDistinct = exactResults.distinct
+          assert(exactResultsDistinct === diverseTimestamps
+            .filter(ts => ts >= 9 && ts < 90).sorted)
+          assert(exactResultsDistinct.contains(9L))
+          assert(!exactResultsDistinct.contains(90L))
+
+          // Postfix timestamp encoder places the timestamp after the key prefix.
+          // With different key prefixes, None in startKey or endKey would scan across
+          // key boundaries, which is not meaningful for postfix encoding. Hence we only
+          // test bounded ranges with explicit keys here.
 
           // Full range [MinValue, MaxValue)
           val fullIter = store.scanWithMultiValues(
@@ -611,6 +630,15 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
           fullIter.close()
 
           assert(fullResults.distinct === diverseTimestamps.sorted)
+
+          // Bounded negative range [-300, 0)
+          val negIter = store.scanWithMultiValues(
+            Some(keyAndTimestampToRow("key1", 1, -300L)),
+            Some(keyAndTimestampToRow("key1", 1, 0L)))
+          val negResults = negIter.map(_.key.getLong(2)).toList
+          negIter.close()
+          assert(negResults.distinct === diverseTimestamps
+            .filter(ts => ts >= -300 && ts < 0).sorted)
 
           // Empty range [10, 31) - no diverseTimestamps entries between 9 and 32
           val emptyIter = store.scanWithMultiValues(
@@ -624,6 +652,9 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
       }
     }
 
+    // Sanity test for prefix encoder scan. Full scan coverage is in RocksDBStateStoreSuite's
+    // "rocksdb range scan - scan" and "rocksdb range scan - scanWithMultiValues" tests.
+    // This test verifies the timestamp prefix encoder integration works correctly.
     test(s"scan with prefix encoder (encoding = $encoding)") {
       tryWithProviderResource(
         newStoreProviderWithTimestampEncoder(
@@ -643,10 +674,13 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
           // None startKey scans from beginning up to 301 (exclusive)
           val iter1 = store.scanWithMultiValues(None,
             Some(keyAndTimestampToRow("key1", 1, 301L)))
-          val results1 = iter1.map(_.key.getLong(2)).toList
+          val results1 = iter1.map { pair =>
+            (pair.key.getString(0), pair.key.getLong(2))
+          }.toList
           iter1.close()
 
-          assert(results1 === Seq(100L, 150L, 200L, 300L))
+          assert(results1 === Seq(
+            ("key1", 100L), ("key2", 150L), ("key1", 200L), ("key1", 300L)))
 
           // Boundary safety: endKey at 201, includes everything up to 200
           // regardless of join key
@@ -657,54 +691,14 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
           }.toList
           iter2.close()
 
-          assert(results2.map(_._2) === Seq(100L, 150L, 200L))
+          assert(results2 === Seq(
+            ("key1", 100L), ("key2", 150L), ("key1", 200L)))
         } finally {
           store.abort()
         }
       }
     }
 
-    test(s"scan single-value variant (encoding = $encoding)") {
-      tryWithProviderResource(
-        newStoreProviderWithTimestampEncoder(
-          encoderType = "postfix",
-          useMultipleValuesPerKey = false,
-          dataEncoding = encoding)
-      ) { provider =>
-        val store = provider.getStore(0)
-
-        try {
-          diverseTimestamps.foreach { ts =>
-            store.put(keyAndTimestampToRow("key1", 1, ts), valueToRow(ts.toInt))
-          }
-
-          // Bounded positive range [0, 100)
-          val posIter = store.scan(
-            Some(keyAndTimestampToRow("key1", 1, 0L)),
-            Some(keyAndTimestampToRow("key1", 1, 100L)))
-          val posResults = posIter.map { pair =>
-            (pair.key.getLong(2), pair.value.getInt(0))
-          }.toList
-          posIter.close()
-
-          val expectedPosTs = diverseTimestamps.filter(ts => ts >= 0 && ts < 100).sorted
-          assert(posResults.map(_._1) === expectedPosTs)
-          assert(posResults.map(_._2) === expectedPosTs.map(_.toInt))
-
-          // Bounded negative range [-300, 0)
-          val negIter = store.scan(
-            Some(keyAndTimestampToRow("key1", 1, -300L)),
-            Some(keyAndTimestampToRow("key1", 1, 0L)))
-          val negResults = negIter.map(_.key.getLong(2)).toList
-          negIter.close()
-
-          val expectedNegTs = diverseTimestamps.filter(ts => ts >= -300 && ts < 0).sorted
-          assert(negResults === expectedNegTs)
-        } finally {
-          store.abort()
-        }
-      }
-    }
   }
 
   // Helper methods to create test data
