@@ -99,4 +99,7 @@ if __name__ == "__main__":
     (sock_file, sock) = local_connect_and_auth(java_port, auth_secret)
     write_int(os.getpid(), sock_file)
     sock_file.flush()
-    main(sock_file, sock_file)
+    try:
+        main(sock_file, sock_file)
+    finally:
+        sock_file.close()

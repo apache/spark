@@ -2081,4 +2081,7 @@ if __name__ == "__main__":
     # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.
     write_int(os.getpid(), sock_file)
     sock_file.flush()
-    main(sock_file, sock_file)
+    try:
+        main(sock_file, sock_file)
+    finally:
+        sock_file.close()
