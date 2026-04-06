@@ -27,7 +27,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{END_INDEX, INDEX, JOIN_SIDE, KEY, NUM_VALUES, PARTITION_ID, START_INDEX, STATE_STORE_ID, STATE_STORE_VERSION}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, GenericInternalRow, JoinedRow, Literal, SafeProjection, SpecificInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, SafeProjection, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, WatermarkSupport}
@@ -647,25 +647,17 @@ class SymmetricHashJoinStateManagerV4(
 
     /**
      * Returns entries where minTs <= timestamp <= maxTs (both inclusive), grouped by timestamp.
-     *
-     * When a bounded range is provided, leverages RocksDB's native seek and upper bound via
-     * [[StateStore.scanWithMultiValues]] to avoid reading entries outside the range.
-     * Falls back to [[StateStore.prefixScanWithMultiValues]] when the full range is requested.
+     * Skips entries before minTs and stops iterating past maxTs (timestamps are sorted).
      */
     def getValuesInRange(
         key: UnsafeRow, minTs: Long, maxTs: Long): Iterator[GetValuesResult] = {
       val reusableGetValuesResult = new GetValuesResult()
 
       new NextIterator[GetValuesResult] {
-        private val iter = if (minTs == Long.MinValue && maxTs == Long.MaxValue) {
-          stateStore.prefixScanWithMultiValues(key, colFamilyName)
-        } else {
-          val startKeyRow = createKeyRow(key, minTs).copy()
-          val endKeyRow = createKeyRow(key, maxTs + 1)
-          stateStore.scanWithMultiValues(Some(startKeyRow), Some(endKeyRow), colFamilyName)
-        }
+        private val iter = stateStore.prefixScanWithMultiValues(key, colFamilyName)
 
         private var currentTs = -1L
+        private var pastUpperBound = false
         private val valueAndMatchPairs = scala.collection.mutable.ArrayBuffer[ValueAndMatchPair]()
 
         private def flushAccumulated(): GetValuesResult = {
@@ -683,13 +675,18 @@ class SymmetricHashJoinStateManagerV4(
 
         @tailrec
         override protected def getNext(): GetValuesResult = {
-          if (!iter.hasNext) {
+          if (pastUpperBound || !iter.hasNext) {
             flushAccumulated()
           } else {
             val unsafeRowPair = iter.next()
             val ts = TimestampKeyStateEncoder.extractTimestamp(unsafeRowPair.key)
 
-            if (currentTs == -1L || currentTs == ts) {
+            if (ts > maxTs) {
+              pastUpperBound = true
+              getNext()
+            } else if (ts < minTs) {
+              getNext()
+            } else if (currentTs == -1L || currentTs == ts) {
               currentTs = ts
               valueAndMatchPairs += valueRowConverter.convertValue(unsafeRowPair.value)
               getNext()
@@ -773,18 +770,11 @@ class SymmetricHashJoinStateManagerV4(
       stateStore.remove(createKeyRow(key, timestamp), colFamilyName)
     }
 
-    private lazy val dummyKeyRow: UnsafeRow = {
-      val defaultValues = keySchema.fields.map(f => Literal.default(f.dataType).eval())
-      val projection = UnsafeProjection.create(keySchema)
-      projection(new GenericInternalRow(defaultValues)).copy()
-    }
-
     case class EvictedKeysResult(key: UnsafeRow, timestamp: Long, numValues: Int)
 
     // NOTE: This assumes we consume the whole iterator to trigger completion.
     def scanEvictedKeys(endTimestamp: Long): Iterator[EvictedKeysResult] = {
-      val endKeyRow = createKeyRow(dummyKeyRow, endTimestamp + 1)
-      val evictIterator = stateStore.scanWithMultiValues(None, Some(endKeyRow), colFamilyName)
+      val evictIterator = stateStore.iteratorWithMultiValues(colFamilyName)
       new NextIterator[EvictedKeysResult]() {
         var currentKeyRow: UnsafeRow = null
         var currentEventTime: Long = -1L
@@ -799,19 +789,25 @@ class SymmetricHashJoinStateManagerV4(
             val ts = TimestampKeyStateEncoder.extractTimestamp(kv.key)
 
             if (keyRow == currentKeyRow && ts == currentEventTime) {
+              // new value with same (key, ts)
               count += 1
             } else if (ts > endTimestamp) {
-              // Safety check for boundary edge case: a small number of entries at exactly
-              // endTimestamp + 1 may leak through the upper bound because the encoded end key
-              // includes a join key suffix.
+              // we found the timestamp beyond the range - we shouldn't continue further
               isBeyondUpperBound = true
+
+              // We don't need to construct the last (key, ts) into EvictedKeysResult - the code
+              // after loop will handle that if there is leftover. That said, we do not reset the
+              // current (key, ts) info here.
             } else if (currentKeyRow == null && currentEventTime == -1L) {
+              // first value to process
               currentKeyRow = keyRow.copy()
               currentEventTime = ts
               count = 1
             } else {
+              // construct the last (key, ts) into EvictedKeysResult
               ret = EvictedKeysResult(currentKeyRow, currentEventTime, count)
 
+              // register the next (key, ts) to process
               currentKeyRow = keyRow.copy()
               currentEventTime = ts
               count = 1
@@ -821,8 +817,10 @@ class SymmetricHashJoinStateManagerV4(
           if (ret != null) {
             ret
           } else if (count > 0) {
+            // there is a final leftover (key, ts) to return
             ret = EvictedKeysResult(currentKeyRow, currentEventTime, count)
 
+            // we shouldn't continue further
             currentKeyRow = null
             currentEventTime = -1L
             count = 0
