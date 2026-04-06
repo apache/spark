@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 import unittest
 
 import numpy as np
@@ -69,7 +70,7 @@ class PredictBatchUDFTestsMixin:
     @classmethod
     def master(cls):
         # test_caching requires all the workload to be executed on the same worker
-        return "local[1]"
+        return os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[1]")
 
     def setUp(self):
         import pandas as pd
@@ -229,6 +230,10 @@ class PredictBatchUDFTestsMixin:
         batch_sizes = preds["preds"].to_numpy()
         self.assertTrue(all(batch_sizes <= batch_size))
 
+    @unittest.skipIf(
+        os.environ.get("SPARK_CONNECT_TESTING_REMOTE"),
+        "We can not guarantee that there is only one worker in Spark Connect tests",
+    )
     def test_caching(self):
         def make_predict_fn():
             # emulate loading a model, this should only be invoked once (per worker process)

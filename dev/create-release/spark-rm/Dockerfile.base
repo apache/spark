@@ -43,6 +43,7 @@ ENV DEBCONF_NONINTERACTIVE_SEEN=true
 RUN apt-get update && apt-get install -y \
     build-essential \
     ca-certificates \
+    cmake \
     curl \
     gfortran \
     git \
@@ -90,7 +91,7 @@ RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/' >> /et
 
 # Install R packages (same versions across all branches)
 # See more in SPARK-39959, roxygen2 < 7.2.1
-RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown', \
+RUN Rscript -e "install.packages(c('devtools', 'remotes', 'knitr', 'markdown', \
     'rmarkdown', 'testthat', 'e1071', 'survival', 'arrow', \
     'ggplot2', 'mvtnorm', 'statmod', 'xml2'), repos='https://cloud.r-project.org/')" && \
     Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')" && \

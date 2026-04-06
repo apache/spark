@@ -33,7 +33,7 @@ class ClassLoaderIsolationSuite extends SparkFunSuite with LocalSparkContext  {
     .take(2)
     .mkString(".")
 
-  private val jarURL1 = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+  private val jarURL1 = TestUtils.createJarWithClasses(Seq("ClassLoaderIsolation_Dummy"))
   private lazy val jar1 = jarURL1.toString
 
   // package com.example
@@ -51,7 +51,6 @@ class ClassLoaderIsolationSuite extends SparkFunSuite with LocalSparkContext  {
   private lazy val jar3 = jarURL3.toString
 
   test("Executor classloader isolation with JobArtifactSet") {
-    assume(jarURL1 != null)
     assume(jarURL2 != null)
     assume(jarURL3 != null)
 

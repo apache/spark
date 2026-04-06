@@ -109,6 +109,10 @@ class SparkSubmitSuite
   private val emptyIvySettings = File.createTempFile("ivy", ".xml")
   Files.writeString(emptyIvySettings.toPath, "<ivysettings />")
 
+  private val testJarPath: String = {
+    val url = TestUtils.createJarWithClasses(Seq("SparkSubmitSuite_Dummy"))
+    new File(url.toURI).getAbsolutePath
+  }
   private val submit = new SparkSubmit()
 
   override def beforeEach(): Unit = {
@@ -502,8 +506,7 @@ class SparkSubmitSuite
 
   test("SPARK-47495: Not to add primary resource to jars again" +
     " in k8s client mode & driver runs inside a POD") {
-    val testJar = "src/test/resources/TestUDTF.jar"
-    assume(new File(testJar).exists)
+    val testJar = testJarPath
     val clArgs = Seq(
       "--deploy-mode", "client",
       "--proxy-user", "test.user",
@@ -518,12 +521,11 @@ class SparkSubmitSuite
     val appArgs = new SparkSubmitArguments(clArgs)
     val (_, _, sparkConf, _) = submit.prepareSubmitEnvironment(appArgs)
     sparkConf.get("spark.jars").contains("jarToIgnore") shouldBe false
-    sparkConf.get("spark.jars").contains("TestUDTF") shouldBe true
+    sparkConf.get("spark.jars").contains("testJar") shouldBe true
   }
 
   test("SPARK-33782: handles k8s files download to current directory") {
-    val testJar = "src/test/resources/TestUDTF.jar"
-    assume(new File(testJar).exists)
+    val testJar = testJarPath
     val clArgs = Seq(
       "--deploy-mode", "client",
       "--proxy-user", "test.user",
@@ -548,21 +550,22 @@ class SparkSubmitSuite
     conf.get("spark.kubernetes.namespace") should be ("spark")
     conf.get("spark.kubernetes.driver.container.image") should be ("bar")
 
+    val testJarName = new File(testJar).getName
     Files.exists(Paths.get("test_metrics_config.properties")) should be (true)
     Files.exists(Paths.get("test_metrics_system.properties")) should be (true)
     Files.exists(Paths.get("log4j2.properties")) should be (true)
-    Files.exists(Paths.get("TestUDTF.jar")) should be (true)
+    Files.exists(Paths.get(testJarName)) should be (true)
     Files.delete(Paths.get("test_metrics_config.properties"))
     Files.delete(Paths.get("test_metrics_system.properties"))
     Files.delete(Paths.get("log4j2.properties"))
-    Files.delete(Paths.get("TestUDTF.jar"))
+    Files.delete(Paths.get(testJarName))
   }
 
   test("SPARK-47475: Avoid jars download if scheme matches " +
     "spark.kubernetes.jars.avoidDownloadSchemes " +
     "in k8s client mode & driver runs inside a POD") {
-    val testJar = "src/test/resources/TestUDTF.jar"
-    assume(new File(testJar).exists)
+    val testJar = testJarPath
+    val testJarName = new File(testJar).getName
     val hadoopConf = new Configuration()
     updateConfWithFakeS3Fs(hadoopConf)
     withTempDir { tmpDir =>
@@ -588,17 +591,17 @@ class SparkSubmitSuite
       val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs, Some(hadoopConf))
       conf.get("spark.master") should be("k8s://https://host:port")
       conf.get("spark.jars").contains(remoteJarFile) shouldBe true
-      conf.get("spark.jars").contains("TestUDTF") shouldBe true
+      conf.get("spark.jars").contains(testJarName) shouldBe true
 
       Files.exists(Paths.get("test_metrics_config.properties")) should be(true)
       Files.exists(Paths.get("test_metrics_system.properties")) should be(true)
       Files.exists(Paths.get("log4j2.properties")) should be(true)
-      Files.exists(Paths.get("TestUDTF.jar")) should be(true)
+      Files.exists(Paths.get(testJarName)) should be(true)
       Files.exists(Paths.get(notToDownload.getName)) should be(false)
       Files.delete(Paths.get("test_metrics_config.properties"))
       Files.delete(Paths.get("test_metrics_system.properties"))
       Files.delete(Paths.get("log4j2.properties"))
-      Files.delete(Paths.get("TestUDTF.jar"))
+      Files.delete(Paths.get(testJarName))
     }
   }
 
@@ -1932,7 +1935,7 @@ class SparkSubmitSuite
       TestUtils.createJar(Seq(text1), zipFile1)
       val testFile = "test_metrics_config.properties"
       val testPyFile = "test_metrics_system.properties"
-      val testJar = "TestUDTF.jar"
+      val testJar = new File(testJarPath).getName
       val clArgs = Seq(
         "--deploy-mode", "client",
         "--proxy-user", "test.user",
@@ -1945,7 +1948,7 @@ class SparkSubmitSuite
         "--conf", "spark.kubernetes.submitInDriver=true",
         "--files", s"src/test/resources/$testFile",
         "--py-files", s"src/test/resources/$testPyFile",
-        "--jars", s"src/test/resources/$testJar",
+        "--jars", testJarPath,
         "--archives", s"${zipFile1.getAbsolutePath}#test_archives",
         "/home/thejar.jar",
         "arg1")

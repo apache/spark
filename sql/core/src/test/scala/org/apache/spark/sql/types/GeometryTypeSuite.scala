@@ -30,7 +30,7 @@ class GeometryTypeSuite extends SparkFunSuite {
   // These tests verify the basic behavior of the GeometryType logical type.
 
   test("GEOMETRY type with specified invalid SRID") {
-    val srids: Seq[Int] = Seq(-4612, -4326, -2, -1, 1, 2)
+    val srids: Seq[Int] = Seq(-4612, -4326, -2, -1, 1, 2, 999, 99999)
     srids.foreach { srid =>
       checkError(
         exception = intercept[SparkIllegalArgumentException] {
@@ -44,7 +44,8 @@ class GeometryTypeSuite extends SparkFunSuite {
   }
 
   test("GEOMETRY type with specified valid SRID") {
-    val srids: Seq[Int] = Seq(0, 3857, 4326)
+    // SRID 0 (Spark Cartesian), 3857 (Web Mercator), and OGC-overridden geographic SRIDs.
+    val srids: Seq[Int] = Seq(0, 3857, 4326, 4267, 4269)
     srids.foreach { srid =>
       val g = GeometryType(srid)
       assert(g.srid == srid)
@@ -121,6 +122,8 @@ class GeometryTypeSuite extends SparkFunSuite {
     assertStringRepresentation(GeometryType(0), "geometry(0)", "geometry(SRID:0)")
     assertStringRepresentation(GeometryType(3857), "geometry(3857)", "geometry(EPSG:3857)")
     assertStringRepresentation(GeometryType(4326), "geometry(4326)", "geometry(OGC:CRS84)")
+    assertStringRepresentation(GeometryType(4267), "geometry(4267)", "geometry(OGC:CRS27)")
+    assertStringRepresentation(GeometryType(4269), "geometry(4269)", "geometry(OGC:CRS83)")
   }
 
   // These tests verify the JSON parsing of different GEOMETRY types.
@@ -128,7 +131,10 @@ class GeometryTypeSuite extends SparkFunSuite {
   test("GEOMETRY data type JSON parsing with valid CRS") {
     val validGeometries = Seq(
       "\"geometry\"",
-      "\"geometry(OGC:CRS84)\""
+      "\"geometry(OGC:CRS84)\"",
+      "\"geometry(EPSG:3857)\"",
+      "\"geometry(EPSG:32601)\"",
+      "\"geometry(ESRI:102013)\""
     )
     validGeometries.foreach { geom =>
       DataType.fromJson(geom).isInstanceOf[GeometryType]
@@ -170,7 +176,11 @@ class GeometryTypeSuite extends SparkFunSuite {
       "GEOMETRY(ANY)",
       "GEOMETRY(0)",
       "GEOMETRY(3857)",
-      "GEOMETRY(4326)"
+      "GEOMETRY(4326)",
+      "GEOMETRY(4267)",
+      "GEOMETRY(4269)",
+      "GEOMETRY(2000)",
+      "GEOMETRY(102100)"
     )
     validGeometries.foreach { geom =>
       val dt = DataType.fromDDL(geom)
@@ -207,6 +217,10 @@ class GeometryTypeSuite extends SparkFunSuite {
       GeometryType(0),
       GeometryType(3857),
       GeometryType(4326),
+      GeometryType(4267),
+      GeometryType(4269),
+      GeometryType(2000),
+      GeometryType(102100),
       GeometryType("ANY")
     )
     geometryTypes.foreach { geometryType =>
