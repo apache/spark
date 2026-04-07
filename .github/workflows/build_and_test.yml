@@ -1465,8 +1465,8 @@ jobs:
           sudo apt-get install r-base
       - name: Check default Python version
         run: |
-          echo "Default Python path: $(which python3)"
-          echo "Default Python version: $(python3 --version)"
+          echo "Default Python path is: $(which python3)"
+          echo "Default Python version is: $(python3 --version)"
       - name: Start Minikube
         uses: medyagh/setup-minikube@e9e035a86bbc3caea26a450bd4dbf9d0c453682e # v0.0.21
         with:
