@@ -352,7 +352,12 @@ engine-provided ``ReadLimit``:
     class MyStreamReader(DataSourceStreamReader):
 
         def getDefaultReadLimit(self) -> ReadLimit:
-            """Limit each micro-batch to at most 20 rows."""
+            """
+            Limit each micro-batch to at most 20 rows.
+
+            This value is just an example; in practice, configure the limit
+            based on source options (e.g., self.options.get("maxRowsPerBatch")).
+            """
             return ReadMaxRows(20)
 
         def latestOffset(self, start: dict, limit: ReadLimit) -> dict:
@@ -362,21 +367,17 @@ engine-provided ``ReadLimit``:
             current = start["offset"]
 
             if isinstance(limit, ReadMaxRows):
-                # Respect the row limit for admission control.
                 end = min(current + limit.max_rows, self.max_available)
             elif isinstance(limit, ReadAllAvailable):
-                # The engine requested every remaining row.
                 end = self.max_available
             else:
-                # Fallback to the same default batch size.
-                end = min(current + 20, self.max_available)
+                raise ValueError(f"Unexpected ReadLimit type: {type(limit)}")
 
             return {"offset": end}
 
-When Spark uses the default ``ReadMaxRows(20)`` limit, each full micro-batch
-reads 20 rows, and the final micro-batch reads only the remaining rows when
-fewer than 20 are left. If Spark passes ``ReadAllAvailable``, the reader
-should return all remaining rows instead.
+When Spark uses the default ``ReadMaxRows(20)`` limit, each micro-batch
+reads at most 20 rows, depending on the available rows. If Spark passes
+``ReadAllAvailable``, the reader should return all remaining rows instead.
 
 This is useful for:
 

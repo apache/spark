@@ -109,7 +109,7 @@ class BlockchainStreamReader(DataSourceStreamReader):
         elif isinstance(limit, ReadAllAvailable):
             end_block = self.CHAIN_HEIGHT
         else:
-            end_block = min(start_block + 20, self.CHAIN_HEIGHT)
+            raise ValueError(f"Unexpected ReadLimit type: {type(limit)}")
 
         return {"block_number": end_block}
 
