@@ -4045,7 +4045,7 @@ class RDD(Generic[T_co]):
             merger.mergeCombiners(it)
             return merger.items()
 
-        return shuffled.mapPartitions(groupByKey, True).mapValues(ResultIterable[V])
+        return shuffled.mapPartitions(groupByKey, True).mapValues(ResultIterable)
 
     def flatMapValues(
         self: "RDD[Tuple[K, V]]", f: Callable[[V], Iterable[U]]
