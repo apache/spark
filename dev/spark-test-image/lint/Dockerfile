@@ -100,6 +100,7 @@ RUN python3.12 -m pip install \
     'pytest==7.1.3' \
     'scipy>=1.8.0' \
     'scipy-stubs' \
+    'types-protobuf==6.32.1.20260221' \
     && python3.12 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
     && python3.12 -m pip install torcheval \
     && python3.12 -m pip cache purge
