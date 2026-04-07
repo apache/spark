@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.ExtractV2Scan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.{EqualTo, Filter, IsNotNull}
@@ -257,8 +257,7 @@ class CollatedFilterPushDownToParquetV2Suite extends CollatedFilterPushDownToPar
 
   override def getPushedDownFilters(query: DataFrame): Seq[Filter] = {
     query.queryExecution.optimizedPlan.collectFirst {
-      case PhysicalOperation(_, _,
-          DataSourceV2ScanRelation(_, scan: ParquetScan, _, _, _)) =>
+      case PhysicalOperation(_, _, ExtractV2Scan(scan: ParquetScan)) =>
         scan.pushedFilters.toSeq
     }.getOrElse(Seq.empty)
   }

@@ -244,12 +244,11 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   }
 
   test("add and list jar files") {
-    val testJar = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
-    assume(testJar != null)
+    val testJar = TestUtils.createJarWithClasses(Seq("SparkContextSuite_AddJar"))
     try {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
       sc.addJar(testJar.toString)
-      assert(sc.listJars().count(_.contains("TestUDTF.jar")) == 1)
+      assert(sc.listJars().count(_.contains("testJar")) == 1)
     } finally {
       sc.stop()
     }
@@ -257,10 +256,10 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
   test("add FS jar files not exists") {
     try {
-      val jarPath = "hdfs:///no/path/to/TestUDTF.jar"
+      val jarPath = "hdfs:///no/path/to/nonexistent.jar"
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
       sc.addJar(jarPath)
-      assert(sc.listJars().forall(!_.contains("TestUDTF.jar")))
+      assert(sc.listJars().forall(!_.contains("nonexistent.jar")))
     } finally {
       sc.stop()
     }
@@ -402,8 +401,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       case "non-local-mode" => "local-cluster[1,1,1024]"
     }
     test(s"$method can be called twice with same file in $schedulingMode (SPARK-16787)") {
-      val testJar = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
-      assume(testJar != null)
+      val testJar = TestUtils.createJarWithClasses(Seq("SparkContextSuite_SPARK16787"))
       sc = new SparkContext(master, "test")
       val jarPath = testJar.toString
       method match {

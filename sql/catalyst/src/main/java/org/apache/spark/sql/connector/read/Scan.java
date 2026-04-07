@@ -78,7 +78,7 @@ public interface Scan {
    */
   default Batch toBatch() {
     throw new SparkUnsupportedOperationException(
-      "_LEGACY_ERROR_TEMP_3147", Map.of("description", description()));
+      "DATA_SOURCE_BATCH_SCAN_NOT_SUPPORTED", Map.of("description", description()));
   }
 
   /**
@@ -95,7 +95,7 @@ public interface Scan {
    */
   default MicroBatchStream toMicroBatchStream(String checkpointLocation) {
     throw new SparkUnsupportedOperationException(
-      "_LEGACY_ERROR_TEMP_3148", Map.of("description", description()));
+      "DATA_SOURCE_MICRO_BATCH_SCAN_NOT_SUPPORTED", Map.of("description", description()));
   }
 
   /**
@@ -112,7 +112,7 @@ public interface Scan {
    */
   default ContinuousStream toContinuousStream(String checkpointLocation) {
     throw new SparkUnsupportedOperationException(
-      "_LEGACY_ERROR_TEMP_3149", Map.of("description", description()));
+      "DATA_SOURCE_CONTINUOUS_SCAN_NOT_SUPPORTED", Map.of("description", description()));
   }
 
   /**

@@ -285,6 +285,17 @@ object ExtractV2CatalogAndIdentifier {
   }
 }
 
+object ExtractV2Scan {
+  def unapply(scanRelation: DataSourceV2ScanRelation): Option[Scan] =
+    Some(scanRelation.scan)
+}
+
+object ExtractV2ScanInfo {
+  def unapply(scanRelation: DataSourceV2ScanRelation)
+      : Option[(DataSourceV2Relation, Scan, Seq[AttributeReference])] =
+    Some((scanRelation.relation, scanRelation.scan, scanRelation.output))
+}
+
 object DataSourceV2Relation {
   def create(
       table: Table,

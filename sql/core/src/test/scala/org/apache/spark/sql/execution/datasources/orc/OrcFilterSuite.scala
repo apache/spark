@@ -32,7 +32,7 @@ import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.ExtractV2Scan
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
@@ -63,7 +63,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       .where(Column(predicate))
 
     query.queryExecution.optimizedPlan match {
-      case PhysicalOperation(_, filters, DataSourceV2ScanRelation(_, o: OrcScan, _, _, _)) =>
+      case PhysicalOperation(_, filters, ExtractV2Scan(o: OrcScan)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
         assert(o.pushedFilters.nonEmpty, "No filter is pushed down")
         val maybeFilter = OrcFilters.createFilter(query.schema, o.pushedFilters.toImmutableArraySeq)

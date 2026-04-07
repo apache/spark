@@ -369,7 +369,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
     val targetPath2 = Paths.get(artifact2Path)
 
     val classPath1 = copyDir.resolve("Hello.class")
-    val classPath2 = copyDir.resolve("udf_noA.jar")
+    val classPath2 = copyDir.resolve("smallClassFile.class")
     assume(artifactPath.resolve("Hello.class").toFile.exists)
     assume(artifactPath.resolve("smallClassFile.class").toFile.exists)
 
@@ -500,10 +500,10 @@ class ArtifactManagerSuite extends SharedSparkSession {
         Paths.get("classes/Hello.class"), clsPath, None)
       artifactManager.addArtifact( // Python
         Paths.get("pyfiles/abc.zip"), randomFilePath, None, deleteStagedFile = false)
-      val jarPath = Paths.get("jars/udf_noA.jar")
+      val jarPath = Paths.get("jars/smallClassFile.class")
       assume(jarPath.toFile.exists)
       artifactManager.addArtifact( // JAR
-        jarPath, path.resolve("udf_noA.jar"), None)
+        jarPath, path.resolve("smallClassFile.class"), None)
       artifactManager.addArtifact( // Cached
         Paths.get("cache/test"), randomFilePath, None)
       assert(Utils.listPaths(artifactManager.artifactPath.toFile).size() === 3)

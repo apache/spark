@@ -2867,12 +2867,72 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     val unresolvedTable = UnresolvedInlineTable(aliases, rows.toSeq)
-    val table = if (conf.getConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED)) {
-      EvaluateUnresolvedInlineTable.evaluate(unresolvedTable)
+    val table = if (canEagerlyEvaluateInlineTable(ctx, unresolvedTable)) {
+      EvaluateUnresolvedInlineTable.evaluate(
+        unresolvedTable, ignoreCollation = isInlineTableInsideInsertValuesClause(ctx))
     } else {
       unresolvedTable
     }
     table.optionalMap(ctx.tableAlias.strictIdentifier)(aliasPlan)
+  }
+
+  /**
+   * Returns whether we can eagerly evaluate the given inline table at parse time.
+   *
+   * Eager evaluation is not allowed if the config is disabled, or if the inline table is part of
+   * a `CREATE TABLE/VIEW` statement and contains expressions that need default collation
+   * resolution (e.g., string literals or casts to string types). In those cases, the default
+   * collation of the object must be applied during analysis, so the inline table cannot be
+   * eagerly evaluated.
+   */
+  private def canEagerlyEvaluateInlineTable(
+      ctx: InlineTableContext, table: UnresolvedInlineTable): Boolean = {
+    def isDefaultCollationApplicable: Boolean = {
+      isInsideCreateObjectWithDefaultCollationSupport(ctx) &&
+        ApplyDefaultCollation.needsResolution(table.expressions)
+    }
+
+    conf.getConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED) &&
+      !isDefaultCollationApplicable
+  }
+
+  // Checks if the VALUES clause is directly part of an INSERT statement (e.g.,
+  // `INSERT INTO t VALUES (...)`) by walking up the parser context tree. Returns false if a
+  // FROM clause is found first, meaning the VALUES is inside a subquery
+  // (e.g., `INSERT INTO t SELECT * FROM VALUES (...) AS T`).
+  private def isInlineTableInsideInsertValuesClause(ctx: InlineTableContext): Boolean = {
+    var currentContext: ParserRuleContext = ctx
+    while (currentContext != null) {
+      currentContext match {
+        case c: SingleInsertQueryContext =>
+          c.insertInto() match {
+            case _: InsertIntoTableContext | _: InsertOverwriteTableContext |
+                 _: InsertIntoReplaceUsingContext | _: InsertIntoReplaceBooleanCondContext =>
+              return true
+            case _ =>
+              return false
+          }
+        case _: FromClauseContext =>
+          return false
+        case _ =>
+          currentContext = currentContext.getParent
+      }
+    }
+    false
+  }
+
+  private def isInsideCreateObjectWithDefaultCollationSupport(
+      ctx: ParserRuleContext): Boolean = {
+    var currentContext = ctx
+    while (currentContext != null) {
+      currentContext match {
+        case _: CreateTableContext | _: ReplaceTableContext | _: CreateViewContext =>
+          return true
+        case _ =>
+          currentContext = currentContext.getParent
+      }
+    }
+    false
   }
 
   /**

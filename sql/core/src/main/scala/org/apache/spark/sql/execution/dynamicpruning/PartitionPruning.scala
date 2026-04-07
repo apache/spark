@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.ExtractV2Scan
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -79,7 +79,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
         } else {
           None
         }
-      case (resExp, r @ DataSourceV2ScanRelation(_, scan: SupportsRuntimeV2Filtering, _, _, _)) =>
+      case (resExp, r @ ExtractV2Scan(scan: SupportsRuntimeV2Filtering)) =>
         val filterAttrs = V2ExpressionUtils.resolveRefs[Attribute](
           scan.filterAttributes.toImmutableArraySeq, r)
         if (resExp.references.subsetOf(AttributeSet(filterAttrs))) {

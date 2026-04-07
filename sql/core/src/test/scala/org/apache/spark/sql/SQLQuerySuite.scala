@@ -18,7 +18,10 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.lang.management.ManagementFactory
 import java.net.{MalformedURLException, URI}
+import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Paths}
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
 import java.util.Locale
@@ -56,7 +59,7 @@ import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-import org.apache.spark.util.{ResetSystemProperties, Utils}
+import org.apache.spark.util.{ResetSystemProperties, SparkTestUtils, Utils}
 
 @ExtendedSQLTest
 class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper
@@ -3865,19 +3868,25 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-33084: Add jar support Ivy URI in SQL -- jar contains udf class") {
-    val jarPath = Thread.currentThread().getContextClassLoader
-      .getResource("SPARK-33084.jar")
-    assume(jarPath != null)
     val sumFuncClass = "org.apache.spark.examples.sql.Spark33084"
+    val resourceName = "SPARK-33084/Spark33084.java"
+    val sourceUrl = Thread.currentThread().getContextClassLoader
+      .getResource(resourceName)
+    assert(sourceUrl != null, s"Resource not found: $resourceName")
+    val source = Map(sumFuncClass ->
+      new String(Files.readAllBytes(Paths.get(sourceUrl.toURI)), StandardCharsets.UTF_8))
+    val classpath = ManagementFactory.getRuntimeMXBean.getClassPath
+      .split(File.pathSeparator).map(p => new File(p).toURI.toURL).toSeq
+    val jarFile = new File(Utils.createTempDir(), "SPARK-33084.jar")
+    SparkTestUtils.createJarWithJavaSources(source, jarFile, classpath)
     val functionName = "test_udf"
     withTempDir { dir =>
       System.setProperty("ivy.home", dir.getAbsolutePath)
-      val sourceJar = new File(jarPath.getFile)
       val targetCacheJarDir = new File(dir.getAbsolutePath +
         "/local/org.apache.spark/SPARK-33084/1.0/jars/")
       targetCacheJarDir.mkdir()
       // copy jar to local cache
-      Utils.copyFileToDirectory(sourceJar, targetCacheJarDir)
+      Utils.copyFileToDirectory(jarFile, targetCacheJarDir)
       withTempView("v1") {
         withUserDefinedFunction(
           s"default.$functionName" -> false,

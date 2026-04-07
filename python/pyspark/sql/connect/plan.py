@@ -1120,7 +1120,7 @@ class Join(LogicalPlan):
 
     @property
     def observations(self) -> Dict[str, "Observation"]:
-        return dict(**super().observations, **self.right.observations)
+        return {**super().observations, **self.right.observations}
 
     def print(self, indent: int = 0) -> str:
         i = " " * indent
@@ -1213,7 +1213,7 @@ class AsOfJoin(LogicalPlan):
 
     @property
     def observations(self) -> Dict[str, "Observation"]:
-        return dict(**super().observations, **self.right.observations)
+        return {**super().observations, **self.right.observations}
 
     def print(self, indent: int = 0) -> str:
         assert self.left is not None
@@ -1288,7 +1288,7 @@ class LateralJoin(LogicalPlan):
 
     @property
     def observations(self) -> Dict[str, "Observation"]:
-        return dict(**super().observations, **self.right.observations)
+        return {**super().observations, **self.right.observations}
 
     def print(self, indent: int = 0) -> str:
         i = " " * indent
@@ -1354,10 +1354,10 @@ class SetOperation(LogicalPlan):
 
     @property
     def observations(self) -> Dict[str, "Observation"]:
-        return dict(
+        return {
             **super().observations,
             **(self.other.observations if self.other is not None else {}),
-        )
+        }
 
     def print(self, indent: int = 0) -> str:
         assert self._child is not None
@@ -1664,7 +1664,7 @@ class CollectMetrics(LogicalPlan):
             observations = {str(self._observation._name): self._observation}
         else:
             observations = {}
-        return dict(**super().observations, **observations)
+        return {**super().observations, **observations}
 
 
 class NAFill(LogicalPlan):
