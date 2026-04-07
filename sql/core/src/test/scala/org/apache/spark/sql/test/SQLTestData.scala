@@ -21,7 +21,6 @@ import java.nio.charset.StandardCharsets
 import java.time.{Duration, Period}
 
 import org.apache.spark.sql.{DataFrame, SparkSessionProvider}
-import org.apache.spark.sql.classic
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
@@ -42,7 +41,7 @@ private[sql] trait SQLTestData extends SparkSessionProvider { self =>
 
   protected lazy val emptyTestData: DataFrame = {
     val df = spark.createDataFrame(
-      spark.asInstanceOf[classic.SparkSession].sparkContext.parallelize(
+      spark.sparkContext.parallelize(
         Seq.empty[Int].map(i => TestData(i, i.toString))))
     df.createOrReplaceTempView("emptyTestData")
     df
@@ -50,7 +49,7 @@ private[sql] trait SQLTestData extends SparkSessionProvider { self =>
 
   protected lazy val testData: DataFrame = {
     val df = spark.createDataFrame(
-      spark.asInstanceOf[classic.SparkSession].sparkContext.parallelize(
+      spark.sparkContext.parallelize(
         (1 to 100).map(i => TestData(i, i.toString))))
     df.createOrReplaceTempView("testData")
     df
@@ -58,7 +57,7 @@ private[sql] trait SQLTestData extends SparkSessionProvider { self =>
 
   protected lazy val testData2: DataFrame = {
     val df = spark.createDataFrame(
-      spark.asInstanceOf[classic.SparkSession].sparkContext.parallelize(
+      spark.sparkContext.parallelize(
         TestData2(1, 1) ::
         TestData2(1, 2) ::
         TestData2(2, 1) ::
@@ -71,7 +70,7 @@ private[sql] trait SQLTestData extends SparkSessionProvider { self =>
 
   protected lazy val testData3: DataFrame = {
     val df = spark.createDataFrame(
-      spark.asInstanceOf[classic.SparkSession].sparkContext.parallelize(
+      spark.sparkContext.parallelize(
         TestData3(1, None) ::
         TestData3(2, Some(2)) :: Nil))
     df.createOrReplaceTempView("testData3")
@@ -122,7 +121,7 @@ private[sql] trait SQLTestData extends SparkSessionProvider { self =>
 
   protected lazy val upperCaseData: DataFrame = {
     val df = spark.createDataFrame(
-      spark.asInstanceOf[classic.SparkSession].sparkContext.parallelize(
+      spark.sparkContext.parallelize(
         UpperCaseData(1, "A") ::
         UpperCaseData(2, "B") ::
         UpperCaseData(3, "C") ::
@@ -135,7 +134,7 @@ private[sql] trait SQLTestData extends SparkSessionProvider { self =>
 
   protected lazy val lowerCaseData: DataFrame = {
     val df = spark.createDataFrame(
-      spark.asInstanceOf[classic.SparkSession].sparkContext.parallelize(
+      spark.sparkContext.parallelize(
         LowerCaseData(1, "a") ::
         LowerCaseData(2, "b") ::
         LowerCaseData(3, "c") ::
@@ -146,7 +145,7 @@ private[sql] trait SQLTestData extends SparkSessionProvider { self =>
 
   protected lazy val lowerCaseDataWithDuplicates: DataFrame = {
     val df = spark.createDataFrame(
-      spark.asInstanceOf[classic.SparkSession].sparkContext.parallelize(
+      spark.sparkContext.parallelize(
         LowerCaseData(1, "a") ::
         LowerCaseData(2, "b") ::
         LowerCaseData(2, "b") ::
