@@ -1038,14 +1038,15 @@ object TPCDSCacheBenchmark extends SqlBasedBenchmark {
     )
 
     // Helper: consume columnar batches directly from cache scan
-    def consumeColumnar(spark: SparkSession, tableName: String): Unit = {
+    def consumeColumnar(spark: SparkSession, sql: String): Unit = {
       import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
-      val df = spark.table(tableName)
+      val df = spark.sql(sql)
       val plan = df.queryExecution.executedPlan
       // Find the InMemoryTableScanExec in the plan
       val scanExec = plan.collectFirst {
         case scan: InMemoryTableScanExec => scan
-      }.getOrElse(throw new RuntimeException("No InMemoryTableScanExec found"))
+      }.getOrElse(throw new RuntimeException(
+        s"No InMemoryTableScanExec found in plan:\n${plan.treeString}"))
 
       // Execute columnar and consume all batches
       val rdd = scanExec.executeColumnar()
@@ -1055,27 +1056,30 @@ object TPCDSCacheBenchmark extends SqlBasedBenchmark {
       }
     }
 
-    // 3 INT columns - columnar read
-    runBenchmark("Columnar read store_sales 3 INT cols") {
+    val select3 = "SELECT ss_sold_date_sk, ss_item_sk, ss_customer_sk FROM store_sales"
+    val select10 = """SELECT ss_sold_date_sk, ss_sold_time_sk, ss_item_sk,
+      |ss_customer_sk, ss_cdemo_sk, ss_hdemo_sk, ss_addr_sk,
+      |ss_store_sk, ss_promo_sk, ss_ticket_number FROM store_sales""".stripMargin
+    val selectAll = "SELECT * FROM store_sales"
+
+    // Cache only 3 cols, read all 3
+    runBenchmark("Columnar read: cache 3 INT cols, read 3") {
       val benchmark = new Benchmark(
-        "Columnar read 3 INT cols", numRows, 5, output = output)
+        "cache 3, read 3", numRows, 5, output = output)
 
       for ((name, serializer, extraConf) <- configs) {
         benchmark.addTimerCase(name) { timer =>
           val spark = createFreshSession(serializer)
           try {
             extraConf.foreach { case (k, v) => spark.conf.set(k, v) }
-            val df = spark.read.parquet(s"$dataDir/store_sales")
+            spark.read.parquet(s"$dataDir/store_sales")
               .selectExpr("ss_sold_date_sk", "ss_item_sk", "ss_customer_sk")
-            df.createOrReplaceTempView("store_sales")
+              .createOrReplaceTempView("store_sales")
             spark.catalog.cacheTable("store_sales")
-            // materialize cache
-            spark.sql("SELECT * FROM store_sales")
-              .write.format("noop").mode("overwrite").save()
-            // warm up columnar read
-            consumeColumnar(spark, "store_sales")
+            spark.sql(selectAll).write.format("noop").mode("overwrite").save()
+            consumeColumnar(spark, selectAll)
             timer.startTiming()
-            consumeColumnar(spark, "store_sales")
+            consumeColumnar(spark, selectAll)
             timer.stopTiming()
             spark.catalog.uncacheTable("store_sales")
           } finally {
@@ -1083,16 +1087,97 @@ object TPCDSCacheBenchmark extends SqlBasedBenchmark {
           }
         }
       }
-
       benchmark.run()
     }
 
-    // All 23 columns - columnar read
-    // NOTE: Default cache does not support columnar output for Decimal/String types,
-    // so only Arrow configs are tested here. Default uses row read for comparison.
-    runBenchmark("Columnar read store_sales all 23 cols (Arrow only)") {
+    // Cache all 23 cols, read only 3 (column pruning)
+    runBenchmark("Columnar read: cache 23 cols, read 3 INT") {
       val benchmark = new Benchmark(
-        "Columnar read all 23 cols", numRows, 5, output = output)
+        "cache 23, read 3", numRows, 5, output = output)
+
+      for ((name, serializer, extraConf) <- configs) {
+        benchmark.addTimerCase(name) { timer =>
+          val spark = createFreshSession(serializer)
+          try {
+            extraConf.foreach { case (k, v) => spark.conf.set(k, v) }
+            spark.read.parquet(s"$dataDir/store_sales")
+              .createOrReplaceTempView("store_sales")
+            spark.catalog.cacheTable("store_sales")
+            spark.sql(selectAll).write.format("noop").mode("overwrite").save()
+            consumeColumnar(spark, select3)
+            timer.startTiming()
+            consumeColumnar(spark, select3)
+            timer.stopTiming()
+            spark.catalog.uncacheTable("store_sales")
+          } finally {
+            spark.stop()
+          }
+        }
+      }
+      benchmark.run()
+    }
+
+    // Cache only 10 INT cols, read all 10
+    runBenchmark("Columnar read: cache 10 INT cols, read 10") {
+      val benchmark = new Benchmark(
+        "cache 10, read 10", numRows, 5, output = output)
+
+      for ((name, serializer, extraConf) <- configs) {
+        benchmark.addTimerCase(name) { timer =>
+          val spark = createFreshSession(serializer)
+          try {
+            extraConf.foreach { case (k, v) => spark.conf.set(k, v) }
+            spark.read.parquet(s"$dataDir/store_sales")
+              .selectExpr("ss_sold_date_sk", "ss_sold_time_sk", "ss_item_sk",
+                "ss_customer_sk", "ss_cdemo_sk", "ss_hdemo_sk", "ss_addr_sk",
+                "ss_store_sk", "ss_promo_sk", "ss_ticket_number")
+              .createOrReplaceTempView("store_sales")
+            spark.catalog.cacheTable("store_sales")
+            spark.sql(selectAll).write.format("noop").mode("overwrite").save()
+            consumeColumnar(spark, selectAll)
+            timer.startTiming()
+            consumeColumnar(spark, selectAll)
+            timer.stopTiming()
+            spark.catalog.uncacheTable("store_sales")
+          } finally {
+            spark.stop()
+          }
+        }
+      }
+      benchmark.run()
+    }
+
+    // Cache all 23 cols, read only 10 INT (column pruning)
+    runBenchmark("Columnar read: cache 23 cols, read 10 INT") {
+      val benchmark = new Benchmark(
+        "cache 23, read 10", numRows, 5, output = output)
+
+      for ((name, serializer, extraConf) <- configs) {
+        benchmark.addTimerCase(name) { timer =>
+          val spark = createFreshSession(serializer)
+          try {
+            extraConf.foreach { case (k, v) => spark.conf.set(k, v) }
+            spark.read.parquet(s"$dataDir/store_sales")
+              .createOrReplaceTempView("store_sales")
+            spark.catalog.cacheTable("store_sales")
+            spark.sql(selectAll).write.format("noop").mode("overwrite").save()
+            consumeColumnar(spark, select10)
+            timer.startTiming()
+            consumeColumnar(spark, select10)
+            timer.stopTiming()
+            spark.catalog.uncacheTable("store_sales")
+          } finally {
+            spark.stop()
+          }
+        }
+      }
+      benchmark.run()
+    }
+
+    // Cache all 23 cols, read all 23 (Arrow only - Default doesn't support Decimal columnar)
+    runBenchmark("Columnar read: cache 23 cols, read 23 (Arrow only)") {
+      val benchmark = new Benchmark(
+        "cache 23, read 23", numRows, 5, output = output)
 
       val arrowConfigs = configs.filter(_._1.startsWith("Arrow"))
       for ((name, serializer, extraConf) <- arrowConfigs) {
@@ -1100,14 +1185,13 @@ object TPCDSCacheBenchmark extends SqlBasedBenchmark {
           val spark = createFreshSession(serializer)
           try {
             extraConf.foreach { case (k, v) => spark.conf.set(k, v) }
-            val df = spark.read.parquet(s"$dataDir/store_sales")
-            df.createOrReplaceTempView("store_sales")
+            spark.read.parquet(s"$dataDir/store_sales")
+              .createOrReplaceTempView("store_sales")
             spark.catalog.cacheTable("store_sales")
-            spark.sql("SELECT * FROM store_sales")
-              .write.format("noop").mode("overwrite").save()
-            consumeColumnar(spark, "store_sales")
+            spark.sql(selectAll).write.format("noop").mode("overwrite").save()
+            consumeColumnar(spark, selectAll)
             timer.startTiming()
-            consumeColumnar(spark, "store_sales")
+            consumeColumnar(spark, selectAll)
             timer.stopTiming()
             spark.catalog.uncacheTable("store_sales")
           } finally {
@@ -1115,41 +1199,65 @@ object TPCDSCacheBenchmark extends SqlBasedBenchmark {
           }
         }
       }
-
       benchmark.run()
     }
 
-    // Row read for comparison (same as before, via noop)
-    runBenchmark("Row read store_sales all 23 cols (for comparison)") {
-      val benchmark = new Benchmark(
-        "Row read all 23 cols", numRows, 5, output = output)
+    // --- Row read variants (via noop, forces columnar-to-row conversion) ---
 
-      for ((name, serializer, extraConf) <- configs) {
-        benchmark.addTimerCase(name) { timer =>
-          val spark = createFreshSession(serializer)
-          try {
-            extraConf.foreach { case (k, v) => spark.conf.set(k, v) }
-            val df = spark.read.parquet(s"$dataDir/store_sales")
-            df.createOrReplaceTempView("store_sales")
-            spark.catalog.cacheTable("store_sales")
-            spark.sql("SELECT * FROM store_sales")
-              .write.format("noop").mode("overwrite").save()
-            // warm up
-            spark.sql("SELECT * FROM store_sales")
-              .write.format("noop").mode("overwrite").save()
-            timer.startTiming()
-            spark.sql("SELECT * FROM store_sales")
-              .write.format("noop").mode("overwrite").save()
-            timer.stopTiming()
-            spark.catalog.uncacheTable("store_sales")
-          } finally {
-            spark.stop()
+    // Helper for row read benchmarks
+    def rowReadBenchmark(label: String, cacheSetup: SparkSession => Unit,
+        readSQL: String): Unit = {
+      runBenchmark(s"Row read: $label") {
+        val benchmark = new Benchmark(
+          s"Row $label", numRows, 5, output = output)
+
+        for ((name, serializer, extraConf) <- configs) {
+          benchmark.addTimerCase(name) { timer =>
+            val spark = createFreshSession(serializer)
+            try {
+              extraConf.foreach { case (k, v) => spark.conf.set(k, v) }
+              cacheSetup(spark)
+              spark.catalog.cacheTable("store_sales")
+              spark.sql(selectAll).write.format("noop").mode("overwrite").save()
+              // warm up
+              spark.sql(readSQL).write.format("noop").mode("overwrite").save()
+              timer.startTiming()
+              spark.sql(readSQL).write.format("noop").mode("overwrite").save()
+              timer.stopTiming()
+              spark.catalog.uncacheTable("store_sales")
+            } finally {
+              spark.stop()
+            }
           }
         }
+        benchmark.run()
       }
-
-      benchmark.run()
     }
+
+    def cacheAll(dataDir: String)(spark: SparkSession): Unit = {
+      spark.read.parquet(s"$dataDir/store_sales")
+        .createOrReplaceTempView("store_sales")
+    }
+
+    def cache3(dataDir: String)(spark: SparkSession): Unit = {
+      spark.read.parquet(s"$dataDir/store_sales")
+        .selectExpr("ss_sold_date_sk", "ss_item_sk", "ss_customer_sk")
+        .createOrReplaceTempView("store_sales")
+    }
+
+    def cache10(dataDir: String)(spark: SparkSession): Unit = {
+      spark.read.parquet(s"$dataDir/store_sales")
+        .selectExpr("ss_sold_date_sk", "ss_sold_time_sk", "ss_item_sk",
+          "ss_customer_sk", "ss_cdemo_sk", "ss_hdemo_sk", "ss_addr_sk",
+          "ss_store_sk", "ss_promo_sk", "ss_ticket_number")
+        .createOrReplaceTempView("store_sales")
+    }
+
+    rowReadBenchmark("cache 3, read 3", cache3(dataDir), select3)
+    rowReadBenchmark("cache 23, read 3", cacheAll(dataDir), select3)
+    rowReadBenchmark("cache 10, read 10", cache10(dataDir), select10)
+    rowReadBenchmark("cache 23, read 10", cacheAll(dataDir), select10)
+    rowReadBenchmark("cache 23, read 23", cacheAll(dataDir), selectAll)
   }
 
   private def runWriteReadSplitBenchmark(dataDir: String): Unit = {
@@ -1241,6 +1349,95 @@ object TPCDSCacheBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  /**
+   * Measure cache memory usage for different configurations.
+   * Uses InMemoryRelation.sizeInBytesStats to get the same value shown in Spark UI.
+   */
+  private def runMemoryMeasurement(dataDir: String): Unit = {
+    import org.apache.spark.sql.execution.columnar.InMemoryRelation
+
+    val configs: Seq[(String, String, Map[String, String])] = Seq(
+      ("Default (compressed)",
+        "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer",
+        Map.empty),
+      ("Default (uncompressed)",
+        "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer",
+        Map("spark.sql.inMemoryColumnarStorage.compressed" -> "false")),
+      ("Arrow (no compression)",
+        classOf[ArrowCachedBatchSerializer].getName,
+        Map.empty),
+      ("Arrow (zstd level 3)",
+        classOf[ArrowCachedBatchSerializer].getName,
+        Map("spark.sql.execution.arrow.compression.codec" -> "zstd",
+          "spark.sql.execution.arrow.compression.level" -> "3")),
+      ("Arrow (zstd level -1)",
+        classOf[ArrowCachedBatchSerializer].getName,
+        Map("spark.sql.execution.arrow.compression.codec" -> "zstd",
+          "spark.sql.execution.arrow.compression.level" -> "-1"))
+    )
+
+    case class TableDef(label: String, setup: SparkSession => Unit)
+    val tables = Seq(
+      TableDef("store_sales (2.88M rows, 23 cols)", { spark =>
+        spark.read.parquet(s"$dataDir/store_sales").createOrReplaceTempView("target")
+      }),
+      TableDef("store_sales 3 INT cols", { spark =>
+        spark.read.parquet(s"$dataDir/store_sales")
+          .selectExpr("ss_sold_date_sk", "ss_item_sk", "ss_customer_sk")
+          .createOrReplaceTempView("target")
+      }),
+      TableDef("date_dim (73K rows, 28 cols)", { spark =>
+        spark.read.parquet(s"$dataDir/date_dim").createOrReplaceTempView("target")
+      }),
+      TableDef("item (18K rows, 22 cols)", { spark =>
+        spark.read.parquet(s"$dataDir/item").createOrReplaceTempView("target")
+      })
+    )
+
+    // scalastyle:off println
+    for (table <- tables) {
+      println(s"\n=== Cache Memory: ${table.label} ===")
+      println(f"${"Config"}%-30s ${"Size (bytes)"}%15s ${"Size (MiB)"}%12s")
+      println("-" * 60)
+
+      for ((name, serializer, extraConf) <- configs) {
+        val spark = createFreshSession(serializer)
+        try {
+          extraConf.foreach { case (k, v) => spark.conf.set(k, v) }
+          table.setup(spark)
+          spark.catalog.cacheTable("target")
+          // Materialize cache
+          spark.sql("SELECT * FROM target").write.format("noop").mode("overwrite").save()
+
+          // Compute actual byte size of all cached batches
+          val plan = spark.table("target").queryExecution.optimizedPlan
+          val cachedRDD = plan.collectFirst {
+            case r: InMemoryRelation => r.cacheBuilder.cachedColumnBuffers
+          }
+          val sizeInBytes = cachedRDD.map { rdd =>
+            rdd.map {
+              case d: org.apache.spark.sql.execution.columnar.DefaultCachedBatch =>
+                d.buffers.map(_.length.toLong).sum
+              case a: org.apache.spark.sql.execution.columnar.ArrowCachedBatch =>
+                a.arrowData.length.toLong
+              case other =>
+                other.sizeInBytes
+            }.collect().sum
+          }.getOrElse(-1L)
+
+          val sizeMiB = sizeInBytes.toDouble / (1024 * 1024)
+          println(f"$name%-30s $sizeInBytes%15d $sizeMiB%11.1f")
+
+          spark.catalog.uncacheTable("target")
+        } finally {
+          spark.stop()
+        }
+      }
+    }
+    println()
+    // scalastyle:on println
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val args = mainArgs.toList
 
@@ -1261,7 +1458,9 @@ object TPCDSCacheBenchmark extends SqlBasedBenchmark {
     require(dataDirIdx >= 0, "Usage: --data-dir <path-to-tpcds-parquet-data>")
     val dataDir = args(dataDirIdx + 1)
 
-    if (args.contains("--columnar-read")) {
+    if (args.contains("--memory")) {
+      runMemoryMeasurement(dataDir)
+    } else if (args.contains("--columnar-read")) {
       runBenchmark("Columnar Read Benchmark (SF1)") {
         runColumnarReadBenchmark(dataDir)
       }
