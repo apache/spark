@@ -17,10 +17,8 @@
 
 package org.apache.spark.executor
 
-import java.io.File
+import java.io.{File, PrintWriter}
 import java.net.URL
-
-import scala.util.Properties
 
 import org.apache.spark.{JobArtifactSet, JobArtifactState, LocalSparkContext, SparkConf, SparkContext, SparkFunSuite, TestUtils}
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
@@ -28,30 +26,32 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 class ClassLoaderIsolationSuite extends SparkFunSuite with LocalSparkContext  {
 
-  private val scalaVersion = Properties.versionNumberString
-    .split("\\.")
-    .take(2)
-    .mkString(".")
-
-  private val jarURL1 = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+  private val jarURL1 = TestUtils.createJarWithClasses(Seq("ClassLoaderIsolation_Dummy"))
   private lazy val jar1 = jarURL1.toString
 
-  // package com.example
-  // object Hello { def test(): Int = 2 }
-  // case class Hello(x: Int, y: Int)
-  private val jarURL2 = Thread.currentThread().getContextClassLoader
-    .getResource(s"TestHelloV2_$scalaVersion.jar")
+  // Dynamically compile Scala source to generate JARs containing
+  // `object Hello { def test(): Int = N }` in package com.example.
+  private def createHelloJar(returnValue: Int): URL = {
+    val source =
+      s"""package com.example
+         |object Hello { def test(): Int = $returnValue }
+         |""".stripMargin
+    val srcFile = File.createTempFile("Hello", ".scala", Utils.createTempDir())
+    val pw = new PrintWriter(srcFile)
+    try { pw.write(source) } finally { pw.close() }
+    val jarFile = File.createTempFile(s"TestHelloV$returnValue", ".jar", Utils.createTempDir())
+    val cp = System.getProperty("java.class.path")
+      .split(File.pathSeparator).map(p => new File(p).toURI.toURL).toSeq
+    TestUtils.createJarWithScalaSources(Seq(srcFile), jarFile, cp)
+  }
+
+  private val jarURL2 = createHelloJar(2)
   private lazy val jar2 = jarURL2.toString
 
-  // package com.example
-  // object Hello { def test(): Int = 3 }
-  // case class Hello(x: String)
-  private val jarURL3 = Thread.currentThread().getContextClassLoader
-    .getResource(s"TestHelloV3_$scalaVersion.jar")
+  private val jarURL3 = createHelloJar(3)
   private lazy val jar3 = jarURL3.toString
 
   test("Executor classloader isolation with JobArtifactSet") {
-    assume(jarURL1 != null)
     assume(jarURL2 != null)
     assume(jarURL3 != null)
 
@@ -123,7 +123,6 @@ class ClassLoaderIsolationSuite extends SparkFunSuite with LocalSparkContext  {
 
   test("SPARK-51537 Executor isolation session classloader inherits from " +
     "default session classloader") {
-    assume(jarURL2 != null)
     sc = new SparkContext(new SparkConf()
       .setAppName("test")
       .setMaster("local")

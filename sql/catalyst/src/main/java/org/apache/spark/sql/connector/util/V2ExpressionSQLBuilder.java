@@ -319,20 +319,20 @@ public class V2ExpressionSQLBuilder {
   protected String visitUserDefinedScalarFunction(
       String funcName, String canonicalName, String[] inputs) {
     throw new SparkUnsupportedOperationException(
-      "_LEGACY_ERROR_TEMP_3141",
-      Map.of("class", this.getClass().getSimpleName(), "funcName", funcName));
+      "V2_EXPRESSION_SQL_BUILDER_UDF_NOT_SUPPORTED",
+      Map.of("class", this.getClass().getName(), "funcName", funcName));
   }
 
   protected String visitUserDefinedAggregateFunction(
       String funcName, String canonicalName, boolean isDistinct, String[] inputs) {
     throw new SparkUnsupportedOperationException(
-      "_LEGACY_ERROR_TEMP_3142",
-      Map.of("class", this.getClass().getSimpleName(), "funcName", funcName));
+      "V2_EXPRESSION_SQL_BUILDER_UDAF_NOT_SUPPORTED",
+      Map.of("class", this.getClass().getName(), "funcName", funcName));
   }
 
   protected String visitUnexpectedExpr(Expression expr) throws IllegalArgumentException {
     throw new SparkIllegalArgumentException(
-      "_LEGACY_ERROR_TEMP_3207", Map.of("expr", String.valueOf(expr)));
+      "UNEXPECTED_V2_EXPRESSION", Map.of("expr", String.valueOf(expr)));
   }
 
   protected String visitPartitionPredicate(PartitionPredicate partitionPredicate) {

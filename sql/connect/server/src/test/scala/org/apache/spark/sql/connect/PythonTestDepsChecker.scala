@@ -28,7 +28,7 @@ object PythonTestDepsChecker {
         pythonExec,
         "-c",
         "from pyspark.sql.connect.utils import check_dependencies;" +
-          "check_dependencies('pyspark.sql.connect.fake_module')"),
+          "check_dependencies()"),
       None,
       "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
     true

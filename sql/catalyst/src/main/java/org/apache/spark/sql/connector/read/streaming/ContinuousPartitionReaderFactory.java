@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.read.streaming;
 
+import java.util.Map;
+
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -38,6 +40,7 @@ public interface ContinuousPartitionReaderFactory extends PartitionReaderFactory
 
   @Override
   default ContinuousPartitionReader<ColumnarBatch> createColumnarReader(InputPartition partition) {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3150");
+    throw new SparkUnsupportedOperationException(
+      "DATA_SOURCE_COLUMNAR_READER_NOT_SUPPORTED", Map.of("class", getClass().getName()));
   }
 }

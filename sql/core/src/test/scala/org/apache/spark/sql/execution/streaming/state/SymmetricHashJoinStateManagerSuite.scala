@@ -24,6 +24,7 @@ import java.util.UUID
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.{SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference, Expression, GenericInternalRow, JoinedRow, LessThanOrEqual, Literal, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
@@ -329,8 +330,8 @@ class SymmetricHashJoinStateManagerSuite extends SymmetricHashJoinStateManagerBa
 
   /* Test removeByValue with nulls in middle simulated by updating numValues on the state manager */
   private def testAllOperationsWithNullsInMiddle(stateFormatVersion: Int): Unit = {
-    // Test with skipNullsForStreamStreamJoins set to false which would throw a
-    // NullPointerException while iterating and also return null values as part of get
+    // Test with skipNullsForStreamStreamJoins set to false which would throw
+    // STREAM_STREAM_JOIN_INCONSISTENT_STATE.NULL_VALUE while iterating
     withJoinStateManager(inputValueAttributes, joinKeyExpressions, stateFormatVersion) { manager =>
       implicit val mgr = manager
 
@@ -342,15 +343,9 @@ class SymmetricHashJoinStateManagerSuite extends SymmetricHashJoinStateManagerBa
         updateNumValues(40, 7) // create nulls in between and end
         removeByValue(50)
       }
-      assert(ex.isInstanceOf[NullPointerException])
-      assert(getNumValues(40) === 7)        // we should get 7 with no nulls skipped
-
-      removeByValue(300)
-      assert(getNumValues(40) === 1)         // only 400 should remain
-      assert(get(40) === Seq(400))
-      removeByValue(400)
-      assert(get(40) === Seq.empty)
-      assertNumRows(stateFormatVersion, 0)   // ensure all elements removed
+      assert(ex.isInstanceOf[SparkRuntimeException])
+      assert(ex.asInstanceOf[SparkThrowable].getCondition ==
+        "STREAM_STREAM_JOIN_INCONSISTENT_STATE.NULL_VALUE")
     }
 
     // Test with skipNullsForStreamStreamJoins set to true which would skip nulls

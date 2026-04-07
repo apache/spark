@@ -306,6 +306,17 @@ object StateStoreErrors {
       StateStoreUnknownInternalColumnFamily = {
     new StateStoreUnknownInternalColumnFamily(colFamilyName)
   }
+
+  def streamStreamJoinNullValue(
+      valueIndex: Long,
+      numValues: Long,
+      joinSide: String,
+      storeVersion: Long,
+      partitionId: Int,
+      configKey: String): StreamStreamJoinInconsistentStateNullValue = {
+    new StreamStreamJoinInconsistentStateNullValue(
+      valueIndex, numValues, joinSide, storeVersion, partitionId, configKey)
+  }
 }
 
 trait ConvertableToCannotLoadStoreError {
@@ -674,3 +685,20 @@ class StateStoreBaseCheckpointIdMismatch(
       "actualBaseId" -> actualBaseId
     )
   )
+
+class StreamStreamJoinInconsistentStateNullValue(
+    valueIndex: Long,
+    numValues: Long,
+    joinSide: String,
+    storeVersion: Long,
+    partitionId: Int,
+    configKey: String)
+  extends SparkRuntimeException(
+    errorClass = "STREAM_STREAM_JOIN_INCONSISTENT_STATE.NULL_VALUE",
+    messageParameters = Map(
+      "valueIndex" -> valueIndex.toString,
+      "numValues" -> numValues.toString,
+      "joinSide" -> joinSide,
+      "storeVersion" -> storeVersion.toString,
+      "partitionId" -> partitionId.toString,
+      "configKey" -> configKey))

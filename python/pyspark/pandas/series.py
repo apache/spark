@@ -7424,7 +7424,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     def __getitem__(self, key: Any) -> Any:
         if LooseVersion(pd.__version__) < "3.0.0":
-            treating_keys_as_positions = type(key) == int and not isinstance(
+            treating_keys_as_positions = isinstance(key, int) and not isinstance(
                 self.index.spark.data_type, (IntegerType, LongType)
             )
             if treating_keys_as_positions:
@@ -7439,7 +7439,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             treating_keys_as_positions = False
         try:
             if (
-                isinstance(key, slice) and any(type(n) == int for n in [key.start, key.stop])
+                isinstance(key, slice) and any(isinstance(n, int) for n in [key.start, key.stop])
             ) or treating_keys_as_positions:
                 # Seems like pandas Series always uses int as positional search when slicing
                 # with ints, searches based on index values when the value is int.

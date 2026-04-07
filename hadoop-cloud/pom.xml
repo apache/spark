@@ -110,18 +110,6 @@
       <version>${analyticsaccelerator-s3.version}</version>
       <scope>${hadoop.deps.scope}</scope>
     </dependency>
-    <dependency>
-      <groupId>com.google.cloud.bigdataoss</groupId>
-      <artifactId>gcs-connector</artifactId>
-      <version>${gcs-connector.version}</version>
-      <classifier>shaded</classifier>
-      <exclusions>
-        <exclusion>
-          <groupId>*</groupId>
-          <artifactId>*</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
 
     <!--
     Add joda time to ensure that anything downstream which doesn't pull in spark-hive
@@ -197,29 +185,19 @@
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-cos</artifactId>
         </exclusion>
+        <!--
+          SPARK-55657: `hadoop-tos` is not a dependency of `hadoop-cloud-storage` 3.4.3,
+          manually exclude it to avoid recurring issues similar to HADOOP-18159 in Spark.
+        -->
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-tos</artifactId>
+        </exclusion>
         <exclusion>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-huaweicloud</artifactId>
         </exclusion>
       </exclusions>
-    </dependency>
-    <!--
-    The jetty declarations are made
-    (a) to keep that jetty-util-ajax version in sync with the rest of Spark.
-    (b) to minimise the effects which Spark's jetty shading has on the
-        availability of the jetty JARs on for hadoop-azure, which depends
-        on them.
-     -->
-    <dependency>
-      <groupId>org.eclipse.jetty</groupId>
-      <artifactId>jetty-util</artifactId>
-      <scope>${hadoop.deps.scope}</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.eclipse.jetty</groupId>
-      <artifactId>jetty-util-ajax</artifactId>
-      <version>${jetty.version}</version>
-      <scope>${hadoop.deps.scope}</scope>
     </dependency>
     <dependency>
       <groupId>com.squareup.okhttp3</groupId>

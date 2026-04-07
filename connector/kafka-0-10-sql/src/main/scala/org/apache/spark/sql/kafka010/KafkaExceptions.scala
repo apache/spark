@@ -178,6 +178,25 @@ object KafkaExceptions {
         "assignedPartitions" -> assignedPartitions.toString))
   }
 
+  def kafkaMalformedRecordTimestamp(
+      topic: String,
+      partition: Int,
+      offset: Long,
+      timestamp: Long,
+      cause: Throwable
+  ): KafkaIllegalStateException = {
+    new KafkaIllegalStateException(
+      errorClass = "KAFKA_MALFORMED_RECORD_TIMESTAMP",
+      messageParameters = Map(
+        "topic" -> topic,
+        "partition" -> partition.toString,
+        "offset" -> offset.toString,
+        "timestamp" -> timestamp.toString
+      ),
+      cause = cause
+    )
+  }
+
   def nullTopicInData(): KafkaIllegalStateException = {
     new KafkaIllegalStateException(
       errorClass = "KAFKA_NULL_TOPIC_IN_DATA",
