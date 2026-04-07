@@ -29,7 +29,7 @@ class ConnectProfilerCollector(ProfilerCollector):
 
     def __init__(self) -> None:
         super().__init__()
-        self._value = ProfileResultsParam.zero(None)
+        self._value = ProfileResultsParam.zero({})
 
     @property
     def _profile_results(self) -> "ProfileResults":

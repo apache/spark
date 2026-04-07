@@ -67,7 +67,7 @@ def worker_run(main: Callable, infile: IO, outfile: IO) -> None:
 
         _accumulatorRegistry.clear()
         accumulator = _deserialize_accumulator(
-            SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
+            SpecialAccumulatorIds.SQL_UDF_PROFIER, {}, ProfileResultsParam
         )
 
         if main.__module__ == "__main__":
