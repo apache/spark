@@ -31,7 +31,8 @@ import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, MessageSerializer}
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, SpecificInternalRow}
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.columnar.{CachedBatch, SimpleMetricsCachedBatchSerializer}
 import org.apache.spark.sql.execution.arrow.ArrowWriter
@@ -149,7 +150,6 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],
       conf: SQLConf): RDD[InternalRow] = {
-    // Direct conversion from ArrowCachedBatch to InternalRow without intermediate ColumnarBatch
     val cacheSchema = DataTypeUtils.fromAttributes(cacheAttributes)
     val selectedSchema = DataTypeUtils.fromAttributes(selectedAttributes)
     val timeZoneId = conf.sessionLocalTimeZone
@@ -159,13 +159,43 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       cacheAttributes.indexWhere(_.exprId == attr.exprId)
     }.toArray
 
-    input.mapPartitionsInternal { batchIterator =>
-      new ArrowCachedBatchToInternalRowIterator(
-        batchIterator,
-        cacheSchema,
-        selectedSchema,
-        selectedIndices,
-        timeZoneId)
+    // Check if all selected types can use the fast path (no complex types)
+    val hasComplexTypes = selectedSchema.fields.exists { f =>
+      f.dataType match {
+        case _: ArrayType | _: StructType | _: MapType => true
+        case _ => false
+      }
+    }
+
+    if (hasComplexTypes) {
+      // Fall back to columnar-to-row conversion via ColumnarBatch for complex types.
+      // Use UnsafeProjection to convert ColumnarBatchRow to UnsafeRow.
+      convertCachedBatchToColumnarBatch(input, cacheAttributes, selectedAttributes, conf)
+        .mapPartitionsInternal { batchIter =>
+          val toUnsafe = org.apache.spark.sql.catalyst.expressions.UnsafeProjection.create(
+            selectedSchema)
+          batchIter.flatMap { batch =>
+            val numRows = batch.numRows()
+            new Iterator[InternalRow] {
+              private var rowIdx = 0
+              override def hasNext: Boolean = rowIdx < numRows
+              override def next(): InternalRow = {
+                val row = batch.getRow(rowIdx)
+                rowIdx += 1
+                toUnsafe(row)
+              }
+            }
+          }
+        }
+    } else {
+      input.mapPartitionsInternal { batchIterator =>
+        new ArrowCachedBatchToInternalRowIterator(
+          batchIterator,
+          cacheSchema,
+          selectedSchema,
+          selectedIndices,
+          timeZoneId)
+      }
     }
   }
 }
@@ -847,8 +877,138 @@ private class ArrowCachedBatchToColumnarBatchIterator(
 }
 
 /**
- * Iterator that converts ArrowCachedBatch directly to InternalRow without intermediate
- * ColumnarBatch, avoiding the overhead of creating ArrowColumnVector wrappers.
+ * A typed column reader that reads from an Arrow FieldVector and writes directly
+ * to an UnsafeRowWriter, avoiding per-row pattern matching overhead.
+ */
+private abstract class ArrowColumnReader {
+  def vector: org.apache.arrow.vector.FieldVector
+  def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit
+  def setVector(v: org.apache.arrow.vector.FieldVector): Unit
+}
+
+private object ArrowColumnReader {
+  import org.apache.arrow.vector._
+
+  def create(dataType: DataType): ArrowColumnReader = dataType match {
+    case BooleanType => new ArrowColumnReader {
+      private var _vector: BitVector = _
+      def vector: FieldVector = _vector
+      def setVector(v: FieldVector): Unit = _vector = v.asInstanceOf[BitVector]
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit =
+        writer.write(ordinal, _vector.get(rowIndex) != 0)
+    }
+    case ByteType => new ArrowColumnReader {
+      private var _vector: TinyIntVector = _
+      def vector: FieldVector = _vector
+      def setVector(v: FieldVector): Unit = _vector = v.asInstanceOf[TinyIntVector]
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit =
+        writer.write(ordinal, _vector.get(rowIndex))
+    }
+    case ShortType => new ArrowColumnReader {
+      private var _vector: SmallIntVector = _
+      def vector: FieldVector = _vector
+      def setVector(v: FieldVector): Unit = _vector = v.asInstanceOf[SmallIntVector]
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit =
+        writer.write(ordinal, _vector.get(rowIndex))
+    }
+    case IntegerType | DateType => new ArrowColumnReader {
+      private var _vector: FieldVector = _
+      def vector: FieldVector = _vector
+      def setVector(v: FieldVector): Unit = _vector = v
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit = {
+        val value = _vector match {
+          case iv: IntVector => iv.get(rowIndex)
+          case dv: DateDayVector => dv.get(rowIndex)
+        }
+        writer.write(ordinal, value)
+      }
+    }
+    case LongType | TimestampType | TimestampNTZType => new ArrowColumnReader {
+      private var _vector: FieldVector = _
+      def vector: FieldVector = _vector
+      def setVector(v: FieldVector): Unit = _vector = v
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit = {
+        val value = _vector match {
+          case bv: BigIntVector => bv.get(rowIndex)
+          case tv: TimeStampMicroTZVector => tv.get(rowIndex)
+          case tv: TimeStampMicroVector => tv.get(rowIndex)
+        }
+        writer.write(ordinal, value)
+      }
+    }
+    case FloatType => new ArrowColumnReader {
+      private var _vector: Float4Vector = _
+      def vector: FieldVector = _vector
+      def setVector(v: FieldVector): Unit = _vector = v.asInstanceOf[Float4Vector]
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit =
+        writer.write(ordinal, _vector.get(rowIndex))
+    }
+    case DoubleType => new ArrowColumnReader {
+      private var _vector: Float8Vector = _
+      def vector: FieldVector = _vector
+      def setVector(v: FieldVector): Unit = _vector = v.asInstanceOf[Float8Vector]
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit =
+        writer.write(ordinal, _vector.get(rowIndex))
+    }
+    case StringType => new ArrowColumnReader {
+      private var _vector: VarCharVector = _
+      def vector: FieldVector = _vector
+      def setVector(v: FieldVector): Unit = _vector = v.asInstanceOf[VarCharVector]
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit = {
+        val bytes = _vector.get(rowIndex)
+        writer.write(ordinal, UTF8String.fromBytes(bytes))
+      }
+    }
+    case BinaryType => new ArrowColumnReader {
+      private var _vector: VarBinaryVector = _
+      def vector: FieldVector = _vector
+      def setVector(v: FieldVector): Unit = _vector = v.asInstanceOf[VarBinaryVector]
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit =
+        writer.write(ordinal, _vector.get(rowIndex))
+    }
+    case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
+      // Fast path for compact decimals (precision <= 18):
+      // Read the unscaled long directly from the Arrow buffer, zero allocation.
+      // Arrow stores Decimal as 128-bit little-endian integer in 16 bytes.
+      // For compact decimals, the value fits in the lower 8 bytes.
+      new ArrowColumnReader {
+        private var _vector: DecimalVector = _
+        private var _dataBuffer: org.apache.arrow.memory.ArrowBuf = _
+        private val typeWidth = DecimalVector.TYPE_WIDTH // 16 bytes
+        def vector: FieldVector = _vector
+        def setVector(v: FieldVector): Unit = {
+          _vector = v.asInstanceOf[DecimalVector]
+          _dataBuffer = _vector.getDataBuffer
+        }
+        def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit = {
+          val startIndex = rowIndex.toLong * typeWidth
+          val unscaledLong = _dataBuffer.getLong(startIndex)
+          writer.write(ordinal, unscaledLong)
+        }
+      }
+    case dt: DecimalType => new ArrowColumnReader {
+      // Slow path for wide decimals (precision > 18): must go through BigDecimal
+      private var _vector: DecimalVector = _
+      private val precision = dt.precision
+      private val scale = dt.scale
+      def vector: FieldVector = _vector
+      def setVector(v: FieldVector): Unit = _vector = v.asInstanceOf[DecimalVector]
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit = {
+        val decimal = Decimal(_vector.getObject(rowIndex), precision, scale)
+        writer.write(ordinal, decimal, precision, scale)
+      }
+    }
+    case _ =>
+      throw new UnsupportedOperationException(
+        s"Complex type $dataType is handled by the fallback path")
+  }
+}
+
+/**
+ * Fast-path iterator that converts ArrowCachedBatch to InternalRow.
+ * Uses pre-built typed column readers to avoid per-row pattern matching,
+ * and writes directly to UnsafeRowWriter to avoid intermediate SpecificInternalRow.
+ * Only used for schemas without complex types (Array/Struct/Map).
  */
 private class ArrowCachedBatchToInternalRowIterator(
     batchIter: Iterator[CachedBatch],
@@ -866,12 +1026,14 @@ private class ArrowCachedBatchToInternalRowIterator(
   private var currentRowIndex: Int = 0
   private var currentRowCount: Int = 0
 
-  // Mutable row for reading from Arrow vectors
-  private val row = new SpecificInternalRow(selectedSchema.map(_.dataType))
+  private val numFields = selectedSchema.length
 
-  // UnsafeProjection to convert to UnsafeRow
-  private val toUnsafe = org.apache.spark.sql.catalyst.expressions.UnsafeProjection.create(
-    selectedSchema)
+  // Pre-build typed readers per column at init time -- no per-row pattern match
+  private val columnReaders: Array[ArrowColumnReader] =
+    selectedSchema.fields.map(f => ArrowColumnReader.create(f.dataType))
+
+  // Write directly to UnsafeRow -- no intermediate SpecificInternalRow + UnsafeProjection
+  private val rowWriter = new UnsafeRowWriter(numFields)
 
   // Register cleanup
   Option(TaskContext.get()).foreach { tc =>
@@ -904,26 +1066,26 @@ private class ArrowCachedBatchToInternalRowIterator(
       throw new NoSuchElementException("No more rows")
     }
 
-    // Read values from Arrow vectors directly into the row
-    var i = 0
-    while (i < columnIndices.length) {
-      val colIndex = columnIndices(i)
-      val vector = currentRoot.getVector(colIndex)
+    rowWriter.reset()
+    rowWriter.zeroOutNullBytes()
 
-      if (vector.isNull(currentRowIndex)) {
-        row.setNullAt(i)
+    val rowIdx = currentRowIndex
+    var i = 0
+    while (i < numFields) {
+      val reader = columnReaders(i)
+      if (reader.vector.isNull(rowIdx)) {
+        rowWriter.setNullAt(i)
       } else {
-        readValueFromVector(vector, currentRowIndex, row, i, selectedSchema(i).dataType)
+        reader.read(rowIdx, i, rowWriter)
       }
       i += 1
     }
 
     currentRowIndex += 1
-    toUnsafe(row)
+    rowWriter.getRow()
   }
 
   private def loadNextBatch(): Unit = {
-    // Close previous root
     if (currentRoot != null) {
       currentRoot.close()
       currentRoot = null
@@ -931,16 +1093,13 @@ private class ArrowCachedBatchToInternalRowIterator(
 
     val cachedBatch = batchIter.next().asInstanceOf[ArrowCachedBatch]
 
-    // Deserialize Arrow IPC data
     val arrowData = cachedBatch.arrowData
     val in = new ByteArrayInputStream(arrowData)
     val readChannel = new ReadChannel(Channels.newChannel(in))
 
-    // Deserialize the RecordBatch
     val recordBatch = MessageSerializer.deserializeRecordBatch(readChannel, allocator)
 
     try {
-      // Create root and load batch
       val arrowSchema = ArrowUtils.toArrowSchema(cacheSchema, timeZoneId, false, false)
       val root = VectorSchemaRoot.create(arrowSchema, allocator)
       currentRoot = root
@@ -948,73 +1107,17 @@ private class ArrowCachedBatchToInternalRowIterator(
       val loader = new VectorLoader(root)
       loader.load(recordBatch)
 
+      // Update pre-built readers with new vectors
+      var i = 0
+      while (i < numFields) {
+        columnReaders(i).setVector(root.getVector(columnIndices(i)))
+        i += 1
+      }
+
       currentRowIndex = 0
       currentRowCount = cachedBatch.numRows
     } finally {
       recordBatch.close()
-    }
-  }
-
-  private def readValueFromVector(
-      vector: org.apache.arrow.vector.FieldVector,
-      rowIndex: Int,
-      row: SpecificInternalRow,
-      ordinal: Int,
-      dataType: DataType): Unit = {
-    dataType match {
-      case BooleanType =>
-        row.setBoolean(ordinal,
-          vector.asInstanceOf[org.apache.arrow.vector.BitVector].get(rowIndex) != 0)
-      case ByteType =>
-        row.setByte(ordinal,
-          vector.asInstanceOf[org.apache.arrow.vector.TinyIntVector].get(rowIndex))
-      case ShortType =>
-        row.setShort(ordinal,
-          vector.asInstanceOf[org.apache.arrow.vector.SmallIntVector].get(rowIndex))
-      case IntegerType =>
-        row.setInt(ordinal,
-          vector.asInstanceOf[org.apache.arrow.vector.IntVector].get(rowIndex))
-      case LongType =>
-        row.setLong(ordinal,
-          vector.asInstanceOf[org.apache.arrow.vector.BigIntVector].get(rowIndex))
-      case FloatType =>
-        row.setFloat(ordinal,
-          vector.asInstanceOf[org.apache.arrow.vector.Float4Vector].get(rowIndex))
-      case DoubleType =>
-        row.setDouble(ordinal,
-          vector.asInstanceOf[org.apache.arrow.vector.Float8Vector].get(rowIndex))
-      case DateType =>
-        row.setInt(ordinal,
-          vector.asInstanceOf[org.apache.arrow.vector.DateDayVector].get(rowIndex))
-      case TimestampType =>
-        row.setLong(ordinal,
-          vector.asInstanceOf[org.apache.arrow.vector.TimeStampMicroTZVector].get(rowIndex))
-      case TimestampNTZType =>
-        row.setLong(ordinal,
-          vector.asInstanceOf[org.apache.arrow.vector.TimeStampMicroVector].get(rowIndex))
-      case StringType =>
-        val bytes = vector.asInstanceOf[org.apache.arrow.vector.VarCharVector].get(rowIndex)
-        row.update(ordinal, UTF8String.fromBytes(bytes))
-      case BinaryType =>
-        val bytes = vector.asInstanceOf[org.apache.arrow.vector.VarBinaryVector].get(rowIndex)
-        row.update(ordinal, bytes)
-      case dt: DecimalType =>
-        val decimalVector = vector.asInstanceOf[org.apache.arrow.vector.DecimalVector]
-        val decimal = decimalVector.getObject(rowIndex)
-        row.setDecimal(ordinal, Decimal(decimal, dt.precision, dt.scale), dt.precision)
-      case _: ArrayType =>
-        val arrowColumnVector = new ArrowColumnVector(vector)
-        row.update(ordinal, arrowColumnVector.getArray(rowIndex))
-      case _: StructType =>
-        val arrowColumnVector = new ArrowColumnVector(vector)
-        row.update(ordinal, arrowColumnVector.getStruct(rowIndex))
-      case _: MapType =>
-        val arrowColumnVector = new ArrowColumnVector(vector)
-        row.update(ordinal, arrowColumnVector.getMap(rowIndex))
-      case _ =>
-        // For other types, use getUTF8String as fallback
-        val arrowColumnVector = new ArrowColumnVector(vector)
-        row.update(ordinal, arrowColumnVector.getUTF8String(rowIndex))
     }
   }
 }
