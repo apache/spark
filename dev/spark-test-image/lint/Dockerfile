@@ -32,6 +32,7 @@ ENV DEBCONF_NONINTERACTIVE_SEEN=true
 RUN apt-get update && apt-get install -y \
     build-essential \
     ca-certificates \
+    cmake \
     curl \
     gfortran \
     git \
@@ -99,6 +100,7 @@ RUN python3.12 -m pip install \
     'pytest==7.1.3' \
     'scipy>=1.8.0' \
     'scipy-stubs' \
+    'types-protobuf==6.32.1.20260221' \
     && python3.12 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
     && python3.12 -m pip install torcheval \
     && python3.12 -m pip cache purge
