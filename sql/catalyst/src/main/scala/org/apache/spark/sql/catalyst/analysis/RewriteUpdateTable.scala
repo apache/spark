@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, EqualNullSafe, Expression, If, Literal, MetadataAttribute, Not, SubqueryExpression, UnresolvedIncrementMetricIf, UnresolvedIncrementMetricIfThenReturn}
-import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, EqualNullSafe, Expression, If, Literal, MetadataAttribute, Not, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, Expand, Filter, LogicalPlan, Project, ReplaceData, Union, UpdateTable, WriteDelta}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
@@ -34,6 +34,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * This rule assumes the commands have been fully resolved and all assignments have been aligned.
  */
 object RewriteUpdateTable extends RewriteRowLevelCommand {
+
+  private[sql] final val IS_UPDATED_COLUMN: String = "__is_updated"
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case u @ UpdateTable(aliasedTable, assignments, cond)
@@ -71,20 +73,9 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     // construct a read relation and include all required metadata columns
     val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs)
 
-    // add Filter with IncrementMetric expressions to the plan
-    val updatedRowsMetric = UnresolvedIncrementMetricIfThenReturn(
-      condition = cond,
-      returnExpr = Literal.TrueLiteral,
-      metricName = "numUpdatedRows")
-    val copiedRowsMetric = UnresolvedIncrementMetricIfThenReturn(
-      condition = Not(EqualNullSafe(cond, Literal.TrueLiteral)),
-      returnExpr = Literal.TrueLiteral,
-      metricName = "numCopiedRows")
-    val readRelationWithMetrics = Filter(copiedRowsMetric, Filter(updatedRowsMetric, readRelation))
-
     // build a plan with updated and copied over records
     val updatedAndRemainingRowsPlan = buildReplaceDataUpdateProjection(
-      readRelationWithMetrics, assignments, cond)
+      readRelation, assignments, cond)
 
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
@@ -111,18 +102,18 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs)
 
     // build a plan for updated records that match the condition
-    val condWithMetric = UnresolvedIncrementMetricIf(cond, "numUpdatedRows")
-    val matchedRowsPlan = Filter(condWithMetric, readRelation)
+    val matchedRowsPlan = Filter(cond, readRelation)
     val updatedRowsPlan = buildReplaceDataUpdateProjection(matchedRowsPlan, assignments)
 
     // build a plan that contains unmatched rows in matched groups that must be copied over
-    val remainingRowFilter = Not(EqualNullSafe(cond, Literal.TrueLiteral))
-    val remainingRowFilterWithMetric =
-      UnresolvedIncrementMetricIf(remainingRowFilter, "numCopiedRows")
-    val remainingRowsPlan = Filter(remainingRowFilterWithMetric, readRelation)
+    val remainingRowFilter = Not(EqualNullSafe(cond, TrueLiteral))
+    val remainingRowsPlan = Filter(remainingRowFilter, readRelation)
+    val remainingRowsPlanWithFlag = Project(
+      remainingRowsPlan.output :+ Alias(FalseLiteral, IS_UPDATED_COLUMN)(),
+      remainingRowsPlan)
 
     // the new state is a union of updated and copied over records
-    val updatedAndRemainingRowsPlan = Union(updatedRowsPlan, remainingRowsPlan)
+    val updatedAndRemainingRowsPlan = Union(updatedRowsPlan, remainingRowsPlanWithFlag)
 
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
@@ -157,7 +148,9 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       }
     }
 
-    Project(updatedValues, plan)
+    // add a boolean column to indicate whether each row was updated or copied over
+    val isUpdatedCol = Alias(EqualNullSafe(cond, TrueLiteral), IS_UPDATED_COLUMN)()
+    Project(updatedValues :+ isUpdatedCol, plan)
   }
 
   // build a rewrite plan for sources that support row deltas
@@ -178,8 +171,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs, rowIdAttrs)
 
     // build a plan for updated records that match the condition
-    val condWithMetric = UnresolvedIncrementMetricIf(cond, "numUpdatedRows")
-    val matchedRowsPlan = Filter(condWithMetric, readRelation)
+    val matchedRowsPlan = Filter(cond, readRelation)
     val rowDeltaPlan = if (operation.representUpdateAsDeleteAndInsert) {
       buildDeletesAndInserts(matchedRowsPlan, assignments, rowIdAttrs)
     } else {

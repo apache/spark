@@ -24,6 +24,7 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.analysis.RewriteUpdateTable.IS_UPDATED_COLUMN
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, TableSpec, UnaryNode}
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils, ReplaceDataProjections, WriteDeltaProjections}
@@ -312,16 +313,25 @@ case class ReplaceDataExec(
     refreshCache: () => Unit,
     projections: ReplaceDataProjections,
     write: Write,
-    override val rowLevelCommand: Option[RowLevelOperation.Command],
-    override val operationMetrics: Map[String, SQLMetric] = Map.empty)
+    override val rowLevelCommand: Option[RowLevelOperation.Command])
   extends V2ExistingTableWriteExec {
 
   override def writingTask: WritingSparkTask[_] = {
+    val metricCounter = rowLevelCommand match {
+      case Some(RowLevelOperation.Command.UPDATE) =>
+        val isUpdatedIndex = query.output.indexWhere(_.name == IS_UPDATED_COLUMN)
+        Some(BooleanMetricCounter(
+          isUpdatedIndex, operationMetrics("numUpdatedRows"), operationMetrics("numCopiedRows")))
+      case _ => None
+    }
     projections match {
       case ReplaceDataProjections(dataProj, Some(metadataProj)) =>
-        DataAndMetadataWritingSparkTask(dataProj, metadataProj)
+        DataAndMetadataWritingSparkTask(dataProj, metadataProj, metricCounter)
+      // TODO: add test coverage for ReplaceData without metadata attributes
+      case ReplaceDataProjections(dataProj, None) if metricCounter.isDefined =>
+        DataWritingSparkTask(Some(dataProj), metricCounter)
       case _ =>
-        DataWritingSparkTask
+        DataWritingSparkTask()
     }
   }
 
@@ -338,15 +348,14 @@ case class WriteDeltaExec(
     refreshCache: () => Unit,
     projections: WriteDeltaProjections,
     write: DeltaWrite,
-    override val rowLevelCommand: Option[RowLevelOperation.Command] = None,
-    override val operationMetrics: Map[String, SQLMetric] = Map.empty)
+    override val rowLevelCommand: Option[RowLevelOperation.Command] = None)
   extends V2ExistingTableWriteExec {
 
   override lazy val writingTask: WritingSparkTask[_] = {
     if (projections.metadataProjection.isDefined) {
-      DeltaWithMetadataWritingSparkTask(projections)
+      DeltaWithMetadataWritingSparkTask(projections, operationMetrics)
     } else {
-      DeltaWritingSparkTask(projections)
+      DeltaWritingSparkTask(projections, operationMetrics)
     }
   }
 
@@ -416,7 +425,7 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec {
  */
 trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSparkPlanHelper {
   def query: SparkPlan
-  def writingTask: WritingSparkTask[_] = DataWritingSparkTask
+  def writingTask: WritingSparkTask[_] = DataWritingSparkTask()
   def rowLevelCommand: Option[RowLevelOperation.Command] = None
 
   var commitProgress: Option[StreamWriterCommitProgress] = None
@@ -425,7 +434,15 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
   override def output: Seq[Attribute] = Nil
 
   protected val customMetrics: Map[String, SQLMetric] = Map.empty
-  val operationMetrics: Map[String, SQLMetric] = Map.empty
+
+  protected lazy val operationMetrics: Map[String, SQLMetric] = rowLevelCommand match {
+    case Some(RowLevelOperation.Command.UPDATE) =>
+      Map(
+        "numUpdatedRows" -> SQLMetrics.createMetric(sparkContext, "number of updated rows"),
+        "numCopiedRows" -> SQLMetrics.createMetric(sparkContext, "number of copied rows")
+      )
+    case _ => Map.empty
+  }
 
   override lazy val metrics = customMetrics ++ operationMetrics
 
@@ -620,13 +637,34 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
   }
 }
 
+/**
+ * Reads a boolean column at the given ordinal and increments one of two metrics per row.
+ */
+case class BooleanMetricCounter(
+    ordinal: Int,
+    trueMetric: SQLMetric,
+    falseMetric: SQLMetric) extends Serializable {
+  def count(row: InternalRow): Unit = {
+    if (row.getBoolean(ordinal)) {
+      trueMetric.add(1L)
+    } else {
+      falseMetric.add(1L)
+    }
+  }
+}
+
 case class DataAndMetadataWritingSparkTask(
     dataProj: ProjectingInternalRow,
-    metadataProj: ProjectingInternalRow) extends WritingSparkTask[DataWriter[InternalRow]] {
+    metadataProj: ProjectingInternalRow,
+    metricCounter: Option[BooleanMetricCounter] = None)
+  extends WritingSparkTask[DataWriter[InternalRow]] {
+
   override protected def write(
       writer: DataWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
     while (iter.hasNext) {
       val row = iter.next()
+      metricCounter.foreach(_.count(row))
+
       val operation = row.getInt(0)
 
       operation match {
@@ -646,18 +684,39 @@ case class DataAndMetadataWritingSparkTask(
   }
 }
 
-object DataWritingSparkTask extends WritingSparkTask[DataWriter[InternalRow]] {
+case class DataWritingSparkTask(
+    dataProj: Option[ProjectingInternalRow] = None,
+    metricCounter: Option[BooleanMetricCounter] = None)
+  extends WritingSparkTask[DataWriter[InternalRow]] {
+
   override protected def write(
       writer: DataWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
-    writer.writeAll(iter)
+    if (dataProj.isEmpty && metricCounter.isEmpty) {
+      writer.writeAll(iter)
+    } else {
+      while (iter.hasNext) {
+        val row = iter.next()
+        metricCounter.foreach(_.count(row))
+        dataProj match {
+          case Some(proj) =>
+            proj.project(row)
+            writer.write(proj)
+          case None =>
+            writer.write(row)
+        }
+      }
+    }
   }
 }
 
 case class DeltaWritingSparkTask(
-    projections: WriteDeltaProjections) extends WritingSparkTask[DeltaWriter[InternalRow]] {
+    projections: WriteDeltaProjections,
+    operationMetrics: Map[String, SQLMetric] = Map.empty)
+  extends WritingSparkTask[DeltaWriter[InternalRow]] {
 
   private lazy val rowProjection = projections.rowProjection.orNull
   private lazy val rowIdProjection = projections.rowIdProjection
+  private lazy val numUpdatedRows = operationMetrics.get("numUpdatedRows")
 
   override protected def write(
       writer: DeltaWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
@@ -666,11 +725,15 @@ case class DeltaWritingSparkTask(
       val operation = row.getInt(0)
 
       operation match {
+        // When representUpdateAsDeleteAndInsert is true, each logical update is split
+        // into a DELETE and a REINSERT. Count the DELETE as one updated row.
         case DELETE_OPERATION =>
+          numUpdatedRows.foreach(_.add(1L))
           rowIdProjection.project(row)
           writer.delete(null, rowIdProjection)
 
         case UPDATE_OPERATION =>
+          numUpdatedRows.foreach(_.add(1L))
           rowProjection.project(row)
           rowIdProjection.project(row)
           writer.update(null, rowIdProjection, rowProjection)
@@ -691,11 +754,14 @@ case class DeltaWritingSparkTask(
 }
 
 case class DeltaWithMetadataWritingSparkTask(
-    projections: WriteDeltaProjections) extends WritingSparkTask[DeltaWriter[InternalRow]] {
+    projections: WriteDeltaProjections,
+    operationMetrics: Map[String, SQLMetric] = Map.empty)
+  extends WritingSparkTask[DeltaWriter[InternalRow]] {
 
   private lazy val rowProjection = projections.rowProjection.orNull
   private lazy val rowIdProjection = projections.rowIdProjection
   private lazy val metadataProjection = projections.metadataProjection.orNull
+  private lazy val numUpdatedRows = operationMetrics.get("numUpdatedRows")
 
   override protected def write(
       writer: DeltaWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
@@ -704,12 +770,16 @@ case class DeltaWithMetadataWritingSparkTask(
       val operation = row.getInt(0)
 
       operation match {
+        // When representUpdateAsDeleteAndInsert is true, each logical update is split
+        // into a DELETE and a REINSERT. Count the DELETE as one updated row.
         case DELETE_OPERATION =>
+          numUpdatedRows.foreach(_.add(1L))
           rowIdProjection.project(row)
           metadataProjection.project(row)
           writer.delete(metadataProjection, rowIdProjection)
 
         case UPDATE_OPERATION =>
+          numUpdatedRows.foreach(_.add(1L))
           rowProjection.project(row)
           rowIdProjection.project(row)
           metadataProjection.project(row)
