@@ -19,7 +19,6 @@ license: |
   limitations under the License.
 ---
 
- * [SHOW CACHED TABLES](sql-ref-syntax-aux-show-cached-tables.html)
  * [SHOW COLUMNS](sql-ref-syntax-aux-show-columns.html)
  * [SHOW CREATE TABLE](sql-ref-syntax-aux-show-create-table.html)
  * [SHOW DATABASES](sql-ref-syntax-aux-show-databases.html)

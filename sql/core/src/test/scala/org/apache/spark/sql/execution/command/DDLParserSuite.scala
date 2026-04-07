@@ -48,12 +48,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       ShowCurrentNamespaceCommand())
   }
 
-  test("SHOW CACHED TABLES") {
-    comparePlans(
-      parser.parsePlan("SHOW CACHED TABLES"),
-      ShowCachedTables)
-  }
-
   test("insert overwrite directory") {
     val v1 = "INSERT OVERWRITE DIRECTORY '/tmp/file' USING parquet SELECT 1 as a"
     parser.parsePlan(v1) match {

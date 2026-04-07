@@ -1139,13 +1139,12 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     }
   }
 
-  test("catalog API: SHOW CACHED TABLES and listCachedTables") {
+  test("catalog API: listCachedTables") {
     val t = "catalog_api_ext_cached_t"
     spark.sql(s"DROP TABLE IF EXISTS $t")
     spark.sql(s"CREATE TABLE $t (id INT) USING parquet")
     try {
       assert(spark.catalog.listCachedTables().collect().isEmpty)
-      assert(spark.sql("SHOW CACHED TABLES").collect().isEmpty)
       spark.catalog.cacheTable(t)
       val fromApi = spark.catalog.listCachedTables().collect()
       assert(fromApi.exists(_.name.contains(t)))
@@ -1153,13 +1152,6 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       val entry = fromApi.find(_.name.contains(t)).get
       assert(entry.catalog === null)
       assert(entry.namespace === null)
-      val fromSql = spark
-        .sql("SHOW CACHED TABLES")
-        .collect()
-        .map(r => (r.getString(0), r.getString(1)))
-        .toSet
-      val fromApiSet = fromApi.map(c => (c.name, c.storageLevel)).toSet
-      assert(fromSql === fromApiSet)
       // Caching with a fully-qualified name populates catalog and namespace
       spark.catalog.uncacheTable(t)
       spark.catalog.cacheTable(s"spark_catalog.default.$t")

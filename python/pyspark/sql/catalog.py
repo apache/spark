@@ -181,7 +181,7 @@ class Catalog:
         return catalogs
 
     def listCachedTables(self) -> List[CachedTable]:
-        """Lists named in-memory cache entries (same as ``SHOW CACHED TABLES``).
+        """Lists named in-memory cache entries.
 
         Includes caches registered with ``CACHE TABLE`` or
         :meth:`~pyspark.sql.catalog.Catalog.cacheTable`. Caches from
