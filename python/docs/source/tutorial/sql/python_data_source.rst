@@ -238,7 +238,7 @@ This is a dummy streaming data reader that generates 2 rows in every microbatch.
             """
             return {"offset": 0}
 
-        def latestOffset(self) -> dict:
+        def latestOffset(self, start: dict, limit) -> dict:
             """
             Return the current latest offset that the next microbatch will read to.
             """

@@ -756,7 +756,7 @@ class DataSourceStreamReader(ABC):
         ...     if isinstance(limit, ReadAllAvailable):
         ...        return {"index": start["index"] + 10}
         ...     else:  # e.g., limit is ReadMaxRows(5)
-        ...        return {"index": start["index"] + min(10, limit.maxRows)}
+        ...        return {"index": start["index"] + min(10, limit.max_rows)}
         """
         # NOTE: Previous Spark versions didn't have start offset and read limit parameters for this
         # method. While Spark will ensure the backward compatibility for existing data sources, the
