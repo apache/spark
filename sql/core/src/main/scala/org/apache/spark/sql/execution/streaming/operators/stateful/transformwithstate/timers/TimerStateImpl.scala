@@ -112,6 +112,27 @@ class TimerStateImpl(
     schemaForValueRow, RangeKeyScanStateEncoderSpec(keySchemaForSecIndex, Seq(0)),
     useMultipleValuesPerKey = false, isInternal = true)
 
+  private val secIndexProjection = UnsafeProjection.create(keySchemaForSecIndex)
+
+  /**
+   * Encodes a timestamp into an UnsafeRow key for the secondary index.
+   * The timestamp is incremented by 1 so that the encoded key serves as an exclusive
+   * lower / upper bound in range scans. Returns None if tsMs is Long.MaxValue
+   * (overflow guard).
+   *
+   * The returned UnsafeRow is always a fresh copy, safe to hold alongside other
+   * rows produced by the same projection.
+   */
+  private def encodeTimestampAsKey(tsMs: Long): Option[UnsafeRow] = {
+    if (tsMs < Long.MaxValue) {
+      val row = new GenericInternalRow(keySchemaForSecIndex.length)
+      row.setLong(0, tsMs + 1)
+      Some(secIndexProjection.apply(row).copy())
+    } else {
+      None
+    }
+  }
+
   private def getGroupingKey(cfName: String): Any = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
     if (keyOption.isEmpty) {
@@ -189,15 +210,22 @@ class TimerStateImpl(
 
   /**
    * Function to get all the expired registered timers for all grouping keys.
-   * Perform a range scan on timestamp and will stop iterating once the key row timestamp equals or
+   * Perform a range scan on timestamp and will stop iterating once the key row timestamp
    * exceeds the limit (as timestamp key is increasingly sorted).
-   * @param expiryTimestampMs Threshold for expired timestamp in milliseconds, this function
-   *                          will return all timers that have timestamp less than passed threshold.
+   * @param expiryTimestampMs Threshold for expired timestamp in milliseconds (inclusive),
+   *                          this function will return all timers that have timestamp
+   *                          less than or equal to the passed threshold.
+   * @param prevExpiryTimestampMs If provided, the lower bound (exclusive) of the scan range.
+   *                              Timers at or below this timestamp are assumed to have been
+   *                              already processed in the previous batch and will be skipped.
    * @return - iterator of all the registered timers for all grouping keys
    */
-  def getExpiredTimers(expiryTimestampMs: Long): Iterator[(Any, Long)] = {
-    // this iter is increasingly sorted on timestamp
-    val iter = store.iterator(tsToKeyCFName)
+  def getExpiredTimers(
+      expiryTimestampMs: Long,
+      prevExpiryTimestampMs: Option[Long] = None): Iterator[(Any, Long)] = {
+    val startKey = prevExpiryTimestampMs.flatMap(encodeTimestampAsKey)
+    val endKey = encodeTimestampAsKey(expiryTimestampMs)
+    val iter = store.rangeScan(startKey, endKey, tsToKeyCFName)
 
     new NextIterator[(Any, Long)] {
       override protected def getNext(): (Any, Long) = {

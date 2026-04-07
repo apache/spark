@@ -88,6 +88,11 @@ trait TTLState {
   // an expiration at or before this timestamp must be cleaned up.
   private[sql] def batchTimestampMs: Long
 
+  // The batch timestamp from the previous micro-batch, used to derive the startKey
+  // for scan-based TTL eviction. Entries at or below prevBatchTimestampMs were already
+  // cleaned up in the previous batch.
+  private[sql] def prevBatchTimestampMs: Option[Long]
+
   // The configuration for this run of the streaming query. It may change between runs
   // (e.g. user sets ttlConfig1, stops their query, updates to ttlConfig2, and then
   // resumes their query).
@@ -104,6 +109,8 @@ trait TTLState {
     StructType(Array(StructField("__empty__", NullType)))
 
   private final val TTL_ENCODER = new TTLEncoder(elementKeySchema)
+
+  private final val ELEMENT_KEY_PROJECTION = UnsafeProjection.create(elementKeySchema)
 
   // Empty row used for values
   private final val TTL_EMPTY_VALUE_ROW =
@@ -161,10 +168,25 @@ trait TTLState {
   //
   // The schema of the UnsafeRow returned by this iterator is (expirationMs, elementKey).
   private[sql] def ttlEvictionIterator(): Iterator[UnsafeRow] = {
-    val ttlIterator = store.iterator(TTL_INDEX)
+    val dummyElementKey = ELEMENT_KEY_PROJECTION
+      .apply(new GenericInternalRow(elementKeySchema.length))
+    val startKey = prevBatchTimestampMs.flatMap { prevTs =>
+      if (prevTs < Long.MaxValue) {
+        Some(TTL_ENCODER.encodeTTLRow(prevTs + 1, dummyElementKey).copy())
+      } else {
+        None
+      }
+    }
+    val endKey = if (batchTimestampMs < Long.MaxValue) {
+      Some(TTL_ENCODER.encodeTTLRow(batchTimestampMs + 1, dummyElementKey).copy())
+    } else {
+      None
+    }
+    val ttlIterator = store.rangeScan(startKey, endKey, TTL_INDEX)
 
     // Recall that the format is (expirationMs, elementKey) -> TTL_EMPTY_VALUE_ROW, so
     // kv.value doesn't ever need to be used.
+    // Safety filter: keep only truly expired entries
     ttlIterator.takeWhile { kv =>
       val expirationMs = kv.key.getLong(0)
       StateTTL.isExpired(expirationMs, batchTimestampMs)
@@ -223,12 +245,14 @@ abstract class OneToOneTTLState(
     elementKeySchemaArg: StructType,
     ttlConfigArg: TTLConfig,
     batchTimestampMsArg: Long,
+    prevBatchTimestampMsArg: Option[Long],
     metricsArg: Map[String, SQLMetric]) extends TTLState {
   override private[sql] def stateName: String = stateNameArg
   override private[sql] def store: StateStore = storeArg
   override private[sql] def elementKeySchema: StructType = elementKeySchemaArg
   override private[sql] def ttlConfig: TTLConfig = ttlConfigArg
   override private[sql] def batchTimestampMs: Long = batchTimestampMsArg
+  override private[sql] def prevBatchTimestampMs: Option[Long] = prevBatchTimestampMsArg
   override private[sql] def metrics: Map[String, SQLMetric] = metricsArg
 
   /**
@@ -340,12 +364,14 @@ abstract class OneToManyTTLState(
     elementKeySchemaArg: StructType,
     ttlConfigArg: TTLConfig,
     batchTimestampMsArg: Long,
+    prevBatchTimestampMsArg: Option[Long],
     metricsArg: Map[String, SQLMetric]) extends TTLState {
   override private[sql] def stateName: String = stateNameArg
   override private[sql] def store: StateStore = storeArg
   override private[sql] def elementKeySchema: StructType = elementKeySchemaArg
   override private[sql] def ttlConfig: TTLConfig = ttlConfigArg
   override private[sql] def batchTimestampMs: Long = batchTimestampMsArg
+  override private[sql] def prevBatchTimestampMs: Option[Long] = prevBatchTimestampMsArg
   override private[sql] def metrics: Map[String, SQLMetric] = metricsArg
 
   // Schema of the min-expiry index: elementKey -> minExpirationMs

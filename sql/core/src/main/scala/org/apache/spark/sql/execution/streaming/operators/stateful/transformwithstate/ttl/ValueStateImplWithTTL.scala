@@ -33,6 +33,10 @@ import org.apache.spark.sql.streaming.{TTLConfig, ValueState}
  * @param valEncoder - Spark SQL encoder for value
  * @param ttlConfig  - TTL configuration for values  stored in this state
  * @param batchTimestampMs - current batch processing timestamp.
+ * @param prevBatchTimestampMs - batch timestamp from the previous micro-batch (exclusive).
+ *                               Entries with expiration at or below this timestamp are assumed
+ *                               to have been already cleaned up and will be skipped during
+ *                               TTL eviction scans.
  * @param metrics - metrics to be updated as part of stateful processing
  * @tparam S - data type of object that will be stored
  */
@@ -43,9 +47,11 @@ class ValueStateImplWithTTL[S](
     valEncoder: ExpressionEncoder[Any],
     ttlConfig: TTLConfig,
     batchTimestampMs: Long,
+    prevBatchTimestampMs: Option[Long] = None,
     metrics: Map[String, SQLMetric] = Map.empty)
   extends OneToOneTTLState(
-    stateName, store, keyExprEnc.schema, ttlConfig, batchTimestampMs, metrics) with ValueState[S] {
+    stateName, store, keyExprEnc.schema, ttlConfig, batchTimestampMs,
+    prevBatchTimestampMs, metrics) with ValueState[S] {
 
   private val stateTypesEncoder =
     StateTypesEncoder(keyExprEnc, valEncoder, stateName, hasTtl = true)
