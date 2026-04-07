@@ -516,9 +516,20 @@ class RocksDB(
             currVersionLineage = currVersionLineage.sortBy(_.version)
           }
           // Delegate to AutoSnapshotLoader which handles both the happy path
-          // and auto-repair fallback to older snapshots.
+          // and auto-repair fallback to older snapshots. Sets loadedVersion to
+          // the actually loaded snapshot version as a side effect.
           currVersionLineage =
             loadSnapshotWithCheckpointId(version, stateStoreCkptId, currVersionLineage)
+
+          // Replay changelogs from the loaded snapshot version to the target version.
+          if (loadedVersion != version) {
+            val versionsAndUniqueIds = currVersionLineage.collect {
+              case i if i.version > loadedVersion && i.version <= version =>
+                (i.version, Option(i.checkpointUniqueId))
+            }
+            replayChangelog(versionsAndUniqueIds)
+            loadedVersion = version
+          }
         }
         loadedFromDfs = version > 0
         lineageManager.resetLineage(currVersionLineage)
@@ -647,14 +658,20 @@ class RocksDB(
     this
   }
 
-  private def loadSnapshotWithoutCheckpointId(versionToLoad: Long): Long = {
-    // Don't allow auto snapshot repair if changelog checkpointing is not enabled
-    // since it relies on changelog to rebuild state.
-    val allowAutoSnapshotRepair = if (enableChangelogCheckpointing) {
+  /**
+   * Whether auto snapshot repair is allowed. Repair is only allowed when
+   * changelog checkpointing is enabled, since repair relies on replaying
+   * changelogs to rebuild state from an older snapshot.
+   */
+  private def allowAutoSnapshotRepair: Boolean = {
+    if (enableChangelogCheckpointing) {
       conf.stateStoreConf.autoSnapshotRepairEnabled
     } else {
       false
     }
+  }
+
+  private def loadSnapshotWithoutCheckpointId(versionToLoad: Long): Long = {
     val snapshotLoader = new AutoSnapshotLoader(
       allowAutoSnapshotRepair,
       conf.stateStoreConf.autoSnapshotRepairNumFailuresBeforeActivating,
@@ -700,8 +717,11 @@ class RocksDB(
   /**
    * V2-aware snapshot loading with auto-repair support.
    * Uses lineage to discover eligible snapshots and falls back to older ones if corrupt.
+   * Loads only the snapshot; changelog replay to reach versionToLoad is the caller's
+   * responsibility.
    *
-   * Sets [[performedSnapshotAutoRepair]] as a side effect if auto-repair was used.
+   * Sets [[performedSnapshotAutoRepair]] as a side effect if auto-repair was used,
+   * and sets [[loadedVersion]] to the actually loaded snapshot version.
    *
    * @param versionToLoad The target version to load
    * @param stateStoreCkptId The checkpoint ID for the target version (for lineage enrichment)
@@ -718,11 +738,6 @@ class RocksDB(
     // so that getAdditionalEligibleSnapshots can enrich the lineage and
     // getEligibleSnapshots (re-called after enrichment) sees the updated lineage.
     var workingLineage = initialLineage
-    val allowAutoSnapshotRepair = if (enableChangelogCheckpointing) {
-      conf.stateStoreConf.autoSnapshotRepairEnabled
-    } else {
-      false
-    }
 
     val snapshotLoader = new AutoSnapshotLoader(
       allowAutoSnapshotRepair,
@@ -794,19 +809,8 @@ class RocksDB(
       }
     }
 
-    val (snapshotVersion, autoRepairCompleted) = snapshotLoader.loadSnapshot(versionToLoad)
+    val (_, autoRepairCompleted) = snapshotLoader.loadSnapshot(versionToLoad)
     performedSnapshotAutoRepair = autoRepairCompleted
-
-    // Replay changelogs from loaded snapshot to target version
-    if (snapshotVersion != versionToLoad) {
-      val versionsAndUniqueIds = workingLineage.collect {
-        case i if i.version > snapshotVersion && i.version <= versionToLoad =>
-          (i.version, Option(i.checkpointUniqueId))
-      }
-      replayChangelog(versionsAndUniqueIds)
-      loadedVersion = versionToLoad
-    }
-
     workingLineage
   }
 

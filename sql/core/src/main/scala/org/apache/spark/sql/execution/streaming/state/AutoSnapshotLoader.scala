@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.fs.{Path, PathFilter}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{NUM_RETRIES, NUM_RETRY, VERSION_NUM}
+import org.apache.spark.internal.LogKeys.{NUM_RETRIES, NUM_RETRY, UUID, VERSION_NUM}
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 
 /**
@@ -79,9 +79,6 @@ abstract class AutoSnapshotLoader(
    * newly-discovered snapshots. The results are merged with the initial eligible
    * snapshots (duplicates are removed by version).
    *
-   * Default: no additional snapshots, which avoids redundant DFS listings for
-   * V1 and HDFS callers that have no additional snapshots to discover.
-   *
    * @param versionToLoad The version being loaded
    * @return Additional eligible snapshot (version, uniqueId) pairs for repair
    */
@@ -123,7 +120,8 @@ abstract class AutoSnapshotLoader(
           onLoadSnapshotFromCheckpointFailure()
           numFailuresForFirstSnapshot += 1
           logError(log"Failed to load snapshot version " +
-            log"${MDC(VERSION_NUM, firstEligibleSnapshot._1)}, " +
+            log"${MDC(VERSION_NUM, firstEligibleSnapshot._1)} " +
+            log"(uniqueId: ${MDC(UUID, firstEligibleSnapshot._2.getOrElse(""))}), " +
             log"attempt ${MDC(NUM_RETRY, numFailuresForFirstSnapshot)} out of " +
             log"${MDC(NUM_RETRIES, maxNumFailures)} attempts", e)
           lastException = e
@@ -168,12 +166,14 @@ abstract class AutoSnapshotLoader(
           loadSnapshotFromCheckpoint(snapshot._1, snapshot._2)
           loadedSnapshot = Some(snapshot._1)
           logInfo(log"Successfully loaded snapshot version " +
-            log"${MDC(VERSION_NUM, snapshot._1)}. Repair complete.")
+            log"${MDC(VERSION_NUM, snapshot._1)} " +
+            log"(uniqueId: ${MDC(UUID, snapshot._2.getOrElse(""))}). Repair complete.")
         } catch {
           case NonFatal(e) =>
             logError(log"Failed to load snapshot version " +
-              log"${MDC(VERSION_NUM, snapshot._1)}, will retry repair with " +
-              log"the next eligible snapshot version", e)
+              log"${MDC(VERSION_NUM, snapshot._1)} " +
+              log"(uniqueId: ${MDC(UUID, snapshot._2.getOrElse(""))}), will retry repair " +
+              log"with the next eligible snapshot version", e)
             onLoadSnapshotFromCheckpointFailure()
             lastException = e
         }
