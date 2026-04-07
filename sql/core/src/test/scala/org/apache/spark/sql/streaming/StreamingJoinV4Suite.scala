@@ -23,7 +23,8 @@ import org.scalatest.Tag
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
-import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinStateKeyWatermarkPredicate, JoinStateValueWatermarkPredicate}
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -328,6 +329,72 @@ class StreamingInnerJoinV4Suite
         StopStream
       )
     }
+  }
+
+  test("prevStateWatermark must be None in the first batch") {
+    // Regression test for the IncrementalExecution guard: in the first batch
+    // prevOffsetSeqMetadata is None, so eventTimeWatermarkForLateEvents must NOT
+    // be passed to getStateWatermarkPredicates.  Without the guard the watermark
+    // propagation framework yields Some(0) even in batch 0, which would cause
+    // scanEvictedKeys to skip state entries at timestamp 0.
+    val input1 = MemoryStream[(Int, Int)]
+    val input2 = MemoryStream[(Int, Int)]
+
+    val df1 = input1.toDF().toDF("key", "time")
+      .select($"key", timestamp_seconds($"time") as "leftTime",
+        ($"key" * 2) as "leftValue")
+      .withWatermark("leftTime", "10 seconds")
+    val df2 = input2.toDF().toDF("key", "time")
+      .select($"key", timestamp_seconds($"time") as "rightTime",
+        ($"key" * 3) as "rightValue")
+      .withWatermark("rightTime", "10 seconds")
+
+    val joined = df1.join(df2,
+      df1("key") === df2("key") &&
+        expr("leftTime >= rightTime - interval 5 seconds " +
+          "AND leftTime <= rightTime + interval 5 seconds"),
+      "inner")
+      .select(df1("key"), $"leftTime".cast("long"), $"leftValue", $"rightValue")
+
+    def extractPrevWatermarks(q: StreamExecution): (Option[Long], Option[Long]) = {
+      val joinExec = q.lastExecution.executedPlan.collect {
+        case j: StreamingSymmetricHashJoinExec => j
+      }.head
+      val leftPrev = joinExec.stateWatermarkPredicates.left.flatMap {
+        case p: JoinStateKeyWatermarkPredicate => p.prevStateWatermark
+        case p: JoinStateValueWatermarkPredicate => p.prevStateWatermark
+      }
+      val rightPrev = joinExec.stateWatermarkPredicates.right.flatMap {
+        case p: JoinStateKeyWatermarkPredicate => p.prevStateWatermark
+        case p: JoinStateValueWatermarkPredicate => p.prevStateWatermark
+      }
+      (leftPrev, rightPrev)
+    }
+
+    testStream(joined)(
+      // First batch: prevStateWatermark must be None on both sides.
+      MultiAddData(input1, (1, 5))(input2, (1, 5)),
+      CheckNewAnswer((1, 5, 2, 3)),
+      Execute { q =>
+        val (leftPrev, rightPrev) = extractPrevWatermarks(q)
+        assert(leftPrev.isEmpty,
+          s"Left prevStateWatermark should be None in the first batch, got $leftPrev")
+        assert(rightPrev.isEmpty,
+          s"Right prevStateWatermark should be None in the first batch, got $rightPrev")
+      },
+
+      // Second batch: after watermark advances, prevStateWatermark should be set.
+      MultiAddData(input1, (2, 30))(input2, (2, 30)),
+      CheckNewAnswer((2, 30, 4, 6)),
+      Execute { q =>
+        val (leftPrev, rightPrev) = extractPrevWatermarks(q)
+        assert(leftPrev.isDefined,
+          "Left prevStateWatermark should be defined after the first batch")
+        assert(rightPrev.isDefined,
+          "Right prevStateWatermark should be defined after the first batch")
+      },
+      StopStream
+    )
   }
 }
 

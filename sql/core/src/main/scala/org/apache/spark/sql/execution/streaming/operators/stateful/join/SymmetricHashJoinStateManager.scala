@@ -34,7 +34,8 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOper
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.execution.streaming.state.{DropLastNFieldsStatePartitionKeyExtractor, KeyStateEncoderSpec, NoopStatePartitionKeyExtractor, NoPrefixKeyStateEncoderSpec, StatePartitionKeyExtractor, StateSchemaBroadcast, StateStore, StateStoreCheckpointInfo, StateStoreColFamilySchema, StateStoreConf, StateStoreErrors, StateStoreId, StateStoreMetrics, StateStoreProvider, StateStoreProviderId, SupportsFineGrainedReplay, TimestampAsPostfixKeyStateEncoderSpec, TimestampAsPrefixKeyStateEncoderSpec, TimestampKeyStateEncoder}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, DataType, LongType, NullType, StructField, StructType}
+import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DataType, DateType, DoubleType, FloatType, IntegerType, LongType, NullType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.NextIterator
 
 /**
@@ -184,15 +185,28 @@ trait SupportsEvictByCondition { self: SymmetricHashJoinStateManager =>
 trait SupportsEvictByTimestamp { self: SymmetricHashJoinStateManager =>
   import SymmetricHashJoinStateManager._
 
-  /** Evict the state by timestamp. Returns the number of values evicted. */
-  def evictByTimestamp(endTimestamp: Long): Long
+  /**
+   * Evict the state by timestamp. Returns the number of values evicted.
+   *
+   * @param endTimestamp Inclusive upper bound: evicts entries with timestamp <= endTimestamp.
+   * @param startTimestamp Exclusive lower bound: entries with timestamp <= startTimestamp are
+   *   assumed to have been evicted already (e.g. from the previous batch). When provided,
+   *   the scan starts from startTimestamp + 1.
+   */
+  def evictByTimestamp(endTimestamp: Long, startTimestamp: Option[Long] = None): Long
 
   /**
    * Evict the state by timestamp and return the evicted key-value pairs.
    *
    * It is caller's responsibility to consume the whole iterator.
+   *
+   * @param endTimestamp Inclusive upper bound: evicts entries with timestamp <= endTimestamp.
+   * @param startTimestamp Exclusive lower bound: entries with timestamp <= startTimestamp are
+   *   assumed to have been evicted already (e.g. from the previous batch). When provided,
+   *   the scan starts from startTimestamp + 1.
    */
-  def evictAndReturnByTimestamp(endTimestamp: Long): Iterator[KeyToValuePair]
+  def evictAndReturnByTimestamp(
+      endTimestamp: Long, startTimestamp: Option[Long] = None): Iterator[KeyToValuePair]
 }
 
 /**
@@ -519,11 +533,11 @@ class SymmetricHashJoinStateManagerV4(
     }
   }
 
-  override def evictByTimestamp(endTimestamp: Long): Long = {
+  override def evictByTimestamp(endTimestamp: Long, startTimestamp: Option[Long] = None): Long = {
     require(hasEventTime,
       "evictByTimestamp requires event time; secondary index was not populated")
     var removed = 0L
-    tsWithKey.scanEvictedKeys(endTimestamp).foreach { evicted =>
+    tsWithKey.scanEvictedKeys(endTimestamp, startTimestamp).foreach { evicted =>
       val key = evicted.key
       val timestamp = evicted.timestamp
       val numValues = evicted.numValues
@@ -537,12 +551,13 @@ class SymmetricHashJoinStateManagerV4(
     removed
   }
 
-  override def evictAndReturnByTimestamp(endTimestamp: Long): Iterator[KeyToValuePair] = {
+  override def evictAndReturnByTimestamp(
+      endTimestamp: Long, startTimestamp: Option[Long] = None): Iterator[KeyToValuePair] = {
     require(hasEventTime,
       "evictAndReturnByTimestamp requires event time; secondary index was not populated")
     val reusableKeyToValuePair = KeyToValuePair()
 
-    tsWithKey.scanEvictedKeys(endTimestamp).flatMap { evicted =>
+    tsWithKey.scanEvictedKeys(endTimestamp, startTimestamp).flatMap { evicted =>
       val key = evicted.key
       val timestamp = evicted.timestamp
       val values = keyWithTsToValues.get(key, timestamp)
@@ -663,17 +678,30 @@ class SymmetricHashJoinStateManagerV4(
 
     /**
      * Returns entries where minTs <= timestamp <= maxTs (both inclusive), grouped by timestamp.
-     * Skips entries before minTs and stops iterating past maxTs (timestamps are sorted).
+     * When maxTs is bounded (< Long.MaxValue), uses rangeScanWithMultiValues for efficient
+     * range access; falls back to prefixScan otherwise to stay within the key's scope.
+     *
+     * When prefixScan is used (maxTs == Long.MaxValue), entries outside [minTs, maxTs] are
+     * filtered out so both code paths produce identical results.
      */
     def getValuesInRange(
         key: UnsafeRow, minTs: Long, maxTs: Long): Iterator[GetValuesResult] = {
       val reusableGetValuesResult = new GetValuesResult()
+      // Only use rangeScan when maxTs < Long.MaxValue, since rangeScan requires
+      // an exclusive end key (maxTs + 1) which would overflow at Long.MaxValue.
+      val useRangeScan = maxTs < Long.MaxValue
 
       new NextIterator[GetValuesResult] {
-        private val iter = stateStore.prefixScanWithMultiValues(key, colFamilyName)
+        private val iter = if (useRangeScan) {
+          val startKey = createKeyRow(key, minTs).copy()
+          // rangeScanWithMultiValues endKey is exclusive, so use maxTs + 1
+          val endKey = Some(createKeyRow(key, maxTs + 1))
+          stateStore.rangeScanWithMultiValues(Some(startKey), endKey, colFamilyName)
+        } else {
+          stateStore.prefixScanWithMultiValues(key, colFamilyName)
+        }
 
         private var currentTs = -1L
-        private var pastUpperBound = false
         private val valueAndMatchPairs = scala.collection.mutable.ArrayBuffer[ValueAndMatchPair]()
 
         private def flushAccumulated(): GetValuesResult = {
@@ -691,16 +719,16 @@ class SymmetricHashJoinStateManagerV4(
 
         @tailrec
         override protected def getNext(): GetValuesResult = {
-          if (pastUpperBound || !iter.hasNext) {
+          if (!iter.hasNext) {
             flushAccumulated()
           } else {
             val unsafeRowPair = iter.next()
             val ts = TimestampKeyStateEncoder.extractTimestamp(unsafeRowPair.key)
 
-            if (ts > maxTs) {
-              pastUpperBound = true
-              getNext()
-            } else if (ts < minTs) {
+            // Filter out entries outside [minTs, maxTs]. This is essential when using
+            // prefixScan (which returns all timestamps for the key) and serves as a
+            // safety guard for rangeScan as well.
+            if (ts < minTs || ts > maxTs) {
               getNext()
             } else if (currentTs == -1L || currentTs == ts) {
               currentTs = ts
@@ -773,6 +801,8 @@ class SymmetricHashJoinStateManagerV4(
       isInternal = true
     )
 
+    // Returns an UnsafeRow backed by a reused projection buffer. Callers that need to
+    // hold the row beyond the immediate state store call must invoke copy() on the result.
     private def createKeyRow(key: UnsafeRow, timestamp: Long): UnsafeRow = {
       TimestampKeyStateEncoder.attachTimestamp(
         attachTimestampProjection, keySchemaWithTimestamp, key, timestamp)
@@ -788,9 +818,66 @@ class SymmetricHashJoinStateManagerV4(
 
     case class EvictedKeysResult(key: UnsafeRow, timestamp: Long, numValues: Int)
 
-    // NOTE: This assumes we consume the whole iterator to trigger completion.
-    def scanEvictedKeys(endTimestamp: Long): Iterator[EvictedKeysResult] = {
-      val evictIterator = stateStore.iteratorWithMultiValues(colFamilyName)
+    private def defaultInternalRow(schema: StructType): InternalRow = {
+      InternalRow.fromSeq(schema.map(f => defaultValueForType(f.dataType)))
+    }
+
+    private def defaultValueForType(dt: DataType): Any = dt match {
+      case BooleanType => false
+      case ByteType => 0.toByte
+      case ShortType => 0.toShort
+      case IntegerType | DateType => 0
+      case LongType | TimestampType | TimestampNTZType => 0L
+      case FloatType => 0.0f
+      case DoubleType => 0.0
+      case StringType => UTF8String.EMPTY_UTF8
+      case BinaryType => Array.emptyByteArray
+      case st: StructType => defaultInternalRow(st)
+      case _ => null
+    }
+
+    /**
+     * Build a scan boundary row for rangeScan. The TsWithKeyTypeStore uses
+     * TimestampAsPrefixKeyStateEncoder, which encodes the row as [timestamp][key_fields].
+     * We need a full-schema row (not just the timestamp) because the encoder expects all
+     * key columns to be present. Default values are used for the key fields since only the
+     * timestamp matters for ordering in the prefix encoder.
+     */
+    private def createScanBoundaryRow(timestamp: Long): UnsafeRow = {
+      val defaultKey = UnsafeProjection.create(keySchema)
+        .apply(defaultInternalRow(keySchema))
+      createKeyRow(defaultKey, timestamp).copy()
+    }
+
+    /**
+     * Scan keys eligible for eviction within the timestamp range.
+     *
+     * This assumes we consume the whole iterator to trigger completion.
+     *
+     * @param endTimestamp Inclusive upper bound: entries with timestamp <= endTimestamp are
+     *   eligible for eviction.
+     * @param startTimestamp Exclusive lower bound: entries with timestamp <= startTimestamp
+     *   are assumed to have been evicted already. The scan starts from startTimestamp + 1.
+     */
+    def scanEvictedKeys(
+        endTimestamp: Long,
+        startTimestamp: Option[Long] = None): Iterator[EvictedKeysResult] = {
+      // rangeScanWithMultiValues: startKey is inclusive, endKey is exclusive.
+      // startTimestamp is exclusive (already evicted), so we seek from st + 1.
+      val startKeyRow = startTimestamp.flatMap { st =>
+        if (st < Long.MaxValue) Some(createScanBoundaryRow(st + 1))
+        else None
+      }
+      // endTimestamp is inclusive, so we use endTimestamp + 1 as the exclusive upper bound.
+      // When endTimestamp == Long.MaxValue we cannot add 1, so endKeyRow is None. This is
+      // safe because rangeScanWithMultiValues with no end key uses the column-family prefix
+      // as the upper bound, naturally scoping the scan within this column family.
+      val endKeyRow = if (endTimestamp < Long.MaxValue) {
+        Some(createScanBoundaryRow(endTimestamp + 1))
+      } else {
+        None
+      }
+      val evictIterator = stateStore.rangeScanWithMultiValues(startKeyRow, endKeyRow, colFamilyName)
       new NextIterator[EvictedKeysResult]() {
         var currentKeyRow: UnsafeRow = null
         var currentEventTime: Long = -1L

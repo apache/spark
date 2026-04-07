@@ -531,13 +531,19 @@ class IncrementalExecution(
       case j: StreamingSymmetricHashJoinExec =>
         val iwLateEvents = inputWatermarkForLateEvents(j.stateInfo.get)
         val iwEviction = inputWatermarkForEviction(j.stateInfo.get)
+        // Only use the late-events watermark as the scan lower bound when a previous
+        // batch actually existed.  In the very first batch the watermark propagation
+        // yields Some(0) even though no state has been evicted yet, which would
+        // incorrectly skip entries at timestamp 0.
+        val prevBatchLateEventsWm =
+          if (prevOffsetSeqMetadata.isDefined) iwLateEvents else None
         j.copy(
           eventTimeWatermarkForLateEvents = iwLateEvents,
           eventTimeWatermarkForEviction = iwEviction,
           stateWatermarkPredicates =
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
               j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
-              iwEviction, !allowMultipleStatefulOperators)
+              iwEviction, prevBatchLateEventsWm, !allowMultipleStatefulOperators)
         )
     }
   }
