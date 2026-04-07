@@ -81,7 +81,7 @@ public class JavaTaskContextCompileCheck {
 
   static class JavaTaskInterruptListenerImpl implements TaskInterruptListener {
     @Override
-    public void onTaskInterrupted(TaskContext context) {
+    public void onTaskInterrupted(TaskContext context, String reason) {
     }
   }
 

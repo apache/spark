@@ -77,7 +77,7 @@ private[spark] class TaskContextImpl(
   @transient private val onInterruptCallbacks = new Stack[TaskInterruptListener]
 
   /**
-   * The thread currently executing task completion or failure listeners, if any.
+   * The thread currently executing task completion, failure, or interrupt listeners, if any.
    *
    * `invokeListeners()` uses this to ensure listeners are called sequentially.
    */
@@ -139,7 +139,9 @@ private[spark] class TaskContextImpl(
       // all listeners, including the new listener.
       onInterruptCallbacks.push(listener)
       reasonIfKilled
-    }.foreach(reason => invokeTaskInterruptListeners(new TaskKilledException(reason)))
+    }.foreach { reason =>
+      invokeTaskInterruptListeners(reason, new TaskKilledException(reason))
+    }
     this
   }
 
@@ -183,11 +185,11 @@ private[spark] class TaskContextImpl(
     }
   }
 
-  private def invokeTaskInterruptListeners(error: Throwable): Unit = {
+  private def invokeTaskInterruptListeners(reason: String, error: Throwable): Unit = {
     // It is safe to access the reference to `onInterruptCallbacks` without holding the TaskContext
     // lock. `invokeListeners()` acquires the lock before accessing the contents.
     invokeListeners(onInterruptCallbacks, "TaskInterruptListener", Option(error)) {
-      _.onTaskInterrupted(this)
+      _.onTaskInterrupted(this, reason)
     }
   }
 
@@ -297,7 +299,14 @@ private[spark] class TaskContextImpl(
 
   private[spark] override def markInterrupted(reason: String): Unit = {
     reasonIfKilled = Some(reason)
-    invokeTaskInterruptListeners(new TaskKilledException(reason))
+    try {
+      invokeTaskInterruptListeners(reason, new TaskKilledException(reason))
+    } catch {
+      case e: TaskCompletionListenerException =>
+        // SPARK-56330: Listener failures already called `markTaskFailed`; do not propagate
+        // to the executor kill / RPC thread.
+        logError(log"Exception(s) in TaskInterruptListener(s) after task was interrupted", e)
+    }
   }
 
   private[spark] override def killTaskIfInterrupted(): Unit = {

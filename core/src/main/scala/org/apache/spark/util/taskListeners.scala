@@ -48,10 +48,13 @@ trait TaskFailureListener extends EventListener {
  * :: DeveloperApi ::
  *
  * Listener providing a callback function to invoke when a task's execution is interrupted.
+ *
+ * @param context the task context
+ * @param reason the kill / interrupt reason (same string as in [[org.apache.spark.TaskKilledException]])
  */
 @DeveloperApi
 trait TaskInterruptListener extends EventListener {
-  def onTaskInterrupted(context: TaskContext): Unit
+  def onTaskInterrupted(context: TaskContext, reason: String): Unit
 }
 
 

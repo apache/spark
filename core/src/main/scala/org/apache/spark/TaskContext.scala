@@ -172,13 +172,28 @@ abstract class TaskContext extends Serializable {
   /**
    * Adds a listener to be executed when the task is interrupted.
    *
+   * Adding a listener to an already interrupted task will result in that listener being called
+   * immediately.
+   *
    * There are no ordering guarantees for task interrupt listeners. Listeners are guaranteed to
    * execute sequentially with other task completion, failure, or interrupt listeners. Listeners may
    * be invoked concurrently with the task itself.
    *
-   * Exceptions thrown by the listener will result in failure of the task.
+   * Exceptions thrown by the listener will mark the task as failed; they are not propagated from
+   * `markInterrupted` (for example when interruption is delivered on the executor kill thread).
    */
   def addTaskInterruptListener(listener: TaskInterruptListener): TaskContext
+
+  /**
+   * Adds a listener to be executed when the task is interrupted (Scala closure form).
+   * Behavior matches [[addTaskInterruptListener]] with a [[TaskInterruptListener]].
+   */
+  def addTaskInterruptListener(f: (TaskContext, String) => Unit): TaskContext = {
+    addTaskInterruptListener(new TaskInterruptListener {
+      override def onTaskInterrupted(context: TaskContext, reason: String): Unit =
+        f(context, reason)
+    })
+  }
 
   /** Runs a task with this context, ensuring failure and completion listeners get triggered. */
   private[spark] def runTaskWithListeners[T](task: Task[T]): T = {
