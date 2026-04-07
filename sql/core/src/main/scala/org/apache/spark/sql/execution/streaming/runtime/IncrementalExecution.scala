@@ -411,7 +411,8 @@ class IncrementalExecution(
         j.copy(
           stateInfo = Some(nextStatefulOperationStateInfo()),
           eventTimeWatermarkForLateEvents = None,
-          eventTimeWatermarkForEviction = None
+          eventTimeWatermarkForEviction = None,
+          outputMode = Some(outputMode)
         )
 
       case l: StreamingGlobalLimitExec =>

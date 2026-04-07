@@ -370,9 +370,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   testBinaryOperationInStreamingPlan(
     "inner join in update mode",
     _.join(_, joinType = Inner),
-    outputMode = Update,
-    streamStreamSupported = false,
-    expectedMsg = "is not supported in Update output mode")
+    outputMode = Update)
 
   // Full outer joins: stream-batch/batch-stream join are not allowed,
   // and stream-stream join is allowed 'conditionally' - see below check
@@ -403,16 +401,25 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     streamStreamSupported = false,
     expectedMsg = "RightOuter join")
 
-  // Left outer, right outer, full outer, left semi joins
-  Seq(LeftOuter, RightOuter, FullOuter, LeftSemi).foreach { joinType =>
-    // Update mode not allowed
+  // Left outer, right outer, full outer joins: Update mode not allowed
+  Seq(LeftOuter, RightOuter, FullOuter).foreach { joinType =>
     assertNotSupportedInStreamingPlan(
       s"$joinType join with stream-stream relations and update mode",
       streamRelation.join(streamRelation, joinType = joinType,
         condition = Some(attribute === attribute)),
       OutputMode.Update(),
       Seq("is not supported in Update output mode"))
+  }
 
+  // LeftSemi join: Update mode allowed (equivalent to Append mode for non-outer joins)
+  assertSupportedInStreamingPlan(
+    s"LeftSemi join with stream-stream relations and update mode",
+    streamRelation.join(streamRelation, joinType = LeftSemi,
+      condition = Some(attributeWithWatermark === attribute)),
+    OutputMode.Update())
+
+  // Left outer, right outer, full outer, left semi joins
+  Seq(LeftOuter, RightOuter, FullOuter, LeftSemi).foreach { joinType =>
     // Complete mode not allowed
     assertNotSupportedInStreamingPlan(
       s"$joinType join with stream-stream relations and complete mode",

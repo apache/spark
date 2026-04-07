@@ -30,7 +30,7 @@ import org.scalatest.{BeforeAndAfter, Tag}
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
@@ -352,6 +352,28 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
     )
   }
 
+  // Stream-stream non-outer join produces the same behavior between Append mode and Update mode.
+  // We only run a sanity test here rather than replicating the full Append mode test suite.
+  test("stream stream inner join with Update mode on non-time column") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+
+    val df1 = input1.toDF().select($"value" as "key", ($"value" * 2) as "leftValue")
+    val df2 = input2.toDF().select($"value" as "key", ($"value" * 3) as "rightValue")
+    val joined = df1.join(df2, "key")
+
+    testStream(joined, OutputMode.Update())(
+      AddData(input1, 1),
+      CheckAnswer(),
+      AddData(input2, 1, 10),
+      CheckNewAnswer((1, 2, 3)),
+      AddData(input1, 10),
+      CheckNewAnswer((10, 20, 30)),
+      AddData(input2, 1),
+      CheckNewAnswer((1, 2, 3))
+    )
+  }
+
   test("stream stream inner join on windows - without watermark") {
     val input1 = MemoryStream[Int]
     val input2 = MemoryStream[Int]
@@ -669,7 +691,7 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
         assert(query.lastExecution.executedPlan.collect {
           case j @ StreamingSymmetricHashJoinExec(_, _, _, _, _, _, _, _, _,
             ShuffleExchangeExec(opA: HashPartitioning, _, _, _),
-            ShuffleExchangeExec(opB: HashPartitioning, _, _, _))
+            ShuffleExchangeExec(opB: HashPartitioning, _, _, _), _)
               if partitionExpressionsColumns(opA.expressions) === Seq("a", "b")
                 && partitionExpressionsColumns(opB.expressions) === Seq("a", "b")
                 && opA.numPartitions == numPartitions && opB.numPartitions == numPartitions => j
@@ -1241,6 +1263,25 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
 
   import testImplicits._
   import org.apache.spark.sql.functions._
+
+  Seq("left_outer", "right_outer").foreach { joinType =>
+    test(s"stream-stream $joinType join does not support Update mode") {
+      val input1 = MemoryStream[Int]
+      val input2 = MemoryStream[Int]
+
+      val df1 = input1.toDF().select($"value" as "key", ($"value" * 2) as "leftValue")
+      val df2 = input2.toDF().select($"value" as "key", ($"value" * 3) as "rightValue")
+      val joined = df1.join(df2, Seq("key"), joinType)
+
+      val e = intercept[AnalysisException] {
+        testStream(joined, OutputMode.Update())(
+          AddData(input1, 1),
+          CheckAnswer()
+        )
+      }
+      assert(e.getMessage.contains("is not supported in Update output mode"))
+    }
+  }
 
   test("left outer early state exclusion on left") {
     withTempDir { checkpointDir =>
@@ -1954,6 +1995,25 @@ abstract class StreamingOuterJoinSuite extends StreamingOuterJoinBase {
 @SlowSQLTest
 abstract class StreamingFullOuterJoinBase extends StreamingJoinSuite {
 
+  import testImplicits._
+
+  test("stream-stream full outer join does not support Update mode") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+
+    val df1 = input1.toDF().select($"value" as "key", ($"value" * 2) as "leftValue")
+    val df2 = input2.toDF().select($"value" as "key", ($"value" * 3) as "rightValue")
+    val joined = df1.join(df2, Seq("key"), "full_outer")
+
+    val e = intercept[AnalysisException] {
+      testStream(joined, OutputMode.Update())(
+        AddData(input1, 1),
+        CheckAnswer()
+      )
+    }
+    assert(e.getMessage.contains("is not supported in Update output mode"))
+  }
+
   test("windowed full outer join") {
     withTempDir { checkpointDir =>
       val (leftInput, rightInput, joined) = setupWindowedJoin("full_outer")
@@ -2175,6 +2235,22 @@ abstract class StreamingFullOuterJoinSuite extends StreamingFullOuterJoinBase
 abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
 
   import testImplicits._
+
+  // Stream-stream non-outer join produces the same behavior between Append mode and Update mode.
+  // We only run a sanity test here rather than replicating the full Append mode test suite.
+  test("windowed left semi join with Update mode") {
+    withTempDir { checkpointDir =>
+      val (leftInput, rightInput, joined) = setupWindowedJoin("left_semi")
+
+      testStream(joined, OutputMode.Update())(
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        MultiAddData(leftInput, 1, 2, 3, 4, 5)(rightInput, 3, 4, 5, 6, 7),
+        CheckNewAnswer(Row(3, 10, 6), Row(4, 10, 8), Row(5, 10, 10)),
+        MultiAddData(leftInput, 21)(rightInput, 22),
+        CheckNewAnswer()
+      )
+    }
+  }
 
   test("windowed left semi join") {
     withTempDir { checkpointDir =>
