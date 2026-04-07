@@ -94,9 +94,10 @@ class ContinuousDataSourceRDD(
     val partitionReader = readerForPartition.getPartitionReader()
     new NextIterator[InternalRow] {
       private var numRow = 0L
+      private val numRowsPerUpdate = CustomMetrics.numRowsPerUpdate
 
       override def getNext(): InternalRow = {
-        if (numRow % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
+        if (numRow % numRowsPerUpdate == 0) {
           CustomMetrics.updateMetrics(
             partitionReader.currentMetricsValues.toImmutableArraySeq, customMetrics)
         }

@@ -2664,6 +2664,17 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val CUSTOM_METRICS_NUM_ROWS_PER_UPDATE =
+    buildConf("spark.sql.execution.customMetrics.numRowsPerUpdate")
+      .doc("The number of rows between custom metrics updates during data source read/write " +
+        "operations. Increasing this value reduces the frequency of metrics updates and can " +
+        "lower CPU overhead for high-throughput workloads.")
+      .version("4.1.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .intConf
+      .checkValue(_ > 0, "The value must be positive.")
+      .createWithDefault(100)
+
   val STATE_STORE_PROVIDER_CLASS =
     buildConf("spark.sql.streaming.stateStore.providerClass")
       .internal()
@@ -8272,6 +8283,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS)
 
   def usePartitionEvaluator: Boolean = getConf(SQLConf.USE_PARTITION_EVALUATOR)
+
+  def customMetricsNumRowsPerUpdate: Int = getConf(SQLConf.CUSTOM_METRICS_NUM_ROWS_PER_UPDATE)
 
   def legacyNegativeIndexInArrayInsert: Boolean = {
     getConf(SQLConf.LEGACY_NEGATIVE_INDEX_IN_ARRAY_INSERT)

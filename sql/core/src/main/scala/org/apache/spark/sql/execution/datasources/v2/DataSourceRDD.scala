@@ -152,6 +152,7 @@ private class PartitionIterator[T](
     customMetrics: Map[String, SQLMetric]) extends Iterator[T] {
   private[this] var valuePrepared = false
   private[this] var hasMoreInput = true
+  private[this] val numRowsPerUpdate = CustomMetrics.numRowsPerUpdate
 
   private var numRow = 0L
 
@@ -167,7 +168,7 @@ private class PartitionIterator[T](
     if (!hasNext) {
       throw QueryExecutionErrors.endOfStreamError()
     }
-    if (numRow % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
+    if (numRow % numRowsPerUpdate == 0) {
       CustomMetrics.updateMetrics(reader.currentMetricsValues.toImmutableArraySeq, customMetrics)
     }
     numRow += 1

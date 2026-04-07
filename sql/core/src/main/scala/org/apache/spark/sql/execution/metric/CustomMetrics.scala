@@ -19,11 +19,12 @@ package org.apache.spark.sql.execution.metric
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
+import org.apache.spark.sql.internal.SQLConf
 
 object CustomMetrics {
   private[spark] val V2_CUSTOM = "v2Custom"
 
-  private[spark] val NUM_ROWS_PER_UPDATE = 100
+  private[spark] def numRowsPerUpdate: Int = SQLConf.get.customMetricsNumRowsPerUpdate
 
   private[spark] val BUILTIN_OUTPUT_METRICS = Set("bytesWritten", "recordsWritten")
 

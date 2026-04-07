@@ -57,6 +57,7 @@ abstract class FileFormatDataWriter(
   protected val MAX_FILE_COUNTER: Int = 1000 * 1000
   protected val updatedPartitions: mutable.Set[String] = mutable.Set[String]()
   protected var currentWriter: OutputWriter = _
+  private val numRowsPerUpdate = CustomMetrics.numRowsPerUpdate
 
   /** Trackers for computing various statistics on the data as it's being written out. */
   protected val statsTrackers: Seq[WriteTaskStatsTracker] =
@@ -96,7 +97,7 @@ abstract class FileFormatDataWriter(
   def write(record: InternalRow): Unit
 
   final def writeWithMetrics(record: InternalRow, count: Long): Unit = {
-    if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
+    if (count % numRowsPerUpdate == 0) {
       CustomMetrics.updateMetrics(currentMetricsValues.toImmutableArraySeq, customMetrics)
     }
     enrichWriteError(Option(currentWriter).map(_.path()).getOrElse(description.path)) {

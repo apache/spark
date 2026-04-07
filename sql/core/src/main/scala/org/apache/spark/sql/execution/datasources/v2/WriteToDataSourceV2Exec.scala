@@ -595,11 +595,12 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
       dataWriter: W,
       customMetrics: Map[String, SQLMetric]) extends java.util.Iterator[InternalRow] {
     var count = 0L
+    private val numRowsPerUpdate = CustomMetrics.numRowsPerUpdate
 
     override def hasNext: Boolean = iter.hasNext
 
     override def next(): InternalRow = {
-      if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
+      if (count % numRowsPerUpdate == 0) {
         CustomMetrics.updateMetrics(
           dataWriter.currentMetricsValues.toImmutableArraySeq, customMetrics)
       }

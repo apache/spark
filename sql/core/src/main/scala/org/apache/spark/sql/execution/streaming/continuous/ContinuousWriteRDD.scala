@@ -59,9 +59,10 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writerFactory: StreamingDat
             context.partitionId(),
             context.taskAttemptId(),
             EpochTracker.getCurrentEpoch.get)
+          val numRowsPerUpdate = CustomMetrics.numRowsPerUpdate
           var count = 0L
           while (dataIterator.hasNext) {
-            if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
+            if (count % numRowsPerUpdate == 0) {
               CustomMetrics.updateMetrics(
                 dataWriter.currentMetricsValues.toImmutableArraySeq, customMetrics)
             }
