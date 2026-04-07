@@ -15,6 +15,13 @@
 # limitations under the License.
 #
 
+"""
+.. classic:: true
+
+.. connect_migration:: Use `df.describe()` for summary statistics, or
+    `df.observe(name, *exprs)` for named metrics.
+"""
+
 # This file is ported from spark/util/StatCounter.scala
 
 import copy

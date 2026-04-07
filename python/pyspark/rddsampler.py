@@ -15,6 +15,10 @@
 # limitations under the License.
 #
 
+"""
+.. classic:: true
+"""
+
 import sys
 import random
 import math

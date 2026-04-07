@@ -558,6 +558,8 @@ class SparkContext:
         Examples
         --------
         >>> sc.setLogLevel("WARN")  # doctest :+SKIP
+
+        .. connect_migration:: Replace sc.setLogLevel(level) with spark.log.level(level)
         """
         self._jsc.setLogLevel(logLevel)
 
@@ -630,6 +632,8 @@ class SparkContext:
         --------
         >>> sc.applicationId  # doctest: +ELLIPSIS
         'local-...'
+
+        .. connect_migration:: Replace spark.sparkContext.applicationId with spark.conf.get("spark.app.id")
         """
         return self._jsc.sc().applicationId()
 
@@ -675,6 +679,9 @@ class SparkContext:
         --------
         >>> sc.defaultParallelism > 0
         True
+
+        .. connect_migration:: Replace spark.sparkContext.defaultParallelism with
+            int(spark.conf.get("spark.default.parallelism", "200"))
         """
         return self._jsc.sc().defaultParallelism()
 
@@ -734,6 +741,9 @@ class SparkContext:
         EmptyRDD...
         >>> sc.emptyRDD().count()
         0
+
+        .. connect_migration:: Replace sc.emptyRDD with an empty list. When used with
+            createDataFrame: spark.createDataFrame([], schema)
         """
         return RDD(self._jsc.emptyRDD(), self, NoOpSerializer())
 
@@ -828,6 +838,9 @@ class SparkContext:
         >>> strings = ["a", "b", "c"]
         >>> sc.parallelize(strings, 2).glom().collect()
         [['a'], ['b', 'c']]
+
+        .. connect_migration:: Replace sc.parallelize(data) with the Python collection directly.
+            When used with createDataFrame: spark.createDataFrame(data, schema)
         """
         numSlices = int(numSlices) if numSlices is not None else self.defaultParallelism
         if isinstance(c, range):
@@ -2212,6 +2225,10 @@ class SparkContext:
         >>> suppress = lock.acquire()
         >>> print(result)
         Cancelled
+
+        .. connect_migration:: Replace sc.setJobGroup(groupId, desc) with
+            spark.conf.set("spark.job.group.id", groupId) and
+            spark.conf.set("spark.job.description", desc)
         """
         self._jsc.setJobGroup(groupId, description, interruptOnCancel)
 
@@ -2410,6 +2427,9 @@ class SparkContext:
         -----
         If you run jobs in parallel, use :class:`pyspark.InheritableThread` for thread
         local inheritance.
+
+        .. connect_migration:: Replace spark.sparkContext.setLocalProperty(key, value) with
+            spark.conf.set(key, value)
         """
         self._jsc.setLocalProperty(key, value)
 
@@ -2441,6 +2461,9 @@ class SparkContext:
         -----
         If you run jobs in parallel, use :class:`pyspark.InheritableThread` for thread
         local inheritance.
+
+        .. connect_migration:: Replace sc.setJobDescription(desc) with
+            spark.conf.set("spark.job.description", desc)
         """
         self._jsc.setJobDescription(value)
 
@@ -2610,6 +2633,9 @@ class SparkContext:
         """Return a copy of this SparkContext's configuration :class:`SparkConf`.
 
         .. versionadded:: 2.1.0
+
+        .. connect_migration:: Replace sc.getConf() with spark.conf. For a specific key use
+            spark.conf.get(key)
         """
         conf = SparkConf()
         conf.setAll(self._conf.getAll())

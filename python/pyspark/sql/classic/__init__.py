@@ -15,4 +15,8 @@
 # limitations under the License.
 #
 
-"""Spark Classic specific"""
+"""
+Spark Classic specific
+
+.. classic:: true
+"""

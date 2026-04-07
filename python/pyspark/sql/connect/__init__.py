@@ -15,7 +15,11 @@
 # limitations under the License.
 #
 
-"""Spark Connect client"""
+"""
+Spark Connect client
+
+.. connect:: true
+"""
 
 from pyspark.sql.connect.utils import check_dependencies
 

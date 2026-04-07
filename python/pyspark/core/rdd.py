@@ -609,6 +609,9 @@ class RDD(Generic[T_co]):
         >>> rdd = sc.parallelize(["b", "a", "c"])
         >>> sorted(rdd.map(lambda x: (x, 1)).collect())
         [('a', 1), ('b', 1), ('c', 1)]
+
+        .. connect_migration:: Replace rdd.map() with DataFrame operations. Use
+            df.withColumn(), df.select() with a UDF, or a pandas UDF instead.
         """
 
         def func(_: int, iterator: Iterable[T]) -> Iterable[U]:
@@ -697,6 +700,9 @@ class RDD(Generic[T_co]):
         ...
         >>> rdd.mapPartitions(f).collect()
         [3, 7]
+
+        .. connect_migration:: Replace rdd.mapPartitions() with a pandas UDF using
+            applyInPandas.
         """
 
         def func(_: int, iterator: Iterable[T]) -> Iterable[U]:

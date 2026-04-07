@@ -14,6 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+"""
+.. connect:: true
+"""
+
 import grpc
 import json
 from grpc import StatusCode

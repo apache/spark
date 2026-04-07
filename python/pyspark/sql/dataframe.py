@@ -187,6 +187,9 @@ class DataFrame:
             >>> df = spark.range(1)
             >>> type(df.rdd)
             <class 'pyspark.core.rdd.RDD'>
+
+            .. connect_migration:: Use DataFrame operations directly as RDD is not supported
+                in Spark Connect.
             """
             ...
 

@@ -15,7 +15,11 @@
 # limitations under the License.
 #
 
-"""Spark Connect Python Client - ML module"""
+"""
+Spark Connect Python Client - ML module
+
+.. connect:: true
+"""
 
 from pyspark.sql.connect.utils import check_dependencies
 

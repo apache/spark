@@ -15,6 +15,12 @@
 # limitations under the License.
 #
 
+"""
+.. classic:: true
+
+.. connect_migration:: Use SparkSession instead.
+"""
+
 import sys
 import warnings
 from typing import (

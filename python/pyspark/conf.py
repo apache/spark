@@ -15,6 +15,13 @@
 # limitations under the License.
 #
 
+"""
+.. classic:: true
+
+.. connect_migration:: Read Spark SQL configuration values using `spark.conf.get(key)`
+    and write them using `spark.conf.set(key, value)`.
+"""
+
 __all__ = ["SparkConf"]
 
 import sys

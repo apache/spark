@@ -14,6 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+"""
+.. connect:: true
+"""
+
 import abc
 import dataclasses
 from typing import Optional, List, Tuple, Dict, Any, Union, TYPE_CHECKING, Sequence

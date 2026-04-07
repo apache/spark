@@ -15,6 +15,13 @@
 # limitations under the License.
 #
 
+"""
+.. classic:: true
+
+.. connect_migration:: Use `df.observe(name, *exprs)` to collect named metrics during
+    query execution.
+"""
+
 import os
 import sys
 import select

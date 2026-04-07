@@ -772,6 +772,9 @@ class UDFRegistration:
         ... # doctest: +SKIP
         >>> spark.sql("SELECT javaStringLength3('test')").collect()  # doctest: +SKIP
         [Row(javaStringLength3(test)=4)]
+
+        .. connect_migration:: Use spark.udf.register in a Scala notebook cell to register a
+            Scala UDF; it will be accessible from Python in the same session.
         """
 
         jdt = None

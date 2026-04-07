@@ -15,6 +15,10 @@
 # limitations under the License.
 #
 
+"""
+.. classic:: true
+"""
+
 import atexit
 import os
 import signal

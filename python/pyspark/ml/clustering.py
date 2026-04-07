@@ -1429,6 +1429,10 @@ class LDAModel(JavaModel, _LDAParams):
     including local and distributed data structures.
 
     .. versionadded:: 2.0.0
+
+    .. classic:: true
+
+    .. connect_migration:: LDA model family is not supported in Spark Connect.
     """
 
     @since("3.0.0")
@@ -1530,6 +1534,10 @@ class DistributedLDAModel(LDAModel, JavaMLReadable["DistributedLDAModel"], JavaM
     for each training document.
 
     .. versionadded:: 2.0.0
+
+    .. classic:: true
+
+    .. connect_migration:: LDA model family is not supported in Spark Connect.
     """
 
     @functools.cache
@@ -1608,6 +1616,10 @@ class LocalLDAModel(LDAModel, JavaMLReadable["LocalLDAModel"], JavaMLWritable):
     This model stores the inferred topics only; it does not store info about the training dataset.
 
     .. versionadded:: 2.0.0
+
+    .. classic:: true
+
+    .. connect_migration:: LDA model family is not supported in Spark Connect.
     """
 
     pass
@@ -1682,6 +1694,10 @@ class LDA(JavaEstimator[LDAModel], _LDAParams, JavaMLReadable["LDA"], JavaMLWrit
     >>> sameLocalModel = LocalLDAModel.load(local_model_path)
     >>> model.transform(df).take(1) == sameLocalModel.transform(df).take(1)
     True
+
+    .. classic:: true
+
+    .. connect_migration:: LDA model family is not supported in Spark Connect.
     """
 
     _input_kwargs: Dict[str, Any]

@@ -20,6 +20,10 @@ RDD-based machine learning APIs for Python (in maintenance mode).
 
 The `pyspark.mllib` package is in maintenance mode as of the Spark 2.0.0 release to encourage
 migration to the DataFrame-based APIs under the `pyspark.ml` package.
+
+.. classic:: true
+
+.. connect_migration:: Migrate to pyspark.ml.connect
 """
 
 # MLlib currently needs NumPy 1.4+, so complain if lower

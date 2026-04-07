@@ -434,6 +434,10 @@ class DataFrameReader(OptionUtils):
         +----+---+
         | Bob| 30|
         +----+---+
+
+        .. connect_migration:: Does not support RDD arguments in Spark Connect. Collect the
+            data first: rows = [Row(**json_dict) for json_dict in json_data] then
+            df = spark.createDataFrame(rows).
         """
         self._set_opts(
             schema=schema,

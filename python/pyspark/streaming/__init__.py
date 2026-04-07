@@ -15,6 +15,10 @@
 # limitations under the License.
 #
 
+"""
+.. classic:: true
+"""
+
 from pyspark.streaming.context import StreamingContext
 from pyspark.streaming.dstream import DStream
 from pyspark.streaming.listener import StreamingListener

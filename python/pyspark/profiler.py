@@ -15,6 +15,10 @@
 # limitations under the License.
 #
 
+"""
+.. classic:: true
+"""
+
 from typing import (
     Any,
     Callable,
