@@ -30,7 +30,7 @@ class CTASTransactionSuite extends RowLevelOperationSuiteBase {
         |{ "pk": 2, "salary": 200, "dep": "software" }
         |""".stripMargin)
 
-    val (txn, txnTables) = executeTransactionMultiQE {
+    val (txn, txnTables) = executeTransaction {
       sql(s"""CREATE TABLE $newTableNameAsString
              |AS SELECT * FROM $tableNameAsString WHERE dep = 'hr'
              |""".stripMargin)
@@ -58,7 +58,7 @@ class CTASTransactionSuite extends RowLevelOperationSuiteBase {
     spark.catalog.cacheTable(tableNameAsString)
 
     try {
-      val (txn, txnTables) = executeTransactionMultiQE {
+      val (txn, txnTables) = executeTransaction {
         sql(s"""CREATE TABLE $newTableNameAsString
                |AS SELECT * FROM $tableNameAsString WHERE dep = 'hr'
                |""".stripMargin)
@@ -90,7 +90,7 @@ class CTASTransactionSuite extends RowLevelOperationSuiteBase {
     // pre-create the target so REPLACE TABLE (not CREATE OR REPLACE) is valid
     sql(s"CREATE TABLE $newTableNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
 
-    val (txn, txnTables) = executeTransactionMultiQE {
+    val (txn, txnTables) = executeTransaction {
       sql(s"""REPLACE TABLE $newTableNameAsString
              |AS SELECT * FROM $tableNameAsString WHERE dep = 'hr'
              |""".stripMargin)
@@ -119,7 +119,7 @@ class CTASTransactionSuite extends RowLevelOperationSuiteBase {
 
     // source and target are the same table: reads the old snapshot via TxnTable,
     // replaces the table with a filtered version
-    val (txn, txnTables) = executeTransactionMultiQE {
+    val (txn, txnTables) = executeTransaction {
       sql(s"""CREATE OR REPLACE TABLE $tableNameAsString
              |AS SELECT * FROM $tableNameAsString WHERE dep = 'hr'
              |""".stripMargin)

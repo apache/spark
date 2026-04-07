@@ -285,8 +285,8 @@ class QueryExecution(
       // During a transaction, skip cache substitution. This is to avoid replacing relations
       // loaded by the transactional catalog with potentially stale relations cached before
       // the transaction was active.
-      val plan = if (transactionOpt.isDefined) {
-        plan
+      if (transactionOpt.isDefined) {
+        normalized
       }
       else {
         // clone the plan to avoid sharing the plan instance between different stages like

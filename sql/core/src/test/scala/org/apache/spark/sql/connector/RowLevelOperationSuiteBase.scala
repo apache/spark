@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Delete, Id
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
-import org.apache.spark.sql.execution.{InSubqueryExec, QueryExecution, SparkPlan}
+import org.apache.spark.sql.execution.{InSubqueryExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.internal.SQLConf
@@ -135,19 +135,7 @@ abstract class RowLevelOperationSuiteBase
   }
 
   protected def executeTransaction(func: => Unit): (Txn, Map[String, TxnTable]) = {
-    val qe = execute(func)
-    val tables = collectWithSubqueries(qe.executedPlan) {
-      case BatchScanExec(_, _, _, _, table: TxnTable, _) =>
-        table
-      case BatchScanExec(_, _, _, _, RowLevelOperationTable(table: TxnTable, _), _) =>
-        table
-    }
-    (catalog.lastTransaction, indexByName(tables))
-  }
-
-  protected def executeTransactionMultiQE(func: => Unit): (Txn, Map[String, TxnTable]) = {
-    val qes = withQueryExecutionsCaptured(spark)(func)
-    val tables = qes.flatMap { qe =>
+    val tables = withQueryExecutionsCaptured(spark)(func).flatMap { qe =>
       collectWithSubqueries(qe.executedPlan) {
         case BatchScanExec(_, _, _, _, table: TxnTable, _) => table
         case BatchScanExec(_, _, _, _, RowLevelOperationTable(table: TxnTable, _), _) => table
@@ -166,13 +154,8 @@ abstract class RowLevelOperationSuiteBase
 
   // executes an operation and keeps the executed plan
   protected def executeAndKeepPlan(func: => Unit): SparkPlan = {
-    val qe = execute(func)
-    stripAQEPlan(qe.executedPlan)
-  }
-
-  private def execute(func: => Unit): QueryExecution = {
     withQueryExecutionsCaptured(spark)(func) match {
-      case Seq(qe) => qe
+      case Seq(qe) => stripAQEPlan(qe.executedPlan)
       case other => fail(s"expected only one query execution, but got ${other.size}")
     }
   }
