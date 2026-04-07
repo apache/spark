@@ -196,12 +196,12 @@ trait ReadStateStore {
    * bytes for the scan range to be meaningful (e.g., timestamp-based encoders or
    * RangeKeyScanStateEncoder).
    */
-  def scan(
+  def rangeScan(
       startKey: Option[UnsafeRow],
       endKey: Option[UnsafeRow],
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
     : StateStoreIterator[UnsafeRowPair] = {
-    throw StateStoreErrors.unsupportedOperationException("scan", "")
+    throw StateStoreErrors.unsupportedOperationException("rangeScan", "")
   }
 
   /**
@@ -220,12 +220,12 @@ trait ReadStateStore {
    * It is expected to throw exception if Spark calls this method without setting
    * multipleValuesPerKey as true for the column family.
    */
-  def scanWithMultiValues(
+  def rangeScanWithMultiValues(
       startKey: Option[UnsafeRow],
       endKey: Option[UnsafeRow],
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
     : StateStoreIterator[UnsafeRowPair] = {
-    throw StateStoreErrors.unsupportedOperationException("scanWithMultiValues", "")
+    throw StateStoreErrors.unsupportedOperationException("rangeScanWithMultiValues", "")
   }
 
   /** Return an iterator containing all the key-value pairs in the StateStore. */
@@ -456,18 +456,18 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
     store.prefixScanWithMultiValues(prefixKey, colFamilyName)
   }
 
-  override def scan(
+  override def rangeScan(
       startKey: Option[UnsafeRow],
       endKey: Option[UnsafeRow],
       colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
-    store.scan(startKey, endKey, colFamilyName)
+    store.rangeScan(startKey, endKey, colFamilyName)
   }
 
-  override def scanWithMultiValues(
+  override def rangeScanWithMultiValues(
       startKey: Option[UnsafeRow],
       endKey: Option[UnsafeRow],
       colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
-    store.scanWithMultiValues(startKey, endKey, colFamilyName)
+    store.rangeScanWithMultiValues(startKey, endKey, colFamilyName)
   }
 
   override def iteratorWithMultiValues(

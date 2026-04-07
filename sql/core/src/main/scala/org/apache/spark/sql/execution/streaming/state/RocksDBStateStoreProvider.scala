@@ -556,14 +556,17 @@ private[sql] class RocksDBStateStoreProvider
       new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
     }
 
-    override def scan(
+    override def rangeScan(
         startKey: Option[UnsafeRow],
         endKey: Option[UnsafeRow],
         colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       validateAndTransitionState(UPDATE)
-      verifyColFamilyOperations("scan", colFamilyName)
+      verifyColFamilyOperations("rangeScan", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      require(kvEncoder._1.supportsRangeScan,
+        "Range scan requires an encoder that supports range scanning!")
+
       val encodedStartKey = startKey.map(kvEncoder._1.encodeKey)
       val encodedEndKey = endKey.map(kvEncoder._1.encodeKey)
 
@@ -578,14 +581,16 @@ private[sql] class RocksDBStateStoreProvider
       new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
     }
 
-    override def scanWithMultiValues(
+    override def rangeScanWithMultiValues(
         startKey: Option[UnsafeRow],
         endKey: Option[UnsafeRow],
         colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       validateAndTransitionState(UPDATE)
-      verifyColFamilyOperations("scanWithMultiValues", colFamilyName)
+      verifyColFamilyOperations("rangeScanWithMultiValues", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      require(kvEncoder._1.supportsRangeScan,
+        "Range scan requires an encoder that supports range scanning!")
       verify(
         kvEncoder._2.supportsMultipleValuesPerKey,
         "Multi-value iterator operation requires an encoder" +

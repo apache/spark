@@ -1637,7 +1637,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     -230L, -14569L, -92L, -7434253L, 35L, 6L, 9L, -323L, 5L,
     -32L, -64L, -256L, 64L, 32L, 1024L, 4096L, 0L)
 
-  testWithColumnFamiliesAndEncodingTypes("rocksdb range scan - scan",
+  testWithColumnFamiliesAndEncodingTypes("rocksdb range scan - rangeScan",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
 
     tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
@@ -1657,7 +1657,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         }
 
         // Bounded positive range [0, 100)
-        val boundedIter = store.scan(
+        val boundedIter = store.rangeScan(
           Some(dataToKeyRowWithRangeScan(0L, "a")),
           Some(dataToKeyRowWithRangeScan(100L, "a")), cfName)
         val boundedResults = boundedIter.map { pair =>
@@ -1671,7 +1671,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         // Exact bound: startKey is inclusive, endKey is exclusive.
         // 9 exists in diverseTimestamps, 90 exists in diverseTimestamps.
         // Scan [9, 90) should include 9 but exclude 90.
-        val exactIter = store.scan(
+        val exactIter = store.rangeScan(
           Some(dataToKeyRowWithRangeScan(9L, "a")),
           Some(dataToKeyRowWithRangeScan(90L, "a")), cfName)
         val exactResults = exactIter.map(_.key.getLong(0)).toList
@@ -1681,28 +1681,28 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         assert(!exactResults.contains(90L))
 
         // None startKey scans from beginning to 0
-        val noneStartIter = store.scan(
+        val noneStartIter = store.rangeScan(
           None, Some(dataToKeyRowWithRangeScan(0L, "a")), cfName)
         val noneStartResults = noneStartIter.map(_.key.getLong(0)).toList
         noneStartIter.close()
         assert(noneStartResults === diverseTimestamps.filter(_ < 0).sorted)
 
         // None endKey scans from 1000 to end
-        val noneEndIter = store.scan(
+        val noneEndIter = store.rangeScan(
           Some(dataToKeyRowWithRangeScan(1000L, "a")), None, cfName)
         val noneEndResults = noneEndIter.map(_.key.getLong(0)).toList
         noneEndIter.close()
         assert(noneEndResults === diverseTimestamps.filter(_ >= 1000).sorted)
 
         // Empty range [10, 31) - no entries between 9 and 32
-        val emptyIter = store.scan(
+        val emptyIter = store.rangeScan(
           Some(dataToKeyRowWithRangeScan(10L, "a")),
           Some(dataToKeyRowWithRangeScan(31L, "a")), cfName)
         assert(!emptyIter.hasNext)
         emptyIter.close()
 
         // Bounded negative range [-300, 0)
-        val negIter = store.scan(
+        val negIter = store.rangeScan(
           Some(dataToKeyRowWithRangeScan(-300L, "a")),
           Some(dataToKeyRowWithRangeScan(0L, "a")), cfName)
         val negResults = negIter.map(_.key.getLong(0)).toList
@@ -1738,7 +1738,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
         val startKey = dataToKeyRowWithRangeScan(100L, "a")
         val endKey = dataToKeyRowWithRangeScan(201L, "a")
-        val iter = store.scan(Some(startKey), Some(endKey), cfName)
+        val iter = store.rangeScan(Some(startKey), Some(endKey), cfName)
         val results = iter.map { pair =>
           (pair.key.getLong(0), pair.key.getUTF8String(1).toString)
         }.toList
@@ -1755,7 +1755,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
   }
 
   testWithColumnFamiliesAndEncodingTypes(
-    "rocksdb range scan - scanWithMultiValues",
+    "rocksdb range scan - rangeScanWithMultiValues",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
 
     if (colFamiliesEnabled) {
@@ -1779,7 +1779,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           }
 
           // Bounded range [0, 1001)
-          val boundedIter = store.scanWithMultiValues(
+          val boundedIter = store.rangeScanWithMultiValues(
             Some(dataToKeyRowWithRangeScan(0L, "a")),
             Some(dataToKeyRowWithRangeScan(1001L, "a")), cfName)
           val boundedResults = boundedIter.map { pair =>
@@ -1797,7 +1797,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
           // Exact bound: startKey is inclusive, endKey is exclusive.
           // 9 exists in diverseTimestamps, 90 exists in diverseTimestamps.
-          val exactIter = store.scanWithMultiValues(
+          val exactIter = store.rangeScanWithMultiValues(
             Some(dataToKeyRowWithRangeScan(9L, "a")),
             Some(dataToKeyRowWithRangeScan(90L, "a")), cfName)
           val exactResults = exactIter.map(_.key.getLong(0)).toList
@@ -1809,28 +1809,28 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           assert(!exactResultsDistinct.contains(90L))
 
           // None startKey scans from beginning to 0
-          val noneStartIter = store.scanWithMultiValues(
+          val noneStartIter = store.rangeScanWithMultiValues(
             None, Some(dataToKeyRowWithRangeScan(0L, "a")), cfName)
           val noneStartResults = noneStartIter.map(_.key.getLong(0)).toList
           noneStartIter.close()
           assert(noneStartResults.distinct === diverseTimestamps.filter(_ < 0).sorted)
 
           // None endKey scans from 1000 to end
-          val noneEndIter = store.scanWithMultiValues(
+          val noneEndIter = store.rangeScanWithMultiValues(
             Some(dataToKeyRowWithRangeScan(1000L, "a")), None, cfName)
           val noneEndResults = noneEndIter.map(_.key.getLong(0)).toList
           noneEndIter.close()
           assert(noneEndResults.distinct === diverseTimestamps.filter(_ >= 1000).sorted)
 
           // Empty range [10, 31) - no entries between 9 and 32
-          val emptyIter = store.scanWithMultiValues(
+          val emptyIter = store.rangeScanWithMultiValues(
             Some(dataToKeyRowWithRangeScan(10L, "a")),
             Some(dataToKeyRowWithRangeScan(31L, "a")), cfName)
           assert(!emptyIter.hasNext)
           emptyIter.close()
 
           // Bounded negative range [-300, 0)
-          val negIter = store.scanWithMultiValues(
+          val negIter = store.rangeScanWithMultiValues(
             Some(dataToKeyRowWithRangeScan(-300L, "a")),
             Some(dataToKeyRowWithRangeScan(0L, "a")), cfName)
           val negResults = negIter.map(_.key.getLong(0)).toList

@@ -567,7 +567,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
   }
 
   Seq("unsaferow", "avro").foreach { encoding =>
-    test(s"scan with postfix encoder (encoding = $encoding)") {
+    test(s"rangeScan with postfix encoder (encoding = $encoding)") {
       tryWithProviderResource(
         newStoreProviderWithTimestampEncoder(
           encoderType = "postfix",
@@ -587,7 +587,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
             Array(valueToRow(999)))
 
           // Bounded range [0, 1001)
-          val boundedIter = store.scanWithMultiValues(
+          val boundedIter = store.rangeScanWithMultiValues(
             Some(keyAndTimestampToRow("key1", 1, 0L)),
             Some(keyAndTimestampToRow("key1", 1, 1001L)))
           val boundedResults = boundedIter.map { pair =>
@@ -606,7 +606,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
 
           // Exact bound: startKey is inclusive, endKey is exclusive.
           // 9 exists in diverseTimestamps, 90 exists in diverseTimestamps.
-          val exactIter = store.scanWithMultiValues(
+          val exactIter = store.rangeScanWithMultiValues(
             Some(keyAndTimestampToRow("key1", 1, 9L)),
             Some(keyAndTimestampToRow("key1", 1, 90L)))
           val exactResults = exactIter.map(_.key.getLong(2)).toList
@@ -623,7 +623,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
           // test bounded ranges with explicit keys here.
 
           // Full range [MinValue, MaxValue)
-          val fullIter = store.scanWithMultiValues(
+          val fullIter = store.rangeScanWithMultiValues(
             Some(keyAndTimestampToRow("key1", 1, Long.MinValue)),
             Some(keyAndTimestampToRow("key1", 1, Long.MaxValue)))
           val fullResults = fullIter.map(_.key.getLong(2)).toList
@@ -632,7 +632,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
           assert(fullResults.distinct === diverseTimestamps.sorted)
 
           // Bounded negative range [-300, 0)
-          val negIter = store.scanWithMultiValues(
+          val negIter = store.rangeScanWithMultiValues(
             Some(keyAndTimestampToRow("key1", 1, -300L)),
             Some(keyAndTimestampToRow("key1", 1, 0L)))
           val negResults = negIter.map(_.key.getLong(2)).toList
@@ -641,7 +641,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
             .filter(ts => ts >= -300 && ts < 0).sorted)
 
           // Empty range [10, 31) - no diverseTimestamps entries between 9 and 32
-          val emptyIter = store.scanWithMultiValues(
+          val emptyIter = store.rangeScanWithMultiValues(
             Some(keyAndTimestampToRow("key1", 1, 10L)),
             Some(keyAndTimestampToRow("key1", 1, 31L)))
           assert(!emptyIter.hasNext)
@@ -653,9 +653,9 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
     }
 
     // Sanity test for prefix encoder scan. Full scan coverage is in RocksDBStateStoreSuite's
-    // "rocksdb range scan - scan" and "rocksdb range scan - scanWithMultiValues" tests.
+    // "rocksdb range scan - rangeScan" and "rocksdb range scan - rangeScanWithMultiValues" tests.
     // This test verifies the timestamp prefix encoder integration works correctly.
-    test(s"scan with prefix encoder (encoding = $encoding)") {
+    test(s"rangeScan with prefix encoder (encoding = $encoding)") {
       tryWithProviderResource(
         newStoreProviderWithTimestampEncoder(
           encoderType = "prefix",
@@ -672,7 +672,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
           store.merge(keyAndTimestampToRow("key2", 2, 150L), valueToRow(150))
 
           // None startKey scans from beginning up to 301 (exclusive)
-          val iter1 = store.scanWithMultiValues(None,
+          val iter1 = store.rangeScanWithMultiValues(None,
             Some(keyAndTimestampToRow("key1", 1, 301L)))
           val results1 = iter1.map { pair =>
             (pair.key.getString(0), pair.key.getLong(2))
@@ -684,7 +684,7 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
 
           // Boundary safety: endKey at 201, includes everything up to 200
           // regardless of join key
-          val iter2 = store.scanWithMultiValues(None,
+          val iter2 = store.rangeScanWithMultiValues(None,
             Some(keyAndTimestampToRow("key1", 1, 201L)))
           val results2 = iter2.map { pair =>
             (pair.key.getString(0), pair.key.getLong(2))
