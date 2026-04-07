@@ -59,7 +59,6 @@ import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.{CloseableIterator, ExecutionListenerManager}
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.Utils
 
 /**
  * The entry point to programming Spark with the Dataset and DataFrame API.
@@ -103,11 +102,7 @@ class SparkSession private[sql] (
 
   /** @inheritdoc */
   override def sparkContext: SparkContext =
-    if (Utils.isTesting) {
-      MockSparkContext.instance
-    } else {
-      throw ConnectClientUnsupportedErrors.sparkContext()
-    }
+    throw ConnectClientUnsupportedErrors.sparkContext()
 
   /** @inheritdoc */
   val conf: RuntimeConfig = new RuntimeConfig(client)
