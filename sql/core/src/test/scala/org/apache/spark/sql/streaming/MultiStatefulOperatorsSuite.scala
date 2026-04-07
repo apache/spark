@@ -22,6 +22,7 @@ import java.sql.Timestamp
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreSaveExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
@@ -931,6 +932,58 @@ class MultiStatefulOperatorsSuite
       ),
       // watermark: 100 - 5 = 95 (windows for [0, 20) are completed)
       CheckNewAnswer((20L, 65L, 85L))
+    )
+  }
+
+  test("stream deduplication -> window agg, update mode") {
+    val inputData = MemoryStream[Int]
+
+    val stream = inputData.toDF()
+      .withColumn("eventTime", timestamp_seconds($"value"))
+      .withWatermark("eventTime", "10 seconds")
+      .dropDuplicates("value", "eventTime")
+      .groupBy(window($"eventTime", "5 seconds").as("window"))
+      .agg(count("*").as("count"))
+      .select($"window".getField("start").cast("long").as[Long],
+        $"count".as[Long])
+
+    // In Update mode, the aggregation emits results on every batch (early firing),
+    // unlike Append mode which waits for watermark to pass the window.
+    testStream(stream, Update)(
+      AddData(inputData, 1 to 15: _*),
+      // data batch: dedup passes all 15 values; agg emits all groups immediately
+      // no-data batch: watermark=5, dedup evicts values 1-5, agg evicts [0,5)
+      CheckNewAnswer((0, 4), (5, 5), (10, 5), (15, 1)),
+      assertNumStateRows(Seq(3, 10)),
+
+      AddData(inputData, 1, 2, 16),
+      // data batch (watermark=5): 1, 2 dropped as late by dedup; 16 passes
+      //   agg: [15,20) updated (count=2)
+      // no-data batch: watermark=6, dedup evicts value 6
+      CheckNewAnswer((15, 2)),
+      assertNumStateRows(Seq(3, 10))
+    )
+  }
+
+  test("stream deduplication -> dedup, update mode") {
+    val inputData = MemoryStream[(String, Int)]
+    val stream = inputData.toDS()
+      .select($"_1" as "str", $"_2" as "num")
+      .dropDuplicates("str", "num")
+      .dropDuplicates("str")
+
+    testStream(stream, Update)(
+      AddData(inputData, "a" -> 1),
+      CheckNewAnswer(("a", 1)),
+
+      AddData(inputData, "a" -> 1), // exact duplicate, dropped by first dedup
+      CheckNewAnswer(),
+
+      AddData(inputData, "a" -> 2), // passes first dedup, dropped by second (str "a" seen)
+      CheckNewAnswer(),
+
+      AddData(inputData, "b" -> 1),
+      CheckNewAnswer(("b", 1))
     )
   }
 

@@ -628,6 +628,64 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       DeduplicateWithinWatermark(Seq(attributeWithWatermark), streamRelation)),
     outputMode = Update)
 
+  // Streaming aggregation at the last stateful operator position in Update mode:
+  // Placing aggregation as the last stateful operator allows early firing in Update mode,
+  // which is a benefit Append mode cannot provide. Non-aggregation stateful operators
+  // before the aggregation are allowed. Aggregation at non-last position is still disallowed
+  // (already covered above).
+
+  // Should PASS: inner operator not flagged, aggregate at last position
+  assertPassOnGlobalWatermarkLimit(
+    "multiple stateful ops - dedup (with event-time) followed by agg in Update mode",
+    Aggregate(Nil, aggExprs("c"),
+      Deduplicate(Seq(attributeWithWatermark), streamRelation)),
+    outputMode = Update)
+
+  assertPassOnGlobalWatermarkLimit(
+    "multiple stateful ops - dedup (without event-time) followed by agg in Update mode",
+    Aggregate(Nil, aggExprs("c"),
+      Deduplicate(Seq(att), streamRelation)),
+    outputMode = Update)
+
+  assertPassOnGlobalWatermarkLimit(
+    "multiple stateful ops - DeduplicateWithinWatermark followed by agg in Update mode",
+    Aggregate(Nil, aggExprs("c"),
+      DeduplicateWithinWatermark(Seq(attributeWithWatermark), streamRelation)),
+    outputMode = Update)
+
+  assertPassOnGlobalWatermarkLimit(
+    "multiple stateful ops - FlatMapGroupsWithState(process time) followed by agg " +
+      "in Update mode",
+    Aggregate(Nil, aggExprs("c"),
+      TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
+        isMapGroupsWithState = false, GroupStateTimeout.ProcessingTimeTimeout(), streamRelation)),
+    outputMode = Update)
+
+  assertPassOnGlobalWatermarkLimit(
+    "multiple stateful ops - MapGroupsWithState(process time) followed by agg " +
+      "in Update mode",
+    Aggregate(Nil, aggExprs("c"),
+      TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Update,
+        isMapGroupsWithState = true, GroupStateTimeout.ProcessingTimeTimeout(), streamRelation)),
+    outputMode = Update)
+
+  // Should FAIL: inner operator flagged (EventTimeTimeout)
+  assertFailOnGlobalWatermarkLimit(
+    "multiple stateful ops - FlatMapGroupsWithState(EventTimeTimeout) followed by agg " +
+      "in Update mode",
+    Aggregate(Nil, aggExprs("c"),
+      TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
+        isMapGroupsWithState = false, GroupStateTimeout.EventTimeTimeout(), streamRelation)),
+    outputMode = Update)
+
+  assertFailOnGlobalWatermarkLimit(
+    "multiple stateful ops - MapGroupsWithState(EventTimeTimeout) followed by agg " +
+      "in Update mode",
+    Aggregate(Nil, aggExprs("c"),
+      TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Update,
+        isMapGroupsWithState = true, GroupStateTimeout.EventTimeTimeout(), streamRelation)),
+    outputMode = Update)
+
   assertPassOnGlobalWatermarkLimit(
     "multiple stateful ops - stream-stream time interval join followed by " +
       "dedup (with event-time)",
