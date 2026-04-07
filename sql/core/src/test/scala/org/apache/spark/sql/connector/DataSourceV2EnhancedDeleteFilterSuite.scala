@@ -29,7 +29,8 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.util.QueryExecutionListener
 
 /**
- * Tests for metadata-only delete optimization using second-pass PartitionPredicate (see SPARK-55596).
+ * Tests for metadata-only delete optimization using second-pass
+ * PartitionPredicate (see SPARK-55596).
  */
 class DataSourceV2EnhancedDeleteFilterSuite
   extends QueryTest with SharedSparkSession {

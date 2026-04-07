@@ -64,16 +64,6 @@ object OptimizeMetadataOnlyDeleteFromTable extends Rule[LogicalPlan] with Predic
       }
   }
 
-  private def toDataSourceV2Filters(predicates: Seq[Expression]): Array[Predicate] = {
-    predicates.flatMap { p =>
-      val filter = DataSourceV2Strategy.translateFilterV2(p)
-      if (filter.isEmpty) {
-        logDebug(s"Cannot translate expression to data source filter: $p")
-      }
-      filter
-    }.toArray
-  }
-
   /**
    * Attempts to convert partition-column filters to [[PartitionPredicate]]s and
    * combine them with translated V2 data filters for a metadata-only delete. (See SPARK-55596)
@@ -106,7 +96,13 @@ object OptimizeMetadataOnlyDeleteFromTable extends Rule[LogicalPlan] with Predic
 
   /** Translates all expressions to V2 filters, or returns [[None]] if any fail. */
   private def tryTranslateToV2(predicates: Seq[Expression]): Option[Array[Predicate]] = {
-    val filters = toDataSourceV2Filters(predicates)
+    val filters = predicates.flatMap { p =>
+      val filter = DataSourceV2Strategy.translateFilterV2(p)
+      if (filter.isEmpty) {
+        logDebug(s"Cannot translate expression to data source filter: $p")
+      }
+      filter
+    }.toArray
     Option.when(filters.length == predicates.size)(filters)
   }
 
