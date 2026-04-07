@@ -166,16 +166,6 @@ object InvalidInputErrors {
   def invalidSchemaTypeNonStruct(dataType: DataType): InvalidPlanInput =
     InvalidPlanInput("INVALID_SCHEMA_TYPE_NON_STRUCT", Map("dataType" -> toSQLType(dataType)))
 
-  def parseInputNotSingleColumn(numColumns: Int): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.PARSE_INPUT_NOT_SINGLE_COLUMN",
-      Map("numColumns" -> numColumns.toString))
-
-  def parseInputNotStringType(dataType: DataType): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.PARSE_INPUT_NOT_STRING_TYPE",
-      Map("dataType" -> toSQLType(dataType)))
-
   def lambdaFunctionArgumentCountInvalid(got: Int): InvalidPlanInput =
     InvalidPlanInput(
       "CONNECT_INVALID_PLAN.LAMBDA_FUNCTION_ARGUMENT_COUNT_INVALID",

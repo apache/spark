@@ -1762,14 +1762,16 @@ class SparkConnectPlanner(
     }
     def ds: Dataset[String] = {
       val input = transformRelation(rel.getInput)
-      val inputSchema = Dataset.ofRows(session, input).schema
-      if (inputSchema.fields.length != 1) {
-        throw InvalidInputErrors.parseInputNotSingleColumn(inputSchema.fields.length)
+      val df = Dataset.ofRows(session, input)
+      val fields = df.schema.fields
+      if (fields.isEmpty) {
+        throw QueryCompilationErrors.parseInputNotStringTypeError(
+          org.apache.spark.sql.types.NullType)
       }
-      if (inputSchema.fields.head.dataType != org.apache.spark.sql.types.StringType) {
-        throw InvalidInputErrors.parseInputNotStringType(inputSchema.fields.head.dataType)
+      if (fields.head.dataType != org.apache.spark.sql.types.StringType) {
+        throw QueryCompilationErrors.parseInputNotStringTypeError(fields.head.dataType)
       }
-      Dataset(session, input)(Encoders.STRING)
+      df.select(df.columns.head).as(Encoders.STRING)
     }
 
     rel.getFormat match {

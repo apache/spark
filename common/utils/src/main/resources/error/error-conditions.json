@@ -1164,16 +1164,6 @@
           "No handler found for extension type: <extensionTypeUrl>"
         ]
       },
-      "PARSE_INPUT_NOT_SINGLE_COLUMN" : {
-        "message" : [
-          "Input DataFrame must have exactly one column, but got <numColumns>."
-        ]
-      },
-      "PARSE_INPUT_NOT_STRING_TYPE" : {
-        "message" : [
-          "Input DataFrame column must be StringType, but got <dataType>."
-        ]
-      },
       "PLAN_SIZE_LARGER_THAN_MAX" : {
         "message" : [
           "The plan size is larger than max (<planSize> vs. <maxPlanSize>)",
@@ -5661,12 +5651,6 @@
       "Syntax error, unexpected empty statement."
     ],
     "sqlState" : "42617"
-  },
-  "PARSE_INPUT_NOT_SINGLE_COLUMN" : {
-    "message" : [
-      "Input DataFrame must have exactly one column, but got <numColumns>."
-    ],
-    "sqlState" : "42K09"
   },
   "PARSE_INPUT_NOT_STRING_TYPE" : {
     "message" : [
