@@ -34,6 +34,7 @@ from typing import (
     Iterable,
     Iterator,
     Optional,
+    TYPE_CHECKING,
     TypeVar,
     Union,
 )
@@ -44,8 +45,12 @@ from pyspark.serializers import (
     FlattenedValuesSerializer,
     CompressedSerializer,
     AutoBatchedSerializer,
+    Serializer,
 )
 from pyspark.util import fail_on_stopiteration
+
+if TYPE_CHECKING:
+    from pyspark._typing import SizedIterable
 
 process = None
 
@@ -227,7 +232,7 @@ class ExternalMerger(Merger, Generic[K, V, C]):
     def __init__(
         self,
         aggregator: Aggregator[C, V],
-        memory_limit: int = 512,
+        memory_limit: float = 512,
         serializer: Any = None,
         localdirs: Optional[list[str]] = None,
         scale: int = 1,
@@ -483,7 +488,7 @@ class ExternalSorter(Generic[V]):
     True
     """
 
-    def __init__(self, memory_limit: int, serializer: Optional[BatchedSerializer] = None):
+    def __init__(self, memory_limit: float, serializer: Optional[Serializer] = None):
         self.memory_limit = memory_limit
         self.local_dirs = _get_local_dirs("sort")
         self.serializer = _compressed_serializer(serializer)
@@ -556,7 +561,7 @@ class ExternalSorter(Generic[V]):
         return heapq.merge(*chunks, key=key, reverse=reverse)
 
 
-class ExternalList(Generic[V]):
+class ExternalList(Iterable[V]):
     """
     ExternalList can have many items which cannot be hold in memory in
     the same time.
@@ -682,21 +687,21 @@ class ExternalListOfList(ExternalList[list[V]]):
     """
 
     def __init__(self, values: list[list[V]]):
-        ExternalList.__init__(self, values)
+        ExternalList[list[V]].__init__(self, values)
         self.count = sum(len(i) for i in values)
 
     def append(self, value: list[V]) -> None:
-        ExternalList.append(self, value)
+        ExternalList[list[V]].append(self, value)
         # already counted 1 in ExternalList.append
         self.count += len(value) - 1
 
     def __iter__(self) -> Iterator[V]:  # type: ignore[override]
-        for values in ExternalList.__iter__(self):
+        for values in ExternalList[list[V]].__iter__(self):
             for v in values:
                 yield v
 
 
-class GroupByKey(Generic[K, V]):
+class GroupByKey(Generic[K, V], Iterable[tuple[K, Iterable[V]]]):
     """
     Group a sorted iterator as [(k1, it1), (k2, it2), ...]
 
@@ -712,7 +717,7 @@ class GroupByKey(Generic[K, V]):
     def __init__(self, iterator: Iterable[tuple[K, list[V]]]):
         self.iterator = iterator
 
-    def __iter__(self) -> Iterator[tuple[K, ExternalListOfList[V]]]:
+    def __iter__(self) -> Iterator[tuple[K, ExternalListOfList[V]]]:  # type: ignore[override]
         key: Optional[K] = None
         values: Optional[ExternalListOfList[V]] = None
         for k, v in self.iterator:
@@ -729,7 +734,7 @@ class GroupByKey(Generic[K, V]):
             yield (key, values)
 
 
-class ExternalGroupBy(ExternalMerger[K, V, C]):
+class ExternalGroupBy(ExternalMerger[K, V, "SizedIterable[V]"]):
     """
     Group by the items by key. If any partition of them can not been
     hold in memory, it will do sort based group by.
@@ -834,7 +839,7 @@ class ExternalGroupBy(ExternalMerger[K, V, C]):
         gc.collect()  # release the memory as much as possible
         MemoryBytesSpilled += max(used_memory - get_used_memory(), 0) << 20
 
-    def _merged_items(self, index: int) -> Iterable[tuple[K, C]]:
+    def _merged_items(self, index: int) -> Iterable[tuple[K, "SizedIterable[V]"]]:
         size = sum(
             os.path.getsize(os.path.join(self._get_spill_dir(j), str(index)))
             for j in range(self.spills)
@@ -842,7 +847,7 @@ class ExternalGroupBy(ExternalMerger[K, V, C]):
         # if the memory can not hold all the partition,
         # then use sort based merge. Because of compression,
         # the data on disks will be much smaller than needed memory
-        if size >= self.memory_limit << 17:  # * 1M / 8
+        if size >= self.memory_limit * (1 << 17):  # * 1M / 8
             return self._merge_sorted_items(index)
 
         self.data = {}
@@ -854,10 +859,10 @@ class ExternalGroupBy(ExternalMerger[K, V, C]):
                 self.mergeCombiners(self.serializer.load_stream(f), 0)
         return self.data.items()
 
-    def _merge_sorted_items(self, index: int) -> Iterable[tuple[K, C]]:
+    def _merge_sorted_items(self, index: int) -> Iterable[tuple[K, "SizedIterable[V]"]]:
         """load a partition from disk, then sort and group by key"""
 
-        def load_partition(j: int) -> Iterable[tuple[K, V]]:
+        def load_partition(j: int) -> Iterable[tuple[K, list[V]]]:
             path = self._get_spill_dir(j)
             p = os.path.join(path, str(index))
             with open(p, "rb", 65536) as f:
@@ -865,7 +870,7 @@ class ExternalGroupBy(ExternalMerger[K, V, C]):
                     yield v
 
         disk_items = [load_partition(j) for j in range(self.spills)]
-        sorted_items: Iterable[tuple[K, V]]
+        sorted_items: Iterable[tuple[K, list[V]]]
 
         if self._sorted:
             # all the partitions are already sorted
@@ -875,7 +880,7 @@ class ExternalGroupBy(ExternalMerger[K, V, C]):
             # Flatten the combined values, so it will not consume huge
             # memory during merging sort.
             ser = self.flattened_serializer()
-            sorter: ExternalSorter[tuple[K, V]] = ExternalSorter(self.memory_limit, ser)
+            sorter: ExternalSorter[tuple[K, list[V]]] = ExternalSorter(self.memory_limit, ser)
             sorted_items = sorter.sorted(itertools.chain(*disk_items), key=operator.itemgetter(0))
         return ((k, vs) for k, vs in GroupByKey[K, V](sorted_items))
 
