@@ -577,7 +577,9 @@ case class TruncateTableCommand(
   }
 }
 
-abstract class DescribeCommandBase extends LeafRunnableCommand {
+trait DescribeCommandBase {
+  def output: Seq[Attribute]
+
   protected def describeSchema(
       schema: StructType,
       buffer: ArrayBuffer[Row],
@@ -602,11 +604,15 @@ abstract class DescribeCommandBase extends LeafRunnableCommand {
  * }}}
  */
 case class DescribeTableCommand(
+    override val child: LogicalPlan,
     table: TableIdentifier,
     partitionSpec: TablePartitionSpec,
     isExtended: Boolean,
     override val output: Seq[Attribute])
-  extends DescribeCommandBase {
+  extends UnaryRunnableCommand with DescribeCommandBase {
+
+  override def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(child = newChild)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
@@ -747,7 +753,7 @@ case class DescribeTableCommand(
  * 7. Common table expressions (CTEs)
  */
 case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
-  extends DescribeCommandBase with SupervisingCommand with CTEInChildren {
+  extends LeafRunnableCommand with DescribeCommandBase with SupervisingCommand with CTEInChildren {
 
   override val output = DescribeCommandSchema.describeTableAttributes()
 
@@ -988,9 +994,14 @@ case class ShowTablePropertiesCommand(
  * }}}
  */
 case class ShowColumnsCommand(
+    override val child: LogicalPlan,
     databaseName: Option[String],
     tableName: TableIdentifier,
-    override val output: Seq[Attribute]) extends LeafRunnableCommand {
+    override val output: Seq[Attribute])
+  extends UnaryRunnableCommand {
+
+  override def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(child = newChild)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog

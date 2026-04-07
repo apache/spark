@@ -686,6 +686,7 @@ struct<plan:string>
 == Physical Plan ==
 Execute DescribeTableCommand
    +- DescribeTableCommand `spark_catalog`.`default`.`t`, false, [col_name#x, data_type#x, comment#x]
+      +- ResolvedTable V2SessionCatalog(spark_catalog), default.t, V1Table(default.t), [a#x, b#x, c#x, d#x]
 
 
 -- !query
@@ -696,6 +697,7 @@ struct<plan:string>
 == Physical Plan ==
 Execute DescribeTableCommand
    +- DescribeTableCommand `spark_catalog`.`default`.`t`, true, [col_name#x, data_type#x, comment#x]
+      +- ResolvedTable V2SessionCatalog(spark_catalog), default.t, V1Table(default.t), [a#x, b#x, c#x, d#x]
 
 
 -- !query
@@ -710,13 +712,16 @@ struct<plan:string>
 == Analyzed Logical Plan ==
 col_name: string, data_type: string, comment: string
 DescribeTableCommand `spark_catalog`.`default`.`t`, false, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.t, V1Table(default.t), [a#x, b#x, c#x, d#x]
 
 == Optimized Logical Plan ==
 DescribeTableCommand `spark_catalog`.`default`.`t`, false, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.t, V1Table(default.t), [a#x, b#x, c#x, d#x]
 
 == Physical Plan ==
 Execute DescribeTableCommand
    +- DescribeTableCommand `spark_catalog`.`default`.`t`, false, [col_name#x, data_type#x, comment#x]
+      +- ResolvedTable V2SessionCatalog(spark_catalog), default.t, V1Table(default.t), [a#x, b#x, c#x, d#x]
 
 
 -- !query
@@ -737,6 +742,7 @@ struct<plan:string>
 == Physical Plan ==
 Execute DescribeTableCommand
    +- DescribeTableCommand `spark_catalog`.`default`.`t`, [c=Us, d=2], false, [col_name#x, data_type#x, comment#x]
+      +- ResolvedTable V2SessionCatalog(spark_catalog), default.t, V1Table(default.t), [a#x, b#x, c#x, d#x]
 
 
 -- !query

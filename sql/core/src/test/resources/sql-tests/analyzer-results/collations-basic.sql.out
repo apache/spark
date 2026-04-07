@@ -55,6 +55,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 describe table t1
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`t1`, false, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.t1, V1Table(default.t1), [utf8_binary#x, utf8_lcase#x]
 
 
 -- !query

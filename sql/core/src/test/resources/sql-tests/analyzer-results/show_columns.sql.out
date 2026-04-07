@@ -43,24 +43,28 @@ CreateViewCommand `showColumn4`, SELECT 1 as col1, 'abc' as `col 5`, false, fals
 SHOW COLUMNS IN showcolumn1
 -- !query analysis
 ShowColumnsCommand `spark_catalog`.`showdb`.`showcolumn1`, [col_name#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), showdb.showcolumn1, V1Table(showdb.showcolumn1), [col1#x, col 2#x]
 
 
 -- !query
 SHOW COLUMNS IN showdb.showcolumn1
 -- !query analysis
 ShowColumnsCommand `spark_catalog`.`showdb`.`showcolumn1`, [col_name#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), showdb.showcolumn1, V1Table(showdb.showcolumn1), [col1#x, col 2#x]
 
 
 -- !query
 SHOW COLUMNS IN showcolumn1 FROM showdb
 -- !query analysis
 ShowColumnsCommand showdb, `spark_catalog`.`showdb`.`showcolumn1`, [col_name#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), showdb.showcolumn1, V1Table(showdb.showcolumn1), [col1#x, col 2#x]
 
 
 -- !query
 SHOW COLUMNS IN showcolumn2 IN showdb
 -- !query analysis
 ShowColumnsCommand showdb, `spark_catalog`.`showdb`.`showcolumn2`, [col_name#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), showdb.showcolumn2, V1Table(showdb.showcolumn2), [price#x, qty#x, year#x, month#x]
 
 
 -- !query
@@ -88,6 +92,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 SHOW COLUMNS IN showdb.showcolumn1 from SHOWDB
 -- !query analysis
 ShowColumnsCommand SHOWDB, `spark_catalog`.`showdb`.`showcolumn1`, [col_name#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), showdb.showcolumn1, V1Table(showdb.showcolumn1), [col1#x, col 2#x]
 
 
 -- !query
@@ -108,6 +113,7 @@ org.apache.spark.sql.AnalysisException
 SHOW COLUMNS IN showcolumn3
 -- !query analysis
 ShowColumnsCommand `showcolumn3`, [col_name#x]
++- ResolvedTempView showcolumn3, `showColumn3`
 
 
 -- !query
@@ -177,12 +183,14 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 SHOW COLUMNS IN global_temp.showcolumn4
 -- !query analysis
 ShowColumnsCommand `global_temp`.`showcolumn4`, [col_name#x]
++- ResolvedTempView global_temp.showcolumn4, `global_temp`.`showColumn4`
 
 
 -- !query
 SHOW COLUMNS IN showcolumn4 FROM global_temp
 -- !query analysis
 ShowColumnsCommand global_temp, `showcolumn4`, [col_name#x]
++- ResolvedTempView global_temp.showcolumn4, `global_temp`.`showColumn4`
 
 
 -- !query
