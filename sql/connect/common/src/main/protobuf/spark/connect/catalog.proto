@@ -55,7 +55,7 @@ message Catalog {
     CurrentCatalog current_catalog = 24;
     SetCurrentCatalog set_current_catalog = 25;
     ListCatalogs list_catalogs = 26;
-    ListCachedTables list_cached_tables = 27;
+    // field 27 was list_cached_tables, removed
     DropTable drop_table = 28;
     DropView drop_view = 29;
     CreateDatabase create_database = 30;
@@ -252,9 +252,6 @@ message ListCatalogs {
   // (Optional) The pattern that the catalog name needs to match
   optional string pattern = 1;
 }
-
-// See `spark.catalog.listCachedTables`
-message ListCachedTables { }
 
 // See `spark.catalog.dropTable`
 message DropTable {

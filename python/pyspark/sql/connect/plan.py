@@ -2507,16 +2507,6 @@ class ListCatalogs(LogicalPlan):
         return plan
 
 
-class ListCachedTables(LogicalPlan):
-    def __init__(self) -> None:
-        super().__init__(None)
-
-    def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = self._create_proto_relation()
-        plan.catalog.list_cached_tables.SetInParent()
-        return plan
-
-
 class DropTable(LogicalPlan):
     def __init__(self, table_name: str, if_exists: bool = False, purge: bool = False) -> None:
         super().__init__(None)

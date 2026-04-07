@@ -314,8 +314,6 @@ class SparkConnectPlanner(
         transformSetCurrentCatalog(catalog.getSetCurrentCatalog)
       case proto.Catalog.CatTypeCase.LIST_CATALOGS =>
         transformListCatalogs(catalog.getListCatalogs)
-      case proto.Catalog.CatTypeCase.LIST_CACHED_TABLES =>
-        transformListCachedTables()
       case proto.Catalog.CatTypeCase.DROP_TABLE => transformDropTable(catalog.getDropTable)
       case proto.Catalog.CatTypeCase.DROP_VIEW => transformDropView(catalog.getDropView)
       case proto.Catalog.CatTypeCase.CREATE_DATABASE =>
@@ -4272,10 +4270,6 @@ class SparkConnectPlanner(
     } else {
       session.catalog.listCatalogs().logicalPlan
     }
-  }
-
-  private def transformListCachedTables(): LogicalPlan = {
-    session.catalog.listCachedTables().logicalPlan
   }
 
   private def transformDropTable(p: proto.DropTable): LogicalPlan = {

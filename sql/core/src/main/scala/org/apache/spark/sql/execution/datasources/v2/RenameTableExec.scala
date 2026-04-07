@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -32,7 +33,7 @@ case class RenameTableExec(
     oldIdent: Identifier,
     newIdent: Identifier,
     invalidateCache: () => Option[StorageLevel],
-    cacheTable: (SparkSession, LogicalPlan, Option[Seq[String]], StorageLevel) => Unit)
+    cacheTable: (SparkSession, LogicalPlan, Option[String], StorageLevel) => Unit)
   extends LeafV2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
@@ -54,8 +55,7 @@ case class RenameTableExec(
       cacheTable(
         session,
         newRelation,
-        Some(qualifiedNewIdent.namespace.toSeq :+ qualifiedNewIdent.name),
-        oldStorageLevel)
+        Some(qualifiedNewIdent.quoted), oldStorageLevel)
     }
     Seq.empty
   }

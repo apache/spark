@@ -368,23 +368,6 @@ class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelpe
     }
   }
 
-  test("extended catalog API: listCachedTables") {
-    val t = "connect_catalog_ext_cached_t"
-    withTable(t) {
-      withTempPath { dir =>
-        val session = spark
-        import session.implicits._
-        Seq(1).toDF("id").write.parquet(dir.getPath)
-        spark.catalog.createTable(t, dir.getPath).collect()
-        assert(spark.catalog.listCachedTables().collect().isEmpty)
-        spark.catalog.cacheTable(t)
-        val fromApi = spark.catalog.listCachedTables().collect()
-        assert(fromApi.exists(_.name.contains(t)))
-        spark.catalog.uncacheTable(t)
-      }
-    }
-  }
-
   test("extended catalog API: dropTable") {
     val tbl = "connect_catalog_ext_drop_t"
     withTable(tbl) {

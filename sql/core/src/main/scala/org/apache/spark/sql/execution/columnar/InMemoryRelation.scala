@@ -255,7 +255,7 @@ case class CachedRDDBuilder(
     serializer: CachedBatchSerializer,
     storageLevel: StorageLevel,
     @transient cachedPlan: SparkPlan,
-    tableIdentifier: Option[Seq[String]],
+    tableName: Option[String],
     @transient logicalPlan: LogicalPlan) {
 
   @transient @volatile private var _cachedColumnBuffers: RDD[CachedBatch] = null
@@ -265,7 +265,7 @@ case class CachedRDDBuilder(
   val rowCountStats: LongAccumulator = cachedPlan.session.sparkContext.longAccumulator
   private val materializedPartitions = cachedPlan.session.sparkContext.longAccumulator
 
-  val cachedName = tableIdentifier.map(parts => s"In-memory table ${parts.mkString(".")}")
+  val cachedName = tableName.map(n => s"In-memory table $n")
     .getOrElse(Utils.abbreviate(cachedPlan.toString, 1024))
 
   val supportsColumnarInput: Boolean = {
@@ -370,7 +370,7 @@ object InMemoryRelation {
   def apply(
       storageLevel: StorageLevel,
       qe: QueryExecution,
-      tableIdentifier: Option[Seq[String]]): InMemoryRelation = {
+      tableName: Option[String]): InMemoryRelation = {
     val optimizedPlan = qe.optimizedPlan
     val serializer = getSerializer(optimizedPlan.conf)
     val child = if (serializer.supportsColumnarInput(optimizedPlan.output)) {
@@ -379,7 +379,7 @@ object InMemoryRelation {
       qe.executedPlan
     }
     val cacheBuilder =
-      CachedRDDBuilder(serializer, storageLevel, child, tableIdentifier, qe.logical)
+      CachedRDDBuilder(serializer, storageLevel, child, tableName, qe.logical)
     val relation = new InMemoryRelation(child.output, cacheBuilder, optimizedPlan.outputOrdering)
     relation.statsOfPlanToCache = optimizedPlan.stats
     relation
@@ -392,10 +392,10 @@ object InMemoryRelation {
       serializer: CachedBatchSerializer,
       storageLevel: StorageLevel,
       child: SparkPlan,
-      tableIdentifier: Option[Seq[String]],
+      tableName: Option[String],
       optimizedPlan: LogicalPlan): InMemoryRelation = {
     val cacheBuilder =
-      CachedRDDBuilder(serializer, storageLevel, child, tableIdentifier, optimizedPlan)
+      CachedRDDBuilder(serializer, storageLevel, child, tableName, optimizedPlan)
     val relation = new InMemoryRelation(child.output, cacheBuilder, optimizedPlan.outputOrdering)
     relation.statsOfPlanToCache = optimizedPlan.stats
     relation

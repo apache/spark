@@ -46,7 +46,6 @@ Catalog
     Catalog.getTable
     Catalog.getTableProperties
     Catalog.isCached
-    Catalog.listCachedTables
     Catalog.listCatalogs
     Catalog.listColumns
     Catalog.listDatabases

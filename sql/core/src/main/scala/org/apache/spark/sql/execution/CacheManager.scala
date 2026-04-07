@@ -94,21 +94,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     cachedData.size
   }
 
-  /**
-   * Returns cache entries that were registered with an explicit table/view name (e.g.
-   * `CACHE TABLE` / `Catalog.cacheTable`). Anonymous `Dataset.cache()` entries are omitted.
-   */
-  private[sql] def listNamedCachedTables(): Seq[(Seq[String], StorageLevel)] = this.synchronized {
-    cachedData.flatMap { cd =>
-      cd.cachedRepresentation.cacheBuilder.tableIdentifier.map { parts =>
-        (parts, cd.cachedRepresentation.cacheBuilder.storageLevel)
-      }
-    }
-  }
-
   // Test-only
   def cacheQuery(query: Dataset[_]): Unit = {
-    cacheQuery(query, tableIdentifier = None, storageLevel = MEMORY_AND_DISK)
+    cacheQuery(query, tableName = None, storageLevel = MEMORY_AND_DISK)
   }
 
   /**
@@ -116,13 +104,13 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    */
   def cacheQuery(
       query: Dataset[_],
-      tableIdentifier: Option[Seq[String]],
+      tableName: Option[String],
       storageLevel: StorageLevel): Unit = {
     cacheQueryInternal(
       query.sparkSession,
       query.queryExecution.analyzed,
       query.queryExecution.normalized,
-      tableIdentifier,
+      tableName,
       storageLevel
     )
   }
@@ -134,10 +122,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   def cacheQuery(
       spark: SparkSession,
       planToCache: LogicalPlan,
-      tableIdentifier: Option[Seq[String]],
+      tableName: Option[String],
       storageLevel: StorageLevel): Unit = {
     val normalized = QueryExecution.normalize(spark, planToCache)
-    cacheQueryInternal(spark, planToCache, normalized, tableIdentifier, storageLevel)
+    cacheQueryInternal(spark, planToCache, normalized, tableName, storageLevel)
   }
 
   // The `normalizedPlan` should have been normalized. It is the cache key.
@@ -145,7 +133,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       spark: SparkSession,
       unnormalizedPlan: LogicalPlan,
       normalizedPlan: LogicalPlan,
-      tableIdentifier: Option[Seq[String]],
+      tableName: Option[String],
       storageLevel: StorageLevel): Unit = {
     if (storageLevel == StorageLevel.NONE) {
       // Do nothing for StorageLevel.NONE since it will not actually cache any data.
@@ -164,7 +152,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         InMemoryRelation(
           storageLevel,
           qe,
-          tableIdentifier)
+          tableName)
       }
 
       this.synchronized {

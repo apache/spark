@@ -77,13 +77,6 @@ class Function(NamedTuple):
     isTemporary: bool
 
 
-class CachedTable(NamedTuple):
-    name: str
-    catalog: Optional[str]
-    namespace: Optional[List[str]]
-    storageLevel: str
-
-
 class TablePartition(NamedTuple):
     partition: str
 
@@ -179,42 +172,6 @@ class Catalog:
                 CatalogMetadata(name=jcatalog.name(), description=jcatalog.description())
             )
         return catalogs
-
-    def listCachedTables(self) -> List[CachedTable]:
-        """Lists named in-memory cache entries.
-
-        Includes caches registered with ``CACHE TABLE`` or
-        :meth:`~pyspark.sql.catalog.Catalog.cacheTable`. Caches from
-        :meth:`~pyspark.sql.DataFrame.cache` without a name are not listed.
-
-        .. versionadded:: 4.2.0
-
-        Returns
-        -------
-        list
-            A list of :class:`CachedTable` describing each named cache entry.
-
-        Examples
-        --------
-        >>> _ = spark.sql("DROP TABLE IF EXISTS tbl_cached_list")
-        >>> _ = spark.sql("CREATE TABLE tbl_cached_list (id INT) USING parquet")
-        >>> spark.catalog.clearCache()
-        >>> spark.catalog.listCachedTables()
-        []
-        >>> spark.catalog.cacheTable("tbl_cached_list")
-        >>> any("tbl_cached_list" in ct.name for ct in spark.catalog.listCachedTables())
-        True
-        >>> spark.catalog.uncacheTable("tbl_cached_list")
-        >>> _ = spark.sql("DROP TABLE tbl_cached_list")
-        """
-        iter = self._jcatalog.listCachedTables().toLocalIterator()
-        out: List[CachedTable] = []
-        while iter.hasNext():
-            j = iter.next()
-            jnamespace = j.namespace()
-            namespace = [jnamespace[i] for i in range(len(jnamespace))] if jnamespace is not None else None
-            out.append(CachedTable(name=j.name(), catalog=j.catalog(), namespace=namespace, storageLevel=j.storageLevel()))
-        return out
 
     def dropTable(self, tableName: str, ifExists: bool = False, purge: bool = False) -> None:
         """Drops a persistent table.

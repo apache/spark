@@ -25,7 +25,6 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.sql.types import StructType
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.catalog import (
-    CachedTable,
     Catalog as PySparkCatalog,
     CatalogMetadata,
     Database,
@@ -321,20 +320,6 @@ class Catalog:
         self._execute_and_fetch(plan.RefreshByPath(path=path))
 
     refreshByPath.__doc__ = PySparkCatalog.refreshByPath.__doc__
-
-    def listCachedTables(self) -> List[CachedTable]:
-        table = self._execute_and_fetch(plan.ListCachedTables())
-        return [
-            CachedTable(
-                name=table[0][i].as_py(),
-                catalog=table[1][i].as_py(),
-                namespace=list(table[2][i].as_py()) if table[2][i].as_py() is not None else None,
-                storageLevel=table[3][i].as_py(),
-            )
-            for i in range(table.num_rows)
-        ]
-
-    listCachedTables.__doc__ = PySparkCatalog.listCachedTables.__doc__
 
     def dropTable(self, tableName: str, ifExists: bool = False, purge: bool = False) -> None:
         self._execute_and_fetch(

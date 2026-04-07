@@ -1139,32 +1139,6 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     }
   }
 
-  test("catalog API: listCachedTables") {
-    val t = "catalog_api_ext_cached_t"
-    spark.sql(s"DROP TABLE IF EXISTS $t")
-    spark.sql(s"CREATE TABLE $t (id INT) USING parquet")
-    try {
-      assert(spark.catalog.listCachedTables().collect().isEmpty)
-      spark.catalog.cacheTable(t)
-      val fromApi = spark.catalog.listCachedTables().collect()
-      assert(fromApi.exists(_.name.contains(t)))
-      // For a simple (unqualified) name, catalog and namespace are null
-      val entry = fromApi.find(_.name.contains(t)).get
-      assert(entry.catalog === null)
-      assert(entry.namespace === null)
-      // Caching with a fully-qualified name populates catalog and namespace
-      spark.catalog.uncacheTable(t)
-      spark.catalog.cacheTable(s"spark_catalog.default.$t")
-      val fqApi = spark.catalog.listCachedTables().collect()
-      val fqEntry = fqApi.find(_.name == t).get
-      assert(fqEntry.catalog === "spark_catalog")
-      assert(fqEntry.namespace.toSeq === Seq("default"))
-    } finally {
-      spark.catalog.uncacheTable(t)
-      spark.catalog.dropTable(t, ifExists = true)
-    }
-  }
-
   test("catalog API: dropTable") {
     val t = "catalog_api_ext_drop_t"
     spark.sql(s"DROP TABLE IF EXISTS $t")

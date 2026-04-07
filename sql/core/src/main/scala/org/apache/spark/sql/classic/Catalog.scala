@@ -28,7 +28,6 @@ import org.apache.spark.internal.LogKeys.{CATALOG_NAME, DATABASE_NAME, TABLE_NAM
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog
 import org.apache.spark.sql.catalog.{
-  CachedTable,
   CatalogMetadata,
   Column,
   Database,
@@ -847,7 +846,7 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
    */
   override def cacheTable(tableName: String, storageLevel: StorageLevel): Unit = {
     sparkSession.sharedState.cacheManager.cacheQuery(
-      sparkSession.table(tableName), Some(parseIdent(tableName)), storageLevel)
+      sparkSession.table(tableName), Some(tableName), storageLevel)
   }
 
   /**
@@ -986,20 +985,6 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
   override def listCatalogs(pattern: String): Dataset[CatalogMetadata] = {
     val catalogs = sparkSession.sessionState.catalogManager.listCatalogs(Some(pattern))
     Catalog.makeDataset(catalogs.map(name => makeCatalog(name)), sparkSession)
-  }
-
-  override def listCachedTables(): Dataset[CachedTable] = {
-    val cached = sparkSession.sharedState.cacheManager.listNamedCachedTables().map {
-      case (parts, sl) =>
-        val simpleName = parts.last
-        val (catalogName, ns) = parts.length match {
-          case 1 => (null: String, null: Array[String])
-          case 2 => (null: String, Array(parts(0)))
-          case _ => (parts.head, parts.slice(1, parts.length - 1).toArray)
-        }
-        new CachedTable(simpleName, catalogName, ns, sl.description)
-    }
-    Catalog.makeDataset(cached, sparkSession)
   }
 
   override def dropTable(tableName: String, ifExists: Boolean, purge: Boolean): Unit = {

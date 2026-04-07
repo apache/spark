@@ -37,7 +37,6 @@ import org.apache.spark.util.Utils
 
 trait BaseCacheTableExec extends LeafV2CommandExec {
   def relationName: String
-  def tableIdentifierForCache: Option[Seq[String]]
   def planToCache: LogicalPlan
   def isLazy: Boolean
   def options: Map[String, String]
@@ -54,7 +53,7 @@ trait BaseCacheTableExec extends LeafV2CommandExec {
     }
 
     val df = Dataset.ofRows(session, planToCache)
-    session.sharedState.cacheManager.cacheQuery(df, tableIdentifierForCache, storageLevel)
+    session.sharedState.cacheManager.cacheQuery(df, Some(relationName), storageLevel)
 
     if (!isLazy) {
       // Performs eager caching.
@@ -82,7 +81,6 @@ case class CacheTableExec(
     override val isLazy: Boolean,
     override val options: Map[String, String]) extends BaseCacheTableExec {
   override lazy val relationName: String = multipartIdentifier.quoted
-  override val tableIdentifierForCache: Option[Seq[String]] = Some(multipartIdentifier)
 
   override lazy val planToCache: LogicalPlan = relation
 }
@@ -95,7 +93,6 @@ case class CacheTableAsSelectExec(
     override val options: Map[String, String],
     referredTempFunctions: Seq[String]) extends BaseCacheTableExec {
   override lazy val relationName: String = tempViewName
-  override val tableIdentifierForCache: Option[Seq[String]] = Some(Seq(tempViewName))
 
   override def planToCache: LogicalPlan = UnresolvedRelation(Seq(tempViewName))
 
