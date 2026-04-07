@@ -91,7 +91,6 @@ object UnsupportedOperationChecker extends Logging {
    * Checks if a logical plan is a streaming stateful operation.
    * Stateful operations include aggregations, stream-stream joins, deduplication,
    * and stateful transformations (FlatMapGroupsWithState, TransformWithState, etc.).
-   * Note: Deduplicate is only counted as stateful when it has an event time column.
    * @param p the logical plan to be checked
    * @return true if there is a streaming stateful operation
    */
@@ -104,7 +103,7 @@ object UnsupportedOperationChecker extends Logging {
     case _ @ Join(left, right, _, _, _) if left.isStreaming && right.isStreaming => true
     case f: FlatMapGroupsWithState if f.isStreaming => true
     case f: FlatMapGroupsInPandasWithState if f.isStreaming => true
-    case d: Deduplicate if d.isStreaming && d.keys.exists(hasEventTimeCol) => true
+    case d: Deduplicate if d.isStreaming => true
     case d: DeduplicateWithinWatermark if d.isStreaming => true
     case t: TransformWithState if t.isStreaming => true
     case t: TransformWithStateInPySpark if t.isStreaming => true

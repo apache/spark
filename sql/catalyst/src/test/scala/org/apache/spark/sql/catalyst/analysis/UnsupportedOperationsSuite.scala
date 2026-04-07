@@ -559,8 +559,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     outputMode = Append)
 
   // Deduplication checks:
-  // Deduplication, if on event time column, is a stateful operator
-  // and cannot be placed after FlatMapGroupsWithState
+  // Deduplication is always a stateful operator and cannot be placed after
+  // FlatMapGroupsWithState with EventTimeTimeout
   assertFailOnGlobalWatermarkLimit(
     "multiple stateful ops - FlatMapGroupsWithState followed by " +
       "dedup (with event-time)",
@@ -569,9 +569,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         isMapGroupsWithState = false, GroupStateTimeout.EventTimeTimeout(), streamRelation)),
     outputMode = Append)
 
-  // Deduplication, if not on event time column,
-  // although it is still a stateful operator,
-  // it can be placed after FlatMapGroupsWithState
+  // Deduplication can be placed after FlatMapGroupsWithState without EventTimeTimeout
   assertPassOnGlobalWatermarkLimit(
     "multiple stateful ops - FlatMapGroupsWithState followed by " +
       "dedup (without event-time)",
@@ -580,8 +578,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         isMapGroupsWithState = false, null, streamRelation)),
     outputMode = Append)
 
-  // Deduplication, if on event time column, is a stateful operator
-  // and cannot be placed after aggregation
+  // Deduplication cannot be placed after aggregation in Update/Complete mode,
+  // because aggregation would not be the last stateful operator
   for (outputMode <- Seq(Update, Complete)) {
     assertFailOnGlobalWatermarkLimit(
       s"multiple stateful ops - aggregation($outputMode mode) followed by " +
@@ -590,16 +588,45 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         Aggregate(Seq(attributeWithWatermark), aggExprs("c"), streamRelation)),
       outputMode = outputMode)
 
-    // Deduplication, if not on event time column,
-    // although it is still a stateful operator,
-    // it can be placed after aggregation
-    assertPassOnGlobalWatermarkLimit(
+    assertFailOnGlobalWatermarkLimit(
       s"multiple stateful ops - aggregation($outputMode mode) followed by " +
         "dedup (without event-time)",
       Deduplicate(Seq(att),
         Aggregate(Seq(attributeWithWatermark), aggExprs("c"), streamRelation)),
       outputMode = outputMode)
   }
+
+  // Multiple stateful operators in Update mode without aggregation:
+  // Update mode is equivalent to Append mode when there is no streaming aggregation,
+  // so multiple non-aggregation stateful operators should be supported.
+
+  assertFailOnGlobalWatermarkLimit(
+    "multiple stateful ops - FlatMapGroupsWithState(EventTimeTimeout) followed by " +
+      "dedup (with event-time) in Update mode",
+    Deduplicate(Seq(attributeWithWatermark),
+      TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
+        isMapGroupsWithState = false, GroupStateTimeout.EventTimeTimeout(), streamRelation)),
+    outputMode = Update)
+
+  assertPassOnGlobalWatermarkLimit(
+    "multiple stateful ops - FlatMapGroupsWithState(no timeout) followed by " +
+      "dedup (without event-time) in Update mode",
+    Deduplicate(Seq(att),
+      TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
+        isMapGroupsWithState = false, null, streamRelation)),
+    outputMode = Update)
+
+  assertPassOnGlobalWatermarkLimit(
+    "multiple stateful ops - dedup followed by dedup in Update mode",
+    Deduplicate(Seq(attributeWithWatermark),
+      Deduplicate(Seq(attributeWithWatermark), streamRelation)),
+    outputMode = Update)
+
+  assertPassOnGlobalWatermarkLimit(
+    "multiple stateful ops - DeduplicateWithinWatermark followed by dedup in Update mode",
+    Deduplicate(Seq(attributeWithWatermark),
+      DeduplicateWithinWatermark(Seq(attributeWithWatermark), streamRelation)),
+    outputMode = Update)
 
   assertPassOnGlobalWatermarkLimit(
     "multiple stateful ops - stream-stream time interval join followed by " +
