@@ -106,7 +106,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val updatedRowsPlan = buildReplaceDataUpdateProjection(matchedRowsPlan, assignments)
 
     // build a plan that contains unmatched rows in matched groups that must be copied over
-    val remainingRowFilter = Not(EqualNullSafe(cond, TrueLiteral))
+    val remainingRowFilter = Not(EqualNullSafe(cond, Literal.TrueLiteral))
     val remainingRowsPlan = Filter(remainingRowFilter, readRelation)
     val remainingRowsPlanWithFlag = Project(
       remainingRowsPlan.output :+ Alias(FalseLiteral, IS_UPDATED_COLUMN)(),
