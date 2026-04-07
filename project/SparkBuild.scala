@@ -1092,9 +1092,42 @@ object UDFWorkerProto {
   lazy val settings = Seq(
     PB.protocVersion := BuildCommons.protoVersion,
     libraryDependencies += "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf",
+
+    dependencyOverrides += "com.google.protobuf" % "protobuf-java" % protoVersion,
+
     (Compile / PB.targets) := Seq(
       PB.gens.java -> target.value / "generated-sources"
-    )
+    ),
+
+    (assembly / test) := { },
+
+    (assembly / logLevel) := Level.Info,
+
+    // Exclude `scala-library` from assembly.
+    (assembly / assemblyPackageScala / assembleArtifact) := false,
+
+    // Include only the proto module jar and protobuf-java in the assembly.
+    (assembly / assemblyExcludedJars) := {
+      val cp = (assembly / fullClasspath).value
+      val validPrefixes = Set("spark-udf-worker-proto", "protobuf-")
+      cp filterNot { v =>
+        validPrefixes.exists(v.data.getName.startsWith)
+      }
+    },
+
+    (assembly / assemblyShadeRules) := Seq(
+      ShadeRule.rename("com.google.protobuf.**" ->
+        "org.sparkproject.spark_udf_worker.protobuf.@1").inAll,
+    ),
+
+    (assembly / assemblyMergeStrategy) := {
+      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
+      case m if m.toLowerCase(Locale.ROOT).matches("meta-inf.*\\.sf$") => MergeStrategy.discard
+      case m if m.toLowerCase(Locale.ROOT).startsWith("meta-inf/services/") =>
+        MergeStrategy.filterDistinctLines
+      case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
+      case _ => MergeStrategy.first
+    }
   ) ++ {
     val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
     if (sparkProtocExecPath.isDefined) {
