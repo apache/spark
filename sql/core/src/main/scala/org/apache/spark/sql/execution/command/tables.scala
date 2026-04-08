@@ -586,17 +586,16 @@ object ResolvedChildHelper {
   def getTableMetadata(
       child: LogicalPlan,
       sparkSession: SparkSession,
-      table: TableIdentifier): CatalogTable = child match {
-    case ResolvedTempView(_, metadata) => metadata
-    case ResolvedPersistentView(_, _, metadata) => metadata
-    case ResolvedTable(_, _, t: V1Table, _) => t.v1Table
-    case _ =>
-      val catalog = sparkSession.sessionState.catalog
-      if (catalog.isTempView(table)) {
-        catalog.getTempViewOrPermanentTableMetadata(table)
-      } else {
-        catalog.getTableRawMetadata(table)
-      }
+      table: TableIdentifier): CatalogTable = {
+    val catalog = sparkSession.sessionState.catalog
+    child match {
+      case ResolvedTempView(_, metadata) => metadata
+      case ResolvedPersistentView(_, _, metadata) => metadata
+      case ResolvedTable(_, _, t: V1Table, _) => t.v1Table
+      case _ if (catalog.isTempView(table)) =>
+          catalog.getTempViewOrPermanentTableMetadata(table)
+      case _ => catalog.getTableRawMetadata(table)
+    }
   }
 }
 
