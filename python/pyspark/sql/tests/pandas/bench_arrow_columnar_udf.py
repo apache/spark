@@ -67,15 +67,15 @@ def create_spark():
     )
 
 
-def timed_collect(df, warmup=2, iterations=5):
-    """Collect a DataFrame multiple times, returning per-iteration timings."""
+def timed_run(df, warmup=2, iterations=5):
+    """Run a DataFrame with noop sink, returning per-iteration timings."""
     for _ in range(warmup):
-        df.collect()
+        df.write.format("noop").mode("overwrite").save()
 
     times = []
     for _ in range(iterations):
         start = time.perf_counter()
-        df.collect()
+        df.write.format("noop").mode("overwrite").save()
         elapsed = time.perf_counter() - start
         times.append(elapsed)
     return times
@@ -116,50 +116,44 @@ def main():
     print(f"  rows={args.rows}  partitions={args.partitions}  iterations={args.iterations}")
     print()
 
-    # A minimal scalar Arrow UDF -- isolates data transfer overhead.
-    @pandas_udf(DoubleType())
-    def add_udf(id_col: pd.Series, val_col: pd.Series) -> pd.Series:
-        return id_col + val_col
+    # Identity UDF -- returns input as-is to minimize Python-side cost
+    # and isolate JVM data transfer overhead.
+    @pandas_udf("string")
+    def identity_udf(data: pd.Series) -> pd.Series:
+        return data
 
-    # ----- Source 1: Arrow-backed columnar DSv2 -----
-    arrow_df = (
-        spark.read.format(ARROW_SOURCE)
-        .option("numRows", str(args.rows))
-        .option("numPartitions", str(args.partitions))
-        .load()
-        .select(add_udf(col("id"), col("value")))
-    )
+    conf_key = "spark.sql.execution.arrow.pythonUDF.columnarInput.enabled"
 
-    # ----- Source 2: Row-based (spark.range) -----
-    row_df = (
-        spark.range(args.rows)
-        .repartition(args.partitions)
-        .selectExpr(
-            "CAST(id AS INT) AS id",
-            "CONCAT('row_', CAST(id AS STRING)) AS name",
-            "CAST(id AS DOUBLE) * 0.1 AS value",
+    def make_df():
+        return (
+            spark.read.format(ARROW_SOURCE)
+            .option("numRows", str(args.rows))
+            .option("numPartitions", str(args.partitions))
+            .load()
+            .select(col("id"), col("name"), col("value"), col("data"), identity_udf(col("data")))
         )
-        .select(add_udf(col("id"), col("value")))
-    )
 
-    # Print physical plans for verification.
+    # ----- Benchmark 1: Arrow columnar (config=true) -----
+    spark.conf.set(conf_key, "true")
+    arrow_df = make_df()
     print("--- Physical Plan: Arrow columnar source ---")
     arrow_df.explain()
     print()
-    print("--- Physical Plan: Row-based source ---")
-    row_df.explain()
-    print()
-
-    # ----- Run benchmarks -----
     print("--- Results ---")
     print()
-
-    arrow_times = timed_collect(arrow_df, iterations=args.iterations)
+    arrow_times = timed_run(arrow_df, iterations=args.iterations)
     arrow_avg = print_stats("Arrow columnar (direct FieldVector extraction)", arrow_times)
     print()
 
-    row_times = timed_collect(row_df, iterations=args.iterations)
+    # ----- Benchmark 2: Row-based with ColumnarToRow (config=false) -----
+    spark.conf.set(conf_key, "false")
+    row_df = make_df()
+    print("--- Physical Plan: Row-based (ColumnarToRow) source ---")
+    row_df.explain()
+    print()
+    row_times = timed_run(row_df, iterations=args.iterations)
     row_avg = print_stats("Row-based (ColumnarToRow + ArrowWriter)", row_times)
+    spark.conf.set(conf_key, "true")
     print()
 
     if arrow_avg > 0:

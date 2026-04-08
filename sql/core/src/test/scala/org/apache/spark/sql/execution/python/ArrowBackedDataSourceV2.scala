@@ -69,6 +69,7 @@ object ArrowBackedDataSourceV2 {
     .add("id", IntegerType, nullable = false)
     .add("name", StringType, nullable = true)
     .add("value", DoubleType, nullable = true)
+    .add("data", StringType, nullable = true)
 
   val DEFAULT_NUM_ROWS: Int = 10000
   val DEFAULT_NUM_PARTITIONS: Int = 2
@@ -116,21 +117,48 @@ private class ArrowBackedScanBuilder(options: CaseInsensitiveStringMap)
     }.toArray
   }
 
+  private val columnar =
+    options.getBoolean("columnar", true)
+
   override def createReaderFactory(): PartitionReaderFactory = {
-    new ArrowBackedReaderFactory()
+    new ArrowBackedReaderFactory(columnar)
   }
 }
 
-private case class ArrowPartition(start: Int, end: Int) extends InputPartition
+private case class ArrowPartition(start: Int, end: Int)
+    extends InputPartition
 
-/** Factory that produces Arrow-backed columnar readers. */
-private class ArrowBackedReaderFactory extends PartitionReaderFactory {
+/**
+ * Factory that produces Arrow-backed readers.
+ *
+ * @param columnar if true, returns columnar ColumnarBatch output
+ *   (supportsColumnarReads = true). If false, returns row-based
+ *   InternalRow output by iterating the ColumnarBatch row by row.
+ *   This allows benchmarking the same data source with and without
+ *   the columnar optimization.
+ */
+private class ArrowBackedReaderFactory(columnar: Boolean)
+    extends PartitionReaderFactory {
 
-  override def supportColumnarReads(partition: InputPartition): Boolean = true
+  override def supportColumnarReads(
+      partition: InputPartition): Boolean = columnar
 
-  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
-    throw new UnsupportedOperationException(
-      "ArrowBackedDataSourceV2 only supports columnar reads")
+  override def createReader(
+      partition: InputPartition): PartitionReader[InternalRow] = {
+    val ArrowPartition(start, end) = partition
+    val inner = new ArrowBackedPartitionReader(start, end)
+    // Wrap columnar reader as row reader.
+    new PartitionReader[InternalRow] {
+      private var rowIter: java.util.Iterator[InternalRow] = _
+      override def next(): Boolean = {
+        if (rowIter != null && rowIter.hasNext) return true
+        if (!inner.next()) return false
+        rowIter = inner.get().rowIterator()
+        rowIter.hasNext
+      }
+      override def get(): InternalRow = rowIter.next()
+      override def close(): Unit = inner.close()
+    }
   }
 
   override def createColumnarReader(
@@ -154,48 +182,51 @@ private class ArrowBackedPartitionReader(start: Int, end: Int)
   private val batchSize = ArrowBackedDataSourceV2.BATCH_SIZE
   private var current = start
   private var currentBatch: ColumnarBatch = _
-  private var allocator: BufferAllocator = _
+
+  // Single allocator for the entire partition reader lifetime.
+  // Arrow vectors from earlier batches may still be referenced by
+  // downstream operators (e.g., pass-through column queue), so we
+  // must NOT close the allocator until the reader itself is closed.
+  private val allocator: BufferAllocator =
+    ArrowUtils.rootAllocator.newChildAllocator(
+      s"arrow-test-reader-$start", 0, Long.MaxValue)
+
+  // Track all batches so we can close them in close().
+  private val allBatches =
+    new java.util.ArrayList[ColumnarBatch]()
 
   override def next(): Boolean = {
-    // Close previous batch's resources
-    closeCurrent()
-
     if (current >= end) return false
 
     val count = math.min(batchSize, end - current)
-
-    allocator = ArrowUtils.rootAllocator.newChildAllocator(
-      s"arrow-test-reader-$start", 0, Long.MaxValue)
 
     // Create Arrow vectors
     val idVector = createIntVector(allocator, "id", count)
     val nameVector = createStringVector(allocator, "name", count)
     val valueVector = createDoubleVector(allocator, "value", count)
+    val dataVector = createLongStringVector(
+      allocator, "data", count)
 
     // Wrap in ArrowColumnVector
     val columns: Array[ColumnVector] = Array(
       new ArrowColumnVector(idVector),
       new ArrowColumnVector(nameVector),
-      new ArrowColumnVector(valueVector))
+      new ArrowColumnVector(valueVector),
+      new ArrowColumnVector(dataVector))
 
     currentBatch = new ColumnarBatch(columns, count)
+    allBatches.add(currentBatch)
     current += count
     true
   }
 
   override def get(): ColumnarBatch = currentBatch
 
-  override def close(): Unit = closeCurrent()
-
-  private def closeCurrent(): Unit = {
-    if (currentBatch != null) {
-      currentBatch.close()
-      currentBatch = null
-    }
-    if (allocator != null) {
-      allocator.close()
-      allocator = null
-    }
+  override def close(): Unit = {
+    allBatches.forEach(_.close())
+    allBatches.clear()
+    currentBatch = null
+    allocator.close()
   }
 
   private def createIntVector(
@@ -230,6 +261,35 @@ private class ArrowBackedPartitionReader(start: Int, end: Int)
     vector.allocateNew(count)
     (0 until count).foreach { i =>
       vector.setSafe(i, (current + i) * 0.1)
+    }
+    vector.setValueCount(count)
+    vector
+  }
+
+  // Random long strings (~200 chars each) to stress ArrowWriter's
+  // per-element VarChar serialization overhead.
+  private val rng = new java.util.Random(42)
+  private def randomString(len: Int): String = {
+    val sb = new java.lang.StringBuilder(len)
+    var i = 0
+    while (i < len) {
+      sb.append(('a' + rng.nextInt(26)).toChar)
+      i += 1
+    }
+    sb.toString
+  }
+
+  private def createLongStringVector(
+      alloc: BufferAllocator, name: String,
+      count: Int): VarCharVector = {
+    val field = ArrowUtils.toArrowField(
+      name, StringType, nullable = true, null)
+    val vector = field.createVector(alloc)
+      .asInstanceOf[VarCharVector]
+    vector.allocateNew()
+    (0 until count).foreach { i =>
+      val bytes = randomString(100).getBytes("UTF-8")
+      vector.setSafe(i, bytes, 0, bytes.length)
     }
     vector.setValueCount(count)
     vector

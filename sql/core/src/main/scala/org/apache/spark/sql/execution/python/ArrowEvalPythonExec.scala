@@ -95,7 +95,10 @@ case class ArrowEvalPythonExec(
   // accept columnar input to avoid the ColumnarToRow -> ArrowWriter round-trip.
   // The Arrow FieldVectors are extracted directly from ArrowColumnVector and
   // serialized to IPC, bypassing the row-based ArrowWriter conversion.
-  override def supportsColumnar: Boolean = child.supportsColumnar
+  override def supportsColumnar: Boolean =
+    child.supportsColumnar && conf.getConfString(
+      "spark.sql.execution.arrow.pythonUDF.columnarInput.enabled",
+      "true").toBoolean
   override def supportsRowBased: Boolean = true
 
   override protected def doExecute(): RDD[InternalRow] = {
