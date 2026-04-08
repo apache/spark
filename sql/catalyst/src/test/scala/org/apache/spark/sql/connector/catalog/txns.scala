@@ -53,8 +53,10 @@ class Txn(override val catalog: TxnTableCatalog) extends Transaction {
   }
 
   override def close(): Unit = {
-    catalog.clearActiveTransaction()
-    this.closed = true
+    if (!closed) {
+      catalog.clearActiveTransaction()
+      this.closed = true
+    }
   }
 }
 

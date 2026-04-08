@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.Committed
 
-class CTASTransactionSuite extends RowLevelOperationSuiteBase {
+class CTASRTASTransactionSuite extends RowLevelOperationSuiteBase {
 
   private val newTableNameAsString = "cat.ns1.new_table"
 
@@ -39,6 +39,7 @@ class CTASTransactionSuite extends RowLevelOperationSuiteBase {
     assert(txn.currentState == Committed)
     assert(txn.isClosed)
     assert(txnTables.size == 1)
+    assert(table.version() == "2")
 
     val sourceTxnTable = txnTables(tableNameAsString)
     assert(sourceTxnTable.scanEvents.size >= 1)
@@ -66,6 +67,7 @@ class CTASTransactionSuite extends RowLevelOperationSuiteBase {
 
       assert(txn.currentState == Committed)
       assert(txn.isClosed)
+      assert(table.version() == "2")
 
       // cache miss: TxnTable-based relation is not structurally equal to the cached one,
       // so the scan goes through the transaction catalog and scan events are captured
@@ -99,6 +101,7 @@ class CTASTransactionSuite extends RowLevelOperationSuiteBase {
     assert(txn.currentState == Committed)
     assert(txn.isClosed)
     assert(txnTables.size == 1)
+    assert(table.version() == "2")
 
     val sourceTxnTable = txnTables(tableNameAsString)
     assert(sourceTxnTable.scanEvents.size >= 1)

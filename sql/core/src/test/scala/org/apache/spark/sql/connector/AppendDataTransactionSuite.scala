@@ -46,6 +46,7 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
     assert(txn.currentState == Committed)
     assert(txn.isClosed)
     assert(txnTables.size == 1)
+    assert(table.version() == "2")
 
     // check the source scan was tracked via the transaction catalog
     val targetTxnTable = txnTables(tableNameAsString)
@@ -75,6 +76,7 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
     // check txn was properly committed and closed
     assert(txn.currentState == Committed)
     assert(txn.isClosed)
+    assert(table.version() == "2")
 
     // check data was inserted correctly
     checkAnswer(
@@ -104,6 +106,7 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
 
     assert(txn.currentState == Committed)
     assert(txn.isClosed)
+    assert(table.version() == "2")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -131,6 +134,7 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
 
       assert(txn.currentState == Committed)
       assert(txn.isClosed)
+      assert(table.version() == "2")
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
@@ -159,6 +163,7 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
 
     assert(txn.currentState == Committed)
     assert(txn.isClosed)
+    assert(table.version() == "2")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -186,6 +191,7 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
 
     assert(txn.currentState == Committed)
     assert(txn.isClosed)
+    assert(table.version() == "2")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -214,6 +220,7 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
     assert(txn.currentState == Committed)
     assert(txn.isClosed)
     assert(txnTables.size == 1)
+    assert(table.version() == "2")
 
     // check data was inserted correctly
     checkAnswer(

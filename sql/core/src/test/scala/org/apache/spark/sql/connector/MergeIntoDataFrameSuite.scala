@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.sql.{sources, Column, Row}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.classic.MergeIntoWriter
-import org.apache.spark.sql.connector.catalog.Committed
+import org.apache.spark.sql.connector.catalog.{Aborted, Committed}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.TableInfo
 import org.apache.spark.sql.functions._
@@ -66,6 +66,7 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     assert(txn.currentState == Committed)
     assert(txn.isClosed)
     assert(txnTables.size == 1)
+    assert(table.version() == "2")
 
     // check all table scans
     val targetTxnTable = txnTables(tableNameAsString)
@@ -92,8 +93,39 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
         Row(1, 101, "hr"), // update
         Row(2, 200, "software"), // unchanged
         Row(3, 300, "hr"))) // unchanged
+  }
 
-    // TODO Achatzis check version.
+  for (alterClause <- Seq(
+         "ADD COLUMN new_col INT",
+         "DROP COLUMN salary",
+         "ALTER COLUMN salary TYPE BIGINT",
+         "ALTER COLUMN pk DROP NOT NULL"))
+  test(s"self merge fails when source schema changes after analysis - DDL: $alterClause" ) {
+    withTable(tableNameAsString) {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+
+      val sourceDF = spark.table(tableNameAsString).where("salary == 100").as("source")
+      sourceDF.queryExecution.assertAnalyzed()
+
+      sql(s"ALTER TABLE $tableNameAsString $alterClause")
+
+      val e = intercept[AnalysisException] {
+        sourceDF
+          .mergeInto(tableNameAsString, $"source.pk" === targetTableCol("pk"))
+          .whenMatched()
+          .update(Map("salary" -> targetTableCol("salary").plus(1)))
+          .merge()
+      }
+
+      assert(
+        e.getCondition == "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        alterClause)
+      assert(catalog.lastTransaction.currentState == Aborted, alterClause)
+      assert(catalog.lastTransaction.isClosed, alterClause)
+    }
   }
 
   test("merge into empty table with NOT MATCHED clause") {

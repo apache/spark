@@ -914,6 +914,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     assert(txn.currentState == Committed)
     assert(txn.isClosed)
     assert(txnTables.size == 2)
+    assert(table.version() == "2")
 
     // check target table was scanned correctly
     val targetTxnTable = txnTables(tableNameAsString)
@@ -973,6 +974,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     assert(txn.currentState == Committed)
     assert(txn.isClosed)
     assert(txnTables.size == 2)
+    assert(table.version() == "2")
 
     // check source table was scanned correctly (dep = 'hr' filter in the subquery)
     val sourceTxnTable = txnTables(sourceNameAsString)
@@ -1026,6 +1028,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     assert(txn.currentState == Committed)
     assert(txn.isClosed)
     assert(txnTables.size == 2)
+    assert(table.version() == "2")
 
     // check source table was scanned via the transaction catalog
     val sourceTxnTable = txnTables(sourceNameAsString)
@@ -1106,6 +1109,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       assert(txn.currentState == Committed)
       assert(txn.isClosed)
       assert(txnTables.size == 2)
+      assert(table.version() == "2")
 
       // check target table was scanned correctly
       val targetTxnTable = txnTables(tableNameAsString)
@@ -1149,15 +1153,15 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         |{ "pk": 2, "salary": 200, "dep": "software" }
         |""".stripMargin)
 
-    // NOTE: df.explain() on a DML command actually executes the write.
-    // TODO(achatzis): This is existing behavior but check why this is OK. Shouldn't sql() be lazy?
+    // sql() is lazy, but explain() forces executedPlan.
     sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE dep = 'hr'").explain()
 
     assert(catalog.lastTransaction != null)
     assert(catalog.lastTransaction.currentState == Committed)
     assert(catalog.lastTransaction.isClosed)
+    assert(table.version() == "2")
 
-    // the UPDATE was actually executed, not just planned
+    // The UPDATE was actually executed, not just planned.
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Seq(

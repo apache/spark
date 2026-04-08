@@ -64,6 +64,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     assert(txn.currentState == Committed)
     assert(txn.isClosed)
     assert(txnTables.size == 1)
+    assert(table.version() == "2")
 
     // check all table scans
     val targetTxnTable = txnTables(tableNameAsString)
@@ -163,6 +164,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       assert(txn.currentState == Committed)
       assert(txn.isClosed)
       assert(txnTables.size == 2)
+      assert(table.version() == "2")
 
       // check target table was scanned correctly
       val targetTxnTable = txnTables(tableNameAsString)
@@ -249,6 +251,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
         assert(txn.currentState == Committed)
         assert(txn.isClosed)
         assert(txnTables.size == 2)
+        assert(table.version() == "2")
 
         // check target table was scanned correctly
         val targetTxnTable = txnTables(tableNameAsString)
@@ -318,6 +321,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       assert(txn.currentState == Committed)
       assert(txn.isClosed)
       assert(txnTables.size == 2)
+      assert(table.version() == "2")
 
       // check target table was scanned correctly
       val targetTxnTable = txnTables(tableNameAsString)
@@ -1106,6 +1110,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       assert(txn.currentState == Committed)
       assert(txn.isClosed)
       assert(txnTables.size == 2)
+      assert(table.version() == "2")
 
       // check target table was scanned correctly
       val targetTxnTable = txnTables(tableNameAsString)
@@ -1177,6 +1182,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
         assert(txn.isClosed)
         // both target and source must have been read through the transaction catalog
         assert(txnTables.size == 2)
+        assert(table.version() == "2")
         assert(txnTables(sourceNameAsString).scanEvents.nonEmpty)
         assert(txnTables(tableNameAsString).scanEvents.nonEmpty)
 

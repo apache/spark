@@ -804,6 +804,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
     assert(txn.currentState == Committed)
     assert(txn.isClosed)
+    assert(table.version() == "2")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -830,6 +831,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     assert(txn.currentState == Committed)
     assert(txn.isClosed)
     assert(txnTables.size == 2)
+    assert(table.version() == "2")
 
     val sourceTxnTable = txnTables(sourceNameAsString)
     val expectedNumSourceScans = if (deltaDelete) 1 else 2
@@ -875,6 +877,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     assert(txn.currentState == Committed)
     assert(txn.isClosed)
     assert(txnTables.size == 2)
+    assert(table.version() == "2")
 
     val targetTxnTable = txnTables(tableNameAsString)
     val expectedNumTargetScans = if (deltaDelete) 1 else 2
@@ -920,6 +923,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       assert(txn.currentState == Committed)
       assert(txn.isClosed)
       assert(txnTables.size == 2)
+      assert(table.version() == "2")
 
       val targetTxnTable = txnTables(tableNameAsString)
       val expectedNumTargetScans = if (deltaDelete) 1 else 2

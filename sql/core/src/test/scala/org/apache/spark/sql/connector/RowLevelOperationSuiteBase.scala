@@ -134,6 +134,14 @@ abstract class RowLevelOperationSuiteBase
     }
   }
 
+  // executes an operation and keeps the executed plan
+  protected def executeAndKeepPlan(func: => Unit): SparkPlan = {
+    withQueryExecutionsCaptured(spark)(func) match {
+      case Seq(qe) => stripAQEPlan(qe.executedPlan)
+      case other => fail(s"expected only one query execution, but got ${other.size}")
+    }
+  }
+
   protected def executeTransaction(func: => Unit): (Txn, Map[String, TxnTable]) = {
     val tables = withQueryExecutionsCaptured(spark)(func).flatMap { qe =>
       collectWithSubqueries(qe.executedPlan) {
@@ -149,14 +157,6 @@ abstract class RowLevelOperationSuiteBase
       case (name, sameNameTables) =>
         val Seq(table) = sameNameTables.distinct
         name -> table
-    }
-  }
-
-  // executes an operation and keeps the executed plan
-  protected def executeAndKeepPlan(func: => Unit): SparkPlan = {
-    withQueryExecutionsCaptured(spark)(func) match {
-      case Seq(qe) => stripAQEPlan(qe.executedPlan)
-      case other => fail(s"expected only one query execution, but got ${other.size}")
     }
   }
 
