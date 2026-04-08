@@ -123,7 +123,7 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
           case _ => false
         }
       case r: DataSourceV2Relation if r.autoSchemaEvolution =>
-        // If a source reports capability [[TableCapability.AUTOMATIC_SCHEMA_EVOLUTION]] but
+        // If a table reports capability [[TableCapability.AUTOMATIC_SCHEMA_EVOLUTION]] but
         // doesn't implement [[SupportsSchemaEvolution]], attempt to apply all changes.
         candidateChanges
       case _ =>
