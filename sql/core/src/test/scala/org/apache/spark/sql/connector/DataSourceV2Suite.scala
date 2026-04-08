@@ -1312,6 +1312,42 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     assert(scanRelation1.canonicalized == scanRelation2.canonicalized,
       "Canonicalized instances with equivalent pushedFilters should be equal")
   }
+
+  test("pushedFilters excludes non-deterministic filters") {
+    val df = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
+    // i > 3 is pushable and deterministic; rand() > 0.5 is non-deterministic and not pushable.
+    // Before the fix, ExpressionSet.contains would miss the non-deterministic filter,
+    // causing it to incorrectly appear in pushedFilterExpressions.
+    val q = df.filter($"i" > 3 && rand() > 0.5)
+
+    val scanRelation = getScanRelation(q)
+    // pushedFilters should only contain the deterministic pushed filter (i > 3).
+    assert(scanRelation.pushedFilters.nonEmpty,
+      "pushedFilters should contain the deterministic pushed filter")
+    assert(scanRelation.pushedFilters.forall(_.deterministic),
+      "pushedFilters should not contain non-deterministic filters")
+    val referencedCols = scanRelation.pushedFilters.flatMap(_.references.map(_.name)).toSet
+    assert(referencedCols.contains("i"),
+      "pushedFilters should contain the pushed filter on column i")
+  }
+
+  test("pushedFilters drops filters referencing pruned columns") {
+    // Disable constraint propagation so IsNotNull(i) is not added (it would keep
+    // column i in the scan output). This simulates a connector that pushes IsNotNull.
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      val df = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
+      // i > 3 is fully pushed; selecting only j causes column pruning to drop i.
+      val q = df.filter($"i" > 3).select($"j")
+      checkAnswer(q, (4 until 10).map(i => Row(-i)))
+
+      val scanRelation = getScanRelation(q)
+      assert(!scanRelation.output.exists(_.name == "i"),
+        "column i should be pruned from scan output")
+      assert(scanRelation.pushedFilters.isEmpty,
+        "pushedFilters should drop filters referencing pruned columns")
+    }
+  }
+
 }
 
 case class RangeInputPartition(start: Int, end: Int) extends InputPartition

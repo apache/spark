@@ -99,8 +99,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // down (i.e., not in postScanFilters). These are stored on the scan relation for
       // potential future use in constraint propagation.
       val postScanFilterSet = ExpressionSet(postScanFiltersWithoutSubquery)
-      sHolder.pushedFilterExpressions =
-        normalizedFiltersWithoutSubquery.filterNot(postScanFilterSet.contains)
+      sHolder.pushedFilterExpressions = normalizedFiltersWithoutSubquery
+        .filterNot(postScanFilterSet.contains)
+        .filter(_.deterministic)
 
       logInfo(
         log"""
@@ -806,13 +807,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         case projectionOverSchema(newExpr) => newExpr
       }
 
-      // Remap pushed filter attributes to the pruned output schema. Note: if a pushed filter
-      // references a column that was pruned from the output (e.g., SELECT j WHERE i > 3 with
-      // i > 3 fully pushed), projectionFunc cannot remap the reference and it becomes stale.
-      // This is acceptable while pushedFilters is informational only. When validConstraints is
-      // wired up to expose pushedFilters, this must be addressed -- either by including
-      // pushed-filter columns in the pruned output or by dropping filters with stale references.
+      // Remap pushed filter attributes to the pruned output schema and drop filters
+      // whose references are no longer in the pruned output.
       val remappedPushedFilters = sHolder.pushedFilterExpressions.map(projectionFunc)
+        .filter(_.references.subsetOf(AttributeSet(output)))
       val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output,
         pushedFilters = remappedPushedFilters)
 
