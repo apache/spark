@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.connector
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.Committed
+import org.apache.spark.sql.connector.catalog.{Aborted, Committed}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
+import org.apache.spark.sql.sources
 
 class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
 
@@ -88,7 +91,8 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
         Row(4, 400, "finance")))
   }
 
-  test("SQL INSERT OVERWRITE with transactional checks") {
+  for (isDynamic <- Seq(false, true))
+  test(s"SQL INSERT OVERWRITE with transactional checks - isDynamic: $isDynamic") {
     // create table with initial data; table is partitioned by dep
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
@@ -96,12 +100,22 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
         |{ "pk": 3, "salary": 300, "dep": "hr" }
         |""".stripMargin)
 
-    // INSERT OVERWRITE with static partition predicate -> OverwriteByExpression
-    val (txn, _) = executeTransaction {
-      sql(s"""INSERT OVERWRITE $tableNameAsString
-             |PARTITION (dep = 'hr')
-             |SELECT pk + 10, salary FROM $tableNameAsString WHERE dep = 'hr'
-             |""".stripMargin)
+    val insertOverwrite = if (isDynamic) {
+      // OverwritePartitionsDynamic
+      s"""INSERT OVERWRITE $tableNameAsString
+         |SELECT pk + 10, salary, dep FROM $tableNameAsString WHERE dep = 'hr'
+         |""".stripMargin
+    } else {
+      // OverwriteByExpression
+      s"""INSERT OVERWRITE $tableNameAsString
+         |PARTITION (dep = 'hr')
+         |SELECT pk + 10, salary FROM $tableNameAsString WHERE dep = 'hr'
+         |""".stripMargin
+    }
+
+    val confValue = if (isDynamic) PartitionOverwriteMode.DYNAMIC else PartitionOverwriteMode.STATIC
+    val (txn, _) = withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> confValue.toString) {
+      executeTransaction { sql(insertOverwrite) }
     }
 
     assert(txn.currentState == Committed)
@@ -114,35 +128,6 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
         Row(2, 200, "software"),  // unchanged
         Row(11, 100, "hr"),       // overwritten
         Row(13, 300, "hr")))      // overwritten
-  }
-
-  test("SQL INSERT OVERWRITE dynamic partition with transactional checks") {
-    // create table with initial data; table is partitioned by dep
-    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
-      """{ "pk": 1, "salary": 100, "dep": "hr" }
-        |{ "pk": 2, "salary": 200, "dep": "software" }
-        |{ "pk": 3, "salary": 300, "dep": "hr" }
-        |""".stripMargin)
-
-    // INSERT OVERWRITE with dynamic partitioning -> OverwritePartitionsDynamic
-    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> "dynamic") {
-      val (txn, _) = executeTransaction {
-        sql(s"""INSERT OVERWRITE $tableNameAsString
-               |SELECT pk + 10, salary, dep FROM $tableNameAsString WHERE dep = 'hr'
-               |""".stripMargin)
-      }
-
-      assert(txn.currentState == Committed)
-      assert(txn.isClosed)
-      assert(table.version() == "2")
-
-      checkAnswer(
-        sql(s"SELECT * FROM $tableNameAsString"),
-        Seq(
-          Row(2, 200, "software"),  // unchanged (different partition)
-          Row(11, 100, "hr"),       // overwrote hr partition
-          Row(13, 300, "hr")))      // overwrote hr partition
-    }
   }
 
   test("writeTo overwrite with transactional checks") {
@@ -168,7 +153,7 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Seq(
-        Row(2, 200, "software"),  // unchanged (different partition)
+        Row(2, 200, "software"),  // unchanged
         Row(11, 999, "hr"),       // overwrote hr partition
         Row(12, 888, "hr")))      // overwrote hr partition
   }
@@ -196,7 +181,7 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Seq(
-        Row(2, 200, "software"),  // unchanged (different partition)
+        Row(2, 200, "software"),  // unchanged
         Row(11, 999, "hr"),       // overwrote hr partition
         Row(12, 888, "hr")))      // overwrote hr partition
   }
@@ -231,5 +216,153 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
         Row(3, 300, "hr"),
         Row(11, 100, "hr"), // inserted from pk=1
         Row(13, 300, "hr"))) // inserted from pk=3
+  }
+
+  test("SQL INSERT INTO SELECT with subquery on source table and transactional checks") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
+    sql(s"INSERT INTO $sourceNameAsString VALUES (1, 500, 'hr'), (3, 600, 'software')")
+
+    // INSERT using a subquery that reads from the target to filter source rows
+    // both tables are scanned through the transaction catalog
+    val (txn, txnTables) = executeTransaction {
+      sql(
+        s"""INSERT INTO $tableNameAsString
+           |SELECT pk + 10, salary, dep FROM $sourceNameAsString
+           |WHERE pk IN (SELECT pk FROM $tableNameAsString WHERE dep = 'hr')
+           |""".stripMargin)
+    }
+
+    assert(txn.currentState == Committed)
+    assert(txn.isClosed)
+    assert(txnTables.size == 2)
+    assert(table.version() == "2")
+
+    // target was scanned via the transaction catalog (IN subquery)
+    val targetTxnTable = txnTables(tableNameAsString)
+    assert(targetTxnTable.scanEvents.flatten.exists {
+      case sources.EqualTo("dep", "hr") => true
+      case _ => false
+    })
+
+    // source was scanned via the transaction catalog
+    assert(txnTables(sourceNameAsString).scanEvents.nonEmpty)
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 100, "hr"),
+        Row(2, 200, "software"),
+        Row(11, 500, "hr"))) // inserted: source pk=1 matched target hr row
+  }
+
+  test("SQL INSERT INTO SELECT with CTE and transactional checks") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
+    sql(s"INSERT INTO $sourceNameAsString VALUES (1, 500, 'hr'), (3, 600, 'software')")
+
+    // CTE reads from target; INSERT selects from source filtered by the CTE result
+    // both tables are scanned through the transaction catalog
+    val (txn, txnTables) = executeTransaction {
+      sql(
+        s"""WITH hr_pks AS (SELECT pk FROM $tableNameAsString WHERE dep = 'hr')
+           |INSERT INTO $tableNameAsString
+           |SELECT pk + 10, salary, dep FROM $sourceNameAsString
+           |WHERE pk IN (SELECT pk FROM hr_pks)
+           |""".stripMargin)
+    }
+
+    assert(txn.currentState == Committed)
+    assert(txn.isClosed)
+    assert(txnTables.size == 2)
+    assert(table.version() == "2")
+
+    // target was scanned via the transaction catalog (CTE)
+    val targetTxnTable = txnTables(tableNameAsString)
+    assert(targetTxnTable.scanEvents.flatten.exists {
+      case sources.EqualTo("dep", "hr") => true
+      case _ => false
+    })
+
+    // source was scanned via the transaction catalog
+    assert(txnTables(sourceNameAsString).scanEvents.nonEmpty)
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 100, "hr"),
+        Row(2, 200, "software"),
+        Row(11, 500, "hr"))) // inserted: source pk=1 matched target hr row via CTE
+  }
+
+  test("SQL INSERT with analysis failure and transactional checks") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    val e = intercept[AnalysisException] {
+      sql(s"INSERT INTO $tableNameAsString SELECT nonexistent_col FROM $tableNameAsString")
+    }
+
+    assert(e.getMessage.contains("nonexistent_col"))
+    assert(catalog.lastTransaction.currentState == Aborted)
+    assert(catalog.lastTransaction.isClosed)
+  }
+
+  for (isDynamic <- Seq(false, true))
+  test(s"SQL INSERT OVERWRITE with analysis failure and transactional checks" +
+      s"isDynamic: $isDynamic") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    val insertOverwrite = if (isDynamic) {
+      s"""INSERT OVERWRITE $tableNameAsString
+         |SELECT nonexistent_col, salary, dep FROM $tableNameAsString WHERE dep = 'hr'
+         |""".stripMargin
+    } else {
+      s"""INSERT OVERWRITE $tableNameAsString
+         |PARTITION (dep = 'hr')
+         |SELECT nonexistent_col FROM $tableNameAsString WHERE dep = 'hr'
+         |""".stripMargin
+    }
+
+    val confValue = if (isDynamic) PartitionOverwriteMode.DYNAMIC else PartitionOverwriteMode.STATIC
+    val e = withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> confValue.toString) {
+      intercept[AnalysisException] { sql(insertOverwrite) }
+    }
+
+    assert(e.getMessage.contains("nonexistent_col"))
+    assert(catalog.lastTransaction.currentState == Aborted)
+    assert(catalog.lastTransaction.isClosed)
+  }
+
+  test("EXPLAIN INSERT SQL with transactional checks") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    sql(s"EXPLAIN INSERT INTO $tableNameAsString VALUES (3, 300, 'hr')")
+
+    // EXPLAIN should not start a transaction
+    assert(catalog.transaction === null)
+
+    // INSERT was not executed; data is unchanged
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 100, "hr"),
+        Row(2, 200, "software")))
   }
 }
