@@ -478,7 +478,7 @@ class DataSourceV2EnhancedPartitionFilterSuite
   }
 
   test("two partition predicates pushed: UDF on p1 and " +
-    "extracted filter on p2 from mixed OR") {
+    "extracted filter on p2 from mixed data and partition references") {
     withTable(partFilterTableName) {
       sql(s"CREATE TABLE $partFilterTableName (p1 string, p2 string, data string) " +
         s"USING $v2Source PARTITIONED BY (p1, p2)")
@@ -492,9 +492,8 @@ class DataSourceV2EnhancedPartitionFilterSuite
       spark.udf.register("my_upper_multi", (s: String) =>
         if (s == null) null else s.toUpperCase(Locale.ROOT))
 
-      // my_upper_multi(p1) = 'A' is untranslatable and partition-only, so it is
-      // a partition filter. The OR mixes p2 and data; extractPredicatesWithinOutputSet
-      // infers (p2 = 'x' OR p2 = 'y') as an additional partition filter.
+      // my_upper_multi(p1) = 'A' is untranslatable and partition-only, so it is a partition filter.
+      // The OR mixes p2 and data; we infer (p2 = 'x' OR p2 = 'y') as a partition filter.
       // Both are pushed as separate PartitionPredicates.
       val df = sql(s"SELECT * FROM $partFilterTableName WHERE " +
         "my_upper_multi(p1) = 'A' AND " +
@@ -506,7 +505,7 @@ class DataSourceV2EnhancedPartitionFilterSuite
   }
 
   test("nested partition: extract partition filter from " +
-    "OR with mixed references") {
+    "OR with mixed data and partition references") {
     withTable(partFilterTableName) {
       sql(s"CREATE TABLE $partFilterTableName " +
         s"(s struct<tz: string, x: int>, data string) USING $v2Source " +
@@ -526,7 +525,7 @@ class DataSourceV2EnhancedPartitionFilterSuite
   }
 
   test("nested partition: two partition predicates from " +
-    "UDF and extracted mixed OR") {
+    "UDF and extracted mixed data and partition references") {
     withTable(partFilterTableName) {
       sql(s"CREATE TABLE $partFilterTableName " +
         s"(s struct<tz: string, x: int>, data string) USING $v2Source " +
@@ -540,9 +539,9 @@ class DataSourceV2EnhancedPartitionFilterSuite
       spark.udf.register("my_upper_nested2", (s: String) =>
         if (s == null) null else s.toUpperCase(Locale.ROOT))
 
-      // my_upper_nested2(s.tz) = 'LA' is untranslatable and partition-only.
-      // The OR mixes s.tz and data; extractPredicatesWithinOutputSet
-      // infers (s.tz = 'LA' OR s.tz = 'la') as an additional partition filter.
+      // my_upper_nested2(s.tz) = 'LA' is untranslatable and partition-only,
+      // it is a partition filter.
+      // The OR mixes s.tz and data; we infer (s.tz = 'LA' OR s.tz = 'la') as an partition filter.
       // Both are pushed as separate PartitionPredicates.
       val df = sql(s"SELECT * FROM $partFilterTableName WHERE " +
         "my_upper_nested2(s.tz) = 'LA' AND " +
