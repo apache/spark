@@ -215,15 +215,20 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, sc: SparkContext
       parentPool = new Pool(poolName, DEFAULT_SCHEDULING_MODE,
         DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
       rootPool.addSchedulable(parentPool)
-      logWarning(log"A job was submitted with scheduler pool " +
-        log"${MDC(SCHEDULER_POOL_NAME, poolName)}, which has not been " +
-        log"configured. This can happen when the file that pools are read from isn't set, or " +
-        log"when that file doesn't contain ${MDC(POOL_NAME, poolName)}. " +
-        log"Created ${MDC(CREATED_POOL_NAME, poolName)} with default " +
-        log"configuration (schedulingMode: " +
-        log"${MDC(LogKeys.SCHEDULING_MODE, DEFAULT_SCHEDULING_MODE)}, " +
-        log"minShare: ${MDC(MIN_SHARE, DEFAULT_MINIMUM_SHARE)}, " +
-        log"weight: ${MDC(WEIGHT, DEFAULT_WEIGHT)}")
+      logWarning(
+        StructuredStreamingIdAwareSchedulerLogging.constructStreamingLogEntry(
+          properties,
+          log"A job was submitted with scheduler pool " +
+          log"${MDC(SCHEDULER_POOL_NAME, poolName)}, which has not been " +
+          log"configured. This can happen when the file that pools are read from isn't set, or " +
+          log"when that file doesn't contain ${MDC(POOL_NAME, poolName)}. " +
+          log"Created ${MDC(CREATED_POOL_NAME, poolName)} with default " +
+          log"configuration (schedulingMode: " +
+          log"${MDC(LogKeys.SCHEDULING_MODE, DEFAULT_SCHEDULING_MODE)}, " +
+          log"minShare: ${MDC(MIN_SHARE, DEFAULT_MINIMUM_SHARE)}, " +
+          log"weight: ${MDC(WEIGHT, DEFAULT_WEIGHT)}"
+        )
+      )
     }
     parentPool.addSchedulable(manager)
 
