@@ -678,6 +678,21 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         outputMode = Append)
   }
 
+  assertPassOnGlobalWatermarkLimit(
+    "streaming aggregation after stream-stream inner join in Update mode",
+    streamRelation.join(streamRelation, joinType = Inner,
+      condition = Some(attributeWithWatermark === attribute))
+      .groupBy("a")(count("*")),
+    outputMode = Update)
+
+  assertFailOnGlobalWatermarkLimit(
+    "streaming aggregation on both sides followed by stream-stream inner join in Update mode",
+    streamRelation.groupBy("a")(count("*")).join(
+      streamRelation.groupBy("a")(count("*")),
+      joinType = Inner,
+      condition = Some(attributeWithWatermark === attribute)),
+    outputMode = Update)
+
   // Cogroup: only batch-batch is allowed
   testBinaryOperationInStreamingPlan(
     "cogroup",
@@ -858,6 +873,26 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         null, att, att, Seq(att), Seq(att), att, null, Append,
         isMapGroupsWithState = false, null,
         Deduplicate(Seq(attribute), streamRelation)), outputMode = Append)
+
+    Seq(Append, Update).foreach { outputMode =>
+      assertPassOnGlobalWatermarkLimit(
+        s"stream-stream inner join with deduplicate on both sides " +
+          s"(with event-time) in ${outputMode} mode",
+        Deduplicate(Seq(attributeWithWatermark), streamRelation).join(
+          Deduplicate(Seq(attributeWithWatermark), streamRelation),
+          joinType = Inner,
+          condition = Some(attributeWithWatermark === attribute)),
+        outputMode = outputMode)
+
+      assertPassOnGlobalWatermarkLimit(
+        s"stream-stream inner join with deduplicate on both sides " +
+          s"(without event-time) in ${outputMode} mode",
+        Deduplicate(Seq(attribute), streamRelation).join(
+          Deduplicate(Seq(attribute), streamRelation),
+          joinType = Inner,
+          condition = Some(attributeWithWatermark === attribute)),
+        outputMode = outputMode)
+    }
   }
 
   /*
