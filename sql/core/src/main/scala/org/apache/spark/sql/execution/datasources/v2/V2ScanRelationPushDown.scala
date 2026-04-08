@@ -818,7 +818,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           sample.lowerBound,
           sample.upperBound,
           sample.withReplacement,
-          sample.seed)
+          sample.seed.getOrElse((math.random() * 1000).toLong))
         val pushed = PushDownUtils.pushTableSample(sHolder.builder, tableSample)
         if (pushed) {
           sHolder.pushedSample = Some(tableSample)

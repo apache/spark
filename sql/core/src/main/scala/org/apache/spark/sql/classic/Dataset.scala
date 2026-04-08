@@ -1943,11 +1943,18 @@ class Dataset[T] private[sql](
   override def sample(fraction: Double, seed: Long): Dataset[T] = super.sample(fraction, seed)
 
   /** @inheritdoc */
-  override def sample(fraction: Double): Dataset[T] = super.sample(fraction)
+  override def sample(fraction: Double): Dataset[T] = {
+    withSameTypedPlan {
+      Sample(0.0, fraction, withReplacement = false, None, logicalPlan)
+    }
+  }
 
   /** @inheritdoc */
-  override def sample(withReplacement: Boolean, fraction: Double): Dataset[T] =
-    super.sample(withReplacement, fraction)
+  override def sample(withReplacement: Boolean, fraction: Double): Dataset[T] = {
+    withSameTypedPlan {
+      Sample(0.0, fraction, withReplacement, None, logicalPlan)
+    }
+  }
 
   /** @inheritdoc */
   override def dropDuplicates(colNames: Array[String]): Dataset[T] = super.dropDuplicates(colNames)

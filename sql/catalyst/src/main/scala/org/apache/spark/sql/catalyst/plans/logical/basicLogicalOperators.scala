@@ -1912,6 +1912,22 @@ object SubqueryAlias {
   }
 }
 
+object Sample {
+  /**
+   * Convenience constructor that wraps a concrete seed in [[Some]].
+   * Use the case-class constructor directly with [[None]] when no seed
+   * was specified and a random seed should be generated at execution time.
+   */
+  def apply(
+      lowerBound: Double,
+      upperBound: Double,
+      withReplacement: Boolean,
+      seed: Long,
+      child: LogicalPlan): Sample = {
+    new Sample(lowerBound, upperBound, withReplacement, Some(seed), child)
+  }
+}
+
 /**
  * Sample the dataset.
  *
@@ -1919,14 +1935,16 @@ object SubqueryAlias {
  * @param upperBound Upper-bound of the sampling probability. The expected fraction sampled
  *                   will be ub - lb.
  * @param withReplacement Whether to sample with replacement.
- * @param seed the random seed
+ * @param seed the random seed. `Some(seed)` when the user explicitly specified a seed
+ *             (SQL `REPEATABLE` clause or programmatic API), `None` when no seed was
+ *             specified and a random seed should be generated at execution time.
  * @param child the LogicalPlan
  */
 case class Sample(
     lowerBound: Double,
     upperBound: Double,
     withReplacement: Boolean,
-    seed: Long,
+    seed: Option[Long],
     child: LogicalPlan) extends UnaryNode {
 
   val eps = RandomSampler.roundingEpsilon

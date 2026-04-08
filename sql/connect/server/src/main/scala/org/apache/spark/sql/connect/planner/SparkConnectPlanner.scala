@@ -454,7 +454,7 @@ class SparkConnectPlanner(
       rel.getLowerBound,
       rel.getUpperBound,
       rel.getWithReplacement,
-      if (rel.hasSeed) rel.getSeed else Utils.random.nextLong,
+      if (rel.hasSeed) Some(rel.getSeed) else None,
       plan)
   }
 

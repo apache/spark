@@ -2386,7 +2386,7 @@ class AstBuilder extends DataTypeAstBuilder
    */
   private def withSample(ctx: SampleContext, query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     // Create a sampled plan if we need one.
-    def sample(fraction: Double, seed: Long): Sample = {
+    def sample(fraction: Double, seed: Option[Long]): Sample = {
       // The range of fraction accepted by Sample is [0, 1]. Because Hive's block sampling
       // function takes X PERCENT as the input and the range of X is [0, 100], we need to
       // adjust the fraction.
@@ -2401,11 +2401,7 @@ class AstBuilder extends DataTypeAstBuilder
       throw QueryParsingErrors.emptyInputForTableSampleError(ctx)
     }
 
-    val seed = if (ctx.seed != null) {
-      ctx.seed.getText.toLong
-    } else {
-      (math.random() * 1000).toLong
-    }
+    val seed: Option[Long] = Option(ctx.seed).map(_.getText.toLong)
 
     ctx.sampleMethod() match {
       case ctx: SampleByRowsContext =>
