@@ -4423,11 +4423,11 @@ object SQLConf {
   val ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED =
     buildConf("spark.sql.execution.arrow.pythonUDF.columnarInput.enabled")
       .doc("When true, Arrow-based Python UDFs (pandas UDFs) can accept " +
-        "columnar input directly from DataSource V2 connectors that " +
-        "produce Arrow-backed ColumnarBatch, bypassing the " +
-        "ColumnarToRow and ArrowWriter conversion. This optimization " +
-        "reduces data transfer overhead between the JVM and Python " +
-        "worker processes.")
+        "columnar input directly from upstream operators that produce " +
+        "Arrow-backed ColumnarBatch (e.g., DataSource V2 connectors), " +
+        "bypassing the ColumnarToRow and ArrowWriter conversion. " +
+        "This optimization reduces data transfer overhead between " +
+        "the JVM and Python worker processes.")
       .version("4.2.0")
       .booleanConf
       .createWithDefault(true)
