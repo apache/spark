@@ -778,20 +778,31 @@ private class ColumnarBatchToArrowCachedBatchIterator(
     val arrowWriter = ArrowWriter.create(root)
     val unloader = new VectorUnloader(root, true, compressionCodec, true)
 
+    // Collect statistics inline during row iteration, same as InternalRowToArrow path
+    val statsCollectors: Array[ColumnStats] = schema.map { attr =>
+      ArrowCachedBatchSerializer.createColumnStats(attr.dataType)
+    }.toArray
+
     Utils.tryWithSafeFinally {
       val rowIterator = batch.rowIterator().asScala
       while (rowIterator.hasNext) {
         val row = rowIterator.next()
         arrowWriter.write(row)
+
+        // Collect statistics for this row inline
+        var i = 0
+        while (i < statsCollectors.length) {
+          statsCollectors(i).gatherStats(row, i)
+          i += 1
+        }
       }
       arrowWriter.finish()
 
       val recordBatch = unloader.getRecordBatch()
       Utils.tryWithSafeFinally {
         val arrowData = ArrowCachedBatchSerializer.serializeBatch(recordBatch)
-        // Collect statistics from Arrow vectors after conversion
-        // This avoids issues with columnar data in InternalRow format
-        val stats = ArrowCachedBatchSerializer.collectStatistics(root, schema)
+        val stats = ArrowCachedBatchSerializer.buildStatisticsFromCollectors(
+          statsCollectors, schema)
         ArrowCachedBatch(rowCount, arrowData, stats)
       } {
         recordBatch.close()
