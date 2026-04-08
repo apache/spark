@@ -37,7 +37,6 @@ import org.apache.spark.sql.catalyst.plans.logical.UnresolvedDataSource
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlOptions}
 import org.apache.spark.sql.classic.ClassicConversions._
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.json.JsonUtils.checkJsonSchema
@@ -158,22 +157,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
   @deprecated("Use json(Dataset[String]) instead.", "2.2.0")
   def json(jsonRDD: RDD[String]): DataFrame = {
     json(sparkSession.createDataset(jsonRDD)(Encoders.STRING))
-  }
-
-  /**
-   * Parses a [[sql.DataFrame]] containing JSON strings into a structured [[sql.DataFrame]].
-   * The first column of the input DataFrame must be of StringType.
-   */
-  def json(df: sql.DataFrame): sql.DataFrame = {
-    val fields = df.schema.fields
-    if (fields.isEmpty) {
-      throw QueryCompilationErrors.parseInputNotStringTypeError(
-        org.apache.spark.sql.types.NullType)
-    }
-    if (fields.head.dataType != org.apache.spark.sql.types.StringType) {
-      throw QueryCompilationErrors.parseInputNotStringTypeError(fields.head.dataType)
-    }
-    json(df.select(df.columns.head).as(Encoders.STRING))
   }
 
   /** @inheritdoc */

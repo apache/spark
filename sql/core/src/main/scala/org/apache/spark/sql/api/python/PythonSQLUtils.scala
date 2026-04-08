@@ -27,7 +27,7 @@ import org.apache.spark.api.python.DechunkedInputStream
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.CLASS_LOADER
 import org.apache.spark.security.SocketAuthServer
-import org.apache.spark.sql.{internal, Column, DataFrame, DataFrameReader, Row, SparkSession, TableArg}
+import org.apache.spark.sql.{internal, Column, DataFrame, DataFrameReader, Encoders, Row, SparkSession, TableArg}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.classic.{DataFrameReader => ClassicDataFrameReader}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.ExpressionUtils.expression
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.python.EvaluatePython
@@ -202,7 +203,16 @@ private[sql] object PythonSQLUtils extends Logging {
   def jsonFromDataFrame(
       reader: DataFrameReader,
       df: DataFrame): DataFrame = {
-    reader.asInstanceOf[ClassicDataFrameReader].json(df)
+    val classicReader = reader.asInstanceOf[ClassicDataFrameReader]
+    val fields = df.schema.fields
+    if (fields.isEmpty) {
+      throw QueryCompilationErrors.parseInputNotStringTypeError(
+        org.apache.spark.sql.types.NullType)
+    }
+    if (fields.head.dataType != org.apache.spark.sql.types.StringType) {
+      throw QueryCompilationErrors.parseInputNotStringTypeError(fields.head.dataType)
+    }
+    classicReader.json(df.select(df.columns.head).as(Encoders.STRING))
   }
 
   def cleanupPythonWorkerLogs(sessionUUID: String, sparkContext: SparkContext): Unit = {
