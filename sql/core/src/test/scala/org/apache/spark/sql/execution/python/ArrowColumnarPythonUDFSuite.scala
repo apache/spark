@@ -64,7 +64,8 @@ class ArrowColumnarPythonUDFSuite extends QueryTest with SharedSparkSession {
       // ProjectExec (which does not support columnar) between the
       // scan and ArrowEvalPythonExec.
       val result = df.selectExpr(
-        "id", "name", "value", "arrow_test_udf(id) as udf_id")
+        "id", "name", "value", "data",
+        "arrow_test_udf(id) as udf_id")
       val plan = result.queryExecution.executedPlan
 
       // ArrowEvalPythonExec should be present.
