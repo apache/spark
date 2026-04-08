@@ -159,6 +159,13 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         None
       }
 
+    // Handle String to Date cast: CAST(string_col AS DATE) = date_literal
+    // Transform to: string_col = CAST(date_literal AS STRING)
+    case be @ BinaryComparison(
+      Cast(fromExp, DateType, _, _), date @ Literal(value, DateType))
+        if fromExp.dataType == StringType && value != null =>
+      Some(unwrapStringToDate(be, fromExp, date))
+
     // As the analyzer makes sure that the list of In is already of the same data type, then the
     // rule can simply check the first literal in `in.list` can implicitly cast to `toType` or not,
     // and note that:
@@ -408,6 +415,28 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
           // null-safe equal comparison.
           FalseLiteral
         }
+      case _ => exp
+    }
+  }
+
+  /**
+   * Move the cast to the literal side for String to Date comparisons.
+   * Transform CAST(string_col AS DATE) op date_literal to
+   * string_col op CAST(date_literal AS STRING).
+   * This allows the comparison to be pushed down to data sources and avoids casting every row.
+   */
+  private def unwrapStringToDate(
+      exp: BinaryComparison,
+      fromExp: Expression,
+      date: Literal): Expression = {
+    val dateAsString = Cast(date, StringType)
+    exp match {
+      case _: GreaterThan => GreaterThan(fromExp, dateAsString)
+      case _: GreaterThanOrEqual => GreaterThanOrEqual(fromExp, dateAsString)
+      case _: EqualTo => EqualTo(fromExp, dateAsString)
+      case _: EqualNullSafe => EqualNullSafe(fromExp, dateAsString)
+      case _: LessThan => LessThan(fromExp, dateAsString)
+      case _: LessThanOrEqual => LessThanOrEqual(fromExp, dateAsString)
       case _ => exp
     }
   }
