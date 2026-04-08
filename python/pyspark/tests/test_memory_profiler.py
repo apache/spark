@@ -612,7 +612,7 @@ class MemoryProfiler2TestsMixin:
 class MemoryProfiler2Tests(MemoryProfiler2TestsMixin, ReusedSQLTestCase):
     def setUp(self) -> None:
         super().setUp()
-        self.spark._profiler_collector._accumulator._value = None
+        self.spark._profiler_collector._accumulator._value = {}
 
 
 if __name__ == "__main__":
