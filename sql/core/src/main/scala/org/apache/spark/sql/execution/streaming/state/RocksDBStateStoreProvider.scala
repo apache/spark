@@ -571,7 +571,7 @@ private[sql] class RocksDBStateStoreProvider
       val encodedEndKey = endKey.map(kvEncoder._1.encodeKey)
 
       val rowPair = new UnsafeRowPair()
-      val rocksDbIter = rocksDB.scan(encodedStartKey, encodedEndKey, colFamilyName)
+      val rocksDbIter = rocksDB.rangeScan(encodedStartKey, encodedEndKey, colFamilyName)
       val iter = rocksDbIter.map { kv =>
         rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
           kvEncoder._2.decodeValue(kv.value))
@@ -598,7 +598,7 @@ private[sql] class RocksDBStateStoreProvider
 
       val encodedStartKey = startKey.map(kvEncoder._1.encodeKey)
       val encodedEndKey = endKey.map(kvEncoder._1.encodeKey)
-      val rocksDbIter = rocksDB.scan(encodedStartKey, encodedEndKey, colFamilyName)
+      val rocksDbIter = rocksDB.rangeScan(encodedStartKey, encodedEndKey, colFamilyName)
 
       val rowPair = new UnsafeRowPair()
       val iter = rocksDbIter.flatMap { kv =>

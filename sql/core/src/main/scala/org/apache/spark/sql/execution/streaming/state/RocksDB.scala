@@ -1759,7 +1759,7 @@ class RocksDB(
    * @param cfName   The column family name.
    * @return An iterator of ByteArrayPairs in the given range.
    */
-  def scan(
+  def rangeScan(
       startKey: Option[Array[Byte]],
       endKey: Option[Array[Byte]],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): NextIterator[ByteArrayPair] = {

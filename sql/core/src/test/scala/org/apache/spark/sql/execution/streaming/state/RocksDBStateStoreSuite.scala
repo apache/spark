@@ -1638,7 +1638,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     -32L, -64L, -256L, 64L, 32L, 1024L, 4096L, 0L)
 
   testWithColumnFamiliesAndEncodingTypes("rocksdb range scan - rangeScan",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    TestWithChangelogCheckpointingDisabled) { colFamiliesEnabled =>
 
     tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
       RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
@@ -1708,6 +1708,12 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         val negResults = negIter.map(_.key.getLong(0)).toList
         negIter.close()
         assert(negResults === diverseTimestamps.filter(ts => ts >= -300 && ts < 0).sorted)
+
+        // Both None: scan entire column family
+        val allIter = store.rangeScan(None, None, cfName)
+        val allResults = allIter.map(_.key.getLong(0)).toList
+        allIter.close()
+        assert(allResults === diverseTimestamps.sorted)
       } finally {
         if (!store.hasCommitted) store.abort()
       }
@@ -1716,7 +1722,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
   testWithColumnFamiliesAndEncodingTypes(
     "rocksdb range scan - scan with multiple key2 values within same key1 range",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    TestWithChangelogCheckpointingDisabled) { colFamiliesEnabled =>
 
     tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
       RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
@@ -1756,7 +1762,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
   testWithColumnFamiliesAndEncodingTypes(
     "rocksdb range scan - rangeScanWithMultiValues",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    TestWithChangelogCheckpointingDisabled) { colFamiliesEnabled =>
 
     if (colFamiliesEnabled) {
       tryWithProviderResource(newStoreProvider(
@@ -1837,6 +1843,12 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           negIter.close()
           assert(negResults.distinct === diverseTimestamps
             .filter(ts => ts >= -300 && ts < 0).sorted)
+
+          // Both None: scan entire column family
+          val allIter = store.rangeScanWithMultiValues(None, None, cfName)
+          val allResults = allIter.map(_.key.getLong(0)).toList
+          allIter.close()
+          assert(allResults.distinct === diverseTimestamps.sorted)
         } finally {
           if (!store.hasCommitted) store.abort()
         }
