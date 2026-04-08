@@ -1185,7 +1185,7 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       sql(s"CREATE TABLE $t1 (id float, data string) USING $v2Format")
       doInsert(t1, Seq((1f, "a")).toDF("id", "data"))
       // Inserting a double into a float should widen the schema, inserting an int into a string
-      // should retain the int type.
+      // should retain the string type.
       doInsertWithSchemaEvolution(t1, Seq((2d, 3)).toDF("id", "data"))
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
