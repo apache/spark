@@ -100,7 +100,7 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
 
   /**
    * Computes the set of table changes needed to evolve `targetTable`'s schema
-   * to accommodate `originalSource` schema. Only returns schema changes that are supported by
+   * to accommodate the `originalSource` schema. Only returns schema changes that are supported by
    * `targetTable`. When `isByName` is true, fields are matched by name. When false, fields are
    * matched by position.
    */
