@@ -4429,6 +4429,7 @@ object SQLConf {
         "This optimization reduces data transfer overhead between " +
         "the JVM and Python worker processes.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
