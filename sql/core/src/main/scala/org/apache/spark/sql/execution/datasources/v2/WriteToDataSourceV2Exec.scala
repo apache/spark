@@ -725,10 +725,7 @@ case class DeltaWritingSparkTask(
       val operation = row.getInt(0)
 
       operation match {
-        // When representUpdateAsDeleteAndInsert is true, each logical update is split
-        // into a DELETE and a REINSERT. Count the DELETE as one updated row.
         case DELETE_OPERATION =>
-          numUpdatedRows.foreach(_.add(1L))
           rowIdProjection.project(row)
           writer.delete(null, rowIdProjection)
 
@@ -738,7 +735,10 @@ case class DeltaWritingSparkTask(
           rowIdProjection.project(row)
           writer.update(null, rowIdProjection, rowProjection)
 
+        // When representUpdateAsDeleteAndInsert is true, each logical update is split
+        // into a DELETE and a REINSERT. Count the REINSERT as one updated row.
         case REINSERT_OPERATION =>
+          numUpdatedRows.foreach(_.add(1L))
           rowProjection.project(row)
           writer.reinsert(null, rowProjection)
 
@@ -770,10 +770,7 @@ case class DeltaWithMetadataWritingSparkTask(
       val operation = row.getInt(0)
 
       operation match {
-        // When representUpdateAsDeleteAndInsert is true, each logical update is split
-        // into a DELETE and a REINSERT. Count the DELETE as one updated row.
         case DELETE_OPERATION =>
-          numUpdatedRows.foreach(_.add(1L))
           rowIdProjection.project(row)
           metadataProjection.project(row)
           writer.delete(metadataProjection, rowIdProjection)
@@ -785,7 +782,10 @@ case class DeltaWithMetadataWritingSparkTask(
           metadataProjection.project(row)
           writer.update(metadataProjection, rowIdProjection, rowProjection)
 
+        // When representUpdateAsDeleteAndInsert is true, each logical update is split
+        // into a DELETE and a REINSERT. Count the REINSERT as one updated row.
         case REINSERT_OPERATION =>
+          numUpdatedRows.foreach(_.add(1L))
           rowProjection.project(row)
           metadataProjection.project(row)
           writer.reinsert(metadataProjection, rowProjection)

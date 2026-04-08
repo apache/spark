@@ -35,6 +35,11 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 object RewriteUpdateTable extends RewriteRowLevelCommand {
 
+  /**
+   * A boolean column added to ReplaceData plans to distinguish updated rows from copied rows.
+   * The writing task reads this column to increment operation metrics and strip it before passing
+   * data to the writer.
+   */
   private[sql] final val IS_UPDATED_COLUMN: String = "__is_updated"
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
@@ -107,13 +112,12 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // build a plan that contains unmatched rows in matched groups that must be copied over
     val remainingRowFilter = Not(EqualNullSafe(cond, Literal.TrueLiteral))
-    val remainingRowsPlan = Filter(remainingRowFilter, readRelation)
-    val remainingRowsPlanWithFlag = Project(
-      remainingRowsPlan.output :+ Alias(FalseLiteral, IS_UPDATED_COLUMN)(),
-      remainingRowsPlan)
+    val remainingRowsPlan = Project(
+      Alias(FalseLiteral, IS_UPDATED_COLUMN)() +: readRelation.output,
+      Filter(remainingRowFilter, readRelation))
 
     // the new state is a union of updated and copied over records
-    val updatedAndRemainingRowsPlan = Union(updatedRowsPlan, remainingRowsPlanWithFlag)
+    val updatedAndRemainingRowsPlan = Union(updatedRowsPlan, remainingRowsPlan)
 
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
@@ -150,7 +154,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // add a boolean column to indicate whether each row was updated or copied over
     val isUpdatedCol = Alias(EqualNullSafe(cond, TrueLiteral), IS_UPDATED_COLUMN)()
-    Project(updatedValues :+ isUpdatedCol, plan)
+    Project(isUpdatedCol +: updatedValues, plan)
   }
 
   // build a rewrite plan for sources that support row deltas
