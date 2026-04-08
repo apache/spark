@@ -559,7 +559,8 @@ class SparkContext:
         --------
         >>> sc.setLogLevel("WARN")  # doctest :+SKIP
 
-        .. connect_migration:: Replace sc.setLogLevel(level) with spark.log.level(level)
+        .. connect_migration:: Replace sc.setLogLevel(level) with
+            spark.conf.set("spark.log.level", level)
         """
         self._jsc.setLogLevel(logLevel)
 
@@ -681,7 +682,8 @@ class SparkContext:
         True
 
         .. connect_migration:: Replace spark.sparkContext.defaultParallelism with
-            int(spark.conf.get("spark.default.parallelism", "200"))
+            int(spark.conf.get("spark.default.parallelism")) if set, otherwise
+            the default depends on the cluster executor configuration.
         """
         return self._jsc.sc().defaultParallelism()
 
@@ -2227,8 +2229,9 @@ class SparkContext:
         Cancelled
 
         .. connect_migration:: Replace sc.setJobGroup(groupId, desc) with
-            spark.conf.set("spark.job.group.id", groupId) and
-            spark.conf.set("spark.job.description", desc)
+            spark.addTag(groupId) for grouping and cancellation via
+            spark.interruptTag(groupId). Job description and interruptOnCancel
+            are not directly supported in Spark Connect.
         """
         self._jsc.setJobGroup(groupId, description, interruptOnCancel)
 
@@ -2429,7 +2432,9 @@ class SparkContext:
         local inheritance.
 
         .. connect_migration:: Replace spark.sparkContext.setLocalProperty(key, value) with
-            spark.conf.set(key, value)
+            spark.conf.set(key, value) for SQL configuration keys. Note that
+            spark.conf.set is session-global; thread-local isolation is not
+            supported in Spark Connect.
         """
         self._jsc.setLocalProperty(key, value)
 

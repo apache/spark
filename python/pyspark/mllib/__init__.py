@@ -23,7 +23,10 @@ migration to the DataFrame-based APIs under the `pyspark.ml` package.
 
 .. classic:: true
 
-.. connect_migration:: Migrate to pyspark.ml.connect
+.. connect_migration:: Migrate to pyspark.ml.connect where supported (classification,
+    evaluation, feature, pipeline, summarizer, tuning). Modules without a Connect
+    equivalent (clustering, fpm, linalg, random, recommendation, regression, stat,
+    tree) have no direct replacement.
 """
 
 # MLlib currently needs NumPy 1.4+, so complain if lower

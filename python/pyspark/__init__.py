@@ -45,20 +45,6 @@ Public classes:
   - :class:`InheritableThread`:
       A inheritable thread to use in Spark when the pinned thread mode is on.
 
-Spark Connect compatibility annotations
-=======================================
-
-The following RST directives annotate PySpark modules, classes, and methods with
-their Spark Connect compatibility status:
-
-- ``.. classic:: true`` -- the API is only available in Classic Spark (not Spark Connect).
-- ``.. connect:: true`` -- the API is available in Spark Connect.
-- ``.. connect_migration:: <message>`` -- migration guidance for users transitioning
-  from Classic Spark to Spark Connect.
-
-Annotations are resolved by inheriting from the nearest annotated ancestor. A child
-annotation overrides the parent's.
-
 .. classic:: true
 .. connect:: true
 """

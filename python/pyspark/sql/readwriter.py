@@ -435,9 +435,11 @@ class DataFrameReader(OptionUtils):
         | Bob| 30|
         +----+---+
 
-        .. connect_migration:: Does not support RDD arguments in Spark Connect. Collect the
-            data first: rows = [Row(**json_dict) for json_dict in json_data] then
-            df = spark.createDataFrame(rows).
+        .. connect_migration:: Does not support RDD arguments in Spark Connect. For a list
+            of JSON strings, parse them first: import json;
+            spark.createDataFrame([json.loads(s) for s in json_strings]).
+            Alternatively, write the strings to a file path and use
+            spark.read.json(path).
         """
         self._set_opts(
             schema=schema,
