@@ -80,3 +80,5 @@ DO NOT push to the upstream repo. Always push to the personal fork. Open PRs aga
 DO NOT force push or use `--amend` on pushed commits unless the user explicitly asks. If the remote branch has new commits, fetch and rebase before pushing.
 
 Always get user approval before external operations such as pushing commits, creating PRs, or posting comments. Use `gh pr create` to open PRs. If `gh` is not installed, generate the GitHub PR URL for the user and recommend installing the GitHub CLI.
+
+To check CI failures on a PR, find the "Report test results" check run which aggregates all test failures as annotations. Use `gh api repos/{owner}/{repo}/check-runs/{id}/annotations` to fetch them. Do not download full job logs to search for failures.
