@@ -185,8 +185,10 @@ run() {
 
   # If MAVEN_MIRROR_URL is set, generate a repositories config so the SBT launcher
   # resolves SBT and Scala through the mirror during the boot phase.
-  if [[ -n "$MAVEN_MIRROR_URL" ]]; then
+  # Skip if the user already configured -Dsbt.repository.config.
+  if [[ -n "$MAVEN_MIRROR_URL" && ! "$SBT_OPTS" =~ sbt\.repository\.config ]]; then
     local sbt_repo_config="$(mktemp /tmp/sbt-repositories.XXXXXX)"
+    trap "rm -f '$sbt_repo_config'" EXIT
     cat > "$sbt_repo_config" <<EOF
 [repositories]
   local
