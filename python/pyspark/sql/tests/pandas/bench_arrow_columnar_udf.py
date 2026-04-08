@@ -49,7 +49,6 @@ import pandas as pd
 
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import pandas_udf, col
-from pyspark.sql.types import DoubleType
 
 
 ARROW_SOURCE = "org.apache.spark.sql.execution.python.ArrowBackedDataSourceV2"
