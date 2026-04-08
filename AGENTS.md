@@ -71,6 +71,25 @@ Run a single test case:
 
     python/run-tests --testnames "pyspark.sql.tests.test_catalog CatalogTests.test_current_database"
 
+## Investigating PR CI Failures
+
+Do NOT download full job logs to grep for errors — they are very large and slow. Instead, use the test report annotations on the fork.
+
+Step 1 — Get the fork owner and the latest commit SHA of the PR:
+
+    gh api repos/apache/spark/pulls/<PR_NUMBER> --jq '{owner: .head.repo.owner.login, sha: .head.sha}'
+
+Step 2 — Find the "Report test results" check run on the fork's commit:
+
+    gh api repos/<OWNER>/spark/commits/<SHA>/check-runs \
+      --jq '.check_runs[] | select(.name == "Report test results") | {id: .id, annotations: .output.annotations_count}'
+
+Step 3 — Fetch failure annotations:
+
+    gh api repos/<OWNER>/spark/check-runs/<CHECK_RUN_ID>/annotations
+
+Each annotation contains the test class, test name, and failure message.
+
 ## Pull Request Workflow
 
 PR title requires a JIRA ticket ID (e.g., `[SPARK-xxxx][SQL] Title`). Ask the user to create a new ticket or provide an existing one if not given. Before writing the PR description, read `.github/PULL_REQUEST_TEMPLATE` and fill in every section from that file.
@@ -80,5 +99,3 @@ DO NOT push to the upstream repo. Always push to the personal fork. Open PRs aga
 DO NOT force push or use `--amend` on pushed commits unless the user explicitly asks. If the remote branch has new commits, fetch and rebase before pushing.
 
 Always get user approval before external operations such as pushing commits, creating PRs, or posting comments. Use `gh pr create` to open PRs. If `gh` is not installed, generate the GitHub PR URL for the user and recommend installing the GitHub CLI.
-
-To check CI failures on a PR, find the "Report test results" check run which aggregates all test failures as annotations. Use `gh api repos/{owner}/{repo}/check-runs/{id}/annotations` to fetch them. Do not download full job logs to search for failures.
