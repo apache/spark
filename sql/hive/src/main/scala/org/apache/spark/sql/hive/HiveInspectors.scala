@@ -1148,9 +1148,7 @@ private[hive] trait HiveInspectors {
       case d: DecimalType => decimalTypeInfo(d)
       case DateType => dateTypeInfo
       case TimestampType => timestampTypeInfo
-      case TimeType =>
-        throw new AnalysisException(
-          s"Type ${TimeType.catalogString} is not supported in Hive-compatible tables.")
+      case TimeType => longTypeInfo  // Store TIME as BIGINT (microseconds since midnight)
       case NullType => voidTypeInfo
       case _: DayTimeIntervalType => intervalDayTimeTypeInfo
       case _: YearMonthIntervalType => intervalYearMonthTypeInfo

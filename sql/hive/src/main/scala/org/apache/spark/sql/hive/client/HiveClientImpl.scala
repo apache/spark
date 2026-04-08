@@ -1053,9 +1053,16 @@ private[hive] object HiveClientImpl extends Logging {
     // When reading data in parquet, orc, or avro file format with string type for char,
     // the tailing spaces may lost if we are not going to pad it.
     val typeString = if (SQLConf.get.charVarcharAsString) {
-      c.dataType.catalogString
+      c.dataType match {
+        case TimeType => "bigint"  // TIME is stored as BIGINT in Hive
+        case _ => c.dataType.catalogString
+      }
     } else {
-      CharVarcharUtils.getRawTypeString(c.metadata).getOrElse(c.dataType.catalogString)
+      CharVarcharUtils.getRawTypeString(c.metadata).getOrElse(
+        c.dataType match {
+          case TimeType => "bigint"  // TIME is stored as BIGINT in Hive
+          case _ => c.dataType.catalogString
+        })
     }
     new FieldSchema(c.name, typeString, c.getComment().orNull)
   }

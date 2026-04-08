@@ -40,7 +40,6 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -49,7 +48,7 @@ import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.types.{AnsiIntervalType, ArrayType, DataType}
-import org.apache.spark.sql.types.{MapType, StructType, TimestampNTZType, TimeType}
+import org.apache.spark.sql.types.{LongType, MapType, StructType, TimestampNTZType, TimeType}
 
 /**
  * A persistent implementation of the system catalog using Hive.
@@ -825,7 +824,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       val partColumnNames = getPartitionColumnsFromTableProperties(table)
       val reorderedSchema = reorderSchema(schema = schemaFromTableProps, partColumnNames)
 
-      if (DataTypeUtils.equalsIgnoreCaseAndNullability(reorderedSchema, table.schema) ||
+      if (equalsIgnoreCaseAndNullabilityForHive(reorderedSchema, table.schema) ||
           options.respectSparkSchema) {
         hiveTable.copy(
           schema = reorderedSchema,
@@ -852,6 +851,34 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     CatalogTable.readLargeTableProp(tableProperties, DATASOURCE_SCHEMA).map { schemaJson =>
       val parsed = DataType.fromJson(schemaJson).asInstanceOf[StructType]
       CharVarcharUtils.getRawSchema(parsed)
+    }
+  }
+
+  /**
+   * Compares two types for Hive tables, treating TIME and BIGINT as equivalent since
+   * TIME is stored as BIGINT in Hive metastore.
+   */
+  private def equalsIgnoreCaseAndNullabilityForHive(from: DataType, to: DataType): Boolean = {
+    (from, to) match {
+      // TIME is stored as BIGINT in Hive, so treat them as equivalent
+      case (TimeType, LongType) => true
+      case (LongType, TimeType) => true
+
+      case (ArrayType(fromElement, _), ArrayType(toElement, _)) =>
+        equalsIgnoreCaseAndNullabilityForHive(fromElement, toElement)
+
+      case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, _)) =>
+        equalsIgnoreCaseAndNullabilityForHive(fromKey, toKey) &&
+          equalsIgnoreCaseAndNullabilityForHive(fromValue, toValue)
+
+      case (StructType(fromFields), StructType(toFields)) =>
+        fromFields.length == toFields.length &&
+          fromFields.zip(toFields).forall { case (l, r) =>
+            l.name.equalsIgnoreCase(r.name) &&
+              equalsIgnoreCaseAndNullabilityForHive(l.dataType, r.dataType)
+          }
+
+      case (fromDataType, toDataType) => fromDataType == toDataType
     }
   }
 

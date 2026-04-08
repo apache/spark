@@ -326,6 +326,7 @@ object Cast extends QueryErrorsBase {
     case (_: AtomicType, StringType) => true
     case (_: CalendarIntervalType, StringType) => true
     case (_: DatetimeType, _: DatetimeType) => true
+    case (StringType, TimeType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       resolvableNullability(fn, tn) && canANSIStoreAssign(fromType, toType)
