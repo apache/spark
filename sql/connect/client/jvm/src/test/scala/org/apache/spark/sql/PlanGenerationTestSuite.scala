@@ -377,6 +377,13 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
       .csv(session.emptyDataset(StringEncoder))
   }
 
+  test("xml from dataset") {
+    session.read
+      .schema(new StructType().add("c1", StringType).add("c2", IntegerType))
+      .option("rowTag", "ROW")
+      .xml(session.emptyDataset(StringEncoder))
+  }
+
   test("read parquet") {
     session.read.parquet(testDataPath.resolve("users.parquet").toString)
   }

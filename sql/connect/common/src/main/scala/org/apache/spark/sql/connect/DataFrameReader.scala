@@ -170,7 +170,7 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends sql.Data
 
   /** @inheritdoc */
   def xml(xmlDataset: sql.Dataset[String]): DataFrame =
-    parse(xmlDataset, ParseFormat.PARSE_FORMAT_UNSPECIFIED)
+    parse(xmlDataset, ParseFormat.PARSE_FORMAT_XML)
 
   /** @inheritdoc */
   override def parquet(path: String): DataFrame = super.parquet(path)

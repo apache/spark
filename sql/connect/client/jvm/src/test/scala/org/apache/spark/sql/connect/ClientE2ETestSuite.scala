@@ -1274,6 +1274,38 @@ class ClientE2ETestSuite
     assert(message.contains("PARSE_SYNTAX_ERROR"))
   }
 
+  test("xml from Dataset[String] inferSchema") {
+    val session = spark
+    import session.implicits._
+    val expected = Seq(
+      new GenericRowWithSchema(
+        Array("Ford", "E350", 1997),
+        new StructType()
+          .add("make", StringType)
+          .add("model", StringType)
+          .add("year", LongType)))
+    val ds = Seq("<ROW><year>1997</year><make>Ford</make><model>E350</model></ROW>").toDS()
+    val result = spark.read.option("rowTag", "ROW").xml(ds)
+    checkSameResult(expected, result)
+  }
+
+  test("xml from Dataset[String] with schema") {
+    val session = spark
+    import session.implicits._
+    val schema = new StructType().add("make", StringType).add("model", StringType)
+    val expected = Seq(new GenericRowWithSchema(Array("Ford", "E350"), schema))
+    val ds = Seq("<ROW><year>1997</year><make>Ford</make><model>E350</model></ROW>").toDS()
+    val result = spark.read.schema(schema).option("rowTag", "ROW").xml(ds)
+    checkSameResult(expected, result)
+  }
+
+  test("xml from Dataset[String] with invalid schema") {
+    val message = intercept[ParseException] {
+      spark.read.schema("123").xml(spark.createDataset(Seq.empty[String])(StringEncoder))
+    }.getMessage
+    assert(message.contains("PARSE_SYNTAX_ERROR"))
+  }
+
   test("Dataset result destructive iterator") {
     // Helper methods for accessing private field `idxToBatches` from SparkResult
     val getResultMap =
