@@ -49,6 +49,15 @@ private[scheduler] trait StructuredStreamingIdAwareSchedulerLogging extends Logg
       StructuredStreamingIdAwareSchedulerLogging.constructStreamingLogEntry(properties, entry))
   }
 
+  override protected def logInfo(msg: => String, t: Throwable): Unit =
+    super.logInfo(
+      StructuredStreamingIdAwareSchedulerLogging.constructStreamingLogEntry(properties, msg), t)
+
+  override protected def logInfo(entry: LogEntry, t: Throwable): Unit = {
+    super.logInfo(
+      StructuredStreamingIdAwareSchedulerLogging.constructStreamingLogEntry(properties, entry), t)
+  }
+
   override protected def logWarning(msg: => String): Unit =
     super.logWarning(
       StructuredStreamingIdAwareSchedulerLogging.constructStreamingLogEntry(properties, msg))
@@ -76,6 +85,15 @@ private[scheduler] trait StructuredStreamingIdAwareSchedulerLogging extends Logg
       StructuredStreamingIdAwareSchedulerLogging.constructStreamingLogEntry(properties, entry))
   }
 
+  override protected def logDebug(msg: => String, t: Throwable): Unit =
+    super.logDebug(
+      StructuredStreamingIdAwareSchedulerLogging.constructStreamingLogEntry(properties, msg), t)
+
+  override protected def logDebug(entry: LogEntry, t: Throwable): Unit = {
+    super.logDebug(
+      StructuredStreamingIdAwareSchedulerLogging.constructStreamingLogEntry(properties, entry), t)
+  }
+
   override protected def logError(msg: => String): Unit =
     super.logError(
       StructuredStreamingIdAwareSchedulerLogging.constructStreamingLogEntry(properties, msg))
@@ -85,6 +103,15 @@ private[scheduler] trait StructuredStreamingIdAwareSchedulerLogging extends Logg
       StructuredStreamingIdAwareSchedulerLogging.constructStreamingLogEntry(properties, entry))
   }
 
+  override protected def logError(msg: => String, t: Throwable): Unit =
+    super.logError(
+      StructuredStreamingIdAwareSchedulerLogging.constructStreamingLogEntry(properties, msg), t)
+
+  override protected def logError(entry: LogEntry, t: Throwable): Unit = {
+    super.logError(
+      StructuredStreamingIdAwareSchedulerLogging.constructStreamingLogEntry(properties, entry), t)
+  }
+
   override protected def logTrace(msg: => String): Unit =
     super.logTrace(
       StructuredStreamingIdAwareSchedulerLogging.constructStreamingLogEntry(properties, msg))
@@ -92,6 +119,15 @@ private[scheduler] trait StructuredStreamingIdAwareSchedulerLogging extends Logg
   override protected def logTrace(entry: LogEntry): Unit = {
     super.logTrace(
       StructuredStreamingIdAwareSchedulerLogging.constructStreamingLogEntry(properties, entry))
+  }
+
+  override protected def logTrace(msg: => String, t: Throwable): Unit =
+    super.logTrace(
+      StructuredStreamingIdAwareSchedulerLogging.constructStreamingLogEntry(properties, msg), t)
+
+  override protected def logTrace(entry: LogEntry, t: Throwable): Unit = {
+    super.logTrace(
+      StructuredStreamingIdAwareSchedulerLogging.constructStreamingLogEntry(properties, entry), t)
   }
 }
 
