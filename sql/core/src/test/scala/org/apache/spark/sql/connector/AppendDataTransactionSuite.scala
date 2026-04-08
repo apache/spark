@@ -46,14 +46,18 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
     }
 
     // check txn was properly committed and closed
-    assert(txn.currentState == Committed)
+    assert(txn.currentState === Committed)
     assert(txn.isClosed)
-    assert(txnTables.size == 1)
-    assert(table.version() == "2")
+    assert(txnTables.size === 1)
+    assert(table.version() === "2")
 
     // check the source scan was tracked via the transaction catalog
     val targetTxnTable = txnTables(tableNameAsString)
-    assert(targetTxnTable.scanEvents.size >= 1)
+    assert(targetTxnTable.scanEvents.size === 1)
+    assert(targetTxnTable.scanEvents.flatten.exists {
+      case sources.EqualTo("pk", 1) => true
+      case _ => false
+    })
 
     // check data was appended correctly
     checkAnswer(
@@ -72,14 +76,17 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
         |""".stripMargin)
 
     // SQL INSERT INTO using VALUES
-    val (txn, _) = executeTransaction {
+    val (txn, txnTables) = executeTransaction {
       sql(s"INSERT INTO $tableNameAsString VALUES (3, 300, 'hr'), (4, 400, 'finance')")
     }
 
     // check txn was properly committed and closed
-    assert(txn.currentState == Committed)
+    assert(txn.currentState === Committed)
     assert(txn.isClosed)
-    assert(table.version() == "2")
+    assert(table.version() === "2")
+
+    // VALUES literal - No catalog tables were scanned
+    assert(txnTables.isEmpty)
 
     // check data was inserted correctly
     checkAnswer(
@@ -114,13 +121,22 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
     }
 
     val confValue = if (isDynamic) PartitionOverwriteMode.DYNAMIC else PartitionOverwriteMode.STATIC
-    val (txn, _) = withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> confValue.toString) {
+    val (txn, txnTables) = withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> confValue.toString) {
       executeTransaction { sql(insertOverwrite) }
     }
 
-    assert(txn.currentState == Committed)
+    assert(txn.currentState === Committed)
     assert(txn.isClosed)
-    assert(table.version() == "2")
+    assert(table.version() === "2")
+
+    // the SELECT reads from the target table once with a dep='hr' filter
+    assert(txnTables.size == 1)
+    val targetTxnTable = txnTables(tableNameAsString)
+    assert(targetTxnTable.scanEvents.size == 1)
+    assert(targetTxnTable.scanEvents.flatten.exists {
+      case sources.EqualTo("dep", "hr") => true
+      case _ => false
+    })
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -142,13 +158,16 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
     val sourceDF = spark.createDataFrame(Seq((11, 999, "hr"), (12, 888, "hr"))).
       toDF("pk", "salary", "dep")
 
-    val (txn, _) = executeTransaction {
+    val (txn, txnTables) = executeTransaction {
       sourceDF.writeTo(tableNameAsString).overwrite(col("dep") === "hr")
     }
 
-    assert(txn.currentState == Committed)
+    assert(txn.currentState === Committed)
     assert(txn.isClosed)
-    assert(table.version() == "2")
+    assert(table.version() === "2")
+
+    // literal DataFrame source - no catalog tables were scanned
+    assert(txnTables.isEmpty)
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -170,13 +189,16 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
     val sourceDF = spark.createDataFrame(Seq((11, 999, "hr"), (12, 888, "hr"))).
       toDF("pk", "salary", "dep")
 
-    val (txn, _) = executeTransaction {
+    val (txn, txnTables) = executeTransaction {
       sourceDF.writeTo(tableNameAsString).overwritePartitions()
     }
 
-    assert(txn.currentState == Committed)
+    assert(txn.currentState === Committed)
     assert(txn.isClosed)
-    assert(table.version() == "2")
+    assert(table.version() === "2")
+
+    // literal DataFrame source - no catalog tables were scanned
+    assert(txnTables.isEmpty)
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -202,10 +224,18 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
     }
 
     // check txn was properly committed and closed
-    assert(txn.currentState == Committed)
+    assert(txn.currentState === Committed)
     assert(txn.isClosed)
-    assert(txnTables.size == 1)
-    assert(table.version() == "2")
+    assert(table.version() === "2")
+
+    // the SELECT reads from the target table once with a dep='hr' filter
+    assert(txnTables.size === 1)
+    val targetTxnTable = txnTables(tableNameAsString)
+    assert(targetTxnTable.scanEvents.size === 1)
+    assert(targetTxnTable.scanEvents.flatten.exists {
+      case sources.EqualTo("dep", "hr") => true
+      case _ => false
+    })
 
     // check data was inserted correctly
     checkAnswer(
@@ -237,20 +267,22 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
            |""".stripMargin)
     }
 
-    assert(txn.currentState == Committed)
+    assert(txn.currentState === Committed)
     assert(txn.isClosed)
-    assert(txnTables.size == 2)
-    assert(table.version() == "2")
+    assert(txnTables.size === 2)
+    assert(table.version() === "2")
 
-    // target was scanned via the transaction catalog (IN subquery)
+    // target was scanned via the transaction catalog (IN subquery) once with dep='hr' filter
     val targetTxnTable = txnTables(tableNameAsString)
+    assert(targetTxnTable.scanEvents.size === 1)
     assert(targetTxnTable.scanEvents.flatten.exists {
       case sources.EqualTo("dep", "hr") => true
       case _ => false
     })
 
-    // source was scanned via the transaction catalog
-    assert(txnTables(sourceNameAsString).scanEvents.nonEmpty)
+    // source was scanned via the transaction catalog exactly once (no filter)
+    val sourceTxnTable = txnTables(sourceNameAsString)
+    assert(sourceTxnTable.scanEvents.size === 1)
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -280,20 +312,22 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
            |""".stripMargin)
     }
 
-    assert(txn.currentState == Committed)
+    assert(txn.currentState === Committed)
     assert(txn.isClosed)
-    assert(txnTables.size == 2)
-    assert(table.version() == "2")
+    assert(txnTables.size === 2)
+    assert(table.version() === "2")
 
-    // target was scanned via the transaction catalog (CTE)
+    // target was scanned via the transaction catalog (CTE) once with dep='hr' filter
     val targetTxnTable = txnTables(tableNameAsString)
+    assert(targetTxnTable.scanEvents.size === 1)
     assert(targetTxnTable.scanEvents.flatten.exists {
       case sources.EqualTo("dep", "hr") => true
       case _ => false
     })
 
-    // source was scanned via the transaction catalog
-    assert(txnTables(sourceNameAsString).scanEvents.nonEmpty)
+    // source was scanned via the transaction catalog exactly once (no filter)
+    val sourceTxnTable = txnTables(sourceNameAsString)
+    assert(sourceTxnTable.scanEvents.size === 1)
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -314,7 +348,7 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
     }
 
     assert(e.getMessage.contains("nonexistent_col"))
-    assert(catalog.lastTransaction.currentState == Aborted)
+    assert(catalog.lastTransaction.currentState === Aborted)
     assert(catalog.lastTransaction.isClosed)
   }
 
@@ -343,7 +377,7 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
     }
 
     assert(e.getMessage.contains("nonexistent_col"))
-    assert(catalog.lastTransaction.currentState == Aborted)
+    assert(catalog.lastTransaction.currentState === Aborted)
     assert(catalog.lastTransaction.isClosed)
   }
 
