@@ -172,7 +172,11 @@ private[spark] class TaskContextImpl(
   private def invokeTaskCompletionListeners(error: Option[Throwable]): Unit = {
     // It is safe to access the reference to `onCompleteCallbacks` without holding the TaskContext
     // lock. `invokeListeners()` acquires the lock before accessing the contents.
-    invokeListeners(onCompleteCallbacks, "TaskCompletionListener", error) {
+    invokeListeners(
+      onCompleteCallbacks,
+      "TaskCompletionListener",
+      error,
+      markTaskFailedOnListenerError = true) {
       _.onTaskCompletion(this)
     }
   }
@@ -180,7 +184,11 @@ private[spark] class TaskContextImpl(
   private def invokeTaskFailureListeners(error: Throwable): Unit = {
     // It is safe to access the reference to `onFailureCallbacks` without holding the TaskContext
     // lock. `invokeListeners()` acquires the lock before accessing the contents.
-    invokeListeners(onFailureCallbacks, "TaskFailureListener", Option(error)) {
+    invokeListeners(
+      onFailureCallbacks,
+      "TaskFailureListener",
+      Option(error),
+      markTaskFailedOnListenerError = true) {
       _.onTaskFailure(this, error)
     }
   }
@@ -204,7 +212,7 @@ private[spark] class TaskContextImpl(
       listeners: Stack[T],
       name: String,
       error: Option[Throwable],
-      markTaskFailedOnListenerError: Boolean = true)(
+      markTaskFailedOnListenerError: Boolean)(
       callback: T => Unit): Unit = {
     // This method is subject to two constraints:
     //
