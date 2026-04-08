@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.catalog.TableChange.ColumnChange;
  * column, widening a column type) needed to make the target table schema compatible with the
  * source data schema. Each candidate change is passed to {@link #supportsColumnChange} to
  * determine whether the data source can apply it. Changes that are not supported are skipped and
- * Spark will attempt to resolve such change using casts. If casting is not supported, the query
+ * Spark will attempt to resolve such changes using casts. If casting is not supported, the query
  * will fail.
  *
  * @since 4.2.0
