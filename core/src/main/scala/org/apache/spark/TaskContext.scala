@@ -186,7 +186,7 @@ abstract class TaskContext extends Serializable {
 
   /**
    * Adds a listener to be executed when the task is interrupted (Scala closure form).
-   * Behavior matches [[addTaskInterruptListener]] with a [[TaskInterruptListener]].
+   * Behavior matches `addTaskInterruptListener` with TaskInterruptListener.
    */
   def addTaskInterruptListener(f: (TaskContext, String) => Unit): TaskContext = {
     addTaskInterruptListener(new TaskInterruptListener {

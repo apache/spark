@@ -48,9 +48,6 @@ trait TaskFailureListener extends EventListener {
  * :: DeveloperApi ::
  *
  * Listener providing a callback function to invoke when a task's execution is interrupted.
- *
- * @param context the task context
- * @param reason the kill / interrupt reason
  */
 @DeveloperApi
 trait TaskInterruptListener extends EventListener {
