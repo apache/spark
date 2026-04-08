@@ -129,7 +129,7 @@ abstract class InMemoryBaseTable(
       val fieldNames = typeChange.fieldNames()
       val newType = typeChange.newDataType()
 
-      // Allow strict changing to a strictly wider type.
+      // Only allow changing to a strictly wider type.
       schema()
         .findNestedField(fieldNames.toImmutableArraySeq, includeCollections = true)
         .exists { field => Cast.canUpCast(field._2.dataType, newType) }
