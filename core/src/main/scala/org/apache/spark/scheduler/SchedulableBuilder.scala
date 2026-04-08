@@ -235,7 +235,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, sc: SparkContext
     logInfo(
       StructuredStreamingIdAwareSchedulerLogging.constructStreamingLogEntry(
         properties,
-        log"Added task set ${MDC(LogKeys.TASK_SET_MANAGER, manager.name)} to pool " +
+        log"Added task set ${MDC(LogKeys.TASK_SET_MANAGER, manager.name)} tasks to pool " +
         log"${MDC(LogKeys.POOL_NAME, poolName)}"
       )
     )
