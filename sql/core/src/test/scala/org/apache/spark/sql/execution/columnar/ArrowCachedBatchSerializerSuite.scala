@@ -18,10 +18,39 @@
 package org.apache.spark.sql.execution.columnar
 
 import java.sql.{Date, Timestamp}
+import java.time.LocalDateTime
 
+import org.apache.arrow.vector.{
+  BigIntVector, BitVector, DateDayVector, DecimalVector,
+  Float4Vector, Float8Vector, IntVector, SmallIntVector,
+  TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector,
+  VarBinaryVector, VarCharVector, VectorSchemaRoot}
+
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.unsafe.types.CalendarInterval
+
+/** UDT whose sqlType is Arrow-supported (ArrayType(DoubleType)). */
+private class SupportedUDT extends UserDefinedType[Array[Double]] {
+  override def sqlType: DataType = ArrayType(DoubleType, containsNull = false)
+  override def serialize(obj: Array[Double]): Any = obj
+  override def deserialize(datum: Any): Array[Double] = datum.asInstanceOf[Array[Double]]
+  override def userClass: Class[Array[Double]] = classOf[Array[Double]]
+}
+
+/** UDT whose sqlType is ObjectType - not supported by Arrow. */
+private class UnsupportedUDT extends UserDefinedType[AnyRef] {
+  override def sqlType: DataType = ObjectType(classOf[AnyRef])
+  override def serialize(obj: AnyRef): Any = obj
+  override def deserialize(datum: Any): AnyRef = datum.asInstanceOf[AnyRef]
+  override def userClass: Class[AnyRef] = classOf[AnyRef]
+}
 
 class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -371,9 +400,6 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
   }
 
   test("supportsColumnarInput with supported types") {
-    import org.apache.spark.sql.catalyst.expressions.AttributeReference
-    import org.apache.spark.sql.types._
-
     val serializer = new ArrowCachedBatchSerializer()
 
     // All primitive types should be supported
@@ -426,9 +452,6 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
   }
 
   test("supportsColumnarInput correctly validates all types") {
-    import org.apache.spark.sql.types._
-    import org.apache.spark.sql.util.ArrowUtils
-
     // Verify that isSupportedByArrow handles all standard Spark SQL types
     assert(ArrowUtils.isSupportedByArrow(BooleanType))
     assert(ArrowUtils.isSupportedByArrow(ByteType))
@@ -458,6 +481,16 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
         StructField("b", ArrayType(StringType))
       )))
     ))
+
+    // UDT: delegates to sqlType - supported when sqlType is Arrow-compatible
+    // ExamplePointUDT.sqlType = ArrayType(DoubleType) -> supported
+    assert(ArrowUtils.isSupportedByArrow(new ExamplePointUDT()),
+      "UDT with Arrow-supported sqlType should be supported")
+    assert(ArrowUtils.isSupportedByArrow(new SupportedUDT()),
+      "UDT with ArrayType(DoubleType) sqlType should be supported")
+    // UDT with ObjectType sqlType -> not supported (ObjectType is internal, not an Arrow type)
+    assert(!ArrowUtils.isSupportedByArrow(new UnsupportedUDT()),
+      "UDT with ObjectType sqlType should not be supported")
   }
 
   test("verify Arrow cache serializer is actually used") {
@@ -834,6 +867,838 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
         assert(inMemoryScan.isDefined)
         assert(inMemoryScan.get.supportsColumnar)
       }
+    }
+  }
+
+  test("InternalRow path (readValueFromVector) handles all supported data types") {
+    // Exercises every explicit type arm in readValueFromVector via the InternalRow fallback path
+    // (CACHE_VECTORIZED_READER_ENABLED=false, set at suite level). Each case verifies a full
+    // cache write -> read roundtrip including both non-null and null values.
+
+    // --- Primitive types ---
+
+    // BooleanType: BitVector.get(i) != 0
+    val boolDf = Seq(Some(true), None, Some(false)).toDF("v")
+    boolDf.cache()
+    checkAnswer(boolDf, Seq(Row(true), Row(null), Row(false)))
+    boolDf.unpersist()
+
+    // ByteType: TinyIntVector.get(i)
+    val byteDf = Seq(Some(1.toByte), None, Some(10.toByte)).toDF("v")
+    byteDf.cache()
+    checkAnswer(byteDf, Seq(Row(1.toByte), Row(null), Row(10.toByte)))
+    byteDf.unpersist()
+
+    // ShortType: SmallIntVector.get(i)
+    val shortDf = Seq(Some(1.toShort), None, Some(100.toShort)).toDF("v")
+    shortDf.cache()
+    checkAnswer(shortDf, Seq(Row(1.toShort), Row(null), Row(100.toShort)))
+    shortDf.unpersist()
+
+    // IntegerType: IntVector.get(i)
+    val intDf = Seq(Some(42), None, Some(-7)).toDF("v")
+    intDf.cache()
+    checkAnswer(intDf, Seq(Row(42), Row(null), Row(-7)))
+    intDf.unpersist()
+
+    // LongType: BigIntVector.get(i)
+    val longDf = Seq(Some(100L), None, Some(-50L)).toDF("v")
+    longDf.cache()
+    checkAnswer(longDf, Seq(Row(100L), Row(null), Row(-50L)))
+    longDf.unpersist()
+
+    // FloatType: Float4Vector.get(i)
+    val floatDf = Seq(Some(3.14f), None, Some(-1.0f)).toDF("v")
+    floatDf.cache()
+    checkAnswer(floatDf, Seq(Row(3.14f), Row(null), Row(-1.0f)))
+    floatDf.unpersist()
+
+    // DoubleType: Float8Vector.get(i)
+    val doubleDf = Seq(Some(2.718), None, Some(-1.0)).toDF("v")
+    doubleDf.cache()
+    checkAnswer(doubleDf, Seq(Row(2.718), Row(null), Row(-1.0)))
+    doubleDf.unpersist()
+
+    // --- String and Binary types ---
+
+    // StringType: VarCharVector.get(i) -> UTF8String.fromBytes
+    val stringDf = Seq(Some("hello"), None, Some("world")).toDF("v")
+    stringDf.cache()
+    checkAnswer(stringDf, Seq(Row("hello"), Row(null), Row("world")))
+    stringDf.unpersist()
+
+    // BinaryType: VarBinaryVector.get(i)
+    val bytes1 = "hello".getBytes("UTF-8")
+    val bytes2 = "world".getBytes("UTF-8")
+    val binaryDf = Seq(bytes1, bytes2).toDF("v")
+    binaryDf.cache()
+    val binaryResult = binaryDf.collect()
+    assert(binaryResult(0).getAs[Array[Byte]](0) sameElements bytes1)
+    assert(binaryResult(1).getAs[Array[Byte]](0) sameElements bytes2)
+    binaryDf.unpersist()
+
+    // DecimalType: DecimalVector.getObject(i)
+    val decDf = Seq(Some(BigDecimal("123.45")), None, Some(BigDecimal("678.90"))).toDF("v")
+    decDf.cache()
+    checkAnswer(decDf, Seq(Row(BigDecimal("123.45")), Row(null), Row(BigDecimal("678.90"))))
+    decDf.unpersist()
+
+    // --- Date and time types ---
+
+    // DateType: DateDayVector.get(i) (days since epoch)
+    val dateDf = Seq(Some(Date.valueOf("2020-01-01")), None, Some(Date.valueOf("2025-12-31")))
+      .toDF("v")
+    dateDf.cache()
+    checkAnswer(dateDf,
+      Seq(Row(Date.valueOf("2020-01-01")), Row(null), Row(Date.valueOf("2025-12-31"))))
+    dateDf.unpersist()
+
+    // TimestampType: TimeStampMicroTZVector.get(i) (microseconds since epoch)
+    val ts1 = Timestamp.valueOf("2020-01-01 12:00:00")
+    val ts2 = Timestamp.valueOf("2025-06-15 00:00:00")
+    val tsDf = Seq(Some(ts1), None, Some(ts2)).toDF("v")
+    tsDf.cache()
+    checkAnswer(tsDf, Seq(Row(ts1), Row(null), Row(ts2)))
+    tsDf.unpersist()
+
+    // TimestampNTZType: TimeStampMicroVector.get(i) (microseconds, no timezone)
+    val ldt1 = LocalDateTime.of(2020, 1, 1, 12, 0)
+    val ldt2 = LocalDateTime.of(2025, 6, 15, 0, 0)
+    val tsNtzDf = Seq(Some(ldt1), None, Some(ldt2)).toDF("v")
+    tsNtzDf.cache()
+    checkAnswer(tsNtzDf, Seq(Row(ldt1), Row(null), Row(ldt2)))
+    tsNtzDf.unpersist()
+
+    // --- Interval types ---
+
+    // YearMonthIntervalType: IntervalYearVector.get(i) (months)
+    val ymiSql = "SELECT INTERVAL '1-1' YEAR TO MONTH AS ymi"
+    val ymiDf = spark.sql(ymiSql)
+    ymiDf.cache()
+    checkAnswer(ymiDf, spark.sql(ymiSql))
+    ymiDf.unpersist()
+
+    // DayTimeIntervalType: DurationVector.get(int) returns ArrowBuf; must use static form
+    val dtiSql = "SELECT INTERVAL '1' DAY AS dti"
+    val dtiDf = spark.sql(dtiSql)
+    dtiDf.cache()
+    checkAnswer(dtiDf, spark.sql(dtiSql))
+    dtiDf.unpersist()
+
+    // CalendarIntervalType: ArrowColumnVector.getInterval(i) (IntervalMonthDayNanoVector)
+    val interval = new CalendarInterval(1, 2, 3000000L)  // 1 month, 2 days, 3 ms
+    val ciSchema = StructType(Seq(StructField("ci", CalendarIntervalType, nullable = true)))
+    val ciDf = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(interval), Row(null))), ciSchema)
+    ciDf.cache()
+    checkAnswer(ciDf, Seq(Row(interval), Row(null)))
+    ciDf.unpersist()
+
+    // --- Null type ---
+
+    // NullType: row.setNullAt without dispatching into readValueFromVector
+    val nullSchema = StructType(Seq(StructField("n", NullType, nullable = true)))
+    val nullDf = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(null), Row(null))), nullSchema)
+    nullDf.cache()
+    checkAnswer(nullDf, Seq(Row(null), Row(null)))
+    nullDf.unpersist()
+
+    // --- Complex types ---
+
+    // ArrayType: ArrowColumnVector.getArray(i) (ListVector)
+    val arrayDf = Seq(Seq(1, 2, 3), Seq(4, 5, 6)).toDF("v")
+    arrayDf.cache()
+    checkAnswer(arrayDf, Seq(Row(Seq(1, 2, 3)), Row(Seq(4, 5, 6))))
+    arrayDf.unpersist()
+
+    // StructType: ArrowColumnVector.getStruct(i) (StructVector)
+    val structSql =
+      "SELECT named_struct('a', 1, 'b', 'x') AS v " +
+      "UNION ALL SELECT named_struct('a', 2, 'b', 'y') AS v"
+    val structDf = spark.sql(structSql)
+    structDf.cache()
+    checkAnswer(structDf, spark.sql(structSql))
+    structDf.unpersist()
+
+    // MapType: ArrowColumnVector.getMap(i) (MapVector)
+    val mapDf = Seq(Map(1 -> "a"), Map(2 -> "b")).toDF("v")
+    mapDf.cache()
+    checkAnswer(mapDf, Seq(Row(Map(1 -> "a")), Row(Map(2 -> "b"))))
+    mapDf.unpersist()
+
+    // UserDefinedType: dispatches to readValueFromVector with udt.sqlType (ArrayType(DoubleType))
+    val point = new ExamplePoint(1.0, 2.0)
+    val udtSchema = StructType(Seq(StructField("p", new ExamplePointUDT(), nullable = true)))
+    val udtDf = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(point), Row(null))), udtSchema)
+    udtDf.cache()
+    checkAnswer(udtDf, Seq(Row(point), Row(null)))
+    udtDf.unpersist()
+  }
+
+  // Helper: cache a single-column DataFrame (row path) and return its ArrowCachedBatch stats.
+  // Stats layout per column: [lowerBound(0), upperBound(1), nullCount(2), rowCount(3), size(4)].
+  private def cachedStats(df: org.apache.spark.sql.DataFrame)
+      : org.apache.spark.sql.catalyst.InternalRow = {
+    df.count()  // trigger cache population
+    val relation = df.queryExecution.executedPlan.collectFirst {
+      case scan: InMemoryTableScanExec => scan.relation
+    }.get
+    relation.cacheBuilder.cachedColumnBuffers.first().asInstanceOf[ArrowCachedBatch].stats
+  }
+
+  // Helper: creates a single-column, single-partition DataFrame backed by an RDD.
+  // LocalRelation can split across multiple partitions, causing cachedStats to see only the first
+  // partition's stats. sc.parallelize(data, numSlices=1) forces exactly one partition.
+  private def singlePartDf(values: Seq[Any], dt: DataType): org.apache.spark.sql.DataFrame =
+    spark.createDataFrame(
+      spark.sparkContext.parallelize(values.map(v => Row(v)), 1),
+      StructType(Seq(StructField("v", dt, nullable = true))))
+
+  test("createColumnStats returns the correct ColumnStats subclass for each supported type") {
+    // Direct unit test: verify the stats class dispatched for each Spark type, which determines
+    // whether partition pruning via min/max bounds is enabled.
+
+    // Orderable types: createColumnStats returns a stats class that tracks min/max bounds.
+    assert(ArrowCachedBatchSerializer.createColumnStats(BooleanType)
+      .isInstanceOf[BooleanColumnStats])
+    assert(ArrowCachedBatchSerializer.createColumnStats(ByteType).isInstanceOf[ByteColumnStats])
+    assert(ArrowCachedBatchSerializer.createColumnStats(ShortType).isInstanceOf[ShortColumnStats])
+    assert(ArrowCachedBatchSerializer.createColumnStats(IntegerType).isInstanceOf[IntColumnStats])
+    // DateType is stored as Int (days since epoch) -> IntColumnStats
+    assert(ArrowCachedBatchSerializer.createColumnStats(DateType).isInstanceOf[IntColumnStats])
+    assert(ArrowCachedBatchSerializer.createColumnStats(LongType).isInstanceOf[LongColumnStats])
+    // TimestampType/NTZ stored as Long (microseconds) -> LongColumnStats
+    assert(ArrowCachedBatchSerializer.createColumnStats(TimestampType)
+      .isInstanceOf[LongColumnStats])
+    assert(ArrowCachedBatchSerializer.createColumnStats(TimestampNTZType)
+      .isInstanceOf[LongColumnStats])
+    assert(ArrowCachedBatchSerializer.createColumnStats(FloatType).isInstanceOf[FloatColumnStats])
+    assert(ArrowCachedBatchSerializer.createColumnStats(DoubleType).isInstanceOf[DoubleColumnStats])
+    // StringType (all collations) -> StringColumnStats with collation-aware semantic comparison
+    assert(ArrowCachedBatchSerializer.createColumnStats(StringType).isInstanceOf[StringColumnStats])
+    assert(ArrowCachedBatchSerializer.createColumnStats(
+      new StringType(1)).isInstanceOf[StringColumnStats])  // collationId 1 = UTF8_LCASE
+    assert(ArrowCachedBatchSerializer.createColumnStats(
+      StringType("UNICODE")).isInstanceOf[StringColumnStats])
+    assert(ArrowCachedBatchSerializer.createColumnStats(DecimalType(10, 2))
+      .isInstanceOf[DecimalColumnStats])
+
+    // Non-orderable types: createColumnStats returns a stats class with null bounds.
+    assert(ArrowCachedBatchSerializer.createColumnStats(BinaryType).isInstanceOf[BinaryColumnStats])
+    assert(ArrowCachedBatchSerializer.createColumnStats(
+      CalendarIntervalType).isInstanceOf[IntervalColumnStats])
+    assert(ArrowCachedBatchSerializer.createColumnStats(VariantType)
+      .isInstanceOf[VariantColumnStats])
+
+    // Complex types and UDT: no natural ordering -> ObjectColumnStats (null bounds).
+    assert(ArrowCachedBatchSerializer.createColumnStats(
+      ArrayType(IntegerType)).isInstanceOf[ObjectColumnStats])
+    assert(ArrowCachedBatchSerializer.createColumnStats(
+      StructType(Seq(StructField("a", IntegerType)))).isInstanceOf[ObjectColumnStats])
+    assert(ArrowCachedBatchSerializer.createColumnStats(
+      MapType(StringType, IntegerType)).isInstanceOf[ObjectColumnStats])
+    assert(ArrowCachedBatchSerializer.createColumnStats(
+      new ExamplePointUDT()).isInstanceOf[ObjectColumnStats])
+    assert(ArrowCachedBatchSerializer.createColumnStats(NullType).isInstanceOf[ObjectColumnStats])
+  }
+
+  test("row path stats: orderable types produce correct min/max bounds") {
+    // DataFrames use the row path (InternalRowToArrowCachedBatchIterator), exercising
+    // createColumnStats + buildStatisticsFromCollectors. singlePartDf ensures all values land
+    // in one cached batch so cachedStats.first() sees the global min and max.
+
+    // BooleanType: lower=false, upper=true
+    val boolDf = singlePartDf(Seq(false, true), BooleanType).cache()
+    val boolStats = cachedStats(boolDf)
+    assert(!boolStats.isNullAt(0) && !boolStats.isNullAt(1))
+    assert(!boolStats.getBoolean(0) && boolStats.getBoolean(1))
+    boolDf.unpersist()
+
+    // ByteType: lower=1, upper=10
+    val byteDf = singlePartDf(Seq(1.toByte, 10.toByte), ByteType).cache()
+    val byteStats = cachedStats(byteDf)
+    assert(!byteStats.isNullAt(0) && !byteStats.isNullAt(1))
+    assert(byteStats.getByte(0) == 1.toByte && byteStats.getByte(1) == 10.toByte)
+    byteDf.unpersist()
+
+    // ShortType: lower=1, upper=10
+    val shortDf = singlePartDf(Seq(1.toShort, 10.toShort), ShortType).cache()
+    val shortStats = cachedStats(shortDf)
+    assert(!shortStats.isNullAt(0) && !shortStats.isNullAt(1))
+    assert(shortStats.getShort(0) == 1.toShort && shortStats.getShort(1) == 10.toShort)
+    shortDf.unpersist()
+
+    // IntegerType: lower=1, upper=10
+    val intDf = singlePartDf(Seq(1, 10), IntegerType).cache()
+    val intStats = cachedStats(intDf)
+    assert(!intStats.isNullAt(0) && !intStats.isNullAt(1))
+    assert(intStats.getInt(0) == 1 && intStats.getInt(1) == 10)
+    intDf.unpersist()
+
+    // DateType: stored as Int (days since epoch); 2020-01-01 < 2025-01-01
+    val dateDf = singlePartDf(
+      Seq(Date.valueOf("2020-01-01"), Date.valueOf("2025-01-01")), DateType).cache()
+    val dateStats = cachedStats(dateDf)
+    assert(!dateStats.isNullAt(0) && !dateStats.isNullAt(1))
+    assert(dateStats.getInt(0) < dateStats.getInt(1))
+    dateDf.unpersist()
+
+    // LongType: lower=1L, upper=10L
+    val longDf = singlePartDf(Seq(1L, 10L), LongType).cache()
+    val longStats = cachedStats(longDf)
+    assert(!longStats.isNullAt(0) && !longStats.isNullAt(1))
+    assert(longStats.getLong(0) == 1L && longStats.getLong(1) == 10L)
+    longDf.unpersist()
+
+    // TimestampType: stored as Long (microseconds since epoch); 2020 < 2025
+    val tsDf = singlePartDf(
+      Seq(Timestamp.valueOf("2020-01-01 00:00:00"), Timestamp.valueOf("2025-01-01 00:00:00")),
+      TimestampType).cache()
+    val tsStats = cachedStats(tsDf)
+    assert(!tsStats.isNullAt(0) && !tsStats.isNullAt(1))
+    assert(tsStats.getLong(0) < tsStats.getLong(1))
+    tsDf.unpersist()
+
+    // TimestampNTZType: stored as Long (microseconds since epoch); 2020 < 2025
+    val tsNtzDf = singlePartDf(
+      Seq(LocalDateTime.of(2020, 1, 1, 0, 0), LocalDateTime.of(2025, 1, 1, 0, 0)),
+      TimestampNTZType).cache()
+    val tsNtzStats = cachedStats(tsNtzDf)
+    assert(!tsNtzStats.isNullAt(0) && !tsNtzStats.isNullAt(1))
+    assert(tsNtzStats.getLong(0) < tsNtzStats.getLong(1))
+    tsNtzDf.unpersist()
+
+    // FloatType: NaN is included but IEEE 754 comparisons with NaN are always false,
+    // so NaN never updates min/max; lower=1.0f, upper=10.0f
+    val floatDf = singlePartDf(Seq(1.0f, Float.NaN, 10.0f), FloatType).cache()
+    val floatStats = cachedStats(floatDf)
+    assert(!floatStats.isNullAt(0) && !floatStats.isNullAt(1))
+    assert(floatStats.getFloat(0) == 1.0f && floatStats.getFloat(1) == 10.0f)
+    floatDf.unpersist()
+
+    // DoubleType: same NaN-exclusion behavior via IEEE 754; lower=1.0, upper=10.0
+    val doubleDf = singlePartDf(Seq(1.0, Double.NaN, 10.0), DoubleType).cache()
+    val doubleStats = cachedStats(doubleDf)
+    assert(!doubleStats.isNullAt(0) && !doubleStats.isNullAt(1))
+    assert(doubleStats.getDouble(0) == 1.0 && doubleStats.getDouble(1) == 10.0)
+    doubleDf.unpersist()
+
+    // StringType (UTF8_BINARY): "apple" < "zebra" in binary order
+    val stringDf = singlePartDf(Seq("apple", "zebra"), StringType).cache()
+    val stringStats = cachedStats(stringDf)
+    assert(!stringStats.isNullAt(0) && !stringStats.isNullAt(1))
+    assert(stringStats.getUTF8String(0).toString == "apple")
+    assert(stringStats.getUTF8String(1).toString == "zebra")
+    stringDf.unpersist()
+
+    // Collated StringType (UTF8_LCASE): semantic min/max uses case-insensitive comparison.
+    // "Apple" and "zebra": case-insensitively "apple" < "zebra", so lower="Apple", upper="zebra".
+    val collatedStringType = new StringType(1)  // collationId 1 = UTF8_LCASE
+    val collatedSchema = StructType(Seq(StructField("v", collatedStringType, nullable = true)))
+    val collatedDf = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row("Apple"), Row("zebra")), 1),
+      collatedSchema).cache()
+    val collatedStats = cachedStats(collatedDf)
+    assert(!collatedStats.isNullAt(0), "lower bound should not be null for collated StringType")
+    assert(!collatedStats.isNullAt(1), "upper bound should not be null for collated StringType")
+    assert(collatedStats.getUTF8String(0).toString == "Apple")  // semantic min
+    assert(collatedStats.getUTF8String(1).toString == "zebra")  // semantic max
+    collatedDf.unpersist()
+
+    // DecimalType(10,2): lower=1.23, upper=9.87
+    val decimalDf = singlePartDf(
+      Seq(new java.math.BigDecimal("1.23"), new java.math.BigDecimal("9.87")),
+      DecimalType(10, 2)).cache()
+    val decimalStats = cachedStats(decimalDf)
+    assert(!decimalStats.isNullAt(0) && !decimalStats.isNullAt(1))
+    assert(decimalStats.getDecimal(0, 10, 2).compareTo(decimalStats.getDecimal(1, 10, 2)) < 0)
+    decimalDf.unpersist()
+  }
+
+  test("row path stats: non-orderable types produce null lower and upper bounds") {
+    // Verifies that types without natural ordering return null bounds so that partition pruning
+    // is safely disabled for them, preventing incorrect data exclusion.
+    def assertNullBounds(df: org.apache.spark.sql.DataFrame): Unit = {
+      val stats = cachedStats(df)
+      assert(stats.isNullAt(0), "lower bound should be null for non-orderable type")
+      assert(stats.isNullAt(1), "upper bound should be null for non-orderable type")
+      df.unpersist()
+    }
+
+    // BinaryType: no natural total ordering
+    assertNullBounds(Seq(Array[Byte](1, 2), Array[Byte](3, 4)).toDF("v").cache())
+
+    // CalendarIntervalType: unordered composite (months + days + nanoseconds)
+    val ciSchema = StructType(Seq(StructField("v", CalendarIntervalType, nullable = true)))
+    assertNullBounds(spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(
+        Row(new CalendarInterval(1, 2, 3000000L)),
+        Row(new CalendarInterval(2, 0, 0L)))),
+      ciSchema).cache())
+
+    // ArrayType: no natural ordering
+    assertNullBounds(spark.sql(
+      "SELECT array(1, 2) AS v UNION ALL SELECT array(3, 4) AS v"
+    ).cache())
+
+    // StructType: no natural ordering
+    assertNullBounds(spark.sql(
+      "SELECT named_struct('i', 1, 's', 'a') AS v " +
+      "UNION ALL SELECT named_struct('i', 2, 's', 'b') AS v"
+    ).cache())
+
+    // MapType: no natural ordering
+    assertNullBounds(spark.sql(
+      "SELECT map(1, 'a') AS v UNION ALL SELECT map(2, 'b') AS v"
+    ).cache())
+
+    // UserDefinedType: no natural ordering
+    val udtSchema = StructType(Seq(StructField("v", new ExamplePointUDT(), nullable = true)))
+    assertNullBounds(spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(new ExamplePoint(1.0, 2.0)), Row(null))),
+      udtSchema).cache())
+
+    // NullType: all values are null by definition
+    val nullSchema = StructType(Seq(StructField("v", NullType, nullable = true)))
+    assertNullBounds(spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(null), Row(null))),
+      nullSchema).cache())
+  }
+
+  test("row path stats: all-NaN Float/Double column produces inverted sentinel bounds") {
+    // FloatColumnStats and DoubleColumnStats initialize upper=MinValue, lower=MaxValue as
+    // sentinels. IEEE 754 comparisons with NaN are always false, so NaN never beats either
+    // sentinel. When every value is NaN, the sentinels are returned unchanged: lower=MaxValue,
+    // upper=MinValue (lower > upper). This differs from the Arrow path, which returns null bounds
+    // for all-NaN input (because calculateMinMaxFloat/Double explicitly skips NaN with !_.isNaN
+    // and returns (null, null) when hasValue stays false).
+    val floatDf = singlePartDf(Seq(Float.NaN), FloatType).cache()
+    val floatStats = cachedStats(floatDf)
+    assert(!floatStats.isNullAt(0),
+      "FloatType lower should not be null for all-NaN (sentinel used)")
+    assert(!floatStats.isNullAt(1),
+      "FloatType upper should not be null for all-NaN (sentinel used)")
+    assert(floatStats.getFloat(0) == Float.MaxValue,
+      s"FloatType lower expected Float.MaxValue (sentinel), got ${floatStats.getFloat(0)}")
+    assert(floatStats.getFloat(1) == Float.MinValue,
+      s"FloatType upper expected Float.MinValue (sentinel), got ${floatStats.getFloat(1)}")
+    floatDf.unpersist()
+
+    val doubleDf = singlePartDf(Seq(Double.NaN), DoubleType).cache()
+    val doubleStats = cachedStats(doubleDf)
+    assert(!doubleStats.isNullAt(0),
+      "DoubleType lower should not be null for all-NaN (sentinel used)")
+    assert(!doubleStats.isNullAt(1),
+      "DoubleType upper should not be null for all-NaN (sentinel used)")
+    assert(doubleStats.getDouble(0) == Double.MaxValue,
+      s"DoubleType lower expected Double.MaxValue (sentinel), got ${doubleStats.getDouble(0)}")
+    assert(doubleStats.getDouble(1) == Double.MinValue,
+      s"DoubleType upper expected Double.MinValue (sentinel), got ${doubleStats.getDouble(1)}")
+    doubleDf.unpersist()
+  }
+
+  test("collectStatistics produces correct min/max bounds for all orderable types") {
+    // Direct unit test of ArrowCachedBatchSerializer.collectStatistics, which is invoked whenever
+    // the input ColumnarBatch contains ArrowColumnVector columns (zero-copy path in
+    // ColumnarBatchToArrowCachedBatchIterator). Three rows [low, mid, high] ensure min/max are
+    // correctly identified for each type.
+    val serializer = new ArrowCachedBatchSerializer()
+
+    val schema = Seq(
+      AttributeReference("bool_col", BooleanType)(),       // BitVector
+      AttributeReference("byte_col", ByteType)(),          // TinyIntVector
+      AttributeReference("short_col", ShortType)(),        // SmallIntVector
+      AttributeReference("float_col", FloatType)(),        // Float4Vector
+      AttributeReference("double_col", DoubleType)(),      // Float8Vector
+      AttributeReference("date_col", DateType)(),          // DateDayVector (days since epoch)
+      AttributeReference("ts_col", TimestampType)(),       // TimeStampMicroTZVector (microseconds)
+      AttributeReference("ts_ntz_col", TimestampNTZType)(),// TimeStampMicroVector (microseconds)
+      AttributeReference("int_col", IntegerType)(),          // IntVector (standalone)
+      AttributeReference("long_col", LongType)(),            // BigIntVector (standalone)
+      AttributeReference("decimal_col", DecimalType(10, 2))() // DecimalVector
+    )
+    val sparkSchema = StructType(schema.map(a => StructField(a.name, a.dataType)))
+    val arrowSchema = ArrowUtils.toArrowSchema(sparkSchema, "UTC", false, false)
+    val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
+
+    try {
+      root.allocateNew()
+      val boolVector = root.getVector("bool_col").asInstanceOf[BitVector]
+      val byteVector = root.getVector("byte_col").asInstanceOf[TinyIntVector]
+      val shortVector = root.getVector("short_col").asInstanceOf[SmallIntVector]
+      val floatVector = root.getVector("float_col").asInstanceOf[Float4Vector]
+      val doubleVector = root.getVector("double_col").asInstanceOf[Float8Vector]
+      val dateVector = root.getVector("date_col").asInstanceOf[DateDayVector]
+      val tsVector = root.getVector("ts_col").asInstanceOf[TimeStampMicroTZVector]
+      val tsNtzVector = root.getVector("ts_ntz_col").asInstanceOf[TimeStampMicroVector]
+      val intVector = root.getVector("int_col").asInstanceOf[IntVector]
+      val longVector = root.getVector("long_col").asInstanceOf[BigIntVector]
+      val decimalVector = root.getVector("decimal_col").asInstanceOf[DecimalVector]
+
+      // Row 0: low values
+      boolVector.setSafe(0, 0)               // false
+      byteVector.setSafe(0, 1.toByte)
+      shortVector.setSafe(0, 100.toShort)
+      floatVector.setSafe(0, 1.0f)
+      doubleVector.setSafe(0, 1.0)
+      dateVector.setSafe(0, 18262)           // 2020-01-01
+      tsVector.setSafe(0, 1577836800000000L) // 2020-01-01 00:00:00 UTC in microseconds
+      tsNtzVector.setSafe(0, 1577836800000000L)
+      intVector.setSafe(0, 1)
+      longVector.setSafe(0, 1L)
+      decimalVector.setSafe(0, new java.math.BigDecimal("1.23"))
+
+      // Row 1: mid values -- Float/Double use NaN to verify NaN is excluded from min/max
+      boolVector.setSafe(1, 1)               // true -- becomes the max
+      byteVector.setSafe(1, 5.toByte)
+      shortVector.setSafe(1, 500.toShort)
+      floatVector.setSafe(1, Float.NaN)      // NaN: must not affect lower=1.0f or upper=10.0f
+      doubleVector.setSafe(1, Double.NaN)    // NaN: must not affect lower=1.0 or upper=10.0
+      dateVector.setSafe(1, 19000)
+      tsVector.setSafe(1, 1700000000000000L)
+      tsNtzVector.setSafe(1, 1700000000000000L)
+      intVector.setSafe(1, 5)
+      longVector.setSafe(1, 5L)
+      decimalVector.setSafe(1, new java.math.BigDecimal("5.55"))
+
+      // Row 2: high values
+      boolVector.setSafe(2, 0)               // false again (3 rows; bool max stays true from row 1)
+      byteVector.setSafe(2, 10.toByte)
+      shortVector.setSafe(2, 1000.toShort)
+      floatVector.setSafe(2, 10.0f)
+      doubleVector.setSafe(2, 10.0)
+      dateVector.setSafe(2, 20000)
+      tsVector.setSafe(2, 1800000000000000L)
+      tsNtzVector.setSafe(2, 1800000000000000L)
+      intVector.setSafe(2, 10)
+      longVector.setSafe(2, 10L)
+      decimalVector.setSafe(2, new java.math.BigDecimal("9.87"))
+
+      root.setRowCount(3)
+
+      val stats = ArrowCachedBatchSerializer.collectStatistics(root, schema)
+
+      // Stats layout: [lower(0), upper(1), nullCount(2), rowCount(3), sizeInBytes(4)] per column.
+      // col0 BooleanType (offset 0): lower=false, upper=true
+      assert(!stats.getBoolean(0), s"BooleanType lower expected false, got ${stats.getBoolean(0)}")
+      assert(stats.getBoolean(1), s"BooleanType upper expected true, got ${stats.getBoolean(1)}")
+
+      // col1 ByteType (offset 5): lower=1, upper=10
+      assert(stats.getByte(5) == 1.toByte, s"ByteType lower=${stats.getByte(5)}")
+      assert(stats.getByte(6) == 10.toByte, s"ByteType upper=${stats.getByte(6)}")
+
+      // col2 ShortType (offset 10): lower=100, upper=1000
+      assert(stats.getShort(10) == 100.toShort, s"ShortType lower=${stats.getShort(10)}")
+      assert(stats.getShort(11) == 1000.toShort, s"ShortType upper=${stats.getShort(11)}")
+
+      // col3 FloatType (offset 15): lower=1.0f, upper=10.0f
+      assert(stats.getFloat(15) == 1.0f, s"FloatType lower=${stats.getFloat(15)}")
+      assert(stats.getFloat(16) == 10.0f, s"FloatType upper=${stats.getFloat(16)}")
+
+      // col4 DoubleType (offset 20): lower=1.0, upper=10.0
+      assert(stats.getDouble(20) == 1.0, s"DoubleType lower=${stats.getDouble(20)}")
+      assert(stats.getDouble(21) == 10.0, s"DoubleType upper=${stats.getDouble(21)}")
+
+      // col5 DateType (offset 25): lower=18262 (2020-01-01), upper=20000
+      assert(stats.getInt(25) == 18262, s"DateType lower=${stats.getInt(25)}")
+      assert(stats.getInt(26) == 20000, s"DateType upper=${stats.getInt(26)}")
+
+      // col6 TimestampType (offset 30): lower < upper (microseconds since epoch)
+      assert(stats.getLong(30) == 1577836800000000L,
+        s"TimestampType lower=${stats.getLong(30)}")
+      assert(stats.getLong(31) == 1800000000000000L,
+        s"TimestampType upper=${stats.getLong(31)}")
+
+      // col7 TimestampNTZType (offset 35): lower < upper (microseconds, no timezone)
+      assert(stats.getLong(35) == 1577836800000000L,
+        s"TimestampNTZType lower=${stats.getLong(35)}")
+      assert(stats.getLong(36) == 1800000000000000L,
+        s"TimestampNTZType upper=${stats.getLong(36)}")
+
+      // col8 IntegerType (offset 40): lower=1, upper=10
+      assert(stats.getInt(40) == 1, s"IntegerType lower=${stats.getInt(40)}")
+      assert(stats.getInt(41) == 10, s"IntegerType upper=${stats.getInt(41)}")
+
+      // col9 LongType (offset 45): lower=1L, upper=10L
+      assert(stats.getLong(45) == 1L, s"LongType lower=${stats.getLong(45)}")
+      assert(stats.getLong(46) == 10L, s"LongType upper=${stats.getLong(46)}")
+
+      // col10 DecimalType(10,2) (offset 50): lower=1.23, upper=9.87
+      assert(stats.getDecimal(50, 10, 2).toJavaBigDecimal.compareTo(
+        new java.math.BigDecimal("1.23")) == 0,
+        s"DecimalType lower=${stats.getDecimal(50, 10, 2)}")
+      assert(stats.getDecimal(51, 10, 2).toJavaBigDecimal.compareTo(
+        new java.math.BigDecimal("9.87")) == 0,
+        s"DecimalType upper=${stats.getDecimal(51, 10, 2)}")
+
+      // All null counts should be 0
+      (0 until 11).foreach { col =>
+        assert(stats.getInt(col * 5 + 2) == 0, s"nullCount for col$col should be 0")
+      }
+
+      root.close()
+    } catch {
+      case e: Exception =>
+        root.close()
+        throw e
+    }
+  }
+
+  test("collectStatistics produces correct min/max bounds for StringType") {
+    // StringType in Arrow is stored as VarCharVector (raw UTF-8 bytes). This test covers the
+    // two distinct code paths in calculateMinMaxString: binary (UTF8_BINARY) and collation-aware
+    // semantic (collated). The collated case directly exercises the Bug 2 fix: before the fix,
+    // `case StringType =>` (singleton) did not match collated types so they returned null bounds.
+
+    // UTF8_BINARY: binary-order comparison.
+    // {"apple", "cherry", "banana"} -> lower=apple, upper=cherry
+    {
+      val schema = Seq(AttributeReference("str_col", StringType)())
+      val sparkSchema = StructType(schema.map(a => StructField(a.name, a.dataType)))
+      val arrowSchema = ArrowUtils.toArrowSchema(sparkSchema, "UTC", false, false)
+      val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
+      try {
+        root.allocateNew()
+        val strVector = root.getVector("str_col").asInstanceOf[VarCharVector]
+        strVector.setSafe(0, "apple".getBytes("UTF-8"), 0, 5)
+        strVector.setSafe(1, "cherry".getBytes("UTF-8"), 0, 6)
+        strVector.setSafe(2, "banana".getBytes("UTF-8"), 0, 6)
+        root.setRowCount(3)
+        val stats = ArrowCachedBatchSerializer.collectStatistics(root, schema)
+        assert(!stats.isNullAt(0), "UTF8_BINARY lower bound should not be null")
+        assert(!stats.isNullAt(1), "UTF8_BINARY upper bound should not be null")
+        assert(stats.getUTF8String(0).toString == "apple",
+          s"UTF8_BINARY lower expected 'apple', got ${stats.getUTF8String(0)}")
+        assert(stats.getUTF8String(1).toString == "cherry",
+          s"UTF8_BINARY upper expected 'cherry', got ${stats.getUTF8String(1)}")
+        root.close()
+      } catch {
+        case e: Exception => root.close(); throw e
+      }
+    }
+
+    // UTF8_LCASE (collationId=1): case-insensitive semantic comparison.
+    // Data: {"Apple", "banana", "Cherry"}
+    // Binary order: "Apple"(A=65) < "Cherry"(C=67) < "banana"(b=98) -> binary max = "banana"
+    // Semantic order: apple < banana < cherry -> semantic max = "Cherry"
+    // Asserting upper == "Cherry" (not "banana") verifies collation-aware semanticCompare is used.
+    {
+      val collatedStringType = new StringType(1) // collationId 1 = UTF8_LCASE
+      val schema = Seq(AttributeReference("str_col", collatedStringType)())
+      val sparkSchema = StructType(schema.map(a => StructField(a.name, a.dataType)))
+      val arrowSchema = ArrowUtils.toArrowSchema(sparkSchema, "UTC", false, false)
+      val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
+      try {
+        root.allocateNew()
+        val strVector = root.getVector("str_col").asInstanceOf[VarCharVector]
+        strVector.setSafe(0, "Apple".getBytes("UTF-8"), 0, 5)
+        strVector.setSafe(1, "banana".getBytes("UTF-8"), 0, 6)
+        strVector.setSafe(2, "Cherry".getBytes("UTF-8"), 0, 6)
+        root.setRowCount(3)
+        val stats = ArrowCachedBatchSerializer.collectStatistics(root, schema)
+        assert(!stats.isNullAt(0), "UTF8_LCASE lower bound should not be null")
+        assert(!stats.isNullAt(1), "UTF8_LCASE upper bound should not be null")
+        assert(stats.getUTF8String(0).toString == "Apple",
+          s"UTF8_LCASE lower expected 'Apple' (semantic min), got ${stats.getUTF8String(0)}")
+        // "Cherry" is the semantic max (case-insensitively: cherry > banana > apple).
+        // "banana" would be the binary max -- asserting "Cherry" proves semanticCompare is used.
+        assert(stats.getUTF8String(1).toString == "Cherry",
+          s"UTF8_LCASE upper expected 'Cherry' (semantic max), got ${stats.getUTF8String(1)}")
+        root.close()
+      } catch {
+        case e: Exception => root.close(); throw e
+      }
+    }
+  }
+
+  test("collectStatistics returns null bounds when all Float/Double values are NaN") {
+    // When every non-null value in a Float or Double column is NaN, calculateMinMaxFloat/Double
+    // finds no valid (non-NaN) values. hasValue stays false -> returns (null, null) -> null bounds.
+    // Null bounds disable partition pruning, ensuring NaN-only batches are never incorrectly
+    // pruned.
+    val schema = Seq(
+      AttributeReference("float_col", FloatType)(),
+      AttributeReference("double_col", DoubleType)()
+    )
+    val sparkSchema = StructType(schema.map(a => StructField(a.name, a.dataType)))
+    val arrowSchema = ArrowUtils.toArrowSchema(sparkSchema, "UTC", false, false)
+    val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
+
+    try {
+      root.allocateNew()
+      val floatVector = root.getVector("float_col").asInstanceOf[Float4Vector]
+      val doubleVector = root.getVector("double_col").asInstanceOf[Float8Vector]
+
+      floatVector.setSafe(0, Float.NaN)
+      floatVector.setSafe(1, Float.NaN)
+      doubleVector.setSafe(0, Double.NaN)
+      doubleVector.setSafe(1, Double.NaN)
+      root.setRowCount(2)
+
+      val stats = ArrowCachedBatchSerializer.collectStatistics(root, schema)
+
+      // FloatType (col0, offset 0): no valid values -> null bounds
+      assert(stats.isNullAt(0), "FloatType lower bound should be null when all values are NaN")
+      assert(stats.isNullAt(1), "FloatType upper bound should be null when all values are NaN")
+
+      // DoubleType (col1, offset 5): no valid values -> null bounds
+      assert(stats.isNullAt(5), "DoubleType lower bound should be null when all values are NaN")
+      assert(stats.isNullAt(6), "DoubleType upper bound should be null when all values are NaN")
+
+      root.close()
+    } catch {
+      case e: Exception =>
+        root.close()
+        throw e
+    }
+  }
+
+  test("collectStatistics returns null bounds for non-orderable types") {
+    // BinaryType has no natural ordering, so its lower and upper bounds must be null.
+    // Null bounds disable partition pruning for those columns, preventing incorrect data exclusion.
+    // A control IntegerType column confirms bounds are per-type, not per-batch.
+    val schema = Seq(
+      AttributeReference("bin_col", BinaryType)(),   // VarBinaryVector -- unordered
+      AttributeReference("int_col", IntegerType)()   // IntVector -- orderable (control column)
+    )
+    val sparkSchema = StructType(schema.map(a => StructField(a.name, a.dataType)))
+    val arrowSchema = ArrowUtils.toArrowSchema(sparkSchema, "UTC", false, false)
+    val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
+
+    try {
+      root.allocateNew()
+      val binVector = root.getVector("bin_col").asInstanceOf[VarBinaryVector]
+      val intVector = root.getVector("int_col").asInstanceOf[IntVector]
+
+      binVector.setSafe(0, "hello".getBytes("UTF-8"))
+      binVector.setSafe(1, "world".getBytes("UTF-8"))
+      intVector.setSafe(0, 1)
+      intVector.setSafe(1, 10)
+      root.setRowCount(2)
+
+      val stats = ArrowCachedBatchSerializer.collectStatistics(root, schema)
+
+      // BinaryType (col0, offset 0): both bounds must be null -- no ordering defined
+      assert(stats.isNullAt(0), "BinaryType lower bound should be null")
+      assert(stats.isNullAt(1), "BinaryType upper bound should be null")
+      assert(stats.getInt(2) == 0, "BinaryType null count should be 0")
+      assert(stats.getInt(3) == 2, "BinaryType row count should be 2")
+
+      // IntegerType (col1, offset 5): bounds should be non-null and correct
+      assert(!stats.isNullAt(5), "IntegerType lower bound should not be null")
+      assert(!stats.isNullAt(6), "IntegerType upper bound should not be null")
+      assert(stats.getInt(5) == 1, s"IntegerType lower=${stats.getInt(5)}")
+      assert(stats.getInt(6) == 10, s"IntegerType upper=${stats.getInt(6)}")
+
+      root.close()
+    } catch {
+      case e: Exception =>
+        root.close()
+        throw e
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Collated string bug fixes
+  // -------------------------------------------------------------------------
+
+  test("caching collated string columns does not throw UnsupportedOperationException") {
+    // Bug: readValueFromVector used `case StringType =>` (singleton match) which only matches
+    // UTF8_BINARY. Collated StringType instances (e.g. UTF8_LCASE, UNICODE) are separate class
+    // instances and fell through to `case other => throw UnsupportedOperationException(...)`.
+    // Fix: use `case _: StringType =>` to match all string type instances.
+    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach { collation =>
+      withTable("tbl") {
+        sql(s"CACHE TABLE tbl AS SELECT col FROM VALUES " +
+          s"('hello' COLLATE $collation), ('world' COLLATE $collation) AS t(col)")
+        checkAnswer(
+          sql("SELECT col FROM tbl"),
+          Seq(Row("hello"), Row("world")))
+      }
+    }
+  }
+
+  test("caching collated string columns with null values reads correctly") {
+    // Verify that null collated string values are also handled correctly in readValueFromVector.
+    withTable("tbl") {
+      sql("CACHE TABLE tbl AS SELECT col FROM VALUES " +
+        "('a' COLLATE UTF8_LCASE), (null), ('B' COLLATE UTF8_LCASE) AS t(col)")
+      checkAnswer(
+        sql("SELECT col FROM tbl"),
+        Seq(Row("a"), Row(null), Row("B")))
+    }
+  }
+
+  test("filter on cached collated column uses correct semantic stats for partition pruning") {
+    // Bug: collectStatistics used `case StringType =>` (singleton), so collated string columns
+    // got null min/max stats. When InMemoryTableScanExec evaluated the partition filter
+    // (e.g. col = 'a') against null bounds, SQL null was coerced to false and the batch was
+    // incorrectly pruned, causing queries to return empty results even when matching rows exist.
+    // Fix: use `case st: StringType =>` and pass st.collationId to calculateMinMaxString so
+    // stats are computed with collation-aware semanticCompare, matching
+    // DefaultCachedBatchSerializer.
+    withTable("tbl") {
+      // Cache the table so InMemoryTableScanExec is used with partition-filter pushdown.
+      sql("CACHE TABLE tbl AS SELECT col FROM VALUES " +
+        "('a' COLLATE UTF8_LCASE), ('B' COLLATE UTF8_LCASE), ('c' COLLATE UTF8_LCASE) AS t(col)")
+
+      // 'a' is in the table; with null stats (before fix) the batch would be incorrectly pruned.
+      checkAnswer(sql("SELECT col FROM tbl WHERE col = 'a'"), Seq(Row("a")))
+      // 'B' is in the table; UTF8_LCASE: 'b' == 'B', so this matches 'B'.
+      checkAnswer(sql("SELECT col FROM tbl WHERE col = 'B'"), Seq(Row("B")))
+      // 'z' is not in the table; result should be empty (not incorrectly pruned to empty).
+      checkAnswer(sql("SELECT col FROM tbl WHERE col = 'z'"), Seq.empty)
+    }
+  }
+
+  test("row path stats for collated strings use collation-aware semantic comparison") {
+    // Bug: createColumnStats used `case StringType =>` (singleton), so collated string columns
+    // got StringColumnStats(StringType) -- i.e., the wrong collation ID (UTF8_BINARY=0) -- instead
+    // of StringColumnStats(collatedType). Since StringColumnStats uses semanticCompare(collationId)
+    // for ordering, passing the wrong collation ID produced binary-order stats for collated
+    // columns,
+    // which could incorrectly prune batches for case-insensitive or locale-sensitive collations.
+    // Fix: use `case st: StringType => new StringColumnStats(st)`.
+    //
+    // Test: cache {"Apple", "banana", "Cherry"} with UTF8_LCASE.
+    // Binary order: "Apple" < "Cherry" < "banana" (uppercase < lowercase in ASCII).
+    // Semantic (case-insensitive) order: "Apple" < "banana" < "Cherry".
+    // So semantic lower="Apple", upper="Cherry"; binary lower="Apple", upper="banana".
+    // A filter WHERE col = 'cherry' should match "Cherry" semantically but not return empty.
+    val collatedStringType = new StringType(1)  // collationId 1 = UTF8_LCASE
+    val schema = StructType(Seq(StructField("v", collatedStringType, nullable = true)))
+    val df = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row("Apple"), Row("banana"), Row("Cherry")), 1),
+      schema).cache()
+    val stats = cachedStats(df)
+    // With correct semantic stats: lower="Apple", upper="Cherry" (case-insensitive order)
+    // "apple" <= "Apple" <= "banana" <= "Cherry" <= "cherry" semantically.
+    assert(!stats.isNullAt(0), "lower bound should not be null for collated StringType")
+    assert(!stats.isNullAt(1), "upper bound should not be null for collated StringType")
+    assert(stats.getUTF8String(0).toString == "Apple")   // semantic min (case-insensitive)
+    assert(stats.getUTF8String(1).toString == "Cherry")  // semantic max (case-insensitive)
+    df.unpersist()
+  }
+}
+
+/**
+ * Tests that ArrowCachedBatch and ArrowCachedBatchSerializer are registered in KryoSerializer.
+ * Without the registration, persisting with DISK_ONLY storage level would fail when
+ * spark.kryo.registrationRequired=true because Kryo rejects unregistered classes.
+ */
+class ArrowCachedBatchKryoRegistrationSuite extends QueryTest with SharedSparkSession {
+
+  override def sparkConf: SparkConf = super.sparkConf
+    .set(StaticSQLConf.SPARK_CACHE_SERIALIZER.key, classOf[ArrowCachedBatchSerializer].getName)
+    .set("spark.kryo.registrationRequired", "true")
+    .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+
+  test("ArrowCachedBatch and ArrowCachedBatchSerializer are registered in KryoSerializer") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 AS SELECT 1 AS a")
+      checkAnswer(sql("SELECT * FROM t1").persist(StorageLevel.DISK_ONLY), Seq(Row(1)))
     }
   }
 }

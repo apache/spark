@@ -159,15 +159,18 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       cacheAttributes.indexWhere(_.exprId == attr.exprId)
     }.toArray
 
-    // Check if all selected types can use the fast path (no complex types)
-    val hasComplexTypes = selectedSchema.fields.exists { f =>
+    // Check if all selected types can use the fast path.
+    // Types not handled by ArrowColumnReader must use the fallback path.
+    val needsFallback = selectedSchema.fields.exists { f =>
       f.dataType match {
         case _: ArrayType | _: StructType | _: MapType => true
+        case CalendarIntervalType | VariantType | NullType => true
+        case _: UserDefinedType[_] => true
         case _ => false
       }
     }
 
-    if (hasComplexTypes) {
+    if (needsFallback) {
       // Fall back to columnar-to-row conversion via ColumnarBatch for complex types.
       // Use UnsafeProjection to convert ColumnarBatchRow to UnsafeRow.
       convertCachedBatchToColumnarBatch(input, cacheAttributes, selectedAttributes, conf)
@@ -245,7 +248,7 @@ private object ArrowCachedBatchSerializer {
       case TimestampNTZType => new LongColumnStats  // TimestampNTZ is stored as Long
       case FloatType => new FloatColumnStats
       case DoubleType => new DoubleColumnStats
-      case StringType => new StringColumnStats(StringType)
+      case st: StringType => new StringColumnStats(st)
       case BinaryType => new BinaryColumnStats
       case dt: DecimalType => new DecimalColumnStats(dt)
       case CalendarIntervalType => new IntervalColumnStats
@@ -287,9 +290,9 @@ private object ArrowCachedBatchSerializer {
         case TimestampNTZType => calculateMinMaxTimestampNTZ(vector, rowCount)
         case FloatType => calculateMinMaxFloat(vector, rowCount)
         case DoubleType => calculateMinMaxDouble(vector, rowCount)
-        case StringType => calculateMinMaxString(vector, rowCount)
+        case st: StringType => calculateMinMaxString(vector, rowCount, st.collationId)
         case _: DecimalType => calculateMinMaxDecimal(vector, rowCount, attr.dataType)
-        case _ => (null, null) // Skip for binary and complex types
+        case _ => (null, null) // Skip for binary, complex, and other unsupported types
       }
 
       Seq(lower, upper, nullCount, rowCount, sizeInBytes)
@@ -502,13 +505,17 @@ private object ArrowCachedBatchSerializer {
     (0 until rowCount).foreach { i =>
       if (!vector.isNull(i)) {
         val value = vector.asInstanceOf[org.apache.arrow.vector.Float4Vector].get(i)
-        if (!hasValue) {
-          min = value
-          max = value
-          hasValue = true
-        } else {
-          if (value < min) min = value
-          if (value > max) max = value
+        // Skip NaN: IEEE 754 comparisons with NaN are always false, so NaN never
+        // updates min/max in the row-based path (FloatColumnStats.gatherValueStats).
+        if (!value.isNaN) {
+          if (!hasValue) {
+            min = value
+            max = value
+            hasValue = true
+          } else {
+            if (value < min) min = value
+            if (value > max) max = value
+          }
         }
       }
     }
@@ -526,13 +533,16 @@ private object ArrowCachedBatchSerializer {
     (0 until rowCount).foreach { i =>
       if (!vector.isNull(i)) {
         val value = vector.asInstanceOf[org.apache.arrow.vector.Float8Vector].get(i)
-        if (!hasValue) {
-          min = value
-          max = value
-          hasValue = true
-        } else {
-          if (value < min) min = value
-          if (value > max) max = value
+        // Skip NaN to match DoubleColumnStats.gatherValueStats.
+        if (!value.isNaN) {
+          if (!hasValue) {
+            min = value
+            max = value
+            hasValue = true
+          } else {
+            if (value < min) min = value
+            if (value > max) max = value
+          }
         }
       }
     }
@@ -542,7 +552,8 @@ private object ArrowCachedBatchSerializer {
 
   def calculateMinMaxString(
       vector: org.apache.arrow.vector.FieldVector,
-      rowCount: Int): (Any, Any) = {
+      rowCount: Int,
+      collationId: Int = StringType.collationId): (Any, Any) = {
     var min: org.apache.spark.unsafe.types.UTF8String = null
     var max: org.apache.spark.unsafe.types.UTF8String = null
     var hasValue = false
@@ -556,8 +567,8 @@ private object ArrowCachedBatchSerializer {
           max = value.clone()
           hasValue = true
         } else {
-          if (value.binaryCompare(min) < 0) min = value.clone()
-          if (value.binaryCompare(max) > 0) max = value.clone()
+          if (value.semanticCompare(min, collationId) < 0) min = value.clone()
+          if (value.semanticCompare(max, collationId) > 0) max = value.clone()
         }
       }
     }
@@ -922,7 +933,7 @@ private object ArrowColumnReader {
       def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit =
         writer.write(ordinal, _vector.get(rowIndex))
     }
-    case IntegerType | DateType => new ArrowColumnReader {
+    case IntegerType | DateType | _: YearMonthIntervalType => new ArrowColumnReader {
       private var _vector: FieldVector = _
       def vector: FieldVector = _vector
       def setVector(v: FieldVector): Unit = _vector = v
@@ -930,11 +941,13 @@ private object ArrowColumnReader {
         val value = _vector match {
           case iv: IntVector => iv.get(rowIndex)
           case dv: DateDayVector => dv.get(rowIndex)
+          case iv: org.apache.arrow.vector.IntervalYearVector => iv.get(rowIndex)
         }
         writer.write(ordinal, value)
       }
     }
-    case LongType | TimestampType | TimestampNTZType => new ArrowColumnReader {
+    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
+      new ArrowColumnReader {
       private var _vector: FieldVector = _
       def vector: FieldVector = _vector
       def setVector(v: FieldVector): Unit = _vector = v
@@ -943,6 +956,8 @@ private object ArrowColumnReader {
           case bv: BigIntVector => bv.get(rowIndex)
           case tv: TimeStampMicroTZVector => tv.get(rowIndex)
           case tv: TimeStampMicroVector => tv.get(rowIndex)
+          case dv: org.apache.arrow.vector.DurationVector =>
+            org.apache.arrow.vector.DurationVector.get(dv.getDataBuffer, rowIndex)
         }
         writer.write(ordinal, value)
       }
@@ -961,7 +976,7 @@ private object ArrowColumnReader {
       def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit =
         writer.write(ordinal, _vector.get(rowIndex))
     }
-    case StringType => new ArrowColumnReader {
+    case _: StringType => new ArrowColumnReader {
       private var _vector: VarCharVector = _
       def vector: FieldVector = _vector
       def setVector(v: FieldVector): Unit = _vector = v.asInstanceOf[VarCharVector]

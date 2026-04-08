@@ -620,6 +620,8 @@ private[serializer] object KryoSerializer {
       "org.apache.spark.sql.columnar.CachedBatchSerializer",
       "org.apache.spark.sql.columnar.SimpleMetricsCachedBatchSerializer",
       "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer",
+      "org.apache.spark.sql.execution.columnar.ArrowCachedBatch",
+      "org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer",
 
       "org.apache.spark.ml.attribute.Attribute",
       "org.apache.spark.ml.attribute.AttributeGroup",

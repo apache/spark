@@ -71,7 +71,7 @@ private[sql] object ArrowUtils {
 
       // Special types
       // Note: These are not in toArrowType(), but are handled by toArrowField()
-      case _: UserDefinedType[_] => true  // UDTs are converted to their sqlType
+      case udt: UserDefinedType[_] => isSupportedByArrow(udt.sqlType)
       case _: GeometryType => true        // Converted to Struct with srid + wkb fields
       case _: GeographyType => true       // Converted to Struct with srid + wkb fields
       case _: VariantType => true         // Converted to Struct with value + metadata fields
