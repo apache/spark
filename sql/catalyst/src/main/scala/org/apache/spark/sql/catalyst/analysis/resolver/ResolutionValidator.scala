@@ -118,6 +118,8 @@ class ResolutionValidator {
         validateRelation(multiInstanceRelation)
       case supervisingCommand: SupervisingCommand =>
         validateSupervisingCommand(supervisingCommand)
+      case setCommandBase: SetCommandBase =>
+        validateSetCommandBase(setCommandBase)
     }
 
     operator match {
@@ -350,6 +352,8 @@ class ResolutionValidator {
   }
 
   private def validateSupervisingCommand(supervisingCommand: SupervisingCommand): Unit = {}
+
+  private def validateSetCommandBase(setCommandBase: SetCommandBase): Unit = {}
 
   private def handleOperatorOutput(operator: LogicalPlan): Unit = {
     attributeScopeStack.overwriteCurrent(operator.output)

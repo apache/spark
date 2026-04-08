@@ -463,6 +463,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_SET_COMMAND_RESOLUTION =
+    buildConf("spark.sql.analyzer.singlePassResolver.enableSetCommandResolution")
+      .internal()
+      .doc(
+        "When true, enables SetCommand resolution in single-pass analyzer. Otherwise, " +
+        "resolution falls back to fixed-point analyzer."
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val ANALYZER_SINGLE_PASS_RESOLVER_RUN_HEAVY_EXTENDED_RESOLUTION_CHECKS =
     buildConf("spark.sql.analyzer.singlePassResolver.runHeavyExtendedResolutionChecks")
       .internal()

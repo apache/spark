@@ -74,3 +74,10 @@ trait SupervisingCommand extends LeafCommand {
    */
   def withTransformedSupervisedPlan(transformer: LogicalPlan => LogicalPlan): LogicalPlan
 }
+
+/**
+ * A base trait for the SET command that lives in `sql/core`. This trait is
+ * defined in `sql/catalyst` so that the single-pass analyzer can
+ * pattern-match on it without depending on `sql/core`.
+ */
+trait SetCommandBase extends Command

@@ -23,6 +23,7 @@ import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.VariableResolution
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.SetCommandBase
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.errors.QueryCompilationErrors.toSQLId
@@ -39,7 +40,7 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
  * }}}
  */
 case class SetCommand(kv: Option[(String, Option[String])])
-  extends LeafRunnableCommand with Logging {
+  extends LeafRunnableCommand with Logging with SetCommandBase {
 
   private def keyValueOutput: Seq[Attribute] = {
     val schema = StructType(Array(

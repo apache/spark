@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{
 }
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ResolverGuardSuite extends ResolverGuardSuiteBase {
@@ -257,6 +258,25 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
 
   test("DESCRIBE") {
     checkResolverGuard("DESCRIBE QUERY SELECT * FROM VALUES (1)")
+  }
+
+  Seq(true, false).foreach { enabled =>
+    val expectedReason = if (enabled) {
+      None
+    } else {
+      Some("class org.apache.spark.sql.execution.command.SetCommand operator resolution")
+    }
+    test(s"SET command - enabled=$enabled") {
+      withSQLConf(
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_SET_COMMAND_RESOLUTION.key ->
+          enabled.toString
+      ) {
+        checkResolverGuard("SET", expectedReason)
+        checkResolverGuard("SET spark.sql.shuffle.partitions=10", expectedReason)
+        checkResolverGuard("SET spark.sql.shuffle.partitions", expectedReason)
+        checkResolverGuard("SET -v", expectedReason)
+      }
+    }
   }
 
   test("HAVING") {

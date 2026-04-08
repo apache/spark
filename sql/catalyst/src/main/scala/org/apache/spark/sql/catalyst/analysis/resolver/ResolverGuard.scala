@@ -151,6 +151,11 @@ class ResolverGuard(
         checkSort(sort)
       case supervisingCommand: SupervisingCommand =>
         None
+      case _: SetCommandBase
+          if conf.getConf(
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_SET_COMMAND_RESOLUTION
+          ) =>
+        None
       case repartition: Repartition =>
         checkRepartition(repartition)
       case having: UnresolvedHaving =>

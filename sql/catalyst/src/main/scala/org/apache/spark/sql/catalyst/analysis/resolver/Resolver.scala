@@ -320,6 +320,8 @@ class Resolver(
             handleLeafOperator(hiveTableRelation)
           case supervisingCommand: SupervisingCommand =>
             resolveSupervisingCommand(supervisingCommand)
+          case setCommandBase: SetCommandBase =>
+            resolveSetCommand(setCommandBase)
           case repartition: Repartition =>
             resolveRepartition(repartition)
           case sample: Sample =>
@@ -729,6 +731,14 @@ class Resolver(
    */
   private def resolveSupervisingCommand(supervisingCommand: SupervisingCommand): LogicalPlan = {
     supervisingCommand
+  }
+
+  /**
+   * [[SetCommandBase]] is a leaf command that is fully formed by the parser and requires no
+   * resolution.
+   */
+  private def resolveSetCommand(setCommandBase: SetCommandBase): LogicalPlan = {
+    setCommandBase
   }
 
   /**
