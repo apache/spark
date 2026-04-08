@@ -4428,7 +4428,7 @@ object SQLConf {
         "ColumnarToRow and ArrowWriter conversion. This optimization " +
         "reduces data transfer overhead between the JVM and Python " +
         "worker processes.")
-      .version("4.1.0")
+      .version("4.2.0")
       .booleanConf
       .createWithDefault(true)
 
