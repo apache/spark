@@ -288,8 +288,27 @@ private[spark] class TaskSchedulerImpl(
   private[scheduler] def createTaskSetManager(
       taskSet: TaskSet,
       maxTaskFailures: Int): TaskSetManager = {
-    new TaskSetManager(this, taskSet, maxTaskFailures, healthTrackerOpt, clock)
+    if (isStreamingTaskSet(taskSet)) {
+      streamingTaskSetManager(taskSet, maxTaskFailures)
+    } else {
+      new TaskSetManager(this, taskSet, maxTaskFailures, healthTrackerOpt, clock)
+    }
   }
+
+  // Create task set manager for streaming tasks sets which
+  // will include query and batch Id in the logs
+  private def streamingTaskSetManager(taskSet: TaskSet, maxTaskFailures: Int) = {
+    new TaskSetManager(this, taskSet, maxTaskFailures, healthTrackerOpt, clock)
+      with StructuredStreamingIdAwareSchedulerLogging {
+        // ensure log name matches the non-streaming version
+        override protected def logName: String = classOf[TaskSetManager].getName
+      }
+  }
+
+  private def isStreamingTaskSet(taskSet: TaskSet): Boolean =
+    taskSet.properties != null &&
+      taskSet.properties.getProperty(
+        StructuredStreamingIdAwareSchedulerLogging.QUERY_ID_KEY) != null
 
   // Kill all the tasks in all the stage attempts of the same stage Id. Note stage attempts won't
   // be aborted but will be marked as zombie. The stage attempt will be finished and cleaned up

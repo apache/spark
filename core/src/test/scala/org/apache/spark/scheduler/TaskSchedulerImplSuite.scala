@@ -28,6 +28,7 @@ import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.language.reflectiveCalls
 
+import org.apache.logging.log4j.Level
 import org.mockito.ArgumentMatchers.{any, anyInt, anyString, eq => meq}
 import org.mockito.Mockito.{atLeast, atMost, never, spy, times, verify, when}
 import org.scalatest.concurrent.Eventually
@@ -2711,6 +2712,57 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
         }
       }
     }
+  }
+
+  test("SPARK-56326: Streaming TaskSet with queryId in properties " +
+    "uses StructuredStreamingIdAwareSchedulerLogging") {
+    setupScheduler()
+    val testQueryId = "test-query-id-1234"
+    val testBatchId = "42"
+    // Create a TaskSet with a non-null Properties containing the streaming metadata.
+    val properties = new Properties()
+    properties.setProperty(StructuredStreamingIdAwareSchedulerLogging.QUERY_ID_KEY, testQueryId)
+    properties.setProperty(StructuredStreamingIdAwareSchedulerLogging.BATCH_ID_KEY, testBatchId)
+    val taskSet = new TaskSet(Array(new FakeTask(0, 0, Nil)),
+    0, 0, 0, properties, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None)
+
+    val logAppender = new LogAppender("streaming log name check")
+    // TSM constructor prints some debug logs we can use
+    logAppender.setThreshold(Level.DEBUG)
+    withLogAppender(logAppender,
+      loggerNames = Seq(classOf[TaskSetManager].getName),
+      level = Some(Level.DEBUG)) {
+      val tsm = taskScheduler.createTaskSetManager(taskSet, 1)
+      assert(tsm.isInstanceOf[StructuredStreamingIdAwareSchedulerLogging])
+    }
+    // when creating the streaming version we want the log name to match the
+    // non-streaming baseline case. By confirming our log appender contains
+    // logs we know the log name is correct
+    assert(logAppender.loggingEvents.nonEmpty,
+      "Expected logs under TaskSetManager logger name")
+  }
+
+  test("SPARK-56326: Streaming TaskSet without queryId in properties " +
+    "does not use StructuredStreamingIdAwareSchedulerLogging") {
+    setupScheduler()
+    // create task with empty properties (using FakeTask will cause null properties)
+    val properties = new Properties()
+    val taskSet = new TaskSet(Array(new FakeTask(0, 0, Nil)),
+      0, 0, 0, properties, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None)
+
+    val tsm = taskScheduler.createTaskSetManager(taskSet, 1)
+
+    assert(!tsm.isInstanceOf[StructuredStreamingIdAwareSchedulerLogging])
+  }
+
+  test("SPARK-56326: Streaming TaskSet with null properties " +
+    "does not use StructuredStreamingIdAwareSchedulerLogging") {
+    setupScheduler()
+    val taskSet = FakeTask.createTaskSet(10)
+
+    val tsm = taskScheduler.createTaskSetManager(taskSet, 1)
+
+    assert(!tsm.isInstanceOf[StructuredStreamingIdAwareSchedulerLogging])
   }
 
 }

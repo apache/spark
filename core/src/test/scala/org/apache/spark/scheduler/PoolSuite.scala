@@ -382,8 +382,8 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     val testBatchId = "99"
     val properties = new Properties()
     properties.setProperty(schedulableBuilder.FAIR_SCHEDULER_PROPERTIES, "1")
-    properties.setProperty("sql.streaming.queryId", testQueryId)
-    properties.setProperty("streaming.sql.batchId", testBatchId)
+    properties.setProperty(StructuredStreamingIdAwareSchedulerLogging.QUERY_ID_KEY, testQueryId)
+    properties.setProperty(StructuredStreamingIdAwareSchedulerLogging.BATCH_ID_KEY, testBatchId)
 
     val taskSetManager = createTaskSetManager(0, 1, taskScheduler)
 

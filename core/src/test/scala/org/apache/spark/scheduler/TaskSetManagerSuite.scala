@@ -2875,8 +2875,8 @@ class TaskSetManagerSuite
     val testBatchId = "42"
     // Create a TaskSet with a non-null Properties containing the streaming metadata.
     val properties = new Properties()
-    properties.setProperty("sql.streaming.queryId", testQueryId)
-    properties.setProperty("streaming.sql.batchId", testBatchId)
+    properties.setProperty(StructuredStreamingIdAwareSchedulerLogging.QUERY_ID_KEY, testQueryId)
+    properties.setProperty(StructuredStreamingIdAwareSchedulerLogging.BATCH_ID_KEY, testBatchId)
     val taskSet = new TaskSet(Array(new FakeTask(0, 0, Nil)),
       0, 0, 0, properties, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None)
 
@@ -2885,7 +2885,12 @@ class TaskSetManagerSuite
     val loggerName = classOf[TaskSetManager].getName
 
     withLogAppender(logAppender, loggerNames = Seq(loggerName)) {
+      // mirrors TaskSchedulerImpl.streamingTaskSetManager
       val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+        with StructuredStreamingIdAwareSchedulerLogging {
+          // ensure log name matches the non-streaming version
+          override protected def logName: String = classOf[TaskSetManager].getName
+        }
 
       // resourceOffer triggers prepareLaunchingTask which logs "Starting ..."
       val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)._1

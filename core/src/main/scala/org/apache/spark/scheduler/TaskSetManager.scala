@@ -31,7 +31,7 @@ import org.apache.spark.InternalAccumulator
 import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.{config, LogKeys}
+import org.apache.spark.internal.{config, Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.SchedulingMode._
@@ -59,10 +59,7 @@ private[spark] class TaskSetManager(
     val taskSet: TaskSet,
     val maxTaskFailures: Int,
     healthTracker: Option[HealthTracker] = None,
-    clock: Clock = new SystemClock())
-  extends Schedulable with StructuredStreamingIdAwareSchedulerLogging {
-
-  override def properties: Properties = taskSet.properties
+    clock: Clock = new SystemClock()) extends Schedulable with Logging {
 
   private val conf = sched.sc.conf
   val maxResultSize = conf.get(config.MAX_RESULT_SIZE)
@@ -79,6 +76,9 @@ private[spark] class TaskSetManager(
     .map { case (t, idx) => t.partitionId -> idx }.toMap
   val numTasks = tasks.length
   val copiesRunning = new Array[Int](numTasks)
+  // used in the case of a streaming task set
+  // where we need the properties for StructuredStreamingIdAwareSchedulerLogging
+  protected def properties: Properties = taskSet.properties
 
   val speculationEnabled = conf.get(SPECULATION_ENABLED)
   private val efficientTaskProcessMultiplier =
