@@ -55,17 +55,16 @@ message Catalog {
     CurrentCatalog current_catalog = 24;
     SetCurrentCatalog set_current_catalog = 25;
     ListCatalogs list_catalogs = 26;
-    ListCachedTables list_cached_tables = 27;
-    DropTable drop_table = 28;
-    DropView drop_view = 29;
-    CreateDatabase create_database = 30;
-    DropDatabase drop_database = 31;
-    ListPartitions list_partitions = 32;
-    ListViews list_views = 33;
-    GetTableProperties get_table_properties = 34;
-    GetCreateTableString get_create_table_string = 35;
-    TruncateTable truncate_table = 36;
-    AnalyzeTable analyze_table = 37;
+    DropTable drop_table = 27;
+    DropView drop_view = 28;
+    CreateDatabase create_database = 29;
+    DropDatabase drop_database = 30;
+    ListPartitions list_partitions = 31;
+    ListViews list_views = 32;
+    GetTableProperties get_table_properties = 33;
+    GetCreateTableString get_create_table_string = 34;
+    TruncateTable truncate_table = 35;
+    AnalyzeTable analyze_table = 36;
   }
 }
 
@@ -252,9 +251,6 @@ message ListCatalogs {
   // (Optional) The pattern that the catalog name needs to match
   optional string pattern = 1;
 }
-
-// See `spark.catalog.listCachedTables`
-message ListCachedTables { }
 
 // See `spark.catalog.dropTable`
 message DropTable {
