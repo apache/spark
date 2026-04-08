@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.permission.{AclEntry, AclEntryScope, AclEntryType, F
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{SQLConfHelper, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.analysis.{ResolvedPersistentView, ResolvedTable, ResolvedTempView, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -39,8 +39,8 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.connector.catalog.{TableCatalog, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TableIdentifierHelper
-import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.CommandExecutionMode
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -577,6 +577,29 @@ case class TruncateTableCommand(
   }
 }
 
+object ResolvedChildHelper {
+  /**
+   * Used by ShowColumnsCommand and DescribeTableCommand to
+   * extract CatalogTable from the plan representing the entity
+   * being described.
+   */
+  def getTableMetadata(
+      child: LogicalPlan,
+      sparkSession: SparkSession,
+      table: TableIdentifier): CatalogTable = child match {
+    case ResolvedTempView(_, metadata) => metadata
+    case ResolvedPersistentView(_, _, metadata) => metadata
+    case ResolvedTable(_, _, t: V1Table, _) => t.v1Table
+    case _ =>
+      val catalog = sparkSession.sessionState.catalog
+      if (catalog.isTempView(table)) {
+        catalog.getTempViewOrPermanentTableMetadata(table)
+      } else {
+        catalog.getTableRawMetadata(table)
+      }
+  }
+}
+
 trait DescribeCommandBase {
   def output: Seq[Attribute]
 
@@ -617,15 +640,14 @@ case class DescribeTableCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
     val catalog = sparkSession.sessionState.catalog
+    val metadata = ResolvedChildHelper.getTableMetadata(child, sparkSession, table)
 
     if (catalog.isTempView(table)) {
       if (partitionSpec.nonEmpty) {
         throw QueryCompilationErrors.descPartitionNotAllowedOnTempView(table.identifier)
       }
-      val schema = catalog.getTempViewOrPermanentTableMetadata(table).schema
-      describeSchema(schema, result, header = false)
+      describeSchema(metadata.schema, result, header = false)
     } else {
-      val metadata = catalog.getTableRawMetadata(table)
       if (metadata.schema.isEmpty) {
         // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
         // inferred at runtime. We should still support it.
@@ -1004,13 +1026,12 @@ case class ShowColumnsCommand(
     copy(child = newChild)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
     val lookupTable = databaseName match {
       case None => tableName
       case Some(db) => TableIdentifier(tableName.identifier, Some(db))
     }
-    val table = catalog.getTempViewOrPermanentTableMetadata(lookupTable)
-    table.schema.map { c =>
+    val metadata = ResolvedChildHelper.getTableMetadata(child, sparkSession, lookupTable)
+    metadata.schema.map { c =>
       Row(c.name)
     }
   }
