@@ -104,7 +104,7 @@ Infer the arguments from the changes:
 
 The script sets the latest unreleased version as the default affected version. Ask the user to review and adjust versions, subtask relationships, and other fields on the JIRA ticket after creation.
 
-Follow the template in `.github/PULL_REQUEST_TEMPLATE` for the PR description.
+Before writing the PR description, read `.github/PULL_REQUEST_TEMPLATE` and fill in every section from that file.
 
 DO NOT push to the upstream repo. Always push to the personal fork. Open PRs against `master` on the upstream repo.
 
