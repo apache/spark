@@ -91,7 +91,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       o.copy(write = Some(write), query = newQuery)
 
     case WriteToMicroBatchDataSource(
-        relationOpt, table, query, queryId, options, outputMode, Some(batchId)) =>
+        relationOpt, table, query, queryId, options, outputMode, Some(batchId), _) =>
       val writeOptions = mergeOptions(
         options,
         relationOpt.map(r => r.options.asCaseSensitiveMap.asScala.toMap).getOrElse(Map.empty))

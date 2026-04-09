@@ -354,7 +354,7 @@ class MicroBatchExecution(
         }
         WriteToMicroBatchDataSource(
           relationOpt,
-          table = s,
+          sinkTable = s,
           query = _logicalPlan,
           queryId = id.toString,
           extraOptions,

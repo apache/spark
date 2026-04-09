@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolveSchemaEvolution}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
-import org.apache.spark.sql.connector.catalog.SupportsWrite
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SupportsSchemaEvolution, UnaryNode}
+import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
+import org.apache.spark.sql.connector.catalog.{SupportsWrite, TableChange, TableWritePrivilege}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.streaming.OutputMode
 
@@ -32,15 +34,44 @@ import org.apache.spark.sql.streaming.OutputMode
  */
 case class WriteToMicroBatchDataSource(
     relation: Option[DataSourceV2Relation],
-    table: SupportsWrite,
+    sinkTable: SupportsWrite,
     query: LogicalPlan,
     queryId: String,
     writeOptions: Map[String, String],
     outputMode: OutputMode,
-    batchId: Option[Long] = None)
-  extends UnaryNode {
+    batchId: Option[Long] = None,
+    override val withSchemaEvolution: Boolean = false)
+  extends UnaryNode with SupportsSchemaEvolution {
   override def child: LogicalPlan = query
   override def output: Seq[Attribute] = Nil
+
+  final override val nodePatterns = Seq(COMMAND)
+
+  override def table: LogicalPlan = relation.getOrElse {
+    throw new IllegalStateException(
+      "Cannot access table for schema evolution: no DataSourceV2Relation is set.")
+  }
+
+  override lazy val schemaEvolutionReady: Boolean =
+    relation.exists(_.resolved) && query.resolved
+
+  override lazy val pendingSchemaChanges: Seq[TableChange] = {
+    if (relation.nonEmpty && schemaEvolutionEnabled && schemaEvolutionReady) {
+      ResolveSchemaEvolution.computeSchemaChanges(
+        relation.get.schema, query.schema, isByName = true).toSeq
+    } else {
+      Seq.empty
+    }
+  }
+
+  override val writePrivileges: Set[TableWritePrivilege] = Set(TableWritePrivilege.INSERT)
+
+  override def withNewTable(newTable: NamedRelation): WriteToMicroBatchDataSource = {
+    val newRelation = newTable.asInstanceOf[DataSourceV2Relation]
+    copy(
+      relation = Some(newRelation),
+      sinkTable = newRelation.table.asInstanceOf[SupportsWrite])
+  }
 
   def withNewBatchId(batchId: Long): WriteToMicroBatchDataSource = {
     copy(batchId = Some(batchId))
