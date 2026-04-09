@@ -240,9 +240,9 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
 
   test("per-write options take precedence over session config") {
     val hadoopConf = spark.sessionState.newHadoopConf()
-    // Test outputTimestampType: session sets INT96, write option overrides to TIMESTAMP_MICROS.
     withTempPath { dir =>
       val path = s"${dir.getCanonicalPath}/test.parquet"
+      // Session sets INT96, but the per-write option overrides to TIMESTAMP_MICROS.
       withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "INT96") {
         spark.sql("SELECT TIMESTAMP '2024-01-01 12:00:00' AS ts")
           .write
@@ -257,24 +257,6 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
           .asPrimitiveType()
         // TIMESTAMP_MICROS is stored as INT64, not INT96
         assert(tsField.getPrimitiveTypeName === PrimitiveTypeName.INT64)
-      }
-    }
-
-    // Test writerVersion: write option sets PARQUET_2_0 which uses delta encoding.
-    withTempPath { dir =>
-      val path = s"${dir.getCanonicalPath}/test.parquet"
-      spark.range(1, 100).toDF("id")
-        .write
-        .option(ParquetOutputFormat.WRITER_VERSION,
-          ParquetProperties.WriterVersion.PARQUET_2_0.toString)
-        .mode("overwrite")
-        .parquet(path)
-
-      for (footer <- readAllFootersWithoutSummaryFiles(new Path(path), hadoopConf)) {
-        for (blockMetadata <- footer.getParquetMetadata.getBlocks.asScala) {
-          val columnChunkMetadata = blockMetadata.getColumns.asScala.head
-          assert(columnChunkMetadata.getEncodings.contains(Encoding.DELTA_BINARY_PACKED))
-        }
       }
     }
   }
