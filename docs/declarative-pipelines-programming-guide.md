@@ -536,6 +536,76 @@ When working with sinks, keep the following considerations in mind:
 - **Python API**: Sink functionality is available only through the Python API, not SQL
 - **Append-only**: Only append operations are supported; full refresh updates reset checkpoints but do not clean previously computed results
 
+## How Datasets are Stored and Refreshed
+
+This section describes how SDP manages the underlying storage for datasets. Understanding these mechanics helps you choose appropriate table formats and storage configurations.
+
+### Table Format
+
+By default, SDP creates tables using Spark's default table format, which is configured by the `spark.sql.sources.default` property (default: `parquet`). You can specify a different format for individual datasets:
+
+<div class="codetabs">
+<div data-lang="python" markdown="1">
+
+```python
+@dp.table(format="delta")
+def my_streaming_table() -> DataFrame:
+    return spark.readStream.table("source")
+
+@dp.materialized_view(format="orc")
+def my_materialized_view() -> DataFrame:
+    return spark.read.table("source")
+```
+
+</div>
+<div data-lang="SQL" markdown="1">
+
+```sql
+CREATE STREAMING TABLE my_streaming_table
+USING DELTA
+AS SELECT * FROM STREAM source;
+
+CREATE MATERIALIZED VIEW my_materialized_view
+USING ORC
+AS SELECT * FROM source;
+```
+
+</div>
+</div>
+
+SDP itself does not restrict which table formats can be used. However, the table format must be supported by the configured catalog. For example, a Delta catalog only supports Delta tables, while the default session catalog supports Parquet, ORC, and other built-in formats.
+
+### How Materialized Views are Refreshed
+
+A materialized view in SDP is **not** the same as a database-native materialized view (e.g., those in PostgreSQL or Oracle). SDP materialized views work as follows:
+
+1. On each pipeline run, the entire query is re-executed.
+2. The existing table data is truncated.
+3. The new query results are appended to the table.
+
+This means that every refresh is a **full recomputation** - there is no incremental or differential update. For tables with large amounts of data, be aware that each pipeline run will reprocess the entire dataset.
+
+Because of this mechanism, the materialized view's underlying table format must support the `TRUNCATE TABLE` operation.
+
+### How Streaming Tables are Refreshed
+
+Unlike materialized views, streaming tables support **incremental processing**:
+
+1. On each pipeline run, only new data from the source is processed.
+2. New data is appended to the existing table data.
+3. A checkpoint tracks the processing progress so subsequent runs resume from where the last run left off.
+
+Streaming tables require a checkpoint directory on a Hadoop-compatible file system (e.g., HDFS, Amazon S3, Azure ADLS Gen2, Google Cloud Storage, or local file system). The checkpoint directory is configured via the `storage` field in the pipeline spec file.
+
+Streaming tables also support **schema evolution**: when the schema of incoming data changes, SDP merges the new schema with the existing table schema automatically.
+
+### Full Refresh
+
+You can force a full refresh of specific datasets or the entire pipeline using the `--full-refresh` or `--full-refresh-all` CLI options. A full refresh:
+
+- For **materialized views**: has no special effect, since every refresh is already a full recomputation.
+- For **streaming tables**: clears all existing data and checkpoints, reprocessing all available source data from scratch.
+
 ## Important Considerations
 
 ### Python Considerations
