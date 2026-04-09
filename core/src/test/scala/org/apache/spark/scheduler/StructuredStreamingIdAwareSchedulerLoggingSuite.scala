@@ -68,7 +68,7 @@ class StructuredStreamingIdAwareSchedulerLoggingSuite extends SparkFunSuite {
     val result = StructuredStreamingIdAwareSchedulerLogging
       .constructStreamingLogEntry(propsWithBothIds(), "test message")
 
-    assertResult(s"[queryId = ${testQueryId.take(5)}] [batchId = $testBatchId] test message")(
+    assertResult(s"[queryId = $testQueryId] [batchId = $testBatchId] test message")(
       result.message)
     assertContextValue(result.context, LogKeys.QUERY_ID, testQueryId)
     assertContextValue(result.context, LogKeys.BATCH_ID, testBatchId)
@@ -78,7 +78,7 @@ class StructuredStreamingIdAwareSchedulerLoggingSuite extends SparkFunSuite {
     val result = StructuredStreamingIdAwareSchedulerLogging
       .constructStreamingLogEntry(propsWithQueryIdOnly(), "test message")
 
-    assertResult(s"[queryId = ${testQueryId.take(5)}] test message")(result.message)
+    assertResult(s"[queryId = $testQueryId] test message")(result.message)
     assertContextValue(result.context, LogKeys.QUERY_ID, testQueryId)
     assertContextAbsent(result.context, LogKeys.BATCH_ID)
   }
@@ -104,7 +104,7 @@ class StructuredStreamingIdAwareSchedulerLoggingSuite extends SparkFunSuite {
       .constructStreamingLogEntry(propsWithBothIds(),
         log"test message ${MDC(LogKeys.MESSAGE, "Dummy Context")}")
 
-    assertResult(s"[queryId = ${testQueryId.take(5)}] " +
+    assertResult(s"[queryId = $testQueryId] " +
       s"[batchId = $testBatchId] test message Dummy Context")(
       result.message)
     assertContextValue(result.context, LogKeys.QUERY_ID, testQueryId)
@@ -117,7 +117,7 @@ class StructuredStreamingIdAwareSchedulerLoggingSuite extends SparkFunSuite {
       .constructStreamingLogEntry(propsWithQueryIdOnly(),
         log"test message ${MDC(LogKeys.MESSAGE, "Dummy Context")}")
 
-    assertResult(s"[queryId = ${testQueryId.take(5)}] test message Dummy Context")(result.message)
+    assertResult(s"[queryId = $testQueryId] test message Dummy Context")(result.message)
     assertContextValue(result.context, LogKeys.QUERY_ID, testQueryId)
     assertContextAbsent(result.context, LogKeys.BATCH_ID)
     assertContextValue(result.context, LogKeys.MESSAGE, "Dummy Context")

@@ -150,13 +150,11 @@ private[scheduler] object StructuredStreamingIdAwareSchedulerLogging extends Log
       val queryId = Option(properties.getProperty(QUERY_ID_KEY))
       val batchId = Option(properties.getProperty(BATCH_ID_KEY))
 
-      // formatMessage truncates the queryId for readability
-      // so we use a blank messageWithContext to overwrite the full query Id to the context
       formatMessage(
         queryId,
         batchId,
         entry
-      ) + MessageWithContext("", constructStreamingContext(queryId, batchId))
+      )
     })
   }
 
@@ -200,7 +198,7 @@ private[scheduler] object StructuredStreamingIdAwareSchedulerLogging extends Log
                              batchId: Option[String],
                              msg: => String): String = {
     val msgWithBatchId = batchId.map(bid => s"[batchId = $bid] $msg").getOrElse(msg)
-    queryId.map(qId => s"[queryId = ${qId.take(5)}] $msgWithBatchId").getOrElse(msgWithBatchId)
+    queryId.map(qId => s"[queryId = $qId] $msgWithBatchId").getOrElse(msgWithBatchId)
   }
 
   private def formatMessage(
@@ -211,7 +209,7 @@ private[scheduler] object StructuredStreamingIdAwareSchedulerLogging extends Log
       bId => log"[batchId = ${MDC(LogKeys.BATCH_ID, bId)}] " + toMessageWithContext(msg)
     ).getOrElse(toMessageWithContext(msg))
     queryId.map(
-      qId => log"[queryId = ${MDC(LogKeys.QUERY_ID, qId.take(5))}] " + msgWithBatchId
+      qId => log"[queryId = ${MDC(LogKeys.QUERY_ID, qId)}] " + msgWithBatchId
     ).getOrElse(msgWithBatchId)
   }
 
