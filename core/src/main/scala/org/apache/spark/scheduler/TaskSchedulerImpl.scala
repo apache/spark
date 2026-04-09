@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
-import java.util.TimerTask
+import java.util.{Properties, TimerTask}
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
@@ -300,6 +300,7 @@ private[spark] class TaskSchedulerImpl(
   private def streamingTaskSetManager(taskSet: TaskSet, maxTaskFailures: Int): TaskSetManager = {
     new TaskSetManager(this, taskSet, maxTaskFailures, healthTrackerOpt, clock)
       with StructuredStreamingIdAwareSchedulerLogging {
+        override protected def properties: Properties = this.taskSet.properties
         // ensure log name matches the non-streaming version
         override protected def logName: String = classOf[TaskSetManager].getName
       }

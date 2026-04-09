@@ -19,7 +19,6 @@ package org.apache.spark.scheduler
 
 import java.io.NotSerializableException
 import java.nio.ByteBuffer
-import java.util.Properties
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, TimeUnit}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
@@ -77,9 +76,6 @@ private[spark] class TaskSetManager(
     .map { case (t, idx) => t.partitionId -> idx }.toMap
   val numTasks = tasks.length
   val copiesRunning = new Array[Int](numTasks)
-  // used in the case of a streaming task set
-  // where we need the properties for StructuredStreamingIdAwareSchedulerLogging
-  protected def properties: Properties = taskSet.properties
 
   val speculationEnabled = conf.get(SPECULATION_ENABLED)
   private val efficientTaskProcessMultiplier =

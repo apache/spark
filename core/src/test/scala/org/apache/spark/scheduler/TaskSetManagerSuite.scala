@@ -2870,7 +2870,8 @@ class TaskSetManagerSuite
   test("SPARK-56326: Streaming query Id and batch Id are included in scheduling log " +
     "messages") {
     sc = new SparkContext("local", "test")
-    sched = new FakeTaskScheduler(sc)
+    val clock = new ManualClock
+    sched = new FakeTaskScheduler(sc, clock, ("exec1", "host1"))
     val testQueryId = "test-query-id-1234"
     val testBatchId = "42"
     // Create a TaskSet with a non-null Properties containing the streaming metadata.
@@ -2878,19 +2879,15 @@ class TaskSetManagerSuite
     properties.setProperty(StructuredStreamingIdAwareSchedulerLogging.QUERY_ID_KEY, testQueryId)
     properties.setProperty(StructuredStreamingIdAwareSchedulerLogging.BATCH_ID_KEY, testBatchId)
     val taskSet = new TaskSet(Array(new FakeTask(0, 0, Nil)),
-      0, 0, 0, properties, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None)
+    0, 0, 0, properties, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None)
 
-    val clock = new ManualClock
     val logAppender = new LogAppender("streaming scheduling logs", maxEvents = 1000)
     val loggerName = classOf[TaskSetManager].getName
 
     withLogAppender(logAppender, loggerNames = Seq(loggerName)) {
-      // mirrors TaskSchedulerImpl.streamingTaskSetManager
-      val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
-        with StructuredStreamingIdAwareSchedulerLogging {
-          // ensure log name matches the non-streaming version
-          override protected def logName: String = classOf[TaskSetManager].getName
-        }
+      // uses TaskSchedulerImpl.streamingTaskSetManager to ensure
+      // logging and properties is initialized correctly
+      val manager = sched.createTaskSetManager(taskSet, MAX_TASK_FAILURES)
 
       // resourceOffer triggers prepareLaunchingTask which logs "Starting ..."
       val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)._1
