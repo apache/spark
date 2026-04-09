@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.V2TableReference.Context
 import org.apache.spark.sql.catalyst.analysis.V2TableReference.TableInfo
 import org.apache.spark.sql.catalyst.analysis.V2TableReference.TemporaryViewContext
-import org.apache.spark.sql.catalyst.analysis.V2TableReference.TestContext
+import org.apache.spark.sql.catalyst.analysis.V2TableReference.TransactionContext
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
@@ -85,17 +85,15 @@ private[sql] object V2TableReference {
 
   sealed trait Context
   case class TemporaryViewContext(viewName: Seq[String]) extends Context
-  // TODO(achatzis): Fix naming and complete implementation.
-  case class TestContext(tableName: Seq[String]) extends Context
+  /** Context for relations that are re-resolved through a transaction catalog. */
+  case object TransactionContext extends Context
 
   def createForTempView(relation: DataSourceV2Relation, viewName: Seq[String]): V2TableReference = {
     create(relation, TemporaryViewContext(viewName))
   }
 
-  def createForRelation(
-      relation: DataSourceV2Relation,
-      relationName: Seq[String]): V2TableReference = {
-    create(relation, TestContext(relationName))
+  def createForTransaction(relation: DataSourceV2Relation): V2TableReference = {
+    create(relation, TransactionContext)
   }
 
   private def create(relation: DataSourceV2Relation, context: Context): V2TableReference = {
@@ -119,7 +117,7 @@ private[sql] object V2TableReferenceUtils extends SQLConfHelper {
     ref.context match {
       case ctx: TemporaryViewContext =>
         validateLoadedTableInTempView(table, ref, ctx)
-      case _: TestContext =>
+      case TransactionContext =>
         validateLoadedTableInTransaction(table, ref)
       case ctx =>
         throw SparkException.internalError(s"Unknown table ref context: ${ctx.getClass.getName}")
@@ -128,8 +126,8 @@ private[sql] object V2TableReferenceUtils extends SQLConfHelper {
 
   private def validateLoadedTableInTransaction(table: Table, ref: V2TableReference): Unit = {
     val dataErrors = V2TableUtil.validateCapturedColumns(
-      table,
-      ref.info.columns,
+      table = table,
+      originCols = ref.info.columns,
       mode = PROHIBIT_CHANGES)
     if (dataErrors.nonEmpty) {
       throw QueryCompilationErrors.columnsChangedAfterAnalysis(ref.name, dataErrors)

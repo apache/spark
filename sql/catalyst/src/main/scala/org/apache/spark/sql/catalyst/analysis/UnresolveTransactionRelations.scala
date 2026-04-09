@@ -23,6 +23,15 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 
+/**
+ * When a transaction is active, converts resolved [[DataSourceV2Relation]] nodes back to
+ * [[V2TableReference]] placeholders for all relations loaded by a catalog with the same
+ * name as the transaction catalog.
+ *
+ * This forces re-resolution of those relations against the transaction's catalog, which
+ * intercepts [[TableCatalog#loadTable]] calls to track which tables are read as part of
+ * the transaction.
+ */
 class UnresolveTransactionRelations(val catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with LookupCatalog {
 
@@ -43,14 +52,13 @@ class UnresolveTransactionRelations(val catalogManager: CatalogManager)
       catalog: CatalogPlugin): LogicalPlan = {
     plan transform {
       case r: DataSourceV2Relation if isLoadedFromCatalog(r, catalog) =>
-        V2TableReference.createForRelation(r, Seq.empty)
+        V2TableReference.createForTransaction(r)
     }
   }
 
   private def isLoadedFromCatalog(
       relation: DataSourceV2Relation,
       catalog: CatalogPlugin): Boolean = {
-    // relation.catalog.exists(_ eq catalog) && relation.identifier.isDefined
     relation.catalog.exists(_.name == catalog.name) && relation.identifier.isDefined
   }
 }

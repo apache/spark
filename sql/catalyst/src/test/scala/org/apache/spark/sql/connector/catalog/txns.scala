@@ -42,13 +42,13 @@ class Txn(override val catalog: TxnTableCatalog) extends Transaction {
 
   override def commit(): Unit = {
     if (closed) throw new IllegalStateException("Can't commit, already closed")
+    if (state == Aborted) throw new IllegalStateException("Can't commit, already aborted")
     catalog.commit()
     this.state = Committed
   }
 
   override def abort(): Unit = {
     if (state == Committed || state == Aborted) return
-    // if (closed) throw new IllegalStateException("Can't abort, already closed")
     this.state = Aborted
   }
 
@@ -58,9 +58,9 @@ class Txn(override val catalog: TxnTableCatalog) extends Transaction {
   }
 }
 
-// a special table used in row-level operation transactions
-// it inherits data from the base table upon construction and
-// propagates staged transaction state back after an explicit commit
+// A special table used in row-level operation transactions. It inherits data
+// from the base table upon construction and propagates staged transaction state
+// back after an explicit commit.
 class TxnTable(val delegate: InMemoryRowLevelOperationTable)
   extends InMemoryRowLevelOperationTable(
     delegate.name,
@@ -72,8 +72,7 @@ class TxnTable(val delegate: InMemoryRowLevelOperationTable)
   // TODO(achatzis): Rethink how schema evolution works on top of transactions.
   alterTableWithData(delegate.data, schema)
 
-  // a tracker of filters used in each scan
-  // achatzis: Non-deterministic filters?
+  // A tracker of filters used in each scan.
   val scanEvents = new ArrayBuffer[Array[Filter]]()
 
   override protected def recordScanEvent(filters: Array[Filter]): Unit = {
@@ -92,8 +91,8 @@ class TxnTable(val delegate: InMemoryRowLevelOperationTable)
   }
 }
 
-// a special table catalog used in row-level operation transactions
-// table changes are initially staged in memory and propagated only after an explicit commit
+// A special table catalog used in row-level operation transactions.
+// Table changes are initially staged in memory and propagated only after an explicit commit.
 class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends TableCatalog {
 
   private val tables: util.Map[Identifier, TxnTable] = new ConcurrentHashMap[Identifier, TxnTable]()
@@ -108,20 +107,25 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
 
   override def loadTable(ident: Identifier): Table = {
     tables.computeIfAbsent(ident, _ => {
-      val table = delegate.loadTableAs[InMemoryRowLevelOperationTable](ident)
+      val table = delegate.loadTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
       new TxnTable(table)
     })
   }
 
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+    delegate.createTable(ident, tableInfo)
+    loadTable(ident)
+  }
+
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
     val newDelegateTable = delegate.alterTable(ident, changes: _*)
-    // Compute again if absent.
-    tables.remove(ident)
+    tables.remove(ident) // Load again.
     newDelegateTable
   }
 
   override def dropTable(ident: Identifier): Boolean = {
-    throw new UnsupportedOperationException()
+    tables.remove(ident)
+    delegate.dropTable(ident)
   }
 
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
@@ -133,6 +137,7 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
   }
 
   def clearActiveTransaction(): Unit = {
+    delegate.lastTransaction = delegate.transaction
     delegate.transaction = null
   }
 

@@ -521,8 +521,10 @@ case class WriteDelta(
 trait V2CreateTableAsSelectPlan
   extends V2CreateTablePlan
     with AnalysisOnlyCommand
-    with CTEInChildren {
+    with CTEInChildren
+    with TransactionalWrite {
   def query: LogicalPlan
+  override def table: LogicalPlan = name
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
     withNameAndQuery(newName = name, newQuery = WithCTE(query, cteDefs))
@@ -1013,13 +1015,13 @@ case class MergeIntoTable(
     notMatchedActions: Seq[MergeAction],
     notMatchedBySourceActions: Seq[MergeAction],
     withSchemaEvolution: Boolean)
-  extends BinaryCommand
-  with WriteWithSchemaEvolution
-  with TransactionalWrite
-  with SupportsSubquery {
+    extends BinaryCommand
+    with WriteWithSchemaEvolution
+    with SupportsSubquery
+    with TransactionalWrite {
 
   // Implements SupportsSchemaEvolution.table.
-  // Implements TransactionalWrite.table, identifying the MERGE target as the table being written.
+  // Implements TransactionalWrite.table.
   override val table: LogicalPlan = EliminateSubqueryAliases(targetTable)
 
   override def withNewTable(newTable: NamedRelation): MergeIntoTable = {
@@ -1279,6 +1281,12 @@ case class Assignment(key: Expression, value: Expression) extends Expression
     newLeft: Expression, newRight: Expression): Assignment = copy(key = newLeft, value = newRight)
 }
 
+/**
+ * Marker trait for write operations that participate in a DSv2 transaction.
+ *
+ * Implementations are expected to target a DSv2 catalog backed by a
+ * [[org.apache.spark.sql.connector.catalog.TransactionalCatalogPlugin]].
+ */
 trait TransactionalWrite extends LogicalPlan {
   def table: LogicalPlan
 }

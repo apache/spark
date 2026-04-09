@@ -354,9 +354,8 @@ class Analyzer(
   /**
    * Returns a copy of this analyzer that uses the given [[CatalogManager]] for all catalog
    * lookups. All other configuration (extended rules, checks, etc.) is preserved. Used by
-   * [[QueryExecution]] to create a per-query analyzer for transactional queries so that
-   * transaction-aware catalog resolution is an instance-level property rather than thread-local
-   * state.
+   * [[QueryExecution]] to create a per-query analyzer for transactional operations for
+   * transaction-aware catalog resolution.
    */
   def withCatalogManager(newCatalogManager: CatalogManager): Analyzer = {
     val self = this
@@ -1056,9 +1055,10 @@ class Analyzer(
       }
     }
 
-    // Resolve V2TableReference nodes in a plan. V2TableReference is only created for temp views
-    // (via V2TableReference.createForTempView), so we only need to resolve it when returning
-    // the plan of temp views (in resolveViews and unwrapRelationPlan).
+    // Resolve V2TableReference nodes created for:
+    // 1 Temp views (via createForTempView).
+    // 2. Transaction references (via createForTransaction). These are resolved by a
+    // separate analysis batch in the transaction-aware analyzer instance.
     private def resolveTableReferences(plan: LogicalPlan): LogicalPlan = {
       plan.resolveOperatorsUp {
         case r: V2TableReference => relationResolution.resolveReference(r)

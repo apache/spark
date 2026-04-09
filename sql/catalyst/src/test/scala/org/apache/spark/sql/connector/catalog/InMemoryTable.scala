@@ -216,9 +216,8 @@ class InMemoryTable(
 
 object InMemoryTable {
 
-  // V1 filter values (from PredicateUtils.toV1) are Scala types (e.g. String), but partition
-  // keys stored in dataMap are Catalyst internal types (e.g. UTF8String). Normalize both sides
-  // before comparing so that string partitions work correctly.
+  // Convert UTF8String to string to make sure equality checks between filters and partitions
+  // work correctly.
   private def valuesEqual(filterValue: Any, partitionValue: Any): Boolean =
     (filterValue, partitionValue) match {
       case (s: String, u: UTF8String) => u.toString == s

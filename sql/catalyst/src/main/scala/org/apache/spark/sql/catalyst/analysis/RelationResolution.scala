@@ -504,13 +504,18 @@ class RelationResolution(
   }
 
   private def loadRelation(ref: V2TableReference): LogicalPlan = {
+    // Resolve catalog. When a transaction is active we return the transaction
+    // aware catalog instance.
     val resolvedCatalog = catalogManager.catalog(ref.catalog.name).asTableCatalog
     val table = resolvedCatalog.loadTable(ref.identifier)
-    // val table = ref.catalog.loadTable(ref.identifier)
     V2TableReferenceUtils.validateLoadedTable(table, ref)
-    // ref.toRelation(table)
+    // Create relation with resolved Catalog.
     DataSourceV2Relation(
-      table, ref.output, Some(resolvedCatalog), Some(ref.identifier), ref.options)
+      table = table,
+      output = ref.output,
+      catalog = Some(resolvedCatalog),
+      identifier = Some(ref.identifier),
+      options = ref.options)
   }
 
   private def adaptCachedRelation(cached: LogicalPlan, ref: V2TableReference): LogicalPlan = {
