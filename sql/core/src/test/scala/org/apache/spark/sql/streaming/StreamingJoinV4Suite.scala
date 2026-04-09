@@ -20,6 +20,7 @@ package org.apache.spark.sql.streaming
 import org.apache.hadoop.fs.Path
 import org.scalatest.Tag
 
+import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
@@ -179,6 +180,52 @@ class StreamingInnerJoinV4Suite
             schemaLeftPrimary, schemaLeftSecondary,
             schemaRightPrimary, schemaRightSecondary
           ).map(_.toString))
+        },
+        StopStream
+      )
+    }
+  }
+
+  testWithVirtualColumnFamilyJoins(
+    "SPARK-56406: secondary index is not populated for join without event time") {
+    withTempDir { checkpointDir =>
+      val input1 = MemoryStream[Int]
+      val input2 = MemoryStream[Int]
+
+      val df1 = input1.toDF()
+        .select($"value" as "key", ($"value" * 2) as "leftValue")
+      val df2 = input2.toDF()
+        .select($"value" as "key", ($"value" * 3) as "rightValue")
+      val joined = df1.join(df2, "key")
+
+      testStream(joined)(
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        AddData(input1, 1, 2, 3),
+        CheckAnswer(),
+        AddData(input2, 1, 2),
+        CheckNewAnswer((1, 2, 3), (2, 4, 6)),
+        Execute { _ =>
+          val checkpointLoc = checkpointDir.getCanonicalPath
+
+          def readStore(storeName: String): Long = {
+            spark.read.format("statestore")
+              .option(StateSourceOptions.PATH, checkpointLoc)
+              .option(StateSourceOptions.STORE_NAME, storeName)
+              .load()
+              .count()
+          }
+
+          // Primary stores should have rows
+          assert(readStore("left-keyWithTsToValues") > 0,
+            "left primary store should have rows")
+          assert(readStore("right-keyWithTsToValues") > 0,
+            "right primary store should have rows")
+
+          // Secondary index stores should be empty since there is no event time
+          assert(readStore("left-tsWithKey") === 0,
+            "left secondary index should be empty without event time")
+          assert(readStore("right-tsWithKey") === 0,
+            "right secondary index should be empty without event time")
         },
         StopStream
       )

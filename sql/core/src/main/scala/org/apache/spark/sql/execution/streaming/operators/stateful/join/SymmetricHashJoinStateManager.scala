@@ -244,6 +244,12 @@ class SymmetricHashJoinStateManagerV4(
     // pass the information. The information is in SQLConf.
     allowMultipleEventTimeColumns = false)
 
+  // When there is no event time column in the value and no watermark ordinal in the key,
+  // the secondary index (TsWithKey) will never be used for eviction. Skip writing to it
+  // to avoid unnecessary RocksDB merge overhead.
+  private val hasEventTime: Boolean =
+    eventTimeColIdxOpt.isDefined || joinKeyOrdinalForWatermark.isDefined
+
   private val random = new scala.util.Random(System.currentTimeMillis())
   private val bucketCountForNoEventTime = 1024
   private val extractEventTimeFn: UnsafeRow => Long = { row =>
@@ -353,7 +359,9 @@ class SymmetricHashJoinStateManagerV4(
     val eventTime = extractEventTimeFnFromKey(key).getOrElse(extractEventTimeFn(value))
     // We always do blind merge for appending new value.
     keyWithTsToValues.append(key, eventTime, value, matched)
-    tsWithKey.add(eventTime, key)
+    if (hasEventTime) {
+      tsWithKey.add(eventTime, key)
+    }
   }
 
   override def getJoinedRows(
@@ -508,6 +516,8 @@ class SymmetricHashJoinStateManagerV4(
   }
 
   override def evictByTimestamp(endTimestamp: Long): Long = {
+    require(hasEventTime,
+      "evictByTimestamp requires event time; secondary index was not populated")
     var removed = 0L
     tsWithKey.scanEvictedKeys(endTimestamp).foreach { evicted =>
       val key = evicted.key
@@ -524,6 +534,8 @@ class SymmetricHashJoinStateManagerV4(
   }
 
   override def evictAndReturnByTimestamp(endTimestamp: Long): Iterator[KeyToValuePair] = {
+    require(hasEventTime,
+      "evictAndReturnByTimestamp requires event time; secondary index was not populated")
     val reusableKeyToValuePair = KeyToValuePair()
 
     tsWithKey.scanEvictedKeys(endTimestamp).flatMap { evicted =>
