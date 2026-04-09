@@ -507,9 +507,6 @@ object ParquetUtils extends Logging {
 
     // Sets flags for `ParquetWriteSupport`, which converts Catalyst schema to Parquet
     // schema and writes actual rows to Parquet files.
-    // For each key, only set from SQLConf if not already present in the conf. Write options
-    // are already merged into the conf upstream via `newHadoopConfWithOptions`, so a non-null
-    // value means the user explicitly set a per-write option which should take precedence.
     DataSourceUtils.setConfIfAbsent(conf,
       SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key, sqlConf.writeLegacyParquetFormat.toString)
     DataSourceUtils.setConfIfAbsent(conf,
