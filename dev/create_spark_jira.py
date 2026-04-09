@@ -46,8 +46,7 @@ def get_jira_client():
     )
 
 
-def list_components():
-    asf_jira = get_jira_client()
+def list_components(asf_jira):
     components = asf_jira.project_components("SPARK")
     components = [c for c in components if not c.raw.get("archived", False)]
     for c in sorted(components, key=lambda x: x.name):
@@ -63,7 +62,6 @@ def main():
         "--type",
         help="Issue type (e.g. Bug, Improvement). Defaults to Improvement.",
     )
-    parser.add_argument("-v", "--version", help="Version to use for the issue")
     parser.add_argument("-c", "--component", help="Component for the issue")
     parser.add_argument(
         "--list-components", action="store_true", help="List available components and exit"
@@ -71,35 +69,19 @@ def main():
     args = parser.parse_args()
 
     def check_jira_access():
-        if not JIRA_IMPORTED or not JIRA_ACCESS_TOKEN:
-            msg = "Cannot create JIRA ticket automatically"
-            if not JIRA_IMPORTED:
-                msg += " (jira-python library not installed, run 'pip install jira')"
-            else:
-                msg += " (JIRA_ACCESS_TOKEN env-var not set)"
-            msg += ". Please create the ticket manually at %s" % JIRA_API_BASE
-            fail(msg)
+        errors = []
+        if not JIRA_IMPORTED:
+            errors.append("jira-python library not installed, run 'pip install jira'")
+        if not JIRA_ACCESS_TOKEN:
+            errors.append("JIRA_ACCESS_TOKEN env-var not set")
+        if errors:
+            fail("Cannot create JIRA ticket automatically (%s). "
+                 "Please create the ticket manually at %s"
+                 % ("; ".join(errors), JIRA_API_BASE))
+        return get_jira_client()
 
-    if args.list_components:
-        check_jira_access()
-        list_components()
-        return
-
-    if not args.title:
-        parser.error("the following arguments are required: title")
-
-    if not args.component:
-        parser.error("the following arguments are required: -c/--component")
-
-    check_jira_access()
-
-    asf_jira = get_jira_client()
-
-    if args.version:
-        affected_version = args.version
-    else:
+    def detect_affected_version(asf_jira):
         versions = asf_jira.project_versions("SPARK")
-        # Consider only x.y.z, unreleased, unarchived versions
         versions = [
             x
             for x in versions
@@ -109,8 +91,23 @@ def main():
         ]
         versions = sorted(versions, key=lambda x: x.name, reverse=True)
         if not versions:
-            fail("No unreleased versions found for SPARK project.")
-        affected_version = versions[0].name
+            fail("Cannot detect affected version. "
+                 "Please create the ticket manually at %s" % JIRA_API_BASE)
+        return versions[0].name
+
+    if args.list_components:
+        asf_jira = check_jira_access()
+        list_components(asf_jira)
+        return
+
+    if not args.title:
+        parser.error("the following arguments are required: title")
+
+    if not args.component:
+        parser.error("the following arguments are required: -c/--component")
+
+    asf_jira = check_jira_access()
+    affected_version = detect_affected_version(asf_jira)
 
     issue_dict = {
         "project": {"key": "SPARK"},
