@@ -1115,7 +1115,6 @@ class ConvertNumpyVsLegacyTests(unittest.TestCase):
     def test_already_converted_variant_guard(self):
         """Difference 4: legacy returns already-converted VariantVal as-is;
         convert_numpy would fail with TypeError."""
-        import pyarrow as pa
         import pandas as pd
 
         from pyspark.sql.pandas.types import _create_converter_to_pandas
