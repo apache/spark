@@ -71,11 +71,10 @@ from pyspark.sql.tests.streaming.kafka_utils import KafkaUtils
 try:
     import testcontainers  # noqa: F401
     import kafka  # noqa: F401
-except ImportError as e:
-    raise ImportError(
-        "Kafka test dependencies not available. "
-        "Install with: pip install testcontainers[kafka] kafka-python"
-    ) from e
+
+    have_kafka_deps = True
+except ImportError:
+    have_kafka_deps = False
 
 
 class StreamingKafkaTestsMixin:
@@ -122,6 +121,10 @@ def _is_docker_available():
         return False
 
 
+@unittest.skipIf(
+    not have_kafka_deps,
+    "Kafka test dependencies not available (testcontainers, kafka-python)",
+)
 class StreamingKafkaTests(StreamingKafkaTestsMixin, ReusedSQLTestCase):
     """
     Tests for Kafka streaming integration with PySpark.
