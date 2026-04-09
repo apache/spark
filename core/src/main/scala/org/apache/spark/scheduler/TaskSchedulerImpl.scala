@@ -297,7 +297,7 @@ private[spark] class TaskSchedulerImpl(
 
   // Create task set manager for streaming tasks sets which
   // will include query and batch Id in the logs
-  private def streamingTaskSetManager(taskSet: TaskSet, maxTaskFailures: Int) = {
+  private def streamingTaskSetManager(taskSet: TaskSet, maxTaskFailures: Int): TaskSetManager = {
     new TaskSetManager(this, taskSet, maxTaskFailures, healthTrackerOpt, clock)
       with StructuredStreamingIdAwareSchedulerLogging {
         // ensure log name matches the non-streaming version
