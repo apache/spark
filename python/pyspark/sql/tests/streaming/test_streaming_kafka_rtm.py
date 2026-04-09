@@ -113,7 +113,7 @@ def _is_docker_available():
 
 
 @unittest.skipIf(
-    not (have_testcontainers and have_kafka),
+    not have_testcontainers or not have_kafka,
     "Kafka test dependencies not available (testcontainers, kafka-python)",
 )
 class StreamingKafkaTests(StreamingKafkaTestsMixin, ReusedSQLTestCase):
