@@ -4298,7 +4298,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         axis = validate_axis(axis)
         if axis == 1:
             psdf = self.copy()
-            psdf.columns = labels
+            psdf.columns = (
+                labels.to_pandas()
+                if isinstance(labels, ps.Index)
+                else labels
+                if isinstance(labels, pd.Index)
+                else pd.Index(labels)
+            )
             return psdf
         else:
             pdf_labels = labels.to_pandas() if isinstance(labels, ps.Index) else pd.Index(labels)
