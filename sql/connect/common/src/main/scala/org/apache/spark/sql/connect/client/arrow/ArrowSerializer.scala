@@ -241,7 +241,8 @@ object ArrowSerializer {
 
   // TODO throw better errors on class cast exceptions.
   private[arrow] def serializerFor[E](encoder: AgnosticEncoder[E], v: AnyRef): Serializer =
-    ConnectTypeOps.forEncoder(encoder)
+    ConnectTypeOps
+      .forEncoder(encoder)
       .map(_.createArrowSerializer(v))
       .getOrElse(serializerForDefault(encoder, v))
 

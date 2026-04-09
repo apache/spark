@@ -70,7 +70,8 @@ object ArrowVectorReader {
       targetDataType: DataType,
       vector: FieldVector,
       timeZoneId: String): ArrowVectorReader =
-    ConnectTypeOps.forDataType(targetDataType)
+    ConnectTypeOps
+      .forDataType(targetDataType)
       .map(_.createArrowVectorReader(vector))
       .getOrElse(applyDefault(targetDataType, vector, timeZoneId))
 

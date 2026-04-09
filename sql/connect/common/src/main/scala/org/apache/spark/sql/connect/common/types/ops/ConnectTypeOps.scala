@@ -89,8 +89,8 @@ trait ConnectTypeOps extends Serializable {
 /**
  * Factory object for ConnectTypeOps lookup.
  *
- * Provides separate factory methods for proto (server-side, feature-flag-gated) and
- * Arrow (client-side, no flag) dispatch.
+ * Provides separate factory methods for proto (server-side, feature-flag-gated) and Arrow
+ * (client-side, no flag) dispatch.
  */
 object ConnectTypeOps {
 

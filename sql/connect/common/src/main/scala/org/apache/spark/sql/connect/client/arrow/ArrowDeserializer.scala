@@ -93,7 +93,8 @@ object ArrowDeserializers {
       encoder: AgnosticEncoder[_],
       data: AnyRef,
       timeZoneId: String): Deserializer[Any] =
-    ConnectTypeOps.forEncoder(encoder)
+    ConnectTypeOps
+      .forEncoder(encoder)
       .map(_.createArrowDeserializer(encoder, data, timeZoneId))
       .getOrElse(deserializerForDefault(encoder, data, timeZoneId))
 
