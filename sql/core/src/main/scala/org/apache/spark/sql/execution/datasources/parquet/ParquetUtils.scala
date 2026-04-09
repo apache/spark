@@ -511,9 +511,9 @@ object ParquetUtils extends Logging {
       SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key,
       sqlConf.writeLegacyParquetFormat.toString)
 
-    conf.set(
-      SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key,
-      sqlConf.parquetOutputTimestampType.toString)
+    val outputTimestampType = parquetOptions.outputTimestampType
+      .getOrElse(sqlConf.parquetOutputTimestampType.toString)
+    conf.set(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key, outputTimestampType)
 
     conf.set(
       SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key,
@@ -529,6 +529,8 @@ object ParquetUtils extends Logging {
 
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
+
+    parquetOptions.writerVersion.foreach(conf.set(ParquetOptions.WRITER_VERSION, _))
 
     // SPARK-15719: Disables writing Parquet summary files by default.
     if (conf.get(ParquetOutputFormat.JOB_SUMMARY_LEVEL) == null

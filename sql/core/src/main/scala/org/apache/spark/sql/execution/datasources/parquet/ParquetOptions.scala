@@ -63,6 +63,17 @@ class ParquetOptions(
   }
 
   /**
+   * Parquet writer version to use. If this returns None, the default format should be used.
+   */
+  val writerVersion: Option[String] = parameters.get(WRITER_VERSION)
+
+  /**
+   * The Parquet physical type to use for timestamp columns. If None, the default type from the
+   * SQL conf should be used.
+   */
+  val outputTimestampType: Option[String] = parameters.get(OUTPUT_TIMESTAMP_TYPE)
+
+  /**
    * Whether it merges schemas or not. When the given Parquet files have different schemas,
    * the schemas can be merged.  By default use the value specified in SQLConf.
    */
@@ -108,6 +119,8 @@ object ParquetOptions extends DataSourceOptions {
   val MERGE_SCHEMA = newOption("mergeSchema")
   val PARQUET_COMPRESSION = newOption(ParquetOutputFormat.COMPRESSION)
   val COMPRESSION = newOption("compression")
+  val WRITER_VERSION = newOption(ParquetOutputFormat.WRITER_VERSION)
+  val OUTPUT_TIMESTAMP_TYPE = newOption(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key)
 
   // The option controls rebasing of the DATE and TIMESTAMP values between
   // Julian and Proleptic Gregorian calendars. It impacts on the behaviour of the Parquet
