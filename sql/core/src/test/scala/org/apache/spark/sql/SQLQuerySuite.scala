@@ -3440,6 +3440,17 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     checkAnswer(df2, Row(1) :: Nil)
   }
 
+  test("SPARK-56426: LATERAL VIEW column alias with dot in name should resolve correctly") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT id, `skill.inst`
+          |FROM VALUES (1, array('a', 'b')) AS t(id, skills)
+          |LATERAL VIEW explode(skills) skills_table AS `skill.inst`
+        """.stripMargin),
+      Row(1, "a") :: Row(1, "b") :: Nil)
+  }
+
   test("SPARK-30279 Support 32 or more grouping attributes for GROUPING_ID()") {
     withTempView("t") {
       sql("CREATE TEMPORARY VIEW t AS SELECT * FROM " +
