@@ -1105,6 +1105,10 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
 class ConvertNumpyVsLegacyTests(unittest.TestCase):
     """Tests documenting known behavioral differences between convert_numpy and convert_legacy.
 
+    These differences are unreachable in practice (convert_numpy only receives raw Arrow data
+    from arr.to_pandas(), never already-deserialized Python objects), but are documented here
+    for completeness.
+
     TODO: Remove this test class when convert_legacy is removed.
     """
 
@@ -1113,24 +1117,29 @@ class ConvertNumpyVsLegacyTests(unittest.TestCase):
         pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_already_converted_variant_guard(self):
-        """Difference 4: legacy returns already-converted VariantVal as-is;
-        convert_numpy would fail with TypeError."""
+        """Legacy _create_converter_to_pandas has an isinstance(value, VariantVal) guard
+        that returns already-converted values as-is. convert_numpy's _create_element_converter
+        does not have this guard, since it only processes raw Arrow output (dicts), never
+        already-deserialized VariantVal objects.
+
+        This difference is unreachable in practice: convert_numpy always receives data from
+        arr.to_pandas() which returns raw dicts from Arrow structs, not VariantVal objects.
+        """
         import pandas as pd
 
         from pyspark.sql.pandas.types import _create_converter_to_pandas
 
         # Simulate a Series containing an already-converted VariantVal
-        # (as could happen if data passes through conversion twice)
         series = pd.Series([[VariantVal(b"\x01", b"\x02")]])
 
-        # legacy _converter: isinstance(value, VariantVal) guard returns as-is
+        # legacy: isinstance(value, VariantVal) guard returns as-is
         converter = _create_converter_to_pandas(
             ArrayType(VariantType()), nullable=True, ndarray_as_list=True
         )
         result_legacy = converter(series)
         self.assertIsInstance(result_legacy.iloc[0][0], VariantVal)
 
-        # convert_numpy _create_element_converter: no guard, raises PySparkValueError
+        # convert_numpy: no guard, treats input as raw dict and raises PySparkValueError
         element_conv = ArrowArrayToPandasConversion._create_element_converter(VariantType())
         with self.assertRaises(PySparkValueError):
             element_conv(VariantVal(b"\x01", b"\x02"))
