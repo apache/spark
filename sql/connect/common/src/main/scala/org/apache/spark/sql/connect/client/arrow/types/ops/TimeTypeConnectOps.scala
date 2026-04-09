@@ -26,14 +26,14 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.LocalTimeEncoder
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils
 import org.apache.spark.sql.connect.client.arrow.{ArrowDeserializers, ArrowSerializer, ArrowVectorReader, TimeVectorReader}
-import org.apache.spark.sql.connect.common.types.ops.{ConnectArrowTypeOps, ProtoTypeOps}
+import org.apache.spark.sql.connect.common.types.ops.ConnectTypeOps
 import org.apache.spark.sql.types.{DataType, TimeType}
 
 /**
  * Combined Connect operations for TimeType.
  *
- * Implements both ProtoTypeOps (proto DataType/Literal conversions) and ConnectArrowTypeOps
- * (Arrow serialization/deserialization) in a single class.
+ * Implements ConnectTypeOps for TimeType, providing both proto DataType/Literal conversions
+ * and Arrow serialization/deserialization.
  *
  * Lives under the arrow.types.ops sub-package to access arrow-private types (TimeVectorReader,
  * ArrowSerializer.Serializer, ArrowDeserializers.LeafFieldDeserializer) while keeping ops
@@ -43,15 +43,13 @@ import org.apache.spark.sql.types.{DataType, TimeType}
  *   The TimeType with precision information
  * @since 4.2.0
  */
-private[connect] class TimeTypeConnectOps(val t: TimeType)
-    extends ProtoTypeOps
-    with ConnectArrowTypeOps {
+private[connect] class TimeTypeConnectOps(val t: TimeType) extends ConnectTypeOps {
 
   override def dataType: DataType = t
 
   override def encoder: AgnosticEncoder[_] = LocalTimeEncoder
 
-  // ==================== ProtoTypeOps ====================
+  // ==================== Proto Conversions ====================
 
   override def toCatalystTypeFromProto(t: proto.DataType): DataType = {
     val time = t.getTime
@@ -99,7 +97,7 @@ private[connect] class TimeTypeConnectOps(val t: TimeType)
     proto.DataType.newBuilder().setTime(timeBuilder.build()).build()
   }
 
-  // ==================== ConnectArrowTypeOps ====================
+  // ==================== Arrow Serialization ====================
 
   override def createArrowSerializer(vector: AnyRef): ArrowSerializer.Serializer = {
     val v = vector.asInstanceOf[TimeNanoVector]

@@ -33,12 +33,11 @@ import org.apache.arrow.vector.{FieldVector, VectorSchemaRoot}
 import org.apache.arrow.vector.complex.{ListVector, MapVector, StructVector}
 import org.apache.arrow.vector.ipc.ArrowReader
 
-import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.connect.common.types.ops.ConnectArrowTypeOps
+import org.apache.spark.sql.connect.common.types.ops.ConnectTypeOps
 import org.apache.spark.sql.errors.{CompilationErrors, ExecutionErrors}
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.sql.util.{CloseableIterator, ConcatenatingArrowStreamReader, MessageIterator}
@@ -93,7 +92,7 @@ object ArrowDeserializers {
       encoder: AgnosticEncoder[_],
       data: AnyRef,
       timeZoneId: String): Deserializer[Any] =
-    ConnectArrowTypeOps(encoder)
+    ConnectTypeOps.forEncoder(encoder)
       .map(_.createArrowDeserializer(encoder, data, timeZoneId))
       .getOrElse(deserializerForDefault(encoder, data, timeZoneId))
 

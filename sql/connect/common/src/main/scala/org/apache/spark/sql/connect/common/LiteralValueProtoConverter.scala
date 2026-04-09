@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.util.{SparkDateTimeUtils, SparkIntervalUtils}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter._
-import org.apache.spark.sql.connect.common.types.ops.ProtoTypeOps
+import org.apache.spark.sql.connect.common.types.ops.ConnectTypeOps
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -58,7 +58,7 @@ object LiteralValueProtoConverter {
       literal: Any,
       options: ToLiteralProtoOptions): proto.Expression.Literal.Builder = {
     val builder = proto.Expression.Literal.newBuilder()
-    ProtoTypeOps.toLiteralProtoForValue(literal, builder).getOrElse {
+    ConnectTypeOps.toLiteralProtoForValue(literal, builder).getOrElse {
       toLiteralProtoBuilderDefault(literal, builder, options)
     }
   }
@@ -136,7 +136,7 @@ object LiteralValueProtoConverter {
       dataType: DataType,
       options: ToLiteralProtoOptions): proto.Expression.Literal.Builder = {
     val builder = proto.Expression.Literal.newBuilder()
-    ProtoTypeOps(dataType)
+    ConnectTypeOps(dataType)
       .map(_.toLiteralProtoWithType(literal, dataType, builder))
       .getOrElse(toLiteralProtoWithTypeDefault(literal, dataType, builder, options))
   }
@@ -453,7 +453,7 @@ object LiteralValueProtoConverter {
 
   private def getScalaConverter(dataType: proto.DataType): proto.Expression.Literal => Any = {
     val converter: proto.Expression.Literal => Any =
-      ProtoTypeOps.getScalaConverterForKind(dataType.getKindCase).getOrElse {
+      ConnectTypeOps.getScalaConverterForKind(dataType.getKindCase).getOrElse {
         getScalaConverterDefault(dataType)
       }
     v => if (v.hasNull) null else converter(v)
@@ -528,7 +528,7 @@ object LiteralValueProtoConverter {
       if (literal.getLiteralTypeCase == proto.Expression.Literal.LiteralTypeCase.NULL) {
         literal.getNull
       } else {
-        ProtoTypeOps
+        ConnectTypeOps
           .getProtoDataTypeFromLiteral(literal)
           .getOrElse(getProtoDataTypeDefault(literal))
       }

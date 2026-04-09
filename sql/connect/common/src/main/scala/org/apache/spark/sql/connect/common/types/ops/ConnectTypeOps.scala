@@ -17,22 +17,32 @@
 
 package org.apache.spark.sql.connect.common.types.ops
 
+import org.apache.arrow.vector.FieldVector
+
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.LocalTimeEncoder
+import org.apache.spark.sql.connect.client.arrow.{ArrowDeserializers, ArrowSerializer, ArrowVectorReader}
 import org.apache.spark.sql.connect.client.arrow.types.ops.TimeTypeConnectOps
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{DataType, TimeType}
 
 /**
- * Optional type operations for Spark Connect protobuf conversions.
+ * Optional type operations for Spark Connect infrastructure.
  *
- * Handles bidirectional DataType <-> proto and Literal <-> proto conversions for
- * framework-managed types in DataTypeProtoConverter and LiteralValueProtoConverter.
+ * Consolidates both proto conversions (DataTypeProtoConverter, LiteralValueProtoConverter) and
+ * Arrow serialization/deserialization (ArrowSerializer, ArrowDeserializer, ArrowVectorReader) for
+ * framework-managed types.
  *
  * @since 4.2.0
  */
-trait ProtoTypeOps extends Serializable {
+trait ConnectTypeOps extends Serializable {
 
   def dataType: DataType
+
+  def encoder: AgnosticEncoder[_]
+
+  // ==================== Proto Conversions ====================
 
   /** Converts this DataType to its Connect proto representation. */
   def toConnectProtoType: proto.DataType
@@ -60,14 +70,34 @@ trait ProtoTypeOps extends Serializable {
 
   /** Converts a proto DataType to a Spark DataType (reverse of toConnectProtoType). */
   def toCatalystTypeFromProto(t: proto.DataType): DataType
+
+  // ==================== Arrow Serialization ====================
+
+  /** Creates an Arrow serializer for writing values to a vector. */
+  def createArrowSerializer(vector: AnyRef): ArrowSerializer.Serializer
+
+  /** Creates an Arrow deserializer for reading values from a vector. */
+  def createArrowDeserializer(
+      enc: AgnosticEncoder[_],
+      data: AnyRef,
+      timeZoneId: String): ArrowDeserializers.Deserializer[Any]
+
+  /** Creates an ArrowVectorReader for this type's vector. */
+  def createArrowVectorReader(vector: FieldVector): ArrowVectorReader
 }
 
 /**
- * Factory object for ProtoTypeOps lookup.
+ * Factory object for ConnectTypeOps lookup.
+ *
+ * Provides separate factory methods for proto (server-side, feature-flag-gated) and
+ * Arrow (client-side, no flag) dispatch.
  */
-object ProtoTypeOps {
+object ConnectTypeOps {
 
-  def apply(dt: DataType): Option[ProtoTypeOps] = {
+  // ==================== Proto Dispatch (server-side, flag-gated) ====================
+
+  /** DataType-keyed dispatch for proto conversions. Checks feature flag. */
+  def apply(dt: DataType): Option[ConnectTypeOps] = {
     if (!SqlApiConf.get.typesFrameworkEnabled) return None
     dt match {
       case tt: TimeType => Some(new TimeTypeConnectOps(tt))
@@ -76,7 +106,7 @@ object ProtoTypeOps {
     }
   }
 
-  /** Reverse lookup by value class for the generic literal builder. */
+  /** Reverse lookup by value class for the generic literal builder. Checks feature flag. */
   def toLiteralProtoForValue(
       value: Any,
       builder: proto.Expression.Literal.Builder): Option[proto.Expression.Literal.Builder] = {
@@ -90,10 +120,10 @@ object ProtoTypeOps {
   }
 
   /**
-   * Shared KindCase -> ProtoTypeOps lookup. All reverse lookups by proto enum case dispatch
-   * through this single registration point.
+   * Shared KindCase -> ConnectTypeOps lookup. All reverse lookups by proto enum case dispatch
+   * through this single registration point. Checks feature flag.
    */
-  private def opsForKindCase(kindCase: proto.DataType.KindCase): Option[ProtoTypeOps] = {
+  private def opsForKindCase(kindCase: proto.DataType.KindCase): Option[ConnectTypeOps] = {
     if (!SqlApiConf.get.typesFrameworkEnabled) return None
     kindCase match {
       case proto.DataType.KindCase.TIME => Some(new TimeTypeConnectOps(TimeType()))
@@ -102,7 +132,7 @@ object ProtoTypeOps {
     }
   }
 
-  /** Reverse lookup: converts a proto DataType to a Spark DataType. */
+  /** Reverse lookup: converts a proto DataType to a Spark DataType. Checks feature flag. */
   def toCatalystType(t: proto.DataType): Option[DataType] =
     opsForKindCase(t.getKindCase).map(_.toCatalystTypeFromProto(t))
 
@@ -123,5 +153,23 @@ object ProtoTypeOps {
       case proto.Expression.Literal.LiteralTypeCase.TIME => proto.DataType.KindCase.TIME
       // Add new framework literal-to-kind mappings here
       case _ => proto.DataType.KindCase.KIND_NOT_SET
+    }
+
+  // ==================== Arrow Dispatch (client-side, NO flag check) ====================
+
+  /** Encoder-keyed dispatch for Arrow serialization. No feature flag check. */
+  def forEncoder(enc: AgnosticEncoder[_]): Option[ConnectTypeOps] =
+    enc match {
+      case LocalTimeEncoder => Some(new TimeTypeConnectOps(TimeType()))
+      // Add new framework encoders here
+      case _ => None
+    }
+
+  /** DataType-keyed dispatch for ArrowVectorReader. No feature flag check. */
+  def forDataType(dt: DataType): Option[ConnectTypeOps] =
+    dt match {
+      case tt: TimeType => Some(new TimeTypeConnectOps(tt))
+      // Add new framework types here
+      case _ => None
     }
 }
