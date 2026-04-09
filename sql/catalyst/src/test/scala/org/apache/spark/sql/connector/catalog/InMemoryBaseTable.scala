@@ -76,6 +76,10 @@ abstract class InMemoryBaseTable(
 
   override def columns(): Array[Column] = tableColumns
 
+  private[catalog] def updateColumns(newColumns: Array[Column]): Unit = {
+    tableColumns = newColumns
+  }
+
   override def version(): String = tableVersion.toString
 
   def setVersion(version: String): Unit = {

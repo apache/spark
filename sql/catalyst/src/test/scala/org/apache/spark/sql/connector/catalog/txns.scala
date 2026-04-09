@@ -71,9 +71,9 @@ class TxnTable(val delegate: InMemoryRowLevelOperationTable)
     delegate.properties,
     delegate.constraints) {
 
-  // TODO: Revise schema evolution.
-  alterTableWithData(delegate.data, schema)
+  withData(delegate.data)
 
+  // Keep initial version to detect any changes during the transaction.
   private val initialVersion: String = version()
 
   // A tracker of filters used in each scan.
@@ -86,8 +86,8 @@ class TxnTable(val delegate: InMemoryRowLevelOperationTable)
   def commit(): Unit = {
     if (version() != initialVersion) {
       delegate.dataMap.clear()
-      // TODO: Revise schema evolution.
-      delegate.alterTableWithData(data, delegate.schema)
+      delegate.alterTableWithData(data, schema)
+      delegate.updateColumns(columns()) // Evolve schema if needed.
       delegate.replacedPartitions = replacedPartitions
       delegate.lastWriteInfo = lastWriteInfo
       delegate.lastWriteLog = lastWriteLog
@@ -124,6 +124,10 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
+    // TODO: This evicts the staged TxnTable, losing any in-flight DML changes. The correct
+    // approach is to apply only the schema change to the existing TxnTable so that the ongoing
+    // DML can observe the new schema and reconcile at commit time. Concurrent DDL + DML is not
+    // supported in this test catalog for now.
     val newDelegateTable = delegate.alterTable(ident, changes: _*)
     tables.remove(ident) // Load again.
     newDelegateTable

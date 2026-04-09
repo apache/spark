@@ -399,4 +399,102 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
         Row(1, 100, "hr"),
         Row(2, 200, "software")))
   }
+
+  test("SQL INSERT WITH SCHEMA EVOLUTION adds new column with transactional checks") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    sql(
+      s"""CREATE TABLE $sourceNameAsString
+         |(pk INT NOT NULL, salary INT, dep STRING, active BOOLEAN)""".stripMargin)
+    sql(s"INSERT INTO $sourceNameAsString VALUES (3, 300, 'hr', true), (4, 400, 'software', false)")
+
+    val (txn, txnTables) = executeTransaction {
+      sql(s"INSERT WITH SCHEMA EVOLUTION INTO $tableNameAsString SELECT * FROM $sourceNameAsString")
+    }
+
+    assert(txn.currentState === Committed)
+    assert(txn.isClosed)
+
+    // the new column must be visible in the committed delegate's schema
+    assert(table.schema.fieldNames.toSeq === Seq("pk", "salary", "dep", "active"))
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 100, "hr", null),      // pre-existing rows: active is null
+        Row(2, 200, "software", null),
+        Row(3, 300, "hr", true),      // inserted with active
+        Row(4, 400, "software", false)))
+  }
+
+  for (isDynamic <- Seq(false, true))
+  test(s"SQL INSERT OVERWRITE WITH SCHEMA EVOLUTION adds new column with transactional checks " +
+      s"isDynamic: $isDynamic") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(
+      s"""CREATE TABLE $sourceNameAsString
+         |(pk INT NOT NULL, salary INT, dep STRING, active BOOLEAN)""".stripMargin)
+    sql(s"INSERT INTO $sourceNameAsString VALUES (11, 999, 'hr', true), (12, 888, 'hr', false)")
+
+    val insertOverwrite = if (isDynamic) {
+      s"""INSERT WITH SCHEMA EVOLUTION OVERWRITE TABLE $tableNameAsString
+         |SELECT * FROM $sourceNameAsString
+         |""".stripMargin
+    } else {
+      s"""INSERT WITH SCHEMA EVOLUTION OVERWRITE TABLE $tableNameAsString
+         |PARTITION (dep = 'hr')
+         |SELECT pk, salary, active FROM $sourceNameAsString
+         |""".stripMargin
+    }
+
+    val confValue = if (isDynamic) PartitionOverwriteMode.DYNAMIC else PartitionOverwriteMode.STATIC
+    val (txn, _) = withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> confValue.toString) {
+      executeTransaction { sql(insertOverwrite) }
+    }
+
+    assert(txn.currentState === Committed)
+    assert(txn.isClosed)
+
+    // the new column must be visible in the committed delegate's schema
+    assert(table.schema.fieldNames.contains("active"))
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(2, 200, "software", null), // unchanged (different partition)
+        Row(11, 999, "hr", true),      // overwrote hr partition
+        Row(12, 888, "hr", false)))
+  }
+
+  test("SQL INSERT WITH SCHEMA EVOLUTION analysis failure aborts transaction") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    sql(
+      s"""CREATE TABLE $sourceNameAsString
+         |(pk INT NOT NULL, salary INT, dep STRING, active BOOLEAN)""".stripMargin)
+
+    val e = intercept[AnalysisException] {
+      sql(
+        s"""INSERT WITH SCHEMA EVOLUTION INTO $tableNameAsString
+           |SELECT nonexistent_col FROM $sourceNameAsString
+           |""".stripMargin)
+    }
+
+    assert(e.getMessage.contains("nonexistent_col"))
+    assert(catalog.lastTransaction.currentState === Aborted)
+    assert(catalog.lastTransaction.isClosed)
+    // schema must be unchanged after the aborted transaction
+    assert(table.schema.fieldNames.toSeq === Seq("pk", "salary", "dep"))
+  }
 }
