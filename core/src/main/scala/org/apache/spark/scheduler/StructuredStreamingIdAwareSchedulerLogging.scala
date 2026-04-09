@@ -145,17 +145,19 @@ private[scheduler] object StructuredStreamingIdAwareSchedulerLogging extends Log
     if (properties == null) {
       return entry
     }
+    // wrap in log entry to defer until log is evaluated
+    new LogEntry({
+      val queryId = Option(properties.getProperty(QUERY_ID_KEY))
+      val batchId = Option(properties.getProperty(BATCH_ID_KEY))
 
-    val queryId = Option(properties.getProperty(QUERY_ID_KEY))
-    val batchId = Option(properties.getProperty(BATCH_ID_KEY))
-
-    // formatMessage truncates the queryId for readability
-    // so we use a blank messageWithContext to overwrite the full query Id to the context
-    formatMessage(
-      queryId,
-      batchId,
-      entry
-    ) + MessageWithContext("", constructStreamingContext(queryId, batchId))
+      // formatMessage truncates the queryId for readability
+      // so we use a blank messageWithContext to overwrite the full query Id to the context
+      formatMessage(
+        queryId,
+        batchId,
+        entry
+      ) + MessageWithContext("", constructStreamingContext(queryId, batchId))
+    })
   }
 
   private[scheduler] def constructStreamingLogEntry(
@@ -167,9 +169,10 @@ private[scheduler] object StructuredStreamingIdAwareSchedulerLogging extends Log
       )
     }
 
-    val queryId = Option(properties.getProperty(QUERY_ID_KEY))
-    val batchId = Option(properties.getProperty(BATCH_ID_KEY))
     new LogEntry({
+      val queryId = Option(properties.getProperty(QUERY_ID_KEY))
+      val batchId = Option(properties.getProperty(BATCH_ID_KEY))
+
       MessageWithContext(
         formatMessage(
           queryId,

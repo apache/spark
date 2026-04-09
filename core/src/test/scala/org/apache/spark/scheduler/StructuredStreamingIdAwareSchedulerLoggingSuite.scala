@@ -20,11 +20,8 @@ package org.apache.spark.scheduler
 import java.util.{Locale, Properties}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.{Logging, LogKey, LogKeys}
-import org.apache.spark.scheduler.StructuredStreamingIdAwareSchedulerLogging.{
-  BATCH_ID_KEY,
-  QUERY_ID_KEY
-}
+import org.apache.spark.internal.{LogEntry, Logging, LogKey, LogKeys, MessageWithContext}
+import org.apache.spark.scheduler.StructuredStreamingIdAwareSchedulerLogging.{BATCH_ID_KEY, QUERY_ID_KEY}
 
 class StructuredStreamingIdAwareSchedulerLoggingSuite extends SparkFunSuite {
 
@@ -146,5 +143,47 @@ class StructuredStreamingIdAwareSchedulerLoggingSuite extends SparkFunSuite {
     assertContextAbsent(result.context, LogKeys.QUERY_ID)
     assertContextAbsent(result.context, LogKeys.BATCH_ID)
     assertContextValue(result.context, LogKeys.MESSAGE, "Dummy Context")
+  }
+
+  test("SPARK-56326: constructStreamingLogEntry with LogEntry - defers evaluation") {
+    var evaluated = false
+    val lazyEntry = new LogEntry({
+      evaluated = true
+      MessageWithContext("lazy message", java.util.Collections.emptyMap())
+    })
+
+    val result = StructuredStreamingIdAwareSchedulerLogging
+      .constructStreamingLogEntry(propsWithBothIds(), lazyEntry)
+
+    // Work should be deferred
+    assert(!evaluated,
+      "LogEntry should not be evaluated during constructStreamingLogEntry")
+
+    // Accessing .message triggers evaluation
+    result.message
+    assert(evaluated, "LogEntry should be evaluated when .message is accessed")
+  }
+
+  test("SPARK-56326: constructStreamingLogEntry with LogEntry - defers property access") {
+    var propertiesAccessed = false
+    val props = new Properties() {
+      override def getProperty(key: String): String = {
+        propertiesAccessed = true
+        super.getProperty(key)
+      }
+    }
+    props.setProperty(QUERY_ID_KEY, testQueryId)
+    props.setProperty(BATCH_ID_KEY, testBatchId)
+
+    val entry = log"test message ${MDC(LogKeys.MESSAGE, "Dummy Context")}"
+    val result = StructuredStreamingIdAwareSchedulerLogging
+      .constructStreamingLogEntry(props, entry)
+
+    assert(!propertiesAccessed,
+      "Properties should not be accessed during constructStreamingLogEntry")
+
+    result.message
+    assert(propertiesAccessed,
+      "Properties should be accessed when .message is called")
   }
 }
