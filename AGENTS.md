@@ -94,7 +94,7 @@ Each annotation contains the test class, test name, and failure message.
 
 PR title requires a JIRA ticket ID (e.g., `[SPARK-xxxx][SQL] Title`). If no ticket ID is given, create one using `dev/create_spark_jira.py`:
 
-    python3 dev/create_spark_jira.py "Title" -c <component> -t <type>
+    python3 dev/create_spark_jira.py "<title>" -c <component> -t <type>
 
 Infer the arguments from the changes:
 
