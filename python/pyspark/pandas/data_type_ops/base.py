@@ -548,6 +548,28 @@ class DataTypeOps(object, metaclass=ABCMeta):
 
     def prepare(self, col: pd.Series) -> pd.Series:
         """Prepare column when from_pandas."""
+
+        from distutils.version import LooseVersion
+
+        if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
+            # In pandas 3, list-valued columns store elements as np.ndarray objects.
+            # np.ndarray is not hashable, so col.replace({np.nan: None}) raises
+            # "ValueError: The truth value of an array is ambiguous" when the Series
+            # has object dtype and contains ndarray elements.
+            # Convert any np.ndarray elements to Python lists first so that:
+            #   1. replace({np.nan: None}) can safely run on the scalar/null values, and
+            #   2. PyArrow correctly infers ArrayType for the Spark schema.
+            # We recurse into nested structures so that 2D/nested ndarrays are fully
+            # converted to plain Python lists at every level.
+            def _ndarray_to_list(x: Any) -> Any:
+                if isinstance(x, np.ndarray):
+                    return [_ndarray_to_list(item) for item in x]
+                return x
+
+            if col.dtype == np.dtype("object"):
+                col = col.where(pd.notna(col), None)
+                return col.apply(_ndarray_to_list)
+
         return col.replace({np.nan: None})
 
     def isnull(self, index_ops: IndexOpsLike) -> IndexOpsLike:
