@@ -397,10 +397,10 @@ class SparkConnectClientSuite extends ConnectFunSuite {
       .build()
 
     val session = SparkSession.builder().client(client).create()
-    val artifactFilePath = commonResourcePath.resolve("artifact-tests")
-    val path = artifactFilePath.resolve("smallClassFile.class")
-    assume(path.toFile.exists)
-    session.addArtifact(path.toString)
+    val tmpFile = java.io.File.createTempFile("smallClassFile", ".class")
+    tmpFile.deleteOnExit()
+    java.nio.file.Files.write(tmpFile.toPath, "dummy".getBytes)
+    session.addArtifact(tmpFile.getAbsolutePath)
   }
 
   private def buildPlan(query: String): proto.Plan = {
