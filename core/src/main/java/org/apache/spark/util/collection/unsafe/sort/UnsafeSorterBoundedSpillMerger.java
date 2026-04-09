@@ -1,0 +1,237 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.util.collection.unsafe.sort;
+
+import javax.annotation.Nullable;
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.serializer.SerializerManager;
+import org.apache.spark.storage.BlockManager;
+
+/**
+ * Performs a bounded multi-round k-way merge of spill files.
+ *
+ * <p>When the number of spill files exceeds the merge factor, this class merges them in
+ * rounds of at most {@code mergeFactor} files at a time, writing intermediate results to
+ * new spill files. This bounds the number of concurrently open file readers and prevents
+ * OOM during the merge phase of external sorting.</p>
+ *
+ * <p>Unlike the default single-round merge in {@link UnsafeSorterSpillMerger} which opens
+ * all spill readers simultaneously (~3MB per reader), this approach caps concurrent readers
+ * at {@code mergeFactor}, making memory usage predictable regardless of spill count.</p>
+ */
+final class UnsafeSorterBoundedSpillMerger {
+
+  private static final SparkLogger logger =
+      SparkLoggerFactory.getLogger(UnsafeSorterBoundedSpillMerger.class);
+
+  private final int mergeFactor;
+  private final RecordComparator recordComparator;
+  private final PrefixComparator prefixComparator;
+  private final BlockManager blockManager;
+  private final SerializerManager serializerManager;
+  private final int fileBufferSizeBytes;
+  private final List<File> intermediateFiles = new ArrayList<>();
+  // Tracks files created by intermediate merge rounds, so we only delete these
+  // (not original spill files that may be carried forward across rounds).
+  private final Set<File> intermediateFileSet = new HashSet<>();
+
+  UnsafeSorterBoundedSpillMerger(
+      int mergeFactor,
+      RecordComparator recordComparator,
+      PrefixComparator prefixComparator,
+      BlockManager blockManager,
+      SerializerManager serializerManager,
+      int fileBufferSizeBytes) {
+    this.mergeFactor = mergeFactor;
+    this.recordComparator = recordComparator;
+    this.prefixComparator = prefixComparator;
+    this.blockManager = blockManager;
+    this.serializerManager = serializerManager;
+    this.fileBufferSizeBytes = fileBufferSizeBytes;
+  }
+
+  /**
+   * Performs bounded multi-round merge of spill writers and returns a sorted iterator.
+   *
+   * <p>If {@code inMemIterator} is non-null, it is included in the final merge round
+   * (not spilled to disk in intermediate rounds).</p>
+   *
+   * @param spillWriters the list of spill writers to merge
+   * @param inMemIterator optional in-memory sorted iterator to include in the final merge
+   * @return a sorted iterator over all records
+   */
+  public UnsafeSorterIterator merge(
+      List<UnsafeSorterSpillWriter> spillWriters,
+      @Nullable UnsafeSorterIterator inMemIterator) throws IOException {
+
+    List<UnsafeSorterSpillWriter> currentWriters = new ArrayList<>(spillWriters);
+    int round = 0;
+
+    while (currentWriters.size() > mergeFactor) {
+      round++;
+      List<UnsafeSorterSpillWriter> nextRoundWriters = new ArrayList<>();
+
+      logger.info("Bounded merge round {}: merging {} spill files with merge factor {}",
+          MDC.of(LogKeys.MERGE_ROUND, round),
+          MDC.of(LogKeys.NUM_SPILL_WRITERS, currentWriters.size()),
+          MDC.of(LogKeys.MERGE_FACTOR, mergeFactor));
+
+      // Partition writers into groups bounded by both merge factor (for memory) and
+      // Integer.MAX_VALUE total records (to prevent int overflow in spill file headers).
+      List<List<UnsafeSorterSpillWriter>> groups = partitionWriters(currentWriters);
+      for (List<UnsafeSorterSpillWriter> group : groups) {
+        if (group.size() == 1) {
+          // Single file in this group, no merge needed — carry forward
+          nextRoundWriters.add(group.get(0));
+        } else {
+          UnsafeSorterSpillWriter merged = mergeGroupToSpill(group);
+          nextRoundWriters.add(merged);
+
+          // Delete intermediate files that were consumed. Original spill files
+          // are not deleted here — those are managed by UnsafeExternalSorter.
+          deleteIntermediateFiles(group);
+        }
+      }
+
+      // If no merging occurred this round (e.g., all groups were size 1 due to
+      // high per-writer record counts), break to avoid an infinite loop.
+      if (nextRoundWriters.size() == currentWriters.size()) {
+        currentWriters = nextRoundWriters;
+        break;
+      }
+      currentWriters = nextRoundWriters;
+    }
+
+    // Final merge: remaining writers fit within the merge factor
+    logger.info("Final merge round: merging {} spill files",
+        MDC.of(LogKeys.NUM_SPILL_WRITERS, currentWriters.size()));
+
+    final UnsafeSorterSpillMerger finalMerger = new UnsafeSorterSpillMerger(
+        recordComparator, prefixComparator,
+        currentWriters.size() + (inMemIterator != null ? 1 : 0));
+    for (UnsafeSorterSpillWriter writer : currentWriters) {
+      finalMerger.addSpillIfNotEmpty(writer.getReader(serializerManager));
+    }
+    if (inMemIterator != null) {
+      finalMerger.addSpillIfNotEmpty(inMemIterator);
+    }
+    return finalMerger.getSortedIterator();
+  }
+
+  /**
+   * Partitions writers into groups bounded by both the merge factor (for memory) and
+   * Integer.MAX_VALUE total records (to prevent int overflow in spill file headers).
+   */
+  private List<List<UnsafeSorterSpillWriter>> partitionWriters(
+      List<UnsafeSorterSpillWriter> writers) {
+    List<List<UnsafeSorterSpillWriter>> groups = new ArrayList<>();
+    List<UnsafeSorterSpillWriter> currentGroup = new ArrayList<>();
+    long currentGroupRecords = 0;
+
+    for (UnsafeSorterSpillWriter writer : writers) {
+      long writerRecords = writer.recordsSpilled();
+      if (!currentGroup.isEmpty()
+          && (currentGroup.size() >= mergeFactor
+              || currentGroupRecords + writerRecords > Integer.MAX_VALUE)) {
+        groups.add(currentGroup);
+        currentGroup = new ArrayList<>();
+        currentGroupRecords = 0;
+      }
+      currentGroup.add(writer);
+      currentGroupRecords += writerRecords;
+    }
+    if (!currentGroup.isEmpty()) {
+      groups.add(currentGroup);
+    }
+    return groups;
+  }
+
+  /**
+   * Merges a group of spill writers into a single new spill file.
+   */
+  private UnsafeSorterSpillWriter mergeGroupToSpill(
+      List<UnsafeSorterSpillWriter> group) throws IOException {
+    int totalRecords = 0;
+    UnsafeSorterSpillMerger merger = new UnsafeSorterSpillMerger(
+        recordComparator, prefixComparator, group.size());
+
+    for (UnsafeSorterSpillWriter sw : group) {
+      UnsafeSorterSpillReader reader = sw.getReader(serializerManager);
+      totalRecords += reader.getNumRecords();
+      merger.addSpillIfNotEmpty(reader);
+    }
+
+    ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
+    UnsafeSorterSpillWriter outputWriter = new UnsafeSorterSpillWriter(
+        blockManager, fileBufferSizeBytes, writeMetrics, totalRecords);
+
+    UnsafeSorterIterator sorted = merger.getSortedIterator();
+    while (sorted.hasNext()) {
+      sorted.loadNext();
+      outputWriter.write(
+          sorted.getBaseObject(), sorted.getBaseOffset(),
+          sorted.getRecordLength(), sorted.getKeyPrefix());
+    }
+    outputWriter.close();
+    File outputFile = outputWriter.getFile();
+    intermediateFiles.add(outputFile);
+    intermediateFileSet.add(outputFile);
+    return outputWriter;
+  }
+
+  private void deleteIntermediateFiles(List<UnsafeSorterSpillWriter> writers) {
+    for (UnsafeSorterSpillWriter writer : writers) {
+      File file = writer.getFile();
+      // Only delete files created by this merger (intermediate files).
+      // Original spill files are managed by UnsafeExternalSorter.deleteSpillFiles().
+      if (file != null && intermediateFileSet.contains(file) && file.exists()) {
+        if (!file.delete()) {
+          logger.warn("Failed to delete intermediate spill file {}",
+              MDC.of(LogKeys.PATH, file.getAbsolutePath()));
+        }
+      }
+    }
+  }
+
+  /**
+   * Cleans up any intermediate files created during multi-round merge.
+   * Called during resource cleanup as a safety net for files not yet consumed.
+   */
+  public void cleanupIntermediateFiles() {
+    for (File file : intermediateFiles) {
+      if (file != null && file.exists()) {
+        if (!file.delete()) {
+          logger.warn("Failed to delete intermediate spill file {}",
+              MDC.of(LogKeys.PATH, file.getAbsolutePath()));
+        }
+      }
+    }
+    intermediateFiles.clear();
+  }
+}
