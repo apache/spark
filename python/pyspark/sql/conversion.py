@@ -1634,23 +1634,6 @@ class ArrowArrayToPandasConversion:
         ]
 
     @staticmethod
-    def _contains_conversion_type(data_type: DataType) -> bool:
-        """
-        Check if data type tree contains types not yet supported by convert_numpy.
-
-        Returns True if the type contains MapType or StructType at any nesting level.
-        When True, convert_numpy is bypassed in favor of the legacy conversion path.
-        """
-        if isinstance(
-            data_type,
-            (MapType, StructType),
-        ):
-            return True
-        elif isinstance(data_type, ArrayType):
-            return ArrowArrayToPandasConversion._contains_conversion_type(data_type.elementType)
-        return False
-
-    @staticmethod
     def _create_element_converter(
         element_type: DataType,
     ) -> Optional[Callable]:
@@ -1684,9 +1667,7 @@ class ArrowArrayToPandasConversion:
                 if v is None:
                     return None
                 if not isinstance(v, dict) or "wkb" not in v or "srid" not in v:
-                    raise PySparkValueError(
-                        errorClass="MALFORMED_GEOGRAPHY", messageParameters={}
-                    )
+                    raise PySparkValueError(errorClass="MALFORMED_GEOGRAPHY", messageParameters={})
                 return Geography.fromWKB(v["wkb"], v["srid"])
 
             return convert_geography
@@ -1696,9 +1677,7 @@ class ArrowArrayToPandasConversion:
                 if v is None:
                     return None
                 if not isinstance(v, dict) or "wkb" not in v or "srid" not in v:
-                    raise PySparkValueError(
-                        errorClass="MALFORMED_GEOMETRY", messageParameters={}
-                    )
+                    raise PySparkValueError(errorClass="MALFORMED_GEOMETRY", messageParameters={})
                 return Geometry.fromWKB(v["wkb"], v["srid"])
 
             return convert_geometry
@@ -1747,7 +1726,13 @@ class ArrowArrayToPandasConversion:
         elif isinstance(spark_type, supported_types):
             return True
         elif isinstance(spark_type, ArrayType):
-            return not cls._contains_conversion_type(spark_type)
+            # Recurse into element type. MapType and StructType are not yet supported.
+            element_type = spark_type.elementType
+            if isinstance(element_type, (MapType, StructType)):
+                return False
+            elif isinstance(element_type, ArrayType):
+                return cls._prefer_convert_numpy(element_type, df_for_struct=False)
+            return True
         # elif isinstance(spark_type, (MapType, StructType)):
         #     TODO: Support MapType, StructType
         else:
