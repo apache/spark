@@ -900,7 +900,7 @@ class DataFrameReader(OptionUtils):
 
         if not is_remote_only() and isinstance(path, RDD):
 
-            def func(iterator):
+            def func(iterator: Iterable) -> Iterable:
                 for x in iterator:
                     if not isinstance(x, str):
                         x = str(x)
@@ -909,7 +909,8 @@ class DataFrameReader(OptionUtils):
                     yield x
 
             keyed = path.mapPartitions(func)
-            keyed._bypass_serializer = True
+            keyed._bypass_serializer = True  # type: ignore[attr-defined]
+            assert self._spark._jvm is not None
             jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())
             # see SPARK-22112
             # There aren't any jvm api for creating a dataframe from rdd storing csv.
