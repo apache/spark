@@ -33,7 +33,7 @@ abstract class SQLImplicits private[sql] (override val session: SparkSession)
     new DatasetHolder[T](session.createDataset(rdd))
 }
 
-class DatasetHolder[U](ds: Dataset[U]) extends sql.DatasetHolder[U] {
+class DatasetHolder[U](ds: Dataset[U]) extends sql.DatasetHolder[U](ds) {
   override def toDS(): Dataset[U] = ds
   override def toDF(): DataFrame = ds.toDF()
   override def toDF(colNames: String*): DataFrame = ds.toDF(colNames: _*)

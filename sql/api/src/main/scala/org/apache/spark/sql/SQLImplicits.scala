@@ -51,14 +51,16 @@ abstract class SQLImplicits extends EncoderImplicits with Serializable {
    * Creates a [[Dataset]] from a local Seq.
    * @since 1.6.0
    */
-  implicit def localSeqToDatasetHolder[T: Encoder](s: Seq[T]): DatasetHolder[T]
+  implicit def localSeqToDatasetHolder[T: Encoder](s: Seq[T]): DatasetHolder[T] =
+    new DatasetHolder[T](session.createDataset(s))
 
   /**
    * Creates a [[Dataset]] from an RDD.
    *
    * @since 1.6.0
    */
-  implicit def rddToDatasetHolder[T: Encoder](rdd: RDD[T]): DatasetHolder[T]
+  implicit def rddToDatasetHolder[T: Encoder](rdd: RDD[T]): DatasetHolder[T] =
+    new DatasetHolder[T](session.createDataset(rdd))
 
   /**
    * An implicit conversion that turns a Scala `Symbol` into a [[org.apache.spark.sql.Column]].
