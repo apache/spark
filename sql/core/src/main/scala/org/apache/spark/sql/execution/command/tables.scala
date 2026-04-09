@@ -639,7 +639,12 @@ case class DescribeTableCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
     val catalog = sparkSession.sessionState.catalog
-    val metadata = ResolvedChildHelper.getTableMetadata(child, sparkSession, table)
+    // V2SessionCatalog.loadTable uses getTableMetadata which replaces char/varchar with string
+    // in the CatalogTable schema. Restore the original types from field metadata so that
+    // DESCRIBE TABLE reports char(n)/varchar(n) instead of string.
+    val rawMetadata = ResolvedChildHelper.getTableMetadata(child, sparkSession, table)
+    val metadata = rawMetadata.copy(
+      schema = CharVarcharUtils.getRawSchema(rawMetadata.schema))
 
     if (catalog.isTempView(table)) {
       if (partitionSpec.nonEmpty) {
