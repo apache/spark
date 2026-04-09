@@ -110,6 +110,9 @@ def main():
     if not args.component:
         parser.error("-c/--component is required")
 
+    if args.parent and args.type:
+        parser.error("--parent and --type cannot be used together")
+
     if not args.parent and not args.type:
         parser.error("-t/--type is required when not creating a subtask")
 
