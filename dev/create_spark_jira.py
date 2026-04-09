@@ -57,9 +57,14 @@ def main():
     parser = argparse.ArgumentParser(description="Create a Spark JIRA issue.")
     parser.add_argument("title", nargs="?", help="Title of the JIRA issue")
     parser.add_argument(
+        "-p",
+        "--parent",
+        help="Parent JIRA ID to create a subtask (e.g. SPARK-12345).",
+    )
+    parser.add_argument(
         "-t",
         "--type",
-        help="Issue type (e.g. Bug, Improvement). Defaults to Improvement.",
+        help="Issue type (e.g. Bug, Improvement)",
     )
     parser.add_argument("-c", "--component", help="Component for the issue")
     parser.add_argument(
@@ -103,7 +108,10 @@ def main():
         parser.error("the following arguments are required: title")
 
     if not args.component:
-        parser.error("the following arguments are required: -c/--component")
+        parser.error("-c/--component is required")
+
+    if not args.parent and not args.type:
+        parser.error("-t/--type is required when not creating a subtask")
 
     asf_jira = check_jira_access()
     affected_version = detect_affected_version(asf_jira)
@@ -113,10 +121,15 @@ def main():
         "summary": args.title,
         "description": "",
         "versions": [{"name": affected_version}],
-        "components": [{"name": args.component}],
     }
 
-    issue_dict["issuetype"] = {"name": args.type if args.type else "Improvement"}
+    issue_dict["components"] = [{"name": args.component}]
+
+    if args.parent:
+        issue_dict["issuetype"] = {"name": "Sub-task"}
+        issue_dict["parent"] = {"key": args.parent}
+    else:
+        issue_dict["issuetype"] = {"name": args.type}
 
     try:
         new_issue = asf_jira.create_issue(fields=issue_dict)

@@ -92,17 +92,15 @@ Each annotation contains the test class, test name, and failure message.
 
 ## Pull Request Workflow
 
-PR title requires a JIRA ticket ID (e.g., `[SPARK-xxxx][SQL] Title`). If no ticket ID is given, create one using `dev/create_spark_jira.py`:
+PR title requires a JIRA ticket ID (e.g., `[SPARK-xxxx][SQL] Title`). If no ticket ID is given, create one using `dev/create_spark_jira.py`. Infer the title from the changes — a concise summary without the JIRA ID or component tag.
 
-    python3 dev/create_spark_jira.py "<title>" -c <component> -t <type>
+    python3 dev/create_spark_jira.py "<title>" -c <component> { -t <type> | -p <parent-jira-id> }
 
-Infer the arguments from the changes:
-
-- **Title**: a concise summary of the change (without the JIRA ID or component tag).
-- **Issue type** (`-t`): "Bug", "Improvement", "New Feature", "Test", "Documentation", or "Dependency upgrade".
 - **Component** (`-c`): e.g. "SQL", "Spark Core", "PySpark", "Connect". Run `python3 dev/create_spark_jira.py --list-components` for the full list.
+- **Issue type** (`-t`): "Bug", "Improvement", "New Feature", "Test", "Documentation", or "Dependency upgrade".
+- **Parent** (`-p`): if the user mentions a parent JIRA ticket (e.g., "this is a subtask of SPARK-12345"), pass it instead of `-t`. The issue type is automatically "Sub-task".
 
-The script sets the latest unreleased version as the default affected version. Ask the user to review and adjust versions, subtask relationships, and other fields on the JIRA ticket after creation.
+The script sets the latest unreleased version as the default affected version. Ask the user to review and adjust versions and other fields on the JIRA ticket after creation.
 
 Before writing the PR description, read `.github/PULL_REQUEST_TEMPLATE` and fill in every section from that file.
 
