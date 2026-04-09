@@ -92,7 +92,17 @@ Each annotation contains the test class, test name, and failure message.
 
 ## Pull Request Workflow
 
-PR title requires a JIRA ticket ID (e.g., `[SPARK-xxxx][SQL] Title`). Ask the user to create a new ticket or provide an existing one if not given. Before writing the PR description, read `.github/PULL_REQUEST_TEMPLATE` and fill in every section from that file.
+PR title requires a JIRA ticket ID (e.g., `[SPARK-xxxx][SQL] Title`). If no ticket ID is given, create one using `dev/create_spark_jira.py`:
+
+    python3 dev/create_spark_jira.py "Title" -c <component> -t <type>
+
+Infer the arguments from the changes:
+
+- **Title**: a concise summary of the change (without the JIRA ID or component tag).
+- **Issue type** (`-t`): "Bug", "Improvement", "New Feature", "Test", "Documentation", or "Dependency upgrade".
+- **Component** (`-c`): e.g. "SQL", "Spark Core", "PySpark", "Connect". Run `python3 dev/create_spark_jira.py --list-components` for the full list.
+
+Before writing the PR description, read `.github/PULL_REQUEST_TEMPLATE` and fill in every section from that file.
 
 DO NOT push to the upstream repo. Always push to the personal fork. Open PRs against `master` on the upstream repo.
 
