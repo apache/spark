@@ -1831,11 +1831,17 @@ class ArrowArrayToPandasConversion:
         ):
             series = arr.to_pandas()
         elif isinstance(spark_type, UserDefinedType):
+            # _create_element_converter always returns non-None for UDT
+            conv = cls._create_element_converter(spark_type)
+            assert conv is not None  # for mypy
             series = arr.to_pandas()
-            series = series.apply(cls._create_element_converter(spark_type))
+            series = series.apply(conv)
         elif isinstance(spark_type, (VariantType, GeographyType, GeometryType)):
+            # _create_element_converter always returns non-None for these types
+            conv = cls._create_element_converter(spark_type)
+            assert conv is not None  # for mypy
             series = arr.to_pandas()
-            series = series.map(cls._create_element_converter(spark_type))
+            series = series.map(conv)
         elif isinstance(spark_type, ArrayType):
             element_conv = cls._create_element_converter(spark_type.elementType)
             if element_conv is not None:
