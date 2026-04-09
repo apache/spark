@@ -152,6 +152,43 @@ class DataSourcesTestsMixin:
         self.assertEqual(readback.collect(), expected)
         shutil.rmtree(tmpPath)
 
+    def test_csv_with_dataframe_input(self):
+        csv_df = self.spark.createDataFrame(
+            [("Alice,25",), ("Bob,30",)],
+            schema="value STRING",
+        )
+        result = self.spark.read.csv(csv_df)
+        expected = [Row(_c0="Alice", _c1="25"), Row(_c0="Bob", _c1="30")]
+        self.assertEqual(sorted(result.collect(), key=lambda r: r._c0), expected)
+
+    def test_csv_with_dataframe_input_and_schema(self):
+        csv_df = self.spark.createDataFrame(
+            [("Alice,25",), ("Bob,30",)],
+            schema="value STRING",
+        )
+        result = self.spark.read.csv(csv_df, schema="name STRING, age INT")
+        expected = [Row(name="Alice", age=25), Row(name="Bob", age=30)]
+        self.assertEqual(sorted(result.collect(), key=lambda r: r.name), expected)
+
+    def test_csv_with_dataframe_input_non_string_column(self):
+        int_df = self.spark.createDataFrame([(1,), (2,)], schema="value INT")
+        with self.assertRaisesRegex(Exception, "PARSE_INPUT_NOT_STRING_TYPE"):
+            self.spark.read.csv(int_df).collect()
+
+    def test_csv_with_dataframe_input_multiple_columns(self):
+        multi_df = self.spark.createDataFrame(
+            [("Alice,25", "extra"), ("Bob,30", "extra")],
+            schema="value STRING, other STRING",
+        )
+        result = self.spark.read.csv(multi_df)
+        expected = [Row(_c0="Alice", _c1="25"), Row(_c0="Bob", _c1="30")]
+        self.assertEqual(sorted(result.collect(), key=lambda r: r._c0), expected)
+
+    def test_csv_with_dataframe_input_zero_columns(self):
+        empty_schema_df = self.spark.range(1).select()
+        with self.assertRaisesRegex(Exception, "PARSE_INPUT_NOT_STRING_TYPE"):
+            self.spark.read.csv(empty_schema_df).collect()
+
     def test_xml(self):
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)

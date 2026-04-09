@@ -214,6 +214,26 @@ private[sql] object PythonSQLUtils extends Logging {
     classicReader.json(df.as(Encoders.STRING))
   }
 
+  /**
+   * Parses a [[DataFrame]] containing CSV strings into a structured [[DataFrame]].
+   * The input DataFrame must have exactly one column of StringType.
+   * This is used by PySpark to avoid manual Dataset[String] conversion on the Python side.
+   */
+  def csvFromDataFrame(
+      reader: DataFrameReader,
+      df: DataFrame): DataFrame = {
+    val classicReader = reader.asInstanceOf[ClassicDataFrameReader]
+    val fields = df.schema.fields
+    if (fields.isEmpty) {
+      throw QueryCompilationErrors.parseInputNotStringTypeError(
+        org.apache.spark.sql.types.NullType)
+    }
+    if (fields.head.dataType != org.apache.spark.sql.types.StringType) {
+      throw QueryCompilationErrors.parseInputNotStringTypeError(fields.head.dataType)
+    }
+    classicReader.csv(df.select(df.columns.head).as(Encoders.STRING))
+  }
+
   def cleanupPythonWorkerLogs(sessionUUID: String, sparkContext: SparkContext): Unit = {
     if (!sparkContext.isStopped) {
       try {

@@ -213,6 +213,43 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
         with self.assertRaisesRegex(Exception, "DATAFRAME_INPUT_NOT_SINGLE_COLUMN"):
             self.connect.read.json(empty_schema_df).collect()
 
+    def test_csv_with_dataframe_input(self):
+        csv_df = self.connect.createDataFrame(
+            [("Alice,25",), ("Bob,30",)],
+            schema="value STRING",
+        )
+        result = self.connect.read.csv(csv_df)
+        expected = [Row(_c0="Alice", _c1="25"), Row(_c0="Bob", _c1="30")]
+        self.assertEqual(sorted(result.collect(), key=lambda r: r._c0), expected)
+
+    def test_csv_with_dataframe_input_and_schema(self):
+        csv_df = self.connect.createDataFrame(
+            [("Alice,25",), ("Bob,30",)],
+            schema="value STRING",
+        )
+        result = self.connect.read.csv(csv_df, schema="name STRING, age INT")
+        expected = [Row(name="Alice", age=25), Row(name="Bob", age=30)]
+        self.assertEqual(sorted(result.collect(), key=lambda r: r.name), expected)
+
+    def test_csv_with_dataframe_input_non_string_column(self):
+        int_df = self.connect.createDataFrame([(1,), (2,)], schema="value INT")
+        with self.assertRaisesRegex(Exception, "PARSE_INPUT_NOT_STRING_TYPE"):
+            self.connect.read.csv(int_df).collect()
+
+    def test_csv_with_dataframe_input_multiple_columns(self):
+        multi_df = self.connect.createDataFrame(
+            [("Alice,25", "extra"), ("Bob,30", "extra")],
+            schema="value STRING, other STRING",
+        )
+        result = self.connect.read.csv(multi_df)
+        expected = [Row(_c0="Alice", _c1="25"), Row(_c0="Bob", _c1="30")]
+        self.assertEqual(sorted(result.collect(), key=lambda r: r._c0), expected)
+
+    def test_csv_with_dataframe_input_zero_columns(self):
+        empty_schema_df = self.connect.range(1).select()
+        with self.assertRaisesRegex(Exception, "PARSE_INPUT_NOT_STRING_TYPE"):
+            self.connect.read.csv(empty_schema_df).collect()
+
     def test_multi_paths(self):
         # SPARK-42041: DataFrameReader should support list of paths
 
