@@ -936,18 +936,13 @@ object JdbcUtils extends Logging with SQLConfHelper {
         } else {
           outMetrics.setRecordsWritten(totalRowCount)
         }
-        if (!conn.isClosed) {
-          conn.close()
-        }
+        conn.close()
       } else {
         outMetrics.setRecordsWritten(totalRowCount)
 
         // The stage must succeed.  We cannot propagate any exception close() might throw.
-        // Connection may already be closed by the task interrupt listener.
         try {
-          if (!conn.isClosed) {
-            conn.close()
-          }
+          conn.close()
         } catch {
           case e: Exception => logWarning("Transaction succeeded, but closing failed", e)
         }
