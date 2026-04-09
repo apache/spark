@@ -145,7 +145,7 @@ case class StreamingSymmetricHashJoinExec(
     stateFormatVersion: Int,
     left: SparkPlan,
     right: SparkPlan,
-    outputMode: Option[OutputMode] = None)
+    outputMode: Option[OutputMode])
     extends BinaryExecNode with StateStoreWriter with SchemaValidationUtils {
 
   def this(
@@ -161,7 +161,8 @@ case class StreamingSymmetricHashJoinExec(
       leftKeys, rightKeys, joinType, JoinConditionSplitPredicates(condition, left, right),
       stateInfo = None,
       eventTimeWatermarkForLateEvents = None, eventTimeWatermarkForEviction = None,
-      stateWatermarkPredicates = JoinStateWatermarkPredicates(), stateFormatVersion, left, right)
+      stateWatermarkPredicates = JoinStateWatermarkPredicates(), stateFormatVersion, left, right,
+      None)
   }
 
   if (stateFormatVersion < 2 && joinType != Inner) {

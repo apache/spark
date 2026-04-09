@@ -944,15 +944,13 @@ class MultiStatefulOperatorsSuite
   testWithAppendAndUpdate("dedup on both sides -> stream-stream inner join") { outputMode =>
     val input1 = MemoryStream[Int]
     val inputDF1 = input1.toDF()
-      .withColumnRenamed("value", "value1")
-      .withColumn("eventTime1", timestamp_seconds($"value1"))
+      .select($"value".as("value1"), timestamp_seconds($"value").as("eventTime1"))
       .withWatermark("eventTime1", "10 seconds")
       .dropDuplicates("value1", "eventTime1")
 
     val input2 = MemoryStream[Int]
     val inputDF2 = input2.toDF()
-      .withColumnRenamed("value", "value2")
-      .withColumn("eventTime2", timestamp_seconds($"value2"))
+      .select($"value".as("value2"), timestamp_seconds($"value").as("eventTime2"))
       .withWatermark("eventTime2", "10 seconds")
       .dropDuplicates("value2", "eventTime2")
 
@@ -971,14 +969,12 @@ class MultiStatefulOperatorsSuite
   test("stream-stream inner join -> window agg, update mode") {
     val input1 = MemoryStream[Int]
     val inputDF1 = input1.toDF()
-      .withColumnRenamed("value", "value1")
-      .withColumn("eventTime1", timestamp_seconds($"value1"))
+      .select($"value".as("value1"), timestamp_seconds($"value").as("eventTime1"))
       .withWatermark("eventTime1", "0 seconds")
 
     val input2 = MemoryStream[Int]
     val inputDF2 = input2.toDF()
-      .withColumnRenamed("value", "value2")
-      .withColumn("eventTime2", timestamp_seconds($"value2"))
+      .select($"value".as("value2"), timestamp_seconds($"value").as("eventTime2"))
       .withWatermark("eventTime2", "0 seconds")
 
     val stream = inputDF1.join(inputDF2, expr("eventTime1 = eventTime2"), "inner")
