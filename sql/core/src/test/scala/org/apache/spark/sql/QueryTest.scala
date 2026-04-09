@@ -35,7 +35,6 @@ import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
 import org.apache.spark.sql.catalyst.plans._
@@ -335,7 +334,7 @@ trait QueryTestBase
         val withTemporary = if (isTemporary) "TEMPORARY" else ""
         spark.sql(s"DROP $withTemporary FUNCTION IF EXISTS $functionName")
         assert(
-          !spark.sessionState.catalog.functionExists(FunctionIdentifier(functionName)),
+          !spark.catalog.functionExists(functionName),
           s"Function $functionName should have been dropped. But, it still exists.")
       }
     }
