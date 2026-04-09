@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.util.{Locale, Properties}
+import java.util.{HashMap, Locale, Properties}
 
 import org.apache.spark.internal.{LogEntry, Logging, LogKeys, MessageWithContext}
 
@@ -140,8 +140,8 @@ private[scheduler] object StructuredStreamingIdAwareSchedulerLogging extends Log
   val BATCH_ID_KEY = "streaming.sql.batchId"
 
   private[scheduler] def constructStreamingLogEntry(
-                                                 properties: Properties,
-                                                 entry: LogEntry): LogEntry = {
+      properties: Properties,
+      entry: LogEntry): LogEntry = {
     if (properties == null) {
       return entry
     }
@@ -159,8 +159,8 @@ private[scheduler] object StructuredStreamingIdAwareSchedulerLogging extends Log
   }
 
   private[scheduler] def constructStreamingLogEntry(
-                                                 properties: Properties,
-                                                 msg: => String): LogEntry = {
+      properties: Properties,
+      msg: => String): LogEntry = {
     if (properties == null) {
       return new LogEntry(
         MessageWithContext(msg, java.util.Collections.emptyMap())
@@ -183,10 +183,9 @@ private[scheduler] object StructuredStreamingIdAwareSchedulerLogging extends Log
   }
 
   private def constructStreamingContext(
-                                         queryId: Option[String],
-                                         batchId: Option[String]):
-  java.util.HashMap[String, String] = {
-    val streamingContext = new java.util.HashMap[String, String]()
+      queryId: Option[String],
+      batchId: Option[String]): HashMap[String, String] = {
+    val streamingContext = new HashMap[String, String]()
     // MDC places the log key in the context as all lowercase, so we do the same here
     queryId.foreach(streamingContext.put(LogKeys.QUERY_ID.name.toLowerCase(Locale.ROOT), _))
     batchId.foreach(streamingContext.put(LogKeys.BATCH_ID.name.toLowerCase(Locale.ROOT), _))
@@ -194,17 +193,17 @@ private[scheduler] object StructuredStreamingIdAwareSchedulerLogging extends Log
   }
 
   private def formatMessage(
-                             queryId: Option[String],
-                             batchId: Option[String],
-                             msg: => String): String = {
+      queryId: Option[String],
+      batchId: Option[String],
+      msg: => String): String = {
     val msgWithBatchId = batchId.map(bid => s"[batchId = $bid] $msg").getOrElse(msg)
     queryId.map(qId => s"[queryId = $qId] $msgWithBatchId").getOrElse(msgWithBatchId)
   }
 
   private def formatMessage(
-                             queryId: Option[String],
-                             batchId: Option[String],
-                             msg: => LogEntry): MessageWithContext = {
+      queryId: Option[String],
+      batchId: Option[String],
+      msg: => LogEntry): MessageWithContext = {
     val msgWithBatchId: MessageWithContext = batchId.map(
       bId => log"[batchId = ${MDC(LogKeys.BATCH_ID, bId)}] " + toMessageWithContext(msg)
     ).getOrElse(toMessageWithContext(msg))
