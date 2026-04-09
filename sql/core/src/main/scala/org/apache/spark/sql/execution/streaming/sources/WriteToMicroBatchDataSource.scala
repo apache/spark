@@ -21,8 +21,8 @@ import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolveSchemaEvolu
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SupportsSchemaEvolution, UnaryNode}
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
-import org.apache.spark.sql.connector.catalog.{SupportsWrite, TableChange, TableWritePrivilege}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsWrite, TableChange, TableWritePrivilege}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2CatalogAndIdentifier}
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -55,13 +55,23 @@ case class WriteToMicroBatchDataSource(
   override lazy val schemaEvolutionReady: Boolean =
     relation.exists(_.resolved) && query.resolved
 
-  override lazy val pendingSchemaChanges: Seq[TableChange] = {
-    if (relation.nonEmpty && schemaEvolutionEnabled && schemaEvolutionReady) {
-      ResolveSchemaEvolution.computeSchemaChanges(
-        relation.get.schema, query.schema, isByName = true).toSeq
-    } else {
-      Seq.empty
+  // Use `def` rather than `lazy val`: the streaming plan may be analyzed multiple times
+  // (e.g. by V2TableRefreshUtil or CacheManager), each time starting from the original plan
+  // with a stale relation schema. Loading the current table from the catalog ensures we
+  // compare against the actual table state and don't re-trigger already-applied evolution.
+  override def pendingSchemaChanges: Seq[TableChange] = {
+    if (relation.isEmpty || !schemaEvolutionEnabled || !schemaEvolutionReady) {
+      return Seq.empty
     }
+    val currentTableSchema = relation.get match {
+      case ExtractV2CatalogAndIdentifier(catalog, ident) =>
+        CatalogV2Util.v2ColumnsToStructType(
+          catalog.loadTable(ident).columns())
+      case _ =>
+        relation.get.schema
+    }
+    ResolveSchemaEvolution.computeSchemaChanges(
+      currentTableSchema, query.schema, isByName = true).toSeq
   }
 
   override val writePrivileges: Set[TableWritePrivilege] = Set(TableWritePrivilege.INSERT)
