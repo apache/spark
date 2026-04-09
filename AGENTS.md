@@ -102,7 +102,7 @@ Infer the arguments from the changes:
 - **Issue type** (`-t`): "Bug", "Improvement", "New Feature", "Test", "Documentation", or "Dependency upgrade".
 - **Component** (`-c`): e.g. "SQL", "Spark Core", "PySpark", "Connect". Run `python3 dev/create_spark_jira.py --list-components` for the full list.
 
-The script sets the latest unreleased version as the default affected version. Ask the user to review and adjust versions on the JIRA ticket after creation.
+The script sets the latest unreleased version as the default affected version. Ask the user to review and adjust versions, subtask relationships, and other fields on the JIRA ticket after creation.
 
 Before writing the PR description, read `.github/PULL_REQUEST_TEMPLATE` and fill in every section from that file.
 

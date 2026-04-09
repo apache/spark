@@ -56,7 +56,6 @@ def list_components(asf_jira):
 def main():
     parser = argparse.ArgumentParser(description="Create a Spark JIRA issue.")
     parser.add_argument("title", nargs="?", help="Title of the JIRA issue")
-    parser.add_argument("-p", "--parent", help="Parent JIRA ID for subtasks")
     parser.add_argument(
         "-t",
         "--type",
@@ -117,11 +116,7 @@ def main():
         "components": [{"name": args.component}],
     }
 
-    if args.parent:
-        issue_dict["issuetype"] = {"name": "Sub-task"}
-        issue_dict["parent"] = {"key": args.parent}
-    else:
-        issue_dict["issuetype"] = {"name": args.type if args.type else "Improvement"}
+    issue_dict["issuetype"] = {"name": args.type if args.type else "Improvement"}
 
     try:
         new_issue = asf_jira.create_issue(fields=issue_dict)
