@@ -74,6 +74,8 @@ class TxnTable(val delegate: InMemoryRowLevelOperationTable)
   // TODO: Revise schema evolution.
   alterTableWithData(delegate.data, schema)
 
+  private val initialVersion: String = version()
+
   // A tracker of filters used in each scan.
   val scanEvents = new ArrayBuffer[Array[Filter]]()
 
@@ -82,14 +84,16 @@ class TxnTable(val delegate: InMemoryRowLevelOperationTable)
   }
 
   def commit(): Unit = {
-    delegate.dataMap.clear()
-    // TODO: Revise schema evolution.
-    delegate.alterTableWithData(data, delegate.schema)
-    delegate.replacedPartitions = replacedPartitions
-    delegate.lastWriteInfo = lastWriteInfo
-    delegate.lastWriteLog = lastWriteLog
-    delegate.commits ++= commits
-    delegate.increaseVersion()
+    if (version() != initialVersion) {
+      delegate.dataMap.clear()
+      // TODO: Revise schema evolution.
+      delegate.alterTableWithData(data, delegate.schema)
+      delegate.replacedPartitions = replacedPartitions
+      delegate.lastWriteInfo = lastWriteInfo
+      delegate.lastWriteLog = lastWriteLog
+      delegate.commits ++= commits
+      delegate.increaseVersion()
+    }
   }
 }
 

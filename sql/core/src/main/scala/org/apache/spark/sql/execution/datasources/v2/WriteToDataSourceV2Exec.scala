@@ -121,13 +121,8 @@ case class AtomicCreateTableAsSelectExec(
     query: LogicalPlan,
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
-    ifNotExists: Boolean,
-    transaction: Option[Transaction] = None)
-  extends V2CreateTableAsSelectBaseExec
-  with TransactionalExec {
-
-  override def withTransaction(txn: Option[Transaction]): AtomicCreateTableAsSelectExec =
-    copy(transaction = txn)
+    ifNotExists: Boolean)
+  extends V2CreateTableAsSelectBaseExec {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
 
@@ -148,9 +143,7 @@ case class AtomicCreateTableAsSelectExec(
       .build()
     val stagedTable = Option(catalog.stageCreate(ident, tableInfo)
     ).getOrElse(catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))
-    val result = writeToTable(catalog, stagedTable, writeOptions, ident, query, overwrite = false)
-    transaction.foreach(TransactionUtils.commit)
-    result
+    writeToTable(catalog, stagedTable, writeOptions, ident, query, overwrite = false)
   }
 }
 
@@ -241,12 +234,8 @@ case class AtomicReplaceTableAsSelectExec(
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
     orCreate: Boolean,
-    invalidateCache: (TableCatalog, Identifier) => Unit,
-    transaction: Option[Transaction] = None)
-  extends V2CreateTableAsSelectBaseExec with TransactionalExec {
-
-  override def withTransaction(txn: Option[Transaction]): AtomicReplaceTableAsSelectExec =
-    copy(transaction = txn)
+    invalidateCache: (TableCatalog, Identifier) => Unit)
+  extends V2CreateTableAsSelectBaseExec {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
 
@@ -287,9 +276,7 @@ case class AtomicReplaceTableAsSelectExec(
     }
     val table = Option(staged).getOrElse(
       catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))
-    val result = writeToTable(catalog, table, writeOptions, ident, query, overwrite = true)
-    transaction.foreach(TransactionUtils.commit)
-    result
+    writeToTable(catalog, table, writeOptions, ident, query, overwrite = true)
   }
 }
 
