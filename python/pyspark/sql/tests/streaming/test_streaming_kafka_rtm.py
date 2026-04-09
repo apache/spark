@@ -65,16 +65,7 @@ jars_args = "--jars %s" % all_jars
 os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join([jars_args, existing_args])
 
 from pyspark.sql.tests.streaming.kafka_utils import KafkaUtils
-
-
-# Check if required Python dependencies are available
-try:
-    import testcontainers  # noqa: F401
-    import kafka  # noqa: F401
-
-    have_kafka_deps = True
-except ImportError:
-    have_kafka_deps = False
+from pyspark.testing.utils import have_testcontainers, have_kafka
 
 
 class StreamingKafkaTestsMixin:
@@ -122,7 +113,7 @@ def _is_docker_available():
 
 
 @unittest.skipIf(
-    not have_kafka_deps,
+    not (have_testcontainers and have_kafka),
     "Kafka test dependencies not available (testcontainers, kafka-python)",
 )
 class StreamingKafkaTests(StreamingKafkaTestsMixin, ReusedSQLTestCase):
