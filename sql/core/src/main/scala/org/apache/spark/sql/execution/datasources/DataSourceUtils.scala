@@ -22,6 +22,7 @@ import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
@@ -42,6 +43,19 @@ import org.apache.spark.util.Utils
 
 
 object DataSourceUtils extends PredicateHelper {
+
+  /**
+   * Sets a key in the Hadoop configuration only if it is not already present. Write options
+   * are merged into the conf upstream via `newHadoopConfWithOptions`, so a non-null value
+   * means the user explicitly set a per-write option which should take precedence over the
+   * session-level SQLConf default.
+   */
+  def setConfIfAbsent(conf: Configuration, key: String, value: => String): Unit = {
+    if (conf.get(key) == null) {
+      conf.set(key, value)
+    }
+  }
+
   /**
    * The key to use for storing partitionBy columns as options.
    */
