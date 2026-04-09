@@ -92,7 +92,7 @@ Each annotation contains the test class, test name, and failure message.
 
 ## Pull Request Workflow
 
-PR title requires a JIRA ticket ID (e.g., `[SPARK-xxxx][SQL] Title`). If no ticket ID is given, create one using `dev/create_spark_jira.py`. Infer the title from the changes — a concise summary without the JIRA ID or component tag.
+PR title format is `[SPARK-xxxx][Component] Title`. Infer the PR title from the changes. If no ticket ID is given, create one using `dev/create_spark_jira.py`, using the PR title (without the JIRA ID and component tag) as the ticket title.
 
     python3 dev/create_spark_jira.py "<title>" -c <component> { -t <type> | -p <parent-jira-id> }
 
