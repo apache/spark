@@ -2912,6 +2912,345 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  // =====================================================================
+  // Design Doc Section 3, Scenario 4: Join after drop/recreate table
+  // =====================================================================
+
+  test("[Section 3 S4] join: drop and recreate table between df1 and df2 analysis") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df1 = spark.table(t)
+      val originalId = catalog("testcat").loadTable(ident).id()
+
+      // drop and recreate table with same schema
+      sql(s"DROP TABLE $t")
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (2, 200)")
+
+      val newId = catalog("testcat").loadTable(ident).id()
+      assert(originalId != newId)
+
+      val df2 = spark.table(t)
+
+      // join should detect table ID mismatch from df1's stale table reference
+      checkError(
+        exception = intercept[AnalysisException] {
+          df1.join(df2, df1("id") === df2("id")).collect()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.TABLE_ID_MISMATCH",
+        sqlState = Some("51024"),
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "capturedTableId" -> originalId,
+          "currentTableId" -> newId))
+    }
+  }
+
+  // =====================================================================
+  // Design Doc Section 4: collect() reuses stale QueryExecution
+  // These tests document the inconsistent behavior where Dataset.collect()
+  // pins the QueryExecution from its first invocation and subsequent
+  // collect() calls reuse the stale plan, while show(), count(), and
+  // other derived operations create fresh QueryExecutions.
+  // The design doc proposes aligning collect() with show() in the future.
+  // =====================================================================
+
+  test("[Section 4 S2] collect reuses stale QE after column addition") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df = spark.sql(s"SELECT * FROM $t")
+
+      // first collect evaluates and pins the QueryExecution
+      val result1 = df.collect()
+      assert(result1.length == 1)
+
+      // add column externally and insert new data
+      val change = TableChange.addColumn(Array("new_column"), IntegerType, true)
+      catalog("testcat").alterTable(ident, change)
+      sql(s"INSERT INTO $t VALUES (2, 200, -1)")
+
+      // count() creates a new QueryExecution via derived Dataset and sees new data
+      assert(df.count() == 2)
+
+      // collect() reuses the stale pinned QueryExecution
+      val result2 = df.collect()
+      assert(result2.length == 1)
+    }
+  }
+
+  test("[Section 4 S3] collect reuses stale QE after column removal") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT, extra STRING) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100, 'x')")
+
+      val df = spark.sql(s"SELECT * FROM $t")
+
+      // first collect pins the QE
+      val result1 = df.collect()
+      assert(result1.length == 1)
+      assert(result1(0) == Row(1, 100, "x"))
+
+      // remove column externally via catalog API
+      val change = TableChange.deleteColumn(Array("extra"), false)
+      catalog("testcat").alterTable(ident, change)
+
+      // collect() reuses stale QE - returns old data without detecting removal
+      val result2 = df.collect()
+      assert(result2.length == 1)
+      assert(result2(0) == Row(1, 100, "x"))
+    }
+  }
+
+  test("[Section 4 S4] collect reuses stale QE after drop/recreate table") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df = spark.sql(s"SELECT * FROM $t")
+
+      // first collect pins the QE
+      val result1 = df.collect()
+      assert(result1.length == 1)
+
+      // drop and recreate table (different table ID)
+      sql(s"DROP TABLE $t")
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+
+      // collect() reuses stale QE - returns old data without detecting table change
+      val result2 = df.collect()
+      assert(result2.length == 1)
+      assert(result2(0) == Row(1, 100))
+    }
+  }
+
+  test("[Section 4 S5] collect reuses stale QE after drop and add column with same type") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df = spark.sql(s"SELECT * FROM $t")
+
+      // first collect pins the QE
+      val result1 = df.collect()
+      assert(result1.length == 1)
+
+      // drop and re-add column with same name and type
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+
+      // collect() reuses stale QE - returns old data
+      val result2 = df.collect()
+      assert(result2.length == 1)
+      assert(result2(0) == Row(1, 100))
+    }
+  }
+
+  test("[Section 4 S6] collect reuses stale QE after drop and add column with different type") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df = spark.sql(s"SELECT * FROM $t")
+
+      // first collect pins the QE
+      val result1 = df.collect()
+      assert(result1.length == 1)
+
+      // drop and re-add column with different type
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary STRING")
+
+      // collect() reuses stale QE - returns old data without detecting type change
+      val result2 = df.collect()
+      assert(result2.length == 1)
+      assert(result2(0) == Row(1, 100))
+    }
+  }
+
+  // =====================================================================
+  // Design Doc Section 5, Scenario 4: Session schema change + cache
+  // =====================================================================
+
+  test("[Section 5 S4] CACHE TABLE: session schema change reflects in subsequent queries") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      sql(s"CACHE TABLE $t")
+      assertCached(spark.table(t))
+      checkAnswer(spark.table(t), Seq(Row(1, 100)))
+
+      // session ALTER TABLE ADD COLUMN should invalidate or refresh the cache
+      sql(s"ALTER TABLE $t ADD COLUMN new_col INT")
+
+      // subsequent query should show the updated schema
+      checkAnswer(spark.table(t), Seq(Row(1, 100, null)))
+    }
+  }
+
+  // =====================================================================
+  // Extra: Type widening scenarios
+  // =====================================================================
+
+  test("temp view: type widening INT to DOUBLE") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      spark.table(t).createOrReplaceTempView("tmp")
+      checkAnswer(spark.table("tmp"), Seq(Row(1, 100)))
+
+      // widen type from INT to DOUBLE
+      sql(s"ALTER TABLE $t ALTER COLUMN salary TYPE DOUBLE")
+
+      // temp view should detect the incompatible type change
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("tmp").collect() },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`tmp`",
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" -> "- `salary` type has changed from INT to DOUBLE"))
+    }
+  }
+
+  test("DataFrame: type widening INT to BIGINT after analysis") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df = spark.table(t)
+
+      // widen type from INT to BIGINT
+      sql(s"ALTER TABLE $t ALTER COLUMN salary TYPE BIGINT")
+
+      // DataFrame should detect the incompatible type change during refresh
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "errors" -> "- `salary` type has changed from INT to BIGINT"))
+    }
+  }
+
+  test("join: type widening INT to BIGINT between df1 and df2 analysis") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df1 = spark.table(t)
+
+      // widen type between the two DataFrame analyses
+      sql(s"ALTER TABLE $t ALTER COLUMN salary TYPE BIGINT")
+      sql(s"INSERT INTO $t VALUES (2, 200)")
+
+      val df2 = spark.table(t)
+
+      // join should detect the type change from df1's stale schema
+      checkError(
+        exception = intercept[AnalysisException] {
+          df1.join(df2, df1("id") === df2("id")).collect()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "errors" -> "- `salary` type has changed from INT to BIGINT"))
+    }
+  }
+
+  // =====================================================================
+  // Extra: Column rename scenarios
+  // =====================================================================
+
+  test("temp view: column rename detects removal of old name") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      spark.table(t).createOrReplaceTempView("tmp")
+      checkAnswer(spark.table("tmp"), Seq(Row(1, 100)))
+
+      // rename column - from Spark's perspective, old column is removed
+      sql(s"ALTER TABLE $t RENAME COLUMN salary TO pay")
+
+      // temp view should detect that captured column `salary` no longer exists
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("tmp").collect() },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`tmp`",
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" -> "- `salary` INT has been removed"))
+    }
+  }
+
+  test("DataFrame: column rename after analysis") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df = spark.table(t)
+
+      // rename column
+      sql(s"ALTER TABLE $t RENAME COLUMN salary TO pay")
+
+      // DataFrame should detect the column removal during refresh
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "errors" -> "- `salary` INT has been removed"))
+    }
+  }
+
+  test("join: column rename between df1 and df2 analysis") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df1 = spark.table(t)
+
+      // rename column between the two DataFrame analyses
+      sql(s"ALTER TABLE $t RENAME COLUMN salary TO pay")
+
+      val df2 = spark.table(t)
+
+      // join should detect the column removal from df1's perspective
+      checkError(
+        exception = intercept[AnalysisException] {
+          df1.join(df2, df1("id") === df2("id")).collect()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "errors" -> "- `salary` INT has been removed"))
+    }
+  }
+
   test("CTAS/RTAS should trigger two query executions") {
     // CTAS/RTAS triggers 2 query executions:
     // 1. The outer CTAS/RTAS command execution
