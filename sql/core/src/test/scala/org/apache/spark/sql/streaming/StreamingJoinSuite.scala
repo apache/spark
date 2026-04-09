@@ -117,6 +117,13 @@ abstract class StreamingJoinSuite
     }
   }
 
+  protected def testWithAppendAndUpdate(testName: String, testTags: Tag*)(
+      testBody: OutputMode => Any): Unit = {
+    Seq(OutputMode.Append(), OutputMode.Update()).foreach { outputMode =>
+      test(s"$testName - $outputMode", testTags: _*)(testBody(outputMode))
+    }
+  }
+
   import testImplicits._
 
   before {
@@ -323,231 +330,222 @@ abstract class StreamingJoinSuite
 abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
 
   import testImplicits._
-  Seq(OutputMode.Append(), OutputMode.Update()).foreach { outputMode =>
-    test(s"stream stream inner join on non-time column - $outputMode") {
-      val input1 = MemoryStream[Int]
-      val input2 = MemoryStream[Int]
+  testWithAppendAndUpdate("stream stream inner join on non-time column") { outputMode =>
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
 
-      val df1 = input1.toDF().select($"value" as "key", ($"value" * 2) as "leftValue")
-      val df2 = input2.toDF().select($"value" as "key", ($"value" * 3) as "rightValue")
-      val joined = df1.join(df2, "key")
+    val df1 = input1.toDF().select($"value" as "key", ($"value" * 2) as "leftValue")
+    val df2 = input2.toDF().select($"value" as "key", ($"value" * 3) as "rightValue")
+    val joined = df1.join(df2, "key")
 
-      testStream(joined, outputMode)(
-        AddData(input1, 1),
-        CheckAnswer(),
-        AddData(input2, 1, 10),       // 1 arrived on input1 first, then input2, should join
-        CheckNewAnswer((1, 2, 3)),
-        AddData(input1, 10),          // 10 arrived on input2 first, then input1, should join
-        CheckNewAnswer((10, 20, 30)),
-        AddData(input2, 1),           // another 1 in input2 should join with 1 input1
-        CheckNewAnswer((1, 2, 3)),
-        StopStream,
-        StartStream(),
-        AddData(input1, 1), // multiple 1s should be kept in state causing multiple (1, 2, 3)
-        CheckNewAnswer((1, 2, 3), (1, 2, 3)),
-        StopStream,
-        StartStream(),
-        AddData(input1, 100),
-        AddData(input2, 100),
-        CheckNewAnswer((100, 200, 300))
-      )
-    }
+    testStream(joined, outputMode)(
+      AddData(input1, 1),
+      CheckAnswer(),
+      AddData(input2, 1, 10),       // 1 arrived on input1 first, then input2, should join
+      CheckNewAnswer((1, 2, 3)),
+      AddData(input1, 10),          // 10 arrived on input2 first, then input1, should join
+      CheckNewAnswer((10, 20, 30)),
+      AddData(input2, 1),           // another 1 in input2 should join with 1 input1
+      CheckNewAnswer((1, 2, 3)),
+      StopStream,
+      StartStream(),
+      AddData(input1, 1), // multiple 1s should be kept in state causing multiple (1, 2, 3)
+      CheckNewAnswer((1, 2, 3), (1, 2, 3)),
+      StopStream,
+      StartStream(),
+      AddData(input1, 100),
+      AddData(input2, 100),
+      CheckNewAnswer((100, 200, 300))
+    )
   }
 
-  Seq(OutputMode.Append(), OutputMode.Update()).foreach { outputMode =>
-    test(s"stream stream inner join on windows - without watermark - $outputMode") {
-      val input1 = MemoryStream[Int]
-      val input2 = MemoryStream[Int]
+  testWithAppendAndUpdate("stream stream inner join on windows - without watermark") { outputMode =>
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
 
-      val df1 = input1.toDF()
-        .select($"value" as "key", timestamp_seconds($"value") as "timestamp",
-          ($"value" * 2) as "leftValue")
-        .select($"key", window($"timestamp", "10 second"), $"leftValue")
+    val df1 = input1.toDF()
+      .select($"value" as "key", timestamp_seconds($"value") as "timestamp",
+        ($"value" * 2) as "leftValue")
+      .select($"key", window($"timestamp", "10 second"), $"leftValue")
 
-      val df2 = input2.toDF()
-        .select($"value" as "key", timestamp_seconds($"value") as "timestamp",
-          ($"value" * 3) as "rightValue")
-        .select($"key", window($"timestamp", "10 second"), $"rightValue")
+    val df2 = input2.toDF()
+      .select($"value" as "key", timestamp_seconds($"value") as "timestamp",
+        ($"value" * 3) as "rightValue")
+      .select($"key", window($"timestamp", "10 second"), $"rightValue")
 
-      val joined = df1.join(df2, Seq("key", "window"))
-        .select($"key", $"window.end".cast("long"), $"leftValue", $"rightValue")
+    val joined = df1.join(df2, Seq("key", "window"))
+      .select($"key", $"window.end".cast("long"), $"leftValue", $"rightValue")
 
-      testStream(joined, outputMode)(
-        AddData(input1, 1),
-        CheckNewAnswer(),
-        AddData(input2, 1),
-        CheckNewAnswer((1, 10, 2, 3)),
-        StopStream,
-        StartStream(),
-        AddData(input1, 25),
-        CheckNewAnswer(),
-        StopStream,
-        StartStream(),
-        AddData(input2, 25),
-        CheckNewAnswer((25, 30, 50, 75)),
-        AddData(input1, 1),
-        CheckNewAnswer((1, 10, 2, 3)),      // State for 1 still around as there is no watermark
-        StopStream,
-        StartStream(),
-        AddData(input1, 5),
-        CheckNewAnswer(),
-        AddData(input2, 5),
-        CheckNewAnswer((5, 10, 10, 15))     // No filter by any watermark
-      )
-    }
+    testStream(joined, outputMode)(
+      AddData(input1, 1),
+      CheckNewAnswer(),
+      AddData(input2, 1),
+      CheckNewAnswer((1, 10, 2, 3)),
+      StopStream,
+      StartStream(),
+      AddData(input1, 25),
+      CheckNewAnswer(),
+      StopStream,
+      StartStream(),
+      AddData(input2, 25),
+      CheckNewAnswer((25, 30, 50, 75)),
+      AddData(input1, 1),
+      CheckNewAnswer((1, 10, 2, 3)),      // State for 1 still around as there is no watermark
+      StopStream,
+      StartStream(),
+      AddData(input1, 5),
+      CheckNewAnswer(),
+      AddData(input2, 5),
+      CheckNewAnswer((5, 10, 10, 15))     // No filter by any watermark
+    )
   }
 
-  Seq(OutputMode.Append(), OutputMode.Update()).foreach { outputMode =>
-    test("stream stream inner join with time range - with watermark" +
-        s" - one side condition - $outputMode") {
-      import org.apache.spark.sql.functions._
+  testWithAppendAndUpdate("stream stream inner join with time range - with watermark" +
+      " - one side condition") { outputMode =>
+    import org.apache.spark.sql.functions._
 
-      val leftInput = MemoryStream[(Int, Int)]
-      val rightInput = MemoryStream[(Int, Int)]
+    val leftInput = MemoryStream[(Int, Int)]
+    val rightInput = MemoryStream[(Int, Int)]
 
-      val df1 = leftInput.toDF().toDF("leftKey", "time")
-        .select($"leftKey", timestamp_seconds($"time") as "leftTime",
-          ($"leftKey" * 2) as "leftValue")
-        .withWatermark("leftTime", "10 seconds")
+    val df1 = leftInput.toDF().toDF("leftKey", "time")
+      .select($"leftKey", timestamp_seconds($"time") as "leftTime",
+        ($"leftKey" * 2) as "leftValue")
+      .withWatermark("leftTime", "10 seconds")
 
-      val df2 = rightInput.toDF().toDF("rightKey", "time")
-        .select($"rightKey", timestamp_seconds($"time") as "rightTime",
-          ($"rightKey" * 3) as "rightValue")
-        .withWatermark("rightTime", "10 seconds")
+    val df2 = rightInput.toDF().toDF("rightKey", "time")
+      .select($"rightKey", timestamp_seconds($"time") as "rightTime",
+        ($"rightKey" * 3) as "rightValue")
+      .withWatermark("rightTime", "10 seconds")
 
-      val joined =
-        df1.join(df2, expr("leftKey = rightKey AND leftTime < rightTime - interval 5 seconds"))
-          .select($"leftKey", $"leftTime".cast("int"), $"rightTime".cast("int"))
+    val joined =
+      df1.join(df2, expr("leftKey = rightKey AND leftTime < rightTime - interval 5 seconds"))
+        .select($"leftKey", $"leftTime".cast("int"), $"rightTime".cast("int"))
 
-      testStream(joined, outputMode)(
-        AddData(leftInput, (1, 5)),
-        CheckAnswer(),
-        AddData(rightInput, (1, 11)),
-        CheckNewAnswer((1, 5, 11)),
-        AddData(rightInput, (1, 10)),
-        CheckNewAnswer(), // no match as leftTime 5 is not < rightTime 10 - 5
-        assertNumStateRows(total = 3, updated = 3),
+    testStream(joined, outputMode)(
+      AddData(leftInput, (1, 5)),
+      CheckAnswer(),
+      AddData(rightInput, (1, 11)),
+      CheckNewAnswer((1, 5, 11)),
+      AddData(rightInput, (1, 10)),
+      CheckNewAnswer(), // no match as leftTime 5 is not < rightTime 10 - 5
+      assertNumStateRows(total = 3, updated = 3),
 
-        // Increase event time watermark to 20s by adding data with time = 30s on both inputs
-        AddData(leftInput, (1, 3), (1, 30)),
-        CheckNewAnswer((1, 3, 10), (1, 3, 11)),
-        assertNumStateRows(total = 5, updated = 2),
-        AddData(rightInput, (0, 30)),
-        CheckNewAnswer(),
+      // Increase event time watermark to 20s by adding data with time = 30s on both inputs
+      AddData(leftInput, (1, 3), (1, 30)),
+      CheckNewAnswer((1, 3, 10), (1, 3, 11)),
+      assertNumStateRows(total = 5, updated = 2),
+      AddData(rightInput, (0, 30)),
+      CheckNewAnswer(),
 
-        // event time watermark:    max event time - 10   ==>   30 - 10 = 20
-        // so left side going to only receive data where leftTime > 20
-        // right side state constraint:    20 < leftTime < rightTime - 5   ==>   rightTime > 25
-        // right state where rightTime <= 25 will be cleared, (1, 11) and (1, 10) removed
-        assertNumStateRows(total = 4, updated = 1),
+      // event time watermark:    max event time - 10   ==>   30 - 10 = 20
+      // so left side going to only receive data where leftTime > 20
+      // right side state constraint:    20 < leftTime < rightTime - 5   ==>   rightTime > 25
+      // right state where rightTime <= 25 will be cleared, (1, 11) and (1, 10) removed
+      assertNumStateRows(total = 4, updated = 1),
 
-        // New data to right input should match with left side (1, 3) and (1, 5), as left state
-        // should not be cleared. But rows rightTime <= 20 should be filtered due to event time
-        // watermark and state rows with rightTime <= 25 should be removed from state.
-        // (1, 20) ==> filtered by event time watermark = 20
-        // (1, 21) ==> passed filter, matched with left (1, 3) and (1, 5), not added to state
-        //             as 21 < state watermark = 25
-        // (1, 28) ==> passed filter, matched with left (1, 3) and (1, 5), added to state
-        AddData(rightInput, (1, 20), (1, 21), (1, 28)),
-        CheckNewAnswer((1, 3, 21), (1, 5, 21), (1, 3, 28), (1, 5, 28)),
-        assertNumStateRows(total = 5, updated = 1, droppedByWatermark = 1),
+      // New data to right input should match with left side (1, 3) and (1, 5), as left state should
+      // not be cleared. But rows rightTime <= 20 should be filtered due to event time watermark and
+      // state rows with rightTime <= 25 should be removed from state.
+      // (1, 20) ==> filtered by event time watermark = 20
+      // (1, 21) ==> passed filter, matched with left (1, 3) and (1, 5), not added to state
+      //             as 21 < state watermark = 25
+      // (1, 28) ==> passed filter, matched with left (1, 3) and (1, 5), added to state
+      AddData(rightInput, (1, 20), (1, 21), (1, 28)),
+      CheckNewAnswer((1, 3, 21), (1, 5, 21), (1, 3, 28), (1, 5, 28)),
+      assertNumStateRows(total = 5, updated = 1, droppedByWatermark = 1),
 
-        // New data to left input with leftTime <= 20 should be filtered due to event time watermark
-        AddData(leftInput, (1, 20), (1, 21)),
-        CheckNewAnswer((1, 21, 28)),
-        assertNumStateRows(total = 6, updated = 1, droppedByWatermark = 1)
-      )
-    }
+      // New data to left input with leftTime <= 20 should be filtered due to event time watermark
+      AddData(leftInput, (1, 20), (1, 21)),
+      CheckNewAnswer((1, 21, 28)),
+      assertNumStateRows(total = 6, updated = 1, droppedByWatermark = 1)
+    )
   }
 
-  Seq(OutputMode.Append(), OutputMode.Update()).foreach { outputMode =>
-    test("stream stream inner join with time range - with watermark" +
-        s" - two side conditions - $outputMode") {
-      import org.apache.spark.sql.functions._
+  testWithAppendAndUpdate("stream stream inner join with time range - with watermark" +
+      " - two side conditions") { outputMode =>
+    import org.apache.spark.sql.functions._
 
-      val leftInput = MemoryStream[(Int, Int)]
-      val rightInput = MemoryStream[(Int, Int)]
+    val leftInput = MemoryStream[(Int, Int)]
+    val rightInput = MemoryStream[(Int, Int)]
 
-      val df1 = leftInput.toDF().toDF("leftKey", "time")
-        .select($"leftKey", timestamp_seconds($"time") as "leftTime",
-          ($"leftKey" * 2) as "leftValue")
-        .withWatermark("leftTime", "20 seconds")
+    val df1 = leftInput.toDF().toDF("leftKey", "time")
+      .select($"leftKey", timestamp_seconds($"time") as "leftTime",
+        ($"leftKey" * 2) as "leftValue")
+      .withWatermark("leftTime", "20 seconds")
 
-      val df2 = rightInput.toDF().toDF("rightKey", "time")
-        .select($"rightKey", timestamp_seconds($"time") as "rightTime",
-          ($"rightKey" * 3) as "rightValue")
-        .withWatermark("rightTime", "30 seconds")
+    val df2 = rightInput.toDF().toDF("rightKey", "time")
+      .select($"rightKey", timestamp_seconds($"time") as "rightTime",
+        ($"rightKey" * 3) as "rightValue")
+      .withWatermark("rightTime", "30 seconds")
 
-      val condition = expr(
-        "leftKey = rightKey AND " +
-          "leftTime BETWEEN rightTime - interval 10 seconds AND rightTime + interval 5 seconds")
+    val condition = expr(
+      "leftKey = rightKey AND " +
+        "leftTime BETWEEN rightTime - interval 10 seconds AND rightTime + interval 5 seconds")
 
-      // This translates to leftTime <= rightTime + 5 seconds AND 
-      // leftTime >= rightTime - 10 seconds. So given leftTime, rightTime has to be
-      // BETWEEN leftTime - 5 seconds AND leftTime + 10 seconds
-      //
-      //  ============ * ==================== * ======================== * ==> leftTime
-      //               |                      |                          |
-      //  |<--- 5s --->|<----- 10s ----->|    |<----- 10s ----->|<- 5s->|
-      //  |                              |                      |
-      //  * ============================= * =================== * ========> rightTime
-      //
-      // E.g.
-      //      if rightTime = 60, then it matches only leftTime = [50, 65]
-      //      if leftTime = 20, then it match only with rightTime = [15, 30]
-      //
-      // State value predicates
-      //   left side:
-      //     values allowed:  leftTime >= rightTime - 10s   ==>   leftTime > eventTimeWatermark - 10
-      //     drop state where leftTime < eventTime - 10
-      //   right side:
-      //     values allowed:  rightTime >= leftTime - 5s   ==>   rightTime > eventTimeWatermark - 5
-      //     drop state where rightTime < eventTime - 5
+    // This translates to leftTime <= rightTime + 5 seconds AND leftTime >= rightTime - 10 seconds
+    // So given leftTime, rightTime has to be BETWEEN leftTime - 5 seconds AND leftTime + 10 seconds
+    //
+    //  =============== * ======================== * ============================== * ==> leftTime
+    //                  |                          |                                |
+    //     |<---- 5s -->|<------ 10s ------>|      |<------ 10s ------>|<---- 5s -->|
+    //     |                                |                          |
+    //  == * ============================== * =========>============== * ===============> rightTime
+    //
+    // E.g.
+    //      if rightTime = 60, then it matches only leftTime = [50, 65]
+    //      if leftTime = 20, then it match only with rightTime = [15, 30]
+    //
+    // State value predicates
+    //   left side:
+    //     values allowed:  leftTime >= rightTime - 10s   ==>   leftTime > eventTimeWatermark - 10
+    //     drop state where leftTime < eventTime - 10
+    //   right side:
+    //     values allowed:  rightTime >= leftTime - 5s   ==>   rightTime > eventTimeWatermark - 5
+    //     drop state where rightTime < eventTime - 5
 
-      val joined =
-        df1.join(df2, condition).select($"leftKey", $"leftTime".cast("int"),
-          $"rightTime".cast("int"))
+    val joined =
+      df1.join(df2, condition).select($"leftKey", $"leftTime".cast("int"),
+        $"rightTime".cast("int"))
 
-      testStream(joined, outputMode)(
-        // If leftTime = 20, then it match only with rightTime = [15, 30]
-        AddData(leftInput, (1, 20)),
-        CheckAnswer(),
-        AddData(rightInput, (1, 14), (1, 15), (1, 25), (1, 26), (1, 30), (1, 31)),
-        CheckNewAnswer((1, 20, 15), (1, 20, 25), (1, 20, 26), (1, 20, 30)),
-        assertNumStateRows(total = 7, updated = 7),
+    testStream(joined, outputMode)(
+      // If leftTime = 20, then it match only with rightTime = [15, 30]
+      AddData(leftInput, (1, 20)),
+      CheckAnswer(),
+      AddData(rightInput, (1, 14), (1, 15), (1, 25), (1, 26), (1, 30), (1, 31)),
+      CheckNewAnswer((1, 20, 15), (1, 20, 25), (1, 20, 26), (1, 20, 30)),
+      assertNumStateRows(total = 7, updated = 7),
 
-        // If rightTime = 60, then it matches only leftTime = [50, 65]
-        AddData(rightInput, (1, 60)),
-        CheckNewAnswer(),                // matches with nothing on the left
-        AddData(leftInput, (1, 49), (1, 50), (1, 65), (1, 66)),
-        CheckNewAnswer((1, 50, 60), (1, 65, 60)),
+      // If rightTime = 60, then it matches only leftTime = [50, 65]
+      AddData(rightInput, (1, 60)),
+      CheckNewAnswer(),                // matches with nothing on the left
+      AddData(leftInput, (1, 49), (1, 50), (1, 65), (1, 66)),
+      CheckNewAnswer((1, 50, 60), (1, 65, 60)),
 
-        // Event time watermark = min(left: 66 - delay 20 = 46, right: 60 - delay 30 = 30) = 30
-        // Left state value watermark = 30 - 10 = slightly less than 20 (since condition has <=)
-        //    Should drop < 20 from left, i.e., none
-        // Right state value watermark = 30 - 5 = slightly less than 25 (since condition has <=)
-        //    Should drop < 25 from the right, i.e., 14 and 15
-        assertNumStateRows(total = 10, updated = 5), // 12 - 2 removed
+      // Event time watermark = min(left: 66 - delay 20 = 46, right: 60 - delay 30 = 30) = 30
+      // Left state value watermark = 30 - 10 = slightly less than 20 (since condition has <=)
+      //    Should drop < 20 from left, i.e., none
+      // Right state value watermark = 30 - 5 = slightly less than 25 (since condition has <=)
+      //    Should drop < 25 from the right, i.e., 14 and 15
+      assertNumStateRows(total = 10, updated = 5), // 12 - 2 removed
 
-        AddData(leftInput, (1, 30), (1, 31)),     // 30 should not be processed or added to state
-        CheckNewAnswer((1, 31, 26), (1, 31, 30), (1, 31, 31)),
-        assertNumStateRows(total = 11, updated = 1, droppedByWatermark = 1),  // only 31 added
+      AddData(leftInput, (1, 30), (1, 31)),     // 30 should not be processed or added to state
+      CheckNewAnswer((1, 31, 26), (1, 31, 30), (1, 31, 31)),
+      assertNumStateRows(total = 11, updated = 1, droppedByWatermark = 1),  // only 31 added
 
-        // Advance the watermark
-        AddData(rightInput, (1, 80)),
-        CheckNewAnswer(),
-        // Event time watermark = min(left: 66 - delay 20 = 46, right: 80 - delay 30 = 50) = 46
-        // Left state value watermark = 46 - 10 = slightly less than 36 (since condition has <=)
-        //    Should drop < 36 from left, i.e., 20, 31 (30 was not added)
-        // Right state value watermark = 46 - 5 = slightly less than 41 (since condition has <=)
-        //    Should drop < 41 from the right, i.e., 25, 26, 30, 31
-        assertNumStateRows(total = 6, updated = 1),  // 12 - 6 removed
+      // Advance the watermark
+      AddData(rightInput, (1, 80)),
+      CheckNewAnswer(),
+      // Event time watermark = min(left: 66 - delay 20 = 46, right: 80 - delay 30 = 50) = 46
+      // Left state value watermark = 46 - 10 = slightly less than 36 (since condition has <=)
+      //    Should drop < 36 from left, i.e., 20, 31 (30 was not added)
+      // Right state value watermark = 46 - 5 = slightly less than 41 (since condition has <=)
+      //    Should drop < 41 from the right, i.e., 25, 26, 30, 31
+      assertNumStateRows(total = 6, updated = 1),  // 12 - 6 removed
 
-        AddData(rightInput, (1, 46), (1, 50)),     // 46 should not be processed or added to state
-        CheckNewAnswer((1, 49, 50), (1, 50, 50)),
-        assertNumStateRows(total = 7, updated = 1, droppedByWatermark = 1)   // 50 added
-      )
-    }
+      AddData(rightInput, (1, 46), (1, 50)),     // 46 should not be processed or added to state
+      CheckNewAnswer((1, 49, 50), (1, 50, 50)),
+      assertNumStateRows(total = 7, updated = 1, droppedByWatermark = 1)   // 50 added
+    )
   }
 
   testQuietly("stream stream inner join without equality predicate") {
@@ -567,27 +565,25 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
     assert(e.toString.contains("Stream-stream join without equality predicate is not supported"))
   }
 
-  Seq(OutputMode.Append(), OutputMode.Update()).foreach { outputMode =>
-    test(s"stream stream self join - $outputMode") {
-      val input = MemoryStream[Int]
-      val df = input.toDF()
-      val join =
-        df.select($"value" % 5 as "key", $"value").join(
-          df.select($"value" % 5 as "key", $"value"), "key")
+  testWithAppendAndUpdate("stream stream self join") { outputMode =>
+    val input = MemoryStream[Int]
+    val df = input.toDF()
+    val join =
+      df.select($"value" % 5 as "key", $"value").join(
+        df.select($"value" % 5 as "key", $"value"), "key")
 
-      testStream(join, outputMode)(
-        AddData(input, 1, 2),
-        CheckAnswer((1, 1, 1), (2, 2, 2)),
-        StopStream,
-        StartStream(),
-        AddData(input, 3, 6),
-        /*
-        (1, 1)     (1, 1)
-        (2, 2)  x  (2, 2)  =  (1, 1, 1), (1, 1, 6), (2, 2, 2), (1, 6, 1), (1, 6, 6)
-        (1, 6)     (1, 6)
-        */
-        CheckAnswer((3, 3, 3), (1, 1, 1), (1, 1, 6), (2, 2, 2), (1, 6, 1), (1, 6, 6)))
-    }
+    testStream(join, outputMode)(
+      AddData(input, 1, 2),
+      CheckAnswer((1, 1, 1), (2, 2, 2)),
+      StopStream,
+      StartStream(),
+      AddData(input, 3, 6),
+      /*
+      (1, 1)     (1, 1)
+      (2, 2)  x  (2, 2)  =  (1, 1, 1), (1, 1, 6), (2, 2, 2), (1, 6, 1), (1, 6, 6)
+      (1, 6)     (1, 6)
+      */
+      CheckAnswer((3, 3, 3), (1, 1, 1), (1, 1, 6), (2, 2, 2), (1, 6, 1), (1, 6, 6)))
   }
 
   test("locality preferences of StateStoreAwareZippedRDD") {
@@ -888,45 +884,46 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
     )
   }
 
-  Seq(OutputMode.Append(), OutputMode.Update()).foreach { outputMode =>
-    test(s"joining non-nullable left join key with nullable right join key - $outputMode") {
-      val input1 = MemoryStream[Int]
-      val input2 = MemoryStream[JInteger]
+  testWithAppendAndUpdate("joining non-nullable left join key with nullable right join key") {
+    outputMode =>
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[JInteger]
 
-      val joined = testForJoinKeyNullability(input1.toDF(), input2.toDF())
-      testStream(joined, outputMode)(
-        AddData(input1, 1, 5),
-        AddData(input2, JInteger.valueOf(1), JInteger.valueOf(5), JInteger.valueOf(10), null),
-        CheckNewAnswer(Row(1, 1, 2, 3), Row(5, 5, 10, 15))
-      )
-    }
+    val joined = testForJoinKeyNullability(input1.toDF(), input2.toDF())
+    testStream(joined, outputMode)(
+      AddData(input1, 1, 5),
+      AddData(input2, JInteger.valueOf(1), JInteger.valueOf(5), JInteger.valueOf(10), null),
+      CheckNewAnswer(Row(1, 1, 2, 3), Row(5, 5, 10, 15))
+    )
+  }
 
-    test(s"joining nullable left join key with non-nullable right join key - $outputMode") {
-      val input1 = MemoryStream[JInteger]
-      val input2 = MemoryStream[Int]
+  testWithAppendAndUpdate("joining nullable left join key with non-nullable right join key") {
+    outputMode =>
+    val input1 = MemoryStream[JInteger]
+    val input2 = MemoryStream[Int]
 
-      val joined = testForJoinKeyNullability(input1.toDF(), input2.toDF())
-      testStream(joined, outputMode)(
-        AddData(input1, JInteger.valueOf(1), JInteger.valueOf(5), JInteger.valueOf(10), null),
-        AddData(input2, 1, 5),
-        CheckNewAnswer(Row(1, 1, 2, 3), Row(5, 5, 10, 15))
-      )
-    }
+    val joined = testForJoinKeyNullability(input1.toDF(), input2.toDF())
+    testStream(joined, outputMode)(
+      AddData(input1, JInteger.valueOf(1), JInteger.valueOf(5), JInteger.valueOf(10), null),
+      AddData(input2, 1, 5),
+      CheckNewAnswer(Row(1, 1, 2, 3), Row(5, 5, 10, 15))
+    )
+  }
 
-    test(s"joining nullable left join key with nullable right join key - $outputMode") {
-      val input1 = MemoryStream[JInteger]
-      val input2 = MemoryStream[JInteger]
+  testWithAppendAndUpdate("joining nullable left join key with nullable right join key") {
+    outputMode =>
+    val input1 = MemoryStream[JInteger]
+    val input2 = MemoryStream[JInteger]
 
-      val joined = testForJoinKeyNullability(input1.toDF(), input2.toDF())
-      testStream(joined, outputMode)(
-        AddData(input1, JInteger.valueOf(1), JInteger.valueOf(5), JInteger.valueOf(10), null),
-        AddData(input2, JInteger.valueOf(1), JInteger.valueOf(5), null),
-        CheckNewAnswer(
-          Row(JInteger.valueOf(1), JInteger.valueOf(1), JInteger.valueOf(2), JInteger.valueOf(3)),
-          Row(JInteger.valueOf(5), JInteger.valueOf(5), JInteger.valueOf(10), JInteger.valueOf(15)),
-          Row(null, null, null, null))
-      )
-    }
+    val joined = testForJoinKeyNullability(input1.toDF(), input2.toDF())
+    testStream(joined, outputMode)(
+      AddData(input1, JInteger.valueOf(1), JInteger.valueOf(5), JInteger.valueOf(10), null),
+      AddData(input2, JInteger.valueOf(1), JInteger.valueOf(5), null),
+      CheckNewAnswer(
+        Row(JInteger.valueOf(1), JInteger.valueOf(1), JInteger.valueOf(2), JInteger.valueOf(3)),
+        Row(JInteger.valueOf(5), JInteger.valueOf(5), JInteger.valueOf(10), JInteger.valueOf(15)),
+        Row(null, null, null, null))
+    )
   }
 
   testWithVirtualColumnFamilyJoins(
@@ -1063,57 +1060,53 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
 abstract class StreamingInnerJoinSuite extends StreamingInnerJoinBase {
   import testImplicits._
 
-  Seq(OutputMode.Append(), OutputMode.Update()).foreach { outputMode =>
-    test(s"stream stream inner join on windows - with watermark - $outputMode") {
-      val input1 = MemoryStream[Int]
-      val input2 = MemoryStream[Int]
+  testWithAppendAndUpdate("stream stream inner join on windows - with watermark") { outputMode =>
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
 
-      val df1 = input1.toDF()
-        .select($"value" as "key", timestamp_seconds($"value") as "timestamp",
-          ($"value" * 2) as "leftValue")
-        .withWatermark("timestamp", "10 seconds")
-        .select($"key", window($"timestamp", "10 second"), $"leftValue")
+    val df1 = input1.toDF()
+      .select($"value" as "key", timestamp_seconds($"value") as "timestamp",
+        ($"value" * 2) as "leftValue")
+      .withWatermark("timestamp", "10 seconds")
+      .select($"key", window($"timestamp", "10 second"), $"leftValue")
 
-      val df2 = input2.toDF()
-        .select($"value" as "key", timestamp_seconds($"value") as "timestamp",
-          ($"value" * 3) as "rightValue")
-        .select($"key", window($"timestamp", "10 second"), $"rightValue")
+    val df2 = input2.toDF()
+      .select($"value" as "key", timestamp_seconds($"value") as "timestamp",
+        ($"value" * 3) as "rightValue")
+      .select($"key", window($"timestamp", "10 second"), $"rightValue")
 
-      val joined = df1.join(df2, Seq("key", "window"))
-        .select($"key", $"window.end".cast("long"), $"leftValue", $"rightValue")
+    val joined = df1.join(df2, Seq("key", "window"))
+      .select($"key", $"window.end".cast("long"), $"leftValue", $"rightValue")
 
-      testStream(joined, outputMode)(
-        AddData(input1, 1),
-        CheckAnswer(),
-        assertNumStateRows(total = 1, updated = 1),
+    testStream(joined, outputMode)(
+      AddData(input1, 1),
+      CheckAnswer(),
+      assertNumStateRows(total = 1, updated = 1),
 
-        AddData(input2, 1),
-        CheckAnswer((1, 10, 2, 3)),
-        assertNumStateRows(total = 2, updated = 1),
-        StopStream,
-        StartStream(),
+      AddData(input2, 1),
+      CheckAnswer((1, 10, 2, 3)),
+      assertNumStateRows(total = 2, updated = 1),
+      StopStream,
+      StartStream(),
 
-        AddData(input1, 25),
-        // watermark = 15, no-data-batch should remove 2 rows
-        // having window=[0,10]
-        CheckNewAnswer(),
-        assertNumStateRows(total = 1, updated = 1),
+      AddData(input1, 25),
+      CheckNewAnswer(),   // watermark = 15, no-data-batch should remove 2 rows having window=[0,10]
+      assertNumStateRows(total = 1, updated = 1),
 
-        AddData(input2, 25),
-        CheckNewAnswer((25, 30, 50, 75)),
-        assertNumStateRows(total = 2, updated = 1),
-        StopStream,
-        StartStream(),
+      AddData(input2, 25),
+      CheckNewAnswer((25, 30, 50, 75)),
+      assertNumStateRows(total = 2, updated = 1),
+      StopStream,
+      StartStream(),
 
-        AddData(input2, 1),
-        CheckNewAnswer(),                             // Should not join as < 15 removed
-        assertNumStateRows(total = 2, updated = 0),   // row not add as 1 < state key watermark = 15
+      AddData(input2, 1),
+      CheckNewAnswer(),                             // Should not join as < 15 removed
+      assertNumStateRows(total = 2, updated = 0),   // row not add as 1 < state key watermark = 15
 
-        AddData(input1, 5),
-        CheckNewAnswer(),                             // Same reason as above
-        assertNumStateRows(total = 2, updated = 0, droppedByWatermark = 1)
-      )
-    }
+      AddData(input1, 5),
+      CheckNewAnswer(),                             // Same reason as above
+      assertNumStateRows(total = 2, updated = 0, droppedByWatermark = 1)
+    )
   }
 
   test("SPARK-35896: metrics in StateOperatorProgress are output correctly") {
@@ -2233,253 +2226,243 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
 
   import testImplicits._
 
-  Seq(OutputMode.Append(), OutputMode.Update()).foreach { outputMode =>
-    test(s"windowed left semi join - $outputMode") {
-      withTempDir { checkpointDir =>
-        val (leftInput, rightInput, joined) = setupWindowedJoin("left_semi")
-
-        testStream(joined, outputMode)(
-          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-          MultiAddData(leftInput, 1, 2, 3, 4, 5)(rightInput, 3, 4, 5, 6, 7),
-          CheckNewAnswer(Row(3, 10, 6), Row(4, 10, 8), Row(5, 10, 10)),
-          // states
-          // left: 1, 2 (left 3, 4, 5 matched right in the same batch, emitted without storing)
-          // right: 3, 4, 5, 6, 7
-          assertNumStateRows(
-            total = Seq(7), updated = Seq(7),
-            droppedByWatermark = Seq(0), removed = Some(Seq(0))),
-          MultiAddData(leftInput, 21)(rightInput, 22),
-          // Watermark = 11, should remove rows having window=[0,10].
-          CheckNewAnswer(),
-          // states
-          // left: 21
-          // right: 22
-          //
-          // states evicted
-          // left: 1, 2 (below watermark)
-          // right: 3, 4, 5, 6, 7 (below watermark)
-          assertNumStateRows(
-            total = Seq(2), updated = Seq(2),
-            droppedByWatermark = Seq(0), removed = Some(Seq(7))),
-          StopStream,
-          // Restart join query from the same checkpoint
-          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-          AddData(leftInput, 22),
-          CheckNewAnswer(Row(22, 30, 44)),
-          // Unlike inner/outer joins, given left input row matches with right input row,
-          // we don't buffer the matched left input row to the state store.
-          //
-          // states
-          // left: 21
-          // right: 22
-          assertNumStateRows(
-            total = Seq(2), updated = Seq(0),
-            droppedByWatermark = Seq(0), removed = Some(Seq(0))),
-          StopStream,
-          // Restart the query from the same checkpoint
-          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-          AddData(leftInput, 1),
-          // Row not add as 1 < state key watermark = 12.
-          CheckNewAnswer(),
-          // states
-          // left: 21
-          // right: 22
-          assertNumStateRows(
-            total = Seq(2), updated = Seq(0),
-            droppedByWatermark = Seq(1), removed = Some(Seq(0))),
-          AddData(rightInput, 5),
-          // Row not add as 5 < state key watermark = 12.
-          CheckNewAnswer(),
-          // states
-          // left: 21
-          // right: 22
-          assertNumStateRows(
-            total = Seq(2), updated = Seq(0),
-            droppedByWatermark = Seq(1), removed = Some(Seq(0)))
-        )
-      }
-    }
-  }
-
-  Seq(OutputMode.Append(), OutputMode.Update()).foreach { outputMode =>
-    test(s"left semi early state exclusion on left - $outputMode") {
-      val (leftInput, rightInput, joined) = setupWindowedJoinWithLeftCondition("left_semi")
+  testWithAppendAndUpdate("windowed left semi join") { outputMode =>
+    withTempDir { checkpointDir =>
+      val (leftInput, rightInput, joined) = setupWindowedJoin("left_semi")
 
       testStream(joined, outputMode)(
-        MultiAddData(leftInput, 1, 2, 3)(rightInput, 3, 4, 5),
-        // The left rows with leftValue <= 4 should not generate their semi join rows and
-        // not get added to the state.
-        CheckNewAnswer(Row(3, 10, 6)),
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        MultiAddData(leftInput, 1, 2, 3, 4, 5)(rightInput, 3, 4, 5, 6, 7),
+        CheckNewAnswer(Row(3, 10, 6), Row(4, 10, 8), Row(5, 10, 10)),
         // states
-        // left: (none - left 3 matched right in the same batch, emitted without storing)
-        // right: 3, 4, 5
+        // left: 1, 2 (left 3, 4, 5 matched right in the same batch, emitted without storing)
+        // right: 3, 4, 5, 6, 7
         assertNumStateRows(
-          total = Seq(3), updated = Seq(3),
+          total = Seq(7), updated = Seq(7),
           droppedByWatermark = Seq(0), removed = Some(Seq(0))),
-        // We shouldn't get more semi join rows when the watermark advances.
-        MultiAddData(leftInput, 20)(rightInput, 21),
+        MultiAddData(leftInput, 21)(rightInput, 22),
+        // Watermark = 11, should remove rows having window=[0,10].
         CheckNewAnswer(),
         // states
-        // left: 20
-        // right: 21
+        // left: 21
+        // right: 22
         //
         // states evicted
-        // right: 3, 4, 5 (below watermark)
+        // left: 1, 2 (below watermark)
+        // right: 3, 4, 5, 6, 7 (below watermark)
         assertNumStateRows(
           total = Seq(2), updated = Seq(2),
-          droppedByWatermark = Seq(0), removed = Some(Seq(3))),
-        AddData(rightInput, 20),
-        CheckNewAnswer((20, 30, 40)),
+          droppedByWatermark = Seq(0), removed = Some(Seq(7))),
+        StopStream,
+        // Restart join query from the same checkpoint
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        AddData(leftInput, 22),
+        CheckNewAnswer(Row(22, 30, 44)),
+        // Unlike inner/outer joins, given left input row matches with right input row,
+        // we don't buffer the matched left input row to the state store.
+        //
         // states
-        // left: (empty -- 20 removed after matching right 20 via getJoinedRowsAndRemoveMatched)
-        // right: 21, 20
+        // left: 21
+        // right: 22
         assertNumStateRows(
-          total = Seq(2), updated = Seq(1),
-          droppedByWatermark = Seq(0), removed = Some(Seq(1)))
+          total = Seq(2), updated = Seq(0),
+          droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+        StopStream,
+        // Restart the query from the same checkpoint
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        AddData(leftInput, 1),
+        // Row not add as 1 < state key watermark = 12.
+        CheckNewAnswer(),
+        // states
+        // left: 21
+        // right: 22
+        assertNumStateRows(
+          total = Seq(2), updated = Seq(0),
+          droppedByWatermark = Seq(1), removed = Some(Seq(0))),
+        AddData(rightInput, 5),
+        // Row not add as 5 < state key watermark = 12.
+        CheckNewAnswer(),
+        // states
+        // left: 21
+        // right: 22
+        assertNumStateRows(
+          total = Seq(2), updated = Seq(0),
+          droppedByWatermark = Seq(1), removed = Some(Seq(0)))
       )
     }
   }
 
-  Seq(OutputMode.Append(), OutputMode.Update()).foreach { outputMode =>
-    test(s"left semi early state exclusion on right - $outputMode") {
-      val (leftInput, rightInput, joined) = setupWindowedJoinWithRightCondition("left_semi")
+  testWithAppendAndUpdate("left semi early state exclusion on left") { outputMode =>
+    val (leftInput, rightInput, joined) = setupWindowedJoinWithLeftCondition("left_semi")
 
-      testStream(joined, outputMode)(
-        MultiAddData(leftInput, 3, 4, 5)(rightInput, 1, 2, 3),
-        // The right rows with rightValue <= 7 should never be added to the state.
-        // The right row with rightValue = 9 > 7, hence joined and added to state.
-        CheckNewAnswer(Row(3, 10, 6)),
-        // states
-        // left: 4, 5 (left 3 matched right in the same batch, emitted without storing)
-        // right: 3
-        assertNumStateRows(
-          total = Seq(3), updated = Seq(3),
-          droppedByWatermark = Seq(0), removed = Some(Seq(0))),
-        // We shouldn't get more semi join rows when the watermark advances.
-        MultiAddData(leftInput, 20)(rightInput, 21),
-        CheckNewAnswer(),
-        // states
-        // left: 20
-        // right: 21
-        //
-        // states evicted
-        // left: 4, 5 (below watermark)
-        // right: 3 (below watermark)
-        assertNumStateRows(
-          total = Seq(2), updated = Seq(2),
-          droppedByWatermark = Seq(0), removed = Some(Seq(3))),
-        AddData(rightInput, 20),
-        CheckNewAnswer((20, 30, 40)),
-        // states
-        // left: (empty -- 20 removed after matching right 20 via getJoinedRowsAndRemoveMatched)
-        // right: 21, 20
-        assertNumStateRows(
-          total = Seq(2), updated = Seq(1),
-          droppedByWatermark = Seq(0), removed = Some(Seq(1)))
-      )
-    }
+    testStream(joined, outputMode)(
+      MultiAddData(leftInput, 1, 2, 3)(rightInput, 3, 4, 5),
+      // The left rows with leftValue <= 4 should not generate their semi join rows and
+      // not get added to the state.
+      CheckNewAnswer(Row(3, 10, 6)),
+      // states
+      // left: (none - left 3 matched right in the same batch, emitted without storing)
+      // right: 3, 4, 5
+      assertNumStateRows(
+        total = Seq(3), updated = Seq(3),
+        droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+      // We shouldn't get more semi join rows when the watermark advances.
+      MultiAddData(leftInput, 20)(rightInput, 21),
+      CheckNewAnswer(),
+      // states
+      // left: 20
+      // right: 21
+      //
+      // states evicted
+      // right: 3, 4, 5 (below watermark)
+      assertNumStateRows(
+        total = Seq(2), updated = Seq(2),
+        droppedByWatermark = Seq(0), removed = Some(Seq(3))),
+      AddData(rightInput, 20),
+      CheckNewAnswer((20, 30, 40)),
+      // states
+      // left: (empty -- 20 removed after matching right 20 via getJoinedRowsAndRemoveMatched)
+      // right: 21, 20
+      assertNumStateRows(
+        total = Seq(2), updated = Seq(1),
+        droppedByWatermark = Seq(0), removed = Some(Seq(1)))
+    )
   }
 
-  Seq(OutputMode.Append(), OutputMode.Update()).foreach { outputMode =>
-    test(s"left semi join with watermark range condition - $outputMode") {
-      val (leftInput, rightInput, joined) = setupJoinWithRangeCondition("left_semi")
+  testWithAppendAndUpdate("left semi early state exclusion on right") { outputMode =>
+    val (leftInput, rightInput, joined) = setupWindowedJoinWithRightCondition("left_semi")
 
-      testStream(joined, outputMode)(
-        AddData(leftInput, (1, 5), (3, 5)),
-        CheckNewAnswer(),
-        // states
-        // left: (1, 5), (3, 5)
-        // right: nothing
-        assertNumStateRows(
-          total = Seq(2), updated = Seq(2),
-          droppedByWatermark = Seq(0), removed = Some(Seq(0))),
-        AddData(rightInput, (1, 10), (2, 5)),
-        // Match left row in the state. Matched left row (1, 5) is immediately removed from state
-        // via getJoinedRowsAndRemoveMatched.
-        CheckNewAnswer((1, 5)),
-        // states
-        // left: (3, 5) -- (1, 5) removed after matching right (1, 10)
-        // right: (1, 10), (2, 5)
-        assertNumStateRows(
-          total = Seq(3), updated = Seq(2),
-          droppedByWatermark = Seq(0), removed = Some(Seq(1))),
-        AddData(rightInput, (1, 9)),
-        // No match as left row (1, 5) was already removed from state.
-        CheckNewAnswer(),
-        // states
-        // left: (3, 5)
-        // right: (1, 10), (2, 5), (1, 9)
-        assertNumStateRows(
-          total = Seq(4), updated = Seq(1),
-          droppedByWatermark = Seq(0), removed = Some(Seq(0))),
-        // Increase event time watermark to 20s by adding data with time = 30s on both inputs.
-        AddData(leftInput, (1, 7), (1, 30)),
-        CheckNewAnswer((1, 7)),
-        // states
-        // left: (3, 5), (1, 30)
-        // right: (1, 10), (2, 5), (1, 9)
-        assertNumStateRows(
-          total = Seq(5), updated = Seq(1),
-          droppedByWatermark = Seq(0), removed = Some(Seq(0))),
-        // Watermark = 30 - 10 = 20, no matched row.
-        AddData(rightInput, (0, 30)),
-        CheckNewAnswer(),
-        // states
-        // left: (1, 30)
-        // right: (0, 30)
-        //
-        // states evicted
-        // left: (3, 5) (below watermark = 20)
-        // right: (1, 10), (2, 5), (1, 9) (below watermark = 20)
-        assertNumStateRows(
-          total = Seq(2), updated = Seq(1),
-          droppedByWatermark = Seq(0), removed = Some(Seq(4)))
-      )
-    }
+    testStream(joined, outputMode)(
+      MultiAddData(leftInput, 3, 4, 5)(rightInput, 1, 2, 3),
+      // The right rows with rightValue <= 7 should never be added to the state.
+      // The right row with rightValue = 9 > 7, hence joined and added to state.
+      CheckNewAnswer(Row(3, 10, 6)),
+      // states
+      // left: 4, 5 (left 3 matched right in the same batch, emitted without storing)
+      // right: 3
+      assertNumStateRows(
+        total = Seq(3), updated = Seq(3),
+        droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+      // We shouldn't get more semi join rows when the watermark advances.
+      MultiAddData(leftInput, 20)(rightInput, 21),
+      CheckNewAnswer(),
+      // states
+      // left: 20
+      // right: 21
+      //
+      // states evicted
+      // left: 4, 5 (below watermark)
+      // right: 3 (below watermark)
+      assertNumStateRows(
+        total = Seq(2), updated = Seq(2),
+        droppedByWatermark = Seq(0), removed = Some(Seq(3))),
+      AddData(rightInput, 20),
+      CheckNewAnswer((20, 30, 40)),
+      // states
+      // left: (empty -- 20 removed after matching right 20 via getJoinedRowsAndRemoveMatched)
+      // right: 21, 20
+      assertNumStateRows(
+        total = Seq(2), updated = Seq(1),
+        droppedByWatermark = Seq(0), removed = Some(Seq(1)))
+    )
   }
 
-  Seq(OutputMode.Append(), OutputMode.Update()).foreach { outputMode =>
-    test(s"self left semi join - $outputMode") {
-      val (inputStream, query) = setupSelfJoin("left_semi")
+  testWithAppendAndUpdate("left semi join with watermark range condition") { outputMode =>
+    val (leftInput, rightInput, joined) = setupJoinWithRangeCondition("left_semi")
 
-      testStream(query, outputMode)(
-        AddData(inputStream, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
-        CheckNewAnswer((2, 2), (4, 4)),
-        // batch 1 - global watermark = 0
-        // states
-        // left: (none - left 2, 4 matched right in the same batch, emitted without storing)
-        //       (left rows with value % 2 != 0 is filtered per [[PushPredicateThroughJoin]])
-        // right: (2, 2L), (4, 4L)
-        //       (right rows with value % 2 != 0 is filtered per [[PushPredicateThroughJoin]])
-        assertNumStateRows(
-          total = Seq(2), updated = Seq(2),
-          droppedByWatermark = Seq(0), removed = Some(Seq(0))),
-        AddData(inputStream, (6, 6L), (7, 7L), (8, 8L), (9, 9L), (10, 10L)),
-        CheckNewAnswer((6, 6), (8, 8), (10, 10)),
-        // batch 2 - global watermark = 5
-        // states
-        // left: (none - left 6, 8, 10 matched right in the same batch, emitted without storing)
-        // right: (6, 6L), (8, 8L), (10, 10L)
-        //
-        // states evicted
-        // right: (2, 2L), (4, 4L)
-        assertNumStateRows(
-          total = Seq(3), updated = Seq(3),
-          droppedByWatermark = Seq(0), removed = Some(Seq(2))),
-        AddData(inputStream, (11, 11L), (12, 12L), (13, 13L), (14, 14L), (15, 15L)),
-        CheckNewAnswer((12, 12), (14, 14)),
-        // batch 3 - global watermark = 9
-        // states
-        // left: (none - left 12, 14 matched right in the same batch, emitted without storing)
-        // right: (10, 10L), (12, 12L), (14, 14L)
-        //
-        // states evicted
-        // right: (6, 6L), (8, 8L)
-        assertNumStateRows(
-          total = Seq(3), updated = Seq(2),
-          droppedByWatermark = Seq(0), removed = Some(Seq(2)))
-      )
-    }
+    testStream(joined, outputMode)(
+      AddData(leftInput, (1, 5), (3, 5)),
+      CheckNewAnswer(),
+      // states
+      // left: (1, 5), (3, 5)
+      // right: nothing
+      assertNumStateRows(
+        total = Seq(2), updated = Seq(2),
+        droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+      AddData(rightInput, (1, 10), (2, 5)),
+      // Match left row in the state. Matched left row (1, 5) is immediately removed from state
+      // via getJoinedRowsAndRemoveMatched.
+      CheckNewAnswer((1, 5)),
+      // states
+      // left: (3, 5) -- (1, 5) removed after matching right (1, 10)
+      // right: (1, 10), (2, 5)
+      assertNumStateRows(
+        total = Seq(3), updated = Seq(2),
+        droppedByWatermark = Seq(0), removed = Some(Seq(1))),
+      AddData(rightInput, (1, 9)),
+      // No match as left row (1, 5) was already removed from state.
+      CheckNewAnswer(),
+      // states
+      // left: (3, 5)
+      // right: (1, 10), (2, 5), (1, 9)
+      assertNumStateRows(
+        total = Seq(4), updated = Seq(1),
+        droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+      // Increase event time watermark to 20s by adding data with time = 30s on both inputs.
+      AddData(leftInput, (1, 7), (1, 30)),
+      CheckNewAnswer((1, 7)),
+      // states
+      // left: (3, 5), (1, 30)
+      // right: (1, 10), (2, 5), (1, 9)
+      assertNumStateRows(
+        total = Seq(5), updated = Seq(1),
+        droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+      // Watermark = 30 - 10 = 20, no matched row.
+      AddData(rightInput, (0, 30)),
+      CheckNewAnswer(),
+      // states
+      // left: (1, 30)
+      // right: (0, 30)
+      //
+      // states evicted
+      // left: (3, 5) (below watermark = 20)
+      // right: (1, 10), (2, 5), (1, 9) (below watermark = 20)
+      assertNumStateRows(
+        total = Seq(2), updated = Seq(1),
+        droppedByWatermark = Seq(0), removed = Some(Seq(4)))
+    )
+  }
+
+  testWithAppendAndUpdate("self left semi join") { outputMode =>
+    val (inputStream, query) = setupSelfJoin("left_semi")
+
+    testStream(query, outputMode)(
+      AddData(inputStream, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
+      CheckNewAnswer((2, 2), (4, 4)),
+      // batch 1 - global watermark = 0
+      // states
+      // left: (none - left 2, 4 matched right in the same batch, emitted without storing)
+      //       (left rows with value % 2 != 0 is filtered per [[PushPredicateThroughJoin]])
+      // right: (2, 2L), (4, 4L)
+      //       (right rows with value % 2 != 0 is filtered per [[PushPredicateThroughJoin]])
+      assertNumStateRows(
+        total = Seq(2), updated = Seq(2),
+        droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+      AddData(inputStream, (6, 6L), (7, 7L), (8, 8L), (9, 9L), (10, 10L)),
+      CheckNewAnswer((6, 6), (8, 8), (10, 10)),
+      // batch 2 - global watermark = 5
+      // states
+      // left: (none - left 6, 8, 10 matched right in the same batch, emitted without storing)
+      // right: (6, 6L), (8, 8L), (10, 10L)
+      //
+      // states evicted
+      // right: (2, 2L), (4, 4L)
+      assertNumStateRows(
+        total = Seq(3), updated = Seq(3),
+        droppedByWatermark = Seq(0), removed = Some(Seq(2))),
+      AddData(inputStream, (11, 11L), (12, 12L), (13, 13L), (14, 14L), (15, 15L)),
+      CheckNewAnswer((12, 12), (14, 14)),
+      // batch 3 - global watermark = 9
+      // states
+      // left: (none - left 12, 14 matched right in the same batch, emitted without storing)
+      // right: (10, 10L), (12, 12L), (14, 14L)
+      //
+      // states evicted
+      // right: (6, 6L), (8, 8L)
+      assertNumStateRows(
+        total = Seq(3), updated = Seq(2),
+        droppedByWatermark = Seq(0), removed = Some(Seq(2)))
+    )
   }
 
 }
