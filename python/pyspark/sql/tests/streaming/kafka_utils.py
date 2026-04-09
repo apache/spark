@@ -80,16 +80,6 @@ class KafkaUtils:
         self._producer = None
         self.broker = None
 
-    @classmethod
-    def has_dependencies(cls) -> bool:
-        try:
-            import testcontainers  # noqa: F401
-            import kafka  # noqa: F401
-
-            return True
-        except ImportError:
-            return False
-
     def setup(self) -> None:
         """
         Start the Kafka container and initialize admin client and producer.

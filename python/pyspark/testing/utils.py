@@ -103,6 +103,14 @@ grpc_status_requirement_message = "" if have_grpc_status else "No module named '
 have_zstandard = have_package("zstandard")
 zstandard_requirement_message = "" if have_zstandard else "No module named 'zstandard'"
 
+have_kafka = have_package("kafka")
+kafka_requirement_message = "" if have_kafka else "No module named 'kafka'"
+
+have_testcontainers = have_package("testcontainers")
+testcontainers_requirement_message = (
+    "" if have_testcontainers else "No module named 'testcontainers'"
+)
+
 
 googleapis_common_protos_requirement_message = ""
 

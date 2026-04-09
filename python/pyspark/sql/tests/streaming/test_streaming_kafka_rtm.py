@@ -32,6 +32,12 @@ import uuid
 
 from pyspark.sql.tests.streaming.kafka_utils import KafkaUtils
 from pyspark.testing.sqlutils import ReusedSQLTestCase, search_jar, read_classpath
+from pyspark.testing.utils import (
+    have_kafka,
+    have_testcontainers,
+    kafka_requirement_message,
+    testcontainers_requirement_message,
+)
 
 
 class StreamingKafkaTestsMixin:
@@ -118,7 +124,8 @@ def _is_docker_available():
         return False
 
 
-@unittest.skipIf(not KafkaUtils.has_dependencies(), "Kafka test dependencies are not installed")
+@unittest.skipIf(not have_kafka, kafka_requirement_message)
+@unittest.skipIf(not have_testcontainers, testcontainers_requirement_message)
 @unittest.skipIf(not _is_docker_available(), "Docker is not available")
 class StreamingKafkaTests(StreamingKafkaTestsMixin, ReusedSQLTestCase):
     """
