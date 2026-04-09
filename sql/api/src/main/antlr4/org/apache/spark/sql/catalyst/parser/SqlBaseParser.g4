@@ -359,7 +359,6 @@ statement
     | CLOSE multipartIdentifier                                        #closeCursorStatement
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         (statement|setResetStatement)                                  #explain
-    | SHOW CACHED TABLES                                                 #showCachedTables
     | SHOW TABLES ((FROM | IN) identifierReference)?
         (LIKE? pattern=stringLit)?                                        #showTables
     | SHOW TABLE EXTENDED ((FROM | IN) ns=identifierReference)?
@@ -1933,7 +1932,6 @@ ansiNonReserved
     | BY
     | BYTE
     | CACHE
-    | CACHED
     | CALLED
     | CASCADE
     | CATALOG
@@ -2305,7 +2303,6 @@ nonReserved
     | BY
     | BYTE
     | CACHE
-    | CACHED
     | CALL
     | CALLED
     | CASCADE

@@ -320,7 +320,7 @@ class DataFrameReader(OptionUtils):
 
     def json(
         self,
-        path: Union[str, List[str], "RDD[str]"],
+        path: Union[str, List[str], "RDD[str]", "DataFrame"],
         schema: Optional[Union[StructType, str]] = None,
         primitivesAsString: Optional[Union[bool, str]] = None,
         prefersDecimal: Optional[Union[bool, str]] = None,
@@ -361,11 +361,15 @@ class DataFrameReader(OptionUtils):
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
+        .. versionchanged:: 4.2.0
+            Supports DataFrame input.
+
         Parameters
         ----------
-        path : str, list or :class:`RDD`
+        path : str, list, :class:`RDD`, or :class:`DataFrame`
             string represents path to the JSON dataset, or a list of paths,
-            or RDD of Strings storing JSON objects.
+            or RDD of Strings storing JSON objects,
+            or a DataFrame with a single string column containing JSON strings.
         schema : :class:`pyspark.sql.types.StructType` or str, optional
             an optional :class:`pyspark.sql.types.StructType` for the input schema or
             a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
@@ -434,6 +438,20 @@ class DataFrameReader(OptionUtils):
         +----+---+
         | Bob| 30|
         +----+---+
+
+        Example 4: Parse JSON from a DataFrame with a single string column.
+
+        >>> json_df = spark.createDataFrame(
+        ...     [('{"name": "Alice", "age": 25}',), ('{"name": "Bob", "age": 30}',)],
+        ...     schema="value STRING",
+        ... )
+        >>> spark.read.json(json_df).sort("name").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 25|Alice|
+        | 30|  Bob|
+        +---+-----+
         """
         self._set_opts(
             schema=schema,
@@ -486,12 +504,20 @@ class DataFrameReader(OptionUtils):
             assert self._spark._jvm is not None
             jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())
             return self._df(self._jreader.json(jrdd))
+
+        from pyspark.sql.dataframe import DataFrame
+
+        if isinstance(path, DataFrame):
+            assert self._spark._jvm is not None
+            return self._df(
+                self._spark._jvm.PythonSQLUtils.jsonFromDataFrame(self._jreader, path._jdf)
+            )
         else:
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "path",
-                    "expected_type": "str or list[RDD]",
+                    "expected_type": "str, list, RDD, or DataFrame",
                     "arg_type": type(path).__name__,
                 },
             )

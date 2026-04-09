@@ -25,12 +25,11 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.sql.types import StructType
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.catalog import (
-    CachedTable,
     Catalog as PySparkCatalog,
     CatalogMetadata,
-    CatalogTablePartition,
     Database,
     Table,
+    TablePartition,
     Function,
     Column,
 )
@@ -322,14 +321,6 @@ class Catalog:
 
     refreshByPath.__doc__ = PySparkCatalog.refreshByPath.__doc__
 
-    def listCachedTables(self) -> List[CachedTable]:
-        table = self._execute_and_fetch(plan.ListCachedTables())
-        return [
-            CachedTable(table[0][i].as_py(), table[1][i].as_py()) for i in range(table.num_rows)
-        ]
-
-    listCachedTables.__doc__ = PySparkCatalog.listCachedTables.__doc__
-
     def dropTable(self, tableName: str, ifExists: bool = False, purge: bool = False) -> None:
         self._execute_and_fetch(
             plan.DropTable(table_name=tableName, if_exists=ifExists, purge=purge)
@@ -358,9 +349,9 @@ class Catalog:
 
     dropDatabase.__doc__ = PySparkCatalog.dropDatabase.__doc__
 
-    def listPartitions(self, tableName: str) -> List[CatalogTablePartition]:
+    def listPartitions(self, tableName: str) -> List[TablePartition]:
         table = self._execute_and_fetch(plan.ListPartitions(table_name=tableName))
-        return [CatalogTablePartition(table[0][i].as_py()) for i in range(table.num_rows)]
+        return [TablePartition(table[0][i].as_py()) for i in range(table.num_rows)]
 
     listPartitions.__doc__ = PySparkCatalog.listPartitions.__doc__
 

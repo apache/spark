@@ -352,8 +352,11 @@ case class SampleExec(
     lowerBound: Double,
     upperBound: Double,
     withReplacement: Boolean,
-    seed: Long,
+    seed: Option[Long],
     child: SparkPlan) extends UnaryExecNode with CodegenSupport {
+
+  val resolvedSeed: Long = seed.getOrElse((math.random() * 1000).toLong)
+
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -369,9 +372,9 @@ case class SampleExec(
         child.execute(),
         new PoissonSampler[InternalRow](upperBound - lowerBound, useGapSamplingIfPossible = false),
         preservesPartitioning = true,
-        seed)
+        resolvedSeed)
     } else {
-      child.execute().randomSampleWithRange(lowerBound, upperBound, seed)
+      child.execute().randomSampleWithRange(lowerBound, upperBound, resolvedSeed)
     }
   }
 
@@ -405,7 +408,7 @@ case class SampleExec(
             s"""
               | private void $initSampler() {
               |   $v = new $samplerClass<UnsafeRow>($upperBound - $lowerBound, false);
-              |   java.util.Random random = new java.util.Random(${seed}L);
+              |   java.util.Random random = new java.util.Random(${resolvedSeed}L);
               |   long randomSeed = random.nextLong();
               |   int loopCount = 0;
               |   while (loopCount < partitionIndex) {
@@ -431,7 +434,7 @@ case class SampleExec(
       val sampler = ctx.addMutableState(s"$samplerClass<UnsafeRow>", "sampler",
         v => s"""
           | $v = new $samplerClass<UnsafeRow>($lowerBound, $upperBound, false);
-          | $v.setSeed(${seed}L + partitionIndex);
+          | $v.setSeed(${resolvedSeed}L + partitionIndex);
          """.stripMargin.trim)
 
       s"""

@@ -73,8 +73,11 @@ private[spark] class TaskContextImpl(
   /** List of callback functions to execute when the task fails. */
   @transient private val onFailureCallbacks = new Stack[TaskFailureListener]
 
+  /** List of callback functions to execute when the task is interrupted. */
+  @transient private val onInterruptCallbacks = new Stack[TaskInterruptListener]
+
   /**
-   * The thread currently executing task completion or failure listeners, if any.
+   * The thread currently executing task completion, failure, or interrupt listeners, if any.
    *
    * `invokeListeners()` uses this to ensure listeners are called sequentially.
    */
@@ -126,6 +129,22 @@ private[spark] class TaskContextImpl(
     this
   }
 
+  override def addTaskInterruptListener(listener: TaskInterruptListener): this.type = {
+    synchronized {
+      // If there is already a thread invoking listeners, adding the new listener to
+      // `onInterruptCallbacks` will cause that thread to execute the new listener, and the call to
+      // `invokeTaskInterruptListeners()` below will be a no-op.
+      //
+      // If there is no such thread, the call to `invokeTaskInterruptListeners()` below will execute
+      // all listeners, including the new listener.
+      onInterruptCallbacks.push(listener)
+      reasonIfKilled
+    }.foreach { reason =>
+      invokeTaskInterruptListeners(reason, new TaskKilledException(reason))
+    }
+    this
+  }
+
   override def resourcesJMap(): java.util.Map[String, ResourceInformation] = {
     resources.asJava
   }
@@ -153,7 +172,11 @@ private[spark] class TaskContextImpl(
   private def invokeTaskCompletionListeners(error: Option[Throwable]): Unit = {
     // It is safe to access the reference to `onCompleteCallbacks` without holding the TaskContext
     // lock. `invokeListeners()` acquires the lock before accessing the contents.
-    invokeListeners(onCompleteCallbacks, "TaskCompletionListener", error) {
+    invokeListeners(
+      onCompleteCallbacks,
+      "TaskCompletionListener",
+      error,
+      markTaskFailedOnListenerError = true) {
       _.onTaskCompletion(this)
     }
   }
@@ -161,15 +184,35 @@ private[spark] class TaskContextImpl(
   private def invokeTaskFailureListeners(error: Throwable): Unit = {
     // It is safe to access the reference to `onFailureCallbacks` without holding the TaskContext
     // lock. `invokeListeners()` acquires the lock before accessing the contents.
-    invokeListeners(onFailureCallbacks, "TaskFailureListener", Option(error)) {
+    invokeListeners(
+      onFailureCallbacks,
+      "TaskFailureListener",
+      Option(error),
+      markTaskFailedOnListenerError = true) {
       _.onTaskFailure(this, error)
+    }
+  }
+
+  private def invokeTaskInterruptListeners(reason: String, error: Throwable): Unit = {
+    // It is safe to access the reference to `onInterruptCallbacks` without holding the TaskContext
+    // lock. `invokeListeners()` acquires the lock before accessing the contents.
+    // Do not call `markTaskFailed` per listener here: the first failure would win in
+    // `failureCauseOpt` and mask the aggregate `TaskCompletionListenerException` that
+    // `markInterrupted` records after swallowing the thrown exception (SPARK-56330).
+    invokeListeners(
+      onInterruptCallbacks,
+      "TaskInterruptListener",
+      Option(error),
+      markTaskFailedOnListenerError = false) {
+      _.onTaskInterrupted(this, reason)
     }
   }
 
   private def invokeListeners[T](
       listeners: Stack[T],
       name: String,
-      error: Option[Throwable])(
+      error: Option[Throwable],
+      markTaskFailedOnListenerError: Boolean)(
       callback: T => Unit): Unit = {
     // This method is subject to two constraints:
     //
@@ -212,7 +255,8 @@ private[spark] class TaskContextImpl(
         callback(listener)
       } catch {
         case e: Throwable =>
-          // A listener failed. Temporarily clear the listenerInvocationThread and markTaskFailed.
+          // A listener failed. For completion/failure listeners, temporarily clear
+          // listenerInvocationThread and markTaskFailed so nested TaskContext calls can run.
           //
           // One of the following cases applies (#3 being the interesting one):
           //
@@ -246,15 +290,20 @@ private[spark] class TaskContextImpl(
           //    failed, and now another completion listener has failed. Then our call to
           //    [[markTaskFailed]] here will have no effect and we simply resume running the
           //    remaining completion handlers.
-          try {
-            listenerInvocationThread = None
-            markTaskFailed(e)
-          } catch {
-            case t: Throwable => e.addSuppressed(t)
-          } finally {
-            synchronized {
-              if (listenerInvocationThread.isEmpty) {
-                listenerInvocationThread = Some(Thread.currentThread())
+          //
+          // Task interrupt listeners skip per-listener [[markTaskFailed]]; see
+          // [[invokeTaskInterruptListeners]].
+          if (markTaskFailedOnListenerError) {
+            try {
+              listenerInvocationThread = None
+              markTaskFailed(e)
+            } catch {
+              case t: Throwable => e.addSuppressed(t)
+            } finally {
+              synchronized {
+                if (listenerInvocationThread.isEmpty) {
+                  listenerInvocationThread = Some(Thread.currentThread())
+                }
               }
             }
           }
@@ -272,6 +321,15 @@ private[spark] class TaskContextImpl(
 
   private[spark] override def markInterrupted(reason: String): Unit = {
     reasonIfKilled = Some(reason)
+    try {
+      invokeTaskInterruptListeners(reason, new TaskKilledException(reason))
+    } catch {
+      case e: TaskCompletionListenerException =>
+        // SPARK-56330: Do not propagate to the executor kill / RPC thread; record the aggregate
+        // failure for the task (not the first listener exception only).
+        logError(log"Exception(s) in TaskInterruptListener(s) after task was interrupted", e)
+        markTaskFailed(e)
+    }
   }
 
   private[spark] override def killTaskIfInterrupted(): Unit = {
