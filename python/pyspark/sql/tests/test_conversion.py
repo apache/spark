@@ -803,26 +803,52 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
         result = ArrowArrayToPandasConversion.convert_pyarrow(arr, LongType())
         self.assertEqual(result.name, "my_col")
 
-    def test_convert_arrow_cast_types(self):
-        """Test that arrow_cast_types routes matching types to convert_pyarrow."""
+    def test_convert_arrow_dtype_types(self):
+        """Test that arrow_dtype_types routes matching types to convert_pyarrow."""
         import pyarrow as pa
         import pandas as pd
 
         arr = pa.array([1, 2, 3], type=pa.int64())
 
-        # With arrow_cast_types including LongType: should get ArrowDtype
-        result = ArrowArrayToPandasConversion.convert(arr, LongType(), arrow_cast_types=(LongType,))
+        # With arrow_dtype_types including LongType: should get ArrowDtype
+        result = ArrowArrayToPandasConversion.convert(
+            arr, LongType(), arrow_dtype_types=(LongType,)
+        )
         self.assertIsInstance(result.dtype, pd.ArrowDtype)
 
-        # With arrow_cast_types not including LongType: should get numpy dtype
+        # With arrow_dtype_types not including LongType: should get numpy dtype
         result = ArrowArrayToPandasConversion.convert(
-            arr, LongType(), arrow_cast_types=(StringType,)
+            arr, LongType(), arrow_dtype_types=(StringType,)
         )
         self.assertNotIsInstance(result.dtype, pd.ArrowDtype)
 
-        # With arrow_cast_types=None (default): should get numpy dtype
+        # With arrow_dtype_types=None (default): should get numpy dtype
         result = ArrowArrayToPandasConversion.convert(arr, LongType())
         self.assertNotIsInstance(result.dtype, pd.ArrowDtype)
+
+    def test_convert_arrow_table_to_pandas_arrow_dtype(self):
+        """Test _convert_arrow_table_to_pandas with arrow_dtype flag."""
+        import pyarrow as pa
+        import pandas as pd
+
+        from pyspark.sql.pandas.conversion import _convert_arrow_table_to_pandas
+
+        table = pa.table({"a": [1, 2, 3], "b": ["x", "y", "z"]})
+        schema = StructType([StructField("a", LongType()), StructField("b", StringType())])
+
+        # arrow_dtype=False: numpy-backed
+        pdf_numpy = _convert_arrow_table_to_pandas(table, schema, timezone="UTC", arrow_dtype=False)
+        self.assertNotIsInstance(pdf_numpy["a"].dtype, pd.ArrowDtype)
+        self.assertNotIsInstance(pdf_numpy["b"].dtype, pd.ArrowDtype)
+
+        # arrow_dtype=True: ArrowDtype-backed for supported types
+        pdf_arrow = _convert_arrow_table_to_pandas(table, schema, timezone="UTC", arrow_dtype=True)
+        self.assertIsInstance(pdf_arrow["a"].dtype, pd.ArrowDtype)
+        self.assertIsInstance(pdf_arrow["b"].dtype, pd.ArrowDtype)
+
+        # Values should be equal
+        self.assertEqual(pdf_numpy["a"].tolist(), pdf_arrow["a"].tolist())
+        self.assertEqual(pdf_numpy["b"].tolist(), pdf_arrow["b"].tolist())
 
     def test_geography_convert_numpy(self):
         import pyarrow as pa
