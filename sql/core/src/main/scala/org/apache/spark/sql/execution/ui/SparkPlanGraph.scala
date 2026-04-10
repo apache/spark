@@ -91,6 +91,10 @@ object SparkPlanGraph {
   /** Maximum character length for DOT graph node labels. */
   private val MAX_LABEL_LENGTH = 36
 
+  /** Pattern to detect dot-separated qualified names (e.g., catalog.schema.table). */
+  private val QUALIFIED_NAME_PATTERN =
+    java.util.regex.Pattern.compile(".*\\w+\\.\\w+\\.\\w+.*")
+
   /**
    * Truncate a node label for compact display in the plan visualization graph.
    * Only truncates labels containing dot-separated qualified names (e.g.,
@@ -100,7 +104,7 @@ object SparkPlanGraph {
    */
   private[ui] def truncateLabel(label: String): String = {
     if (label == null || label.length <= MAX_LABEL_LENGTH ||
-        !label.matches(".*\\w+\\.\\w+\\.\\w+.*")) {
+        !QUALIFIED_NAME_PATTERN.matcher(label).matches()) {
       label
     } else {
       val half = (MAX_LABEL_LENGTH - 3) / 2
