@@ -99,24 +99,29 @@ case class MergeRowsExec(
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
+  override def needCopyResult: Boolean = {
+    // Only Split instructions produce multiple output rows per input row.
+    val hasSplitInstruction = (matchedInstructions ++ notMatchedInstructions ++
+      notMatchedBySourceInstructions).exists(_.isInstanceOf[Split])
+    hasSplitInstruction ||
+      child.asInstanceOf[CodegenSupport].needCopyResult
+  }
+
   protected override def doProduce(ctx: CodegenContext): String = {
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    // Save the input variables that were passed to doConsume
-    val inputCurrentVars = input
-
-    // code for instruction execution code
-    generateInstructionExecutionCode(ctx, inputCurrentVars)
+    generateInstructionExecutionCode(ctx, input)
   }
 
-
   /**
-   * code for cardinality validation
+   * Code for cardinality validation.
    */
-  private def generateCardinalityValidationCode(ctx: CodegenContext, rowIdOrdinal: Int,
-                                                input: Seq[ExprCode]): ExprCode = {
+  private def generateCardinalityValidationCode(
+      ctx: CodegenContext,
+      rowIdOrdinal: Int,
+      input: Seq[ExprCode]): ExprCode = {
     val bitmapClass = classOf[Roaring64Bitmap]
     val rowIdBitmap = ctx.addMutableState(bitmapClass.getName, "matchedRowIds",
       v => s"$v = new ${bitmapClass.getName}();")
@@ -137,20 +142,21 @@ case class MergeRowsExec(
   /**
    * Generate code for instruction execution based on row presence conditions
    */
-  private def generateInstructionExecutionCode(ctx: CodegenContext,
-                                               inputExprs: Seq[ExprCode]): String = {
+  private def generateInstructionExecutionCode(
+      ctx: CodegenContext,
+      inputExprs: Seq[ExprCode]): String = {
 
-    // code for evaluating src/tgt presence conditions
+    // Code for evaluating src/tgt presence conditions
     val sourcePresentExpr = generatePredicateCode(ctx, isSourceRowPresent, child.output, inputExprs)
     val targetPresentExpr = generatePredicateCode(ctx, isTargetRowPresent, child.output, inputExprs)
 
-    // code for each instruction type
+    // Code for each instruction type
     val matchedInstructionsCode = generateInstructionsCode(ctx, matchedInstructions,
-      "matched", inputExprs, sourcePresent = true)
+      inputExprs, sourcePresent = true)
     val notMatchedInstructionsCode = generateInstructionsCode(ctx, notMatchedInstructions,
-      "notMatched", inputExprs, sourcePresent = true)
+      inputExprs, sourcePresent = true)
     val notMatchedBySourceInstructionsCode = generateInstructionsCode(ctx,
-      notMatchedBySourceInstructions, "notMatchedBySource", inputExprs, sourcePresent = false)
+      notMatchedBySourceInstructions, inputExprs, sourcePresent = false)
 
     val cardinalityValidationCode = if (checkCardinality) {
       val rowIdOrdinal = child.output.indexWhere(attr => conf.resolver(attr.name, ROW_ID))
@@ -178,10 +184,11 @@ case class MergeRowsExec(
   /**
    * Generate code for executing a sequence of instructions
    */
-  private def generateInstructionsCode(ctx: CodegenContext, instructions: Seq[Instruction],
-                                       instructionType: String,
-                                       inputExprs: Seq[ExprCode],
-                                       sourcePresent: Boolean): String = {
+  private def generateInstructionsCode(
+      ctx: CodegenContext,
+      instructions: Seq[Instruction],
+      inputExprs: Seq[ExprCode],
+      sourcePresent: Boolean): String = {
     if (instructions.isEmpty) {
       ""
     } else {
@@ -195,16 +202,16 @@ case class MergeRowsExec(
     }
   }
 
-  private def generateSingleInstructionCode(ctx: CodegenContext,
-                                            instruction: Instruction,
-                                            inputExprs: Seq[ExprCode],
-                                            sourcePresent: Boolean): String = {
+  private def generateSingleInstructionCode(
+      ctx: CodegenContext,
+      instruction: Instruction,
+      inputExprs: Seq[ExprCode],
+      sourcePresent: Boolean): String = {
     instruction match {
       case Keep(context, condition, outputExprs) =>
         val projectionExpr = generateProjectionCode(ctx, outputExprs, inputExprs)
         val code = generatePredicateCode(ctx, condition, child.output, inputExprs)
 
-        // Generate metric updates based on context
         val metricUpdateCode = generateMetricUpdateCode(ctx, context, sourcePresent)
 
         s"""
@@ -224,7 +231,7 @@ case class MergeRowsExec(
            |${code.code}
            |if (${code.value}) {
            |  $metricUpdateCode
-           |  return; // Discar row
+           |  return; // Discard row
            |}
        """.stripMargin
 
@@ -252,10 +259,12 @@ case class MergeRowsExec(
   }
 
   /**
-   * metric update code based on Keep's context
+   * Metric update code based on Keep's context.
    */
-  private def generateMetricUpdateCode(ctx: CodegenContext, context: Context,
-                                       sourcePresent: Boolean): String = {
+  private def generateMetricUpdateCode(
+      ctx: CodegenContext,
+      context: Context,
+      sourcePresent: Boolean): String = {
     context match {
       case Copy =>
         val copyMetric = metricTerm(ctx, "numTargetRowsCopied")
@@ -276,8 +285,9 @@ case class MergeRowsExec(
     }
   }
 
-  private def generateUpdateMetricUpdateCode(ctx: CodegenContext,
-                                             sourcePresent: Boolean): String = {
+  private def generateUpdateMetricUpdateCode(
+      ctx: CodegenContext,
+      sourcePresent: Boolean): String = {
     val updateMetric = metricTerm(ctx, "numTargetRowsUpdated")
     if (sourcePresent) {
       val matchedUpdateMetric = metricTerm(ctx, "numTargetRowsMatchedUpdated")
@@ -296,8 +306,9 @@ case class MergeRowsExec(
     }
   }
 
-  private def generateDeleteMetricUpdateCode(ctx: CodegenContext,
-                                             sourcePresent: Boolean): String = {
+  private def generateDeleteMetricUpdateCode(
+      ctx: CodegenContext,
+      sourcePresent: Boolean): String = {
     val deleteMetric = metricTerm(ctx, "numTargetRowsDeleted")
     if (sourcePresent) {
       val matchedDeleteMetric = metricTerm(ctx, "numTargetRowsMatchedDeleted")
@@ -330,20 +341,19 @@ case class MergeRowsExec(
     val originalCurrentVars = ctx.currentVars
     val originalInputRow = ctx.INPUT_ROW
     try {
-      // Set to the input variables saved in doConsume
       ctx.currentVars = inputCurrentVars
       block
     } finally {
-      // Restore original context
       ctx.currentVars = originalCurrentVars
       ctx.INPUT_ROW = originalInputRow
     }
   }
 
-  private def generatePredicateCode(ctx: CodegenContext,
-                                    predicate: Expression,
-                                    inputAttrs: Seq[Attribute],
-                                    inputCurrentVars: Seq[ExprCode]): ExprCode = {
+  private def generatePredicateCode(
+      ctx: CodegenContext,
+      predicate: Expression,
+      inputAttrs: Seq[Attribute],
+      inputCurrentVars: Seq[ExprCode]): ExprCode = {
     withCodegenContext(ctx, inputCurrentVars) {
       val boundPredicate = BindReferences.bindReference(predicate, inputAttrs)
       val ev = boundPredicate.genCode(ctx)
@@ -357,9 +367,10 @@ case class MergeRowsExec(
     }
   }
 
-  private def generateProjectionCode(ctx: CodegenContext,
-                                     outputExprs: Seq[Expression],
-                                     inputCurrentVars: Seq[ExprCode]): Seq[ExprCode] = {
+  private def generateProjectionCode(
+      ctx: CodegenContext,
+      outputExprs: Seq[Expression],
+      inputCurrentVars: Seq[ExprCode]): Seq[ExprCode] = {
     withCodegenContext(ctx, inputCurrentVars) {
       val boundExprs = outputExprs.map(BindReferences.bindReference(_, child.output))
       boundExprs.map(_.genCode(ctx))
