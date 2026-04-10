@@ -108,13 +108,21 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
       targetTable: LogicalPlan,
       originalSource: StructType,
       isByName: Boolean): Array[TableChange] = {
+    val onError: () => Nothing = () =>
+      throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
+        targetTable.schema, originalSource, null)
     val candidateChanges = computeSchemaChanges(
       targetTable.schema,
       originalSource,
-      targetTable.schema,
-      originalSource,
       fieldPath = Nil,
-      isByName)
+      isByName,
+      onError)
+    filterSupportedChanges(targetTable, candidateChanges)
+  }
+
+  def filterSupportedChanges(
+      targetTable: LogicalPlan,
+      candidateChanges: Array[TableChange]): Array[TableChange] = {
     targetTable match {
       case ExtractV2Table(t: SupportsSchemaEvolution) =>
         candidateChanges.filter {
@@ -131,133 +139,86 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
     }
   }
 
-  private def computeSchemaChanges(
+  private[catalyst] def computeSchemaChanges(
       currentType: DataType,
       newType: DataType,
-      originalTarget: StructType,
-      originalSource: StructType,
       fieldPath: List[String],
-      isByName: Boolean): Array[TableChange] = {
+      isByName: Boolean,
+      onError: () => Nothing): Array[TableChange] = {
     (currentType, newType) match {
       case (StructType(currentFields), StructType(newFields)) =>
         if (isByName) {
-          computeSchemaChangesByName(
-            currentFields, newFields, originalTarget, originalSource, fieldPath)
+          computeSchemaChangesByName(currentFields, newFields, fieldPath, onError)
         } else {
-          computeSchemaChangesByPosition(
-            currentFields, newFields, originalTarget, originalSource, fieldPath)
+          computeSchemaChangesByPosition(currentFields, newFields, fieldPath, onError)
         }
 
       case (ArrayType(currentElementType, _), ArrayType(newElementType, _)) =>
         computeSchemaChanges(
-          currentElementType,
-          newElementType,
-          originalTarget,
-          originalSource,
-          fieldPath :+ "element",
-          isByName)
+          currentElementType, newElementType, fieldPath :+ "element", isByName, onError)
 
       case (MapType(currentKeyType, currentValueType, _),
             MapType(newKeyType, newValueType, _)) =>
-        val keyChanges = computeSchemaChanges(
-          currentKeyType,
-          newKeyType,
-          originalTarget,
-          originalSource,
-          fieldPath :+ "key",
-          isByName)
-        val valueChanges = computeSchemaChanges(
-          currentValueType,
-          newValueType,
-          originalTarget,
-          originalSource,
-          fieldPath :+ "value",
-          isByName)
-        keyChanges ++ valueChanges
+        computeSchemaChanges(
+          currentKeyType, newKeyType, fieldPath :+ "key", isByName, onError) ++
+        computeSchemaChanges(
+          currentValueType, newValueType, fieldPath :+ "value", isByName, onError)
 
       case (currentType: AtomicType, newType: AtomicType) if currentType != newType =>
         Array(TableChange.updateColumnType(fieldPath.toArray, newType))
 
       case (currentType, newType) if currentType == newType =>
-        // No change needed
         Array.empty[TableChange]
 
       case (_, NullType) =>
-        // Don't try to change to NullType.
         Array.empty[TableChange]
 
       case (_: AtomicType | NullType, newType: AtomicType) =>
         Array(TableChange.updateColumnType(fieldPath.toArray, newType))
 
       case _ =>
-        // Do not support change between atomic and complex types for now
-        throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
-          originalTarget, originalSource, null)
+        onError()
     }
   }
 
-  /**
-   * Match fields by name: look up each target field in the source by name to collect schema
-   * differences. Nested struct fields are also matched by name.
-   */
   private def computeSchemaChangesByName(
       currentFields: Array[StructField],
       newFields: Array[StructField],
-      originalTarget: StructType,
-      originalSource: StructType,
-      fieldPath: List[String]): Array[TableChange] = {
+      fieldPath: List[String],
+      onError: () => Nothing): Array[TableChange] = {
     val currentFieldMap = toFieldMap(currentFields)
     val newFieldMap = toFieldMap(newFields)
 
-    // Collect field updates
     val updates = currentFields
       .filter(f => newFieldMap.contains(f.name))
       .flatMap { f =>
         computeSchemaChanges(
-          f.dataType,
-          newFieldMap(f.name).dataType,
-          originalTarget,
-          originalSource,
-          fieldPath :+ f.name,
-          isByName = true)
+          f.dataType, newFieldMap(f.name).dataType, fieldPath :+ f.name,
+          isByName = true, onError)
       }
 
-    // Collect newly added fields
     val adds = newFields
       .filterNot(f => currentFieldMap.contains(f.name))
       .map { f =>
-        // Make the type nullable, since existing rows in the table will have NULLs for this column.
         TableChange.addColumn((fieldPath :+ f.name).toArray, f.dataType.asNullable)
       }
 
     updates ++ adds
   }
 
-  /**
-   * Match fields by position: pair target and source fields in order to collect schema
-   * differences. Nested struct fields are also matched by position.
-   */
   private def computeSchemaChangesByPosition(
       currentFields: Array[StructField],
       newFields: Array[StructField],
-      originalTarget: StructType,
-      originalSource: StructType,
-      fieldPath: List[String]): Array[TableChange] = {
-    // Update existing field types by pairing fields at the same position.
+      fieldPath: List[String],
+      onError: () => Nothing): Array[TableChange] = {
     val updates = currentFields.zip(newFields).flatMap { case (currentField, newField) =>
       computeSchemaChanges(
-        currentField.dataType,
-        newField.dataType,
-        originalTarget,
-        originalSource,
-        fieldPath :+ currentField.name,
-        isByName = false)
+        currentField.dataType, newField.dataType, fieldPath :+ currentField.name,
+        isByName = false, onError)
     }
 
-    // Extra source fields beyond the target's field count are new additions.
     val adds = newFields.drop(currentFields.length)
       .map { f =>
-        // Make the type nullable, since existing rows in the table will have NULLs for this column.
         TableChange.addColumn((fieldPath :+ f.name).toArray, f.dataType.asNullable)
       }
 
