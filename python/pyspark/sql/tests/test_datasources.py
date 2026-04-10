@@ -113,7 +113,7 @@ class DataSourcesTestsMixin:
 
     def test_json_with_dataframe_input_non_string_column(self):
         int_df = self.spark.createDataFrame([(1,), (2,)], schema="value INT")
-        with self.assertRaisesRegex(Exception, "PARSE_INPUT_NOT_STRING_TYPE"):
+        with self.assertRaisesRegex(Exception, "DATAFRAME_INPUT_NOT_STRING_TYPE"):
             self.spark.read.json(int_df).collect()
 
     def test_json_with_dataframe_input_multiple_columns(self):
@@ -121,13 +121,12 @@ class DataSourcesTestsMixin:
             [('{"name": "Alice"}', "extra"), ('{"name": "Bob"}', "extra")],
             schema="value STRING, other STRING",
         )
-        result = self.spark.read.json(multi_df)
-        expected = [Row(name="Alice"), Row(name="Bob")]
-        self.assertEqual(sorted(result.collect(), key=lambda r: r.name), expected)
+        with self.assertRaisesRegex(Exception, "DATAFRAME_INPUT_NOT_SINGLE_COLUMN"):
+            self.spark.read.json(multi_df).collect()
 
     def test_json_with_dataframe_input_zero_columns(self):
         empty_schema_df = self.spark.range(1).select()
-        with self.assertRaisesRegex(Exception, "PARSE_INPUT_NOT_STRING_TYPE"):
+        with self.assertRaisesRegex(Exception, "DATAFRAME_INPUT_NOT_SINGLE_COLUMN"):
             self.spark.read.json(empty_schema_df).collect()
 
     def test_multiline_csv(self):

@@ -205,14 +205,13 @@ private[sql] object PythonSQLUtils extends Logging {
       df: DataFrame): DataFrame = {
     val classicReader = reader.asInstanceOf[ClassicDataFrameReader]
     val fields = df.schema.fields
-    if (fields.isEmpty) {
-      throw QueryCompilationErrors.parseInputNotStringTypeError(
-        org.apache.spark.sql.types.NullType)
+    if (fields.length != 1) {
+      throw QueryCompilationErrors.dataframeInputNotSingleColumnError(fields.length)
     }
     if (fields.head.dataType != org.apache.spark.sql.types.StringType) {
-      throw QueryCompilationErrors.parseInputNotStringTypeError(fields.head.dataType)
+      throw QueryCompilationErrors.dataframeInputNotStringTypeError(fields.head.dataType)
     }
-    classicReader.json(df.select(df.columns.head).as(Encoders.STRING))
+    classicReader.json(df.as(Encoders.STRING))
   }
 
   def cleanupPythonWorkerLogs(sessionUUID: String, sparkContext: SparkContext): Unit = {

@@ -1451,6 +1451,18 @@
     ],
     "sqlState" : "42887"
   },
+  "DATAFRAME_INPUT_NOT_SINGLE_COLUMN" : {
+    "message" : [
+      "Input DataFrame must have exactly one column, but got <numColumns>."
+    ],
+    "sqlState" : "42K09"
+  },
+  "DATAFRAME_INPUT_NOT_STRING_TYPE" : {
+    "message" : [
+      "Input DataFrame column must be StringType, but got <dataType>."
+    ],
+    "sqlState" : "42K09"
+  },
   "DATAFLOW_GRAPH_NOT_FOUND" : {
     "message" : [
       "Dataflow graph with id <graphId> could not be found"
@@ -5651,12 +5663,6 @@
       "Syntax error, unexpected empty statement."
     ],
     "sqlState" : "42617"
-  },
-  "PARSE_INPUT_NOT_STRING_TYPE" : {
-    "message" : [
-      "Input DataFrame column must be StringType, but got <dataType>."
-    ],
-    "sqlState" : "42K09"
   },
   "PARSE_MODE_UNSUPPORTED" : {
     "message" : [
