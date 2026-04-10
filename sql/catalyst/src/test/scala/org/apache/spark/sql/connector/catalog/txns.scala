@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.sources.Filter
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 sealed trait TransactionState
@@ -63,15 +64,15 @@ class Txn(override val catalog: TxnTableCatalog) extends Transaction {
 // A special table used in row-level operation transactions. It inherits data
 // from the base table upon construction and propagates staged transaction state
 // back after an explicit commit.
-class TxnTable(val delegate: InMemoryRowLevelOperationTable)
+class TxnTable(val delegate: InMemoryRowLevelOperationTable, schema: StructType)
   extends InMemoryRowLevelOperationTable(
     delegate.name,
-    delegate.schema,
+    schema,
     delegate.partitioning,
     delegate.properties,
     delegate.constraints) {
 
-  alterTableWithData(delegate.data, delegate.schema)
+  alterTableWithData(delegate.data, schema)
 
   // Keep initial version to detect any changes during the transaction.
   private val initialVersion: String = version()
@@ -86,8 +87,8 @@ class TxnTable(val delegate: InMemoryRowLevelOperationTable)
   def commit(): Unit = {
     if (version() != initialVersion) {
       delegate.dataMap.clear()
-      delegate.alterTableWithData(data, schema)
       delegate.updateColumns(columns()) // Evolve schema if needed.
+      delegate.alterTableWithData(data, schema)
       delegate.replacedPartitions = replacedPartitions
       delegate.lastWriteInfo = lastWriteInfo
       delegate.lastWriteLog = lastWriteLog
@@ -114,7 +115,7 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
   override def loadTable(ident: Identifier): Table = {
     tables.computeIfAbsent(ident, _ => {
       val table = delegate.loadTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
-      new TxnTable(table)
+      new TxnTable(table, table.schema())
     })
   }
 
@@ -124,13 +125,20 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
-    // FIXME: This is not transactional. The schema changes are applied directly to the delegate.
-    // The correct behavior is to apply the schema changes to the TxnTable and propagate them
-    // to the delegate only after commit.
-    // Furthermore, this also evicts the staged TxnTable, losing any in-flight DML changes.
-    val newDelegateTable = delegate.alterTable(ident, changes: _*)
-    tables.remove(ident) // Load again.
-    newDelegateTable
+    // AlterTable may be called by ResolveSchemaEvolution when schema evolution is enabled. Thus,
+    // it needs to be transactional. The schema changes are only propagated to the delegate at
+    // commit time.
+    val txnTable = tables.get(ident)
+    val schema = CatalogV2Util.applySchemaChanges(
+      txnTable.schema, changes, tableProvider = Some("in-memory"), statementType = "ALTER TABLE")
+
+    if (schema.fields.isEmpty) {
+      throw new IllegalArgumentException(s"Cannot drop all fields")
+    }
+
+    val newTxnTable = new TxnTable(txnTable.delegate, schema)
+    tables.put(ident, newTxnTable)
+    newTxnTable
   }
 
   override def dropTable(ident: Identifier): Boolean = {
