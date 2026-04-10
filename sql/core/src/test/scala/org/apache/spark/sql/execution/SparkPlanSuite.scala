@@ -21,7 +21,7 @@ import org.apache.spark.{SparkEnv, SparkException, SparkUnsupportedOperationExce
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.Deduplicate
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
@@ -126,6 +126,60 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
       Seq(AttributeReference("val", IntegerType)()), Seq(InternalRow(1)), None)
     val nonEmpty = ColumnarOp(relation).toRowBased.executeCollect()
     assert(nonEmpty === relation.executeCollect())
+  }
+
+  test("BatchScanExec equals is reflexive when batch is null") {
+    // scan is @transient, so after serialization round-trip it's null and batch becomes null.
+    // equals must still satisfy x.equals(x) == true (reflexivity).
+    val exec = BatchScanExec(
+      output = Seq.empty,
+      scan = null,
+      runtimeFilters = Seq.empty,
+      table = null
+    )
+    assert(exec.batch == null)
+    assert(exec.equals(exec))
+  }
+
+  test("BatchScanExec hashCode is consistent with equals") {
+    // Two BatchScanExec instances with the same fields must have the same hashCode.
+    val exec1 = BatchScanExec(
+      output = Seq.empty,
+      scan = null,
+      runtimeFilters = Seq.empty,
+      table = null,
+      keyGroupedPartitioning = Some(Seq(Literal(1)))
+    )
+    val exec2 = BatchScanExec(
+      output = Seq.empty,
+      scan = null,
+      runtimeFilters = Seq.empty,
+      table = null,
+      keyGroupedPartitioning = Some(Seq(Literal(1)))
+    )
+    assert(exec1.equals(exec2))
+    assert(exec1.hashCode() == exec2.hashCode())
+  }
+
+  test("BatchScanExec hashCode includes keyGroupedPartitioning") {
+    // Instances differing only in keyGroupedPartitioning must not be equal,
+    // and should (with high probability) have different hashCodes.
+    val exec1 = BatchScanExec(
+      output = Seq.empty,
+      scan = null,
+      runtimeFilters = Seq.empty,
+      table = null,
+      keyGroupedPartitioning = Some(Seq(Literal(1)))
+    )
+    val exec2 = BatchScanExec(
+      output = Seq.empty,
+      scan = null,
+      runtimeFilters = Seq.empty,
+      table = null,
+      keyGroupedPartitioning = Some(Seq(Literal(2)))
+    )
+    assert(!exec1.equals(exec2))
+    assert(exec1.hashCode() != exec2.hashCode())
   }
 
   test("SPARK-37779: ColumnarToRowExec should be canonicalizable after being (de)serialized") {
