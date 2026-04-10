@@ -162,9 +162,12 @@ trait TTLState {
     store.iterator(TTL_INDEX).map(kv => toTTLRow(kv.key))
   }
 
-  // Returns an Iterator over all the keys in the TTL index that have expired. This method
-  // does not delete the keys from the TTL index; it is the responsibility of the caller
-  // to do so.
+  // Returns an Iterator over the keys in the TTL index that have expired. Uses a bounded
+  // range scan over [prevBatchTimestampMs+1, batchTimestampMs+1) to skip entries that
+  // were already evicted in previous batches.
+  //
+  // This method does not delete the keys from the TTL index; it is the responsibility of
+  // the caller to do so.
   //
   // The schema of the UnsafeRow returned by this iterator is (expirationMs, elementKey).
   private[sql] def ttlEvictionIterator(): Iterator[UnsafeRow] = {
