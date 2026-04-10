@@ -124,10 +124,10 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
-    // TODO: This evicts the staged TxnTable, losing any in-flight DML changes. The correct
-    // approach is to apply only the schema change to the existing TxnTable so that the ongoing
-    // DML can observe the new schema and reconcile at commit time. Concurrent DDL + DML is not
-    // supported in this test catalog for now.
+    // FIXME: This is not transactional. The schema changes are applied directly to the delegate.
+    // The correct behavior is to apply the schema changes to the TxnTable and propagate them
+    // to the delegate only after commit.
+    // Furthermore, this also evicts the staged TxnTable, losing any in-flight DML changes.
     val newDelegateTable = delegate.alterTable(ident, changes: _*)
     tables.remove(ident) // Load again.
     newDelegateTable
