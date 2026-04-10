@@ -1063,9 +1063,9 @@ def assertDataFrameEqual(
                 return all(compare_vals(x, y) for x, y in zip(val1, val2))
             elif isinstance(val1, dict) and isinstance(val2, dict):
                 return (
-                    len(val1.keys()) == len(val2.keys())
+                    len(val1) == len(val2)
                     and val1.keys() == val2.keys()
-                    and all(compare_vals(val1[k], val2[k]) for k in val1.keys())
+                    and all(compare_vals(val1[k], val2[k]) for k in val1)
                 )
             elif isinstance(val1, float) and isinstance(val2, float):
                 if abs(val1 - val2) > (atol + rtol * abs(val2)):
