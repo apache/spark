@@ -802,6 +802,28 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
         arr = batch.column("my_col")
         result = ArrowArrayToPandasConversion.convert_pyarrow(arr, LongType())
         self.assertEqual(result.name, "my_col")
+
+    def test_convert_arrow_cast_types(self):
+        """Test that arrow_cast_types routes matching types to convert_pyarrow."""
+        import pyarrow as pa
+        import pandas as pd
+
+        arr = pa.array([1, 2, 3], type=pa.int64())
+
+        # With arrow_cast_types including LongType: should get ArrowDtype
+        result = ArrowArrayToPandasConversion.convert(arr, LongType(), arrow_cast_types=(LongType,))
+        self.assertIsInstance(result.dtype, pd.ArrowDtype)
+
+        # With arrow_cast_types not including LongType: should get numpy dtype
+        result = ArrowArrayToPandasConversion.convert(
+            arr, LongType(), arrow_cast_types=(StringType,)
+        )
+        self.assertNotIsInstance(result.dtype, pd.ArrowDtype)
+
+        # With arrow_cast_types=None (default): should get numpy dtype
+        result = ArrowArrayToPandasConversion.convert(arr, LongType())
+        self.assertNotIsInstance(result.dtype, pd.ArrowDtype)
+
     def test_geography_convert_numpy(self):
         import pyarrow as pa
 

@@ -188,6 +188,7 @@ class ArrowBatchTransformer:
         ndarray_as_list: bool = False,
         prefer_int_ext_dtype: bool = False,
         df_for_struct: bool = False,
+        arrow_cast_types: Optional[tuple] = None,
     ) -> List[Union["pd.Series", "pd.DataFrame"]]:
         """
         Convert a RecordBatch or Table to a list of pandas Series.
@@ -208,6 +209,10 @@ class ArrowBatchTransformer:
             Whether to convert integers to Pandas ExtensionDType.
         df_for_struct : bool
             If True, convert struct columns to DataFrame instead of Series.
+        arrow_cast_types : tuple of DataType classes, optional
+            If provided, columns whose Spark type matches one of these classes will be
+            converted via convert_pyarrow (ArrowDtype-backed). Unsupported types fall
+            through to convert_numpy/convert_legacy. Default is None (disabled).
 
         Returns
         -------
@@ -232,6 +237,7 @@ class ArrowBatchTransformer:
                 ndarray_as_list=ndarray_as_list,
                 prefer_int_ext_dtype=prefer_int_ext_dtype,
                 df_for_struct=df_for_struct,
+                arrow_cast_types=arrow_cast_types,
             )
             for i in range(batch.num_columns)
         ]
@@ -1471,6 +1477,7 @@ class ArrowArrayToPandasConversion:
         ndarray_as_list: bool = False,
         prefer_int_ext_dtype: bool = False,
         df_for_struct: bool = False,
+        arrow_cast_types: Optional[tuple] = None,
     ) -> Union["pd.Series", "pd.DataFrame"]:
         """
         Convert a PyArrow Array or ChunkedArray to a pandas Series or DataFrame.
@@ -1495,6 +1502,10 @@ class ArrowArrayToPandasConversion:
         df_for_struct : bool, optional
             If True, convert struct columns to a DataFrame with columns corresponding
             to struct fields instead of a Series. Default is False.
+        arrow_cast_types : tuple of DataType classes, optional
+            If provided, columns whose Spark type matches one of these classes will be
+            converted via convert_pyarrow (ArrowDtype-backed). Unsupported types fall
+            through to convert_numpy/convert_legacy. Default is None (disabled).
 
         Returns
         -------
@@ -1502,6 +1513,13 @@ class ArrowArrayToPandasConversion:
             Converted pandas Series. If df_for_struct is True and the type is StructType,
             returns a DataFrame with columns corresponding to struct fields.
         """
+        if arrow_cast_types is not None and isinstance(spark_type, arrow_cast_types):
+            return cls.convert_pyarrow(
+                arr,
+                spark_type,
+                ser_name=ser_name,
+            )
+
         if cls._prefer_convert_numpy(spark_type, df_for_struct):
             return cls.convert_numpy(
                 arr,
