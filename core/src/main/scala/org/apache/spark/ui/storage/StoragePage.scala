@@ -45,15 +45,16 @@ private[ui] class StoragePage(parent: SparkUITab, store: AppStatusStore) extends
       Nil
     } else {
       <div>
-        <span class="collapse-aggregated-rdds collapse-table"
-            data-collapse-name="collapse-aggregated-rdds"
-            data-collapse-table="aggregated-rdds">
+        <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-rdds"
+            aria-expanded="true" aria-controls="aggregated-rdds"
+            data-collapse-name="collapse-aggregated-rdds">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>RDDs ({rdds.length})</a>
           </h4>
         </span>
-        <div class="aggregated-rdds collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-rdds">
           {UIUtils.listingTable(
             rddHeader,
             rddRow(request, _: v1.RDDStorageInfo),

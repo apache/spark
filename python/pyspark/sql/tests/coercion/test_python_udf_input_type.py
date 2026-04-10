@@ -311,7 +311,7 @@ class UDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
                 values_str = [row["python_value_str"] for row in results_data]
 
                 # Assert that the UDF output values match the input values
-                assert values == input_data, f"Input {values} != output {input_data}"
+                assert values == input_data, f"Output {values} != Input {input_data}"
 
                 result.append(str(types))
                 result.append(str(values_str))

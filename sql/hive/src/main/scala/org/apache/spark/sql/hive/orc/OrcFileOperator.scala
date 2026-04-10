@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.hive.orc
 
-import java.io.IOException
+import java.io.{FileNotFoundException, IOException}
 
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.ql.io.orc.{OrcFile, Reader}
@@ -53,7 +54,8 @@ private[hive] object OrcFileOperator extends Logging {
    */
   def getFileReader(basePath: String,
       config: Option[Configuration] = None,
-      ignoreCorruptFiles: Boolean = false)
+      ignoreCorruptFiles: Boolean = false,
+      ignoreMissingFiles: Boolean = false)
       : Option[Reader] = {
     def isWithNonEmptySchema(path: Path, reader: Reader): Boolean = {
       reader.getObjectInspector match {
@@ -76,6 +78,10 @@ private[hive] object OrcFileOperator extends Logging {
       val reader = try {
         Some(OrcFile.createReader(fs, path))
       } catch {
+        case e: Exception if ignoreMissingFiles &&
+            ExceptionUtils.getThrowables(e).exists(_.isInstanceOf[FileNotFoundException]) =>
+          logWarning(log"Skipped missing file: ${MDC(PATH, path)}", e)
+          None
         case e: IOException =>
           if (ignoreCorruptFiles) {
             logWarning(log"Skipped the footer in the corrupted file: ${MDC(PATH, path)}", e)
@@ -108,11 +114,12 @@ private[hive] object OrcFileOperator extends Logging {
    * This is visible for testing.
    */
   def readOrcSchemasInParallel(
-      partFiles: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean)
+      partFiles: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean,
+      ignoreMissingFiles: Boolean)
       : Seq[StructType] = {
     ThreadUtils.parmap(partFiles, "readingOrcSchemas", 8) { currentFile =>
       val file = currentFile.getPath.toString
-      getFileReader(file, Some(conf), ignoreCorruptFiles).map(reader => {
+      getFileReader(file, Some(conf), ignoreCorruptFiles, ignoreMissingFiles).map(reader => {
         val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
         val schema = readerInspector.getTypeName
         logDebug(s"Reading schema from file $file., got Hive schema string: $schema")

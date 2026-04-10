@@ -36,11 +36,14 @@ import org.apache.spark.tags.DockerTest
 class PostgresNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespaceTest {
   override val db = new PostgresDatabaseOnDocker
 
-  val map = new CaseInsensitiveStringMap(
+  lazy val map = new CaseInsensitiveStringMap(
     Map("url" -> db.getJdbcUrl(dockerIp, externalPort),
       "driver" -> "org.postgresql.Driver").asJava)
 
-  catalog.initialize("postgresql", map)
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    catalog.initialize("postgresql", map)
+  }
 
   override def dataPreparation(conn: Connection): Unit = {}
 

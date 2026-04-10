@@ -393,6 +393,21 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     session.table("myTable")
   }
 
+  test("read changes") {
+    session.read
+      .option("startingVersion", "1")
+      .option("endingVersion", "5")
+      .changes("myTable")
+  }
+
+  test("read changes with options") {
+    session.read
+      .option("startingTimestamp", "2026-01-01")
+      .option("deduplicationMode", "netChanges")
+      .option("computeUpdates", "true")
+      .changes("myTable")
+  }
+
   test("read text") {
     session.read.text(testDataPath.resolve("people.txt").toString)
   }
@@ -3544,6 +3559,13 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
   /* Stream Reader API  */
   test("streaming table API with options") {
     session.readStream.options(Map("p1" -> "v1", "p2" -> "v2")).table("tempdb.myStreamingTable")
+  }
+
+  test("streaming changes API with options") {
+    session.readStream
+      .option("startingVersion", "1")
+      .option("deduplicationMode", "dropCarryovers")
+      .changes("tempdb.myStreamingTable")
   }
 
   /* Avro functions */

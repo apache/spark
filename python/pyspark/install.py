@@ -21,6 +21,12 @@ import time
 import traceback
 import urllib.request
 from shutil import rmtree
+from typing import TYPE_CHECKING
+
+
+if TYPE_CHECKING:
+    from http.client import HTTPResponse
+
 
 # NOTE that we shouldn't import pyspark here because this is used in
 # setup.py, and assume there's no PySpark imported.
@@ -32,14 +38,16 @@ SUPPORTED_HIVE_VERSIONS = ["hive2.3"]
 UNSUPPORTED_COMBINATIONS = []  # type: ignore
 
 
-def checked_package_name(spark_version, hadoop_version, hive_version):
+def checked_package_name(spark_version: str, hadoop_version: str, hive_version: str) -> str:
     """
     Check the generated package name, here we need to use the final hadoop version.
     """
     return "%s-bin-%s" % (spark_version, hadoop_version)
 
 
-def checked_versions(spark_version, hadoop_version, hive_version):
+def checked_versions(
+    spark_version: str, hadoop_version: str, hive_version: str
+) -> tuple[str, str, str]:
     """
     Check the valid combinations of supported versions in Spark distributions.
 
@@ -64,7 +72,7 @@ def checked_versions(spark_version, hadoop_version, hive_version):
         spark_version = "spark-%s" % spark_version
     if not spark_version.startswith("spark-"):
         raise RuntimeError(
-            "Spark version should start with 'spark-' prefix; however, " "got %s" % spark_version
+            "Spark version should start with 'spark-' prefix; however, got %s" % spark_version
         )
 
     if hadoop_version == "without":
@@ -90,7 +98,7 @@ def checked_versions(spark_version, hadoop_version, hive_version):
     return spark_version, convert_old_hadoop_version(spark_version, hadoop_version), hive_version
 
 
-def convert_old_hadoop_version(spark_version, hadoop_version):
+def convert_old_hadoop_version(spark_version: str, hadoop_version: str) -> str:
     # check if Spark version <= 3.2, if so, convert hadoop3 to hadoop3.2 and hadoop2 to hadoop2.7
     version_dict = {
         "hadoop3": "hadoop3.2",
@@ -99,6 +107,7 @@ def convert_old_hadoop_version(spark_version, hadoop_version):
         "without-hadoop": "without-hadoop",
     }
     spark_version_parts = re.search("^spark-([0-9]+)\\.([0-9]+)\\.[0-9]+$", spark_version)
+    assert spark_version_parts is not None
     spark_major_version = int(spark_version_parts.group(1))
     spark_minor_version = int(spark_version_parts.group(2))
     if spark_major_version < 3 or (spark_major_version == 3 and spark_minor_version <= 2):
@@ -106,7 +115,7 @@ def convert_old_hadoop_version(spark_version, hadoop_version):
     return hadoop_version
 
 
-def install_spark(dest, spark_version, hadoop_version, hive_version):
+def install_spark(dest: str, spark_version: str, hadoop_version: str, hive_version: str) -> None:
     """
     Installs Spark that corresponds to the given Hadoop version in the current
     library directory.
@@ -167,7 +176,7 @@ def install_spark(dest, spark_version, hadoop_version, hive_version):
     raise OSError("Unable to download %s." % pretty_pkg_name)
 
 
-def get_preferred_mirrors():
+def get_preferred_mirrors() -> list[str]:
     mirror_urls = []
     for _ in range(3):
         try:
@@ -187,7 +196,7 @@ def get_preferred_mirrors():
     return list(set(mirror_urls)) + [x for x in default_sites if x not in mirror_urls]
 
 
-def _download_with_retries(url, path, max_retries=3, timeout=600):
+def _download_with_retries(url: str, path: str, max_retries: int = 3, timeout: int = 600) -> None:
     """
     Download a file from a URL with retry logic and timeout handling.
 
@@ -221,8 +230,8 @@ def _download_with_retries(url, path, max_retries=3, timeout=600):
                 raise
 
 
-def download_to_file(response, path, chunk_size=1024 * 1024):
-    total_size = int(response.info().get("Content-Length").strip())
+def download_to_file(response: "HTTPResponse", path: str, chunk_size: int = 1024 * 1024) -> None:
+    total_size = int(response.info().get("Content-Length", "0").strip())
     bytes_so_far = 0
 
     with open(path, mode="wb") as dest:

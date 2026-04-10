@@ -292,9 +292,30 @@ object StateStoreErrors {
     new StateStoreCheckpointIdsNotSupported(msg)
   }
 
+  def stateStoreBaseCheckpointIdMismatch(
+      batchVersion: Long,
+      partitionId: Int,
+      operatorId: Long,
+      expectedBaseId: String,
+      actualBaseId: String): StateStoreBaseCheckpointIdMismatch = {
+    new StateStoreBaseCheckpointIdMismatch(
+      batchVersion, partitionId, operatorId, expectedBaseId, actualBaseId)
+  }
+
   def unknownInternalColumnFamily(colFamilyName: String):
       StateStoreUnknownInternalColumnFamily = {
     new StateStoreUnknownInternalColumnFamily(colFamilyName)
+  }
+
+  def streamStreamJoinNullValue(
+      valueIndex: Long,
+      numValues: Long,
+      joinSide: String,
+      storeVersion: Long,
+      partitionId: Int,
+      configKey: String): StreamStreamJoinInconsistentStateNullValue = {
+    new StreamStreamJoinInconsistentStateNullValue(
+      valueIndex, numValues, joinSide, storeVersion, partitionId, configKey)
   }
 }
 
@@ -647,3 +668,37 @@ class StateStoreUnknownInternalColumnFamily(colFamilyName: String)
   extends SparkRuntimeException(
     errorClass = "STATE_STORE_UNKNOWN_INTERNAL_COLUMN_FAMILY",
     messageParameters = Map("colFamilyName" -> colFamilyName))
+
+class StateStoreBaseCheckpointIdMismatch(
+    batchVersion: Long,
+    partitionId: Int,
+    operatorId: Long,
+    expectedBaseId: String,
+    actualBaseId: String)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_BASE_CHECKPOINT_ID_MISMATCH",
+    messageParameters = Map(
+      "batchVersion" -> batchVersion.toString,
+      "partitionId" -> partitionId.toString,
+      "operatorId" -> operatorId.toString,
+      "expectedBaseId" -> expectedBaseId,
+      "actualBaseId" -> actualBaseId
+    )
+  )
+
+class StreamStreamJoinInconsistentStateNullValue(
+    valueIndex: Long,
+    numValues: Long,
+    joinSide: String,
+    storeVersion: Long,
+    partitionId: Int,
+    configKey: String)
+  extends SparkRuntimeException(
+    errorClass = "STREAM_STREAM_JOIN_INCONSISTENT_STATE.NULL_VALUE",
+    messageParameters = Map(
+      "valueIndex" -> valueIndex.toString,
+      "numValues" -> numValues.toString,
+      "joinSide" -> joinSide,
+      "storeVersion" -> storeVersion.toString,
+      "partitionId" -> partitionId.toString,
+      "configKey" -> configKey))

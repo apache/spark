@@ -24,6 +24,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.scheduler.SparkListenerEvent
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.connect.IllegalStateErrors
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.util.{Clock, Utils}
 
@@ -187,9 +188,7 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
       request.getPlan.getOpTypeCase match {
         case proto.Plan.OpTypeCase.COMMAND => request.getPlan.getCommand
         case proto.Plan.OpTypeCase.ROOT => request.getPlan.getRoot
-        case _ =>
-          throw new UnsupportedOperationException(
-            s"${request.getPlan.getOpTypeCase} not supported.")
+        case _ => request.getPlan
       }
 
     val event = SparkListenerConnectOperationStarted(
@@ -247,8 +246,11 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
    * Post @link org.apache.spark.sql.connect.service.SparkListenerConnectOperationCanceled.
    */
   def postCanceled(): Unit = {
+    // SPARK-53339: Pending is included to handle the case where interrupt() is called before
+    // postStarted() transitions the status from Pending to Started.
     assertStatus(
       List(
+        ExecuteStatus.Pending,
         ExecuteStatus.Started,
         ExecuteStatus.Analyzed,
         ExecuteStatus.ReadyForExecution,
@@ -268,8 +270,11 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
    *   The message of the error thrown during the request.
    */
   def postFailed(errorMessage: String): Unit = {
+    // SPARK-53339: Pending is included to handle the case where postStarted() itself throws
+    // an exception (e.g., session state check failure) before transitioning from Pending.
     assertStatus(
       List(
+        ExecuteStatus.Pending,
         ExecuteStatus.Started,
         ExecuteStatus.Analyzed,
         ExecuteStatus.ReadyForExecution,
@@ -350,16 +355,19 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
       validStatuses: List[ExecuteStatus],
       eventStatus: ExecuteStatus): Unit = {
     if (validStatuses.find(s => s == status).isEmpty) {
-      throw new IllegalStateException(s"""
-        operationId: $operationId with status ${status}
-        is not within statuses $validStatuses for event $eventStatus
-        """)
+      throw IllegalStateErrors.executionStateTransitionInvalidOperationStatus(
+        executeHolder.operationId,
+        status,
+        validStatuses,
+        eventStatus)
     }
-    if (sessionHolder.eventManager.status != SessionStatus.Started) {
-      throw new IllegalStateException(s"""
-        sessionId: $sessionId with status $sessionStatus
-        is not Started for event $eventStatus
-        """)
+    val validSessionStatuses = List(SessionStatus.Started, SessionStatus.Closed)
+    if (!validSessionStatuses.contains(sessionHolder.eventManager.status)) {
+      throw IllegalStateErrors.executionStateTransitionInvalidSessionStatus(
+        sessionHolder.sessionId,
+        sessionStatus,
+        validSessionStatuses,
+        eventStatus)
     }
     _status = eventStatus
   }

@@ -43,7 +43,7 @@ import org.apache.spark.sql.internal.SQLConf.{LEGACY_TIME_PARSER_POLICY, SHUFFLE
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.types.{DecimalType, StructType}
 import org.apache.spark.tags.{ExtendedHiveTest, SlowHiveTest}
-import org.apache.spark.util.{ResetSystemProperties, Utils}
+import org.apache.spark.util.{ResetSystemProperties, SparkTestUtils, Utils}
 
 /**
  * This suite tests spark-submit with applications using HiveContext.
@@ -155,24 +155,27 @@ class HiveSparkSubmitSuite
   }
 
   test("SPARK-8489: MissingRequirementError during reflection") {
-    // This test uses a pre-built jar to test SPARK-8489. In a nutshell, this test creates
-    // a HiveContext and uses it to create a data frame from an RDD using reflection.
-    // Before the fix in SPARK-8470, this results in a MissingRequirementError because
-    // the HiveContext code mistakenly overrides the class loader that contains user classes.
-    // For more detail, see sql/hive/src/test/resources/regression-test-SPARK-8489/*scala.
+    // This test creates a HiveContext and uses it to create a data frame from an RDD using
+    // reflection. Before the fix in SPARK-8470, this results in a MissingRequirementError
+    // because the HiveContext code mistakenly overrides the class loader that contains user
+    // classes. For more detail, see src/test/resources/regression-test-SPARK-8489/*.scala.
     val version = Properties.versionNumberString match {
       case v if v.startsWith("2.13") => v.substring(0, 4)
       case x => throw new Exception(s"Unsupported Scala Version: $x")
     }
-    val jarDir = getTestResourcePath("regression-test-SPARK-8489")
-    val testJar = s"$jarDir/test-$version.jar"
-    assume(new File(testJar).exists)
+    val srcDir = new File(getTestResourcePath("regression-test-SPARK-8489"))
+    val sources = Seq(new File(srcDir, "Main.scala"), new File(srcDir, "MyCoolClass.scala"))
+    val jarDir = Utils.createTempDir()
+    val testJar = new File(jarDir, s"test-$version.jar")
+    val cp = System.getProperty("java.class.path")
+      .split(File.pathSeparator).map(p => new File(p).toURI.toURL).toSeq
+    SparkTestUtils.createJarWithScalaSources(sources, testJar, cp)
     val args = Seq(
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--driver-java-options", "-Dderby.system.durability=test",
       "--class", "Main",
-      testJar)
+      testJar.getAbsolutePath)
     runSparkSubmit(args)
   }
 

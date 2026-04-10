@@ -646,6 +646,16 @@ package object config {
       .bytesConf(ByteUnit.BYTE)
       .createOptional
 
+  private[spark] val STORAGE_SHUFFLE_MANAGER_INIT_WAITING_TIMEOUT =
+    ConfigBuilder("spark.storage.shuffleManager.initWaitingTimeout")
+      .doc("Maximum time to wait for the ShuffleManager to be initialized when receiving " +
+        "shuffle migration requests. If the ShuffleManager is not initialized within this " +
+        "timeout, the migration request will be rejected and the sender should retry.")
+      .version("4.2.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ > 0, "Timeout should be positive.")
+      .createWithDefaultString("30s")
+
   private[spark] val STORAGE_REPLICATION_TOPOLOGY_FILE =
     ConfigBuilder("spark.storage.replication.topologyFile")
       .version("2.1.0")
@@ -711,7 +721,11 @@ package object config {
       .createWithDefault(false)
 
   private[spark] val CPUS_PER_TASK =
-    ConfigBuilder("spark.task.cpus").version("0.5.0").intConf.createWithDefault(1)
+    ConfigBuilder("spark.task.cpus")
+      .version("0.5.0")
+      .intConf
+      .checkValue(_ > 0, "Number of cores to allocate for each task should be positive.")
+      .createWithDefault(1)
 
   private[spark] val DYN_ALLOCATION_ENABLED =
     ConfigBuilder("spark.dynamicAllocation.enabled")
@@ -2047,7 +2061,7 @@ package object config {
       .doc("If true, Spark master tries to use Java 21 virtual thread for REST API.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val MASTER_UI_PORT = ConfigBuilder("spark.master.ui.port")
     .version("1.1.0")
@@ -2919,4 +2933,29 @@ package object config {
       .checkValue(v => v.forall(Set("stdout", "stderr").contains),
         "The value only can be one or more of 'stdout, stderr'.")
       .createWithDefault(Seq("stdout", "stderr"))
+
+  private[spark] val YARN_AM_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED =
+    ConfigBuilder("spark.yarn.am.limitActiveProcessorCount.enabled")
+      .doc("Whether to add -XX:ActiveProcessorCount=<spark.yarn.am.cores> to the YARN " +
+        "Application Master JVM options in client mode. In cluster mode, use " +
+        "`spark.driver.limitActiveProcessorCount.enabled` instead.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val DRIVER_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED =
+    ConfigBuilder("spark.driver.limitActiveProcessorCount.enabled")
+      .doc("Whether to add -XX:ActiveProcessorCount=<spark.driver.cores> to the driver JVM " +
+        "options. Currently, this only takes effect in YARN cluster mode.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val EXECUTOR_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED =
+    ConfigBuilder("spark.executor.limitActiveProcessorCount.enabled")
+      .doc("Whether to add -XX:ActiveProcessorCount=<spark.executor.cores> to executor JVM " +
+        "options. Currently, this only takes effect in YARN mode.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
 }

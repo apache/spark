@@ -1010,4 +1010,47 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     assert(!row.isNullAt(2))
     assert(row.get(2, TimestampNTZType) === 1000L)
   }
+
+  testVectors("putBooleans(byte)", 96, BooleanType) { testVector =>
+    // Test various bit patterns at aligned offsets
+    val patterns = Seq(
+      0x00.toByte,
+      0xFF.toByte,
+      0xAA.toByte,
+      0x55.toByte,
+      0x80.toByte,
+      0x01.toByte
+    )
+
+    patterns.zipWithIndex.foreach { case (pattern, idx) =>
+      val rowId = idx * 8
+      testVector.putBooleans(rowId, pattern)
+      (0 until 8).foreach { i =>
+        val expected = ((pattern & 0xFF) >>> i & 1) == 1
+        assert(testVector.getBoolean(rowId + i) === expected)
+      }
+    }
+
+    // Verify writes at different offsets don't corrupt adjacent data.
+    // Note: the loop above writes 6 patterns at rowId 0..40, so rowId 48+ is untouched.
+    testVector.putBooleans(48, 0xFF.toByte) // fill slots 48-55 with true
+    testVector.putBooleans(56, 0xAA.toByte) // write at offset 56
+    // Verify slots 48-55 are untouched
+    (0 until 8).foreach { i =>
+      assert(testVector.getBoolean(48 + i) === true,
+        s"slot ${48 + i} should still be true after writing at rowId=56")
+    }
+    // Verify offset-56 write is correct
+    (0 until 8).foreach { i =>
+      val expected = ((0xAA & 0xFF) >>> i & 1) == 1
+      assert(testVector.getBoolean(56 + i) === expected)
+    }
+
+    // Write at capacity boundary (last 8 slots: rowId=88, capacity=96)
+    testVector.putBooleans(88, 0x55.toByte)
+    (0 until 8).foreach { i =>
+      val expected = ((0x55 & 0xFF) >>> i & 1) == 1
+      assert(testVector.getBoolean(88 + i) === expected)
+    }
+  }
 }

@@ -38,6 +38,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.config.ConfigBindingPolicy
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.classic.SQLContext
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -126,6 +127,7 @@ private[spark] object HiveUtils extends Logging {
     .doc("When set to true, the built-in Parquet reader and writer are used to process " +
       "parquet tables created by using the HiveQL syntax, instead of Hive serde.")
     .version("1.1.1")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .booleanConf
     .createWithDefault(true)
 
@@ -142,6 +144,7 @@ private[spark] object HiveUtils extends Logging {
     .doc("When set to true, the built-in ORC reader and writer are used to process " +
       "ORC tables created by using the HiveQL syntax, instead of Hive serde.")
     .version("2.0.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .booleanConf
     .createWithDefault(true)
 
@@ -152,6 +155,7 @@ private[spark] object HiveUtils extends Logging {
         "to process inserting into partitioned ORC/Parquet tables created by using the HiveSQL " +
         "syntax.")
       .version("3.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -162,6 +166,7 @@ private[spark] object HiveUtils extends Logging {
         "to process inserting into unpartitioned ORC/Parquet tables created by using the HiveSQL " +
         "syntax.")
       .version("4.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -171,6 +176,7 @@ private[spark] object HiveUtils extends Logging {
       "`spark.sql.hive.convertMetastoreParquet` or `spark.sql.hive.convertMetastoreOrc` is " +
       "enabled respectively for Parquet and ORC formats")
     .version("3.0.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .booleanConf
     .createWithDefault(true)
 

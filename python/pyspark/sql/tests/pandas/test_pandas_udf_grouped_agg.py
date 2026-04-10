@@ -42,7 +42,6 @@ from pyspark.testing.utils import (
     pyarrow_requirement_message,
 )
 
-
 if have_pandas:
     import pandas as pd
     from pandas.testing import assert_frame_equal
@@ -1130,9 +1129,9 @@ class GroupedAggPandasUDFTestsMixin:
             for person_series in it:
                 # Currently struct types are passed as Series of dicts
                 # In the future, they should be passed as pd.DataFrame (like scalar pandas UDFs)
-                assert isinstance(
-                    person_series, pd.Series
-                ), f"Expected Series, got {type(person_series)}"
+                assert isinstance(person_series, pd.Series), (
+                    f"Expected Series, got {type(person_series)}"
+                )
                 # Extract age values from dicts
                 ages = [p["age"] for p in person_series]
                 total_age += sum(ages)

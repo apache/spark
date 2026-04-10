@@ -25,20 +25,19 @@ import org.apache.spark.sql.types.{DataType, MapType, VariantType}
 /**
  * [[OperatorWithUncomparableTypeValidator]] performs the validation of a logical plan to ensure
  * that it (if it is [[Distinct]] or [[SetOperation]]) does not contain any uncomparable types:
- * [[VariantType]], [[MapType]], [[GeometryType]] or [[GeographyType]].
+ * [[VariantType]] or [[MapType]].
  */
 object OperatorWithUncomparableTypeValidator {
 
   /**
    * Validates that the provided logical plan does not contain any uncomparable types:
-   * [[VariantType]], [[MapType]], [[GeometryType]] or [[GeographyType]] (throws a specific
-   * user-facing error if it does). Operators that are not supported are [[Distinct]] and
-   * [[SetOperation]] ([[Union]], [[Except]], [[Intersect]]).
+   * [[VariantType]] or [[MapType]] (throws a specific user-facing error if it does). Operators
+   * that are not supported are [[Distinct]] and [[SetOperation]] ([[Union]], [[Except]],
+   * [[Intersect]]).
    */
   def validate(operator: LogicalPlan, output: Seq[Attribute]): Unit = {
     operator match {
       case unsupportedOperator @ (_: SetOperation | _: Distinct) =>
-
         output.foreach { element =>
           if (hasMapType(element.dataType)) {
             throwUnsupportedSetOperationOnMapType(element, unsupportedOperator)

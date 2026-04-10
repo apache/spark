@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.read;
 
 import java.io.Serializable;
+import java.util.Map;
 
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
@@ -51,7 +52,8 @@ public interface PartitionReaderFactory extends Serializable {
    * {@link InputPartition} class defined for the data source.
    */
   default PartitionReader<ColumnarBatch> createColumnarReader(InputPartition partition) {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3150");
+    throw new SparkUnsupportedOperationException(
+      "DATA_SOURCE_COLUMNAR_READER_NOT_SUPPORTED", Map.of("class", getClass().getName()));
   }
 
   /**

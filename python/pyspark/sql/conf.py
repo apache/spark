@@ -136,9 +136,10 @@ class RuntimeConfig:
         """Assert that an object is of type str."""
         if not isinstance(obj, str):
             raise PySparkTypeError(
-                errorClass="NOT_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": identifier,
+                    "expected_type": "str",
                     "arg_type": type(obj).__name__,
                 },
             )
@@ -163,7 +164,7 @@ def _test() -> None:
     globs = pyspark.sql.conf.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("sql.conf tests").getOrCreate()
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.conf, globs=globs, optionflags=doctest.ELLIPSIS
     )
     spark.stop()

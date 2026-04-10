@@ -69,6 +69,20 @@ class FrameBinaryOpsMixin:
             lambda: psdf.add(psdf_other),
         )
 
+    def test_mixed_dataframe_ops_dispatch_to_pandas_on_spark(self):
+        pdf = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+        psdf = ps.from_pandas(pdf)
+
+        with self.assertRaisesRegex(
+            TypeError, "add with a sequence is currently not supported; however, got DataFrame."
+        ):
+            psdf + pdf
+
+        with self.assertRaisesRegex(
+            TypeError, "radd with a sequence is currently not supported; however, got DataFrame."
+        ):
+            pdf + psdf
+
     def test_binary_operator_add(self):
         # Positive
         pdf = pd.DataFrame({"a": ["x"], "b": ["y"], "c": [1], "d": [2]})

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, d3, collapseTable */
+/* global $ */
 /* eslint-disable no-unused-vars */
 /* Adds background colors to stripe table rows in the summary table (on the stage page). This is
  * necessary (instead of using css or the table striping provided by bootstrap) because the summary
@@ -26,9 +26,9 @@
 function stripeSummaryTable() {
   $("#task-summary-table").find("tr:not(:hidden)").each(function (index) {
     if (index % 2 == 1) {
-      $(this).css("background-color", "#f9f9f9");
+      $(this).css("background-color", "var(--bs-tertiary-bg)");
     } else {
-      $(this).css("background-color", "#ffffff");
+      $(this).css("background-color", "var(--bs-body-bg)");
     }
   });
 }
@@ -102,19 +102,6 @@ function onSearchStringChange() {
       $(this).toggleClass('d-none', !found);
     }
   });
-}
-/* eslint-enable no-unused-vars */
-
-/* eslint-disable no-unused-vars */
-function collapseTableAndButton(thisName, table) {
-  collapseTable(thisName, table);
-
-  const t = d3.select("." + table);
-  if (t.classed("collapsed")) {
-    d3.select("." + table + "-button").style("display", "none");
-  } else {
-    d3.select("." + table + "-button").style("display", "flex");
-  }
 }
 /* eslint-enable no-unused-vars */
 

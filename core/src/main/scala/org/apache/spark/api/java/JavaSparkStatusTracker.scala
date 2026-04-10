@@ -17,7 +17,7 @@
 
 package org.apache.spark.api.java
 
-import org.apache.spark.{SparkContext, SparkJobInfo, SparkStageInfo}
+import org.apache.spark.{SparkContext, SparkExecutorInfo, SparkJobInfo, SparkStageInfo}
 
 /**
  * Low-level status reporting APIs for monitoring job and stage progress.
@@ -69,4 +69,11 @@ class JavaSparkStatusTracker private[spark] (sc: SparkContext) {
    * garbage collected.
    */
   def getStageInfo(stageId: Int): SparkStageInfo = sc.statusTracker.getStageInfo(stageId).orNull
+
+  /**
+   * Returns information of all known executors, including host, port, cacheSize, numRunningTasks
+   * and memory metrics.
+   * Note this include information for both the driver and executors.
+   */
+  def getExecutorInfos: Array[SparkExecutorInfo] = sc.statusTracker.getExecutorInfos
 }

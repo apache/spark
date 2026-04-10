@@ -30,6 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, PYTHON_EXEC, QUERY_ID, RUN_ID_STRING, SESSION_ID, USER_ID}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders}
+import org.apache.spark.sql.connect.IllegalStateErrors
 import org.apache.spark.sql.connect.common.ForeachWriterPacket
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -184,10 +185,10 @@ object StreamingForeachBatchHelper extends Logging {
               errorClass = "PYTHON_EXCEPTION",
               messageParameters = Map("msg" -> msg, "traceback" -> traceback))
           case otherValue =>
-            throw new IllegalStateException(
-              s"[session: ${sessionHolder.sessionId}] [userId: ${sessionHolder.userId}] " +
-                s"Unexpected return value $otherValue from the " +
-                s"Python worker.")
+            throw IllegalStateErrors.streamingQueryUnexpectedReturnValue(
+              sessionHolder.key.toString,
+              otherValue,
+              "foreachBatch function")
         }
       } catch {
         // TODO: Better handling (e.g. retries) on exceptions like EOFException to avoid
@@ -233,7 +234,7 @@ object StreamingForeachBatchHelper extends Logging {
 
       Option(cleanerCache.putIfAbsent(key, cleaner)) match {
         case Some(_) =>
-          throw new IllegalStateException(s"Unexpected: a cleaner for query $key is already set")
+          throw IllegalStateErrors.cleanerAlreadySet(sessionHolder.key.toString, key.toString)
         case None => // Inserted. Normal.
       }
     }

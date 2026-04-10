@@ -246,9 +246,11 @@ class Index(IndexOpsMixin):
         internal = self._internal.copy(
             index_spark_columns=[scol.alias(SPARK_DEFAULT_INDEX_NAME)],
             index_fields=[
-                field
-                if field is None or field.struct_field is None
-                else field.copy(name=SPARK_DEFAULT_INDEX_NAME)
+                (
+                    field
+                    if field is None or field.struct_field is None
+                    else field.copy(name=SPARK_DEFAULT_INDEX_NAME)
+                )
             ],
             column_labels=[],
             data_spark_columns=[],
@@ -432,7 +434,7 @@ class Index(IndexOpsMixin):
         """
         if same_anchor(self, other):
             return True
-        elif type(self) == type(other):
+        elif type(self) is type(other):
             if get_option("compute.ops_on_diff_frames"):
                 # TODO: avoid using default index?
                 with option_context("compute.default_index_type", "distributed-sequence"):
@@ -548,7 +550,8 @@ class Index(IndexOpsMixin):
             "It should only be used if the resulting NumPy ndarray is expected to be small."
         )
         result = np.asarray(
-            self._to_internal_pandas()._values, dtype=dtype  # type: ignore[attr-defined, arg-type]
+            self._to_internal_pandas()._values,  # type: ignore[attr-defined]
+            dtype=dtype,  # type: ignore[arg-type]
         )
         if copy:
             result = result.copy()
@@ -565,7 +568,7 @@ class Index(IndexOpsMixin):
         mapper : function, dict, or pd.Series
             Mapping correspondence.
         na_action : {None, 'ignore'}
-            If ‘ignore’, propagate NA values, without passing them to the mapping correspondence.
+            If 'ignore', propagate NA values, without passing them to the mapping correspondence.
 
         Returns
         -------
@@ -927,9 +930,7 @@ class Index(IndexOpsMixin):
             else:
 
                 def struct_to_array(scol: Column) -> Column:
-                    field_names = result._internal.spark_type_for(
-                        scol
-                    ).fieldNames()  # type: ignore[attr-defined]
+                    field_names = result._internal.spark_type_for(scol).fieldNames()  # type: ignore[attr-defined]
                     return F.array([scol[field] for field in field_names])
 
                 return result.spark.transform(struct_to_array)
@@ -1260,7 +1261,7 @@ class Index(IndexOpsMixin):
                     " %d is not a valid level number" % (level,)
                 )
             elif level > 0:
-                raise IndexError("Too many levels:" " Index has only 1 level, not %d" % (level + 1))
+                raise IndexError("Too many levels: Index has only 1 level, not %d" % (level + 1))
         elif level != self.name:
             raise KeyError(
                 "Requested level ({}) does not match index name ({})".format(level, self.name)
@@ -1466,7 +1467,7 @@ class Index(IndexOpsMixin):
         >>> (s1.index ^ s2.index)
         Index([1, 5], dtype='int64')
         """
-        if type(self) != type(other):
+        if type(self) is not type(other):
             raise NotImplementedError(
                 "Doesn't support symmetric_difference between Index & MultiIndex for now"
             )
@@ -2067,7 +2068,7 @@ class Index(IndexOpsMixin):
         # Check if the `self` and `other` have different index types.
         # 1. `self` is Index, `other` is MultiIndex
         # 2. `self` is MultiIndex, `other` is Index
-        is_index_types_different = isinstance(other, Index) and (type(self) != type(other))
+        is_index_types_different = isinstance(other, Index) and (type(self) is not type(other))
         if is_index_types_different:
             if isinstance(self, MultiIndex):
                 # In case `self` is MultiIndex and `other` is Index,
@@ -2253,9 +2254,11 @@ class Index(IndexOpsMixin):
             for left, right in zip(self._internal.index_fields, other._internal.index_fields)
         ):
             return [
-                left.copy(nullable=left.nullable or right.nullable)
-                if left.spark_type == right.spark_type
-                else InternalField(dtype=left.dtype)
+                (
+                    left.copy(nullable=left.nullable or right.nullable)
+                    if left.spark_type == right.spark_type
+                    else InternalField(dtype=left.dtype)
+                )
                 for left, right in zip(self._internal.index_fields, other._internal.index_fields)
             ]
         elif any(
@@ -2671,7 +2674,7 @@ def _test() -> None:
         .appName("pyspark.pandas.indexes.base tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.indexes.base,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

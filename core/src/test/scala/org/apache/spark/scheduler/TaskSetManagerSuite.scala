@@ -1573,8 +1573,7 @@ class TaskSetManagerSuite
   }
 
   test("SPARK-21563 context's added jars shouldn't change mid-TaskSet") {
-    val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
-    assume(jarPath != null)
+    val jarPath = TestUtils.createJarWithClasses(Seq("TaskSetManagerSuite_SPARK21563"))
     sc = new SparkContext("local", "test")
     val addedJarsPreTaskSet = Map[String, Long](sc.allAddedJars.toSeq: _*)
     assert(addedJarsPreTaskSet.size === 0)
@@ -1743,6 +1742,114 @@ class TaskSetManagerSuite
     // Make sure that task with index 2 is re-submitted
     assert(resubmittedTasks.contains(2))
 
+  }
+
+  test("SPARK-56235 Reverse index is correctly maintained and used by executorLost") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+    // Create a task set with 4 tasks
+    val taskSet = FakeTask.createTaskSet(4,
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host2", "exec2")),
+      Seq(TaskLocation("host2", "exec2")))
+    val clock = new ManualClock()
+    clock.advance(1)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+
+    // Initially, the reverse index should be empty
+    assert(manager.executorIdToTaskIds.isEmpty)
+
+    // Offer resources: tasks 0, 1 on exec1; tasks 2, 3 on exec2
+    val task0 = manager.resourceOffer("exec1", "host1", PROCESS_LOCAL)._1.get
+    val task1 = manager.resourceOffer("exec1", "host1", PROCESS_LOCAL)._1.get
+    val task2 = manager.resourceOffer("exec2", "host2", PROCESS_LOCAL)._1.get
+    val task3 = manager.resourceOffer("exec2", "host2", PROCESS_LOCAL)._1.get
+
+    // Verify reverse index is correctly populated
+    assert(manager.executorIdToTaskIds.size === 2)
+    assert(manager.executorIdToTaskIds("exec1").size === 2)
+    assert(manager.executorIdToTaskIds("exec1").contains(task0.taskId))
+    assert(manager.executorIdToTaskIds("exec1").contains(task1.taskId))
+    assert(manager.executorIdToTaskIds("exec2").size === 2)
+    assert(manager.executorIdToTaskIds("exec2").contains(task2.taskId))
+    assert(manager.executorIdToTaskIds("exec2").contains(task3.taskId))
+
+    assert(manager.runningTasks === 4)
+
+    // Lose exec1 - only tasks on exec1 should be affected
+    sched.removeExecutor("exec1")
+    manager.executorLost("exec1", "host1", ExecutorProcessLost())
+
+    // Tasks on exec1 should be failed (no longer running)
+    assert(manager.runningTasks === 2)
+    // Tasks on exec2 should still be running
+    assert(manager.taskInfos(task2.taskId).running)
+    assert(manager.taskInfos(task3.taskId).running)
+    // Tasks on exec1 should not be running
+    assert(!manager.taskInfos(task0.taskId).running)
+    assert(!manager.taskInfos(task1.taskId).running)
+  }
+
+  test("SPARK-56235 Reverse index works correctly with speculative tasks") {
+    val conf = new SparkConf().set(config.SPECULATION_ENABLED, true)
+    sc = new SparkContext("local", "test", conf)
+    sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
+    sc.conf.set(config.SPECULATION_QUANTILE, 0.5)
+
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"),
+      ("exec2", "host2"), ("exec3", "host3"))
+    sched.initialize(new FakeSchedulerBackend() {
+      override def killTask(
+          taskId: Long,
+          executorId: String,
+          interruptThread: Boolean,
+          reason: String): Unit = {}
+    })
+
+    val taskSet = FakeTask.createTaskSet(2,
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host2", "exec2")))
+    val clock = new ManualClock()
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+
+    // Launch tasks: task 0 on exec1, task 1 on exec2
+    val task0 = manager.resourceOffer("exec1", "host1", PROCESS_LOCAL)._1.get
+    val task1 = manager.resourceOffer("exec2", "host2", PROCESS_LOCAL)._1.get
+
+    assert(manager.executorIdToTaskIds("exec1").size === 1)
+    assert(manager.executorIdToTaskIds("exec1").contains(task0.taskId))
+    assert(manager.executorIdToTaskIds("exec2").size === 1)
+    assert(manager.executorIdToTaskIds("exec2").contains(task1.taskId))
+
+    // Complete task 0, so that speculative task can be launched for task 1
+    clock.advance(1)
+    val directTaskResult = new DirectTaskResult[String]() {
+      override def value(resultSer: SerializerInstance): String = ""
+    }
+    manager.handleSuccessfulTask(task0.taskId, directTaskResult)
+
+    // Launch speculative copy of task 1 on exec3
+    clock.advance(1)
+    manager.checkSpeculatableTasks(0)
+    manager.speculatableTasks += 1
+    manager.addPendingTask(1, speculatable = true)
+    val specTask = manager.resourceOffer("exec3", "host3", ANY)._1.get
+    assert(specTask.index === 1)
+    assert(specTask.attemptNumber === 1)
+
+    // Verify reverse index now has speculative task on exec3
+    assert(manager.executorIdToTaskIds("exec3").size === 1)
+    assert(manager.executorIdToTaskIds("exec3").contains(specTask.taskId))
+
+    // Lose exec2 (where original task 1 is running)
+    sched.removeExecutor("exec2")
+    manager.executorLost("exec2", "host2", ExecutorProcessLost())
+
+    // Original task 1 should be failed, speculative task 1 on exec3 should still be running
+    assert(!manager.taskInfos(task1.taskId).running)
+    assert(manager.taskInfos(specTask.taskId).running)
+    assert(manager.runningTasks === 1)
   }
 
   private def createTaskResult(

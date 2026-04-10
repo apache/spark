@@ -562,6 +562,9 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
 
   test("[SPARK-54063] STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG requires " +
     "STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG") {
+    // Default values should work fine - both default to true
+    assert(spark.sessionState.conf.stateStoreForceSnapshotUploadOnLag === true)
+
     // This should work fine - both enabled
     withSQLConf(
       SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "true",

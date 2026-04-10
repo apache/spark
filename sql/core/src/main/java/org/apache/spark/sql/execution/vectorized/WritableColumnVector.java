@@ -53,6 +53,23 @@ import org.apache.spark.unsafe.types.UTF8String;
 public abstract class WritableColumnVector extends ColumnVector {
   private final byte[] byte8 = new byte[8];
 
+  // Lookup table that "expands" each of the 8 bits in a byte into a separate byte within a long.
+  // Bit k of the input byte becomes byte k of the output long, in little-endian memory order.
+  // For example: input 0xAA (10101010) -> output 0x0100010001000100L,
+  // which when stored on a little-endian machine writes bytes [0,1,0,1,0,1,0,1] in memory order.
+  // On big-endian platforms, callers must apply Long.reverseBytes() before writing to memory.
+  private static final long[] BOOL_BYTE_TO_LONG_TABLE = new long[256];
+
+  static {
+    for (int i = 0; i < 256; i++) {
+      long r = 0L;
+      for (int bit = 0; bit < 8; bit++) {
+        r |= ((long)((i >>> bit) & 1)) << (bit * 8);
+      }
+      BOOL_BYTE_TO_LONG_TABLE[i] = r;
+    }
+  }
+
   protected abstract void releaseMemory();
 
   /**
@@ -246,8 +263,11 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   /**
-   * Sets bits from [src[0], src[7]] to [rowId, rowId + 7]
+   * Sets bits from [src[0], src[7]] to [rowId, rowId + 7].
    * src must contain bit-packed 8 booleans in the byte.
+   *
+   * Caller must ensure rowId + 8 <= capacity, as implementations may use
+   * Unsafe operations that bypass array bounds checking.
    */
   public abstract void putBooleans(int rowId, byte src);
 
@@ -964,6 +984,14 @@ public abstract class WritableColumnVector extends ColumnVector {
     return type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType ||
       type instanceof GeometryType || type instanceof GeographyType ||
       DecimalType.isByteArrayDecimalType(type);
+  }
+
+  /**
+   * Expands each bit of a bit-packed boolean byte into a separate byte within a long
+   * (little-endian layout). See {@link #BOOL_BYTE_TO_LONG_TABLE} for the byte-order convention.
+   */
+  protected long expandBoolByteToLong(byte b) {
+    return BOOL_BYTE_TO_LONG_TABLE[b & 0xFF];
   }
 
   /**

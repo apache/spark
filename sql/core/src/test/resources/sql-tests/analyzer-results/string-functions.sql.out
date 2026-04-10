@@ -1641,7 +1641,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 DROP VIEW IF EXISTS fmtTable
 -- !query analysis
-DropTempViewCommand fmtTable
+DropTempViewCommand fmtTable, true
 
 
 -- !query

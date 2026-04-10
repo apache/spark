@@ -54,7 +54,7 @@ object VariableAssignmentUtils {
       varRef.originalNameParts.map(_.toLowerCase(Locale.ROOT))
     }
 
-    val scriptingVariableManager = SqlScriptingContextManager.get().map(_.getVariableManager)
+    val scriptingVariableManager = SqlScriptingContextManager.get().flatMap(_.getVariableManager)
 
     val variableManager = varRef.catalog match {
       case FakeLocalCatalog if scriptingVariableManager.isEmpty =>

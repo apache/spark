@@ -708,7 +708,7 @@ class QueryExecutionErrorsSuite
       ),
       condition = "ARITHMETIC_OVERFLOW",
       parameters = Map(
-        "message" -> "integer overflow",
+        "message" -> "overflow",
         "alternative" -> "",
         "config" -> s""""${SQLConf.ANSI_ENABLED.key}""""))
   }

@@ -17,6 +17,7 @@
 
 import unittest
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql.types import (
     StructType,
     StructField,
@@ -113,7 +114,10 @@ class SparkConnectDataFramePropertyTests(ReusedMixedTestCase, PandasOnSparkTestU
         def func(iterator):
             for pdf in iterator:
                 assert isinstance(pdf, pd.DataFrame)
-                assert [d.name for d in list(pdf.dtypes)] == ["int32", "object"]
+                if LooseVersion(pd.__version__) < "3.0.0":
+                    assert [d.name for d in list(pdf.dtypes)] == ["int32", "object"]
+                else:
+                    assert [d.name for d in list(pdf.dtypes)] == ["int32", "str"]
                 yield pdf
 
         schema = StructType(

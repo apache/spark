@@ -67,6 +67,18 @@ private[ui] class ExecutorsPage(
     val content =
       {
         <div id="active-executors"></div> ++
+        <div class="offcanvas offcanvas-end" tabindex="-1" id="executor-detail-offcanvas"
+             aria-labelledby="executor-detail-offcanvas-label"
+             style="width: 60vw; max-width: 900px;">
+          <div class="offcanvas-resize-handle" id="offcanvas-resize-handle"></div>
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="executor-detail-offcanvas-label"></h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas"
+                    aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body" id="executor-detail-offcanvas-body">
+          </div>
+        </div> ++
         <script type="module" src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
         <script type="module"
                 src={UIUtils.prependBaseUri(request, "/static/executorspage.js")}></script> ++

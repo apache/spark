@@ -71,6 +71,7 @@ class SorterSuite extends SparkFunSuite {
   }
 
   test("java.lang.ArrayIndexOutOfBoundsException in TimSort") {
+    System.gc()
     // scalastyle:off
     val runLengths = Array(76405736, 74830360, 1181532, 787688, 1575376, 2363064, 3938440, 6301504,
       1181532, 393844, 15753760, 1575376, 787688, 393844, 1969220, 3150752, 1181532,787688, 5513816, 3938440,

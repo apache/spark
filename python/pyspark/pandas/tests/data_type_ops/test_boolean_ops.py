@@ -364,6 +364,9 @@ class BooleanOpsTestsMixin:
         psser, other_psser = psdf["this"], psdf["that"]
         self.assert_eq(pser == other_pser, psser == other_psser)
         self.assert_eq(pser == pser, psser == psser)
+        # SPARK-54665: boolean vs string comparison should match pandas behavior
+        self.assert_eq(pser == "True", psser == "True")
+        self.assert_eq(pser == "False", psser == "False")
 
     def test_ne(self):
         pdf, psdf = self.bool_pdf, self.bool_psdf
@@ -371,6 +374,9 @@ class BooleanOpsTestsMixin:
         psser, other_psser = psdf["this"], psdf["that"]
         self.assert_eq(pser != other_pser, psser != other_psser)
         self.assert_eq(pser != pser, psser != psser)
+        # SPARK-54665: boolean vs string comparison should match pandas behavior
+        self.assert_eq(pser != "True", psser != "True")
+        self.assert_eq(pser != "False", psser != "False")
 
     def test_lt(self):
         pdf, psdf = self.bool_pdf, self.bool_psdf

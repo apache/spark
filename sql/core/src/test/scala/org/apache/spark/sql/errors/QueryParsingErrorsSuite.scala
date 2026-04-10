@@ -230,28 +230,6 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
         stop = 57))
   }
 
-  test("INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME: Invalid table value function name") {
-    checkError(
-      exception = parseException("SELECT * FROM db.func()"),
-      condition = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-      sqlState = "42000",
-      parameters = Map("funcName" -> "`db`.`func`"),
-      context = ExpectedContext(
-        fragment = "db.func()",
-        start = 14,
-        stop = 22))
-
-    checkError(
-      exception = parseException("SELECT * FROM ns.db.func()"),
-      condition = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-      sqlState = "42000",
-      parameters = Map("funcName" -> "`ns`.`db`.`func`"),
-      context = ExpectedContext(
-        fragment = "ns.db.func()",
-        start = 14,
-        stop = 25))
-  }
-
   test("INVALID_SQL_SYNTAX.SHOW_FUNCTIONS_INVALID_SCOPE: Invalid scope in show functions") {
     val sqlText = "SHOW sys FUNCTIONS"
     checkError(
@@ -322,7 +300,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
         stop = 141))
   }
 
-  test("INVALID_SQL_SYNTAX.MULTI_PART_NAME: Create temporary function with multi-part name") {
+  test("INVALID_TEMP_OBJ_QUALIFIER: Create temporary function with invalid multi-part name") {
     val sqlText =
       """CREATE TEMPORARY FUNCTION ns.db.func as
         |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
@@ -330,19 +308,20 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
 
     checkError(
       exception = parseException(sqlText),
-      condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      sqlState = "42000",
+      condition = "INVALID_TEMP_OBJ_QUALIFIER",
+      sqlState = "42602",
       parameters = Map(
-        "statement" -> "CREATE TEMPORARY FUNCTION",
-        "name" -> "`ns`.`db`.`func`"),
+        "objectType" -> "FUNCTION",
+        "objectName" -> "`func`",
+        "qualifier" -> "`ns`.`db`"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
-        stop = 132))
+        stop = sqlText.length - 1))
   }
 
-  test("INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_DATABASE: " +
-    "Specifying database while creating temporary function") {
+  test("INVALID_TEMP_OBJ_QUALIFIER: " +
+    "Specifying invalid database while creating temporary function") {
     val sqlText =
       """CREATE TEMPORARY FUNCTION db.func as
         |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
@@ -350,28 +329,32 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
 
     checkError(
       exception = parseException(sqlText),
-      condition = "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_DATABASE",
-      sqlState = "42000",
-      parameters = Map("database" -> "`db`"),
+      condition = "INVALID_TEMP_OBJ_QUALIFIER",
+      sqlState = "42602",
+      parameters = Map(
+        "objectType" -> "FUNCTION",
+        "objectName" -> "`func`",
+        "qualifier" -> "`db`"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
-        stop = 129))
+        stop = sqlText.length - 1))
   }
 
-  test("INVALID_SQL_SYNTAX.MULTI_PART_NAME: Drop temporary function requires a single part name") {
+  test("INVALID_TEMP_OBJ_QUALIFIER: Drop temporary function with invalid qualification") {
     val sqlText = "DROP TEMPORARY FUNCTION db.func"
     checkError(
       exception = parseException(sqlText),
-      condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      sqlState = "42000",
+      condition = "INVALID_TEMP_OBJ_QUALIFIER",
+      sqlState = "42602",
       parameters = Map(
-        "statement" -> "DROP TEMPORARY FUNCTION",
-        "name" -> "`db`.`func`"),
+        "objectType" -> "FUNCTION",
+        "objectName" -> "`func`",
+        "qualifier" -> "`db`"),
       context = ExpectedContext(
         fragment = sqlText,
         start = 0,
-        stop = 30))
+        stop = sqlText.length - 1))
   }
 
   test("DUPLICATE_KEY: Found duplicate partition keys") {
@@ -687,6 +670,48 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       condition = "INCOMPLETE_TYPE_DEFINITION.STRUCT",
       sqlState = "42K01",
       context = ExpectedContext(fragment = "struct", start = 30, stop = 35))
+  }
+
+  test("INCOMPLETE_TYPE_DEFINITION: error position for multi-line CREATE FUNCTION parameter") {
+    // The incomplete STRUCT is on line 3. The error should reference its position, not line 2.
+    val sqlText =
+      """CREATE OR REPLACE FUNCTION error_log_udf_v2(
+        |        log_struct STRUCT<level STRING, message STRING>,
+        |    request_vars_struct STRUCT
+        |)
+        |RETURNS STRING
+        |  RETURN CONCAT(
+        |       'Error: ', log_struct.level, ' ', log_struct.message, ' ', request_vars_struct
+        |   )""".stripMargin
+    checkError(
+      exception = parseException(sqlText),
+      condition = "INCOMPLETE_TYPE_DEFINITION.STRUCT",
+      sqlState = "42K01",
+      context = ExpectedContext(fragment = "STRUCT", start = 126, stop = 131))
+  }
+
+  test("INCOMPLETE_TYPE_DEFINITION: error position for multi-line CREATE FUNCTION return type") {
+    val sqlText =
+      """CREATE OR REPLACE FUNCTION my_func(x INT)
+        |RETURNS STRUCT
+        |  RETURN x""".stripMargin
+    checkError(
+      exception = parseException(sqlText),
+      condition = "INCOMPLETE_TYPE_DEFINITION.STRUCT",
+      sqlState = "42K01",
+      context = ExpectedContext(fragment = "STRUCT", start = 50, stop = 55))
+  }
+
+  test("INCOMPLETE_TYPE_DEFINITION: error position for multi-line CREATE FUNCTION return params") {
+    val sqlText =
+      """CREATE OR REPLACE FUNCTION my_func(x INT)
+        |RETURNS TABLE(result STRUCT)
+        |  RETURN SELECT x""".stripMargin
+    checkError(
+      exception = parseException(sqlText),
+      condition = "INCOMPLETE_TYPE_DEFINITION.STRUCT",
+      sqlState = "42K01",
+      context = ExpectedContext(fragment = "STRUCT", start = 63, stop = 68))
   }
 
   test("INCOMPLETE_TYPE_DEFINITION: map type definition is incomplete") {

@@ -182,7 +182,7 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
   }
 
   private def checkExecutorId(execId: String): Unit = {
-    if (execId != SparkContext.DRIVER_IDENTIFIER && !execId.forall(Character.isDigit)) {
+    if (!SparkContext.isDriver(execId) && !execId.forall(Character.isDigit)) {
       throw new BadParameterException(
         s"Invalid executorId: neither '${SparkContext.DRIVER_IDENTIFIER}' nor number.")
     }

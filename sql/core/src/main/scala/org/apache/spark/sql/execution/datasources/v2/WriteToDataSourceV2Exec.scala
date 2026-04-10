@@ -180,7 +180,9 @@ case class ReplaceTableAsSelectExec(
       invalidateCache(catalog, ident)
       catalog.dropTable(ident)
     } else if (!orCreate) {
-      throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
+      throw QueryCompilationErrors.cannotReplaceMissingTableError(
+        ident,
+        CatalogV2Util.searchPathForTableIdentifier(catalog, ident))
     }
     val tableInfo = new TableInfo.Builder()
       .withColumns(getV2Columns(refreshedQuery.schema, catalog.useNullableQuerySchema))
@@ -245,10 +247,15 @@ case class AtomicReplaceTableAsSelectExec(
         catalog.stageReplace(ident, tableInfo)
       } catch {
         case e: NoSuchTableException =>
-          throw QueryCompilationErrors.cannotReplaceMissingTableError(ident, Some(e))
+          throw QueryCompilationErrors.cannotReplaceMissingTableError(
+            ident,
+            CatalogV2Util.searchPathForTableIdentifier(catalog, ident),
+            Some(e))
       }
     } else {
-      throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
+      throw QueryCompilationErrors.cannotReplaceMissingTableError(
+        ident,
+        CatalogV2Util.searchPathForTableIdentifier(catalog, ident))
     }
     val table = Option(staged).getOrElse(
       catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))

@@ -103,7 +103,7 @@ private[ui] class SparkConnectServerSessionPage(parent: SparkConnectServerTab)
             showSessionLink = false).table(sqlTablePage))
       } catch {
         case e @ (_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
-          Some(<div class="alert alert-error">
+          Some(<div class="alert alert-danger">
             <p>Error while rendering job table:</p>
             <pre>
               {Utils.exceptionString(e)}
@@ -114,15 +114,16 @@ private[ui] class SparkConnectServerSessionPage(parent: SparkConnectServerTab)
       None
     }
     val content =
-      <span id="sqlsessionstat" class="collapse-aggregated-sqlsessionstat collapse-table"
-            data-collapse-name="collapse-aggregated-sqlsessionstat"
-            data-collapse-table="aggregated-sqlsessionstat">
+      <span id="sqlsessionstat" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-sqlsessionstat"
+            aria-expanded="true" aria-controls="aggregated-sqlsessionstat"
+            data-collapse-name="collapse-aggregated-sqlsessionstat">
         <h4>
           <span class="collapse-table-arrow arrow-open"></span>
           <a>Request Statistics</a>
         </h4>
       </span> ++
-        <div class="aggregated-sqlsessionstat collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-sqlsessionstat">
           {table.getOrElse("No statistics have been generated yet.")}
         </div>
 

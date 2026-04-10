@@ -2695,6 +2695,80 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  testWithStateStoreCheckpointIds(
+    "RocksDBFileManager: loading zip without checksum file succeeds when checksum enabled") { _ =>
+    withTempDir { dir =>
+      val dfsRootDir = dir.getAbsolutePath
+      val cpFiles = Seq("sst-file1.sst" -> 10, "other-file1" -> 100)
+
+      // Save checkpoint with checksum disabled (simulates a checkpoint written before
+      // checksums were enabled, i.e. an older version)
+      val fileMapping = new RocksDBFileMapping
+      val writerFileManager = new RocksDBFileManager(
+        dfsRootDir, Utils.createTempDir(), hadoopConf,
+        fileChecksumEnabled = false)
+      saveCheckpointFiles(writerFileManager, cpFiles, version = 1, numKeys = 3, fileMapping)
+      assert(!new File(dfsRootDir, "1.zip.crc").exists())
+
+      // Load with checksum enabled - should succeed without verification since no .crc exists
+      val readerFileManager = new RocksDBFileManager(
+        dfsRootDir, Utils.createTempDir(), hadoopConf,
+        fileChecksumEnabled = true,
+        fileChecksumThreadPoolSize = Some(2))
+      val verificationDir = Utils.createTempDir().getAbsolutePath
+      loadAndVerifyCheckpointFiles(
+        readerFileManager, verificationDir, version = 1, cpFiles, 3, new RocksDBFileMapping())
+    }
+  }
+
+  testWithStateStoreCheckpointIds("RocksDBFileManager: corrupted zip checksum fails on load") {
+    enableStateStoreCheckpointIds =>
+    withTempDir { dir =>
+      val dfsRootDir = dir.getAbsolutePath
+      val fileMapping = new RocksDBFileMapping
+      val fileManager = new RocksDBFileManager(
+        dfsRootDir, Utils.createTempDir(), hadoopConf,
+        fileChecksumEnabled = true,
+        fileChecksumThreadPoolSize = Some(2))
+      val cpFiles = Seq("sst-file1.sst" -> 10, "other-file1" -> 100)
+      val checkpointUniqueId =
+        if (enableStateStoreCheckpointIds) Some(java.util.UUID.randomUUID.toString) else None
+
+      saveCheckpointFiles(fileManager, cpFiles, version = 1, numKeys = 3, fileMapping,
+        checkpointUniqueId = checkpointUniqueId)
+
+      // Overwrite the checksum sidecar with a wrong value/size to simulate corruption
+      val wrongChecksumJson =
+        """{"algorithm":"CRC32C","value":0,"mainFileSize":0,""" +
+        """"timestampMs":0,"creator":{"executorId":"","taskInfo":""}}"""
+      val crcFileName = checkpointUniqueId.map(id => s"1_$id.zip.crc").getOrElse("1.zip.crc")
+      Files.writeString(new File(dfsRootDir, crcFileName).toPath, wrongChecksumJson)
+
+      if (enableStateStoreCheckpointIds) {
+        val zipName = s"1_${checkpointUniqueId.get}\\.zip"
+        val ex = intercept[SparkException] {
+          fileManager.loadCheckpointFromDfs(
+            1, Utils.createTempDir(), new RocksDBFileMapping(), checkpointUniqueId)
+        }
+        checkError(
+          exception = ex,
+          condition = "CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED",
+          parameters = Map(
+            "fileName" -> s"$dfsRootDir/$zipName",
+            "expectedSize" -> "0",
+            "expectedChecksum" -> "0",
+            "computedSize" -> "^\\d+$",
+            "computedChecksum" -> "^-?\\d+$"),
+          matchPVals = true)
+      } else {
+        // Checkpoint verification is skipped for checkpoint v1 zip
+        loadAndVerifyCheckpointFiles(
+          fileManager, Utils.createTempDir().getAbsolutePath,
+          version = 1, cpFiles, 3, new RocksDBFileMapping())
+      }
+    }
+  }
+
   testWithColumnFamilies("ensure concurrent access lock is released after Spark task completes",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     RocksDBSuite.withSingletonDB {
@@ -2923,6 +2997,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         // since we called load, loadFromSnapshot should not be populated
         assert(!m1.loadMetrics.contains("loadFromSnapshot"))
 
+        assert(m1.loadedFromDfs === 1)
         if (conf.enableChangelogCheckpointing) {
           assert(m1.loadMetrics("replayChangelog") > 0)
           assert(m1.loadMetrics("numReplayChangeLogFiles") == 1)
@@ -2930,6 +3005,12 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           assert(!m1.loadMetrics.contains("replayChangelog"))
           assert(!m1.loadMetrics.contains("numReplayChangeLogFiles"))
         }
+
+        // A reload of the same version is served from local cache - no DFS fetch
+        db.load(2)
+        db.put("c", "1")
+        db.commit()
+        assert(db.metricsOpt.get.loadedFromDfs === 0)
       }
     }
   }
@@ -2956,6 +3037,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.refreshRecordedMetricsForTest()
         val m1 = db.metricsOpt.get
         assert(m1.loadMetrics("loadFromSnapshot") > 0)
+        assert(m1.loadedFromDfs === 1)
         // since we called loadFromSnapshot, load should not be populated
         assert(!m1.loadMetrics.contains("load"))
         assert(m1.loadMetrics("replayChangelog") > 0)
@@ -3982,6 +4064,70 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  testWithChangelogCheckpointingEnabled(
+    "SPARK-55892: Stale reused files in snapshot are replaced during maintenance upload") {
+    // This test verifies that when a snapshot is uploaded after a delay, files that were
+    // reused from old versions (which are now eligible for deletion by another executor's
+    // maintenance) are replaced with new files to be uploaded.
+    //
+    // Scenario:
+    // db1 loads v0 and commits v1. Generates 1.changelog and 1.zip (but not uploaded to DFS)
+    // db2 loads v1 but since no snapshot, it uses 1.changelog and generates snapshot 2.zip
+    // db 1 maintenance uploads snapshot 1.zip to DFS
+    // db 3 loads v2 using 1.zip + 2.changelog and generates 3.zip but not uploaded to DFS
+    // db2 maintenance uploads 2.zip, and deletes files < 2.zip, because minVersionsToRetain = 1
+    // db 3 uploads 3.zip to DFS <-- (with new fix, shouldn't include reused files from 1.zip)
+    // db 4 loads v3 using 3.zip, should be successful (previously cause FileNotFoundException)
+
+    val conf = dbConf.copy(
+      minVersionsToRetain = 1,
+      minDeltasForSnapshot = 0, // Force snapshot on every commit
+      minVersionsToDelete = 0, // Allow immediate deletion of old versions
+      compactOnCommit = false
+    )
+
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir = remoteDir, conf = conf) { db1 =>
+        db1.load(0)
+        db1.put("key1", "value1")
+        db1.commit() // produce 1.changelog and 1.zip but not uploaded to DFS
+
+        withDB(remoteDir = remoteDir, conf = conf) { db2 =>
+          db2.load(1)
+          db2.put("key2", "value2")
+          db2.commit() // produce 2.changelog and 2.zip but not uploaded to DFS
+
+          db1.doMaintenance() // db1 now uploads 1.zip to DFS
+
+          withDB(remoteDir = remoteDir, conf = conf) { db3 =>
+            db3.load(2) // load using 1.zip from db1
+            db3.put("key3", "value3")
+            db3.commit() // produce 3.changelog and 3.zip but not uploaded to DFS
+
+            // db2 maintenance uploads 2.zip, and deletes files < 2.zip,
+            // so 1.zip and its associated SSTs are deleted
+            db2.doMaintenance()
+
+            // db3 now uploads 3.zip to DFS. Before the fix, it will reuse the SST files
+            // from 1.zip, since 3.zip was created using 1.zip, leading to FileNotFoundException.
+            // With the fix, during this maintenance, we check the reused files and
+            // avoid reusing files that are eligible for deletion.
+            db3.doMaintenance()
+          }
+        }
+      }
+
+      // db4 load(3) should be successful, and no FileNotFoundException
+      withDB(remoteDir = remoteDir, conf = conf) { db4 =>
+        db4.load(3) // load using 3.zip from db3
+        assert(toStr(db4.get("key1")) == "value1") // record created in 1.zip
+        db4.put("key4", "value4")
+        db4.commit()
+      }
+    }
+  }
+
   test("RocksDB task completion listener correctly releases for failed task") {
     // This test verifies that a thread that locks the DB and then fails
     // can rely on the completion listener to release the lock.
@@ -4045,10 +4191,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           db.doMaintenance() // upload snapshot 4.zip
         }
 
-        def corruptFile(file: File): Unit =
-          // overwrite the file content to become empty
-          new PrintWriter(file) { close() }
-
         // corrupt snapshot 4.zip
         corruptFile(new File(remoteDir, "4.zip"))
 
@@ -4073,6 +4215,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
             db.put("e", "4")
             db.commit() // a new snapshot (5.zip) will be created since previous one is corrupt
             assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 1)
+            assert(db.metricsOpt.get.loadedFromDfs === 1)
             db.doMaintenance() // upload snapshot 5.zip
           }
 
@@ -4085,6 +4228,341 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
             assert(toStr(db.get("b")) == "1")
             db.commit()
             assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 1)
+            // All snapshots were corrupt; fallback to version 0 base and replay changelogs from DFS
+            assert(db.metricsOpt.get.loadedFromDfs === 1)
+          }
+        }
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled(
+      "Auto snapshot repair with checkpoint format V2") {
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> false.toString,
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "2"
+    ) {
+      withTempDir { dir =>
+        val remoteDir = dir.getCanonicalPath
+        val versionToUniqueId = mutable.Map[Long, String]()
+
+        // Build up state: 4 versions with snapshots at versions 2 and 4
+        withDB(remoteDir, enableStateStoreCheckpointIds = true,
+            versionToUniqueId = versionToUniqueId) { db =>
+          db.load(0)
+          db.put("a", "0")
+          db.commit()
+          assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 0)
+
+          db.load(1)
+          db.put("b", "1")
+          db.commit() // snapshot is created
+          assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 0)
+          db.doMaintenance() // upload snapshot 2_{uuid}.zip
+
+          db.load(2)
+          db.put("c", "2")
+          db.commit()
+          assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 0)
+
+          db.load(3)
+          db.put("d", "3")
+          db.commit() // snapshot is created
+          assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 0)
+          db.doMaintenance() // upload snapshot 4_{uuid}.zip
+        }
+
+        // Corrupt the latest V2 snapshot (version 4)
+        val uuid4 = versionToUniqueId(4)
+        corruptFile(new File(remoteDir, s"4_${uuid4}.zip"))
+
+        // Without auto-repair, this should fail
+        withDB(remoteDir, enableStateStoreCheckpointIds = true,
+            versionToUniqueId = versionToUniqueId) { db =>
+          val ex = intercept[java.nio.file.NoSuchFileException] {
+            db.load(4)
+          }
+          assert(ex.getMessage.contains("/metadata"))
+        }
+
+        // With auto-repair enabled, should succeed by falling back to snapshot at version 2
+        withSQLConf(SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_ENABLED.key -> true.toString,
+          SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_NUM_FAILURES_BEFORE_ACTIVATING.key -> "1",
+          SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_MAX_CHANGE_FILE_REPLAY.key -> "5") {
+          withDB(remoteDir, enableStateStoreCheckpointIds = true,
+              versionToUniqueId = versionToUniqueId) { db =>
+            db.load(4)
+            assert(toStr(db.get("a")) == "0")
+            assert(toStr(db.get("b")) == "1")
+            assert(toStr(db.get("c")) == "2")
+            assert(toStr(db.get("d")) == "3")
+            db.put("e", "4")
+            db.commit()
+            assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 1)
+            assert(db.metricsOpt.get.loadedFromDfs === 1)
+            db.doMaintenance() // upload new snapshot
+          }
+
+          // Corrupt all V2 snapshot files - should fall back to version 0 + replay
+          val uuid2 = versionToUniqueId(2)
+          val uuid5 = versionToUniqueId(5)
+          corruptFile(new File(remoteDir, s"2_${uuid2}.zip"))
+          corruptFile(new File(remoteDir, s"5_${uuid5}.zip"))
+
+          withDB(remoteDir, enableStateStoreCheckpointIds = true,
+              versionToUniqueId = versionToUniqueId) { db =>
+            db.load(5)
+            assert(toStr(db.get("b")) == "1")
+            db.commit()
+            assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 1)
+            assert(db.metricsOpt.get.loadedFromDfs === 1)
+          }
+        }
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled(
+      "V2 auto-repair respects maxChangeFileReplay limit") {
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> false.toString,
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "2",
+      SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_ENABLED.key -> true.toString,
+      SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_NUM_FAILURES_BEFORE_ACTIVATING.key -> "1") {
+      withTempDir { dir =>
+        val remoteDir = dir.getCanonicalPath
+        val versionToUniqueId = mutable.Map[Long, String]()
+
+        // Build 6 versions with snapshots at 2, 4, and 6
+        withDB(remoteDir, enableStateStoreCheckpointIds = true,
+            versionToUniqueId = versionToUniqueId) { db =>
+          for (i <- 0 until 6) {
+            db.load(i)
+            db.put(s"k$i", s"v$i")
+            db.commit()
+            if (i > 0 && i % 2 == 1) db.doMaintenance() // snapshots at 2, 4, 6
+          }
+        }
+
+        // Corrupt snapshots at version 6 and 4
+        val uuid6 = versionToUniqueId(6)
+        val uuid4 = versionToUniqueId(4)
+        corruptFile(new File(remoteDir, s"6_${uuid6}.zip"))
+        corruptFile(new File(remoteDir, s"4_${uuid4}.zip"))
+
+        // With maxChangeFileReplay=2, snapshot 2 (4 changelogs away) should be
+        // skipped, and version 0 (6 changelogs away) should also be skipped.
+        // Auto-repair should fail since no eligible snapshot is within range.
+        withSQLConf(
+          SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_MAX_CHANGE_FILE_REPLAY.key -> "2"
+        ) {
+          withDB(remoteDir, enableStateStoreCheckpointIds = true,
+              versionToUniqueId = versionToUniqueId) { db =>
+            intercept[StateStoreAutoSnapshotRepairFailed] {
+              db.load(6)
+            }
+          }
+        }
+
+        // With maxChangeFileReplay=5, snapshot 2 (4 changelogs away) should be
+        // eligible and auto-repair should succeed.
+        withSQLConf(
+          SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_MAX_CHANGE_FILE_REPLAY.key -> "5"
+        ) {
+          withDB(remoteDir, enableStateStoreCheckpointIds = true,
+              versionToUniqueId = versionToUniqueId) { db =>
+            db.load(6)
+            for (i <- 0 until 6) {
+              assert(toStr(db.get(s"k$i")) == s"v$i")
+            }
+            db.commit()
+            assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 1)
+          }
+        }
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled(
+      "V2 auto-repair followed by commit produces valid state for subsequent loads") {
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> false.toString,
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "2",
+      SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_ENABLED.key -> true.toString,
+      SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_NUM_FAILURES_BEFORE_ACTIVATING.key -> "1",
+      SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_MAX_CHANGE_FILE_REPLAY.key -> "5"
+    ) {
+      withTempDir { dir =>
+        val remoteDir = dir.getCanonicalPath
+        val versionToUniqueId = mutable.Map[Long, String]()
+
+        // Build 4 versions with snapshots at 2 and 4
+        withDB(remoteDir, enableStateStoreCheckpointIds = true,
+            versionToUniqueId = versionToUniqueId) { db =>
+          db.load(0)
+          db.put("a", "0")
+          db.commit()
+
+          db.load(1)
+          db.put("b", "1")
+          db.commit()
+          db.doMaintenance() // snapshot at 2
+
+          db.load(2)
+          db.put("c", "2")
+          db.commit()
+
+          db.load(3)
+          db.put("d", "3")
+          db.commit()
+          db.doMaintenance() // snapshot at 4
+        }
+
+        // Corrupt snapshot at version 4
+        val uuid4 = versionToUniqueId(4)
+        corruptFile(new File(remoteDir, s"4_${uuid4}.zip"))
+
+        // Auto-repair loads version 4 from snapshot 2 + replay, then commit version 5
+        withDB(remoteDir, enableStateStoreCheckpointIds = true,
+            versionToUniqueId = versionToUniqueId) { db =>
+          db.load(4)
+          assert(toStr(db.get("d")) == "3")
+          db.put("e", "4")
+          db.commit()
+          assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 1)
+          db.doMaintenance() // upload snapshot at version 5
+        }
+
+        // Reload version 5 in a fresh DB instance - verifies the lineage chain is intact
+        withDB(remoteDir, enableStateStoreCheckpointIds = true,
+            versionToUniqueId = versionToUniqueId) { db =>
+          db.load(5)
+          assert(toStr(db.get("a")) == "0")
+          assert(toStr(db.get("b")) == "1")
+          assert(toStr(db.get("c")) == "2")
+          assert(toStr(db.get("d")) == "3")
+          assert(toStr(db.get("e")) == "4")
+
+          // Commit another version to verify the chain continues
+          db.put("f", "5")
+          db.commit()
+          assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 0)
+        }
+
+        // Reload version 6 to verify continued integrity
+        withDB(remoteDir, enableStateStoreCheckpointIds = true,
+            versionToUniqueId = versionToUniqueId) { db =>
+          db.load(6)
+          assert(toStr(db.get("f")) == "5")
+          db.commit()
+          assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 0)
+        }
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled(
+      "V2 auto-repair with no snapshots falls back to version 0 + full replay") {
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> false.toString,
+      // Set very high so no snapshots are ever created
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "100",
+      SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_ENABLED.key -> true.toString,
+      SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_NUM_FAILURES_BEFORE_ACTIVATING.key -> "1",
+      SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_MAX_CHANGE_FILE_REPLAY.key -> "10"
+    ) {
+      withTempDir { dir =>
+        val remoteDir = dir.getCanonicalPath
+        val versionToUniqueId = mutable.Map[Long, String]()
+
+        // Build 4 versions with only changelogs (no snapshots due to high minDeltas)
+        withDB(remoteDir, enableStateStoreCheckpointIds = true,
+            versionToUniqueId = versionToUniqueId) { db =>
+          for (i <- 0 until 4) {
+            db.load(i)
+            db.put(s"k$i", s"v$i")
+            db.commit()
+            db.doMaintenance() // no snapshot will be uploaded
+          }
+        }
+
+        // Verify no snapshot files exist
+        val snapshotFiles = dir.listFiles().filter(_.getName.endsWith(".zip"))
+        assert(snapshotFiles.isEmpty, "Expected no snapshot files")
+
+        // Loading should succeed via version 0 + full changelog replay.
+        // getEligibleSnapshots returns empty (no snapshots in lineage),
+        // AutoSnapshotLoader appends 0L, so we load version 0 and replay all changelogs.
+        withDB(remoteDir, enableStateStoreCheckpointIds = true,
+            versionToUniqueId = versionToUniqueId) { db =>
+          db.load(4)
+          for (i <- 0 until 4) {
+            assert(toStr(db.get(s"k$i")) == s"v$i")
+          }
+          db.commit()
+          // No auto-repair since version 0 is the first eligible and succeeds
+          assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 0)
+        }
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled(
+      "V2 auto-repair with getFullLineage failure falls back using sparse lineage") {
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> false.toString,
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "2",
+      SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_ENABLED.key -> true.toString,
+      SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_NUM_FAILURES_BEFORE_ACTIVATING.key -> "1",
+      SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_MAX_CHANGE_FILE_REPLAY.key -> "10"
+    ) {
+      withTempDir { dir =>
+        val remoteDir = dir.getCanonicalPath
+        val versionToUniqueId = mutable.Map[Long, String]()
+
+        // Build 4 versions with snapshots at 2 and 4
+        withDB(remoteDir, enableStateStoreCheckpointIds = true,
+            versionToUniqueId = versionToUniqueId) { db =>
+          db.load(0)
+          db.put("a", "0")
+          db.commit()
+
+          db.load(1)
+          db.put("b", "1")
+          db.commit()
+          db.doMaintenance() // snapshot at 2
+
+          db.load(2)
+          db.put("c", "2")
+          db.commit()
+
+          db.load(3)
+          db.put("d", "3")
+          db.commit()
+          db.doMaintenance() // snapshot at 4
+        }
+
+        // Corrupt snapshot at version 4 (to trigger auto-repair)
+        val uuid4 = versionToUniqueId(4)
+        corruptFile(new File(remoteDir, s"4_${uuid4}.zip"))
+
+        // Also corrupt changelog at version 2 to break getFullLineage's backward walk.
+        // getFullLineage reads changelogs from version 4 backward; corrupting version 2's
+        // changelog means the backward walk will fail. The NonFatal catch should handle
+        // this gracefully and repair using the sparse lineage (just version 4).
+        // With sparse lineage, the only fallback is version 0 + full replay.
+        val uuid2 = versionToUniqueId(2)
+        corruptFile(new File(remoteDir, s"2_${uuid2}.changelog"))
+
+        // When getFullLineage fails, we fall back to the sparse lineage which only
+        // contains the target version. The version 0 fallback is rejected by the
+        // lineage-completeness check inside loadSnapshotFromCheckpoint (sparse lineage
+        // doesn't cover versions 1..3), so auto-repair fails with
+        // StateStoreAutoSnapshotRepairFailed.
+        withDB(remoteDir, enableStateStoreCheckpointIds = true,
+            versionToUniqueId = versionToUniqueId) { db =>
+          intercept[StateStoreAutoSnapshotRepairFailed] {
+            db.load(4)
           }
         }
       }
@@ -4106,6 +4584,158 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       assert(changelogReader.version === 1)
       val entries = changelogReader.toSeq
       assert(entries.size == 1)
+    }
+  }
+
+  // Test ensuring a race condition on no-overwrite filesystems (e.g., ABFS)
+  // does not occur:
+  // 1. Query run 1 uploads snapshot X.zip pointing to SST file Y.SST
+  // 2. Query run 1 is cancelled before the commit log is written
+  // 3. Query run 2 retries the batch, uploads Z.SST, tries to re-upload X.zip
+  //    pointing to Z.SST. The zip overwrite silently fails on no-overwrite FS,
+  //    but versionToRocksDBFiles maps version X -> Z.SST (stale)
+  // 4. Maintenance/cleanup uses the stale in-memory mapping, sees Y.SST as
+  //    untracked, and deletes it
+  // 5. A subsequent query run tries to load X.zip from cloud, which still
+  //    references Y.SST -> FileNotFoundException
+  testWithChangelogCheckpointingEnabled("no-overwrite FS maintenance " +
+    "does not delete SST files still referenced by zip in DFS") {
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      val fmClass = "org.apache.spark.sql.execution.streaming.state." +
+        "NoOverwriteFileSystemBasedCheckpointFileManager"
+      val noOverwriteConf = new Configuration()
+      noOverwriteConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fmClass)
+      noOverwriteConf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
+
+      // Snapshots at versions 10, 20, 30. With minVersionsToRetain = 2,
+      // minVersionToRetain = 20, so version 10 is deleted and cleanup runs.
+      // The fix fetches cloud metadata for the min retained version (20),
+      // protecting run 1's SSTs referenced by the on-disk 20.zip.
+      val conf = dbConf.copy(
+        compactOnCommit = false,
+        minVersionsToRetain = 2,
+        minVersionsToDelete = 0,
+        minDeltasForSnapshot = 10)
+
+      // Phase 1: versions 1-19 (snapshot at 10, rest changelog-only).
+      val localDir0 = Utils.createTempDir()
+      val db0 = new RocksDB(
+        remoteDir, conf = conf, localRootDir = localDir0,
+        hadoopConf = noOverwriteConf,
+        loggingId = s"[Thread-${Thread.currentThread.getId}]")
+      try {
+        db0.load(0)
+        db0.put("setup_key", "setup_value")
+        db0.commit() // version 1
+        db0.doMaintenance()
+        for (v <- 2 to 19) {
+          db0.load(v - 1)
+          db0.put(s"setup_key_v$v", s"setup_value_v$v")
+          db0.commit() // snapshot at v=10, changelog-only otherwise
+          db0.doMaintenance()
+        }
+      } finally {
+        db0.close()
+      }
+
+      val sstDir = new File(remoteDir, "SSTs")
+      val setupSstFiles = if (sstDir.exists()) {
+        sstDir.listFiles().filter(_.getName.endsWith(".sst")).map(_.getName).toSet
+      } else {
+        Set.empty[String]
+      }
+
+      // Phase 2: Run 1 commits version 20, creating 20.zip with run 1's SSTs.
+      val localDir1 = Utils.createTempDir()
+      val db1 = new RocksDB(
+        remoteDir, conf = conf, localRootDir = localDir1,
+        hadoopConf = noOverwriteConf,
+        loggingId = s"[Thread-${Thread.currentThread.getId}]")
+      try {
+        db1.load(19)
+        db1.put("key", "value_from_run1")
+        db1.commit() // version 20 -- snapshot queued
+        db1.doMaintenance() // uploads 20.zip + run 1's SST files
+      } finally {
+        db1.close()
+      }
+
+      // Verify 20.zip was created
+      val zipFilesAfterRun1 = new File(remoteDir).listFiles()
+        .filter(_.getName.endsWith(".zip"))
+      assert(zipFilesAfterRun1.exists(_.getName.startsWith("20")),
+        s"Expected 20.zip after query run 1, found: " +
+          s"${zipFilesAfterRun1.map(_.getName).mkString(", ")}")
+
+      // Identify query run 1's SST files
+      val sstFilesAfterRun1 = sstDir.listFiles()
+        .filter(_.getName.endsWith(".sst")).map(_.getName).toSet
+      val run1SstFiles = sstFilesAfterRun1 -- setupSstFiles
+      assert(run1SstFiles.nonEmpty,
+        "Expected new SST files from query run 1")
+
+      // Phase 3: Run 2 (retry) commits version 20 again. 20.zip is not overwritten,
+      // but the in-memory cache now maps version 20 to run 2's SSTs.
+      val localDir2 = Utils.createTempDir()
+      val db2 = new RocksDB(
+        remoteDir,
+        conf = conf,
+        localRootDir = localDir2,
+        hadoopConf = noOverwriteConf,
+        loggingId = s"[Thread-${Thread.currentThread.getId}]")
+      try {
+        db2.load(19)
+        db2.put("key", "value_from_run2")
+        db2.commit() // version 20 -- run 2's SSTs created, snapshot queued
+        db2.doMaintenance() // run 2's SSTs uploaded, 20.zip silently not overwritten
+
+        val sstFilesAfterRun2 = sstDir.listFiles()
+          .filter(_.getName.endsWith(".sst")).map(_.getName).toSet
+        val run2SstFiles = sstFilesAfterRun2 -- sstFilesAfterRun1
+        assert(run2SstFiles.nonEmpty,
+          "Expected new SST files from query run 2")
+
+        // Phase 4: versions 21-30. Snapshot at 30 triggers cleanup
+        // (minVersionToRetain = 20, deletes 10.zip).
+        for (v <- 21 to 30) {
+          db2.load(v - 1)
+          db2.put(s"key_v$v", s"value_v$v")
+          db2.commit()
+          db2.doMaintenance()
+        }
+
+        // Run 1's SSTs survive cleanup: the fix fetches cloud metadata for
+        // version 20, protecting files referenced by the on-disk 20.zip.
+        val sstFilesAfterCleanup = sstDir.listFiles()
+          .filter(_.getName.endsWith(".sst")).map(_.getName).toSet
+        run1SstFiles.foreach { name =>
+          assert(sstFilesAfterCleanup.contains(name),
+            s"Expected run 1 SST file $name to still exist (protected by cloud " +
+              s"metadata fetch), but it was deleted.")
+        }
+
+        // Phase 5: Fresh instance loads version 29 from 20.zip + changelogs.
+        // Succeeds because run 1's SSTs (referenced by 20.zip) were preserved.
+        val localDir3 = Utils.createTempDir()
+        val db3 = new RocksDB(
+          remoteDir,
+          conf = conf,
+          localRootDir = localDir3,
+          hadoopConf = noOverwriteConf,
+          loggingId = s"[Thread-${Thread.currentThread.getId}]")
+        try {
+          db3.load(29)
+          val value = new String(db3.get("key"), "UTF-8")
+          assert(value == "value_from_run1",
+            s"Expected stale value 'value_from_run1' from 20.zip (run 1's SSTs), " +
+              s"but got '$value'")
+        } finally {
+          db3.close()
+        }
+      } finally {
+        db2.close()
+      }
     }
   }
 
@@ -4277,6 +4907,82 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     assert(provider.rocksDB.localRootDir.getParent() == System.getProperty("java.io.tmpdir"))
   }
 
+  test("prefixUpperBound computes correct exclusive upper bound") {
+    def assertBound(input: Array[Byte], expected: Option[Seq[Byte]]): Unit = {
+      assert(RocksDB.prefixUpperBound(input).map(_.toSeq) === expected)
+    }
+
+    // Normal increment
+    assertBound(Array(0x01, 0x02, 0x03), Some(Seq(0x01, 0x02, 0x04)))
+
+    // Single byte
+    assertBound(Array(0x05), Some(Seq(0x06)))
+
+    // Carry: last byte is 0xFF, so it's dropped and previous byte is incremented
+    assertBound(Array(0x01, 0xFF.toByte), Some(Seq(0x02)))
+
+    // Carry: trailing bytes after the incremented position are removed
+    assertBound(Array(0x01, 0x02, 0xFF.toByte), Some(Seq(0x01, 0x03)))
+
+    // Multiple carry
+    assertBound(Array(0x01, 0xFF.toByte, 0xFF.toByte), Some(Seq(0x02)))
+
+    // All 0xFF: no finite upper bound
+    assertBound(Array(0xFF.toByte, 0xFF.toByte), None)
+
+    // Single 0xFF
+    assertBound(Array(0xFF.toByte), None)
+
+    // Empty prefix
+    assertBound(Array.empty[Byte], None)
+
+    // Zero byte
+    assertBound(Array(0x00.toByte), Some(Seq(0x01)))
+  }
+
+  testWithColumnFamilies(
+    "prefixScan returns only keys matching the prefix",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    val remoteDir = Utils.createTempDir().getAbsolutePath
+
+    withDB(remoteDir, useColumnFamilies = colFamiliesEnabled) { db =>
+      val cfName = if (colFamiliesEnabled) {
+        val cf = "testCF"
+        db.createColFamilyIfAbsent(cf, isInternal = false)
+        cf
+      } else {
+        StateStore.DEFAULT_COL_FAMILY_NAME
+      }
+
+      db.put("aa1", "v1", cfName)
+      db.put("aa2", "v2", cfName)
+      db.put("ab1", "v3", cfName)
+      db.put("bb1", "v4", cfName)
+      db.commit()
+
+      db.load(1)
+
+      val resultAA = db.prefixScan("aa".getBytes, cfName).map(toStr).toSeq
+      assert(resultAA.map(_._1).toSet === Set("aa1", "aa2"))
+      assert(resultAA.size === 2)
+
+      val resultAB = db.prefixScan("ab".getBytes, cfName).map(toStr).toSeq
+      assert(resultAB.map(_._1).toSet === Set("ab1"))
+      assert(resultAB.size === 1)
+
+      val resultBB = db.prefixScan("bb".getBytes, cfName).map(toStr).toSeq
+      assert(resultBB.map(_._1).toSet === Set("bb1"))
+      assert(resultBB.size === 1)
+
+      val resultCC = db.prefixScan("cc".getBytes, cfName).map(toStr).toSeq
+      assert(resultCC.isEmpty)
+
+      val resultA = db.prefixScan("a".getBytes, cfName).map(toStr).toSeq
+      assert(resultA.map(_._1).toSet === Set("aa1", "aa2", "ab1"))
+      assert(resultA.size === 3)
+    }
+  }
+
   private def dbConf = RocksDBConf(StateStoreConf(SQLConf.get.clone()))
 
   class RocksDBCheckpointFormatV2(
@@ -4431,6 +5137,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
   def toStr(kv: ByteArrayPair): (String, String) = (toStr(kv.key), toStr(kv.value))
 
   def iterator(db: RocksDB): Iterator[(String, String)] = db.iterator().map(toStr)
+
+  /** Overwrite a file with empty content to simulate corruption. */
+  def corruptFile(file: File): Unit =
+    new PrintWriter(file) { close() }
 
   def listFiles(file: File): Seq[File] = {
     if (!file.exists()) return Seq.empty

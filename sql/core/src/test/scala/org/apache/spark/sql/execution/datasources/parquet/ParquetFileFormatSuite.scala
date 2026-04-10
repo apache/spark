@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.io.FileNotFoundException
+import java.net.URI
 import java.time.{Duration, LocalTime, Period}
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{QueryTest, Row}
@@ -38,6 +41,34 @@ abstract class ParquetFileFormatSuite
   import testImplicits._
 
   override protected def dataSourceFormat = "parquet"
+
+  private def checkCannotReadFooterError(body: => Unit): Unit = {
+    checkErrorMatchPVals(
+      exception = intercept[SparkException] { body }.getCause.asInstanceOf[SparkException],
+      condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+      parameters = Map("path" -> "file:.*")
+    )
+  }
+
+  // Traverses the cause chain to find a SparkException with the given condition. Used when the
+  // error is thrown inside a Spark job and gets wrapped in a job-level SparkException.
+  private def findSparkExceptionWithCondition(
+      t: Throwable, condition: String): Option[SparkException] = {
+    if (t == null) None
+    else t match {
+      case se: SparkException if se.getCondition == condition => Some(se)
+      case _ => findSparkExceptionWithCondition(t.getCause, condition)
+    }
+  }
+
+  private def listFileStatuses(basePath: String, hadoopConf: Configuration): Seq[FileStatus] =
+    HadoopFSUtils.listFiles(
+      new Path(basePath),
+      hadoopConf,
+      (path: Path) => path.getName != "_SUCCESS").flatMap(_._2)
+
+  private def deleteFile(hadoopConf: Configuration, status: FileStatus): Unit =
+    status.getPath.getFileSystem(hadoopConf).delete(status.getPath, false)
 
   test("read parquet footers in parallel") {
     def testReadFooters(ignoreCorruptFiles: Boolean): Unit = {
@@ -73,6 +104,81 @@ abstract class ParquetFileFormatSuite
       condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
       parameters = Map("path" -> "file:.*")
     )
+  }
+
+  test("SPARK-55857: read parquet footers in parallel - ignoreMissingFiles") {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      val hadoopConf = spark.sessionState.newHadoopConf()
+      spark.range(0, 1).toDF("a").coalesce(1).write.parquet(new Path(basePath, "p1").toString)
+      spark.range(1, 2).toDF("a").coalesce(1).write.parquet(new Path(basePath, "p2").toString)
+      val fileStatuses = listFileStatuses(basePath, hadoopConf)
+      assert(fileStatuses.size == 2)
+      deleteFile(hadoopConf, fileStatuses.head)
+
+      assert(ParquetFileFormat.readParquetFootersInParallel(
+        hadoopConf, fileStatuses, ignoreCorruptFiles = false, ignoreMissingFiles = true).size == 1)
+
+      checkCannotReadFooterError {
+        ParquetFileFormat.readParquetFootersInParallel(
+          hadoopConf, fileStatuses, ignoreCorruptFiles = false, ignoreMissingFiles = false)
+      }
+    }
+  }
+
+  test("SPARK-55857: read parquet footers in parallel - ignoreMissingFiles via RuntimeException") {
+    // Simulates cloud storage (e.g., S3) where a missing-file error surfaces as a RuntimeException
+    // with FileNotFoundException in the cause chain rather than as a direct FileNotFoundException.
+    val conf = new Configuration()
+    conf.set(s"fs.${WrappingFNFLocalFileSystem.scheme}.impl",
+      classOf[WrappingFNFLocalFileSystem].getName)
+    conf.set(s"fs.${WrappingFNFLocalFileSystem.scheme}.impl.disable.cache", "true")
+    val fakeStatus = new FileStatus(0L, false, 0, 0L, 0L,
+      new Path(s"${WrappingFNFLocalFileSystem.scheme}://localhost/fake/file.parquet"))
+
+    assert(ParquetFileFormat.readParquetFootersInParallel(
+      conf, Seq(fakeStatus), ignoreCorruptFiles = false, ignoreMissingFiles = true).isEmpty)
+
+    checkErrorMatchPVals(
+      exception = intercept[SparkException] {
+        ParquetFileFormat.readParquetFootersInParallel(
+          conf, Seq(fakeStatus), ignoreCorruptFiles = false, ignoreMissingFiles = false)
+      }.getCause.asInstanceOf[SparkException],
+      condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+      parameters = Map("path" -> s"${WrappingFNFLocalFileSystem.scheme}:.*")
+    )
+  }
+
+  test("SPARK-55857: mergeSchemasInParallel ignoreMissingFiles") {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      val hadoopConf = spark.sessionState.newHadoopConf()
+      spark.range(0, 1).toDF("a").coalesce(1).write.parquet(new Path(basePath, "p1").toString)
+      spark.range(1, 2).toDF("a").coalesce(1).write.parquet(new Path(basePath, "p2").toString)
+      spark.range(2, 3).toDF("a").coalesce(1).write.parquet(new Path(basePath, "p3").toString)
+      val fileStatuses = listFileStatuses(basePath, hadoopConf)
+      assert(fileStatuses.size == 3)
+      deleteFile(hadoopConf, fileStatuses.head)
+
+      val schema = ParquetFileFormat.mergeSchemasInParallel(
+        Map("ignoreMissingFiles" -> "true"), fileStatuses, spark)
+      assert(schema.isDefined)
+      assert(schema.get.fieldNames.sameElements(Array("a")))
+
+      // mergeSchemasInParallel runs via a Spark job, so the error is wrapped in a job-level
+      // SparkException. Traverse the cause chain to find the specific footer error.
+      val ex = intercept[SparkException] {
+        ParquetFileFormat.mergeSchemasInParallel(
+          Map("ignoreMissingFiles" -> "false"), fileStatuses, spark)
+      }
+      checkErrorMatchPVals(
+        exception = findSparkExceptionWithCondition(
+          ex, "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER")
+          .getOrElse(fail(s"Expected FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER in: $ex")),
+        condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+        parameters = Map("path" -> "file:.*")
+      )
+    }
   }
 
   test("SPARK-36825, SPARK-36854: year-month/day-time intervals written and read as INT32/INT64") {
@@ -167,4 +273,19 @@ class ParquetFileFormatV2Suite extends ParquetFileFormatSuite {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
+}
+
+/**
+ * A local filesystem that wraps FileNotFoundException in RuntimeException, simulating cloud
+ * storage (e.g., S3) where missing-file errors surface through the cause chain rather than as
+ * direct FileNotFoundExceptions.
+ */
+class WrappingFNFLocalFileSystem extends RawLocalFileSystem {
+  override def getUri: URI = URI.create(s"${WrappingFNFLocalFileSystem.scheme}:///")
+  override def open(f: Path, bufferSize: Int): org.apache.hadoop.fs.FSDataInputStream =
+    throw new RuntimeException(new FileNotFoundException("Simulated missing file: " + f))
+}
+
+object WrappingFNFLocalFileSystem {
+  val scheme = "fnfwrap"
 }

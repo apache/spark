@@ -26,47 +26,41 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{
   ResolverGuard
 }
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, Project, Tail}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ResolverGuardSuite extends QueryTest with SharedSparkSession {
-
-  // Queries that should pass the OperatorResolverGuard
-
+class ResolverGuardSuite extends ResolverGuardSuiteBase {
   test("Select * from an inline table") {
-    checkResolverGuard("SELECT * FROM VALUES(1,2,3)", shouldPass = true)
+    checkResolverGuard("SELECT * FROM VALUES(1,2,3)")
   }
 
   test("Select the named parameters from an inline table") {
-    checkResolverGuard("SELECT col1,col2,col3 FROM VALUES(1,2,3)", shouldPass = true)
+    checkResolverGuard("SELECT col1,col2,col3 FROM VALUES(1,2,3)")
   }
 
   test("Inline table as a top level operator") {
-    checkResolverGuard("VALUES(1,2,3)", shouldPass = true)
+    checkResolverGuard("VALUES(1,2,3)")
   }
 
   test("Select one row") {
-    checkResolverGuard("SELECT 'Hello world!'", shouldPass = true)
+    checkResolverGuard("SELECT 'Hello world!'")
   }
 
   test("Where clause with a literal") {
     checkResolverGuard(
-      "SELECT * FROM VALUES(1, 2, false), (3, 4, true) WHERE true",
-      shouldPass = true
+      "SELECT * FROM VALUES(1, 2, false), (3, 4, true) WHERE true"
     )
   }
 
   test("Limit clause with a literal") {
     checkResolverGuard(
-      "SELECT * FROM VALUES(1, 2, false), (3, 4, true) LIMIT 1",
-      shouldPass = true
+      "SELECT * FROM VALUES(1, 2, false), (3, 4, true) LIMIT 1"
     )
   }
 
   test("Offset clause with a literal") {
     checkResolverGuard(
-      "SELECT * FROM VALUES(1, 2, false), (3, 4, true) OFFSET 1",
-      shouldPass = true
+      "SELECT * FROM VALUES(1, 2, false), (3, 4, true) OFFSET 1"
     )
   }
 
@@ -76,123 +70,113 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
         Literal(1),
         sql("SELECT * FROM VALUES(1, 2, false), (3, 4, true)").queryExecution.logical
       ),
-      shouldPass = true
+      None
     )
   }
 
   test("Where clause with an attribute") {
     checkResolverGuard(
-      "SELECT * FROM VALUES(1, 2, false), (3, 4, true) WHERE col3",
-      shouldPass = true
+      "SELECT * FROM VALUES(1, 2, false), (3, 4, true) WHERE col3"
     )
   }
 
   test("Explicit cast with auto-alias") {
     checkResolverGuard(
-      "SELECT CAST(1 AS DECIMAL(3,2))",
-      shouldPass = true
+      "SELECT CAST(1 AS DECIMAL(3,2))"
     )
   }
 
   test("Multipart attribute name") {
-    checkResolverGuard("SELECT table.col1 FROM VALUES(1) AS table", shouldPass = true)
+    checkResolverGuard("SELECT table.col1 FROM VALUES(1) AS table")
   }
 
   test("Predicates") {
-    checkResolverGuard("SELECT true and false", shouldPass = true)
-    checkResolverGuard("SELECT true or false", shouldPass = true)
+    checkResolverGuard("SELECT true and false")
+    checkResolverGuard("SELECT true or false")
     checkResolverGuard(
-      "SELECT col1 from VALUES(1,2) where true and false or true",
-      shouldPass = true
+      "SELECT col1 from VALUES(1,2) where true and false or true"
     )
-    checkResolverGuard("SELECT 1 = 2", shouldPass = true)
-    checkResolverGuard("SELECT 1 != 2", shouldPass = true)
-    checkResolverGuard("SELECT 1 IN (1,2,3)", shouldPass = true)
-    checkResolverGuard("SELECT 1 NOT IN (1,2,3)", shouldPass = true)
-    checkResolverGuard("SELECT 1 IS NULL", shouldPass = true)
-    checkResolverGuard("SELECT 1 IS NOT NULL", shouldPass = true)
-    checkResolverGuard("SELECT INTERVAL '1' DAY > INTERVAL '1' HOUR", shouldPass = true)
+    checkResolverGuard("SELECT 1 = 2")
+    checkResolverGuard("SELECT 1 != 2")
+    checkResolverGuard("SELECT 1 IN (1,2,3)")
+    checkResolverGuard("SELECT 1 NOT IN (1,2,3)")
+    checkResolverGuard("SELECT 1 IS NULL")
+    checkResolverGuard("SELECT 1 IS NOT NULL")
+    checkResolverGuard("SELECT INTERVAL '1' DAY > INTERVAL '1' HOUR")
   }
 
   test("Star target") {
-    checkResolverGuard("SELECT table.* FROM VALUES(1) as table", shouldPass = true)
+    checkResolverGuard("SELECT table.* FROM VALUES(1) as table")
   }
 
   test("Binary arithmetic") {
-    checkResolverGuard("SELECT col1+col2 FROM VALUES(1,2)", shouldPass = true)
-    checkResolverGuard("SELECT 1 + 2.3 / 2 - 3 DIV 2 + 3.0 * 10.0", shouldPass = true)
+    checkResolverGuard("SELECT col1+col2 FROM VALUES(1,2)")
+    checkResolverGuard("SELECT 1 + 2.3 / 2 - 3 DIV 2 + 3.0 * 10.0")
     checkResolverGuard(
-      "SELECT TIMESTAMP'2011-11-11 11:11:11' - TIMESTAMP'2011-11-11 11:11:10'",
-      shouldPass = true
+      "SELECT TIMESTAMP'2011-11-11 11:11:11' - TIMESTAMP'2011-11-11 11:11:10'"
     )
     checkResolverGuard(
-      "SELECT DATE'2020-01-01' - TIMESTAMP'2019-10-06 10:11:12.345678'",
-      shouldPass = true
+      "SELECT DATE'2020-01-01' - TIMESTAMP'2019-10-06 10:11:12.345678'"
     )
-    checkResolverGuard("SELECT DATE'2012-01-01' - INTERVAL 3 HOURS", shouldPass = true)
+    checkResolverGuard("SELECT DATE'2012-01-01' - INTERVAL 3 HOURS")
     checkResolverGuard(
-      "SELECT DATE'2012-01-01' + INTERVAL '12:12:12' HOUR TO SECOND",
-      shouldPass = true
+      "SELECT DATE'2012-01-01' + INTERVAL '12:12:12' HOUR TO SECOND"
     )
-    checkResolverGuard("SELECT DATE'2012-01-01' + 1", shouldPass = true)
-    checkResolverGuard("SELECT 2 * INTERVAL 2 YEAR", shouldPass = true)
+    checkResolverGuard("SELECT DATE'2012-01-01' + 1")
+    checkResolverGuard("SELECT 2 * INTERVAL 2 YEAR")
   }
 
   test("Supported recursive types") {
     Seq("ARRAY", "MAP", "STRUCT").foreach { typeName =>
       checkResolverGuard(
-        s"SELECT col1 FROM VALUES($typeName(1,2),3)",
-        shouldPass = true
+        s"SELECT col1 FROM VALUES($typeName(1,2),3)"
       )
     }
   }
 
   test("Recursive types related functions") {
-    checkResolverGuard("SELECT NAMED_STRUCT('a', 1)", shouldPass = true)
-    checkResolverGuard("SELECT MAP_CONTAINS_KEY(MAP(1, 'a', 2, 'b'), 2)", shouldPass = true)
-    checkResolverGuard("SELECT ARRAY_CONTAINS(ARRAY(1, 2, 3), 2);", shouldPass = true)
+    checkResolverGuard("SELECT NAMED_STRUCT('a', 1)")
+    checkResolverGuard("SELECT MAP_CONTAINS_KEY(MAP(1, 'a', 2, 'b'), 2)")
+    checkResolverGuard("SELECT ARRAY_CONTAINS(ARRAY(1, 2, 3), 2);")
   }
 
   test("Conditional expressions") {
-    checkResolverGuard("SELECT COALESCE(NULL, 1)", shouldPass = true)
-    checkResolverGuard("SELECT col1, IF(col1 > 1, 1, 0) FROM VALUES(1,2),(2,3)", shouldPass = true)
+    checkResolverGuard("SELECT COALESCE(NULL, 1)")
+    checkResolverGuard("SELECT col1, IF(col1 > 1, 1, 0) FROM VALUES(1,2),(2,3)")
     checkResolverGuard(
-      "SELECT col1, CASE WHEN col1 > 1 THEN 1 ELSE 0 END FROM VALUES(1,2),(2,3)",
-      shouldPass = true
+      "SELECT col1, CASE WHEN col1 > 1 THEN 1 ELSE 0 END FROM VALUES(1,2),(2,3)"
     )
   }
 
   test("User specified alias") {
-    checkResolverGuard("SELECT 1 AS alias", shouldPass = true)
+    checkResolverGuard("SELECT 1 AS alias")
   }
 
   test("Select from table") {
     withTable("test_table") {
       sql("CREATE TABLE test_table (col1 INT, col2 INT)")
-      checkResolverGuard("SELECT * FROM test_table", shouldPass = true)
+      checkResolverGuard("SELECT * FROM test_table")
     }
   }
 
   test("Single-layer subquery") {
-    checkResolverGuard("SELECT * FROM (SELECT * FROM VALUES(1))", shouldPass = true)
+    checkResolverGuard("SELECT * FROM (SELECT * FROM VALUES(1))")
   }
 
   test("Multi-layer subquery") {
-    checkResolverGuard("SELECT * FROM (SELECT * FROM (SELECT * FROM VALUES(1)))", shouldPass = true)
+    checkResolverGuard("SELECT * FROM (SELECT * FROM (SELECT * FROM VALUES(1)))")
   }
 
   for (setOperation <- Seq("UNION", "INTERSECT", "EXCEPT")) {
     test(s"$setOperation ALL") {
       checkResolverGuard(
-        s"SELECT * FROM VALUES(1) $setOperation ALL SELECT * FROM VALUES(2)",
-        shouldPass = true
+        s"SELECT * FROM VALUES(1) $setOperation ALL SELECT * FROM VALUES(2)"
       )
     }
 
     test(s"$setOperation DISTINCT") {
       checkResolverGuard(
-        s"SELECT * FROM VALUES (1) $setOperation DISTINCT SELECT * FROM VALUES (2)",
-        shouldPass = true
+        s"SELECT * FROM VALUES (1) $setOperation DISTINCT SELECT * FROM VALUES (2)"
       )
     }
 
@@ -208,52 +192,48 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
             SELECT * FROM cte1
             $setOperation ALL
             SELECT * FROM cte2
-      """,
-        shouldPass = true
+      """
       )
     }
   }
 
   test("Subquery column aliases") {
     checkResolverGuard(
-      "SELECT t.a, t.b FROM VALUES (1, 2) t (a, b)",
-      shouldPass = true
+      "SELECT t.a, t.b FROM VALUES (1, 2) t (a, b)"
     )
   }
 
   test("Function") {
-    checkResolverGuard("SELECT assert_true(true)", shouldPass = true)
+    checkResolverGuard("SELECT assert_true(true)")
   }
 
   test("Supported literal functions") {
-    checkResolverGuard("SELECT current_date", shouldPass = true)
-    checkResolverGuard("SELECT current_timestamp", shouldPass = true)
+    checkResolverGuard("SELECT current_date")
+    checkResolverGuard("SELECT current_timestamp")
   }
 
   test("Group by") {
-    checkResolverGuard("SELECT col1, count(col1) FROM VALUES(1) GROUP BY ALL", shouldPass = true)
-    checkResolverGuard("SELECT * FROM VALUES(1,2,3) GROUP BY ALL", shouldPass = true)
-    checkResolverGuard("SELECT col1 FROM VALUES(1) GROUP BY 1", shouldPass = true)
-    checkResolverGuard("SELECT col1, col1 + 1 FROM VALUES(1) GROUP BY 1, col1", shouldPass = true)
+    checkResolverGuard("SELECT col1, count(col1) FROM VALUES(1) GROUP BY ALL")
+    checkResolverGuard("SELECT * FROM VALUES(1,2,3) GROUP BY ALL")
+    checkResolverGuard("SELECT col1 FROM VALUES(1) GROUP BY 1")
+    checkResolverGuard("SELECT col1, col1 + 1 FROM VALUES(1) GROUP BY 1, col1")
   }
 
   test("Order by") {
-    checkResolverGuard("SELECT col1 FROM VALUES(1) ORDER BY ALL", shouldPass = true)
-    checkResolverGuard("SELECT col1 FROM VALUES(1) ORDER BY 1", shouldPass = true)
-    checkResolverGuard("SELECT col1, col1 + 1 FROM VALUES(1) ORDER BY 1, col1", shouldPass = true)
+    checkResolverGuard("SELECT col1 FROM VALUES(1) ORDER BY ALL")
+    checkResolverGuard("SELECT col1 FROM VALUES(1) ORDER BY 1")
+    checkResolverGuard("SELECT col1, col1 + 1 FROM VALUES(1) ORDER BY 1, col1")
   }
 
   test("Scalar subquery") {
     checkResolverGuard(
-      "SELECT (SELECT col1 FROM VALUES (1)) + (SELECT col1 FROM VALUES (2))",
-      shouldPass = true
+      "SELECT (SELECT col1 FROM VALUES (1)) + (SELECT col1 FROM VALUES (2))"
     )
   }
 
   test("IN subquery") {
     checkResolverGuard(
-      "SELECT * FROM VALUES (1, 2) WHERE col1 IN (SELECT col1 FROM VALUES (3))",
-      shouldPass = true
+      "SELECT * FROM VALUES (1, 2) WHERE col1 IN (SELECT col1 FROM VALUES (3))"
     )
   }
 
@@ -266,55 +246,65 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
         EXISTS (
           SELECT * FROM VALUES (1, 3) AS t2 WHERE t1.col1 = t2.col1
         )
-      """,
-      shouldPass = true
+      """
     )
   }
 
   test("EXPLAIN") {
-    checkResolverGuard("EXPLAIN EXTENDED SELECT * FROM VALUES (1)", shouldPass = true)
-    checkResolverGuard("EXPLAIN EXPLAIN SELECT * FROM VALUES (1)", shouldPass = true)
+    checkResolverGuard("EXPLAIN EXTENDED SELECT * FROM VALUES (1)")
+    checkResolverGuard("EXPLAIN EXPLAIN SELECT * FROM VALUES (1)")
   }
 
   test("DESCRIBE") {
-    checkResolverGuard("DESCRIBE QUERY SELECT * FROM VALUES (1)", shouldPass = true)
+    checkResolverGuard("DESCRIBE QUERY SELECT * FROM VALUES (1)")
   }
 
   test("HAVING") {
     checkResolverGuard(
-      "SELECT col1 FROM VALUES(1) GROUP BY col1 HAVING col1 > 1",
-      shouldPass = true
+      "SELECT col1 FROM VALUES(1) GROUP BY col1 HAVING col1 > 1"
     )
   }
 
+
   test("TABLESAMPLE") {
     checkResolverGuard(
-      "SELECT * FROM (VALUES (1), (2), (3)) TABLESAMPLE (40 PERCENT)",
-      shouldPass = true
+      "SELECT * FROM (VALUES (1), (2), (3)) TABLESAMPLE (40 PERCENT)"
     )
   }
 
   test("Semi-structured extract") {
-    checkResolverGuard("SELECT PARSE_JSON('{\"a\":1}'):a", shouldPass = true)
+    checkResolverGuard("SELECT PARSE_JSON('{\"a\":1}'):a")
   }
 
-  // Queries that shouldn't pass the OperatorResolverGuard
+  test("Named parameters") {
+    checkResolverGuard(
+      plan = spark.sql("SELECT :first", Map("first" -> 1)).queryExecution.logical,
+      unsupportedReason = None
+    )
+    checkResolverGuard(
+      plan = spark.sql("EXPLAIN SELECT :first", Map("first" -> 1)).queryExecution.logical,
+      unsupportedReason = None
+    )
+  }
 
   test("Unsupported literal functions") {
-    checkResolverGuard("SELECT current_user", shouldPass = false)
-    checkResolverGuard("SELECT session_user", shouldPass = false)
-    checkResolverGuard("SELECT user", shouldPass = false)
-  }
-
-  test("Session variables") {
-    withSessionVariable {
-      checkResolverGuard("SELECT session_variable", shouldPass = false)
-    }
+    checkResolverGuard(
+      "SELECT current_user",
+      unsupportedReason = Some("unsupported attribute name 'current_user'")
+    )
+    checkResolverGuard(
+      "SELECT session_user",
+      unsupportedReason = Some("unsupported attribute name 'session_user'")
+    )
+    checkResolverGuard("SELECT user", unsupportedReason = Some("unsupported attribute name 'user'"))
   }
 
   test("Case sensitive analysis") {
     withSQLConf("spark.sql.caseSensitive" -> "true") {
-      checkResolverGuard("SELECT 1", shouldPass = false)
+      checkResolverGuard(
+        "SELECT 1",
+        unsupportedReason = Some("configuration: caseSensitiveAnalysis")
+      )
     }
   }
 
@@ -322,7 +312,7 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
     withSqlFunction("supermario") {
       sql("CREATE FUNCTION supermario(x INT) RETURNS INT RETURN x + 3")
 
-      checkResolverGuard("SELECT supermario(2)", shouldPass = false)
+      checkResolverGuard("SELECT supermario(2)", unsupportedReason = Some("non-builtin function"))
     }
   }
 
@@ -335,9 +325,18 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
 
         sql("CREATE FUNCTION supermario(x INT) RETURNS INT RETURN x + 3")
 
-        checkResolverGuard("SELECT upper.supermario(2)", shouldPass = false)
+        checkResolverGuard(
+          "SELECT upper.supermario(2)",
+          unsupportedReason = Some("multi-part function name")
+        )
       }
     }
+  }
+
+  test("Multi-part persistent function name is still rejected") {
+    checkResolverGuard(
+      "SELECT spark_catalog.default.some_func(1)",
+      unsupportedReason = Some("multi-part function name"))
   }
 
   test("PLAN_ID_TAG") {
@@ -346,20 +345,11 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
     val planId: Long = 0
     plan.asInstanceOf[Project].projectList.head.setTagValue(LogicalPlan.PLAN_ID_TAG, planId)
 
-    checkResolverGuard(plan, shouldPass = false)
+    checkResolverGuard(plan, unsupportedReason = Some("PLAN_ID_TAG"))
   }
 
   test("Star outside of Project list") {
-    checkResolverGuard("SELECT * FROM VALUES (1, 2) WHERE 3 IN (*)", shouldPass = false)
-  }
-
-  test("Lambda variable") {
-    checkResolverGuard(
-      "SELECT array_sort(array(2, 1), (p1, p2) -> IF(p1 > p2, 1, 0))",
-      shouldPass = false
-    )
-    checkResolverGuard("SELECT transform(array(2, 1), x -> x * 2)", shouldPass = false)
-    checkResolverGuard("SELECT filter(array(2, 1), x -> x > 0)", shouldPass = false)
+    checkResolverGuard("SELECT * FROM VALUES (1, 2) WHERE 3 IN (*)")
   }
 
   test("Catch ExplicitlyUnsupportedResolverFeature exceptions") {
@@ -378,7 +368,7 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SparkException](
         checkResolverGuard(
           plan = dummyPlan,
-          shouldPass = true,
+          unsupportedReason = None,
           mockResolver = Some(new ThrowsExplicitlyUnsupportedFeatureResolver)
         )
       ),
@@ -389,18 +379,51 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  private def checkResolverGuard(query: String, shouldPass: Boolean): Unit = {
-    checkResolverGuard(spark.sessionState.sqlParser.parsePlan(query), shouldPass)
+
+  test("Star target with columns renames") {
+    val df = sql("SELECT * FROM VALUES(1,2)")
+    val newDf = df.withColumnsRenamed(Seq("col2"), Seq("newCol2"))
+    checkResolverGuard(plan = newDf.queryExecution.logical, None)
   }
 
-  private def checkResolverGuard(
-      plan: LogicalPlan,
-      shouldPass: Boolean,
-      mockResolver: Option[Resolver] = None): Unit = {
-    val resolverGuard = new ResolverGuard(spark.sessionState.catalogManager)
-    assert(resolverGuard.apply(plan) == shouldPass)
 
-    if (shouldPass) {
+  test("Regex query with column reference pattern") {
+    withSQLConf("spark.sql.parser.quotedRegexColumnNames" -> "true") {
+      checkResolverGuard(
+        """SELECT `[a-z].{3}(1|3)` FROM VALUES('a', 'b', 'c')"""
+      )
+    }
+  }
+
+}
+
+trait ResolverGuardSuiteBase extends QueryTest with SharedSparkSession {
+  protected def checkResolverGuard(
+      query: String,
+      unsupportedReason: Option[String] = None): Unit = {
+    checkResolverGuard(
+      spark.sessionState.sqlParser.parsePlan(query),
+      unsupportedReason,
+      mockResolver = None
+    )
+  }
+
+  protected def checkResolverGuard(plan: LogicalPlan, unsupportedReason: Option[String]): Unit = {
+    checkResolverGuard(plan, unsupportedReason, mockResolver = None)
+  }
+
+  protected def checkResolverGuard(
+      plan: LogicalPlan,
+      unsupportedReason: Option[String],
+      mockResolver: Option[Resolver]): Unit = {
+    val resolverGuard = new ResolverGuard(
+      catalogManager = spark.sessionState.catalogManager
+    )
+
+    val result = resolverGuard.apply(plan)
+    assert(result.planUnsupportedReason == unsupportedReason)
+
+    if (unsupportedReason.isEmpty) {
       checkSuccessfulResolution(plan, mockResolver)
     }
   }
@@ -430,16 +453,7 @@ class ResolverGuardSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  private def withSessionVariable(body: => Unit): Unit = {
-    sql("DECLARE session_variable = 1;")
-    try {
-      body
-    } finally {
-      sql("DROP TEMPORARY VARIABLE session_variable;")
-    }
-  }
-
-  private def withSqlFunction[R](name: String)(body: => R): R = {
+  protected def withSqlFunction[R](name: String)(body: => R): R = {
     try {
       body
     } finally {

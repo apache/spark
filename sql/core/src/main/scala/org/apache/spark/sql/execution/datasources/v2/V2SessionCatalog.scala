@@ -463,9 +463,10 @@ class V2SessionCatalog(catalog: SessionCatalog)
   override def listFunctions(namespace: Array[String]): Array[Identifier] = {
     namespace match {
       case Array(db) =>
-        catalog.listFunctions(db).filter(_._2 == "USER").map { case (funcIdent, _) =>
-          assert(funcIdent.database.isDefined)
-          Identifier.of(Array(funcIdent.database.get), funcIdent.identifier)
+        // Only persistent USER functions have a database; temp functions are USER but 1-part
+        catalog.listFunctions(db).filter(_._2 == "USER").filter(_._1.database.isDefined).map {
+          case (funcIdent, _) =>
+            Identifier.of(Array(funcIdent.database.get), funcIdent.identifier)
         }.toArray
       case _ =>
         throw QueryCompilationErrors.noSuchNamespaceError(name() +: namespace)

@@ -62,7 +62,7 @@ private[ui] class StageTableBase(
     ).table(stagePage)
   } catch {
     case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
-      <div class="alert alert-error">
+      <div class="alert alert-danger">
         <p>Error while rendering stage table:</p>
         <pre>
           {Utils.exceptionString(e)}
@@ -225,7 +225,7 @@ private[ui] class StagePagedTable(
       val killLinkUri = s"$basePathUri/stages/stage/kill/?id=${s.stageId}"
       <a href={killLinkUri}
          data-kill-message={s"Are you sure you want to kill stage ${s.stageId} ?"}
-         class="kill-link">(kill)</a>
+         class="kill-link float-end">(kill)</a>
     } else {
       Seq.empty
     }
@@ -236,7 +236,7 @@ private[ui] class StagePagedTable(
     val cachedRddInfos = store.rddList().filter { rdd => s.rddIds.contains(rdd.id) }
     val details = if (s.details != null && s.details.nonEmpty) {
       <span data-toggle-details=".stage-details"
-            class="expand-details">
+            class="expand-details float-end">
         +details
       </span> ++
       <div class="stage-details collapsed">

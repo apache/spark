@@ -78,10 +78,8 @@ private[spark] class TaskThreadDumpPage(
               <th>Thread Name</th>
               <th>Thread State</th>
               <th>
-                <span data-toggle="tooltip" data-placement="top"
-                      title="Objects whose lock the thread currently holds">
-                  Thread Locks
-                </span>
+                {UIUtils.tooltipSpan(<xml:group>Thread Locks</xml:group>,
+                  "Objects whose lock the thread currently holds")}
               </th>
             </thead>
             <tbody>

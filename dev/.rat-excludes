@@ -32,14 +32,11 @@ graphlib-dot.min.js
 sorttable.js
 vis-timeline-graph2d.min.js
 vis-timeline-graph2d.min.css
-dataTables.bootstrap4.min.css
-dataTables.bootstrap4.min.js
+dataTables.bootstrap5.min.css
+dataTables.bootstrap5.min.js
 dataTables.rowsGroup.js
-jquery.blockUI.min.js
-jquery.cookies.2.2.0.min.js
 jquery.dataTables.min.css
 jquery.dataTables.min.js
-jquery.mustache.js
 .*\.avsc
 .*\.txt
 .*\.json
@@ -114,6 +111,7 @@ vote.tmpl
 GangliaReporter.java
 application_1578436911597_0052
 config.properties
+configs-without-binding-policy-exceptions
 local-1596020211915
 app-20200706201101-0003
 application_1628109047826_1317105
@@ -142,4 +140,6 @@ ui-test/package-lock.json
 core/src/main/resources/org/apache/spark/ui/static/package.json
 testCommitLog
 .*\.har
+spark-logo.svg
+spark-logo-rev.svg
 .nojekyll

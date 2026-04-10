@@ -138,6 +138,36 @@ class ExecuteEventsManagerSuite
         .isInstanceOf[SparkListenerConnectOperationCanceled])
   }
 
+  test("SPARK-53339: post canceled from Pending state") {
+    val events = setupEvents(ExecuteStatus.Pending)
+    events.postCanceled()
+    assert(events.status == ExecuteStatus.Canceled)
+    assert(events.terminationReason.contains(TerminationReason.Canceled))
+  }
+
+  test("SPARK-53339: post failed from Pending state") {
+    val events = setupEvents(ExecuteStatus.Pending)
+    events.postFailed(DEFAULT_ERROR)
+    assert(events.status == ExecuteStatus.Failed)
+    assert(events.terminationReason.contains(TerminationReason.Failed))
+  }
+
+  test("SPARK-53339: Pending to Canceled to Closed transition") {
+    val events = setupEvents(ExecuteStatus.Pending)
+    events.postCanceled()
+    events.postClosed()
+    assert(events.status == ExecuteStatus.Closed)
+    assert(events.terminationReason.contains(TerminationReason.Canceled))
+  }
+
+  test("SPARK-53339: Pending to Failed to Closed transition") {
+    val events = setupEvents(ExecuteStatus.Pending)
+    events.postFailed(DEFAULT_ERROR)
+    events.postClosed()
+    assert(events.status == ExecuteStatus.Closed)
+    assert(events.terminationReason.contains(TerminationReason.Failed))
+  }
+
   test("SPARK-43923: post failed") {
     val events = setupEvents(ExecuteStatus.Started)
     events.postFailed(DEFAULT_ERROR)
@@ -339,6 +369,25 @@ class ExecuteEventsManagerSuite
     assertThrows[IllegalStateException] {
       events.postStarted()
     }
+  }
+
+  test("SPARK-55448: terminal events can be posted when session is Closed") {
+    val events = setupEvents(ExecuteStatus.Started, SessionStatus.Closed)
+    events.postCanceled()
+    val expectedCancelEvent = SparkListenerConnectOperationCanceled(
+      events.executeHolder.jobTag,
+      DEFAULT_QUERY_ID,
+      DEFAULT_CLOCK.getTimeMillis())
+    verify(events.executeHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
+      .post(expectedCancelEvent)
+
+    events.postClosed()
+    val expectedClosedEvent = SparkListenerConnectOperationClosed(
+      events.executeHolder.jobTag,
+      DEFAULT_QUERY_ID,
+      DEFAULT_CLOCK.getTimeMillis())
+    verify(events.executeHolder.sessionHolder.session.sparkContext.listenerBus, times(1))
+      .post(expectedClosedEvent)
   }
 
   test("terminationReason is None initially") {

@@ -232,7 +232,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
 
       val goldenFile =
         new File(expRoot, HistoryServerSuite.sanitizePath(name) + "_expectation.json")
-      val jsonAst = parse(clearLastUpdated(jsonOpt.get))
+      val jsonAst = parse(clearDynamicFields(jsonOpt.get))
 
       if (regenerateGoldenFiles) {
         Utils.tryWithResource(new FileWriter(goldenFile)) { out =>
@@ -255,9 +255,11 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
   // the REST API returns the last modified time of EVENT LOG file for this field.
   // It is not applicable to hard-code this dynamic field in a static expected file,
   // so here we skip checking the lastUpdated field's value (setting it as "").
-  private def clearLastUpdated(json: String): String = {
-    if (json.indexOf("lastUpdated") >= 0) {
-      val subStrings = json.split(",")
+  // Similarly, logSourceName and logSourceFullPath contain environment-specific absolute paths.
+  private def clearDynamicFields(json: String): String = {
+    var result = json
+    if (result.indexOf("lastUpdated") >= 0) {
+      val subStrings = result.split(",")
       for (i <- subStrings.indices) {
         if (subStrings(i).indexOf("lastUpdatedEpoch") >= 0) {
           subStrings(i) = subStrings(i).replaceAll("(\\d+)", "0")
@@ -266,10 +268,14 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
           subStrings(i) = regex.replaceAllIn(subStrings(i), "\"lastUpdated\" : \"\"")
         }
       }
-      subStrings.mkString(",")
-    } else {
-      json
+      result = subStrings.mkString(",")
     }
+    // logSourceName and logSourceFullPath contain environment-specific absolute paths
+    result = "\"logSourceName\"\\s*:\\s*\"[^\"]*\"".r
+      .replaceAllIn(result, "\"logSourceName\" : \"\"")
+    result = "\"logSourceFullPath\"\\s*:\\s*\"[^\"]*\"".r
+      .replaceAllIn(result, "\"logSourceFullPath\" : \"\"")
+    result
   }
 
   test("download all logs for app with multiple attempts") {

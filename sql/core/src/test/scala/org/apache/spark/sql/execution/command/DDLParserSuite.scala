@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, SchemaCompensation, UnresolvedAttribute, UnresolvedIdentifier}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, SchemaCompensation, UnresolvedAttribute, UnresolvedIdentifier, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
@@ -522,8 +523,9 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val v3 = "CREATE TEMPORARY VIEW a.b AS SELECT 1"
     checkError(
       exception = parseException(v3),
-      condition = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
-      parameters = Map("actualName" -> "`a`.`b`"),
+      condition = "INVALID_TEMP_OBJ_QUALIFIER",
+      parameters = Map("objectType" -> "VIEW", "objectName" -> "`b`",
+        "qualifier" -> "`a`"),
       context = ExpectedContext(
         fragment = v3,
         start = 0,
@@ -684,23 +686,23 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
     val sql1 = "DROP TEMPORARY FUNCTION a.b"
     checkError(
-      exception = parseException(sql1),
-      condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "name" -> "`a`.`b`"),
-      context = ExpectedContext(
-        fragment = sql1,
-        start = 0,
-        stop = 26))
+      exception = intercept[AnalysisException](parser.parsePlan(sql1)),
+      condition = "INVALID_TEMP_OBJ_QUALIFIER",
+      parameters = Map(
+        "objectType" -> "FUNCTION",
+        "objectName" -> "`b`",
+        "qualifier" -> "`a`"),
+      queryContext = Array(ExpectedContext(sql1, 0, sql1.length - 1)))
 
     val sql2 = "DROP TEMPORARY FUNCTION IF EXISTS a.b"
     checkError(
-      exception = parseException(sql2),
-      condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "name" -> "`a`.`b`"),
-      context = ExpectedContext(
-        fragment = sql2,
-        start = 0,
-        stop = 36))
+      exception = intercept[AnalysisException](parser.parsePlan(sql2)),
+      condition = "INVALID_TEMP_OBJ_QUALIFIER",
+      parameters = Map(
+        "objectType" -> "FUNCTION",
+        "objectName" -> "`b`",
+        "qualifier" -> "`a`"),
+      queryContext = Array(ExpectedContext(sql2, 0, sql2.length - 1)))
   }
 
   test("SPARK-32374: create temporary view with properties not allowed") {
@@ -720,83 +722,76 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("create table like") {
-    val v1 = "CREATE TABLE table1 LIKE table2"
-    val (target, source, fileFormat, provider, properties, exists) =
-      parser.parsePlan(v1).collect {
-        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
-      }.head
+    // Helper to extract fields from the new CreateTableLike unresolved plan.
+    // The parser now emits CreateTableLike (v2 logical plan) instead of
+    // CreateTableLikeCommand; the name is an UnresolvedIdentifier and the source is
+    // an UnresolvedTableOrView.
+    def extract(sql: String): (Seq[String], Seq[String],
+        Option[String], Option[String], Map[String, String], Boolean) =
+      parser.parsePlan(sql).collect {
+      case CreateTableLike(
+          UnresolvedIdentifier(targetParts, _),
+          UnresolvedTableOrView(sourceParts, _, _),
+          loc, p, _, pr, e) =>
+        (targetParts, sourceParts, loc, p, pr, e)
+    }.head
+
+    val (target, source, location, provider, properties, exists) =
+      extract("CREATE TABLE table1 LIKE table2")
     assert(exists == false)
-    assert(target.database.isEmpty)
-    assert(target.table == "table1")
-    assert(source.database.isEmpty)
-    assert(source.table == "table2")
-    assert(fileFormat.locationUri.isEmpty)
+    assert(target == Seq("table1"))
+    assert(source == Seq("table2"))
+    assert(location.isEmpty)
     assert(provider.isEmpty)
 
-    val v2 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2"
-    val (target2, source2, fileFormat2, provider2, properties2, exists2) =
-      parser.parsePlan(v2).collect {
-        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
-      }.head
+    val (target2, source2, location2, provider2, properties2, exists2) =
+      extract("CREATE TABLE IF NOT EXISTS table1 LIKE table2")
     assert(exists2)
-    assert(target2.database.isEmpty)
-    assert(target2.table == "table1")
-    assert(source2.database.isEmpty)
-    assert(source2.table == "table2")
-    assert(fileFormat2.locationUri.isEmpty)
+    assert(target2 == Seq("table1"))
+    assert(source2 == Seq("table2"))
+    assert(location2.isEmpty)
     assert(provider2.isEmpty)
 
-    val v3 = "CREATE TABLE table1 LIKE table2 LOCATION '/spark/warehouse'"
-    val (target3, source3, fileFormat3, provider3, properties3, exists3) =
-      parser.parsePlan(v3).collect {
-        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
-      }.head
+    val (target3, source3, location3, provider3, properties3, exists3) =
+      extract("CREATE TABLE table1 LIKE table2 LOCATION '/spark/warehouse'")
     assert(!exists3)
-    assert(target3.database.isEmpty)
-    assert(target3.table == "table1")
-    assert(source3.database.isEmpty)
-    assert(source3.table == "table2")
-    assert(fileFormat3.locationUri.map(_.toString) == Some("/spark/warehouse"))
+    assert(target3 == Seq("table1"))
+    assert(source3 == Seq("table2"))
+    assert(location3 == Some("/spark/warehouse"))
     assert(provider3.isEmpty)
 
-    val v4 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2 LOCATION '/spark/warehouse'"
-    val (target4, source4, fileFormat4, provider4, properties4, exists4) =
-      parser.parsePlan(v4).collect {
-        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
-      }.head
+    val (target4, source4, location4, provider4, properties4, exists4) =
+      extract("CREATE TABLE IF NOT EXISTS table1 LIKE table2 LOCATION '/spark/warehouse'")
     assert(exists4)
-    assert(target4.database.isEmpty)
-    assert(target4.table == "table1")
-    assert(source4.database.isEmpty)
-    assert(source4.table == "table2")
-    assert(fileFormat4.locationUri.map(_.toString) == Some("/spark/warehouse"))
+    assert(target4 == Seq("table1"))
+    assert(source4 == Seq("table2"))
+    assert(location4 == Some("/spark/warehouse"))
     assert(provider4.isEmpty)
 
-    val v5 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2 USING parquet"
-    val (target5, source5, fileFormat5, provider5, properties5, exists5) =
-      parser.parsePlan(v5).collect {
-        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
-      }.head
+    val (target5, source5, location5, provider5, properties5, exists5) =
+      extract("CREATE TABLE IF NOT EXISTS table1 LIKE table2 USING parquet")
     assert(exists5)
-    assert(target5.database.isEmpty)
-    assert(target5.table == "table1")
-    assert(source5.database.isEmpty)
-    assert(source5.table == "table2")
-    assert(fileFormat5.locationUri.isEmpty)
+    assert(target5 == Seq("table1"))
+    assert(source5 == Seq("table2"))
+    assert(location5.isEmpty)
     assert(provider5 == Some("parquet"))
 
-    val v6 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2 USING ORC"
-    val (target6, source6, fileFormat6, provider6, properties6, exists6) =
-      parser.parsePlan(v6).collect {
-        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
-      }.head
+    val (target6, source6, location6, provider6, properties6, exists6) =
+      extract("CREATE TABLE IF NOT EXISTS table1 LIKE table2 USING ORC")
     assert(exists6)
-    assert(target6.database.isEmpty)
-    assert(target6.table == "table1")
-    assert(source6.database.isEmpty)
-    assert(source6.table == "table2")
-    assert(fileFormat6.locationUri.isEmpty)
+    assert(target6 == Seq("table1"))
+    assert(source6 == Seq("table2"))
+    assert(location6.isEmpty)
     assert(provider6 == Some("ORC"))
+
+    // 3-part names: catalog.namespace.table
+    val (target7, source7, location7, provider7, properties7, exists7) =
+      extract("CREATE TABLE testcat.ns.dst LIKE testcat.ns.src")
+    assert(!exists7)
+    assert(target7 == Seq("testcat", "ns", "dst"))
+    assert(source7 == Seq("testcat", "ns", "src"))
+    assert(location7.isEmpty)
+    assert(provider7.isEmpty)
   }
 
   test("SET CATALOG") {
@@ -818,5 +813,17 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     comparePlans(
       parser.parsePlan("SHOW CATALOGS LIKE 'defau*'"),
       ShowCatalogsCommand(Some("defau*")))
+  }
+
+  test("SHOW COLLATIONS") {
+    comparePlans(
+      parser.parsePlan("SHOW COLLATIONS"),
+      ShowCollationsCommand(None))
+    comparePlans(
+      parser.parsePlan("SHOW COLLATIONS LIKE 'UNICODE*'"),
+      ShowCollationsCommand(Some("UNICODE*")))
+    comparePlans(
+      parser.parsePlan("SHOW COLLATIONS LIKE 'UTF8_BINARY'"),
+      ShowCollationsCommand(Some("UTF8_BINARY")))
   }
 }

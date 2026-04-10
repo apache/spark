@@ -24,7 +24,7 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image for SparkR"
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20260212
+ENV FULL_REFRESH_DATE=20260316
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -32,6 +32,7 @@ ENV DEBCONF_NONINTERACTIVE_SEEN=true
 RUN apt-get update && apt-get install -y \
     build-essential \
     ca-certificates \
+    cmake \
     curl \
     gfortran \
     git \
@@ -68,7 +69,7 @@ RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-c
 # See more in SPARK-39959, roxygen2 < 7.2.1
 RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown',  \
     'rmarkdown', 'testthat', 'devtools', 'e1071', 'survival', 'arrow',  \
-    'ggplot2', 'mvtnorm', 'statmod', 'xml2'), repos='https://cloud.r-project.org/')" && \
+    'ggplot2', 'mvtnorm', 'statmod', 'xml2', 'remotes'), repos='https://cloud.r-project.org/')" && \
     Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')" && \
     Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')" && \
     Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')" && \

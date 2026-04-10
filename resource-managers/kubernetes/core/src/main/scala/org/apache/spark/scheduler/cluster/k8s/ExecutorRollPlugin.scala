@@ -111,7 +111,7 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
   private def choose(list: Seq[v1.ExecutorSummary], policy: ExecutorRollPolicy.Value)
       : Option[String] = {
     val listWithoutDriver = list
-      .filterNot(_.id.equals(SparkContext.DRIVER_IDENTIFIER))
+      .filterNot(e => SparkContext.isDriver(e.id))
       .filter(_.totalTasks >= minTasks)
     val sortedList = policy match {
       case ExecutorRollPolicy.ID =>

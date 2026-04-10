@@ -16,7 +16,6 @@
 #
 
 import functools
-import platform
 import pydoc
 import shutil
 import tempfile
@@ -600,8 +599,12 @@ class BaseUDFTestsMixin(object):
 
             self.check_error(
                 exception=pe.exception,
-                errorClass="NOT_CALLABLE",
-                messageParameters={"arg_name": "func", "arg_type": "str"},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "callable",
+                    "arg_name": "func",
+                    "arg_type": "str",
+                },
             )
 
     def test_non_existed_udf(self):
@@ -1229,9 +1232,6 @@ class BaseUDFTestsMixin(object):
         with self.assertRaisesRegex(PythonException, "StopIteration"):
             self.spark.range(10).select(test_udf(col("id"))).show()
 
-    @unittest.skipIf(
-        "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
-    )
     def test_python_udf_segfault(self):
         with self.sql_conf({"spark.sql.execution.pyspark.udf.faulthandler.enabled": True}):
             with self.assertRaisesRegex(Exception, "Segmentation fault"):
@@ -1268,8 +1268,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_CALLABLE",
-            messageParameters={"arg_name": "func", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "callable", "arg_name": "func", "arg_type": "str"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1277,8 +1277,12 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_DATATYPE_OR_STR",
-            messageParameters={"arg_name": "returnType", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "DataType or str",
+                "arg_name": "returnType",
+                "arg_type": "int",
+            },
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1286,8 +1290,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_INT",
-            messageParameters={"arg_name": "evalType", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "int", "arg_name": "evalType", "arg_type": "str"},
         )
 
     def test_timeout_util_with_udf(self):
@@ -1433,12 +1437,12 @@ class BaseUDFTestsMixin(object):
             self.assertEqual(result_type, StringType("fr"))
 
     def test_udf_with_char_varchar_return_type(self):
-        (char_type, char_value) = ("char(10)", "a")
-        (varchar_type, varchar_value) = ("varchar(8)", "a")
-        (array_with_char_type, array_with_char_type_value) = ("array<char(5)>", ["a", "b"])
-        (array_with_varchar_type, array_with_varchar_value) = ("array<varchar(12)>", ["a", "b"])
-        (map_type, map_value) = (f"map<{char_type}, {varchar_type}>", {"a": "b"})
-        (struct_type, struct_value) = (
+        char_type, char_value = ("char(10)", "a")
+        varchar_type, varchar_value = ("varchar(8)", "a")
+        array_with_char_type, array_with_char_type_value = ("array<char(5)>", ["a", "b"])
+        array_with_varchar_type, array_with_varchar_value = ("array<varchar(12)>", ["a", "b"])
+        map_type, map_value = (f"map<{char_type}, {varchar_type}>", {"a": "b"})
+        struct_type, struct_value = (
             f"struct<f1: {char_type}, f2: {varchar_type}>",
             {"f1": "a", "f2": "b"},
         )

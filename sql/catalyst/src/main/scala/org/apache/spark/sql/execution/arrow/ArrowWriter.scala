@@ -124,9 +124,9 @@ class ArrowWriter(val root: VectorSchemaRoot, fields: Array[ArrowFieldWriter]) {
     count += 1
   }
 
-  def sizeInBytes(): Int = {
+  def sizeInBytes(): Long = {
     var i = 0
-    var bytes = 0
+    var bytes = 0L
     while (i < fields.size) {
       bytes += fields(i).getSizeInBytes()
       i += 1

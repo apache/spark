@@ -109,7 +109,8 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
         coalesceGroup.shuffleStages.map(_.partitionSpecs),
         advisoryTargetSize = advisoryTargetSize,
         minNumPartitions = minNumPartitions,
-        minPartitionSize = minPartitionSize)
+        minPartitionSize = minPartitionSize,
+        coalesceGroup.shuffleStages.map(_.shuffleStage.id))
 
       if (newPartitionSpecs.nonEmpty) {
         coalesceGroup.shuffleStages.zip(newPartitionSpecs).map { case (stageInfo, partSpecs) =>

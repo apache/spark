@@ -18,7 +18,11 @@
 package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.catalyst.analysis.resolver.{Resolver, ResolverRunner}
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
+import org.apache.spark.sql.catalyst.analysis.resolver.{
+  Resolver,
+  ResolverRunner
+}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
@@ -56,8 +60,11 @@ class AliasResolverSuite extends QueryTest with SharedSparkSession {
 
   test("Nested aliases in the middle of expression tree") {
     val query = table.select("a".attr.as("innerAlias").as("outerAlias") + 1)
-    val resolverAnswer = table.select(($"a".int.as("outerAlias") + 1).as("(a AS outerAlias + 1)"))
-    val resolverRunnerAnswer = table.select(($"a".int + 1).as("(a AS outerAlias + 1)"))
+    val resolverAnswer = table.select(
+      ($"a".int.as("innerAlias").as("outerAlias") + 1).as("(a AS innerAlias AS outerAlias + 1)")
+    )
+    val resolverRunnerAnswer =
+      table.select(($"a".int + 1).as("(a AS innerAlias AS outerAlias + 1)"))
     checkAnswer(query, resolverAnswer, resolverRunnerAnswer)
   }
 
@@ -69,13 +76,19 @@ class AliasResolverSuite extends QueryTest with SharedSparkSession {
       catalogManager = spark.sessionState.catalogManager,
       extensions = spark.sessionState.analyzer.singlePassResolverExtensions
     )
-    val resolverRunner = new ResolverRunner(new Resolver(
-      catalogManager = spark.sessionState.catalogManager,
-      extensions = spark.sessionState.analyzer.singlePassResolverExtensions
-    ))
+    val resolverRunner = new ResolverRunner(
+      resolver = new Resolver(
+        catalogManager = spark.sessionState.catalogManager,
+        extensions = spark.sessionState.analyzer.singlePassResolverExtensions
+      )
+    )
 
     val resolverResult = resolver.resolve(query)
-    val resolverRunnerResult = resolverRunner.resolve(query)
+    val resolverRunnerResult = resolverRunner.resolve(
+      plan = query,
+      analyzerBridgeState = None,
+      tracker = new QueryPlanningTracker
+    )
 
     assert(NormalizePlan(resolverResult) == NormalizePlan(expectedResolverResult))
     assert(NormalizePlan(resolverRunnerResult) == NormalizePlan(expectedResolverRunnerResult))

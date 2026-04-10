@@ -56,7 +56,7 @@ import org.apache.spark.unsafe.types.UTF8String
 abstract class DataSourceV2SQLSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
   with DeleteFromTests with DatasourceV2SQLBase with StatsEstimationTestBase
-  with AdaptiveSparkPlanHelper {
+  with AdaptiveSparkPlanHelper with InsertIntoSchemaEvolutionTests {
 
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.ANSI_ENABLED, true)
@@ -70,6 +70,28 @@ abstract class DataSourceV2SQLSuite
       insert.createOrReplaceTempView(tmpView)
       val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
       sql(s"INSERT $overwrite TABLE $tableName SELECT * FROM $tmpView")
+    }
+  }
+
+  protected def doInsertWithSchemaEvolution(
+      tableName: String,
+      insert: DataFrame,
+      mode: SaveMode = SaveMode.Append,
+      byName: Boolean = false,
+      replaceWhere: Option[String] = None): Unit = {
+    val tmpView = "tmp_view"
+    withTempView(tmpView) {
+      insert.createOrReplaceTempView(tmpView)
+      val byNameClause = if (byName) " BY NAME" else ""
+      replaceWhere match {
+        case Some(predicate) =>
+          sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE $tableName$byNameClause" +
+            s" REPLACE WHERE $predicate SELECT * FROM $tmpView")
+        case None =>
+          val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
+          sql(s"INSERT WITH SCHEMA EVOLUTION $overwrite TABLE $tableName$byNameClause" +
+            s" SELECT * FROM $tmpView")
+      }
     }
   }
 
@@ -3199,6 +3221,37 @@ class DataSourceV2SQLSuiteV1Filter
 
     assert(sql("SHOW CATALOGS LIKE 'testcat*'").collect() === Array(
       Row("testcat"), Row("testcat2")))
+  }
+
+  test("SPARK-49543: ShowCollations") {
+    val schema = new StructType()
+      .add("NAME", StringType, nullable = false)
+      .add("LANGUAGE", StringType, nullable = true)
+      .add("COUNTRY", StringType, nullable = true)
+      .add("ACCENT_SENSITIVITY", StringType, nullable = false)
+      .add("CASE_SENSITIVITY", StringType, nullable = false)
+      .add("PAD_ATTRIBUTE", StringType, nullable = false)
+      .add("ICU_VERSION", StringType, nullable = true)
+
+    val df = sql("SHOW COLLATIONS")
+    assert(df.schema === schema)
+
+    val allCollations = df.collect()
+    assert(allCollations.exists(_.getString(0) == "UTF8_BINARY"))
+    assert(allCollations.exists(_.getString(0) == "UNICODE"))
+    assert(allCollations.exists(_.getString(0) == "UNICODE_CI"))
+
+    val utf8Row = allCollations.find(_.getString(0) == "UTF8_BINARY").get
+    assert(utf8Row.getString(3) == "ACCENT_SENSITIVE")
+    assert(utf8Row.getString(4) == "CASE_SENSITIVE")
+
+    val likeResult = sql("SHOW COLLATIONS LIKE 'UNICODE*'").collect()
+    assert(likeResult.nonEmpty)
+    assert(likeResult.forall(_.getString(0).startsWith("UNICODE")))
+
+    val exactResult = sql("SHOW COLLATIONS LIKE 'UTF8_BINARY'").collect()
+    assert(exactResult.length == 1)
+    assert(exactResult.head.getString(0) == "UTF8_BINARY")
   }
 
   test("CREATE INDEX should fail") {

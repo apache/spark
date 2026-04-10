@@ -73,7 +73,7 @@ private[sql] class AvroOptions(
    * instead of "string" type in the default converted schema.
    */
   val schema: Option[Schema] = {
-    parameters.get(AVRO_SCHEMA).map(new Schema.Parser().setValidateDefaults(false).parse).orElse({
+    parameters.get(AVRO_SCHEMA).map(AvroUtils.parseAvroSchema).orElse({
       val avroUrlSchema = parameters.get(AVRO_SCHEMA_URL).map(url => {
         log.debug("loading avro schema from url: " + url)
         val fs = FileSystem.get(new URI(url), conf)

@@ -275,6 +275,16 @@ trait SparkTestSuite
   }
 
   /**
+   * Parameter keys that are omitted from comparison when absent from the expected map.
+   * For each error condition, the set lists keys that are removed from the actual
+   * exception parameters before comparison with the expected map.
+   * Test suites may override this to add or change ignorable parameters per condition.
+   */
+  protected def checkErrorIgnorableParameters: Map[String, Set[String]] = Map(
+    "TABLE_OR_VIEW_NOT_FOUND" -> Set("searchPath")
+  )
+
+  /**
    * Checks an exception with an error condition against expected results.
    * @param exception     The exception to check
    * @param condition     The expected error condition identifying the error
@@ -293,10 +303,14 @@ trait SparkTestSuite
       queryContext: Array[ExpectedContext] = Array.empty): Unit = {
     assert(exception.getCondition === condition)
     sqlState.foreach(state => assert(exception.getSqlState === state))
-    val expectedParameters = exception.getMessageParameters.asScala
+    val actualParameters = exception.getMessageParameters.asScala
+    val ignorable = checkErrorIgnorableParameters.getOrElse(condition, Set.empty[String])
+    val actualParametersToCompare = actualParameters.filter { case (k, _) =>
+      !ignorable.contains(k) || parameters.contains(k)
+    }
     if (matchPVals) {
-      assert(expectedParameters.size === parameters.size)
-      expectedParameters.foreach(
+      assert(actualParametersToCompare.size === parameters.size)
+      actualParametersToCompare.foreach(
         exp => {
           val parm = parameters.getOrElse(exp._1,
             throw new IllegalArgumentException("Missing parameter" + exp._1))
@@ -307,7 +321,7 @@ trait SparkTestSuite
         }
       )
     } else {
-      assert(expectedParameters === parameters)
+      assert(actualParametersToCompare === parameters)
     }
     val actualQueryContext = exception.getQueryContext()
     assert(actualQueryContext.length === queryContext.length, "Invalid length of the query context")
@@ -402,7 +416,9 @@ trait SparkTestSuite
       queryContext: ExpectedContext): Unit =
     checkError(exception = exception,
       condition = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relationName" -> tableName),
+      parameters = Map(
+        "relationName" -> tableName,
+        "searchPath" -> Option(exception.getMessageParameters.get("searchPath")).getOrElse("")),
       queryContext = Array(queryContext))
 
   protected def checkErrorTableNotFound(
@@ -410,7 +426,35 @@ trait SparkTestSuite
       tableName: String): Unit =
     checkError(exception = exception,
       condition = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relationName" -> tableName))
+      parameters = Map(
+        "relationName" -> tableName,
+        "searchPath" -> Option(exception.getMessageParameters.get("searchPath")).getOrElse(""))
+    )
+
+  protected val defaultSearchPathForTests: String =
+    "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+
+  protected def checkErrorTableNotFoundWithSearchPath(
+      exception: SparkThrowable,
+      tableName: String,
+      searchPath: String = defaultSearchPathForTests): Unit =
+    checkError(exception = exception,
+      condition = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map(
+        "relationName" -> tableName,
+        "searchPath" -> searchPath))
+
+  protected def checkErrorTableNotFoundWithSearchPath(
+      exception: SparkThrowable,
+      tableName: String,
+      queryContext: ExpectedContext,
+      searchPath: String): Unit =
+    checkError(exception = exception,
+      condition = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map(
+        "relationName" -> tableName,
+        "searchPath" -> searchPath),
+      queryContext = Array(queryContext))
 
   protected def checkErrorTableAlreadyExists(
       exception: SparkThrowable,

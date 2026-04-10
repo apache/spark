@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.avro
 
-import org.apache.avro.Schema
 import org.apache.avro.mapreduce.AvroJob
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
@@ -37,7 +36,7 @@ private[sql] class AvroOutputWriterFactory(
     avroSchemaAsJsonString: String,
     positionalFieldMatching: Boolean) extends OutputWriterFactory {
 
-  private lazy val avroSchema = new Schema.Parser().parse(avroSchemaAsJsonString)
+  private lazy val avroSchema = AvroUtils.parseAvroSchema(avroSchemaAsJsonString)
 
   override def getFileExtension(context: TaskAttemptContext): String = {
     val codec = context.getConfiguration.get(AvroJob.CONF_OUTPUT_CODEC)
