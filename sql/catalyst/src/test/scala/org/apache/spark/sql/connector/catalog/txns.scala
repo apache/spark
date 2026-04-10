@@ -71,7 +71,7 @@ class TxnTable(val delegate: InMemoryRowLevelOperationTable)
     delegate.properties,
     delegate.constraints) {
 
-  withData(delegate.data)
+  alterTableWithData(delegate.data, delegate.schema)
 
   // Keep initial version to detect any changes during the transaction.
   private val initialVersion: String = version()
