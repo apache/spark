@@ -237,6 +237,10 @@ case class AdaptiveSparkPlanExec(
     allChildStagesMaterialized: Boolean,
     newStages: Seq[QueryStageExec])
 
+  private case class BroadcastFallbackResult(
+    fallbackStages: Seq[BroadcastQueryStageExec],
+    fallbackErrors: Seq[Throwable])
+
   def executedPlan: SparkPlan = currentPhysicalPlan
 
   def isFinalPlan: Boolean = _isFinalPlan
@@ -345,37 +349,17 @@ case class AdaptiveSparkPlanExec(
         val rem = new util.ArrayList[StageMaterializationEvent]()
         events.drainTo(rem)
         val stageEvents = Seq(nextMsg) ++ rem.asScala
-        val fallbackStages = new mutable.ArrayBuffer[QueryStageExec]()
-        val fallbackErrors = new mutable.ArrayBuffer[Throwable]()
-        stageEvents.foreach {
-          case StageSuccess(stage, res) =>
-            stage.resultOption.set(Some(res))
-          case StageFailure(stage: BroadcastQueryStageExec, ex)
-              if shouldFallbackToShuffleJoin(stage, ex) =>
-            removeStageFromCache(stage)
-            logInfo("Broadcast query stage failed on table size/row limit; retrying " +
-              s"adaptive replanning with matching broadcast hash joins disabled. " +
-              s"Stage ${stage.id}")
-            registerFailedBroadcastStage(failedBroadcastStagesBuffer, stage)
-            if (!fallbackStages.exists(_.eq(stage))) {
-              fallbackStages.append(stage)
-            }
-            fallbackErrors.append(ex)
-          case StageFailure(stage: BroadcastQueryStageExec, ex)
-              if shouldIgnoreStaleBroadcastStageFailure(
-                stage, ex, failedBroadcastStagesBuffer.toSeq) =>
-            logDebug("Ignoring stale broadcast query stage failure for a previously failed " +
-              s"broadcast input. Stage ${stage.id}")
-            removeStageFromCache(stage)
-          case StageFailure(stage, ex) =>
-            stage.error.set(Some(ex))
-            errors.append(ex)
-        }
+        val fallbackResult =
+          processStageMaterializationEvents(stageEvents, failedBroadcastStagesBuffer, errors)
+        val fallbackStages = fallbackResult.fallbackStages
+        val fallbackErrors = fallbackResult.fallbackErrors
 
         // Do not carry failed fallback stages into the next logical-plan replacement pass.
         // They are intentionally invalidated and must be rebuilt by replanning.
         if (fallbackStages.nonEmpty) {
-          stagesToReplace = filterStagesToReplaceForFallback(stagesToReplace, fallbackStages.toSeq)
+          stagesToReplace = filterStagesToReplaceForFallback(
+            stagesToReplace,
+            failedBroadcastStagesBuffer.toSeq)
           currentLogicalPlan = removeFailedBroadcastStagesFromLogicalPlan(
             currentLogicalPlan,
             failedBroadcastStagesBuffer.toSeq)
@@ -402,11 +386,8 @@ case class AdaptiveSparkPlanExec(
           val failedBroadcastStages = failedBroadcastStagesBuffer.toSeq
 
           val afterReOptimize = if (shouldBroadcastFallback) {
-            val fallbackLogicalPlan = removeFailedBroadcastStagesFromLogicalPlan(
-              logicalPlan,
-              failedBroadcastStages)
             val targetedLogicalPlan =
-              addNoBroadcastHashHintsForFailedRelations(fallbackLogicalPlan, failedBroadcastStages)
+              addNoBroadcastHashHintsForFailedRelations(logicalPlan, failedBroadcastStages)
             reOptimize(targetedLogicalPlan)
           } else {
             reOptimize(logicalPlan)
@@ -926,6 +907,40 @@ case class AdaptiveSparkPlanExec(
     }
   }
 
+  private def processStageMaterializationEvents(
+      stageEvents: Seq[StageMaterializationEvent],
+      failedBroadcastStages: mutable.ArrayBuffer[BroadcastQueryStageExec],
+      errors: mutable.ArrayBuffer[Throwable]): BroadcastFallbackResult = {
+    val fallbackStages = new mutable.ArrayBuffer[BroadcastQueryStageExec]()
+    val fallbackErrors = new mutable.ArrayBuffer[Throwable]()
+
+    stageEvents.foreach {
+      case StageSuccess(stage, res) =>
+        stage.resultOption.set(Some(res))
+      case StageFailure(stage: BroadcastQueryStageExec, ex)
+          if shouldFallbackToShuffleJoin(stage, ex) =>
+        removeStageFromCache(stage)
+        logInfo("Broadcast query stage failed on table size/row limit; retrying " +
+          s"adaptive replanning with matching broadcast hash joins disabled. " +
+          s"Stage ${stage.id}")
+        registerFailedBroadcastStage(failedBroadcastStages, stage)
+        if (!fallbackStages.exists(_.eq(stage))) {
+          fallbackStages.append(stage)
+        }
+        fallbackErrors.append(ex)
+      case StageFailure(stage: BroadcastQueryStageExec, ex)
+          if shouldIgnoreStaleBroadcastStageFailure(stage, ex, failedBroadcastStages.toSeq) =>
+        logDebug("Ignoring stale broadcast query stage failure for a previously failed " +
+          s"broadcast input. Stage ${stage.id}")
+        removeStageFromCache(stage)
+      case StageFailure(stage, ex) =>
+        stage.error.set(Some(ex))
+        errors.append(ex)
+    }
+
+    BroadcastFallbackResult(fallbackStages.toSeq, fallbackErrors.toSeq)
+  }
+
   private def shouldFallbackToShuffleJoin(stage: QueryStageExec, error: Throwable): Boolean = {
     // Detect errors such as:
     //   - Cannot broadcast the table over <maxBroadcastTableRows> rows: <numRows> rows.
@@ -1112,12 +1127,20 @@ case class AdaptiveSparkPlanExec(
           if (!disableLeft && !disableRight) {
             join
           } else {
-            // If either join side is the failed broadcast relation, add NO_BROADCAST_HASH
-            // where the join does not already carry an explicit non-broadcast strategy.
-            // This preserves existing join-strategy intent such as PREFER_SHUFFLE_HASH.
+            // For each failed broadcast side, add NO_BROADCAST_HASH where the join does not
+            // already carry an explicit non-broadcast strategy. This preserves existing
+            // join-strategy intent such as PREFER_SHUFFLE_HASH.
             val newHint = JoinHint(
-              toNoBroadcastHashHint(join.hint.leftHint),
-              toNoBroadcastHashHint(join.hint.rightHint))
+              if (disableLeft) {
+                toNoBroadcastHashHint(join.hint.leftHint)
+              } else {
+                join.hint.leftHint
+              },
+              if (disableRight) {
+                toNoBroadcastHashHint(join.hint.rightHint)
+              } else {
+                join.hint.rightHint
+              })
             if (newHint != join.hint) join.copy(hint = newHint) else join
           }
       }
