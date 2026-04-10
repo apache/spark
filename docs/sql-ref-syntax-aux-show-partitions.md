@@ -28,7 +28,7 @@ partition spec.
 ### Syntax
 
 ```sql
-SHOW PARTITIONS table_identifier [ partition_spec ]
+SHOW PARTITIONS table_identifier [ partition_spec ] [ AS JSON ]
 ```
 
 ### Parameters
@@ -45,6 +45,31 @@ SHOW PARTITIONS table_identifier [ partition_spec ]
     for partitions. When specified, the partitions that match the partition specification are returned.
 
     **Syntax:** `PARTITION ( partition_col_name = partition_col_val [ , ... ] )`
+
+* **AS JSON**
+
+    An optional parameter to return the partition list as a single-row JSON document
+    instead of the default tabular format. Only supported for V1 (session catalog / Hive
+    metastore) tables.
+
+    **Syntax:** `[ AS JSON ]`
+
+    **Output schema:** A single column named `json_metadata` of type `STRING NOT NULL`.
+
+    **Schema:**
+
+    Below is the full JSON schema.
+    In actual output, the JSON is not pretty-printed (see Examples).
+
+    ```json
+    {
+      "partitions": ["<partition_string>", ...]
+    }
+    ```
+
+    | Field | Type | Description |
+    |---|---|---|
+    | `partitions` | array of strings | Each element is a partition path string in `col=val/col=val` format, sorted lexicographically. The array is empty when no partitions match the optional `partition_spec`. |
 
 ### Examples
 
@@ -100,6 +125,38 @@ SHOW PARTITIONS customer PARTITION (city =  'San Jose');
 +----------------------+
 |state=CA/city=San Jose|
 +----------------------+
+
+-- List all partitions as a JSON
+SHOW PARTITIONS customer AS JSON;
++----------------------------------------------------------------------------------------+
+|json_metadata                                                                           |
++----------------------------------------------------------------------------------------+
+|{"partitions":["state=AZ/city=Peoria","state=CA/city=Fremont","state=CA/city=San Jose"]}|
++----------------------------------------------------------------------------------------+
+
+-- Filter with a partial partition spec and return results as JSON
+SHOW PARTITIONS customer PARTITION (state = 'CA') AS JSON;
++------------------------------------------------------------------+
+|json_metadata                                                     |
++------------------------------------------------------------------+
+|{"partitions":["state=CA/city=Fremont","state=CA/city=San Jose"]} |
++------------------------------------------------------------------+
+
+-- Filter with a full partition spec as JSON
+SHOW PARTITIONS customer PARTITION (state = 'CA', city = 'Fremont') AS JSON;
++-----------------------------------------+
+|json_metadata                            |
++-----------------------------------------+
+|{"partitions":["state=CA/city=Fremont"]} |
++-----------------------------------------+
+
+-- When no partitions match the spec, AS JSON returns an empty array
+SHOW PARTITIONS customer PARTITION (state = 'TX') AS JSON;
++------------------+
+|json_metadata     |
++------------------+
+|{"partitions":[]} |
++------------------+
 ```
 
 ### Related Statements

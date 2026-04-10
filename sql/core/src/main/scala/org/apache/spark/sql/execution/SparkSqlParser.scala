@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace,
   GlobalTempView, LocalTempView, PersistedView,
   PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute,
-  UnresolvedIdentifier, UnresolvedNamespace, UnresolvedProcedure}
+  UnresolvedIdentifier, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedProcedure}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -1457,6 +1457,32 @@ class SparkSqlAstBuilder extends AstBuilder {
       } else {
         DescribeRelation(relation, partitionSpec, isExtended)
       }
+    }
+  }
+
+  /**
+   * A command for users to list the partition names of a table. If partition spec is specified,
+   * only partitions that match the spec are returned. Otherwise all partitions are returned.
+   *
+   * Without `AS JSON`, this creates a [[ShowPartitions]] logical plan (one row per partition).
+   * With `AS JSON`, this creates a [[ShowPartitionsJsonCommand]] that returns a single JSON
+   * document.
+   *
+   * The syntax of using this command in SQL is:
+   * {{{
+   *   SHOW PARTITIONS multi_part_name [partition_spec] [AS JSON];
+   * }}}
+   */
+  override def visitShowPartitions(ctx: ShowPartitionsContext): LogicalPlan = withOrigin(ctx) {
+    val asJson = ctx.JSON != null
+    val relation = createUnresolvedTable(ctx.identifierReference, "SHOW PARTITIONS")
+    val partitionKeys = Option(ctx.partitionSpec).map { specCtx =>
+      UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(specCtx), None)
+    }
+    if (asJson) {
+      ShowPartitionsJsonCommand(relation, partitionKeys.map(_.spec))
+    } else {
+      ShowPartitions(relation, partitionKeys)
     }
   }
 

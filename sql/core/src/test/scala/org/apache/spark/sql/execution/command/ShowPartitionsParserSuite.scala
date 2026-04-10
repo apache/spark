@@ -55,4 +55,16 @@ class ShowPartitionsParserSuite extends AnalysisTest {
         start = 25,
         stop = 44))
   }
+
+  test("retain sql text position") {
+    val tbl = "unknown"
+    val sqlStatement = s"SHOW PARTITIONS $tbl"
+    val startPos = sqlStatement.indexOf(tbl)
+    assert(startPos != -1)
+    assertAnalysisErrorCondition(
+      parsePlan(sqlStatement),
+      "TABLE_OR_VIEW_NOT_FOUND",
+      Map("relationName" -> s"`$tbl`"),
+      Array(ExpectedContext(tbl, startPos, startPos + tbl.length - 1)))
+  }
 }

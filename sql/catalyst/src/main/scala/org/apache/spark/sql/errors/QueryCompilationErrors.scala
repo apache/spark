@@ -1664,6 +1664,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     notSupportedInJDBCCatalog("CREATE TABLE ... USING ...")
   }
 
+  def showPartitionsAsJsonNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("SHOW PARTITIONS AS JSON")
+  }
+
   def cannotCreateJDBCTableUsingLocationError(): Throwable = {
     notSupportedInJDBCCatalog("CREATE TABLE ... LOCATION ...")
   }

@@ -105,6 +105,44 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
         Row("p1=__HIVE_DEFAULT_PARTITION__"))
     }
   }
+
+  test("SPARK-54710: show partitions as JSON") {
+    withNamespaceAndTable("ns", "dateTable") { t =>
+      createDateTable(t)
+      val df = spark.sql(s"SHOW PARTITIONS $t AS JSON")
+      assert(df.schema.length == 1)
+      assert(df.schema.head.name == "json_metadata")
+      checkAnswer(
+        df,
+        Row(
+          """{"partitions":["year=2015/month=1","year=2015/month=2",""" +
+            """"year=2016/month=2","year=2016/month=3"]}"""))
+    }
+  }
+
+  test("SPARK-54710: show partitions with spec as JSON") {
+    withNamespaceAndTable("ns", "dateTable") { t =>
+      createDateTable(t)
+      checkAnswer(
+        spark.sql(s"SHOW PARTITIONS $t PARTITION(year=2015) AS JSON"),
+        Row("""{"partitions":["year=2015/month=1","year=2015/month=2"]}"""))
+      checkAnswer(
+        spark.sql(s"SHOW PARTITIONS $t PARTITION(year=2015, month=1) AS JSON"),
+        Row("""{"partitions":["year=2015/month=1"]}"""))
+      checkAnswer(
+        spark.sql(s"SHOW PARTITIONS $t PARTITION(month=2) AS JSON"),
+        Row("""{"partitions":["year=2015/month=2","year=2016/month=2"]}"""))
+    }
+  }
+
+  test("SPARK-54710: no matching partitions as JSON") {
+    withNamespaceAndTable("ns", "dateTable") { t =>
+      createDateTable(t)
+      checkAnswer(
+        spark.sql(s"SHOW PARTITIONS $t PARTITION(year=9999) AS JSON"),
+        Row("""{"partitions":[]}"""))
+    }
+  }
 }
 
 /**
@@ -162,6 +200,20 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
       checkError(
         exception = intercept[AnalysisException] {
           sql(sqlText)
+        },
+        condition = "INVALID_PARTITION_OPERATION.PARTITION_SCHEMA_IS_EMPTY",
+        parameters = Map("name" -> tableName))
+    }
+  }
+
+  test("SPARK-54710: non-partitioned table AS JSON") {
+    withNamespaceAndTable("ns", "not_partitioned_table") { t =>
+      sql(s"CREATE TABLE $t (col1 int) $defaultUsing")
+      val tableName =
+        UnresolvedAttribute.parseAttributeName(t).map(quoteIdentifier).mkString(".")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SHOW PARTITIONS $t AS JSON")
         },
         condition = "INVALID_PARTITION_OPERATION.PARTITION_SCHEMA_IS_EMPTY",
         parameters = Map("name" -> tableName))

@@ -24,7 +24,6 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
     verifyTablePosition("MSCK REPAIR TABLE unknown", "unknown")
     verifyTablePosition("LOAD DATA LOCAL INPATH 'filepath' INTO TABLE unknown", "unknown")
     verifyTablePosition("TRUNCATE TABLE unknown", "unknown")
-    verifyTablePosition("SHOW PARTITIONS unknown", "unknown")
     verifyTablePosition("ALTER TABLE unknown RECOVER PARTITIONS", "unknown")
     verifyTablePosition("ALTER TABLE unknown ADD PARTITION (p=1)", "unknown")
     verifyTablePosition("ALTER TABLE unknown PARTITION (p=1) RENAME TO PARTITION (p=2)", "unknown")
