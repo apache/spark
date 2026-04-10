@@ -250,6 +250,39 @@ abstract class ChecksumCheckpointFileManagerSuite extends CheckpointFileManagerT
       checksumFmWithoutFallback.close()
     }
   }
+
+  test("numThreads = 0 disables thread pool (sequential mode)") {
+    withTempHadoopPath { basePath =>
+      val fm = new ChecksumCheckpointFileManager(
+        createNoChecksumManager(basePath),
+        allowConcurrentDelete = true,
+        numThreads = 0,
+        skipCreationIfFileMissingChecksum = false)
+      val path = new Path(basePath, "testfile")
+      val checksumPath = getChecksumPath(path)
+      // Write a file (main + checksum) in sequential mode
+      fm.createAtomic(path, overwriteIfPossible = false).writeContent(42).close()
+      // Verify both the main file and checksum file were written to disk
+      assert(fm.exists(path), "Main file should exist after write")
+      assert(fm.exists(checksumPath), "Checksum file should exist after write")
+      // Read it back - readContent() closes the stream, which triggers checksum verification
+      assert(fm.open(path).readContent() == 42)
+      fm.close()
+    }
+  }
+
+  test("negative numThreads is invalid") {
+    withTempHadoopPath { basePath =>
+      val ex = intercept[AssertionError] {
+        new ChecksumCheckpointFileManager(
+          createNoChecksumManager(basePath),
+          allowConcurrentDelete = true,
+          numThreads = -1,
+          skipCreationIfFileMissingChecksum = false)
+      }
+      assert(ex.getMessage.contains("numThreads must be a non-negative integer"))
+    }
+  }
 }
 
 class FileContextChecksumCheckpointFileManagerSuite extends ChecksumCheckpointFileManagerSuite {

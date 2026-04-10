@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.util.{Either, Left, Right}
 
-import org.apache.spark.QueryContext
+import org.apache.spark.{QueryContext, SparkException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
@@ -184,7 +184,13 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StructType, IntegralType)
 
-  lazy val childSchema = child.dataType.asInstanceOf[StructType]
+  lazy val childSchema = child.dataType match {
+    case st: StructType => st
+    case other =>
+      throw SparkException.internalError(
+        s"GetStructField requires a StructType child, but got ${other.catalogString}. " +
+        s"The child type may have been changed by a plan transformation.")
+  }
 
   override lazy val canonicalized: Expression = {
     copy(child = child.canonicalized, name = None)
@@ -431,7 +437,7 @@ trait GetArrayItemUtil {
           true
       }
     } else {
-      if (failOnError) arrayElementNullable else true
+      if (failOnError) arrayElementNullable || child.nullable else true
     }
   }
 }

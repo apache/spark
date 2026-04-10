@@ -20,12 +20,14 @@ package org.apache.spark.sql.catalyst.parser
 import scala.annotation.nowarn
 
 import org.apache.spark.SparkThrowable
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationChanges, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{EvaluateUnresolvedInlineTable, IntervalUtils}
+import org.apache.spark.sql.connector.catalog.{ChangelogInfo, ChangelogRange}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, LongType, StringType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -294,15 +296,25 @@ class PlanParserSuite extends AnalysisTest {
       cte(table("cte2").select(star()), false,
         "cte1" -> ((OneRowRelation().select(1), Seq.empty)),
         "cte2" -> ((table("cte1").select(star()), Seq.empty))))
-    val sql = "with cte1 (select 1), cte1 as (select 1 from cte1) select * from cte1"
+    val sql1 = "with cte1 (select 1), cte1 as (select 1 from cte1) select * from cte1"
     checkError(
-      exception = parseException(sql),
+      exception = parseException(sql1),
       condition = "DUPLICATED_CTE_NAMES",
       parameters = Map("duplicateNames" -> "`cte1`"),
       context = ExpectedContext(
-        fragment = sql,
+        fragment = sql1,
         start = 0,
         stop = 68))
+    // Case-insensitive duplicate CTE names should also be detected.
+    val sql2 = "with CTE1 (select 1), cte1 as (select 2) select * from cte1"
+    checkError(
+      exception = parseException(sql2),
+      condition = "DUPLICATED_CTE_NAMES",
+      parameters = Map("duplicateNames" -> "`cte1`"),
+      context = ExpectedContext(
+        fragment = sql2,
+        start = 0,
+        stop = 58))
   }
 
   test("simple select query") {
@@ -819,9 +831,14 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(s"$sql tablesample(100 rows)",
       table("t").limit(100).select(star()))
     assertEqual(s"$sql tablesample(43 percent) as x",
-      Sample(0, .43d, withReplacement = false, 10L, table("t").as("x")).select(star()))
+      Sample(0, .43d, withReplacement = false, None, table("t").as("x")).select(star()))
     assertEqual(s"$sql tablesample(bucket 4 out of 10) as x",
-      Sample(0, .4d, withReplacement = false, 10L, table("t").as("x")).select(star()))
+      Sample(0, .4d, withReplacement = false, None, table("t").as("x")).select(star()))
+    // REPEATABLE clause produces Some(seed)
+    assertEqual(s"$sql tablesample(43 percent) repeatable (10) as x",
+      Sample(0, .43d, withReplacement = false, 10L, table("t").as("x")).select(star()))
+    assertEqual(s"$sql tablesample(bucket 4 out of 10) repeatable (99) as x",
+      Sample(0, .4d, withReplacement = false, 99L, table("t").as("x")).select(star()))
 
     val sql1 = s"$sql tablesample(bucket 4 out of 10 on x) as x"
     val fragment1 = "tablesample(bucket 4 out of 10 on x)"
@@ -913,29 +930,19 @@ class PlanParserSuite extends AnalysisTest {
       "select * from range(2)",
       UnresolvedTableValuedFunction("range", Literal(2) :: Nil).select(star()))
 
-    // SPARK-34627
-    val sql1 = "select * from default.range(2)"
-    val fragment1 = "default.range(2)"
-    checkError(
-      exception = parseException(sql1),
-      condition = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-      parameters = Map("funcName" -> "`default`.`range`"),
-      context = ExpectedContext(
-        fragment = fragment1,
-        start = 14,
-        stop = 29))
+    // SPARK-34627 - Qualified table-valued functions are now supported
+    assertEqual(
+      "select * from default.range(2)",
+      UnresolvedTableValuedFunction(
+        Seq("default", "range"),
+        Literal(2) :: Nil).select(star()))
 
-    // SPARK-38957
-    val sql2 = "select * from spark_catalog.default.range(2)"
-    val fragment2 = "spark_catalog.default.range(2)"
-    checkError(
-      exception = parseException(sql2),
-      condition = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-      parameters = Map("funcName" -> "`spark_catalog`.`default`.`range`"),
-      context = ExpectedContext(
-        fragment = fragment2,
-        start = 14,
-        stop = 43))
+    // SPARK-38957 - Fully qualified table-valued functions are now supported
+    assertEqual(
+      "select * from spark_catalog.default.range(2)",
+      UnresolvedTableValuedFunction(
+        Seq("spark_catalog", "default", "range"),
+        Literal(2) :: Nil).select(star()))
   }
 
   test("SPARK-20311 range(N) as alias") {
@@ -1837,6 +1844,244 @@ class PlanParserSuite extends AnalysisTest {
         fragment = fragment,
         start = 20,
         stop = 38))
+  }
+
+  test("CHANGES clause - version range") {
+    def changesFromVersion(
+        startVersion: String,
+        endVersion: Option[String] = None,
+        startInclusive: Boolean = true,
+        endInclusive: Boolean = true): RelationChanges = {
+      RelationChanges(
+        UnresolvedRelation(Seq("a", "b", "c")),
+        new ChangelogInfo(
+          new ChangelogRange.VersionRange(
+            startVersion,
+            endVersion.map(java.util.Optional.of[String])
+              .getOrElse(java.util.Optional.empty[String]),
+            startInclusive,
+            endInclusive),
+          ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS,
+          false))
+    }
+
+    // Basic version range: CHANGES FROM VERSION 10 TO VERSION 20
+    Seq("VERSION", "SYSTEM_VERSION").foreach { keyword =>
+      comparePlans(
+        parsePlan(s"SELECT * FROM a.b.c CHANGES FROM $keyword 10 TO $keyword 20"),
+        Project(Seq(UnresolvedStar(None)),
+          changesFromVersion("10", Some("20"))))
+    }
+
+    // Version range with string version
+    comparePlans(
+      parsePlan("SELECT * FROM a.b.c CHANGES FROM VERSION '5765898212649545898' " +
+        "TO VERSION '8439568982649545102'"),
+      Project(Seq(UnresolvedStar(None)),
+        changesFromVersion("5765898212649545898", Some("8439568982649545102"))))
+
+    // No ending version: CHANGES FROM VERSION 5
+    comparePlans(
+      parsePlan("SELECT * FROM a.b.c CHANGES FROM VERSION 5"),
+      Project(Seq(UnresolvedStar(None)),
+        changesFromVersion("5")))
+
+    // EXCLUSIVE starting bound
+    comparePlans(
+      parsePlan("SELECT * FROM a.b.c CHANGES FROM VERSION 10 EXCLUSIVE TO VERSION 20"),
+      Project(Seq(UnresolvedStar(None)),
+        changesFromVersion("10", Some("20"), startInclusive = false)))
+
+    // EXCLUSIVE ending bound
+    comparePlans(
+      parsePlan("SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 EXCLUSIVE"),
+      Project(Seq(UnresolvedStar(None)),
+        changesFromVersion("10", Some("20"), endInclusive = false)))
+
+    // Both bounds EXCLUSIVE
+    comparePlans(
+      parsePlan(
+        "SELECT * FROM a.b.c CHANGES FROM VERSION 10 EXCLUSIVE TO VERSION 20 EXCLUSIVE"),
+      Project(Seq(UnresolvedStar(None)),
+        changesFromVersion("10", Some("20"),
+          startInclusive = false, endInclusive = false)))
+
+    // INCLUSIVE is explicit (but default)
+    comparePlans(
+      parsePlan(
+        "SELECT * FROM a.b.c CHANGES FROM VERSION 10 INCLUSIVE TO VERSION 20 INCLUSIVE"),
+      Project(Seq(UnresolvedStar(None)),
+        changesFromVersion("10", Some("20"))))
+  }
+
+  test("CHANGES clause - timestamp range") {
+    def assertTimestampRange(sql: String): ChangelogRange.TimestampRange = {
+      val plan = parsePlan(sql)
+      val project = plan.asInstanceOf[Project]
+      val changes = project.child match {
+        case rc: RelationChanges => rc
+        case sa: SubqueryAlias => sa.child.asInstanceOf[RelationChanges]
+      }
+      changes.changelogInfo.range().asInstanceOf[ChangelogRange.TimestampRange]
+    }
+
+    // Basic timestamp range
+    val range1 = assertTimestampRange(
+      "SELECT * FROM a.b.c CHANGES FROM TIMESTAMP '2026-01-01' TO TIMESTAMP '2026-02-01'")
+    assert(range1.startingBoundInclusive())
+    assert(range1.endingBoundInclusive())
+    assert(range1.endingTimestamp().isPresent)
+
+    // SYSTEM_TIME synonym
+    val range2 = assertTimestampRange(
+      "SELECT * FROM a.b.c CHANGES FROM SYSTEM_TIME '2026-01-01' TO SYSTEM_TIME '2026-02-01'")
+    assert(range2.startingTimestamp() == range1.startingTimestamp())
+    assert(range2.endingTimestamp() == range1.endingTimestamp())
+
+    // No ending timestamp
+    val range3 = assertTimestampRange(
+      "SELECT * FROM a.b.c CHANGES FROM TIMESTAMP '2026-01-01'")
+    assert(!range3.endingTimestamp().isPresent)
+
+    // EXCLUSIVE bounds on timestamp
+    val range4 = assertTimestampRange(
+      "SELECT * FROM a.b.c CHANGES FROM TIMESTAMP '2026-01-01' EXCLUSIVE " +
+        "TO TIMESTAMP '2026-02-01' EXCLUSIVE")
+    assert(!range4.startingBoundInclusive())
+    assert(!range4.endingBoundInclusive())
+
+    // INCLUSIVE is explicit but same as default
+    val range5 = assertTimestampRange(
+      "SELECT * FROM a.b.c CHANGES FROM TIMESTAMP '2026-01-01' INCLUSIVE " +
+        "TO TIMESTAMP '2026-02-01' INCLUSIVE")
+    assert(range5.startingBoundInclusive())
+    assert(range5.endingBoundInclusive())
+    assert(range5.startingTimestamp() == range1.startingTimestamp())
+  }
+
+  test("CHANGES clause - with options") {
+    def assertChangelogInfo(sql: String): ChangelogInfo = {
+      val plan = parsePlan(sql)
+      val project = plan.asInstanceOf[Project]
+      val changes = project.child match {
+        case rc: RelationChanges => rc
+        case sa: SubqueryAlias => sa.child.asInstanceOf[RelationChanges]
+      }
+      changes.changelogInfo
+    }
+
+    // Default: DROP_CARRYOVERS and computeUpdates = false
+    val info1 = assertChangelogInfo(
+      "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20")
+    assert(info1.deduplicationMode() == ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+    assert(!info1.computeUpdates())
+
+    // deduplicationMode = none
+    val info2 = assertChangelogInfo(
+      "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
+        "WITH (deduplicationMode = 'none')")
+    assert(info2.deduplicationMode() == ChangelogInfo.DeduplicationMode.NONE)
+    assert(!info2.computeUpdates())
+
+    // deduplicationMode = netChanges
+    val info3 = assertChangelogInfo(
+      "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
+        "WITH (deduplicationMode = 'netChanges')")
+    assert(info3.deduplicationMode() == ChangelogInfo.DeduplicationMode.NET_CHANGES)
+
+    // computeUpdates = true
+    val info4 = assertChangelogInfo(
+      "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
+        "WITH (computeUpdates = 'true')")
+    assert(info4.deduplicationMode() == ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+    assert(info4.computeUpdates())
+
+    // Both options together
+    val info5 = assertChangelogInfo(
+      "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
+        "WITH (deduplicationMode = 'none', computeUpdates = 'true')")
+    assert(info5.deduplicationMode() == ChangelogInfo.DeduplicationMode.NONE)
+    assert(info5.computeUpdates())
+
+    // Case-insensitive deduplicationMode value
+    val info6 = assertChangelogInfo(
+      "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
+        "WITH (deduplicationMode = 'DROPCARRYOVERS')")
+    assert(info6.deduplicationMode() == ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+  }
+
+  test("CHANGES clause - invalid deduplicationMode") {
+    checkError(
+      intercept[AnalysisException] {
+        parsePlan(
+          "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
+            "WITH (deduplicationMode = 'invalid')")
+      },
+      condition = "INVALID_CDC_OPTION.INVALID_DEDUPLICATION_MODE",
+      parameters = Map("mode" -> "invalid"))
+  }
+
+  test("CHANGES clause - aliased table") {
+    // CHANGES with table alias
+    val plan = parsePlan(
+      "SELECT t.* FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 AS t")
+    assert(plan.isInstanceOf[Project])
+    val project = plan.asInstanceOf[Project]
+    val alias = project.child.asInstanceOf[SubqueryAlias]
+    assert(alias.identifier.name == "t")
+    assert(alias.child.isInstanceOf[RelationChanges])
+  }
+
+  test("CHANGES clause - simple table name") {
+    comparePlans(
+      parsePlan("SELECT * FROM my_table CHANGES FROM VERSION 1"),
+      Project(Seq(UnresolvedStar(None)),
+        RelationChanges(
+          UnresolvedRelation(Seq("my_table")),
+          new ChangelogInfo(
+            new ChangelogRange.VersionRange(
+              "1", java.util.Optional.empty[String], true, true),
+            ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS,
+            false))))
+  }
+
+  test("CHANGES clause - in subquery") {
+    val plan = parsePlan(
+      "SELECT * FROM (SELECT * FROM t CHANGES FROM VERSION 1 TO VERSION 5) sub")
+    assert(plan.isInstanceOf[Project])
+  }
+
+  test("CHANGES clause - in join") {
+    val plan = parsePlan(
+      "SELECT * FROM t1 CHANGES FROM VERSION 1 TO VERSION 5 AS a " +
+        "JOIN t2 CHANGES FROM VERSION 1 TO VERSION 5 AS b ON a.id = b.id")
+    assert(plan.isInstanceOf[Project])
+  }
+
+  test("CHANGES clause - error: column reference in timestamp") {
+    val e = intercept[ParseException] {
+      parsePlan("SELECT * FROM t CHANGES FROM TIMESTAMP col_name")
+    }
+    assert(e.getMessage.contains("timestamp expression cannot refer to any columns"))
+  }
+
+  test("CHANGES clause - error: subquery in starting timestamp") {
+    checkError(
+      intercept[AnalysisException] {
+        parsePlan(
+          "SELECT * FROM t CHANGES FROM TIMESTAMP (SELECT MAX(ts) FROM other_table)")
+      },
+      condition = "INVALID_CDC_OPTION.INVALID_TIMESTAMP_EXPR")
+  }
+
+  test("CHANGES clause - error: subquery in ending timestamp") {
+    checkError(
+      intercept[AnalysisException] {
+        parsePlan(
+          "SELECT * FROM t CHANGES FROM TIMESTAMP '2026-01-01' " +
+            "TO TIMESTAMP (SELECT MAX(ts) FROM other_table)")
+      },
+      condition = "INVALID_CDC_OPTION.INVALID_TIMESTAMP_EXPR")
   }
 
   test("PERCENTILE_CONT & PERCENTILE_DISC") {

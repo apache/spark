@@ -197,6 +197,17 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends sql.Data
   }
 
   /** @inheritdoc */
+  def changes(tableName: String): DataFrame = {
+    require(tableName != null, "The table name can't be null")
+    assertNoSpecifiedSchema("changes")
+    sparkSession.newDataFrame { builder =>
+      builder.getRelationChangesBuilder
+        .setUnparsedIdentifier(tableName)
+        .putAllOptions(extraOptions.toMap.asJava)
+    }
+  }
+
+  /** @inheritdoc */
   override def text(path: String): DataFrame = super.text(path)
 
   /** @inheritdoc */

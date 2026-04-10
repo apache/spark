@@ -234,8 +234,13 @@ message PipelineCommand {
   // Request from the client to update the flow function evaluation result
   // for a previously un-analyzed flow.
   message DefineFlowQueryFunctionResult {
-    // The fully qualified name of the flow being updated.
-    optional string flow_name = 1;
+    // (Deprecated) The fully qualified name of the flow being updated.
+    //
+    // This field is deprecated since Spark 4.2+. Use flow_identifier field instead.
+    optional string flow_name = 1 [deprecated = true];
+
+    // The fully qualified identifier of the flow being updated.
+    optional ResolvedIdentifier flow_identifier = 4;
 
     // The ID of the graph this flow belongs to.
     optional string dataflow_graph_id = 2;
@@ -311,7 +316,13 @@ message SourceCodeLocation {
 // A signal from the server to the client to execute the query function for one or more flows, and
 // to register their results with the server.
 message PipelineQueryFunctionExecutionSignal {
-  repeated string flow_names = 1;
+  // (Deprecated) The name of flows that are ready to be re-evaluated.
+  //
+  // This field is deprecated since Spark 4.2+. Use flow_identifiers field instead.
+  repeated string flow_names = 1 [deprecated = true];
+
+  // The identifier of flows that are ready to be re-evaluated
+  repeated ResolvedIdentifier flow_identifiers = 2;
 }
 
 // Metadata providing context about the pipeline during Spark Connect query analysis.
@@ -320,8 +331,12 @@ message PipelineAnalysisContext {
   optional string dataflow_graph_id = 1;
   // The path of the top-level pipeline file determined at runtime during pipeline initialization.
   optional string definition_path = 2;
-  // The name of the Flow involved in this analysis
-  optional string flow_name = 3;
+  // (Deprecated) The name of the Flow involved in this analysis
+  //
+  // This field is deprecated since Spark 4.2+. Use flow_identifier field instead.
+  optional string flow_name = 3 [deprecated = true];
+  // The identifier of the Flow involved in this analysis
+  optional ResolvedIdentifier flow_identifier = 4;
 
   // Reserved field for protocol extensions.
   repeated google.protobuf.Any extension = 999;

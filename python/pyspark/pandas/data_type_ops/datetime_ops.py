@@ -94,6 +94,8 @@ class DatetimeOps(DataTypeOps):
             "The timestamp subtraction returns an integer in seconds, "
             "whereas pandas returns 'timedelta64[ns]'."
         )
+        if isinstance(right, pd.Series):
+            raise NotImplementedError()
         if isinstance(right, datetime.datetime):
             warnings.warn(msg, UserWarning)
             return cast(

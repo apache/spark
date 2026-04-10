@@ -18,6 +18,7 @@
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.config import set_option, reset_option
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -46,37 +47,41 @@ class GroupByDiffLenMixin:
             pd.DataFrame({"a": [1, 2, 6, 4, 4, 6, 4, 3, 7], "b": [4, 2, 7, 3, 3, 1, 1, 1, 2]}),
         ]
 
-        for pdf1, pdf2 in zip(pdfs1, pdfs2):
-            psdf1 = ps.from_pandas(pdf1)
-            psdf2 = ps.from_pandas(pdf2)
+        for as_index in [True, False]:
+            # pandas 3 includes external group keys for as_index=False and can widen
+            # their dtype after aligning mismatched lengths.
+            almost = as_index or LooseVersion(pd.__version__) >= "3.0.0"
 
-            for as_index in [True, False]:
-                if as_index:
+            if as_index:
 
-                    def sort(df):
-                        return df.sort_index()
+                def sort(df):
+                    return df.sort_index()
 
-                else:
+            else:
 
-                    def sort(df):
-                        return df.sort_values("c").reset_index(drop=True)
+                def sort(df):
+                    return df.sort_values("c").reset_index(drop=True)
 
-                self.assert_eq(
-                    sort(psdf1.groupby(psdf2.a, as_index=as_index).sum()),
-                    sort(pdf1.groupby(pdf2.a, as_index=as_index).sum()),
-                    almost=as_index,
-                )
+            for i, (pdf1, pdf2) in enumerate(zip(pdfs1, pdfs2)):
+                psdf1 = ps.from_pandas(pdf1)
+                psdf2 = ps.from_pandas(pdf2)
 
-                self.assert_eq(
-                    sort(psdf1.groupby(psdf2.a, as_index=as_index).c.sum()),
-                    sort(pdf1.groupby(pdf2.a, as_index=as_index).c.sum()),
-                    almost=as_index,
-                )
-                self.assert_eq(
-                    sort(psdf1.groupby(psdf2.a, as_index=as_index)["c"].sum()),
-                    sort(pdf1.groupby(pdf2.a, as_index=as_index)["c"].sum()),
-                    almost=as_index,
-                )
+                with self.subTest(i=i, as_index=as_index):
+                    self.assert_eq(
+                        sort(psdf1.groupby(psdf2.a, as_index=as_index).sum()),
+                        sort(pdf1.groupby(pdf2.a, as_index=as_index).sum()),
+                        almost=almost,
+                    )
+                    self.assert_eq(
+                        sort(psdf1.groupby(psdf2.a, as_index=as_index).c.sum()),
+                        sort(pdf1.groupby(pdf2.a, as_index=as_index).c.sum()),
+                        almost=almost,
+                    )
+                    self.assert_eq(
+                        sort(psdf1.groupby(psdf2.a, as_index=as_index)["c"].sum()),
+                        sort(pdf1.groupby(pdf2.a, as_index=as_index)["c"].sum()),
+                        almost=almost,
+                    )
 
 
 class GroupByDiffLenTests(

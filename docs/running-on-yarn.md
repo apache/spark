@@ -407,13 +407,28 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>1.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.yarn.am.defaultJavaOptions</code></td>
+  <td>(none)</td>
+  <td>
+  A string of default JVM options to prepend to <code>spark.yarn.am.extraJavaOptions</code>
+  for the YARN Application Master in client mode. Note that it is illegal to set maximum
+  heap size (-Xmx) settings with this option. Maximum heap size settings can be set with
+  <code>spark.yarn.am.memory</code>.
+
+  This is intended to be set by administrators.
+  </td>
+  <td>4.2.0</td>
+</tr>
+<tr>
   <td><code>spark.yarn.am.extraJavaOptions</code></td>
   <td>(none)</td>
   <td>
   A string of extra JVM options to pass to the YARN Application Master in client mode.
   In cluster mode, use <code>spark.driver.extraJavaOptions</code> instead. Note that it is illegal
   to set maximum heap size (-Xmx) settings with this option. Maximum heap size settings can be set
-  with <code>spark.yarn.am.memory</code>
+  with <code>spark.yarn.am.memory</code>.
+
+  <code>spark.yarn.am.defaultJavaOptions</code> will be prepended to this configuration.
   </td>
   <td>1.3.0</td>
 </tr>

@@ -1241,7 +1241,21 @@ class MicroBatchExecution(
       execCtx: MicroBatchExecutionContext,
       opId: Long,
       checkpointInfo: Array[StatefulOpStateStoreCheckpointInfo]): Unit = {
-    // TODO validate baseStateStoreCkptId
+    // Validate that each partition's baseStateStoreCkptId matches what the driver sent
+    currentStateStoreCkptId.get(opId).foreach { previousCkptIds =>
+      checkpointInfo.foreach { info =>
+        val expectedBaseId = previousCkptIds(info.partitionId)
+        val actualBaseId = info.baseStateStoreCkptId
+        if (!actualBaseId.exists(_.sameElements(expectedBaseId))) {
+          throw StateStoreErrors.stateStoreBaseCheckpointIdMismatch(
+            info.batchVersion,
+            info.partitionId,
+            opId,
+            expectedBaseId.mkString("[", ", ", "]"),
+            actualBaseId.map(_.mkString("[", ", ", "]")).getOrElse("None"))
+        }
+      }
+    }
     checkpointInfo.map(_.batchVersion).foreach { v =>
       assert(
         execCtx.batchId == -1 || v == execCtx.batchId + 1,

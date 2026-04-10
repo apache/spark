@@ -84,7 +84,10 @@ class OfflineStateRepartitionTestUtils:
         verify_initial, verify_after_increase, verify_after_decrease : callable
             Functions(collected_results) to verify results at each stage.
         """
-        with tempfile.TemporaryDirectory() as input_dir, tempfile.TemporaryDirectory() as checkpoint_dir:
+        with (
+            tempfile.TemporaryDirectory() as input_dir,
+            tempfile.TemporaryDirectory() as checkpoint_dir,
+        ):
             collected_results = []
 
             def collect_batch(batch_df, batch_id):

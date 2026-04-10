@@ -29,7 +29,9 @@ import org.apache.spark.sql.internal.SQLConf
  * Important note: these checks are not always idempotent, and sometimes perform heavy network
  * operations.
  */
-class ResolutionCheckRunner(resolutionChecks: Seq[LogicalPlan => Unit]) extends SQLConfHelper {
+class ResolutionCheckRunner(resolutionChecks: Seq[LogicalPlan => Unit])
+    extends ResolverMetricTracker
+    with SQLConfHelper {
 
   /**
    * Runs the resolution checks on `plan`. Invokes all the checks for every subquery plan, and
@@ -37,8 +39,10 @@ class ResolutionCheckRunner(resolutionChecks: Seq[LogicalPlan => Unit]) extends 
    */
   def runWithSubqueries(plan: LogicalPlan): Unit = {
     if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_RUN_EXTENDED_RESOLUTION_CHECKS)) {
-      AnalysisHelper.allowInvokingTransformsInAnalyzer {
-        doRunWithSubqueries(plan)
+      recordProfile("runWithSubqueries") {
+        AnalysisHelper.allowInvokingTransformsInAnalyzer {
+          doRunWithSubqueries(plan)
+        }
       }
     }
   }
@@ -57,7 +61,9 @@ class ResolutionCheckRunner(resolutionChecks: Seq[LogicalPlan => Unit]) extends 
 
   private def run(plan: LogicalPlan): Unit = {
     for (check <- resolutionChecks) {
-      check(plan)
+      recordProfile(check.getClass.getSimpleName) {
+        check(plan)
+      }
     }
   }
 }

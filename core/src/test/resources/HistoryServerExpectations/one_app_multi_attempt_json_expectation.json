@@ -2,6 +2,8 @@
   "attempts" : [ {
     "appSparkVersion" : "",
     "attemptId" : "2",
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "completed" : true,
     "duration" : 34935,
     "endTime" : "2015-03-17T23:12:25.177GMT",
@@ -14,6 +16,8 @@
   }, {
     "appSparkVersion" : "",
     "attemptId" : "1",
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "completed" : true,
     "duration" : 34935,
     "endTime" : "2015-03-16T19:25:45.177GMT",

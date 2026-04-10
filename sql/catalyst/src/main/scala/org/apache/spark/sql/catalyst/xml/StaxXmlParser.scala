@@ -1284,13 +1284,19 @@ object StaxXmlParser {
     val decimalParser = ExprUtils.getDecimalParser(options.locale)
     try {
       var d = decimalParser(value)
-      if (d.scale() < 0) {
-        d = d.setScale(0)
-      }
-      if (d.scale <= VariantUtil.MAX_DECIMAL16_PRECISION &&
-        d.precision <= VariantUtil.MAX_DECIMAL16_PRECISION) {
-        builder.appendDecimal(d)
-        return
+      if (d.scale() < -VariantUtil.MAX_DECIMAL16_PRECISION) {
+        // Scale is so extremely negative that setScale(0) would require computing
+        // bigTenToThe(|scale|), which is prohibitively expensive. The resulting precision
+        // would also exceed MAX_DECIMAL16_PRECISION, so fall through to string.
+      } else {
+        if (d.scale() < 0) {
+          d = d.setScale(0)
+        }
+        if (d.scale <= VariantUtil.MAX_DECIMAL16_PRECISION &&
+          d.precision <= VariantUtil.MAX_DECIMAL16_PRECISION) {
+          builder.appendDecimal(d)
+          return
+        }
       }
     } catch {
       case NonFatal(_) =>

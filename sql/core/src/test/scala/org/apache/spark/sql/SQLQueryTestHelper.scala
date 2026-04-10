@@ -400,11 +400,16 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
   protected def splitCommentsAndCodes(input: String): (Array[String], Array[String]) =
     input.split("\n").partition { line =>
       val newLine = line.trim
-      newLine.startsWith("--") && !newLine.startsWith("--QUERY-DELIMITER")
+      newLine.startsWith("--") && !newLine.startsWith("--QUERY-DELIMITER") &&
+        newLine != "--DEBUG"
     }
 
-  protected def getQueries(code: Array[String], comments: Array[String],
-      allTestCases: Seq[TestCase]): Seq[String] = {
+  /**
+   * Parses queries from code lines and returns each query paired with a Boolean indicating
+   * whether it was preceded by a --DEBUG marker.
+   */
+  protected def getQueriesWithDebugFlag(code: Array[String], comments: Array[String],
+      allTestCases: Seq[TestCase]): Seq[(String, Boolean)] = {
     def splitWithSemicolon(seq: Seq[String]) = {
       seq.mkString("\n").split("(?<=[^\\\\]);")
     }
@@ -450,10 +455,18 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
       splitWithSemicolon(allCode.toImmutableArraySeq).toSeq
     }
 
-    // List of SQL queries to run
-    tempQueries.map(_.trim).filter(_ != "")
-      // Fix misplacement when comment is at the end of the query.
-      .map(_.split("\n").filterNot(_.startsWith("--")).mkString("\n")).map(_.trim).filter(_ != "")
+    // Detect --DEBUG markers before stripping comment lines from each query.
+    tempQueries.map(_.trim).filter(_ != "").map { query =>
+      val lines = query.split("\n")
+      val isDebug = lines.exists(_.trim == "--DEBUG")
+      val cleanedQuery = lines.filterNot(_.startsWith("--")).mkString("\n").trim
+      (cleanedQuery, isDebug)
+    }.filter(_._1 != "")
+  }
+
+  protected def getQueries(code: Array[String], comments: Array[String],
+      allTestCases: Seq[TestCase]): Seq[String] = {
+    getQueriesWithDebugFlag(code, comments, allTestCases).map(_._1)
   }
 
   protected def getSparkSettings(comments: Array[String]): Array[(String, String)] = {

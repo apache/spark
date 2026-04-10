@@ -21,7 +21,7 @@ import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.avro.{Schema, SchemaFormatter}
+import org.apache.avro.{Schema, SchemaFormatter, SchemaParseException}
 import org.apache.avro.file.{DataFileReader, FileReader}
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.{AvroOutputFormat, FsInput}
@@ -47,6 +47,30 @@ private[sql] object AvroUtils extends Logging {
 
   val JSON_INLINE_FORMAT: String = "json/inline"
   val JSON_PRETTY_FORMAT: String = "json/pretty"
+
+  /**
+   * Parses an Avro schema from a JSON string with proper error handling.
+   *
+   * The Avro 1.12.x library's Schema.Parser can throw NullPointerException from
+   * ParseContext.resolve() when the schema references named types that cannot be
+   * resolved. This method wraps such NPEs in SchemaParseException so they are
+   * handled by the existing error handling in from_avro/to_avro (which catches
+   * NonFatal exceptions and reports them via the parseMode mechanism).
+   *
+   * @param jsonFormatSchema the Avro schema in JSON string format
+   * @return the parsed Avro Schema
+   * @throws SchemaParseException if the schema cannot be parsed
+   */
+  def parseAvroSchema(jsonFormatSchema: String): Schema = {
+    try {
+      new Schema.Parser().setValidateDefaults(false).parse(jsonFormatSchema)
+    } catch {
+      case e: NullPointerException =>
+        val ex = new SchemaParseException(s"Failed to parse Avro schema: ${e.getMessage}")
+        ex.initCause(e)
+        throw ex
+    }
+  }
 
   def inferSchema(
       spark: SparkSession,

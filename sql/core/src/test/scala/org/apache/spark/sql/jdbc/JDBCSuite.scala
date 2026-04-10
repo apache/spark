@@ -531,6 +531,62 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-56251: Dialect getFetchSize is applied when user does not specify fetchsize") {
+    JDBCSuite.capturedFetchSize = -1
+
+    val testDialect = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+      override def getFetchSize(options: JDBCOptions): Int = {
+        val result = options.parameters.get(JDBCOptions.JDBC_BATCH_FETCH_SIZE) match {
+          case Some(v) => v.toInt
+          case None => 100
+        }
+        JDBCSuite.capturedFetchSize = result
+        result
+      }
+    }
+
+    JdbcDialects.registerDialect(testDialect)
+    try {
+      val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties())
+      assert(df.collect().length === 3)
+      assert(JDBCSuite.capturedFetchSize === 100,
+        s"Expected getFetchSize to return 100 (dialect default), " +
+          s"got ${JDBCSuite.capturedFetchSize}")
+    } finally {
+      JdbcDialects.unregisterDialect(testDialect)
+    }
+  }
+
+  test("SPARK-56251: User-specified fetchsize takes precedence over dialect getFetchSize") {
+    JDBCSuite.capturedFetchSize = -1
+
+    val testDialect = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+      override def getFetchSize(options: JDBCOptions): Int = {
+        val result = options.parameters.get(JDBCOptions.JDBC_BATCH_FETCH_SIZE) match {
+          case Some(v) => v.toInt
+          case None => 100
+        }
+        JDBCSuite.capturedFetchSize = result
+        result
+      }
+    }
+
+    JdbcDialects.registerDialect(testDialect)
+    try {
+      val properties = new Properties()
+      properties.setProperty(JDBCOptions.JDBC_BATCH_FETCH_SIZE, "42")
+      val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties)
+      assert(df.collect().length === 3)
+      assert(JDBCSuite.capturedFetchSize === 42,
+        s"Expected getFetchSize to return 42 (user-specified), " +
+          s"got ${JDBCSuite.capturedFetchSize}")
+    } finally {
+      JdbcDialects.unregisterDialect(testDialect)
+    }
+  }
+
   test("Partitioning via JDBCPartitioningInfo API") {
     val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3, new Properties())
     checkNumPartitions(df, expectedNumPartitions = 3)
@@ -2309,4 +2365,10 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       )
     }
   }
+}
+
+object JDBCSuite {
+  // SPARK-56251: Spark tasks use deserialized dialect instances, so closure-captured variables
+  // from the test method won't be updated. Use a companion object singleton to pass values instead.
+  @volatile var capturedFetchSize: Int = -1
 }

@@ -120,5 +120,13 @@
     "message" : [
       "The specified start <offsetType> <startOffset> is greater than the end <offsetType> <endOffset> for topic <topic> partition <partition>."
     ]
+  },
+  "KAFKA_MALFORMED_RECORD_TIMESTAMP" : {
+    "message": [
+      "Record at topic <topic> partition <partition> offset <offset> has timestamp value <timestamp> that overflows when converting to Spark's microsecond-precision TimestampType.",
+      "Kafka record timestamps must be in milliseconds since epoch per the Kafka protocol. The provided value suggests the producer may be writing timestamps in microseconds or nanoseconds instead.",
+      "Ensure the Kafka producer sets the ProducerRecord timestamp in milliseconds."
+    ],
+    "sqlState": "22008"
   }
 }

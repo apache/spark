@@ -211,8 +211,8 @@ class MapInPandasTestsMixin:
 
         with self.assertRaisesRegex(
             PythonException,
-            "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF\\] "
-            "Column names of the returned pandas.DataFrame do not match "
+            "PySparkRuntimeError: \\[RESULT_COLUMN_NAMES_MISMATCH\\] "
+            "Column names of the returned data do not match "
             "specified schema. Missing: id. Unexpected: iid.",
         ):
             (
@@ -233,8 +233,8 @@ class MapInPandasTestsMixin:
 
         with self.assertRaisesRegex(
             PythonException,
-            "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF\\] "
-            "Column names of the returned pandas.DataFrame do not match "
+            "PySparkRuntimeError: \\[RESULT_COLUMN_NAMES_MISMATCH\\] "
+            "Column names of the returned data do not match "
             "specified schema. Missing: id2.",
         ):
             (
@@ -254,8 +254,8 @@ class MapInPandasTestsMixin:
 
         with self.assertRaisesRegex(
             PythonException,
-            "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF\\] "
-            "Column names of the returned pandas.DataFrame do not match "
+            "PySparkRuntimeError: \\[RESULT_COLUMN_NAMES_MISMATCH\\] "
+            "Column names of the returned data do not match "
             "specified schema. Missing: id2.",
         ):
             f = self.identity_dataframes_iter("id", "value")
@@ -263,8 +263,8 @@ class MapInPandasTestsMixin:
 
         with self.assertRaisesRegex(
             PythonException,
-            "PySparkRuntimeError: \\[RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF\\] "
-            "Number of columns of the returned pandas.DataFrame doesn't match "
+            "PySparkRuntimeError: \\[RESULT_COLUMN_SCHEMA_MISMATCH\\] "
+            "Number of columns of the returned data doesn't match "
             "specified schema. Expected: 3 Actual: 2",
         ):
             f = self.identity_dataframes_wo_column_names_iter("id", "value")
@@ -290,8 +290,9 @@ class MapInPandasTestsMixin:
 
     def check_dataframes_with_incompatible_types(self):
         for safely in [True, False]:
-            with self.subTest(convertToArrowArraySafely=safely), self.sql_conf(
-                {"spark.sql.execution.pandas.convertToArrowArraySafely": safely}
+            with (
+                self.subTest(convertToArrowArraySafely=safely),
+                self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": safely}),
             ):
                 # sometimes we see ValueErrors
                 with self.subTest(convert="string to double"):
@@ -303,14 +304,14 @@ class MapInPandasTestsMixin:
                     pandas_type_name = "object" if LooseVersion(pd.__version__) < "3.0.0" else "str"
 
                     expected = (
-                        r"ValueError: Exception thrown when converting pandas.Series "
-                        rf"\({pandas_type_name}\) with name 'id' to Arrow Array \(double\)."
+                        rf"ValueError: Failed to convert the value of the column 'id' "
+                        rf"with type '{pandas_type_name}' to Arrow type 'double'\."
                     )
                     if safely:
                         expected = expected + (
-                            " It can be caused by overflows or other "
-                            "unsafe conversions warned by Arrow. Arrow safe type check "
-                            "can be disabled by using SQL config "
+                            " It can be caused by overflows or other unsafe "
+                            "conversions warned by Arrow. Arrow safe type "
+                            "check can be disabled by using SQL config "
                             "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                         )
                     with self.assertRaisesRegex(PythonException, expected):
@@ -333,11 +334,11 @@ class MapInPandasTestsMixin:
                     )
                     if safely:
                         expected = (
-                            r"ValueError: Exception thrown when converting pandas.Series "
-                            r"\(float64\) with name 'id' to Arrow Array \(int32\)."
-                            " It can be caused by overflows or other "
-                            "unsafe conversions warned by Arrow. Arrow safe type check "
-                            "can be disabled by using SQL config "
+                            r"ValueError: Failed to convert the value of the column 'id' "
+                            r"with type 'float64' to Arrow type 'int32'\."
+                            " It can be caused by overflows or other unsafe "
+                            "conversions warned by Arrow. Arrow safe type "
+                            "check can be disabled by using SQL config "
                             "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                         )
                         with self.assertRaisesRegex(PythonException, expected):
@@ -374,8 +375,8 @@ class MapInPandasTestsMixin:
     def check_empty_dataframes_with_less_columns(self):
         with self.assertRaisesRegex(
             PythonException,
-            "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF\\] "
-            "Column names of the returned pandas.DataFrame do not match "
+            "PySparkRuntimeError: \\[RESULT_COLUMN_NAMES_MISMATCH\\] "
+            "Column names of the returned data do not match "
             "specified schema. Missing: value.",
         ):
             f = self.dataframes_and_empty_dataframe_iter("id")
@@ -403,8 +404,8 @@ class MapInPandasTestsMixin:
 
         with self.assertRaisesRegex(
             PythonException,
-            "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF\\] "
-            "Column names of the returned pandas.DataFrame do not match "
+            "PySparkRuntimeError: \\[RESULT_COLUMN_NAMES_MISMATCH\\] "
+            "Column names of the returned data do not match "
             "specified schema. Missing: id. Unexpected: iid.",
         ):
             (
@@ -489,8 +490,8 @@ class MapInPandasTestsMixin:
         pandas_type_name = "object" if LooseVersion(pd.__version__) < "3.0.0" else "str"
         with self.assertRaisesRegex(
             PythonException,
-            f"PySparkValueError: Exception thrown when converting pandas.Series \\({pandas_type_name}\\) "
-            "with name 'id' to Arrow Array \\(int32\\)\\.",
+            f"PySparkValueError: Failed to convert the value of the column 'id' "
+            f"with type '{pandas_type_name}' to Arrow type 'int32'\\.",
         ):
             df.collect()
 

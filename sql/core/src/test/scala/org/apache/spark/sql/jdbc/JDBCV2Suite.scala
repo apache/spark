@@ -2949,7 +2949,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         condition = "UNRESOLVED_ROUTINE",
         parameters = Map(
           "routineName" -> "`h2`.`test`.`my_avg2`",
-          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `h2`.`default`]"),
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
         context = ExpectedContext(
           fragment = "h2.test.my_avg2(id)",
           start = 7,
@@ -2961,7 +2961,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         condition = "UNRESOLVED_ROUTINE",
         parameters = Map(
           "routineName" -> "`h2`.`my_avg2`",
-          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `h2`.`default`]"),
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
         context = ExpectedContext(
           fragment = "h2.my_avg2(id)",
           start = 7,
@@ -2974,7 +2974,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         condition = "UNRESOLVED_ROUTINE",
         parameters = Map(
           "routineName" -> "`h2`.`db_name`.`schema_name`.`function_name`",
-          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `h2`.`default`]"),
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
         context = ExpectedContext(
           fragment = "h2.db_name.schema_name.function_name()",
           start = 35,

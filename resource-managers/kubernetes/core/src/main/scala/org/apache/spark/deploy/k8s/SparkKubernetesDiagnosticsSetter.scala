@@ -19,7 +19,6 @@ package org.apache.spark.deploy.k8s
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.base.{PatchContext, PatchType}
-import org.apache.hadoop.util.StringUtils
 
 import org.apache.spark.{SparkConf, SparkMasterRegex}
 import org.apache.spark.deploy.SparkDiagnosticsSetter
@@ -60,7 +59,7 @@ private[spark] class SparkKubernetesDiagnosticsSetter(clientProvider: Kubernetes
   }
 
   override def setDiagnostics(throwable: Throwable, conf: SparkConf): Unit = {
-    val diagnostics = SparkStringUtils.abbreviate(StringUtils.stringifyException(throwable),
+    val diagnostics = SparkStringUtils.abbreviate(Utils.stringifyException(throwable),
       KUBERNETES_EXIT_EXCEPTION_MESSAGE_LIMIT_BYTES)
     Utils.tryWithResource(clientProvider.create(conf)) { client =>
       conf.get(KUBERNETES_DRIVER_POD_NAME).foreach { podName =>

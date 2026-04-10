@@ -412,11 +412,18 @@ object CTESubstitution extends Rule[LogicalPlan] {
       cteRelations: Seq[(String, CTERelationDef)],
       recursiveCTERelation: Option[(String, CTERelationDef)]): LogicalPlan = {
     plan.resolveOperatorsUpWithPruning(
-        _.containsAnyPattern(RELATION_TIME_TRAVEL, UNRESOLVED_RELATION, PLAN_EXPRESSION,
-          UNRESOLVED_IDENTIFIER, PLAN_WITH_UNRESOLVED_IDENTIFIER)) {
+        _.containsAnyPattern(RELATION_TIME_TRAVEL, RELATION_CHANGES, UNRESOLVED_RELATION,
+          PLAN_EXPRESSION, UNRESOLVED_IDENTIFIER, PLAN_WITH_UNRESOLVED_IDENTIFIER)) {
       case RelationTimeTravel(UnresolvedRelation(Seq(table), _, _), _, _)
         if cteRelations.exists(r => plan.conf.resolver(r._1, table)) =>
         throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(table))
+
+      // CDC CHANGES requires a real catalog table to load a Changelog from. A CTE is an
+      // inline subquery definition with no versioned history, so it cannot be a CDC source.
+      // This mirrors the time travel restriction above.
+      case RelationChanges(UnresolvedRelation(Seq(table), _, _), _)
+        if cteRelations.exists(r => plan.conf.resolver(r._1, table)) =>
+        throw QueryCompilationErrors.cdcUnsupportedOnRelationError(toSQLId(table))
 
       case u @ UnresolvedRelation(Seq(table), _, _) =>
         resolveWithCTERelations(table, alwaysInline, cteRelations,

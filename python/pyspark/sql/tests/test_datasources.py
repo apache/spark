@@ -93,6 +93,43 @@ class DataSourcesTestsMixin:
         finally:
             shutil.rmtree(tpath)
 
+    def test_json_with_dataframe_input(self):
+        json_df = self.spark.createDataFrame(
+            [('{"name": "Alice", "age": 25}',), ('{"name": "Bob", "age": 30}',)],
+            schema="value STRING",
+        )
+        result = self.spark.read.json(json_df)
+        expected = [Row(age=25, name="Alice"), Row(age=30, name="Bob")]
+        self.assertEqual(sorted(result.collect(), key=lambda r: r.name), expected)
+
+    def test_json_with_dataframe_input_and_schema(self):
+        json_df = self.spark.createDataFrame(
+            [('{"name": "Alice", "age": 25}',), ('{"name": "Bob", "age": 30}',)],
+            schema="value STRING",
+        )
+        result = self.spark.read.json(json_df, schema="name STRING, age INT")
+        expected = [Row(name="Alice", age=25), Row(name="Bob", age=30)]
+        self.assertEqual(sorted(result.collect(), key=lambda r: r.name), expected)
+
+    def test_json_with_dataframe_input_non_string_column(self):
+        int_df = self.spark.createDataFrame([(1,), (2,)], schema="value INT")
+        with self.assertRaisesRegex(Exception, "PARSE_INPUT_NOT_STRING_TYPE"):
+            self.spark.read.json(int_df).collect()
+
+    def test_json_with_dataframe_input_multiple_columns(self):
+        multi_df = self.spark.createDataFrame(
+            [('{"name": "Alice"}', "extra"), ('{"name": "Bob"}', "extra")],
+            schema="value STRING, other STRING",
+        )
+        result = self.spark.read.json(multi_df)
+        expected = [Row(name="Alice"), Row(name="Bob")]
+        self.assertEqual(sorted(result.collect(), key=lambda r: r.name), expected)
+
+    def test_json_with_dataframe_input_zero_columns(self):
+        empty_schema_df = self.spark.range(1).select()
+        with self.assertRaisesRegex(Exception, "PARSE_INPUT_NOT_STRING_TYPE"):
+            self.spark.read.json(empty_schema_df).collect()
+
     def test_multiline_csv(self):
         ages_newlines = self.spark.read.csv(
             "python/test_support/sql/ages_newlines.csv", multiLine=True

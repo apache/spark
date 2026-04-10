@@ -159,8 +159,49 @@ class CatalogManager(
 }
 
 private[sql] object CatalogManager {
+
   val SESSION_CATALOG_NAME: String = "spark_catalog"
   val SYSTEM_CATALOG_NAME = "system"
   val SESSION_NAMESPACE = "session"
   val BUILTIN_NAMESPACE = "builtin"
+
+  /**
+   * For a view identifier's namespace (e.g. from Identifier.namespace()), returns the database
+   * name to use with v1 TableIdentifier when the view is a session temp view.
+   * - system.session (2 parts) -> Some("session") so SessionCatalog finds the local temp view
+   * - session (1 part) -> Some("session")
+   * - other non-empty namespace -> Some(namespace.head)
+   * - empty -> None
+   */
+  def databaseForSessionQualifiedViewIdentifier(namespace: Seq[String]): Option[String] = {
+    if (namespace.isEmpty) {
+      None
+    } else if (namespace.length == 2 &&
+        namespace(0).equalsIgnoreCase(SYSTEM_CATALOG_NAME) &&
+        namespace(1).equalsIgnoreCase(SESSION_NAMESPACE)) {
+      Some(SESSION_NAMESPACE)
+    } else {
+      Some(namespace.head)
+    }
+  }
+
+  /**
+   * True only for fully qualified `system.session.view` (3 parts). Persistent catalog is never
+   * consulted for this form; see [[isSessionQualifiedViewName]] for 2-part `session.view`.
+   */
+  def isFullyQualifiedSystemSessionViewName(nameParts: Seq[String]): Boolean = {
+    nameParts.length == 3 &&
+      nameParts(0).equalsIgnoreCase(SYSTEM_CATALOG_NAME) &&
+      nameParts(1).equalsIgnoreCase(SESSION_NAMESPACE)
+  }
+
+  /**
+   * True if the multipart name uses the session temp view namespace: two-part `session.view`
+   * or three-part `system.session.view`. The two-part form can also denote a persistent relation
+   * in schema `session`; resolution order is controlled by [[SQLConf.prioritizeSystemCatalog]].
+   */
+  def isSessionQualifiedViewName(nameParts: Seq[String]): Boolean = {
+    (nameParts.length == 2 && nameParts.head.equalsIgnoreCase(SESSION_NAMESPACE)) ||
+      isFullyQualifiedSystemSessionViewName(nameParts)
+  }
 }

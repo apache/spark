@@ -17,175 +17,125 @@
 
 package org.apache.spark.ui.env
 
-import scala.collection.mutable.StringBuilder
-import scala.xml.Node
+import scala.jdk.CollectionConverters._
+import scala.xml.{Node, Unparsed}
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.SparkConf
-import org.apache.spark.resource.{ExecutorResourceRequest, TaskResourceRequest}
+import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.ui._
-import org.apache.spark.util.Utils
 
 private[ui] class EnvironmentPage(
     parent: EnvironmentTab,
     conf: SparkConf,
     store: AppStatusStore) extends WebUIPage("") {
 
+  private val spinner =
+    <div class="text-center p-3">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+    </div>
+
   def render(request: HttpServletRequest): Seq[Node] = {
-    val appEnv = store.environmentInfo()
-    val jvmInformation = Map(
-      "Java Version" -> appEnv.runtime.javaVersion,
-      "Java Home" -> appEnv.runtime.javaHome,
-      "Scala Version" -> appEnv.runtime.scalaVersion)
-
-    def constructExecutorRequestString(execReqs: Map[String, ExecutorResourceRequest]): String = {
-      execReqs.map {
-        case (_, execReq) =>
-          val execStr = new StringBuilder(s"\t${execReq.resourceName}: [amount: ${execReq.amount}")
-          if (execReq.discoveryScript.nonEmpty) {
-            execStr ++= s", discovery: ${execReq.discoveryScript}"
-          }
-          if (execReq.vendor.nonEmpty) {
-            execStr ++= s", vendor: ${execReq.vendor}"
-          }
-          execStr ++= "]"
-          execStr.toString()
-      }.mkString("\n")
+    val defaultsMap = new java.util.HashMap[String, String]()
+    ConfigEntry.knownConfigs.asScala.foreach { case (key, entry) =>
+      try {
+        val dvs = entry.defaultValueString
+        if (dvs != ConfigEntry.UNDEFINED) {
+          defaultsMap.put(key, dvs)
+        }
+      } catch {
+        case _: Exception =>
+      }
     }
+    val defaultsJson = new ObjectMapper().writeValueAsString(defaultsMap)
+      .replace("</", "<\\/")
 
-    def constructTaskRequestString(taskReqs: Map[String, TaskResourceRequest]): String = {
-      taskReqs.map {
-        case (_, taskReq) => s"\t${taskReq.resourceName}: [amount: ${taskReq.amount}]"
-      }.mkString("\n")
-    }
-
-    val resourceProfileInfo = store.resourceProfileInfo().map { rinfo =>
-      val einfo = constructExecutorRequestString(rinfo.executorResources)
-      val tinfo = constructTaskRequestString(rinfo.taskResources)
-      val res = s"Executor Reqs:\n$einfo\nTask Reqs:\n$tinfo"
-      (rinfo.id.toString, res)
-    }.toMap
-
-    val resourceProfileInformationTable = UIUtils.listingTable(resourceProfileHeader,
-      jvmRowDataPre, resourceProfileInfo.toSeq.sortWith(_._1.toInt < _._1.toInt),
-      fixedWidth = true, headerClasses = headerClassesNoSortValues)
-    val runtimeInformationTable = UIUtils.listingTable(
-      propertyHeader, jvmRow, jvmInformation.toSeq.sorted, fixedWidth = true,
-      headerClasses = headerClasses)
-    val sparkPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
-      Utils.redact(conf, appEnv.sparkProperties.sorted), fixedWidth = true,
-      headerClasses = headerClasses)
-    val emptyProperties = collection.Seq.empty[(String, String)]
-    val hadoopPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
-      Utils.redact(conf, Option(appEnv.hadoopProperties).getOrElse(emptyProperties).sorted),
-      fixedWidth = true, headerClasses = headerClasses)
-    val systemPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
-      Utils.redact(conf, appEnv.systemProperties.sorted), fixedWidth = true,
-      headerClasses = headerClasses)
-    val metricsPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
-      Utils.redact(conf, Option(appEnv.metricsProperties).getOrElse(emptyProperties).sorted),
-      fixedWidth = true, headerClasses = headerClasses)
-    val classpathEntriesTable = UIUtils.listingTable(
-      classPathHeader, classPathRow, appEnv.classpathEntries.sorted, fixedWidth = true,
-      headerClasses = headerClasses)
     val content =
       <span>
-        <span class="collapse-aggregated-runtimeInformation collapse-table"
-            data-collapse-name="collapse-aggregated-runtimeInformation"
-            data-collapse-table="aggregated-runtimeInformation">
-          <h4>
-            <span class="collapse-table-arrow arrow-open"></span>
-            <a>Runtime Information</a>
-          </h4>
-        </span>
-        <div class="aggregated-runtimeInformation collapsible-table">
-          {runtimeInformationTable}
+        <div id="spark-config-defaults" class="d-none">{Unparsed(defaultsJson)}</div>
+        <div class="d-flex align-items-start">
+          <div class="nav flex-column nav-pills me-3" id="envTabs" role="tablist"
+               aria-orientation="vertical" style="min-width: 200px;">
+            <button class="nav-link active text-start" id="runtime-tab" data-bs-toggle="pill"
+                    data-bs-target="#runtime" type="button" role="tab"
+                    aria-controls="runtime" aria-selected="true">
+              Runtime Information
+            </button>
+            <button class="nav-link text-start" id="spark-props-tab" data-bs-toggle="pill"
+                    data-bs-target="#spark-props" type="button" role="tab"
+                    aria-controls="spark-props" aria-selected="false">
+              Spark Properties
+            </button>
+            <button class="nav-link text-start" id="resource-profiles-tab" data-bs-toggle="pill"
+                    data-bs-target="#resource-profiles" type="button" role="tab"
+                    aria-controls="resource-profiles" aria-selected="false">
+              Resource Profiles
+            </button>
+            <button class="nav-link text-start" id="hadoop-props-tab" data-bs-toggle="pill"
+                    data-bs-target="#hadoop-props" type="button" role="tab"
+                    aria-controls="hadoop-props" aria-selected="false">
+              Hadoop Properties
+            </button>
+            <button class="nav-link text-start" id="system-props-tab" data-bs-toggle="pill"
+                    data-bs-target="#system-props" type="button" role="tab"
+                    aria-controls="system-props" aria-selected="false">
+              System Properties
+            </button>
+            <button class="nav-link text-start" id="metrics-props-tab" data-bs-toggle="pill"
+                    data-bs-target="#metrics-props" type="button" role="tab"
+                    aria-controls="metrics-props" aria-selected="false">
+              Metrics Properties
+            </button>
+            <button class="nav-link text-start" id="classpath-tab" data-bs-toggle="pill"
+                    data-bs-target="#classpath" type="button" role="tab"
+                    aria-controls="classpath" aria-selected="false">
+              Classpath Entries
+            </button>
+          </div>
+          <div class="tab-content flex-fill" id="envTabContent">
+            <div class="tab-pane fade show active" id="runtime" role="tabpanel"
+                 aria-labelledby="runtime-tab">
+              {spinner}
+            </div>
+            <div class="tab-pane fade" id="spark-props" role="tabpanel"
+                 aria-labelledby="spark-props-tab">
+              {spinner}
+            </div>
+            <div class="tab-pane fade" id="resource-profiles" role="tabpanel"
+                 aria-labelledby="resource-profiles-tab">
+              {spinner}
+            </div>
+            <div class="tab-pane fade" id="hadoop-props" role="tabpanel"
+                 aria-labelledby="hadoop-props-tab">
+              {spinner}
+            </div>
+            <div class="tab-pane fade" id="system-props" role="tabpanel"
+                 aria-labelledby="system-props-tab">
+              {spinner}
+            </div>
+            <div class="tab-pane fade" id="metrics-props" role="tabpanel"
+                 aria-labelledby="metrics-props-tab">
+              {spinner}
+            </div>
+            <div class="tab-pane fade" id="classpath" role="tabpanel"
+                 aria-labelledby="classpath-tab">
+              {spinner}
+            </div>
+          </div>
         </div>
-        <span class="collapse-aggregated-sparkProperties collapse-table"
-            data-collapse-name="collapse-aggregated-sparkProperties"
-            data-collapse-table="aggregated-sparkProperties">
-          <h4>
-            <span class="collapse-table-arrow arrow-open"></span>
-            <a>Spark Properties</a>
-          </h4>
-        </span>
-        <div class="aggregated-sparkProperties collapsible-table">
-          {sparkPropertiesTable}
-        </div>
-        <span class="collapse-aggregated-execResourceProfileInformation collapse-table"
-              data-collapse-name="collapse-aggregated-execResourceProfileInformation"
-              data-collapse-table="aggregated-execResourceProfileInformation">
-          <h4>
-            <span class="collapse-table-arrow arrow-open"></span>
-            <a>Resource Profiles</a>
-          </h4>
-        </span>
-        <div class="aggregated-execResourceProfileInformation collapsible-table">
-          {resourceProfileInformationTable}
-        </div>
-        <span class="collapse-aggregated-hadoopProperties collapse-table"
-              data-collapse-name="collapse-aggregated-hadoopProperties"
-              data-collapse-table="aggregated-hadoopProperties">
-          <h4>
-            <span class="collapse-table-arrow arrow-closed"></span>
-            <a>Hadoop Properties</a>
-          </h4>
-        </span>
-        <div class="aggregated-hadoopProperties collapsible-table collapsed">
-          {hadoopPropertiesTable}
-        </div>
-        <span class="collapse-aggregated-systemProperties collapse-table"
-            data-collapse-name="collapse-aggregated-systemProperties"
-            data-collapse-table="aggregated-systemProperties">
-          <h4>
-            <span class="collapse-table-arrow arrow-closed"></span>
-            <a>System Properties</a>
-          </h4>
-        </span>
-        <div class="aggregated-systemProperties collapsible-table collapsed">
-          {systemPropertiesTable}
-        </div>
-        <span class="collapse-aggregated-metricsProperties collapse-table"
-              data-collapse-name="collapse-aggregated-metricsProperties"
-              data-collapse-table="aggregated-metricsProperties">
-          <h4>
-            <span class="collapse-table-arrow arrow-closed"></span>
-            <a>Metrics Properties</a>
-          </h4>
-        </span>
-        <div class="aggregated-metricsProperties collapsible-table collapsed">
-          {metricsPropertiesTable}
-        </div>
-        <span class="collapse-aggregated-classpathEntries collapse-table"
-            data-collapse-name="collapse-aggregated-classpathEntries"
-            data-collapse-table="aggregated-classpathEntries">
-          <h4>
-            <span class="collapse-table-arrow arrow-closed"></span>
-            <a>Classpath Entries</a>
-          </h4>
-        </span>
-        <div class="aggregated-classpathEntries collapsible-table collapsed">
-          {classpathEntriesTable}
-        </div>
-        <script src={UIUtils.prependBaseUri(request, "/static/environmentpage.js")}></script>
+        <script type="module"
+                src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script>
+        <script type="module"
+                src={UIUtils.prependBaseUri(request, "/static/environmentpage.js")}></script>
       </span>
 
-    UIUtils.headerSparkPage(request, "Environment", content, parent)
+    UIUtils.headerSparkPage(request, "Environment", content, parent, useDataTables = true)
   }
-
-  private def resourceProfileHeader = Seq("Resource Profile Id", "Resource Profile Contents")
-  private def propertyHeader = Seq("Name", "Value")
-  private def classPathHeader = Seq("Resource", "Source")
-  private def headerClasses = Seq("sorttable_alpha", "sorttable_alpha")
-  private def headerClassesNoSortValues = Seq("sorttable_numeric", "sorttable_nosort")
-
-  private def jvmRowDataPre(kv: (String, String)) =
-    <tr><td>{kv._1}</td><td><pre>{kv._2}</pre></td></tr>
-  private def jvmRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
-  private def propertyRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
-  private def classPathRow(data: (String, String)) = <tr><td>{data._1}</td><td>{data._2}</td></tr>
 }
 
 private[ui] class EnvironmentTab(

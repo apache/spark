@@ -93,6 +93,12 @@ Spark SQL and DataFrames support the following data types:
     |`DayTimeIntervalType(MINUTE, SECOND)`|INTERVAL MINUTE TO SECOND|`INTERVAL '1000:01.001' MINUTE TO SECOND`|
     |`DayTimeIntervalType(SECOND, SECOND)` or `DayTimeIntervalType(SECOND)`|INTERVAL SECOND|`INTERVAL '1000.000001' SECOND`|
 
+* Spatial types
+  Spatial objects as defined in the [OGC Simple Feature Access](https://portal.ogc.org/files/?artifact_id=25355) specification.
+  - `GeometryType`: Represents GEOMETRY values—spatial objects in a Cartesian coordinate system. The type can be fixed to a single SRID, e.g. `geometry(4326)`, or allow mixed SRIDs with `geometry(any)`. Default SRID when not specified is 4326 (WGS 84).
+  - `GeographyType`: Represents GEOGRAPHY values—spatial objects in a geographic coordinate system (latitude/longitude). Edge interpolation is always SPHERICAL. The type can be fixed to a single SRID, e.g. `geography(4326)`, or allow mixed SRIDs with `geography(any)`. Default SRID is 4326 (WGS 84).
+  For more details and built-in functions, see [Geospatial (Geometry/Geography) types](sql-ref-geospatial-types.html).
+
 * Complex types
   - `ArrayType(elementType, containsNull)`: Represents values comprising a sequence of
   elements with the type of `elementType`. `containsNull` is used to indicate if
@@ -137,6 +143,8 @@ from pyspark.sql.types import *
 |**TimestampNTZType**|datetime.datetime|TimestampNTZType()|
 |**DateType**|datetime.date|DateType()|
 |**DayTimeIntervalType**|datetime.timedelta|DayTimeIntervalType()|
+|**GeometryType**|Geometry|GeometryType() or GeometryType(*srid*)|
+|**GeographyType**|Geography|GeographyType() or GeographyType(*srid*)|
 |**ArrayType**|list, tuple, or array|ArrayType(*elementType*, [*containsNull*])<br/>**Note:**The default value of *containsNull* is True.|
 |**MapType**|dict|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br/>**Note:**The default value of *valueContainsNull* is True.|
 |**StructType**|list or tuple|StructType(*fields*)<br/>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
@@ -171,6 +179,8 @@ You can access them by doing
 |**TimeType**|java.time.LocalTime|TimeType|
 |**YearMonthIntervalType**|java.time.Period|YearMonthIntervalType|
 |**DayTimeIntervalType**|java.time.Duration|DayTimeIntervalType|
+|**GeometryType**|org.apache.spark.sql.types.Geometry|GeometryType or GeometryType(*srid*)|
+|**GeographyType**|org.apache.spark.sql.types.Geography|GeographyType or GeographyType(*srid*)|
 |**ArrayType**|scala.collection.Seq|ArrayType(*elementType*, [*containsNull]*)<br/>**Note:** The default value of *containsNull* is true.|
 |**MapType**|scala.collection.Map|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br/>**Note:** The default value of *valueContainsNull* is true.|
 |**StructType**|org.apache.spark.sql.Row|StructType(*fields*)<br/>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
@@ -205,6 +215,8 @@ please use factory methods provided in
 |**TimeType**|java.time.LocalTime|DataTypes.TimeType|
 |**YearMonthIntervalType**|java.time.Period|DataTypes.YearMonthIntervalType|
 |**DayTimeIntervalType**|java.time.Duration|DataTypes.DayTimeIntervalType|
+|**GeometryType**|org.apache.spark.sql.types.Geometry|DataTypes.createGeometryType(*srid*)|
+|**GeographyType**|org.apache.spark.sql.types.Geography|DataTypes.createGeographyType(*srid*)|
 |**ArrayType**|java.util.List|DataTypes.createArrayType(*elementType*)<br/>**Note:** The value of *containsNull* will be true.<br/>DataTypes.createArrayType(*elementType*, *containsNull*).|
 |**MapType**|java.util.Map|DataTypes.createMapType(*keyType*, *valueType*)<br/>**Note:** The value of *valueContainsNull* will be true.<br/>DataTypes.createMapType(*keyType*, *valueType*, *valueContainsNull*)|
 |**StructType**|org.apache.spark.sql.Row|DataTypes.createStructType(*fields*)<br/>**Note:** *fields* is a List or an array of StructFields.Also, two fields with the same name are not allowed.|
@@ -228,6 +240,8 @@ please use factory methods provided in
 |**BooleanType**|logical|"bool"|
 |**TimestampType**|POSIXct|"timestamp"|
 |**DateType**|Date|"date"|
+|**GeometryType**|Not supported|Not supported|
+|**GeographyType**|Not supported|Not supported|
 |**ArrayType**|vector or list|list(type="array", elementType=*elementType*, containsNull=[*containsNull*])<br/>**Note:** The default value of *containsNull* is TRUE.|
 |**MapType**|environment|list(type="map", keyType=*keyType*, valueType=*valueType*, valueContainsNull=[*valueContainsNull*])<br/> **Note:** The default value of *valueContainsNull* is TRUE.|
 |**StructType**|named list|list(type="struct", fields=*fields*)<br/> **Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
@@ -258,6 +272,8 @@ The following table shows the type names as well as aliases used in Spark SQL pa
 |**DecimalType**|DECIMAL, DEC, NUMERIC|
 |**YearMonthIntervalType**|INTERVAL YEAR, INTERVAL YEAR TO MONTH, INTERVAL MONTH|
 |**DayTimeIntervalType**|INTERVAL DAY, INTERVAL DAY TO HOUR, INTERVAL DAY TO MINUTE, INTERVAL DAY TO SECOND, INTERVAL HOUR, INTERVAL HOUR TO MINUTE, INTERVAL HOUR TO SECOND, INTERVAL MINUTE, INTERVAL MINUTE TO SECOND, INTERVAL SECOND|
+|**GeometryType**|GEOMETRY or GEOMETRY(*srid*) or GEOMETRY(ANY)|
+|**GeographyType**|GEOGRAPHY or GEOGRAPHY(*srid*) or GEOGRAPHY(ANY)|
 |**ArrayType**|ARRAY\<element_type>|
 |**StructType**|STRUCT<field1_name: field1_type, field2_name: field2_type, ...><br/> **Note:** ':' is optional.|
 |**MapType**|MAP<key_type, value_type>|

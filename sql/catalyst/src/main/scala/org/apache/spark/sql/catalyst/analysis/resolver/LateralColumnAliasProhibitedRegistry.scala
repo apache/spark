@@ -19,7 +19,8 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.ArrayList
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
+import org.apache.spark.sql.catalyst.analysis.resolver.AliasKind._
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression}
 
 /**
  * Dummy implementation of [[LateralColumnAliasRegistry]] used when
@@ -28,7 +29,8 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
  * idempotent.
  */
 class LateralColumnAliasProhibitedRegistry extends LateralColumnAliasRegistry {
-  def withNewLcaScope(isTopLevelAlias: Boolean)(body: => Alias): Alias = body
+  def withNewLcaScope[T <: NamedExpression](
+      aliasKind: AliasKind = AliasKind.Explicit)(body: => T): T = body
 
   def getAttribute(attributeName: String): Option[Attribute] =
     throwLcaResolutionNotEnabled()
@@ -40,5 +42,8 @@ class LateralColumnAliasProhibitedRegistry extends LateralColumnAliasRegistry {
     throwLcaResolutionNotEnabled()
 
   def isAttributeLaterallyReferenced(attribute: Attribute): Boolean =
+    throwLcaResolutionNotEnabled()
+
+  def getAllLaterallyReferencedAttributes: Seq[Attribute] =
     throwLcaResolutionNotEnabled()
 }

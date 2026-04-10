@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 ARG java_image_name=azul/zulu-openjdk
-ARG java_image_tag=21
+ARG java_image_tag=21-jre
 
 FROM ${java_image_name}:${java_image_tag}
 LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"

@@ -345,7 +345,7 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
         # In this case, if the PR is committed to the master branch and the release branch, we
         # only consider the release branch to be the fix version. E.g. it is not valid to have
         # both 1.1.0 and 1.0.0 as fix versions.
-        (major, minor, patch) = v.split(".")
+        major, minor, patch = v.split(".")
         if patch == "0":
             previous = "%s.%s.%s" % (major, int(minor) - 1, 0)
             if previous in default_fix_versions:
@@ -737,7 +737,7 @@ def main():
 if __name__ == "__main__":
     import doctest
 
-    (failure_count, test_count) = doctest.testmod()
+    failure_count, test_count = doctest.testmod()
     if failure_count:
         sys.exit(-1)
     try:

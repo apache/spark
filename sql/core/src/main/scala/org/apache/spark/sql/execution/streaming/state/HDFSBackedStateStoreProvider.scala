@@ -529,15 +529,21 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   private[state] lazy val fm = {
     val mgr = CheckpointFileManager.create(baseDir, hadoopConf)
     if (storeConf.checkpointFileChecksumEnabled) {
+      // To avoid blocking, we need 2 threads per fm caller (one for main file, one for checksum
+      // file). Since this fm is used by both query task and maintenance thread, the recommended
+      // default is 2 * 2 = 4 threads. A value of 0 disables the thread pool (sequential mode).
+      val numThreads = storeConf.fileChecksumThreadPoolSize
+      if (numThreads < ChecksumCheckpointFileManager.DEFAULT_THREAD_POOL_SIZE) {
+        logWarning(s"fileChecksumThreadPoolSize for the state store file checksum thread pool " +
+          s"is set to $numThreads, which is below the recommended default of " +
+          s"${ChecksumCheckpointFileManager.DEFAULT_THREAD_POOL_SIZE}. " +
+          "This may have performance impact.")
+      }
       new ChecksumCheckpointFileManager(
         mgr,
         // Allowing this for perf, since we do orphan checksum file cleanup in maintenance anyway
         allowConcurrentDelete = true,
-        // We need 2 threads per fm caller to avoid blocking
-        // (one for main file and another for checksum file).
-        // Since this fm is used by both query task and maintenance thread,
-        // then we need 2 * 2 = 4 threads.
-        numThreads = 4,
+        numThreads = numThreads,
         skipCreationIfFileMissingChecksum =
           storeConf.checkpointFileChecksumSkipCreationIfFileMissingChecksum)
     } else {
@@ -725,7 +731,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       storeIdStr) {
       override protected def beforeLoad(): Unit = {}
 
-      override protected def loadSnapshotFromCheckpoint(snapshotVersion: Long): Unit = {
+      override protected def loadSnapshotFromCheckpoint(
+          snapshotVersion: Long, uniqueId: Option[String]): Unit = {
         loadedMap = if (snapshotVersion <= 0) {
           // Use an empty map for versions 0 or less.
           Some(createHDFSBackedStateStoreMap())
@@ -738,7 +745,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
       override protected def onLoadSnapshotFromCheckpointFailure(): Unit = {}
 
-      override protected def getEligibleSnapshots(versionToLoad: Long): Seq[Long] = {
+      override protected def getEligibleSnapshots(
+          versionToLoad: Long): Seq[(Long, Option[String])] = {
         val snapshotVersions = SnapshotLoaderHelper.getEligibleSnapshotsForVersion(
           versionToLoad, fm, baseDir, onlySnapshotFiles, fileSuffix = ".snapshot")
 
@@ -748,7 +756,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         }.filter(_ <= versionToLoad)
 
         // Combine the two sets of versions, so we can check both during load
-        (snapshotVersions ++ cachedVersions).distinct
+        (snapshotVersions ++ cachedVersions).distinct.map((_, None))
       }
     }
 

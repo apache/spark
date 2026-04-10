@@ -18,6 +18,7 @@
 """
 Util functions for workers.
 """
+
 from contextlib import contextmanager
 import importlib
 from inspect import currentframe, getframeinfo
@@ -27,9 +28,9 @@ from typing import Any, Generator, IO, Optional
 import warnings
 
 if "SPARK_TESTING" in os.environ:
-    assert (
-        os.environ.get("SPARK_PYTHON_RUNTIME") == "PYTHON_WORKER"
-    ), "This module can only be imported in python woker"
+    assert os.environ.get("SPARK_PYTHON_RUNTIME") == "PYTHON_WORKER", (
+        "This module can only be imported in python woker"
+    )
 
 # 'resource' is a Unix specific module.
 has_resource_module = True
@@ -101,7 +102,7 @@ def setup_memory_limits(memory_limit_mb: int) -> None:
     if memory_limit_mb > 0 and has_resource_module:
         total_memory = resource.RLIMIT_AS
         try:
-            (soft_limit, hard_limit) = resource.getrlimit(total_memory)
+            soft_limit, hard_limit = resource.getrlimit(total_memory)
             msg = "Current mem limits: {0} of max {1}\n".format(soft_limit, hard_limit)
             print(msg, file=sys.stderr)
 
@@ -171,7 +172,7 @@ def setup_broadcasts(infile: IO) -> None:
             conn_info = utf8_deserializer.loads(infile)
         else:
             auth_secret = utf8_deserializer.loads(infile)
-        (broadcast_sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
+        broadcast_sock_file, _ = local_connect_and_auth(conn_info, auth_secret)
 
     for _ in range(num_broadcast_variables):
         bid = read_long(infile)
@@ -246,8 +247,8 @@ class Conf:
             v = utf8_deserializer.loads(infile)
             self._conf[k] = v
 
-    def get(self, key: str, default: Any = "") -> Any:
+    def get(self, key: str, default: Any = "", *, lower_str: bool = True) -> Any:
         val = self._conf.get(key, default)
-        if isinstance(val, str):
+        if isinstance(val, str) and lower_str:
             return val.lower()
         return val

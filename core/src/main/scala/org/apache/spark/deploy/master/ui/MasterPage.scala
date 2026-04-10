@@ -181,15 +181,16 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
         <div class="row">
           <div class="col-12">
-            <span class="collapse-aggregated-workers collapse-table"
-                data-collapse-name="collapse-aggregated-workers"
-                data-collapse-table="aggregated-workers">
+            <span class="collapse-table" data-bs-toggle="collapse"
+                data-bs-target="#aggregated-workers"
+                aria-expanded="true" aria-controls="aggregated-workers"
+                data-collapse-name="collapse-aggregated-workers">
               <h4>
                 <span class="collapse-table-arrow arrow-open"></span>
                 <a>Workers ({workers.length})</a>
               </h4>
             </span>
-            <div class="aggregated-workers collapsible-table">
+            <div class="collapsible-table collapse show" id="aggregated-workers">
               {workerTable}
             </div>
           </div>
@@ -197,15 +198,17 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
         <div class="row">
           <div class="col-12">
-            <span id="running-app" class="collapse-aggregated-activeApps collapse-table"
-                data-collapse-name="collapse-aggregated-activeApps"
-                data-collapse-table="aggregated-activeApps">
+            <span id="running-app" class="collapse-table"
+                data-bs-toggle="collapse"
+                data-bs-target="#aggregated-activeApps"
+                aria-expanded="true" aria-controls="aggregated-activeApps"
+                data-collapse-name="collapse-aggregated-activeApps">
               <h4>
                 <span class="collapse-table-arrow arrow-open"></span>
                 <a>Running Applications ({activeApps.length})</a>
               </h4>
             </span>
-            <div class="aggregated-activeApps collapsible-table">
+            <div class="collapsible-table collapse show" id="aggregated-activeApps">
               {activeAppsTable}
             </div>
           </div>
@@ -215,15 +218,18 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
           {if (hasDrivers) {
              <div class="row">
                <div class="col-12">
-                 <span class="collapse-aggregated-activeDrivers collapse-table"
-                     data-collapse-name="collapse-aggregated-activeDrivers"
-                     data-collapse-table="aggregated-activeDrivers">
+                 <span class="collapse-table" data-bs-toggle="collapse"
+                     data-bs-target="#aggregated-activeDrivers"
+                     aria-expanded="true"
+                     aria-controls="aggregated-activeDrivers"
+                     data-collapse-name="collapse-aggregated-activeDrivers">
                    <h4>
                      <span class="collapse-table-arrow arrow-open"></span>
                      <a>Running Drivers ({activeDrivers.length})</a>
                    </h4>
                  </span>
-                 <div class="aggregated-activeDrivers collapsible-table">
+                 <div class="collapsible-table collapse show"
+                     id="aggregated-activeDrivers">
                    {activeDriversTable}
                  </div>
                </div>
@@ -234,15 +240,18 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
         <div class="row">
           <div class="col-12">
-            <span id="completed-app" class="collapse-aggregated-completedApps collapse-table"
-                data-collapse-name="collapse-aggregated-completedApps"
-                data-collapse-table="aggregated-completedApps">
+            <span id="completed-app" class="collapse-table"
+                data-bs-toggle="collapse"
+                data-bs-target="#aggregated-completedApps"
+                aria-expanded="true" aria-controls="aggregated-completedApps"
+                data-collapse-name="collapse-aggregated-completedApps">
               <h4>
                 <span class="collapse-table-arrow arrow-open"></span>
                 <a>Completed Applications ({completedApps.length})</a>
               </h4>
             </span>
-            <div class="aggregated-completedApps collapsible-table">
+            <div class="collapsible-table collapse show"
+                id="aggregated-completedApps">
               {completedAppsTable}
             </div>
           </div>
@@ -253,15 +262,18 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
             if (hasDrivers) {
               <div class="row">
                 <div class="col-12">
-                  <span class="collapse-aggregated-completedDrivers collapse-table"
-                      data-collapse-name="collapse-aggregated-completedDrivers"
-                      data-collapse-table="aggregated-completedDrivers">
+                  <span class="collapse-table" data-bs-toggle="collapse"
+                      data-bs-target="#aggregated-completedDrivers"
+                      aria-expanded="true"
+                      aria-controls="aggregated-completedDrivers"
+                      data-collapse-name="collapse-aggregated-completedDrivers">
                     <h4>
                       <span class="collapse-table-arrow arrow-open"></span>
                       <a>Completed Drivers ({completedDrivers.length})</a>
                     </h4>
                   </span>
-                  <div class="aggregated-completedDrivers collapsible-table">
+                  <div class="collapsible-table collapse show"
+                      id="aggregated-completedDrivers">
                     {completedDriversTable}
                   </div>
                 </div>
@@ -302,12 +314,12 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private def appRow(app: ApplicationInfo): Seq[Node] = {
     val killLink = if (parent.killEnabled &&
       (app.state == ApplicationState.RUNNING || app.state == ApplicationState.WAITING)) {
-      <form action="app/kill/" method="POST" style="display:inline">
+      <form action="app/kill/" method="POST" class="d-inline">
         <input type="hidden" name="id" value={app.id}/>
         <input type="hidden" name="terminate" value="true"/>
         <a href="#"
            data-kill-message={s"Are you sure you want to kill application ${app.id} ?"}
-           class="kill-link">(kill)</a>
+           class="kill-link float-end">(kill)</a>
       </form>
     }
     <tr>
@@ -351,12 +363,12 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     val killLink = if (parent.killEnabled &&
       (driver.state == DriverState.RUNNING ||
         driver.state == DriverState.SUBMITTED)) {
-      <form action="driver/kill/" method="POST" style="display:inline">
+      <form action="driver/kill/" method="POST" class="d-inline">
         <input type="hidden" name="id" value={driver.id}/>
         <input type="hidden" name="terminate" value="true"/>
         <a href="#"
            data-kill-message={s"Are you sure you want to kill driver ${driver.id} ?"}
-           class="kill-link">(kill)</a>
+           class="kill-link float-end">(kill)</a>
       </form>
     }
     <tr>

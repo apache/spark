@@ -81,6 +81,7 @@ message Relation {
     UnresolvedTableValuedFunction unresolved_table_valued_function = 43;
     LateralJoin lateral_join = 44;
     ChunkedCachedLocalRelation chunked_cached_local_relation = 45;
+    RelationChanges relation_changes = 46;
 
     // NA functions
     NAFill fill_na = 90;
@@ -262,6 +263,25 @@ message Read {
     // for source evolution.
     optional string source_name = 6;
   }
+}
+
+// Reads Change Data Capture (CDC) changes for a named table.
+//
+// This corresponds to the `DataFrameReader.changes()` or `DataStreamReader.changes()` API.
+// CDC-specific options (startingVersion, endingVersion, startingTimestamp, endingTimestamp,
+// deduplicationMode, computeUpdates, etc.) are passed in the options map.
+message RelationChanges {
+  // (Required) Unparsed identifier for the table.
+  string unparsed_identifier = 1;
+
+  // Options for the CDC query. The map key is case insensitive.
+  // Supported keys include: startingVersion, endingVersion, startingTimestamp,
+  // endingTimestamp, deduplicationMode, computeUpdates, startingBoundInclusive,
+  // endingBoundInclusive.
+  map<string, string> options = 2;
+
+  // (Optional) Indicates if this is a streaming CDC read.
+  bool is_streaming = 3;
 }
 
 // Projection of a bag of expressions for a given input relation.

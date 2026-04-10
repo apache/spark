@@ -14,10 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
-
 from typing import TYPE_CHECKING, Any, Union, Sequence, List, Optional, Tuple, cast, Iterable
 
 from pyspark.sql.column import Column
@@ -172,7 +168,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.window,
         globs=globs,
         optionflags=doctest.ELLIPSIS

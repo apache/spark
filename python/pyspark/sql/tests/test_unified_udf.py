@@ -181,15 +181,13 @@ class UnifiedUDFTestsMixin:
             df.createOrReplaceTempView("pd_tbl")
             self.spark.udf.register("pd_win_max", pd_win_max)
 
-            result2 = self.spark.sql(
-                """
+            result2 = self.spark.sql("""
                 SELECT *, pd_win_max(v) OVER (
                     PARTITION BY id
                     ORDER BY v
                     ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
                 ) AS res FROM pd_tbl
-                """
-            ).collect()
+                """).collect()
             self.assertEqual(result2, expected)
 
     def test_scalar_arrow_udf(self):
@@ -359,15 +357,13 @@ class UnifiedUDFTestsMixin:
             df.createOrReplaceTempView("pa_tbl")
             self.spark.udf.register("pa_win_max", pa_win_max)
 
-            result2 = self.spark.sql(
-                """
+            result2 = self.spark.sql("""
                 SELECT *, pa_win_max(v) OVER (
                     PARTITION BY id
                     ORDER BY v
                     ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
                 ) AS res FROM pa_tbl
-                """
-            ).collect()
+                """).collect()
             self.assertEqual(result2, expected)
 
     def test_regular_python_udf(self):

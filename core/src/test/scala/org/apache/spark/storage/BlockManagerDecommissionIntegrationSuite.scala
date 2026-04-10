@@ -207,7 +207,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       override def onExecutorMetricsUpdate(
           executorMetricsUpdate: SparkListenerExecutorMetricsUpdate): Unit = {
         val executorId = executorMetricsUpdate.execId
-        if (executorId != SparkContext.DRIVER_IDENTIFIER) {
+        if (!SparkContext.isDriver(executorId)) {
           val validUpdate = executorMetricsUpdate
             .accumUpdates
             .flatMap(_._4)

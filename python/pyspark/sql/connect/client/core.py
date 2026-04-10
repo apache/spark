@@ -24,9 +24,6 @@ import atexit
 
 import pyspark
 from pyspark.sql.connect.proto.base_pb2 import FetchErrorDetailsResponse
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
 
 import concurrent.futures
 import logging
@@ -755,8 +752,11 @@ class SparkConnectClient(object):
 
         self._release_futures: weakref.WeakSet[concurrent.futures.Future] = weakref.WeakSet()
 
-        # cleanup ml cache if possible
-        atexit.register(self._cleanup_ml_cache)
+        self._release_session_on_exit = os.getenv(
+            "SPARK_CONNECT_RELEASE_SESSION_ON_EXIT", "false"
+        ).lower() in ("true", "1")
+        # cleanup if possible
+        atexit.register(self._on_exit)
 
         self.global_user_context_extensions: List[Tuple[str, any_pb2.Any]] = []
         self.global_user_context_extensions_lock = threading.Lock()
@@ -999,7 +999,7 @@ class SparkConnectClient(object):
         logger.debug("Fetching the resources")
         cmd = pb2.Command()
         cmd.get_resources_command.SetInParent()
-        (_, properties, _) = self.execute_command(cmd)
+        _, properties, _ = self.execute_command(cmd)
         resources = properties["get_resources_command_result"]
         return resources
 
@@ -1559,7 +1559,7 @@ class SparkConnectClient(object):
                     else:
                         if observed_metrics.name == "__python_accumulator__":
                             for metric in observed_metrics.metrics:
-                                (aid, update) = pickleSer.loads(LiteralExpression._to_value(metric))
+                                aid, update = pickleSer.loads(LiteralExpression._to_value(metric))
                                 if aid == SpecialAccumulatorIds.SQL_UDF_PROFIER:
                                     self._profiler_collector._update(update)
                         elif observed_metrics.name in observations:
@@ -1930,6 +1930,58 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error)
 
+    def _get_operation_statuses(
+        self,
+        operation_ids: Optional[List[str]] = None,
+        operation_extensions: Optional[List[any_pb2.Any]] = None,
+        request_extensions: Optional[List[any_pb2.Any]] = None,
+    ) -> "pb2.GetStatusResponse":
+        """
+        Get status of operations in the session.
+
+        Parameters
+        ----------
+        operation_ids : list of str, optional
+            List of operation IDs to get status for.
+            If None or empty, returns status of all operations in the session.
+        operation_extensions : list of google.protobuf.any_pb2.Any, optional
+            Per-operation extension messages to include in the OperationStatusRequest to request
+            additional per-operation information.
+        request_extensions : list of google.protobuf.any_pb2.Any, optional
+            Request-level extension messages to include in the GetStatusRequest.
+
+        Returns
+        -------
+        pb2.GetStatusResponse
+            The full GetStatusResponse, including operation_statuses and any extensions.
+        """
+        req = pb2.GetStatusRequest()
+        req.session_id = self._session_id
+        req.client_type = self._builder.userAgent
+        if self._user_id:
+            req.user_context.user_id = self._user_id
+        if self._server_session_id:
+            req.client_observed_server_side_session_id = self._server_session_id
+
+        req.operation_status.SetInParent()
+
+        if operation_ids:
+            req.operation_status.operation_ids.extend(operation_ids)
+        if operation_extensions:
+            req.operation_status.extensions.extend(operation_extensions)
+        if request_extensions:
+            req.extensions.extend(request_extensions)
+
+        try:
+            for attempt in self._retrying():
+                with attempt:
+                    resp = self._stub.GetStatus(req, metadata=self._builder.metadata())
+                    self._verify_response_integrity(resp)
+                    return resp
+            raise SparkConnectException("Invalid state during retry exception handling.")
+        except Exception as error:
+            self._handle_error(error)
+
     def add_tag(self, tag: str) -> None:
         self._throw_if_invalid_tag(tag)
         if not hasattr(self.thread_local, "tags"):
@@ -2169,6 +2221,7 @@ class SparkConnectClient(object):
             pb2.AnalyzePlanResponse,
             pb2.FetchErrorDetailsResponse,
             pb2.ReleaseSessionResponse,
+            pb2.GetStatusResponse,
         ],
     ) -> None:
         """
@@ -2203,7 +2256,7 @@ class SparkConnectClient(object):
         logger.debug("Creating the ResourceProfile")
         cmd = pb2.Command()
         cmd.create_resource_profile_command.profile.CopyFrom(profile)
-        (_, properties, _) = self.execute_command(cmd)
+        _, properties, _ = self.execute_command(cmd)
         profile_id = properties["create_resource_profile_command_result"]
         return profile_id
 
@@ -2216,7 +2269,7 @@ class SparkConnectClient(object):
                     [pb2.ObjectRef(id=cache_id) for cache_id in cache_ids]
                 )
                 command.ml_command.delete.evict_only = evict_only
-                (_, properties, _) = self.execute_command(command)
+                _, properties, _ = self.execute_command(command)
 
                 assert properties is not None
 
@@ -2227,6 +2280,18 @@ class SparkConnectClient(object):
             return []
         except Exception:
             return []
+
+    def _on_exit(self) -> None:
+        self._cleanup_ml_cache()
+        if self._release_session_on_exit and not self._closed:
+            try:
+                self.release_session()
+            except Exception:
+                pass
+            try:
+                self.close()
+            except Exception:
+                pass
 
     def _cleanup_ml_cache(self) -> None:
         try:
@@ -2239,7 +2304,7 @@ class SparkConnectClient(object):
     def _get_ml_cache_info(self) -> List[str]:
         command = pb2.Command()
         command.ml_command.get_cache_info.SetInParent()
-        (_, properties, _) = self.execute_command(command)
+        _, properties, _ = self.execute_command(command)
 
         assert properties is not None
 
@@ -2254,7 +2319,7 @@ class SparkConnectClient(object):
         command.ml_command.get_model_size.CopyFrom(
             pb2.MlCommand.GetModelSize(model_ref=pb2.ObjectRef(id=model_ref_id))
         )
-        (_, properties, _) = self.execute_command(command)
+        _, properties, _ = self.execute_command(command)
 
         assert properties is not None
 

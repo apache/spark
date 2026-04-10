@@ -37,7 +37,7 @@ import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_ARROW_MAX_BATCH
 import org.apache.spark.sql.connect.planner.{InvalidInputErrors, SparkConnectPlanner}
 import org.apache.spark.sql.connect.service.ExecuteHolder
 import org.apache.spark.sql.connect.utils.{ErrorUtils, MetricGenerator, PipelineAnalysisContextUtils}
-import org.apache.spark.sql.execution.{DoNotCleanup, LocalTableScanExec, QueryExecution, RemoveShuffleFiles, SkipMigration, SQLExecution}
+import org.apache.spark.sql.execution.{CollectLimitExec, CollectTailExec, DoNotCleanup, LocalTableScanExec, QueryExecution, RemoveShuffleFiles, SkipMigration, SQLExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -204,7 +204,14 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       }
       numSent += 1
     }
-
+    def sendCollectedRows(rows: Array[InternalRow]): Unit = {
+      executePlan.eventsManager.postFinished(Some(rows.length))
+      var offset = 0L
+      converter(rows.iterator).foreach { case (bytes, count) =>
+        sendBatch(bytes, count, offset)
+        offset += count
+      }
+    }
     dataframe.queryExecution.executedPlan match {
       case LocalTableScanExec(_, rows, _) =>
         executePlan.eventsManager.postFinished(Some(rows.length))
@@ -212,6 +219,14 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
         converter(rows.iterator).foreach { case (bytes, count) =>
           sendBatch(bytes, count, offset)
           offset += count
+        }
+      case collectLimit: CollectLimitExec =>
+        SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectLimitArrow")) {
+          sendCollectedRows(collectLimit.executeCollect())
+        }
+      case collectTail: CollectTailExec =>
+        SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectTailArrow")) {
+          sendCollectedRows(collectTail.executeCollect())
         }
       case _ =>
         SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectArrow")) {

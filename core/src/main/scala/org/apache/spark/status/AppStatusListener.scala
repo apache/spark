@@ -362,11 +362,11 @@ private[spark] class AppStatusListener(
     // Implicitly exclude every available executor for the stage associated with this node
     Option(liveStages.get((stageId, stageAttemptId))).foreach { stage =>
       val executorIds = liveExecutors.values.filter(exec => exec.host == hostId
-        && exec.executorId != SparkContext.DRIVER_IDENTIFIER).map(_.executorId).toSeq
+        && !SparkContext.isDriver(exec.executorId)).map(_.executorId).toSeq
       setStageExcludedStatus(stage, now, executorIds: _*)
     }
     liveExecutors.values.filter(exec => exec.hostname == hostId
-      && exec.executorId != SparkContext.DRIVER_IDENTIFIER).foreach { exec =>
+      && !SparkContext.isDriver(exec.executorId)).foreach { exec =>
       addExcludedStageTo(exec, stageId, now)
     }
   }
@@ -413,7 +413,7 @@ private[spark] class AppStatusListener(
 
     // Implicitly (un)exclude every executor associated with the node.
     liveExecutors.values.foreach { exec =>
-      if (exec.hostname == host && exec.executorId != SparkContext.DRIVER_IDENTIFIER) {
+      if (exec.hostname == host && !SparkContext.isDriver(exec.executorId)) {
         updateExecExclusionStatus(exec, excluded, now)
       }
     }

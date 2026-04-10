@@ -43,7 +43,6 @@ from pyspark.sql import Row
 from pyspark.sql.types import StructType, StructField, VariantVal
 from pyspark.sql.functions import col, when
 
-
 __all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
 
 
@@ -103,6 +102,14 @@ grpc_status_requirement_message = "" if have_grpc_status else "No module named '
 
 have_zstandard = have_package("zstandard")
 zstandard_requirement_message = "" if have_zstandard else "No module named 'zstandard'"
+
+have_kafka = have_package("kafka")
+kafka_requirement_message = "" if have_kafka else "No module named 'kafka'"
+
+have_testcontainers = have_package("testcontainers")
+testcontainers_requirement_message = (
+    "" if have_testcontainers else "No module named 'testcontainers'"
+)
 
 
 googleapis_common_protos_requirement_message = ""
@@ -452,12 +459,14 @@ class PySparkErrorTestUtils:
                     f"Expected message parameter key '{key}' was not found "
                     "in actual message parameters.",
                 )
-                self.assertRegex(
-                    actual[key],
-                    value,
-                    f"Expected message parameter value '{value}' does not match actual message "
-                    f"parameter value '{actual[key]}'.",
-                ),
+                (
+                    self.assertRegex(
+                        actual[key],
+                        value,
+                        f"Expected message parameter value '{value}' does not match actual message "
+                        f"parameter value '{actual[key]}'.",
+                    ),
+                )
         else:
             self.assertEqual(
                 expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
@@ -473,9 +482,9 @@ class PySparkErrorTestUtils:
                     expected, actual, f"Expected QueryContext was '{expected}', got '{actual}'"
                 )
                 if actual == QueryContextType.DataFrame:
-                    assert (
-                        fragment is not None
-                    ), "`fragment` is required when QueryContextType is DataFrame."
+                    assert fragment is not None, (
+                        "`fragment` is required when QueryContextType is DataFrame."
+                    )
                     expected = fragment
                     actual = actual_context.fragment()
                     self.assertEqual(
@@ -505,7 +514,7 @@ def assertSchemaEqual(
     expected : StructType
         The expected schema, for comparison with the actual schema.
     ignoreNullable : bool, default True
-        Specifies whether a column’s nullable property is included when checking for
+        Specifies whether a column's nullable property is included when checking for
         schema equality.
         When set to `True` (default), the nullable property of the columns being compared
         is not taken into account and the columns will be considered equal even if they have
@@ -592,13 +601,21 @@ def assertSchemaEqual(
     """
     if not isinstance(actual, StructType):
         raise PySparkTypeError(
-            errorClass="NOT_STRUCT",
-            messageParameters={"arg_name": "actual", "arg_type": type(actual).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "actual",
+                "expected_type": "struct type",
+                "arg_type": type(actual).__name__,
+            },
         )
     if not isinstance(expected, StructType):
         raise PySparkTypeError(
-            errorClass="NOT_STRUCT",
-            messageParameters={"arg_name": "expected", "arg_type": type(expected).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "expected",
+                "expected_type": "struct type",
+                "arg_type": type(expected).__name__,
+            },
         )
 
     def compare_schemas_ignore_nullable(s1: StructType, s2: StructType):
@@ -715,7 +732,7 @@ def assertDataFrameEqual(
         The absolute tolerance, used in asserting approximate equality for float values in actual
         and expected. Set to 1e-8 by default. (See Notes)
     ignoreNullable : bool, default True
-        Specifies whether a column’s nullable property is included when checking for
+        Specifies whether a column's nullable property is included when checking for
         schema equality.
         When set to `True` (default), the nullable property of the columns being compared
         is not taken into account and the columns will be considered equal even if they have
@@ -1162,7 +1179,7 @@ def _test() -> None:
     globs = pyspark.testing.utils.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("testing.utils tests").getOrCreate()
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.testing.utils,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

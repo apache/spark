@@ -688,17 +688,17 @@ Project [cate#x, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST R
 
 -- !query
 SELECT val, cate,
-first_value(val) FILTER (WHERE cate = 'a') OVER(ORDER BY val_long
+first_value(val) FILTER (WHERE cate = 'a') OVER(ORDER BY val_long NULLS LAST, val NULLS LAST, cate NULLS LAST
   ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS first_a,
-last_value(val) FILTER (WHERE cate = 'a') OVER(ORDER BY val_long
+last_value(val) FILTER (WHERE cate = 'a') OVER(ORDER BY val_long NULLS LAST, val NULLS LAST, cate NULLS LAST
   ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS last_a
-FROM testData ORDER BY val_long, cate
+FROM testData ORDER BY val_long NULLS LAST, val NULLS LAST, cate NULLS LAST
 -- !query analysis
 Project [val#x, cate#x, first_a#x, last_a#x]
-+- Sort [val_long#xL ASC NULLS FIRST, cate#x ASC NULLS FIRST], true
++- Sort [val_long#xL ASC NULLS LAST, val#x ASC NULLS LAST, cate#x ASC NULLS LAST], true
    +- Project [val#x, cate#x, first_a#x, last_a#x, val_long#xL]
       +- Project [val#x, cate#x, _w0#x, val_long#xL, first_a#x, last_a#x, first_a#x, last_a#x]
-         +- Window [first_value(val#x, false) FILTER (WHERE _w0#x) windowspecdefinition(val_long#xL ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS first_a#x, last_value(val#x, false) FILTER (WHERE _w0#x) windowspecdefinition(val_long#xL ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS last_a#x], [val_long#xL ASC NULLS FIRST]
+         +- Window [first_value(val#x, false) FILTER (WHERE _w0#x) windowspecdefinition(val_long#xL ASC NULLS LAST, val#x ASC NULLS LAST, cate#x ASC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS first_a#x, last_value(val#x, false) FILTER (WHERE _w0#x) windowspecdefinition(val_long#xL ASC NULLS LAST, val#x ASC NULLS LAST, cate#x ASC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS last_a#x], [val_long#xL ASC NULLS LAST, val#x ASC NULLS LAST, cate#x ASC NULLS LAST]
             +- Project [val#x, cate#x, (cate#x = a) AS _w0#x, val_long#xL]
                +- SubqueryAlias testdata
                   +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])

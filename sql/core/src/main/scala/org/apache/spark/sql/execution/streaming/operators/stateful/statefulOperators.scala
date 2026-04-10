@@ -33,6 +33,7 @@ import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
@@ -1336,7 +1337,10 @@ abstract class BaseStreamingDeduplicateExec
       session.sessionState,
       Some(session.streams.stateStoreCoordinator),
       extraOptions = extraOptionOnStateStore) { (store, iter) =>
-      val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+      // Normalize NaN and -0.0 in floating-point key values so that semantically equal
+      // values produce identical UnsafeRow bytes.
+      val getKey = GenerateUnsafeProjection.generate(
+        keyExpressions.map(NormalizeFloatingNumbers.normalize), child.output)
       val numOutputRows = longMetric("numOutputRows")
       val numUpdatedStateRows = longMetric("numUpdatedStateRows")
       val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")

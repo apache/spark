@@ -351,8 +351,8 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       exception = intercept[AnalysisException] {
         Seq((1, 2, 3, 4)).toDF("a", "b", "c", "d").write.partitionBy("b", "c").insertInto(tableName)
       },
-      condition = "_LEGACY_ERROR_TEMP_1309",
-      parameters = Map.empty
+      condition = "PARTITION_BY_NOT_ALLOWED_WITH_INSERT_INTO",
+      parameters = Map("tableName" -> tableName)
     )
   }
 
@@ -472,6 +472,36 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
           sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE $tableName SELECT 25, 26, 27, (28, 29)")
         },
         condition = "UNSUPPORTED_INSERT_WITH_SCHEMA_EVOLUTION"
+      )
+  }
+
+  testPartitionedTable("INSERT INTO ... REPLACE ON is currently unsupported") {
+    tableName =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO $tableName AS t REPLACE ON t.a = 1 " +
+            s"SELECT 25, 26, 27, 28")
+        },
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        sqlState = "0A000",
+        parameters = Map(
+          "tableName" -> s"`spark_catalog`.`default`.`$tableName`",
+          "operation" -> "INSERT INTO ... REPLACE ON/USING")
+      )
+  }
+
+  testPartitionedTable("INSERT INTO ... REPLACE USING is currently unsupported") {
+    tableName =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO $tableName AS t REPLACE USING (a) " +
+            s"SELECT 25, 26, 27, 28")
+        },
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        sqlState = "0A000",
+        parameters = Map(
+          "tableName" -> s"`spark_catalog`.`default`.`$tableName`",
+          "operation" -> "INSERT INTO ... REPLACE ON/USING")
       )
   }
 

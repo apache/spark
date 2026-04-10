@@ -94,11 +94,10 @@ from pyspark.errors import PySparkRuntimeError
 # for backward compatibility references.
 from pyspark.util import PythonEvalType  # noqa: F401
 
-
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
 
-    from pyspark._typing import S, NumberOrArray
+    from pyspark._typing import S, SizedIterable, NumberOrArray
     from pyspark.core.context import SparkContext
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.types import AtomicType, StructType
@@ -196,7 +195,6 @@ class Partitioner:
 
 
 class RDD(Generic[T_co]):
-
     """
     A Resilient Distributed Dataset (RDD), the basic abstraction in Spark.
     Represents an immutable, partitioned collection of elements that can be
@@ -1205,8 +1203,7 @@ class RDD(Generic[T_co]):
         numPartitions: Optional[int] = ...,
         partitionFunc: Callable[["S"], int] = ...,
         ascending: bool = ...,
-    ) -> "RDD[Tuple[S, V]]":
-        ...
+    ) -> "RDD[Tuple[S, V]]": ...
 
     @overload
     def repartitionAndSortWithinPartitions(
@@ -1215,8 +1212,7 @@ class RDD(Generic[T_co]):
         partitionFunc: Callable[[K], int],
         ascending: bool,
         keyfunc: Callable[[K], "S"],
-    ) -> "RDD[Tuple[K, V]]":
-        ...
+    ) -> "RDD[Tuple[K, V]]": ...
 
     @overload
     def repartitionAndSortWithinPartitions(
@@ -1226,8 +1222,7 @@ class RDD(Generic[T_co]):
         ascending: bool = ...,
         *,
         keyfunc: Callable[[K], "S"],
-    ) -> "RDD[Tuple[K, V]]":
-        ...
+    ) -> "RDD[Tuple[K, V]]": ...
 
     def repartitionAndSortWithinPartitions(
         self: "RDD[Tuple[Any, Any]]",
@@ -1279,7 +1274,7 @@ class RDD(Generic[T_co]):
         serializer = self._jrdd_deserializer
 
         def sortPartition(iterator: Iterable[Tuple[K, V]]) -> Iterable[Tuple[K, V]]:
-            sort = ExternalSorter(memory * 0.9, serializer).sorted
+            sort = ExternalSorter[tuple[K, V]](memory * 0.9, serializer).sorted
             return iter(sort(iterator, key=lambda k_v: keyfunc(k_v[0]), reverse=(not ascending)))
 
         return self.partitionBy(numPartitions, partitionFunc).mapPartitions(sortPartition, True)
@@ -1289,8 +1284,7 @@ class RDD(Generic[T_co]):
         self: "RDD[Tuple[S, V]]",
         ascending: bool = ...,
         numPartitions: Optional[int] = ...,
-    ) -> "RDD[Tuple[K, V]]":
-        ...
+    ) -> "RDD[Tuple[K, V]]": ...
 
     @overload
     def sortByKey(
@@ -1298,8 +1292,7 @@ class RDD(Generic[T_co]):
         ascending: bool,
         numPartitions: int,
         keyfunc: Callable[[K], "S"],
-    ) -> "RDD[Tuple[K, V]]":
-        ...
+    ) -> "RDD[Tuple[K, V]]": ...
 
     @overload
     def sortByKey(
@@ -1308,8 +1301,7 @@ class RDD(Generic[T_co]):
         numPartitions: Optional[int] = ...,
         *,
         keyfunc: Callable[[K], "S"],
-    ) -> "RDD[Tuple[K, V]]":
-        ...
+    ) -> "RDD[Tuple[K, V]]": ...
 
     def sortByKey(
         self: "RDD[Tuple[K, V]]",
@@ -1362,7 +1354,7 @@ class RDD(Generic[T_co]):
         serializer = self._jrdd_deserializer
 
         def sortPartition(iterator: Iterable[Tuple[K, V]]) -> Iterable[Tuple[K, V]]:
-            sort = ExternalSorter(memory * 0.9, serializer).sorted
+            sort = ExternalSorter[tuple[K, V]](memory * 0.9, serializer).sorted
             return iter(sort(iterator, key=lambda kv: keyfunc(kv[0]), reverse=(not ascending)))
 
         if numPartitions == 1:
@@ -1739,8 +1731,7 @@ class RDD(Generic[T_co]):
         :meth:`SparkContext.setJobGroup`
         """
         warnings.warn(
-            "Deprecated in 3.1, Use pyspark.InheritableThread with "
-            "the pinned thread mode enabled.",
+            "Deprecated in 3.1, Use pyspark.InheritableThread with the pinned thread mode enabled.",
             FutureWarning,
         )
 
@@ -2064,12 +2055,10 @@ class RDD(Generic[T_co]):
         return partiallyAggregated.reduce(combOp)
 
     @overload
-    def max(self: "RDD[S]") -> "S":
-        ...
+    def max(self: "RDD[S]") -> "S": ...
 
     @overload
-    def max(self: "RDD[T]", key: Callable[[T], "S"]) -> T:
-        ...
+    def max(self: "RDD[T]", key: Callable[[T], "S"]) -> T: ...
 
     def max(self: "RDD[T]", key: Optional[Callable[[T], "S"]] = None) -> T:
         """
@@ -2104,12 +2093,10 @@ class RDD(Generic[T_co]):
         return self.reduce(lambda a, b: max(a, b, key=key))
 
     @overload
-    def min(self: "RDD[S]") -> "S":
-        ...
+    def min(self: "RDD[S]") -> "S": ...
 
     @overload
-    def min(self: "RDD[T]", key: Callable[[T], "S"]) -> T:
-        ...
+    def min(self: "RDD[T]", key: Callable[[T], "S"]) -> T: ...
 
     def min(self: "RDD[T]", key: Optional[Callable[[T], "S"]] = None) -> T:
         """
@@ -2538,12 +2525,10 @@ class RDD(Generic[T_co]):
         return self.mapPartitions(countPartition).reduce(mergeMaps)
 
     @overload
-    def top(self: "RDD[S]", num: int) -> List["S"]:
-        ...
+    def top(self: "RDD[S]", num: int) -> List["S"]: ...
 
     @overload
-    def top(self: "RDD[T]", num: int, key: Callable[[T], "S"]) -> List[T]:
-        ...
+    def top(self: "RDD[T]", num: int, key: Callable[[T], "S"]) -> List[T]: ...
 
     def top(self: "RDD[T]", num: int, key: Optional[Callable[[T], "S"]] = None) -> List[T]:
         """
@@ -2595,12 +2580,10 @@ class RDD(Generic[T_co]):
         return self.mapPartitions(topIterator).reduce(merge)
 
     @overload
-    def takeOrdered(self: "RDD[S]", num: int) -> List["S"]:
-        ...
+    def takeOrdered(self: "RDD[S]", num: int) -> List["S"]: ...
 
     @overload
-    def takeOrdered(self: "RDD[T]", num: int, key: Callable[[T], "S"]) -> List[T]:
-        ...
+    def takeOrdered(self: "RDD[T]", num: int, key: Callable[[T], "S"]) -> List[T]: ...
 
     def takeOrdered(self: "RDD[T]", num: int, key: Optional[Callable[[T], "S"]] = None) -> List[T]:
         """
@@ -3858,7 +3841,7 @@ class RDD(Generic[T_co]):
         agg = Aggregator(createCombiner, mergeValue, mergeCombiners)
 
         def combineLocally(iterator: Iterable[Tuple[K, V]]) -> Iterable[Tuple[K, U]]:
-            merger = ExternalMerger(agg, memory * 0.9, serializer)
+            merger = ExternalMerger[K, V, U](agg, memory * 0.9, serializer)
             merger.mergeValues(iterator)
             return merger.items()
 
@@ -3866,7 +3849,7 @@ class RDD(Generic[T_co]):
         shuffled = locally_combined.partitionBy(numPartitions, partitionFunc)
 
         def _mergeCombiners(iterator: Iterable[Tuple[K, U]]) -> Iterable[Tuple[K, U]]:
-            merger = ExternalMerger(agg, memory, serializer)
+            merger = ExternalMerger[K, V, U](agg, memory, serializer)
             merger.mergeCombiners(iterator)
             return merger.items()
 
@@ -4050,15 +4033,15 @@ class RDD(Generic[T_co]):
         agg = Aggregator(createCombiner, mergeValue, mergeCombiners)
 
         def combine(iterator: Iterable[Tuple[K, V]]) -> Iterable[Tuple[K, List[V]]]:
-            merger = ExternalMerger(agg, memory * 0.9, serializer)
+            merger = ExternalMerger[K, V, list[V]](agg, memory * 0.9, serializer)
             merger.mergeValues(iterator)
             return merger.items()
 
         locally_combined = self.mapPartitions(combine, preservesPartitioning=True)
         shuffled = locally_combined.partitionBy(numPartitions, partitionFunc)
 
-        def groupByKey(it: Iterable[Tuple[K, List[V]]]) -> Iterable[Tuple[K, List[V]]]:
-            merger = ExternalGroupBy(agg, memory, serializer)
+        def groupByKey(it: Iterable[Tuple[K, List[V]]]) -> Iterable[Tuple[K, "SizedIterable[V]"]]:
+            merger = ExternalGroupBy[K, V](agg, memory, serializer)  # type: ignore[arg-type]
             merger.mergeCombiners(it)
             return merger.items()
 
@@ -4143,14 +4126,12 @@ class RDD(Generic[T_co]):
     @overload
     def groupWith(
         self: "RDD[Tuple[K, V]]", other: "RDD[Tuple[K, V1]]"
-    ) -> "RDD[Tuple[K, Tuple[ResultIterable[V], ResultIterable[V1]]]]":
-        ...
+    ) -> "RDD[Tuple[K, Tuple[ResultIterable[V], ResultIterable[V1]]]]": ...
 
     @overload
     def groupWith(
         self: "RDD[Tuple[K, V]]", other: "RDD[Tuple[K, V1]]", __o1: "RDD[Tuple[K, V2]]"
-    ) -> "RDD[Tuple[K, Tuple[ResultIterable[V], ResultIterable[V1], ResultIterable[V2]]]]":
-        ...
+    ) -> "RDD[Tuple[K, Tuple[ResultIterable[V], ResultIterable[V1], ResultIterable[V2]]]]": ...
 
     @overload
     def groupWith(
@@ -4168,8 +4149,7 @@ class RDD(Generic[T_co]):
                 ResultIterable[V3],
             ],
         ]
-    ]""":
-        ...
+    ]""": ...
 
     def groupWith(  # type: ignore[misc]
         self: "RDD[Tuple[Any, Any]]", other: "RDD[Tuple[Any, Any]]", *others: "RDD[Tuple[Any, Any]]"
@@ -5096,21 +5076,18 @@ class RDD(Generic[T_co]):
         self: "RDD[RowLike]",
         schema: Optional[Union[List[str], Tuple[str, ...]]] = None,
         sampleRatio: Optional[float] = None,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def toDF(
         self: "RDD[RowLike]", schema: Optional[Union["StructType", str]] = None
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def toDF(
         self: "RDD[AtomicValue]",
         schema: Union["AtomicType", str],
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     def toDF(
         self: "RDD[Any]", schema: Optional[Any] = None, sampleRatio: Optional[float] = None
@@ -5158,7 +5135,6 @@ def _wrap_function(
 
 
 class RDDBarrier(Generic[T]):
-
     """
     Wraps an RDD in a barrier stage, which forces Spark to launch tasks of this stage together.
     :class:`RDDBarrier` instances are created by :meth:`RDD.barrier`.
@@ -5274,7 +5250,6 @@ class RDDBarrier(Generic[T]):
 
 
 class PipelinedRDD(RDD[U], Generic[T, U]):
-
     """
     Examples
     --------
@@ -5399,7 +5374,7 @@ def _test() -> None:
     # even in these small test examples:
     globs["sc"] = SparkContext("local[4]", "PythonTest")
     globs["sc"].setCheckpointDir(tmp_dir.name)
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs["sc"].stop()
     tmp_dir.cleanup()
     if failure_count:

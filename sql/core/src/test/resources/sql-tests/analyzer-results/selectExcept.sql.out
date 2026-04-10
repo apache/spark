@@ -346,7 +346,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 DROP VIEW tbl_view
 -- !query analysis
-DropTempViewCommand tbl_view
+DropTempViewCommand tbl_view, false
 
 
 -- !query

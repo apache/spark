@@ -287,7 +287,6 @@ trait StateStore extends ReadStateStore {
    * Delete all keys in the range [beginKey, endKey).
    * Uses RocksDB's native deleteRange for efficient bulk deletion.
    *
-   * @note This operation is NOT recorded in the changelog.
    * @param beginKey      The start key of the range (inclusive)
    * @param endKey        The end key of the range (exclusive)
    * @param colFamilyName The column family name
@@ -612,6 +611,10 @@ object KeyStateEncoderSpec {
       case "PrefixKeyScanStateEncoderSpec" =>
         val numColsPrefixKey = m("numColsPrefixKey").asInstanceOf[BigInt].toInt
         PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey)
+      case "TimestampAsPostfixKeyStateEncoderSpec" =>
+        TimestampAsPostfixKeyStateEncoderSpec(keySchema)
+      case "TimestampAsPrefixKeyStateEncoderSpec" =>
+        TimestampAsPrefixKeyStateEncoderSpec(keySchema)
     }
   }
 }
@@ -670,7 +673,10 @@ case class RangeKeyScanStateEncoderSpec(
   }
 }
 
-/** The encoder specification for [[TimestampAsPrefixKeyStateEncoder]]. */
+/**
+ * The encoder specification for [[TimestampAsPrefixKeyStateEncoder]].
+ * The encoder expects the provided key schema to have [original key fields..., timestamp field].
+ */
 case class TimestampAsPrefixKeyStateEncoderSpec(keySchema: StructType)
   extends KeyStateEncoderSpec {
 
@@ -685,7 +691,10 @@ case class TimestampAsPrefixKeyStateEncoderSpec(keySchema: StructType)
   }
 }
 
-/** The encoder specification for [[TimestampAsPostfixKeyStateEncoder]]. */
+/**
+ * The encoder specification for [[TimestampAsPostfixKeyStateEncoder]].
+ * The encoder expects the provided key schema to have [original key fields..., timestamp field].
+ */
 case class TimestampAsPostfixKeyStateEncoderSpec(keySchema: StructType)
   extends KeyStateEncoderSpec {
 
@@ -979,7 +988,7 @@ object StateStoreProvider extends Logging {
   private[state] def coordinatorRef: Option[StateStoreCoordinatorRef] = synchronized {
     val env = SparkEnv.get
     if (env != null) {
-      val isDriver = env.executorId == SparkContext.DRIVER_IDENTIFIER
+      val isDriver = SparkContext.isDriver(env.executorId)
       // If running locally, then the coordinator reference in stateStoreCoordinatorRef may have
       // become inactive as SparkContext + SparkEnv may have been restarted. Hence, when running in
       // driver, always recreate the reference.
@@ -1756,8 +1765,7 @@ object StateStore extends Logging {
   private def coordinatorRef: Option[StateStoreCoordinatorRef] = loadedProviders.synchronized {
     val env = SparkEnv.get
     if (env != null) {
-      val isDriver =
-        env.executorId == SparkContext.DRIVER_IDENTIFIER
+      val isDriver = SparkContext.isDriver(env.executorId)
       // If running locally, then the coordinator reference in _coordRef may be have become inactive
       // as SparkContext + SparkEnv may have been restarted. Hence, when running in driver,
       // always recreate the reference.

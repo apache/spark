@@ -200,7 +200,7 @@ class MultiIndex(Index):
         Parameters
         ----------
         arrays: list / sequence of array-likes
-            Each array-like gives one level’s value for each data point. len(arrays)
+            Each array-like gives one level's value for each data point. len(arrays)
             is the number of levels.
         sortorder: int or None
             Level of sortedness (must be lexicographically sorted by that level).
@@ -804,7 +804,7 @@ class MultiIndex(Index):
                     (  'lama', 'speed')],
                    )
         """
-        if type(self) != type(other):
+        if type(self) is not type(other):
             raise NotImplementedError(
                 "Doesn't support symmetric_difference between Index & MultiIndex for now"
             )
@@ -1004,8 +1004,7 @@ class MultiIndex(Index):
             if level < 0:
                 if (level + nlevels) < 0:
                     raise IndexError(
-                        "Too many levels: Index has only %d levels, "
-                        "not %d" % (nlevels, level + 1)
+                        "Too many levels: Index has only %d levels, not %d" % (nlevels, level + 1)
                     )
                 level = level + nlevels
         else:
@@ -1279,7 +1278,7 @@ def _test() -> None:
         .appName("pyspark.pandas.indexes.multi tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.indexes.multi,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

@@ -62,7 +62,9 @@ class ParquetToSparkSchemaConverter(
     nanosAsLong: Boolean = SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.defaultValue.get,
     useFieldId: Boolean = SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get,
     val ignoreVariantAnnotation: Boolean =
-      SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.defaultValue.get) {
+      SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.defaultValue.get,
+    val respectUnknownTypeAnnotation: Boolean =
+      SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.defaultValue.get) {
 
   def this(conf: SQLConf) = this(
     assumeBinaryIsString = conf.isParquetBinaryAsString,
@@ -71,7 +73,9 @@ class ParquetToSparkSchemaConverter(
     inferTimestampNTZ = conf.parquetInferTimestampNTZEnabled,
     nanosAsLong = conf.legacyParquetNanosAsLong,
     useFieldId = conf.parquetFieldIdReadEnabled,
-    ignoreVariantAnnotation = conf.parquetIgnoreVariantAnnotation)
+    ignoreVariantAnnotation = conf.parquetIgnoreVariantAnnotation,
+    respectUnknownTypeAnnotation =
+      conf.parquetReaderRespectUnknownTypeAnnotation)
 
   def this(conf: Configuration) = this(
     assumeBinaryIsString = conf.get(SQLConf.PARQUET_BINARY_AS_STRING.key).toBoolean,
@@ -82,7 +86,10 @@ class ParquetToSparkSchemaConverter(
     useFieldId = conf.getBoolean(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key,
       SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get),
     ignoreVariantAnnotation = conf.getBoolean(SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key,
-      SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.defaultValue.get))
+      SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.defaultValue.get),
+    respectUnknownTypeAnnotation = conf.getBoolean(
+      SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.key,
+      SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.defaultValue.get))
 
   /**
    * Converts Parquet [[MessageType]] `parquetSchema` to a Spark SQL [[StructType]].
@@ -227,7 +234,11 @@ class ParquetToSparkSchemaConverter(
       primitiveColumn: PrimitiveColumnIO,
       sparkReadType: Option[DataType] = None): ParquetColumn = {
     val parquetType = primitiveColumn.getType.asPrimitiveType()
-    val typeAnnotation = primitiveColumn.getType.getLogicalTypeAnnotation
+    val typeAnnotation = primitiveColumn.getType.getLogicalTypeAnnotation match {
+      case unknown: UnknownLogicalTypeAnnotation =>
+        if (respectUnknownTypeAnnotation) unknown else null
+      case other => other
+    }
     val typeName = primitiveColumn.getPrimitive
 
     def typeString =

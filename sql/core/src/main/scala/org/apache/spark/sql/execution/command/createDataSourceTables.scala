@@ -28,6 +28,7 @@ import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.CommandExecutionMode
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
@@ -79,7 +80,9 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
         bucketSpec = table.bucketSpec,
         options = table.storage.properties ++ pathOption,
         // As discussed in SPARK-19583, we don't check if the location is existed
-        catalogTable = Some(tableWithDefaultOptions)).resolveRelation(checkFilesExist = false)
+        catalogTable = Some(tableWithDefaultOptions))
+        .resolveRelation(checkFilesExist = false,
+          forceNullable = !sessionState.conf.getConf(SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL))
 
     val partitionColumnNames = if (table.schema.nonEmpty) {
       table.partitionColumnNames
@@ -122,6 +125,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 
     Seq.empty[Row]
   }
+
 }
 
 /**

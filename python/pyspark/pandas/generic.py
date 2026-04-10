@@ -18,6 +18,7 @@
 """
 A base class of DataFrame/Column to behave like pandas DataFrame/Series.
 """
+
 from abc import ABCMeta, abstractmethod
 from functools import reduce
 from typing import (
@@ -485,7 +486,7 @@ class Frame(object, metaclass=ABCMeta):
         if isinstance(func, tuple):
             func, target = func
             if target in kwargs:
-                raise ValueError("%s is both the pipe target and a keyword " "argument" % target)
+                raise ValueError("%s is both the pipe target and a keyword argument" % target)
             kwargs[target] = self
             return func(*args, **kwargs)
         else:
@@ -867,8 +868,8 @@ class Frame(object, metaclass=ABCMeta):
             File path. If not specified, the result is returned as
             a string.
         lines: bool, default True
-            If ‘orient’ is ‘records’ write out line delimited JSON format.
-            Will throw ValueError if incorrect ‘orient’ since others are not
+            If 'orient' is 'records' write out line delimited JSON format.
+            Will throw ValueError if incorrect 'orient' since others are not
             list like. It should be always True for now.
         orient: str, default 'records'
              It should be always 'records' for now.
@@ -1098,9 +1099,7 @@ class Frame(object, metaclass=ABCMeta):
         elif isinstance(self, ps.Series):
             f = pd.Series.to_excel
         else:
-            raise TypeError(
-                "Constructor expects DataFrame or Series; however, " "got [%s]" % (self,)
-            )
+            raise TypeError("Constructor expects DataFrame or Series; however, got [%s]" % (self,))
         return validate_arguments_and_invoke_function(
             psdf._to_internal_pandas(), self.to_excel, f, args
         )
@@ -1218,9 +1217,7 @@ class Frame(object, metaclass=ABCMeta):
         elif isinstance(self, ps.Series):
             f = pd.Series.to_hdf
         else:
-            raise TypeError(
-                "Constructor expects DataFrame or Series; however, " "got [%s]" % (self,)
-            )
+            raise TypeError("Constructor expects DataFrame or Series; however, got [%s]" % (self,))
         return validate_arguments_and_invoke_function(
             psdf._to_internal_pandas(), self.to_hdf, f, args
         )
@@ -1590,7 +1587,7 @@ class Frame(object, metaclass=ABCMeta):
         self, axis: Optional[Axis] = None, skipna: bool = True, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
-        Return unbiased kurtosis using Fisher’s definition of kurtosis (kurtosis of normal == 0.0).
+        Return unbiased kurtosis using Fisher's definition of kurtosis (kurtosis of normal == 0.0).
         Normalized by N-1.
 
         Parameters
@@ -1795,8 +1792,8 @@ class Frame(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        axis: {0 or ‘index’, 1 or ‘columns’}, default 0
-            If 0 or ‘index’ counts are generated for each column. If 1 or ‘columns’ counts are
+        axis: {0 or 'index', 1 or 'columns'}, default 0
+            If 0 or 'index' counts are generated for each column. If 1 or 'columns' counts are
             generated for each row.
         numeric_only: bool, default False
             If True, include only float, int, boolean columns. This parameter is mainly for
@@ -3105,7 +3102,9 @@ class Frame(object, metaclass=ABCMeta):
             # Otherwise, there is no change.
             self_top_two = cast("Series", self).head(2)
             has_single_value = len(self_top_two) == 1
-            return cast(Union[Scalar, ps.Series], self_top_two[0] if has_single_value else self)
+            return cast(
+                Union[Scalar, ps.Series], self_top_two.iloc[0] if has_single_value else self
+            )
 
     def truncate(
         self,
@@ -3681,7 +3680,7 @@ def _test() -> None:
     path = tempfile.mkdtemp()
     globs["path"] = path
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.generic,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

@@ -27,14 +27,16 @@ import org.apache.spark.api.python.DechunkedInputStream
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.CLASS_LOADER
 import org.apache.spark.security.SocketAuthServer
-import org.apache.spark.sql.{internal, Column, DataFrame, Row, SparkSession, TableArg}
+import org.apache.spark.sql.{internal, Column, DataFrame, DataFrameReader, Encoders, Row, SparkSession, TableArg}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.classic.{DataFrameReader => ClassicDataFrameReader}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.ExpressionUtils.expression
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.python.EvaluatePython
@@ -192,6 +194,26 @@ private[sql] object PythonSQLUtils extends Logging {
 
   @scala.annotation.varargs
   def internalFn(name: String, inputs: Column*): Column = Column.internalFn(name, inputs: _*)
+
+  /**
+   * Parses a [[DataFrame]] containing JSON strings into a structured [[DataFrame]].
+   * The input DataFrame must have exactly one column of StringType.
+   * This is used by PySpark to avoid manual Dataset[String] conversion on the Python side.
+   */
+  def jsonFromDataFrame(
+      reader: DataFrameReader,
+      df: DataFrame): DataFrame = {
+    val classicReader = reader.asInstanceOf[ClassicDataFrameReader]
+    val fields = df.schema.fields
+    if (fields.isEmpty) {
+      throw QueryCompilationErrors.parseInputNotStringTypeError(
+        org.apache.spark.sql.types.NullType)
+    }
+    if (fields.head.dataType != org.apache.spark.sql.types.StringType) {
+      throw QueryCompilationErrors.parseInputNotStringTypeError(fields.head.dataType)
+    }
+    classicReader.json(df.select(df.columns.head).as(Encoders.STRING))
+  }
 
   def cleanupPythonWorkerLogs(sessionUUID: String, sparkContext: SparkContext): Unit = {
     if (!sparkContext.isStopped) {

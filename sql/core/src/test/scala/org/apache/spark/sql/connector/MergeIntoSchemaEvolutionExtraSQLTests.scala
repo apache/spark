@@ -18,12 +18,17 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkRuntimeException
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, PartialSchemaEvolutionCatalog, TableInfo}
+import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 // Tests that cannot re-use helper functions as they have custom logic
 trait MergeIntoSchemaEvolutionExtraSQLTests extends RowLevelOperationSuiteBase {
+
+  import testImplicits._
 
   test("source missing struct field violating check constraints") {
     Seq(true, false).foreach { withSchemaEvolution =>
@@ -86,6 +91,60 @@ trait MergeIntoSchemaEvolutionExtraSQLTests extends RowLevelOperationSuiteBase {
           }
           sql(s"DROP TABLE IF EXISTS $tableNameAsString")
         }
+      }
+    }
+  }
+
+  test("error when catalog ignores schema changes in MERGE WITH SCHEMA EVOLUTION") {
+    spark.conf.set("spark.sql.catalog.cat", classOf[PartialSchemaEvolutionCatalog].getName)
+    spark.sessionState.catalogManager.reset()
+    withTable(tableNameAsString) {
+      withTempView("source") {
+        // Target: pk INT, salary INT, dep STRING
+        val targetData: DataFrame = Seq(
+          (1, 100, "hr"),
+          (2, 200, "software")
+        ).toDF("pk", "salary", "dep")
+        // Source: pk LONG (wider type), salary INT, dep STRING, active BOOLEAN (new column)
+        // Triggers UpdateColumnType(pk) and AddColumn(active) in schema evolution
+        val sourceData: DataFrame = Seq(
+          (1L, 150, "hr", true),
+          (3L, 350, "eng", false)
+        ).toDF("pk", "salary", "dep", "active")
+
+        val columns = CatalogV2Util.structTypeToV2Columns(targetData.schema)
+        val partitionCols = Seq("dep")
+        val transforms = Array[Transform](identity(reference(partitionCols)))
+        val tableInfo = new TableInfo.Builder()
+          .withColumns(columns)
+          .withPartitions(transforms)
+          .withProperties(extraTableProps)
+          .build()
+        catalog.createTable(ident, tableInfo)
+        targetData.writeTo(tableNameAsString).append()
+        sourceData.createOrReplaceTempView("source")
+
+        val ex = intercept[AnalysisException] {
+          sql(
+            s"""MERGE WITH SCHEMA EVOLUTION
+               |INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED THEN UPDATE SET dep = s.dep, active = s.active
+               |WHEN NOT MATCHED THEN INSERT (pk, salary, dep, active)
+               |VALUES (s.pk, s.salary, s.dep, s.active)
+               |""".stripMargin)
+        }
+        assert(ex.getCondition.startsWith("UNSUPPORTED_AUTO_SCHEMA_EVOLUTION_CHANGES"),
+          s"Expected error class UNSUPPORTED_AUTO_SCHEMA_EVOLUTION_CHANGES but got: " +
+            s"${ex.getCondition}. Message: ${ex.getMessage}")
+        assert(ex.getMessageParameters.get("tableName") != null,
+          s"Error message should mention table name: ${ex.getMessage}")
+
+        val msg = ex.getMessage
+        val expectedChanges = "ALTER COLUMN pk TYPE BIGINT; ADD COLUMN active BOOLEAN"
+        assert(msg.contains(expectedChanges),
+          s"Error message should contain exact changes '$expectedChanges': $msg")
       }
     }
   }

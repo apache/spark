@@ -54,6 +54,13 @@ class ErrorsTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Cannot find main error class"):
             PySparkValueError(errorClass="invalid", messageParameters={})
 
+    def test_error_class_without_message_parameters(self):
+        # Error classes with no parameters in their template should work
+        # without explicitly passing messageParameters.
+        e = PySparkValueError(errorClass="MALFORMED_VARIANT")
+        self.assertIn("MALFORMED_VARIANT", e.getCondition())
+        self.assertIn("malformed", str(e))
+
     def test_breaking_change_info(self):
         # Test retrieving the breaking change info for an error.
         error_reader = ErrorClassesReader()

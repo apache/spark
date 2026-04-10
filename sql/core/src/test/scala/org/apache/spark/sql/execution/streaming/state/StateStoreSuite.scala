@@ -2465,6 +2465,124 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
   }
 
+  test("fileChecksumThreadPoolSize propagates to ChecksumCheckpointFileManager") {
+    Seq(0, 1, 6).foreach { numThreads =>
+      val storeId = StateStoreId(newDir(), 0L, 0)
+      withSQLConf(
+        SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> "true",
+        SQLConf.STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE.key -> numThreads.toString) {
+        tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+          val fmMethod = PrivateMethod[CheckpointFileManager](Symbol("fm"))
+          val fm = provider match {
+            case hdfs: HDFSBackedStateStoreProvider =>
+              hdfs.fm
+            case rocksdb: RocksDBStateStoreProvider =>
+              rocksdb.rocksDB.fileManager invokePrivate fmMethod()
+            case _ =>
+              fail(s"Unexpected provider type: ${provider.getClass.getName}")
+          }
+          assert(fm.isInstanceOf[ChecksumCheckpointFileManager])
+          assert(fm.asInstanceOf[ChecksumCheckpointFileManager].numThreads === numThreads)
+        }
+      }
+    }
+  }
+
+  test("STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE: invalid negative value is rejected") {
+    val sqlConf = SQLConf.get.clone()
+    val ex = intercept[IllegalArgumentException] {
+      sqlConf.setConfString(SQLConf.STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE.key, "-1")
+    }
+    assert(ex.getMessage.contains("Must be a non-negative integer"))
+  }
+
+  test("fileChecksumThreadPoolSize = 0 supports sequential I/O (load, write, commit, reload)") {
+    val storeId = StateStoreId(newDir(), 0L, 0)
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> "true",
+      SQLConf.STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE.key -> "0") {
+      // Write some state with sequential mode enabled
+      tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+        val store = provider.getStore(0)
+        put(store, "a", 0, 1)
+        put(store, "b", 0, 2)
+        store.commit()
+        // Verify that main file and checksum file were both written to disk.
+        // Both HDFS and RocksDB produce 2 files and 1 checksum file:
+        //   HDFS:    1.delta, 1.delta.checksum
+        //   RocksDB: 1.zip, 1.zip.crc
+        verifyChecksumFiles(storeId.storeCheckpointLocation().toString,
+          expectedNumFiles = 2, expectedNumChecksumFiles = 1)
+      }
+
+      // Reload and verify state is intact
+      tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+        val store = provider.getStore(1)
+        assert(get(store, "a", 0) === Some(1))
+        assert(get(store, "b", 0) === Some(2))
+        store.abort()
+      }
+    }
+  }
+
+  test("fileChecksumThreadPoolSize = 0: concurrent store commit and maintenance both complete") {
+    val storeId = StateStoreId(newDir(), 0L, 0)
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> "true",
+      SQLConf.STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE.key -> "0",
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
+      // So that RocksDB uploads a snapshot during maintenance rather than being a no-op.
+      RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true") {
+      tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+        // Build up a few versions so maintenance has something to work with.
+        // With minDeltasForSnapshot=1 and changelog checkpointing enabled, doMaintenance()
+        // uploads a queued snapshot, exercising the checksum file manager concurrently.
+        (0L until 3L).foreach { version =>
+          putAndCommitStore(provider, version, doMaintenance = false)
+        }
+
+        // Load the store and prepare the write before maintenance starts, so that
+        // store.commit() (the actual file I/O) is what overlaps with doMaintenance().
+        val store = provider.getStore(3)
+        put(store, "3", 3, 300)
+
+        val errors = new ConcurrentLinkedQueue[Throwable]()
+        val maintenanceStartedLatch = new CountDownLatch(1)
+        val maintenanceDoneLatch = new CountDownLatch(1)
+
+        val maintenanceThread = new Thread(() => {
+          try {
+            maintenanceStartedLatch.countDown()
+            provider.doMaintenance()
+          } catch {
+            case t: Throwable => errors.add(t)
+          } finally {
+            maintenanceDoneLatch.countDown()
+          }
+        })
+        maintenanceThread.setDaemon(true)
+        maintenanceThread.start()
+
+        // Wait until maintenance is running, then commit to simulate concurrency.
+        assert(maintenanceStartedLatch.await(30, TimeUnit.SECONDS),
+          "Maintenance thread did not start within 30 seconds")
+        store.commit()
+
+        assert(maintenanceDoneLatch.await(30, TimeUnit.SECONDS),
+          "Maintenance did not complete within 30 seconds")
+        assert(errors.isEmpty,
+          s"Maintenance failed with: ${Option(errors.peek()).map(_.getMessage).orNull}")
+      }
+
+      // Verify state committed concurrently with maintenance is intact.
+      tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+        val store = provider.getStore(4)
+        assert(get(store, "3", 3) === Some(300))
+        store.abort()
+      }
+    }
+  }
+
   private def verifyChecksumFiles(
       dir: String, expectedNumFiles: Int, expectedNumChecksumFiles: Int): Unit = {
     val allFiles = new File(dir)

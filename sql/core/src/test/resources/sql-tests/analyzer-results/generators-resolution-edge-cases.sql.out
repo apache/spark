@@ -478,3 +478,306 @@ Project [col#x, arr#x]
 +- Generate explode(arr#x), false, [col#x]
    +- Generate explode(array(array(0), array(1), array(2))), false, [arr#x]
       +- OneRowRelation
+
+
+-- !query
+SELECT col + 1 as col2, explode(array(1, 2, 3)) as col
+-- !query analysis
+Project [(col#x + 1) AS col2#x, col#x]
++- Generate explode(array(1, 2, 3)), false, [col#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT 1 AS (pos, val)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MULTI_ALIAS_WITHOUT_GENERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "expr" : "\"1\"",
+    "names" : "pos, val"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "1 AS (pos, val)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM VALUES (1) ORDER BY explode(array(1, 2, 3))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.OUTSIDE_SELECT",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "plan" : "Sort [explode(array(1, 2, 3)) ASC NULLS FIRST], true"
+  }
+}
+
+
+-- !query
+SELECT * FROM VALUES (array(1, 2, 3)) t(arr) WHERE explode(arr) == 2
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.OUTSIDE_SELECT",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "plan" : "'Filter (explode(arr#x) = 2)"
+  }
+}
+
+
+-- !query
+SELECT explode(packages) AS package
+FROM (VALUES(array('a', 'b'))) AS t(packages)
+GROUP BY ALL
+HAVING package IN ('a')
+-- !query analysis
+Filter package#x IN (a)
++- Project [package#x]
+   +- Generate explode(_gen_input_0#x), false, [package#x]
+      +- Aggregate [packages#x], [packages#x AS _gen_input_0#x]
+         +- SubqueryAlias t
+            +- Project [col1#x AS packages#x]
+               +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT explode(collect_list(a)) AS package
+FROM (VALUES ('a'), ('b')) AS t(a)
+GROUP BY ALL
+HAVING package IN ('a')
+-- !query analysis
+Filter package#x IN (a)
++- Project [package#x]
+   +- Generate explode(_gen_input_0#x), false, [package#x]
+      +- Aggregate [collect_list(a#x, 0, 0, true) AS _gen_input_0#x]
+         +- SubqueryAlias t
+            +- Project [col1#x AS a#x]
+               +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT stack(2, id * 10L, count(val))
+FROM (VALUES (1,'a'), (1,'b'), (2, 'c')) AS t(id, val)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_GROUP_BY",
+  "sqlState" : "42803",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 92,
+    "fragment" : "SELECT stack(2, id * 10L, count(val))\nFROM (VALUES (1,'a'), (1,'b'), (2, 'c')) AS t(id, val)"
+  } ]
+}
+
+
+-- !query
+SELECT
+  explode(array(1)) AS x1,
+  explode(array(t1.c1, t2.c1)) AS x2,
+  explode(array(t2.c1)) AS x3
+FROM (VALUES (1), (2)) AS t1(c1)
+FULL OUTER JOIN (VALUES (2), (3)) AS t2(c1)
+USING (c1)
+-- !query analysis
+Project [x1#x, x2#x, x3#x]
++- Project [c1#x, x1#x, x2#x, x3#x]
+   +- Generate explode(array(c1#x)), false, [x3#x]
+      +- Project [c1#x, x1#x, x2#x, c1#x]
+         +- Generate explode(array(c1#x, c1#x)), false, [x2#x]
+            +- Generate explode(array(1)), false, [x1#x]
+               +- Project [coalesce(c1#x, c1#x) AS c1#x, c1#x, c1#x]
+                  +- Join FullOuter, (c1#x = c1#x)
+                     :- SubqueryAlias t1
+                     :  +- Project [col1#x AS c1#x]
+                     :     +- LocalRelation [col1#x]
+                     +- SubqueryAlias t2
+                        +- Project [col1#x AS c1#x]
+                           +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT
+  explode(array(t1.c1)) AS x1,
+  explode(array(t1.c1, t2.c1)) AS x2,
+  explode(array(t2.c1)) AS x3
+FROM (VALUES (1), (2)) AS t1(c1)
+FULL OUTER JOIN (VALUES (2), (3)) AS t2(c1)
+USING (c1)
+-- !query analysis
+Project [x1#x, x2#x, x3#x]
++- Project [c1#x, x1#x, x2#x, x3#x]
+   +- Generate explode(array(c1#x)), false, [x3#x]
+      +- Project [c1#x, x1#x, x2#x, c1#x]
+         +- Generate explode(array(c1#x, c1#x)), false, [x2#x]
+            +- Project [c1#x, x1#x, c1#x, c1#x]
+               +- Generate explode(array(c1#x)), false, [x1#x]
+                  +- Project [coalesce(c1#x, c1#x) AS c1#x, c1#x, c1#x]
+                     +- Join FullOuter, (c1#x = c1#x)
+                        :- SubqueryAlias t1
+                        :  +- Project [col1#x AS c1#x]
+                        :     +- LocalRelation [col1#x]
+                        +- SubqueryAlias t2
+                           +- Project [col1#x AS c1#x]
+                              +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT explode(array(t1.c1, t2.c1)) AS x1, explode(array(x1, t1.c1)) AS x2
+FROM (VALUES (1), (2), (3)) AS t1(c1)
+FULL OUTER JOIN (VALUES (2), (3), (4)) AS t2(c1)
+USING (c1)
+-- !query analysis
+Project [x1#x, x2#x]
++- Project [c1#x, x1#x, x2#x]
+   +- Generate explode(array(x1#x, c1#x)), false, [x2#x]
+      +- Project [c1#x, x1#x, c1#x]
+         +- Generate explode(array(c1#x, c1#x)), false, [x1#x]
+            +- Project [coalesce(c1#x, c1#x) AS c1#x, c1#x, c1#x]
+               +- Join FullOuter, (c1#x = c1#x)
+                  :- SubqueryAlias t1
+                  :  +- Project [col1#x AS c1#x]
+                  :     +- LocalRelation [col1#x]
+                  +- SubqueryAlias t2
+                     +- Project [col1#x AS c1#x]
+                        +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT 1 as a, explode(array(1, 2, 3)) as a, a * 10
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
+  "sqlState" : "42702",
+  "messageParameters" : {
+    "n" : "2",
+    "name" : "`a`"
+  }
+}
+
+
+-- !query
+SELECT 1 as a, explode(array(1, 2, 3)) as a, a * 10, count(*)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
+  "sqlState" : "42702",
+  "messageParameters" : {
+    "n" : "2",
+    "name" : "`a`"
+  }
+}
+
+
+-- !query
+SELECT explode(array(1, 2, 3)) as a, 1 as a, a * 10
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
+  "sqlState" : "42702",
+  "messageParameters" : {
+    "n" : "2",
+    "name" : "`a`"
+  }
+}
+
+
+-- !query
+SELECT explode(array(1, 2, 3)) as a, 1 as a, a * 10, count(*)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
+  "sqlState" : "42702",
+  "messageParameters" : {
+    "n" : "2",
+    "name" : "`a`"
+  }
+}
+
+
+-- !query
+SELECT 1 as pos, posexplode(array('x', 'y')) as (pos, val), pos * 10
+-- !query analysis
+Project [pos#x, pos#x, val#x, (pos#x * 10) AS (lateralAliasReference(pos) * 10)#x]
++- Project [pos#x, val#x, 1 AS pos#x]
+   +- Generate posexplode(array(x, y)), false, [pos#x, val#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT 1 as pos, posexplode(array('x', 'y')) as (pos, val), pos * 10, count(*)
+-- !query analysis
+Project [pos#x, pos#x, val#x, (lateralAliasReference(pos) * 10)#x, count(1)#xL]
++- Generate posexplode(array(x, y)), false, [pos#x, val#x]
+   +- Project [pos#x, (pos#x * 10) AS (lateralAliasReference(pos) * 10)#x, count(1)#xL AS count(1)#xL]
+      +- Project [count(1)#xL, 1 AS pos#x]
+         +- Aggregate [count(1) AS count(1)#xL]
+            +- OneRowRelation
+
+
+-- !query
+SELECT explode(array(10, 20)) as col, col FROM (VALUES (42)) AS t(col)
+-- !query analysis
+Project [col#x, col#x]
++- Generate explode(array(10, 20)), false, [col#x]
+   +- SubqueryAlias t
+      +- Project [col1#x AS col#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT explode(array(10, 20)) as col, col, count(*) FROM (VALUES (42)) AS t(col) GROUP BY col
+-- !query analysis
+Project [col#x, col#x, count(1)#xL]
++- Generate explode(array(10, 20)), false, [col#x]
+   +- Aggregate [col#x], [col#x, count(1) AS count(1)#xL]
+      +- SubqueryAlias t
+         +- Project [col1#x AS col#x]
+            +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT posexplode(array('x', 'y')) as (pos, val), pos, val FROM (VALUES (42)) AS t(pos)
+-- !query analysis
+Project [pos#x, val#x, pos#x, val#x]
++- Generate posexplode(array(x, y)), false, [pos#x, val#x]
+   +- SubqueryAlias t
+      +- Project [col1#x AS pos#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT posexplode(array('x', 'y')) as (pos, val), pos, val, count(*) FROM (VALUES (42)) AS t(pos) GROUP BY pos
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`val`",
+    "proposal" : "`pos`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 56,
+    "stopIndex" : 58,
+    "fragment" : "val"
+  } ]
+}

@@ -26,9 +26,8 @@ import org.apache.spark.sql.catalyst.expressions.{
   ExprId,
   NamedExpression
 }
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, ATTRIBUTE_REFERENCE}
+import org.apache.spark.sql.catalyst.trees.TreePattern.ATTRIBUTE_REFERENCE
 
 /**
  * During LCA resolution some aliases may be rewritten as new aliases with new [[ExprId]]s. This
@@ -171,9 +170,7 @@ trait RewritesAliasesInTopLcaProject {
       scopes: NameScopeStack,
       missingExpressions: Seq[NamedExpression]): (Expression, Seq[NamedExpression]) = {
     val replacedAttributeReferences = new HashSet[ExprId]
-    val expressionWithReplacedAliases = sortOrderOrCondition.transformDownWithPruning(
-      _.containsAnyPattern(AGGREGATE_EXPRESSION, ATTRIBUTE_REFERENCE)
-    ) {
+    val expressionWithReplacedAliases = sortOrderOrCondition.transformDown {
       case attributeReference: AttributeReference =>
         scopes.current.aggregateListAliases
           .collectFirst {
@@ -184,13 +181,13 @@ trait RewritesAliasesInTopLcaProject {
               alias.toAttribute
           }
           .getOrElse(attributeReference)
-      case aggregateExpression: AggregateExpression =>
+      case expression: Expression =>
         scopes.current.aggregateListAliases
           .collectFirst {
-            case alias if alias.child.semanticEquals(aggregateExpression) =>
+            case alias if alias.child.semanticEquals(expression) =>
               alias.toAttribute
           }
-          .getOrElse(aggregateExpression)
+          .getOrElse(expression)
     }
     val filteredMissingExpressions = missingExpressions.filter(
       expression => !replacedAttributeReferences.contains(expression.exprId)

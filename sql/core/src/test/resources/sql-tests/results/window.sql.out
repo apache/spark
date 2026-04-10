@@ -669,23 +669,23 @@ b	6
 
 -- !query
 SELECT val, cate,
-first_value(val) FILTER (WHERE cate = 'a') OVER(ORDER BY val_long
+first_value(val) FILTER (WHERE cate = 'a') OVER(ORDER BY val_long NULLS LAST, val NULLS LAST, cate NULLS LAST
   ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS first_a,
-last_value(val) FILTER (WHERE cate = 'a') OVER(ORDER BY val_long
+last_value(val) FILTER (WHERE cate = 'a') OVER(ORDER BY val_long NULLS LAST, val NULLS LAST, cate NULLS LAST
   ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS last_a
-FROM testData ORDER BY val_long, cate
+FROM testData ORDER BY val_long NULLS LAST, val NULLS LAST, cate NULLS LAST
 -- !query schema
 struct<val:int,cate:string,first_a:int,last_a:int>
 -- !query output
-NULL	NULL	1	NULL
-1	b	1	NULL
+1	a	1	1
 3	NULL	1	1
 NULL	a	1	NULL
-1	a	1	1
 1	a	1	1
 2	b	1	1
 2	a	1	2
 3	b	1	2
+1	b	1	2
+NULL	NULL	1	2
 
 
 -- !query
