@@ -339,7 +339,7 @@ class SparkContext:
         )
         os.environ["SPARK_BUFFER_SIZE"] = str(self._jvm.PythonUtils.getSparkBufferSize(self._jsc))
 
-        self.pythonExec = os.environ.get("PYSPARK_PYTHON", "python3")
+        self.pythonExec = self._get_python_exec_from_conf()
         self.pythonVer = "%d.%d" % sys.version_info[:2]
 
         # Broadcast's __reduce__ method stores Broadcast instances here.
@@ -415,6 +415,51 @@ class SparkContext:
             threading._MainThread,  # type: ignore[attr-defined]
         ):
             signal.signal(signal.SIGINT, signal_handler)
+
+    def _get_python_exec_from_conf(self) -> str:
+        """
+        Determine the Python executable to use for the driver.
+
+        The priority order (highest to lowest):
+        1. PYSPARK_DRIVER_PYTHON environment variable
+        2. PYSPARK_PYTHON environment variable
+        3. spark.pyspark.driver.python configuration
+        4. spark.pyspark.python configuration
+        5. spark.executorEnv.PYSPARK_DRIVER_PYTHON configuration
+        6. spark.executorEnv.PYSPARK_PYTHON configuration
+        7. Default: 'python3'
+
+        This ensures driver and executor Python versions are consistent,
+        especially in client mode where launch_container.sh may not run.
+
+        Returns
+        -------
+        str
+            The path to the Python executable.
+        """
+        # Check environment variables first (highest priority)
+        env_driver_python = os.environ.get("PYSPARK_DRIVER_PYTHON")
+        if env_driver_python and env_driver_python.strip():
+            return env_driver_python.strip()
+
+        env_pyspark_python = os.environ.get("PYSPARK_PYTHON")
+        if env_pyspark_python and env_pyspark_python.strip():
+            return env_pyspark_python.strip()
+
+        # Fall back to Spark configuration keys
+        config_keys = [
+            "spark.pyspark.driver.python",
+            "spark.pyspark.python",
+            "spark.executorEnv.PYSPARK_DRIVER_PYTHON",
+            "spark.executorEnv.PYSPARK_PYTHON",
+        ]
+        for key in config_keys:
+            python_exec = self._conf.get(key, None)
+            if python_exec is not None and python_exec.strip() != "":
+                return python_exec.strip()
+
+        # Default fallback
+        return "python3"
 
     def __repr__(self) -> str:
         return "<SparkContext master={master} appName={appName}>".format(

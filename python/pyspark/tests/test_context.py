@@ -26,6 +26,7 @@ from collections import namedtuple
 from pyspark import SparkConf, SparkFiles, SparkContext
 from pyspark.testing.sqlutils import SPARK_HOME
 from pyspark.testing.utils import ReusedPySparkTestCase, PySparkTestCase, QuietTest
+from unittest.mock import MagicMock
 
 
 class CheckpointTests(ReusedPySparkTestCase):
@@ -320,6 +321,71 @@ class ContextTests(unittest.TestCase):
 
         with SparkContext("local-cluster[3, 1, 1024]") as sc:
             sc.range(2).foreach(lambda _: create_spark_context())
+
+    def test_python_executable_from_spark_conf(self):
+        # SPARK-52669: Test _get_python_exec_from_conf method directly
+        # Priority: PYSPARK_DRIVER_PYTHON env > PYSPARK_PYTHON env >
+        #           spark.pyspark.driver.python > spark.pyspark.python >
+        #           spark.executorEnv.PYSPARK_DRIVER_PYTHON > spark.executorEnv.PYSPARK_PYTHON >
+        #           'python3' (default)
+
+        # Backup original environment
+        original_env = os.environ.copy()
+
+        try:
+            # Clean up python-related env vars for test isolation
+            for key in ["PYSPARK_DRIVER_PYTHON", "PYSPARK_PYTHON"]:
+                if key in os.environ:
+                    del os.environ[key]
+
+            # Test 1: spark.pyspark.driver.python takes precedence over spark.pyspark.python
+            conf1 = SparkConf()
+            conf1.set("spark.pyspark.python", "python_fallback")
+            conf1.set("spark.pyspark.driver.python", "python_driver")
+            mock_sc1 = MagicMock()
+            mock_sc1._conf = conf1
+            result1 = SparkContext._get_python_exec_from_conf(mock_sc1)
+            self.assertEqual(result1, "python_driver")
+
+            # Test 2: spark.pyspark.python fallback when driver.python not set
+            conf2 = SparkConf()
+            conf2.set("spark.pyspark.python", "python_shared")
+            mock_sc2 = MagicMock()
+            mock_sc2._conf = conf2
+            result2 = SparkContext._get_python_exec_from_conf(mock_sc2)
+            self.assertEqual(result2, "python_shared")
+
+            # Test 3: PYSPARK_DRIVER_PYTHON env has highest priority
+            os.environ["PYSPARK_DRIVER_PYTHON"] = "python_env_driver"
+            conf3 = SparkConf()
+            conf3.set("spark.pyspark.python", "python_shared")
+            mock_sc3 = MagicMock()
+            mock_sc3._conf = conf3
+            result3 = SparkContext._get_python_exec_from_conf(mock_sc3)
+            self.assertEqual(result3, "python_env_driver")
+            del os.environ["PYSPARK_DRIVER_PYTHON"]
+
+            # Test 4: PYSPARK_PYTHON env overrides spark config
+            os.environ["PYSPARK_PYTHON"] = "python_env_shared"
+            conf4 = SparkConf()
+            conf4.set("spark.pyspark.driver.python", "python_driver_conf")
+            mock_sc4 = MagicMock()
+            mock_sc4._conf = conf4
+            result4 = SparkContext._get_python_exec_from_conf(mock_sc4)
+            self.assertEqual(result4, "python_env_shared")
+            del os.environ["PYSPARK_PYTHON"]
+
+            # Test 5: default fallback to python3
+            conf5 = SparkConf()
+            mock_sc5 = MagicMock()
+            mock_sc5._conf = conf5
+            result5 = SparkContext._get_python_exec_from_conf(mock_sc5)
+            self.assertEqual(result5, "python3")
+
+        finally:
+            # Restore original environment
+            os.environ.clear()
+            os.environ.update(original_env)
 
 
 class ContextTestsWithResources(unittest.TestCase):
