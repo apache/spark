@@ -65,13 +65,15 @@ object Main extends Logging {
   // Visible for testing
   private[repl] def doMain(args: Array[String], _interp: SparkILoop): Unit = {
     interp = _interp
-    val jars = Utils
+    val userJars = Utils
       .getLocalUserJarsForShell(conf)
       // Remove file:///, file:// or file:/ scheme if exists for each jar
       .map { x =>
         if (x.startsWith("file:")) new File(new URI(x)).getPath else x
       }
       .mkString(File.pathSeparator)
+    val jvmClasspath = sys.props.getOrElse("java.class.path", "")
+    val jars = Seq(userJars, jvmClasspath).filter(_.nonEmpty).mkString(File.pathSeparator)
     val interpArguments = List(
       "-Yrepl-class-based",
       "-Yrepl-outdir",

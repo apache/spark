@@ -37,13 +37,6 @@ export _SPARK_CMD_USAGE="Usage: ./bin/spark-shell [options]
 Scala REPL options, Spark Classic only:
   -I <file>                   preload <file>, enforcing line-by-line interpretation"
 
-# SPARK-4161: scala does not assume use of the java classpath,
-# so we need to add the "-Dscala.usejavacp=true" flag manually. We
-# do this specifically for the Spark shell because the scala REPL
-# has its own class loader, and any additional classpath specified
-# through spark.driver.extraClassPath is not automatically propagated.
-SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS -Dscala.usejavacp=true"
-
 function main() {
   export SPARK_SCALA_SHELL=1
   # In case of Spark Connect shell, the main class (and resource) is replaced in

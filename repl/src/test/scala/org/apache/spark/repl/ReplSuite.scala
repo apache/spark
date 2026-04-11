@@ -72,6 +72,27 @@ class ReplSuite extends SparkFunSuite {
   def runInterpreterInPasteMode(master: String, input: String): String =
     runInterpreter(master, ":paste\n" + input + 4.toChar) // 4 is the ascii code of CTRL + D
 
+  test("SPARK-56447: spark-shell REPL initializes without explicit -classpath argument") {
+    // Regression test for SPARK-56447: doMain must include java.class.path in the REPL
+    // classpath even when the caller does not pass -classpath explicitly. Before the fix,
+    // the Scala compiler mirror failed to find `object scala` because the JVM classpath
+    // was not propagated to the REPL settings.
+    // spark.repl.local.jars is not set, so userJars is intentionally empty;
+    // the classpath must be derived from java.class.path alone.
+    Main.sparkContext = null
+    Main.sparkSession = null
+    Main.conf.set("spark.master", "local")
+
+    val in = new BufferedReader(new StringReader("spark.version\n"))
+    val out = new StringWriter()
+    Main.doMain(Array.empty, new SparkILoop(in, new PrintWriter(out)))
+
+    val output = out.toString
+    assertDoesNotContain("object scala in compiler mirror not found", output)
+    assertDoesNotContain("Failed to initialize compiler", output)
+    assertContains("res0: String =", output)
+  }
+
   def assertContains(message: String, output: String): Unit = {
     val isContain = output.contains(message)
     assert(isContain,
