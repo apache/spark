@@ -1451,6 +1451,12 @@
     ],
     "sqlState" : "42887"
   },
+  "DATAFLOW_GRAPH_NOT_FOUND" : {
+    "message" : [
+      "Dataflow graph with id <graphId> could not be found"
+    ],
+    "sqlState" : "KD011"
+  },
   "DATAFRAME_INPUT_NOT_SINGLE_COLUMN" : {
     "message" : [
       "Input DataFrame must have exactly one column, but got <numColumns>."
@@ -1462,12 +1468,6 @@
       "Input DataFrame column must be StringType, but got <dataType>."
     ],
     "sqlState" : "42K09"
-  },
-  "DATAFLOW_GRAPH_NOT_FOUND" : {
-    "message" : [
-      "Dataflow graph with id <graphId> could not be found"
-    ],
-    "sqlState" : "KD011"
   },
   "DATATYPE_CANNOT_ORDER" : {
     "message" : [
