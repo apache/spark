@@ -40,6 +40,8 @@ import org.apache.thrift.protocol.TProtocolFactory;
 import org.eclipse.jetty.server.AbstractConnectionFactory;
 import org.eclipse.jetty.server.ConnectionFactory;
 import org.eclipse.jetty.server.HttpConnectionFactory;
+import org.eclipse.jetty.server.HttpConfiguration;
+import org.eclipse.jetty.server.SecureRequestCustomizer;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.ee10.servlet.ServletContextHandler;
 import org.eclipse.jetty.ee10.servlet.ServletHolder;
@@ -91,8 +93,14 @@ public class ThriftHttpCLIService extends ThriftCLIService {
           Arrays.toString(sslContextFactoryServer.getExcludeProtocols()));
         sslContextFactoryServer.setKeyStorePath(keyStorePath);
         sslContextFactoryServer.setKeyStorePassword(keyStorePassword);
+        // SPARK-54293: Disable SNI host check, which defaults to true since Jetty 10.
+        // This is consistent with the fix in JettyUtils.scala (SPARK-45522).
+        HttpConfiguration httpConfig = new HttpConfiguration();
+        SecureRequestCustomizer src = new SecureRequestCustomizer();
+        src.setSniHostCheck(false);
+        httpConfig.addCustomizer(src);
         connectionFactories = AbstractConnectionFactory.getFactories(
-            sslContextFactoryServer, new HttpConnectionFactory());
+            sslContextFactoryServer, new HttpConnectionFactory(httpConfig));
       } else {
         connectionFactories = new ConnectionFactory[] { new HttpConnectionFactory() };
       }
