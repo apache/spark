@@ -4192,6 +4192,7 @@ object SQLConf {
         "This optimization applies to: pyspark.sql.DataFrame.toPandas " +
         "when 'spark.sql.execution.arrow.pyspark.enabled' is set.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
