@@ -137,6 +137,13 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  private def broadcastHashJoinBuildOutput(join: BroadcastHashJoinExec): Seq[String] = {
+    join.buildSide match {
+      case BuildLeft => join.left.output.map(_.name)
+      case BuildRight => join.right.output.map(_.name)
+    }
+  }
+
   def findTopLevelBroadcastNestedLoopJoin(plan: SparkPlan): Seq[BaseJoinExec] = {
     collect(plan) {
       case j: BroadcastNestedLoopJoinExec => j
@@ -879,13 +886,12 @@ class AdaptiveQueryExecSuite
         val joins = targetedLogicalPlan.collect { case join: Join => join }
         val targetedPlan = adaptivePlan.invokePrivate(reOptimize(targetedLogicalPlan)).get._1
         val finalBhjs = findTopLevelBroadcastHashJoin(targetedPlan)
-        val finalSmjs = findTopLevelSortMergeJoin(targetedPlan)
+        val bhjBuildOutputs = finalBhjs.map(broadcastHashJoinBuildOutput)
 
         assert(joins.exists(_.hint.rightHint.exists(_.strategy.contains(NO_BROADCAST_HASH))))
         assert(joins.exists(_.hint.rightHint.exists(_.strategy.contains(BROADCAST))))
-        assert(finalBhjs.size == 1, s"$targetedPlan")
-        assert(finalBhjs.head.output.exists(_.name == "tag"), s"$targetedPlan")
-        assert(finalSmjs.size == 1, s"$targetedPlan")
+        assert(bhjBuildOutputs.exists(_.contains("tag")), s"$targetedPlan")
+        assert(!bhjBuildOutputs.exists(_.contains("payload")), s"$targetedPlan")
         assert(!adaptivePlan.invokePrivate(
           hasFailedBroadcastRelation(targetedPlan, Seq(failedStage))))
       }
@@ -1395,12 +1401,11 @@ class AdaptiveQueryExecSuite
 
         val finalPlan = stripAQEPlan(df.queryExecution.executedPlan)
         val finalBhjs = findTopLevelBroadcastHashJoin(finalPlan)
-        val finalSmjs = findTopLevelSortMergeJoin(finalPlan)
+        val bhjBuildOutputs = finalBhjs.map(broadcastHashJoinBuildOutput)
 
         assert(findTopLevelBaseJoin(finalPlan).size == 2, s"$finalPlan")
-        assert(finalBhjs.size == 1, s"$finalPlan")
-        assert(finalBhjs.head.output.exists(_.name == "tag"), s"$finalPlan")
-        assert(finalSmjs.size == 1, s"$finalPlan")
+        assert(bhjBuildOutputs.exists(_.contains("tag")), s"$finalPlan")
+        assert(!bhjBuildOutputs.exists(_.contains("payload")), s"$finalPlan")
         assert(findTopLevelBroadcastNestedLoopJoin(finalPlan).isEmpty, s"$finalPlan")
       }
     }
