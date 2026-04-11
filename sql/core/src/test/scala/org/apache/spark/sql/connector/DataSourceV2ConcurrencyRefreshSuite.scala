@@ -2680,4 +2680,379 @@ class DataSourceV2ConcurrencyRefreshSuite
       intercept[AnalysisException] { df.collect() }
     }
   }
+
+  // =====================================================================
+  // REVIEWER COMMENT SCENARIOS
+  // Test cases derived from design doc review comments by
+  // Bart Samwel, Julek Sompolski, Ryan Johnson, Daniel Weeks.
+  // =====================================================================
+
+  // --- Bart: DF temp view vs SQL temp view behave differently ---
+
+  test("[reviewer] DF view vs SQL view: column addition") {
+    withTable(T) {
+      setupTable()
+      // DF temp view (captured plan, ALLOW_NEW_TOP_LEVEL_FIELDS)
+      spark.table(T).createOrReplaceTempView("df_v")
+      // SQL temp view (re-analyzed from text)
+      sql(s"CREATE OR REPLACE TEMP VIEW sql_v AS SELECT * FROM $T")
+
+      sql(s"ALTER TABLE $T ADD COLUMN bonus INT")
+      sql(s"INSERT INTO $T VALUES (2, 200, 50)")
+
+      // DF view: preserves original 2-col schema
+      val dfResult = spark.table("df_v").collect()
+      assert(dfResult(0).length == 2)
+
+      // SQL view with SELECT *: column names are captured at
+      // creation time (id, salary). Re-analysis resolves those
+      // 2 names against the new schema, so also 2 columns.
+      // This is consistent: SELECT * pins column list.
+      val sqlResult = spark.table("sql_v").collect()
+      assert(sqlResult(0).length == 2)
+    }
+  }
+
+  test("[reviewer] DF view vs SQL view: column removal") {
+    withTable(T) {
+      sql(
+        s"CREATE TABLE $T (id INT, salary INT, extra STRING)" +
+        " USING foo")
+      sql(s"INSERT INTO $T VALUES (1, 100, 'x')")
+      // DF temp view
+      spark.table(T).createOrReplaceTempView("df_v")
+      // SQL temp view
+      sql(s"CREATE OR REPLACE TEMP VIEW sql_v" +
+        s" AS SELECT * FROM $T")
+
+      sql(s"ALTER TABLE $T DROP COLUMN extra")
+
+      // DF view: detects removal, throws
+      intercept[AnalysisException] {
+        spark.table("df_v").collect()
+      }
+      // SQL view: also fails (SELECT * captured column names)
+      intercept[AnalysisException] {
+        spark.table("sql_v").collect()
+      }
+    }
+  }
+
+  test("[reviewer] DF view vs SQL view: drop/recreate") {
+    withTable(T) {
+      setupTable()
+      spark.table(T).createOrReplaceTempView("df_v")
+      sql(s"CREATE OR REPLACE TEMP VIEW sql_v" +
+        s" AS SELECT * FROM $T")
+
+      sql(s"DROP TABLE $T")
+      sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $T VALUES (9, 900)")
+
+      // DF view: accepts table ID change, sees new table
+      checkAnswer(spark.table("df_v"), Seq(Row(9, 900)))
+      // SQL view: re-analyzes, also sees new table
+      checkAnswer(spark.table("sql_v"), Seq(Row(9, 900)))
+    }
+  }
+
+  // --- Julek: write transactions should never use cache ---
+  // (Section 5 comment: "I assume write txns never use cache")
+
+  test("[reviewer] CTAS reads fresh data, not cached") {
+    val t2 = "testcat.ns1.ns2.tbl2"
+    withTable(T, t2) {
+      setupTable()
+      sql(s"CACHE TABLE $T")
+      assertCached(spark.table(T))
+      // Insert bypasses cache on write path
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+      // CTAS should read fresh data, not stale cache
+      sql(s"CREATE TABLE $t2 USING foo" +
+        s" AS SELECT * FROM $T")
+      checkAnswer(
+        spark.table(t2),
+        Seq(Row(1, 100), Row(2, 200)))
+      sql(s"UNCACHE TABLE IF EXISTS $T")
+    }
+  }
+
+  // --- Julek: read vs write behavior for same schema change ---
+  // (queries allow new fields, commands prohibit changes)
+
+  test("[reviewer] query allows column addition but command fails") {
+    val t2 = "testcat.ns1.ns2.tbl2"
+    withTable(T, t2) {
+      setupTable()
+      val df = spark.table(T).filter("id < 10")
+      // External column addition via catalog API
+      cat.alterTable(IDENT,
+        TableChange.addColumn(
+          Array("bonus"), IntegerType, true))
+
+      // Query: column addition is compatible, succeeds
+      // (ALLOW_NEW_FIELDS mode)
+      df.collect()
+
+      // Command: same DF used in CTAS fails because
+      // PROHIBIT_CHANGES mode rejects any schema change
+      val e = intercept[AnalysisException] {
+        df.writeTo(t2).createOrReplace()
+      }
+      assert(e.getMessage.contains("incompatible"))
+    }
+  }
+
+  // --- Ryan: refresh runs on ALL versioned tables ---
+  // (not just tables with detected version mismatch)
+
+  test("[reviewer] refresh validates ALL tables in plan") {
+    val t2 = "testcat.ns1.ns2.tbl2"
+    withTable(T, t2) {
+      setupTable()
+      sql(s"CREATE TABLE $t2 (id INT, bonus INT) USING foo")
+      sql(s"INSERT INTO $t2 VALUES (1, 50)")
+
+      val df1 = spark.table(T)
+      val df2 = spark.table(t2)
+
+      // Modify ONLY t2 (incompatible change)
+      sql(s"ALTER TABLE $t2 DROP COLUMN bonus")
+
+      // Join: refresh validates BOTH tables, not just
+      // the one with a version mismatch. df2's schema
+      // change is detected.
+      intercept[AnalysisException] {
+        df1.join(df2, df1("id") === df2("id")).collect()
+      }
+    }
+  }
+
+  test("[reviewer] refresh validates unmodified table too") {
+    val t2 = "testcat.ns1.ns2.tbl2"
+    withTable(T, t2) {
+      setupTable()
+      sql(s"CREATE TABLE $t2 (id INT, bonus INT) USING foo")
+      sql(s"INSERT INTO $t2 VALUES (1, 50)")
+
+      val df1 = spark.table(T)
+      val df2 = spark.table(t2)
+
+      // Modify ONLY T (compatible data write)
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+
+      // Both tables refreshed: T gets new data, t2 unchanged
+      val joined = df1.join(
+        df2, df1("id") === df2("id"))
+      // Only id=1 matches between T and t2
+      checkAnswer(joined, Seq(Row(1, 100, 1, 50)))
+    }
+  }
+
+  // --- Ryan: session writes immediately visible ---
+
+  test("[reviewer] session write immediately visible in next read") {
+    withTable(T) {
+      setupTable()
+      checkAnswer(spark.table(T), Seq(Row(1, 100)))
+
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+      // Immediately visible in the very next read
+      checkAnswer(
+        spark.table(T),
+        Seq(Row(1, 100), Row(2, 200)))
+
+      sql(s"INSERT INTO $T VALUES (3, 300)")
+      checkAnswer(
+        spark.table(T),
+        Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
+    }
+  }
+
+  test("[reviewer] session schema change immediately visible") {
+    withTable(T) {
+      setupTable()
+      sql(s"ALTER TABLE $T ADD COLUMN bonus INT")
+      // Schema change visible in the very next query
+      val result = spark.table(T).collect()
+      assert(result(0).length == 3)
+    }
+  }
+
+  // --- Daniel: monotonic version advancement ---
+
+  test("[reviewer] sequential reads see monotonically advancing data") {
+    withTable(T) {
+      setupTable()
+      assert(spark.table(T).count() == 1)
+
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+      assert(spark.table(T).count() == 2)
+
+      sql(s"INSERT INTO $T VALUES (3, 300)")
+      assert(spark.table(T).count() == 3)
+
+      sql(s"INSERT INTO $T VALUES (4, 400)")
+      assert(spark.table(T).count() == 4)
+
+      // Never goes backward
+      assert(spark.table(T).count() >= 4)
+    }
+  }
+
+  // --- Anton: SQL query with same table multiple times ---
+  // (relation cache ensures consistent version)
+
+  test("[reviewer] SQL self-join gets consistent version") {
+    withTable(T) {
+      setupTable()
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+      // Single SQL query references T twice
+      val q = s"""SELECT a.id, b.salary
+                  FROM $T a JOIN $T b ON a.id = b.id"""
+      checkAnswer(
+        spark.sql(q),
+        Seq(Row(1, 100), Row(2, 200)))
+
+      sql(s"INSERT INTO $T VALUES (3, 300)")
+      // Both references see the same (latest) version
+      assert(spark.sql(q).count() == 3)
+    }
+  }
+
+  test("[reviewer] SQL with 3 refs to same table: consistent") {
+    withTable(T) {
+      setupTable()
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+      // 3 references to T in one SQL: outer + 2 subqueries
+      val q = s"""SELECT * FROM $T t1
+                  WHERE id IN (SELECT id FROM $T)
+                  AND salary < (SELECT MAX(salary) FROM $T)"""
+      val r1 = spark.sql(q).collect()
+      sql(s"INSERT INTO $T VALUES (3, 50)")
+      // All 3 refs refreshed to same latest version
+      val r2 = spark.sql(q).collect()
+      assert(r2.length > r1.length)
+    }
+  }
+
+  // --- Bart: multiple paths to same table in one query ---
+
+  test("[reviewer] same table via view + direct + subquery") {
+    withTable(T) {
+      setupTable()
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+      spark.table(T).createOrReplaceTempView("v")
+
+      // Query references T through 3 different paths:
+      // 1. temp view "v" (captured plan)
+      // 2. direct reference $T
+      // 3. subquery referencing $T
+      val q = s"""SELECT v.id, t.salary
+                  FROM v JOIN $T t ON v.id = t.id
+                  WHERE v.id IN (SELECT id FROM $T)"""
+      checkAnswer(
+        spark.sql(q),
+        Seq(Row(1, 100), Row(2, 200)))
+
+      sql(s"INSERT INTO $T VALUES (3, 300)")
+      // All 3 paths see latest data
+      assert(spark.sql(q).count() == 3)
+    }
+  }
+
+  // --- Julek: align classic/connect for Section 3 Scenario 2 ---
+  // (join with column addition: classic keeps original schema,
+  //  connect re-analyzes to new schema)
+
+  test("[reviewer] join with column addition: schema preservation") {
+    withTable(T) {
+      setupTable()
+      val df1 = spark.table(T)
+      sql(s"ALTER TABLE $T ADD COLUMN bonus INT")
+      sql(s"INSERT INTO $T VALUES (2, 200, 50)")
+      val df2 = spark.table(T)
+
+      // Classic: df1 preserves 2-col schema, df2 has 3-col
+      val joined = df1.join(
+        df2, df1("id") === df2("id"))
+      val result = joined.collect()
+      // df1 contributes 2 cols, df2 contributes 3 cols = 5 total
+      assert(result(0).length == 5)
+      // df1 side: (id, salary) only
+      assert(result.length == 2) // both rows match
+    }
+  }
+
+  // --- Julek: show() reuses executedPlan RDD ---
+  // "calling df.show() again should reuse the executedPlan RDD"
+  // Verify that show-like ops create DERIVED DFs (new QE)
+  // while collect reuses the SAME QE
+
+  test("[reviewer] show vs collect QE reuse semantics") {
+    withTable(T) {
+      setupTable()
+      val df = spark.sql(s"SELECT * FROM $T")
+
+      // First collect: pins QE
+      assert(df.collect().length == 1)
+
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+
+      // count: creates derived DF (new QE) -> sees 2
+      assert(df.count() == 2)
+
+      // head: creates derived DF (new QE) -> sees 2
+      assert(df.head(10).length == 2)
+
+      // take: creates derived DF (new QE) -> sees 2
+      assert(df.take(10).length == 2)
+
+      // collect: reuses pinned QE -> stale, sees 1
+      assert(df.collect().length == 1)
+    }
+  }
+
+  // --- Ryan: session consistency after DROP + CREATE ---
+
+  test("[reviewer] session DROP + CREATE: next read sees new table") {
+    withTable(T) {
+      setupTable()
+      checkAnswer(spark.table(T), Seq(Row(1, 100)))
+      sql(s"DROP TABLE $T")
+      sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
+      // Immediately after drop+create, read sees empty table
+      checkAnswer(spark.table(T), Seq.empty)
+      sql(s"INSERT INTO $T VALUES (9, 900)")
+      checkAnswer(spark.table(T), Seq(Row(9, 900)))
+    }
+  }
+
+  // --- Daniel: external write distinction ---
+
+  test("[reviewer] cached table: session write visible, external not") {
+    withTable(T) {
+      setupTable()
+      sql(s"CACHE TABLE $T")
+      assertCached(spark.table(T))
+      checkAnswer(spark.table(T), Seq(Row(1, 100)))
+
+      // Session write: invalidates + refreshes cache
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+      assertCached(spark.table(T))
+      checkAnswer(
+        spark.table(T),
+        Seq(Row(1, 100), Row(2, 200)))
+
+      // External write (via catalog API): pinned, not visible
+      cat.loadTable(IDENT,
+        util.Set.of(TableWritePrivilege.DELETE))
+        .asInstanceOf[TruncatableTable].truncateTable()
+      assertCached(spark.table(T))
+      checkAnswer(
+        spark.table(T),
+        Seq(Row(1, 100), Row(2, 200)))
+      sql(s"UNCACHE TABLE IF EXISTS $T")
+    }
+  }
 }
