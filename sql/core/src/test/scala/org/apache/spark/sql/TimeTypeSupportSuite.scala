@@ -429,8 +429,9 @@ class TimeTypeSupportSuite extends QueryTest with SharedSparkSession {
       // Test with direct CAST in SELECT to verify non-ANSI behavior
       val df = sql("SELECT CAST('24:00:00' AS TIME) as t")
       val result = df.collect()
-      assert(result(0).isNullAt(0), "Invalid time '24:00:00' should result in NULL in non-ANSI mode")
-      
+      assert(result(0).isNullAt(0),
+        "Invalid time '24:00:00' should result in NULL in non-ANSI mode")
+
       // Also test with try_cast which should always return NULL for invalid input
       val df2 = sql("SELECT TRY_CAST('24:00:00' AS TIME) as t")
       val result2 = df2.collect()

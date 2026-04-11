@@ -229,7 +229,14 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
   private[this] val serializer = {
     val table = new Properties()
     table.setProperty("columns", dataSchema.fieldNames.mkString(","))
-    table.setProperty("columns.types", dataSchema.map(_.dataType.catalogString).mkString(":"))
+    // Convert TIME type to bigint for Hive compatibility
+    val hiveTypes = dataSchema.map { field =>
+      field.dataType match {
+        case _: org.apache.spark.sql.types.TimeType => "bigint"
+        case other => other.catalogString
+      }
+    }.mkString(":")
+    table.setProperty("columns.types", hiveTypes)
 
     val serde = new OrcSerde
     serde.initialize(conf, table)
@@ -238,7 +245,15 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
 
   // Object inspector converted from the schema of the relation to be serialized.
   val structOI = {
-    val typeInfo = TypeInfoUtils.getTypeInfoFromTypeString(dataSchema.catalogString)
+    // Convert TIME type to bigint for Hive compatibility
+    val hiveSchema = org.apache.spark.sql.types.StructType(dataSchema.map { field =>
+      field.dataType match {
+        case _: org.apache.spark.sql.types.TimeType =>
+          field.copy(dataType = org.apache.spark.sql.types.LongType)
+        case _ => field
+      }
+    })
+    val typeInfo = TypeInfoUtils.getTypeInfoFromTypeString(hiveSchema.catalogString)
     OrcStruct.createObjectInspector(typeInfo.asInstanceOf[StructTypeInfo])
       .asInstanceOf[SettableStructObjectInspector]
   }

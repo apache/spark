@@ -333,7 +333,7 @@ object SparkExecuteStatementOperation {
     // unnecessary behavior change
     case TimestampType => TTypeId.TIMESTAMP_TYPE
     case TimestampNTZType => TTypeId.TIMESTAMP_TYPE
-    case TimeType => TTypeId.STRING_TYPE
+    case _: TimeType => TTypeId.STRING_TYPE
     case BinaryType => TTypeId.BINARY_TYPE
     case CalendarIntervalType => TTypeId.STRING_TYPE
     case _: DayTimeIntervalType => TTypeId.INTERVAL_DAY_TIME_TYPE

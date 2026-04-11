@@ -17,25 +17,16 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.sql.{Date, Timestamp}
-
 import org.apache.hive.service.rpc.thrift.TTypeId
 
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.TimeType
 
 class TimeTypeSuite extends HiveThriftServer2Test {
+  override def mode: ServerMode.Value = ServerMode.binary
 
   test("TimeType mapping to TTypeId") {
-    val operation = new SparkExecuteStatementOperation(
-      spark.sqlContext,
-      null,
-      "SELECT TIME '10:15:30'",
-      null,
-      false,
-      0)
-
     // Test that TimeType maps to STRING_TYPE in Thrift
-    assert(operation.toTTypeId(TimeType) === TTypeId.STRING_TYPE)
+    assert(SparkExecuteStatementOperation.toTTypeId(TimeType) === TTypeId.STRING_TYPE)
   }
 
   test("TimeType mapping to java.sql.Types") {
@@ -143,5 +134,3 @@ class TimeTypeSuite extends HiveThriftServer2Test {
     }
   }
 }
-
-// Made with Bob
