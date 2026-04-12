@@ -71,10 +71,14 @@ class DataSourceV2ConcurrencyRefreshSuite
     .set("spark.sql.catalog.nullidcat",
       classOf[NullIdInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.nullidcat.copyOnLoad", "true")
+    // NOTE: MutableMetadataColumnCatalog exists but is not
+    // registered because custom metadata columns can't be
+    // scanned by InMemoryTable's read infrastructure.
 
   override def afterEach(): Unit = {
     SharedInMemoryTableCatalog.reset()
     CachingInMemoryTableCatalog.clearCache()
+    // MutableMetadataColumnTable.reset() not needed (unused)
     try {
       spark.sessionState.catalogManager.reset()
     } finally {
@@ -3639,4 +3643,13 @@ class DataSourceV2ConcurrencyRefreshSuite
       intercept[AnalysisException] { df.collect() }
     }
   }
+
+  // NOTE: METADATA_COLUMNS_MISMATCH cannot be tested E2E.
+  // InMemoryTable's scan infrastructure only supports its own
+  // hardcoded metadata columns (index, _partition). Projecting
+  // a custom metadata column like _version causes
+  // PLAN_VALIDATION_FAILED because the scan builder doesn't
+  // know how to produce it. This code path IS covered by the
+  // unit tests in V2TableUtilSuite (validateCapturedMetadata*)
+  // but not by E2E tests.
 }
