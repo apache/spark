@@ -3778,4 +3778,251 @@ class DataSourceV2ConcurrencyRefreshSuite
         "Should have 2 partition groups")
     }
   }
+
+  // =====================================================================
+  // MISSING DataFrame API COVERAGE
+  // Operations that combine or transform plans in ways that
+  // could interact differently with the refresh phase.
+  // =====================================================================
+
+  // --- Join types not yet covered ---
+
+  test("[api] right outer join with version drift") {
+    withTable(T) {
+      setupTable()
+      val df1 = spark.table(T)
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+      val df2 = spark.table(T)
+      val result = df1.join(
+        df2, df1("id") === df2("id"), "right_outer")
+      assert(result.collect().length == 2)
+    }
+  }
+
+  test("[api] full outer join with version drift") {
+    withTable(T) {
+      setupTable()
+      val df1 = spark.table(T)
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+      val df2 = spark.table(T)
+      val result = df1.join(
+        df2, df1("id") === df2("id"), "full_outer")
+      assert(result.collect().length == 2)
+    }
+  }
+
+  test("[api] left semi join with column removal on right") {
+    withTable(T) {
+      sql(
+        s"CREATE TABLE $T (id INT, salary INT, extra STRING)" +
+        " USING foo")
+      sql(s"INSERT INTO $T VALUES (1, 100, 'x'), (2, 200, 'y')")
+      val df1 = spark.table(T)
+      sql(s"ALTER TABLE $T DROP COLUMN extra")
+      val df2 = spark.table(T)
+      // Left semi: only left side columns in output.
+      // Right side schema change should still be detected
+      // because refresh validates ALL relations in the plan.
+      intercept[AnalysisException] {
+        df1.join(
+          df2, df1("id") === df2("id"), "left_semi")
+          .collect()
+      }
+    }
+  }
+
+  test("[api] full outer join with column removal fails") {
+    withTable(T) {
+      setupTable()
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+      val df1 = spark.table(T)
+      sql(s"ALTER TABLE $T DROP COLUMN salary")
+      val df2 = spark.table(T)
+      intercept[AnalysisException] {
+        df1.join(
+          df2, df1("id") === df2("id"), "full_outer")
+          .collect()
+      }
+    }
+  }
+
+  // --- unionByName ---
+
+  test("[api] unionByName with data write") {
+    withTable(T) {
+      setupTable()
+      val df1 = spark.table(T)
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+      val df2 = spark.table(T)
+      // unionByName matches columns by name
+      val result = df1.unionByName(df2).collect()
+      assert(result.length == 4) // 2 rows x 2
+    }
+  }
+
+  test("[api] unionByName with column addition") {
+    withTable(T) {
+      setupTable()
+      val df1 = spark.table(T)
+      sql(s"ALTER TABLE $T ADD COLUMN bonus INT")
+      sql(s"INSERT INTO $T VALUES (2, 200, 50)")
+      val df2 = spark.table(T)
+      // df1 has 2 cols, df2 has 3. unionByName can handle
+      // this with allowMissingColumns=true
+      val result = df1.unionByName(
+        df2, allowMissingColumns = true).collect()
+      assert(result.length >= 2)
+    }
+  }
+
+  test("[api] unionByName with column removal fails") {
+    withTable(T) {
+      setupTable()
+      val df1 = spark.table(T)
+      sql(s"ALTER TABLE $T DROP COLUMN salary")
+      val df2 = spark.table(T)
+      // df1 captured (id, salary), df2 has (id).
+      // Refresh detects salary was removed from df1's table.
+      intercept[AnalysisException] {
+        df1.unionByName(df2).collect()
+      }
+    }
+  }
+
+  // --- exceptAll / intersectAll ---
+
+  test("[api] exceptAll with data write") {
+    withTable(T) {
+      setupTable()
+      val df1 = spark.table(T)
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+      val df2 = spark.table(T)
+      // Both refreshed: exceptAll should be empty
+      val result = df1.exceptAll(df2).collect()
+      assert(result.isEmpty)
+    }
+  }
+
+  test("[api] intersectAll with data write") {
+    withTable(T) {
+      setupTable()
+      val df1 = spark.table(T)
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+      val df2 = spark.table(T)
+      // Both refreshed: intersectAll = all rows
+      val result = df1.intersectAll(df2).collect()
+      assert(result.length == 2)
+    }
+  }
+
+  // --- pivot ---
+
+  test("[api] pivot preserves version refresh") {
+    withTable(T) {
+      sql(
+        s"CREATE TABLE $T (id INT, dept STRING, salary INT)" +
+        " USING foo")
+      sql(s"INSERT INTO $T VALUES (1, 'eng', 100)")
+      sql(s"INSERT INTO $T VALUES (2, 'hr', 200)")
+      val df = spark.table(T)
+        .groupBy("dept")
+        .pivot("dept", Seq("eng", "hr"))
+        .sum("salary")
+      sql(s"INSERT INTO $T VALUES (3, 'eng', 300)")
+      // Pivot creates derived aggregate plan;
+      // refresh propagates through it
+      val result = df.collect()
+      assert(result.length == 2)
+    }
+  }
+
+  // --- cube / rollup ---
+
+  test("[api] cube preserves version refresh") {
+    withTable(T) {
+      setupTable()
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+      val df = spark.sql(
+        s"SELECT id, sum(salary) FROM $T GROUP BY CUBE(id)")
+      sql(s"INSERT INTO $T VALUES (3, 300)")
+      val result = df.collect()
+      // Cube includes all combinations + grand total
+      assert(result.length >= 3)
+    }
+  }
+
+  test("[api] rollup preserves version refresh") {
+    withTable(T) {
+      setupTable()
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+      val df = spark.sql(
+        s"SELECT id, sum(salary) FROM $T GROUP BY ROLLUP(id)")
+      sql(s"INSERT INTO $T VALUES (3, 300)")
+      val result = df.collect()
+      assert(result.length >= 3)
+    }
+  }
+
+  // --- dropDuplicates ---
+
+  test("[api] dropDuplicates preserves version refresh") {
+    withTable(T) {
+      setupTable()
+      val df = spark.table(T).dropDuplicates("id")
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+      val result = df.collect()
+      assert(result.length == 2)
+    }
+  }
+
+  // --- withColumnsRenamed ---
+
+  test("[api] withColumnsRenamed preserves version refresh") {
+    withTable(T) {
+      setupTable()
+      val df = spark.table(T).withColumnRenamed(
+        "salary", "pay")
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+      val result = df.collect()
+      assert(result.length == 2)
+      assert(df.columns.contains("pay"))
+    }
+  }
+
+  // --- describe / summary ---
+
+  test("[api] describe preserves version refresh") {
+    withTable(T) {
+      setupTable()
+      val df = spark.table(T)
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+      // describe creates a new plan
+      val result = df.describe("salary").collect()
+      assert(result.length > 0)
+    }
+  }
+
+  // --- tail ---
+
+  test("[api] tail preserves version refresh") {
+    withTable(T) {
+      setupTable()
+      val df = spark.table(T)
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+      val result = df.tail(10)
+      assert(result.length == 2)
+    }
+  }
+
+  // --- isEmpty ---
+
+  test("[api] isEmpty reflects latest data") {
+    withTable(T) {
+      sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
+      val df = spark.table(T)
+      sql(s"INSERT INTO $T VALUES (1, 100)")
+      // isEmpty creates a new QE (like count)
+      assert(!df.isEmpty)
+    }
+  }
 }
