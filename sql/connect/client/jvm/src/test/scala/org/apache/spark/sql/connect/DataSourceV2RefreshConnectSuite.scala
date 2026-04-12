@@ -55,46 +55,72 @@ class DataSourceV2RefreshConnectSuite
   // Modification Definitions (SQL-only, no catalog API in Connect)
   // =====================================================================
 
+  // In Connect, SQL temp views (SELECT *) capture column names.
+  // Removing/renaming/retyping a captured column fails on
+  // re-analysis. Adding columns or data is fine.
+  // In Connect, DataFrames re-analyze on every action.
+  // ALL modifications succeed for DataFrames.
   case class Mod(
       name: String,
       fn: String => Unit,
-      // In Connect, SQL temp views (SELECT *) capture column names.
-      // Removing/renaming/retyping a captured column fails on
-      // re-analysis. Adding columns or data is fine.
       sqlViewOk: Boolean,
-      // In Connect, DataFrames re-analyze on every action.
-      // ALL modifications succeed for DataFrames.
       dfOk: Boolean)
 
   private val mods: Seq[Mod] = Seq(
-    Mod("data write",
+    Mod(
+      "data write",
       t => spark.sql(s"INSERT INTO $t VALUES (2, 200)"),
-      sqlViewOk = true, dfOk = true),
-    Mod("column addition",
+      sqlViewOk = true,
+      dfOk = true),
+    Mod(
+      "column addition",
       t => spark.sql(s"ALTER TABLE $t ADD COLUMN new_col INT"),
-      sqlViewOk = true, dfOk = true),
-    Mod("column removal",
+      sqlViewOk = true,
+      dfOk = true),
+    Mod(
+      "column removal",
       t => spark.sql(s"ALTER TABLE $t DROP COLUMN salary"),
-      sqlViewOk = false, dfOk = true),
-    Mod("column rename",
-      t => spark.sql(s"ALTER TABLE $t RENAME COLUMN salary TO pay"),
-      sqlViewOk = false, dfOk = true),
-    Mod("type widening INT to BIGINT",
-      t => spark.sql(s"ALTER TABLE $t ALTER COLUMN salary TYPE BIGINT"),
-      sqlViewOk = false, dfOk = true),
-    Mod("drop+add column same type",
-      t => { spark.sql(s"ALTER TABLE $t DROP COLUMN salary")
-             spark.sql(s"ALTER TABLE $t ADD COLUMN salary INT") },
-      sqlViewOk = true, dfOk = true),
-    Mod("drop+add column different type",
-      t => { spark.sql(s"ALTER TABLE $t DROP COLUMN salary")
-             spark.sql(s"ALTER TABLE $t ADD COLUMN salary STRING") },
-      sqlViewOk = false, dfOk = true),
-    Mod("drop/recreate table",
-      t => { spark.sql(s"DROP TABLE $t")
-             spark.sql(
-               s"CREATE TABLE $t (id INT, salary INT) USING foo") },
-      sqlViewOk = true, dfOk = true))
+      sqlViewOk = false,
+      dfOk = true),
+    Mod(
+      "column rename",
+      t =>
+        spark.sql(
+          s"ALTER TABLE $t RENAME COLUMN salary TO pay"),
+      sqlViewOk = false,
+      dfOk = true),
+    Mod(
+      "type widening INT to BIGINT",
+      t =>
+        spark.sql(
+          s"ALTER TABLE $t ALTER COLUMN salary TYPE BIGINT"),
+      sqlViewOk = false,
+      dfOk = true),
+    Mod(
+      "drop+add column same type",
+      t => {
+        spark.sql(s"ALTER TABLE $t DROP COLUMN salary")
+        spark.sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+      },
+      sqlViewOk = true,
+      dfOk = true),
+    Mod(
+      "drop+add column different type",
+      t => {
+        spark.sql(s"ALTER TABLE $t DROP COLUMN salary")
+        spark.sql(s"ALTER TABLE $t ADD COLUMN salary STRING")
+      },
+      sqlViewOk = false,
+      dfOk = true),
+    Mod(
+      "drop/recreate table",
+      t => {
+        spark.sql(s"DROP TABLE $t")
+        spark.sql(
+          s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      },
+      sqlViewOk = true,
+      dfOk = true))
 
   // =====================================================================
   // Section 1: SQL Temp View x All Modifications
