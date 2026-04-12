@@ -30,6 +30,7 @@ import org.apache.parquet.schema.Type.Repetition._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.VariantMetadata
+import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.{EdgeInterpolationAlgorithm => SparkEdgeInterpolationAlgorithm}
@@ -331,7 +332,9 @@ class ParquetToSparkSchemaConverter(
             if time.getUnit == TimeUnit.MICROS && !time.isAdjustedToUTC =>
             TimeType(TimeType.MICROS_PRECISION)
           case _ =>
-            illegalType()
+            // Types Framework: reverse lookup for framework types.
+            ParquetTypeOps.fromParquetPrimitive(INT64, typeAnnotation)
+              .getOrElse(illegalType())
         }
 
       case INT96 =>
@@ -501,7 +504,13 @@ class ParquetToSparkSchemaConverter(
             valueContainsNull = valueOptional),
           groupColumn, Seq(convertedKey, convertedValue))
       case _ =>
-        throw QueryCompilationErrors.unrecognizedParquetTypeError(field.toString)
+        // Types Framework: reverse lookup for framework group types.
+        ParquetTypeOps.fromParquetGroup(
+          field.getLogicalTypeAnnotation
+        ).map { dt =>
+          ParquetColumn(dt, groupColumn,
+            (0 until groupColumn.getChildrenCount).map(i => convertField(groupColumn.getChild(i))))
+        }.getOrElse(throw QueryCompilationErrors.unrecognizedParquetTypeError(field.toString))
     }
   }
 
@@ -644,8 +653,15 @@ class SparkToParquetSchemaConverter(
       field: StructField,
       repetition: Type.Repetition,
       inShredded: Boolean): Type = {
+    // Types Framework: framework FIRST, original match as fallback.
+    ParquetTypeOps(field.dataType).map(_.convertToParquetType(field.name, repetition))
+      .getOrElse(convertFieldDefault(field, repetition, inShredded))
+  }
 
-    field.dataType match {
+  private def convertFieldDefault(
+      field: StructField,
+      repetition: Type.Repetition,
+      inShredded: Boolean): Type = field.dataType match {
       // ===================
       // Simple atomic types
       // ===================
@@ -916,7 +932,6 @@ class SparkToParquetSchemaConverter(
       case _ =>
         throw QueryCompilationErrors.cannotConvertDataTypeToParquetTypeError(field)
     }
-  }
 }
 
 private[sql] object ParquetSchemaConverter {

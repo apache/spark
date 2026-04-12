@@ -39,6 +39,7 @@ import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, RebaseSpec}
+import org.apache.spark.sql.execution.datasources.parquet.types.ops.{ParquetFilterOp, ParquetTypeOps}
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources
 import org.apache.spark.unsafe.types.UTF8String
@@ -218,7 +219,33 @@ class ParquetFilters(
     case l => l.asInstanceOf[JLong]
   }
 
-  private val makeEq:
+  // ==================== Types Framework: Filter Dispatch ====================
+  // Custom extractor defined inside ParquetFilters because ParquetSchemaType is a
+  // private inner class - code that destructures it must live in this class scope.
+  // Moving it outside breaks compilation. See Risk #6 in the Phase 3a plan.
+  private object FrameworkFilterOps {
+    def unapply(pst: ParquetSchemaType): Option[ParquetTypeOps] = {
+      val ParquetSchemaType(ann, prim, _) = pst
+      ParquetTypeOps.findByParquetFilter(ann, prim)
+    }
+  }
+
+  // Single helper that creates a framework-first PartialFunction for any comparison op.
+  // The FrameworkFilterOps extractor guarantees parquetFilterType is defined, so
+  // makeFilterPredicate/makeInFilterPredicate should always return Some for matched types.
+  private def frameworkComparisonFilter(op: ParquetFilterOp)
+      : PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
+    case FrameworkFilterOps(ops) =>
+      (n: Array[String], v: Any) => ops.makeFilterPredicate(op, n, v).get
+  }
+
+  private def frameworkInFilter
+      : PartialFunction[ParquetSchemaType, (Array[String], Array[Any]) => FilterPredicate] = {
+    case FrameworkFilterOps(ops) =>
+      (n: Array[String], values: Array[Any]) => ops.makeInFilterPredicate(n, values).get
+  }
+
+  private val makeEqDefault:
     PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
     case ParquetBooleanType =>
       (n: Array[String], v: Any) => FilterApi.eq(booleanColumn(n), v.asInstanceOf[JBoolean])
@@ -272,7 +299,7 @@ class ParquetFilters(
         Option(v).map(d => decimalToByteArray(d.asInstanceOf[JBigDecimal], length)).orNull)
   }
 
-  private val makeNotEq:
+  private val makeNotEqDefault:
     PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
     case ParquetBooleanType =>
       (n: Array[String], v: Any) => FilterApi.notEq(booleanColumn(n), v.asInstanceOf[JBoolean])
@@ -325,7 +352,7 @@ class ParquetFilters(
         Option(v).map(d => decimalToByteArray(d.asInstanceOf[JBigDecimal], length)).orNull)
   }
 
-  private val makeLt:
+  private val makeLtDefault:
     PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
       (n: Array[String], v: Any) => FilterApi.lt(intColumn(n), toIntValue(v))
@@ -364,7 +391,7 @@ class ParquetFilters(
         FilterApi.lt(binaryColumn(n), decimalToByteArray(v.asInstanceOf[JBigDecimal], length))
   }
 
-  private val makeLtEq:
+  private val makeLtEqDefault:
     PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
       (n: Array[String], v: Any) => FilterApi.ltEq(intColumn(n), toIntValue(v))
@@ -403,7 +430,7 @@ class ParquetFilters(
         FilterApi.ltEq(binaryColumn(n), decimalToByteArray(v.asInstanceOf[JBigDecimal], length))
   }
 
-  private val makeGt:
+  private val makeGtDefault:
     PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
       (n: Array[String], v: Any) => FilterApi.gt(intColumn(n), toIntValue(v))
@@ -442,7 +469,7 @@ class ParquetFilters(
         FilterApi.gt(binaryColumn(n), decimalToByteArray(v.asInstanceOf[JBigDecimal], length))
   }
 
-  private val makeGtEq:
+  private val makeGtEqDefault:
     PartialFunction[ParquetSchemaType, (Array[String], Any) => FilterPredicate] = {
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
       (n: Array[String], v: Any) => FilterApi.gtEq(intColumn(n), toIntValue(v))
@@ -481,7 +508,7 @@ class ParquetFilters(
         FilterApi.gtEq(binaryColumn(n), decimalToByteArray(v.asInstanceOf[JBigDecimal], length))
   }
 
-  private val makeInPredicate:
+  private val makeInPredicateDefault:
     PartialFunction[ParquetSchemaType, (Array[String], Array[Any]) => FilterPredicate] = {
 
     case ParquetByteType | ParquetShortType | ParquetIntegerType =>
@@ -592,6 +619,18 @@ class ParquetFilters(
         FilterApi.in(binaryColumn(n), set)
   }
 
+  // Types Framework: composed filter vals - framework FIRST, existing as fallback.
+  private val makeEq = frameworkComparisonFilter(ParquetFilterOp.Eq).orElse(makeEqDefault)
+  private val makeNotEq =
+    frameworkComparisonFilter(ParquetFilterOp.NotEq).orElse(makeNotEqDefault)
+  private val makeLt = frameworkComparisonFilter(ParquetFilterOp.Lt).orElse(makeLtDefault)
+  private val makeLtEq =
+    frameworkComparisonFilter(ParquetFilterOp.LtEq).orElse(makeLtEqDefault)
+  private val makeGt = frameworkComparisonFilter(ParquetFilterOp.Gt).orElse(makeGtDefault)
+  private val makeGtEq =
+    frameworkComparisonFilter(ParquetFilterOp.GtEq).orElse(makeGtEqDefault)
+  private val makeInPredicate = frameworkInFilter.orElse(makeInPredicateDefault)
+
   // Returns filters that can be pushed down when reading Parquet files.
   def convertibleFilters(filters: Seq[sources.Filter]): Seq[sources.Filter] = {
     filters.flatMap(convertibleFiltersHelper(_, canPartialPushDown = true))
@@ -642,7 +681,19 @@ class ParquetFilters(
   // Parquet's type in the given file should be matched to the value's type
   // in the pushed filter in order to push down the filter to Parquet.
   private def valueCanMakeFilterOn(name: String, value: Any): Boolean = {
-    value == null || (nameToParquetField(name).fieldType match {
+    if (value == null) return true
+    // Types Framework: framework FIRST, original match as fallback.
+    // Extract fieldType once and pass to *Default to avoid double lookup.
+    val fieldType = nameToParquetField(name).fieldType
+    val ParquetSchemaType(ann, prim, _) = fieldType
+    ParquetTypeOps.findByParquetFilter(ann, prim)
+      .map(_.isFilterableValue(value))
+      .getOrElse(valueCanMakeFilterOnDefault(fieldType, value))
+  }
+
+  private def valueCanMakeFilterOnDefault(
+      fieldType: ParquetSchemaType, value: Any): Boolean = {
+    value == null || (fieldType match {
       case ParquetBooleanType => value.isInstanceOf[JBoolean]
       case ParquetIntegerType if value.isInstanceOf[Period] => true
       case ParquetByteType | ParquetShortType | ParquetIntegerType => value match {

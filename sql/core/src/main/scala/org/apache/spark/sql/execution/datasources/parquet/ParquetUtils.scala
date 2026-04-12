@@ -42,6 +42,7 @@ import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUt
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, DataSourceUtils, OutputWriter, OutputWriterFactory}
+import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED
@@ -206,7 +207,12 @@ object ParquetUtils extends Logging {
     sqlConf.parquetVectorizedReaderEnabled &&
       schema.forall(f => isBatchReadSupported(sqlConf, f.dataType))
 
-  def isBatchReadSupported(sqlConf: SQLConf, dt: DataType): Boolean = dt match {
+  def isBatchReadSupported(sqlConf: SQLConf, dt: DataType): Boolean =
+    // Types Framework: framework FIRST, original match as fallback.
+    ParquetTypeOps(dt).map(_.isBatchReadSupported(sqlConf))
+      .getOrElse(isBatchReadSupportedDefault(sqlConf, dt))
+
+  private def isBatchReadSupportedDefault(sqlConf: SQLConf, dt: DataType): Boolean = dt match {
     case _: AtomicType =>
       true
     case _: NullType =>

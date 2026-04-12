@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, VariantMetadata}
+import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, UTF8String, VariantVal}
@@ -303,6 +304,20 @@ private[parquet] class ParquetRowConverter(
    * `catalystType`. Converted values are handled by `updater`.
    */
   private def newConverter(
+      parquetType: Type,
+      catalystType: DataType,
+      updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
+    // Types Framework: framework FIRST, original match as fallback.
+    // Passes all ParquetRowConverter constructor params to the extended newConverter overload
+    // so struct-backed types can create recursive converters.
+    ParquetTypeOps(catalystType)
+      .map(_.newConverter(
+        parquetType, updater, schemaConverter, convertTz,
+        datetimeRebaseSpec, int96RebaseSpec))
+      .getOrElse(newConverterDefault(parquetType, catalystType, updater))
+  }
+
+  private def newConverterDefault(
       parquetType: Type,
       catalystType: DataType,
       updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {

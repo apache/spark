@@ -150,6 +150,19 @@ public class VectorizedColumnReader {
   private boolean isLazyDecodingSupported(
       PrimitiveType.PrimitiveTypeName typeName,
       DataType sparkType) {
+    // Types Framework: framework FIRST, original switch as fallback.
+    // Returns boxed Boolean: null = not handled, non-null = framework result.
+    Boolean frameworkResult =
+        org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
+            .isLazyDecodingSupportedFor(sparkType, typeName, logicalTypeAnnotation);
+    if (frameworkResult != null) return frameworkResult;
+
+    return isLazyDecodingSupportedDefault(typeName, sparkType);
+  }
+
+  private boolean isLazyDecodingSupportedDefault(
+      PrimitiveType.PrimitiveTypeName typeName,
+      DataType sparkType) {
     boolean isSupported = false;
     // Don't use lazy dictionary decoding if the column needs extra processing: upcasting or date
     // rebasing.

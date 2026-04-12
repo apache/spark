@@ -71,6 +71,17 @@ public class ParquetVectorUpdaterFactory {
   }
 
   public ParquetVectorUpdater getUpdater(ColumnDescriptor descriptor, DataType sparkType) {
+    // Types Framework: framework FIRST, original switch as fallback.
+    ParquetVectorUpdater frameworkUpdater =
+        org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
+            .getVectorUpdaterOrNull(sparkType, descriptor, logicalTypeAnnotation);
+    if (frameworkUpdater != null) return frameworkUpdater;
+
+    return getUpdaterDefault(descriptor, sparkType);
+  }
+
+  private ParquetVectorUpdater getUpdaterDefault(
+      ColumnDescriptor descriptor, DataType sparkType) {
     PrimitiveType type = descriptor.getPrimitiveType();
     PrimitiveType.PrimitiveTypeName typeName = type.getPrimitiveTypeName();
     boolean isUnknownType = type.getLogicalTypeAnnotation() instanceof UnknownLogicalTypeAnnotation;
