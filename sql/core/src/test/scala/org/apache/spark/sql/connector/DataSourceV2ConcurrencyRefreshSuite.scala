@@ -57,8 +57,12 @@ class DataSourceV2ConcurrencyRefreshSuite
     .set("spark.sql.catalog.testcat.copyOnLoad", "true")
     .set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
     .set("spark.sql.catalog.testcat2.copyOnLoad", "true")
+    .set("spark.sql.catalog.sharedcat",
+      classOf[SharedInMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.sharedcat.copyOnLoad", "true")
 
   override def afterEach(): Unit = {
+    SharedInMemoryTableCatalog.reset()
     try {
       spark.sessionState.catalogManager.reset()
     } finally {
@@ -3237,6 +3241,208 @@ class DataSourceV2ConcurrencyRefreshSuite
 
       // Current version DF should see all data
       assert(spark.table(T).count() == 3)
+    }
+  }
+
+  // =====================================================================
+  // MULTI-SESSION TESTS
+  // Uses SharedInMemoryTableCatalog so two SparkSessions share
+  // the same table state, simulating a real shared metastore.
+  // Pattern inspired by MST concurrency tests in runtime.
+  // =====================================================================
+
+  private val ST = "sharedcat.ns1.tbl"
+
+  test("[multi-session] session2 write visible to session1") {
+    val session2 = spark.newSession()
+    withTable(ST) {
+      spark.sql(
+        s"CREATE TABLE $ST (id INT, salary INT) USING foo")
+      spark.sql(s"INSERT INTO $ST VALUES (1, 100)")
+      checkAnswer(spark.table(ST), Seq(Row(1, 100)))
+
+      // Session 2 writes to the same shared table
+      session2.sql(s"INSERT INTO $ST VALUES (2, 200)")
+
+      // Session 1 should see session 2's write
+      checkAnswer(
+        spark.sql(s"SELECT * FROM $ST"),
+        Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  test("[multi-session] session2 schema change detected by session1 DF") {
+    val session2 = spark.newSession()
+    withTable(ST) {
+      spark.sql(
+        s"CREATE TABLE $ST (id INT, salary INT) USING foo")
+      spark.sql(s"INSERT INTO $ST VALUES (1, 100)")
+
+      // Session 1 creates a DataFrame
+      val df = spark.table(ST)
+
+      // Session 2 drops a column
+      session2.sql(s"ALTER TABLE $ST DROP COLUMN salary")
+
+      // Session 1's DF should detect the incompatible change
+      intercept[AnalysisException] { df.collect() }
+    }
+  }
+
+  test("[multi-session] session2 write visible to session1 temp view") {
+    val session2 = spark.newSession()
+    withTable(ST) {
+      spark.sql(
+        s"CREATE TABLE $ST (id INT, salary INT) USING foo")
+      spark.sql(s"INSERT INTO $ST VALUES (1, 100)")
+
+      // Session 1 creates temp view
+      spark.table(ST).createOrReplaceTempView("s1_view")
+      checkAnswer(
+        spark.table("s1_view"), Seq(Row(1, 100)))
+
+      // Session 2 inserts data
+      session2.sql(s"INSERT INTO $ST VALUES (2, 200)")
+
+      // Session 1's temp view should see session 2's write
+      checkAnswer(
+        spark.table("s1_view"),
+        Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  test("[multi-session] session2 write invalidates shared cache") {
+    val session2 = spark.newSession()
+    withTable(ST) {
+      spark.sql(
+        s"CREATE TABLE $ST (id INT, salary INT) USING foo")
+      spark.sql(s"INSERT INTO $ST VALUES (1, 100)")
+
+      // Session 1 caches the table
+      spark.sql(s"CACHE TABLE $ST")
+      assertCached(spark.table(ST))
+      checkAnswer(spark.table(ST), Seq(Row(1, 100)))
+
+      // Session 2 writes: CacheManager is shared via SharedState,
+      // so session 2's INSERT invalidates session 1's cache.
+      // This is correct: same-cluster writes should be visible.
+      session2.sql(s"INSERT INTO $ST VALUES (2, 200)")
+
+      // Session 1 sees session 2's data (cache invalidated)
+      checkAnswer(
+        spark.table(ST),
+        Seq(Row(1, 100), Row(2, 200)))
+
+      spark.sql(s"UNCACHE TABLE IF EXISTS $ST")
+    }
+  }
+
+  test("[multi-session] session1 write invalidates own cache") {
+    val session2 = spark.newSession()
+    withTable(ST) {
+      spark.sql(
+        s"CREATE TABLE $ST (id INT, salary INT) USING foo")
+      spark.sql(s"INSERT INTO $ST VALUES (1, 100)")
+
+      // Session 1 caches
+      spark.sql(s"CACHE TABLE $ST")
+      checkAnswer(spark.table(ST), Seq(Row(1, 100)))
+
+      // Session 1's own write invalidates its cache
+      spark.sql(s"INSERT INTO $ST VALUES (2, 200)")
+      checkAnswer(
+        spark.table(ST),
+        Seq(Row(1, 100), Row(2, 200)))
+
+      spark.sql(s"UNCACHE TABLE IF EXISTS $ST")
+    }
+  }
+
+  test("[multi-session] concurrent reads from two sessions") {
+    val session2 = spark.newSession()
+    withTable(ST) {
+      spark.sql(
+        s"CREATE TABLE $ST (id INT, salary INT) USING foo")
+      spark.sql(s"INSERT INTO $ST VALUES (1, 100)")
+
+      withExecutor() { exec =>
+        val barrier = new CyclicBarrier(2)
+        val errors = new ConcurrentLinkedQueue[Throwable]()
+
+        // Session 1 reads in thread 1
+        val r1 = exec.submit(new Runnable {
+          override def run(): Unit = try {
+            barrier.await(30, TimeUnit.SECONDS)
+            for (_ <- 1 to 10) {
+              spark.sql(s"SELECT * FROM $ST").collect()
+            }
+          } catch { case e: Throwable => errors.add(e) }
+        })
+
+        // Session 2 reads in thread 2
+        val r2 = exec.submit(new Runnable {
+          override def run(): Unit = try {
+            barrier.await(30, TimeUnit.SECONDS)
+            for (_ <- 1 to 10) {
+              session2.sql(s"SELECT * FROM $ST").collect()
+            }
+          } catch { case e: Throwable => errors.add(e) }
+        })
+
+        r1.get(60, TimeUnit.SECONDS)
+        r2.get(60, TimeUnit.SECONDS)
+        assert(errors.isEmpty,
+          s"Errors: ${errors.toArray(Array.empty[Throwable])
+            .map(_.getMessage).mkString("; ")}")
+      }
+    }
+  }
+
+  test("[multi-session] session2 write while session1 reads") {
+    val session2 = spark.newSession()
+    withTable(ST) {
+      spark.sql(
+        s"CREATE TABLE $ST (id INT, salary INT) USING foo")
+      spark.sql(s"INSERT INTO $ST VALUES (1, 100)")
+
+      withExecutor() { exec =>
+        val barrier = new CyclicBarrier(2)
+        val errors = new ConcurrentLinkedQueue[Throwable]()
+
+        // Session 1 reads concurrently
+        val reader = exec.submit(new Runnable {
+          override def run(): Unit = try {
+            barrier.await(30, TimeUnit.SECONDS)
+            for (_ <- 1 to 10) {
+              try spark.sql(s"SELECT * FROM $ST").collect()
+              catch {
+                case e: Throwable if isExpectedError(e) =>
+              }
+            }
+          } catch { case e: Throwable => errors.add(e) }
+        })
+
+        // Session 2 writes concurrently
+        val writer = exec.submit(new Runnable {
+          override def run(): Unit = try {
+            barrier.await(30, TimeUnit.SECONDS)
+            for (i <- 2 to 5) {
+              session2.sql(
+                s"INSERT INTO $ST VALUES ($i, ${i * 100})")
+            }
+          } catch { case e: Throwable => errors.add(e) }
+        })
+
+        reader.get(60, TimeUnit.SECONDS)
+        writer.get(60, TimeUnit.SECONDS)
+        assert(errors.isEmpty,
+          s"Errors: ${errors.toArray(Array.empty[Throwable])
+            .map(_.getMessage).mkString("; ")}")
+      }
+
+      // After concurrent ops, table should be readable
+      assert(spark.sql(s"SELECT * FROM $ST")
+        .collect().length >= 1)
     }
   }
 }
