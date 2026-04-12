@@ -4310,6 +4310,126 @@ class DataSourceV2ConcurrencyRefreshSuite
     }
   }
 
+  // drop+add column same type: no column ID in Spark, so this
+  // passes by name matching. Contrast with Delta/Iceberg where
+  // column IDs would detect the column identity change.
+  test("[null-id] drop+add column same type succeeds (no column ID)") {
+    withTable(NI) {
+      sql(s"CREATE TABLE $NI (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NI VALUES (1, 100)")
+      val df = spark.table(NI)
+      sql(s"ALTER TABLE $NI DROP COLUMN salary")
+      sql(s"ALTER TABLE $NI ADD COLUMN salary INT")
+      // No column ID check: name+type match, so refresh passes
+      checkAnswer(df, Seq(Row(1, 100)))
+    }
+  }
+
+  // drop+add column different type: detected by schema validation
+  // regardless of column ID
+  test("[null-id] drop+add column different type detected") {
+    withTable(NI) {
+      sql(s"CREATE TABLE $NI (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NI VALUES (1, 100)")
+      val df = spark.table(NI)
+      sql(s"ALTER TABLE $NI DROP COLUMN salary")
+      sql(s"ALTER TABLE $NI ADD COLUMN salary STRING")
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = COL_MISMATCH)
+    }
+  }
+
+  test("[null-id] data write succeeds") {
+    withTable(NI) {
+      sql(s"CREATE TABLE $NI (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NI VALUES (1, 100)")
+      val df = spark.table(NI)
+      sql(s"INSERT INTO $NI VALUES (2, 200)")
+      checkAnswer(df, Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  test("[null-id] column addition succeeds") {
+    withTable(NI) {
+      sql(s"CREATE TABLE $NI (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NI VALUES (1, 100)")
+      val df = spark.table(NI)
+      sql(s"ALTER TABLE $NI ADD COLUMN bonus INT")
+      // Column addition allowed, original schema preserved
+      checkAnswer(df, Seq(Row(1, 100)))
+    }
+  }
+
+  test("[null-id] column rename detected") {
+    withTable(NI) {
+      sql(s"CREATE TABLE $NI (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NI VALUES (1, 100)")
+      val df = spark.table(NI)
+      sql(s"ALTER TABLE $NI RENAME COLUMN salary TO pay")
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = COL_MISMATCH)
+    }
+  }
+
+  test("[null-id] type widening detected") {
+    withTable(NI) {
+      sql(s"CREATE TABLE $NI (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NI VALUES (1, 100)")
+      val df = spark.table(NI)
+      sql(s"ALTER TABLE $NI ALTER COLUMN salary TYPE BIGINT")
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = COL_MISMATCH)
+    }
+  }
+
+  test("[null-id] temp view after drop+add column same type") {
+    withTable(NI) {
+      sql(s"CREATE TABLE $NI (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NI VALUES (1, 100)")
+      spark.table(NI).createOrReplaceTempView("ni_tmp")
+      sql(s"ALTER TABLE $NI DROP COLUMN salary")
+      sql(s"ALTER TABLE $NI ADD COLUMN salary INT")
+      // No column ID: name+type match, view picks up new data
+      checkAnswer(spark.table("ni_tmp"), Seq(Row(1, 100)))
+    }
+  }
+
+  test("[null-id] join after drop+add column same type succeeds") {
+    withTable(NI) {
+      sql(s"CREATE TABLE $NI (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NI VALUES (1, 100)")
+      val df1 = spark.table(NI)
+      sql(s"ALTER TABLE $NI DROP COLUMN salary")
+      sql(s"ALTER TABLE $NI ADD COLUMN salary INT")
+      val df2 = spark.table(NI)
+      // No column ID: both sides refresh to current schema
+      val joined = df1.join(df2, df1("id") === df2("id"))
+      checkAnswer(joined, Seq(Row(1, 100, 1, 100)))
+    }
+  }
+
+  // Contrast: with testcat (has table ID), drop/recreate throws
+  // TABLE_ID_MISMATCH. With nullidcat, it silently succeeds.
+  test("[null-id] CACHE TABLE after drop/recreate sees new table") {
+    withTable(NI) {
+      sql(s"CREATE TABLE $NI (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NI VALUES (1, 100)")
+      sql(s"CACHE TABLE $NI")
+      assertCached(spark.table(NI))
+      checkAnswer(spark.table(NI), Seq(Row(1, 100)))
+
+      sql(s"DROP TABLE $NI")
+      sql(s"CREATE TABLE $NI (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NI VALUES (9, 900)")
+
+      sql(s"REFRESH TABLE $NI")
+      checkAnswer(spark.table(NI), Seq(Row(9, 900)))
+    }
+  }
+
   // NOTE: METADATA_COLUMNS_MISMATCH cannot be tested E2E.
   // InMemoryTable's scan infrastructure only supports its own
   // hardcoded metadata columns (index, _partition). Projecting

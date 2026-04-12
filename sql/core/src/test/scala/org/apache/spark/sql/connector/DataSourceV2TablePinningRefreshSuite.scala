@@ -642,6 +642,83 @@ class DataSourceV2TablePinningRefreshSuite
     }
   }
 
+  // Null ID: drop+add column same type. Without column IDs,
+  // name+type matching passes. Tests both modes per the design doc.
+  test("[3.5-nullid] join after drop+add same type with null ID") {
+    val NT = "nullidcat.ns.tbl"
+    withTable(NT) {
+      sql(s"CREATE TABLE $NT (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NT VALUES (1, 100)")
+      val df1 = spark.table(NT)
+
+      sql(s"ALTER TABLE $NT DROP COLUMN salary")
+      sql(s"ALTER TABLE $NT ADD COLUMN salary INT")
+
+      val df2 = spark.table(NT)
+
+      // No table ID and no column ID: both sides refresh to current
+      val joined = df1.join(df2, df1("id") === df2("id"))
+      checkAnswer(joined, Seq(Row(1, 100, 1, 100)))
+    }
+  }
+
+  // Null ID: drop+add column different type still fails
+  test("[3.6-nullid] join after drop+add different type fails with null ID") {
+    val NT = "nullidcat.ns.tbl"
+    withTable(NT) {
+      sql(s"CREATE TABLE $NT (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NT VALUES (1, 100)")
+      val df1 = spark.table(NT)
+
+      sql(s"ALTER TABLE $NT DROP COLUMN salary")
+      sql(s"ALTER TABLE $NT ADD COLUMN salary STRING")
+
+      val df2 = spark.table(NT)
+
+      // Type change detected by schema validation (no ID needed)
+      checkError(
+        exception = intercept[AnalysisException] {
+          df1.join(df2, df1("id") === df2("id")).collect()
+        },
+        condition = COL_MISMATCH)
+    }
+  }
+
+  // Null ID: temp view after drop+add same type
+  test("[1.5-nullid] temp view after drop+add column same type with null ID") {
+    val NT = "nullidcat.ns.tbl"
+    withTable(NT) {
+      sql(s"CREATE TABLE $NT (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NT VALUES (1, 100)")
+      spark.table(NT).createOrReplaceTempView("nullid_view")
+      checkAnswer(sql("SELECT * FROM nullid_view"), Seq(Row(1, 100)))
+
+      sql(s"ALTER TABLE $NT DROP COLUMN salary")
+      sql(s"ALTER TABLE $NT ADD COLUMN salary INT")
+
+      // No column ID: name+type match, view resolves normally
+      checkAnswer(sql("SELECT * FROM nullid_view"), Seq(Row(1, 100)))
+    }
+  }
+
+  // Null ID: DataFrame show after drop/recreate
+  test("[4.4-nullid] DataFrame after drop/recreate with null ID") {
+    val NT = "nullidcat.ns.tbl"
+    withTable(NT) {
+      sql(s"CREATE TABLE $NT (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NT VALUES (1, 100)")
+      val df = spark.table(NT)
+      checkAnswer(df, Seq(Row(1, 100)))
+
+      sql(s"DROP TABLE $NT")
+      sql(s"CREATE TABLE $NT (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NT VALUES (9, 900)")
+
+      // No table ID: no TABLE_ID_MISMATCH, resolves to new table
+      checkAnswer(df, Seq(Row(9, 900)))
+    }
+  }
+
   test("[3.5] join after drop/re-add column same type succeeds") {
     withTable(T) {
       setupTable()
