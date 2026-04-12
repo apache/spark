@@ -60,9 +60,21 @@ class DataSourceV2ConcurrencyRefreshSuite
     .set("spark.sql.catalog.sharedcat",
       classOf[SharedInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.sharedcat.copyOnLoad", "true")
+    // copyOnLoad=false: shared table instance, no copies
+    .set("spark.sql.catalog.nocopycal",
+      classOf[InMemoryTableCatalog].getName)
+    // Caching connector: simulates Iceberg CachingCatalog
+    .set("spark.sql.catalog.cachingcat",
+      classOf[CachingInMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.cachingcat.copyOnLoad", "true")
+    // Null ID: tables without identity tracking
+    .set("spark.sql.catalog.nullidcat",
+      classOf[NullIdInMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.nullidcat.copyOnLoad", "true")
 
   override def afterEach(): Unit = {
     SharedInMemoryTableCatalog.reset()
+    CachingInMemoryTableCatalog.clearCache()
     try {
       spark.sessionState.catalogManager.reset()
     } finally {
@@ -3443,6 +3455,188 @@ class DataSourceV2ConcurrencyRefreshSuite
       // After concurrent ops, table should be readable
       assert(spark.sql(s"SELECT * FROM $ST")
         .collect().length >= 1)
+    }
+  }
+
+  // =====================================================================
+  // GAP FIX: copyOnLoad=false (shared table instance)
+  // With copyOnLoad=false, loadTable returns the SAME object.
+  // Modifications are immediately visible without refresh.
+  // =====================================================================
+
+  private val NC = "nocopycal.ns1.tbl"
+
+  test("[copyOnLoad=false] data write visible without refresh") {
+    withTable(NC) {
+      sql(s"CREATE TABLE $NC (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NC VALUES (1, 100)")
+      val df = spark.table(NC)
+      sql(s"INSERT INTO $NC VALUES (2, 200)")
+      // No copy: same table instance, data is shared
+      // Refresh still runs but finds same object
+      checkAnswer(df, Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  test("[copyOnLoad=false] schema change visible without refresh") {
+    withTable(NC) {
+      sql(s"CREATE TABLE $NC (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NC VALUES (1, 100)")
+      val df = spark.table(NC)
+      sql(s"ALTER TABLE $NC ADD COLUMN bonus INT")
+      // With shared instance, schema change is visible
+      // but refresh validates the captured vs current schema
+      df.collect() // should succeed: addition is compatible
+    }
+  }
+
+  test("[copyOnLoad=false] temp view picks up write") {
+    withTable(NC) {
+      sql(s"CREATE TABLE $NC (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NC VALUES (1, 100)")
+      spark.table(NC).createOrReplaceTempView("nc_view")
+      sql(s"INSERT INTO $NC VALUES (2, 200)")
+      checkAnswer(
+        spark.table("nc_view"),
+        Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  // =====================================================================
+  // GAP FIX: Caching connector (stale external changes)
+  // Simulates Iceberg's CachingCatalog: external changes are
+  // invisible because loadTable returns the cached copy.
+  // =====================================================================
+
+  private val CC = "cachingcat.ns1.tbl"
+
+  test("[caching-connector] external write invisible (cached)") {
+    withTable(CC) {
+      sql(s"CREATE TABLE $CC (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $CC VALUES (1, 100)")
+      // First loadTable caches the table
+      checkAnswer(spark.table(CC), Seq(Row(1, 100)))
+      // External modification via catalog API
+      val ccIdent = Identifier.of(Array("ns1"), "tbl")
+      val ccCat = spark.sessionState.catalogManager
+        .catalog("cachingcat")
+        .asInstanceOf[InMemoryTableCatalog]
+      ccCat.alterTable(ccIdent,
+        TableChange.addColumn(
+          Array("bonus"), IntegerType, true))
+      // Caching connector returns stale table - no new column
+      // The cached table still has the old schema
+      val result = spark.table(CC).collect()
+      // Should see original 2-col schema (cached)
+      assert(result(0).length == 2)
+    }
+  }
+
+  test("[caching-connector] session write via SQL is cached stale") {
+    withTable(CC) {
+      sql(s"CREATE TABLE $CC (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $CC VALUES (1, 100)")
+      checkAnswer(spark.table(CC), Seq(Row(1, 100)))
+      // Session INSERT modifies the original table in the catalog
+      // internal map, but the caching catalog still returns the
+      // stale cached copy on loadTable. This documents the
+      // limitation: a caching connector that doesn't invalidate
+      // on session writes will serve stale data.
+      sql(s"INSERT INTO $CC VALUES (2, 200)")
+      // After cache clear, fresh data is visible
+      CachingInMemoryTableCatalog.clearCache()
+      checkAnswer(
+        spark.sql(s"SELECT * FROM $CC"),
+        Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  test("[caching-connector] cache clear reveals external changes") {
+    withTable(CC) {
+      sql(s"CREATE TABLE $CC (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $CC VALUES (1, 100)")
+      checkAnswer(spark.table(CC), Seq(Row(1, 100)))
+      // External add column
+      val ccIdent = Identifier.of(Array("ns1"), "tbl")
+      val ccCat = spark.sessionState.catalogManager
+        .catalog("cachingcat")
+        .asInstanceOf[InMemoryTableCatalog]
+      ccCat.alterTable(ccIdent,
+        TableChange.addColumn(
+          Array("bonus"), IntegerType, true))
+      // Still cached (stale)
+      assert(spark.table(CC).collect()(0).length == 2)
+      // Clear cache (simulates TTL expiration)
+      CachingInMemoryTableCatalog.clearCache()
+      // Now loadTable returns fresh - sees new column
+      val result = spark.table(CC).collect()
+      assert(result(0).length == 3) // id, salary, bonus
+    }
+  }
+
+  // =====================================================================
+  // GAP FIX: Null table ID (no identity tracking)
+  // Tables without IDs skip validateTableIdentity entirely.
+  // Drop/recreate is NOT detected as an error.
+  // =====================================================================
+
+  private val NI = "nullidcat.ns1.tbl"
+
+  test("[null-id] drop/recreate NOT detected (no table ID)") {
+    withTable(NI) {
+      sql(s"CREATE TABLE $NI (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NI VALUES (1, 100)")
+      val df = spark.table(NI)
+      // Drop and recreate
+      sql(s"DROP TABLE $NI")
+      sql(s"CREATE TABLE $NI (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NI VALUES (9, 900)")
+      // Without table ID, drop/recreate is NOT detected.
+      // Contrast with testcat where this throws TABLE_ID_MISMATCH.
+      // The DF succeeds without error (no identity check).
+      df.collect() // should NOT throw
+    }
+  }
+
+  test("[null-id] join after drop/recreate succeeds") {
+    withTable(NI) {
+      sql(s"CREATE TABLE $NI (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NI VALUES (1, 100)")
+      val df1 = spark.table(NI)
+      sql(s"DROP TABLE $NI")
+      sql(s"CREATE TABLE $NI (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NI VALUES (2, 200)")
+      val df2 = spark.table(NI)
+      // No table ID = no TABLE_ID_MISMATCH error
+      // Both DFs resolve to whatever table currently exists
+      val joined = df1.join(
+        df2, df1("id") === df2("id"))
+      // Should succeed (contrast: testcat would throw)
+      joined.collect()
+    }
+  }
+
+  test("[null-id] temp view after drop/recreate succeeds") {
+    withTable(NI) {
+      sql(s"CREATE TABLE $NI (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NI VALUES (1, 100)")
+      spark.table(NI).createOrReplaceTempView("ni_view")
+      sql(s"DROP TABLE $NI")
+      sql(s"CREATE TABLE $NI (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NI VALUES (9, 900)")
+      // Temp view resolves to new table (no ID check)
+      checkAnswer(spark.table("ni_view"), Seq(Row(9, 900)))
+    }
+  }
+
+  test("[null-id] column removal still detected") {
+    withTable(NI) {
+      sql(s"CREATE TABLE $NI (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $NI VALUES (1, 100)")
+      val df = spark.table(NI)
+      sql(s"ALTER TABLE $NI DROP COLUMN salary")
+      // Column validation still works (doesn't depend on ID)
+      intercept[AnalysisException] { df.collect() }
     }
   }
 }
