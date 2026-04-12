@@ -379,29 +379,71 @@ abstract class InMemoryBaseTable(
 
   def alterTableWithData(
       data: Array[BufferedRows],
-      newSchema: StructType): InMemoryBaseTable = {
+      newSchema: StructType,
+      renames: Map[String, String] = Map.empty): InMemoryBaseTable = {
     data.foreach { bufferedRow =>
       val oldSchema = bufferedRow.schema
       bufferedRow.rows.foreach { row =>
-        // handle partition evolution by re-keying all data
-        val key = getKey(row, newSchema)
+        // Adapt row from old schema to new schema by column name.
+        // Columns present in both schemas (same name): copy value.
+        // Columns only in new schema: null (newly added columns).
+        // Columns only in old schema: dropped (not copied).
+        // Renamed columns use the renames map to find the old name.
+        // This simulates column mapping behavior so that drop+re-add
+        // a column with the same name correctly returns null for the
+        // recreated column instead of leaking old data.
+        val adaptedRow = adaptRowByName(
+          row, oldSchema, newSchema, renames)
+        val key = getKey(adaptedRow, newSchema)
         dataMap += dataMap.get(key)
           .map { splits =>
             val newSplits = if ((splits.last.rows.size >= numRowsPerSplit) ||
-                (splits.last.schema != oldSchema)) {
-              splits :+ new BufferedRows(key, oldSchema)
+                (splits.last.schema != newSchema)) {
+              splits :+ new BufferedRows(key, newSchema)
             } else {
               splits
             }
-            newSplits.last.withRow(row)
+            newSplits.last.withRow(adaptedRow)
             key -> newSplits
           }
           .getOrElse(key -> Seq(
-            new BufferedRows(key, oldSchema).withRow(row)))
+            new BufferedRows(key, newSchema).withRow(adaptedRow)))
         addPartitionKey(key)
       }
     }
     this
+  }
+
+  /**
+   * Adapt an InternalRow from one schema to another by matching column names.
+   * Values for columns that exist in both schemas are copied. New columns
+   * get null. Dropped columns are discarded. Renamed columns are matched
+   * via the renames map (newName -> oldName). This means a column that was
+   * dropped and re-added with the same name will correctly get null because
+   * the DROP step already discarded the old value.
+   */
+  private def adaptRowByName(
+      row: InternalRow,
+      oldSchema: StructType,
+      newSchema: StructType,
+      renames: Map[String, String]): InternalRow = {
+    if (oldSchema == newSchema && renames.isEmpty) return row.copy()
+    val result = new GenericInternalRow(newSchema.length)
+    val oldFieldMap = oldSchema.fields.zipWithIndex.map {
+      case (f, i) => f.name -> i
+    }.toMap
+    newSchema.fields.zipWithIndex.foreach { case (newField, newIdx) =>
+      // Try new name first, then check if it was renamed
+      val oldName = renames.getOrElse(newField.name, newField.name)
+      oldFieldMap.get(oldName) match {
+        case Some(oldIdx) =>
+          result.update(newIdx,
+            row.get(oldIdx, oldSchema(oldIdx).dataType))
+        case None =>
+          result.setNullAt(newIdx)
+      }
+    }
+    result
   }
 
   def baseCapabiilities: Set[TableCapability] = Set(

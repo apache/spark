@@ -28,11 +28,20 @@ package org.apache.spark.sql.connector.catalog
 class SharedInMemoryTableCatalog extends InMemoryTableCatalog {
   override protected val tables: java.util.Map[Identifier, Table] =
     SharedInMemoryTableCatalog.sharedTables
+  override protected val namespaces
+    : java.util.Map[List[String], Map[String, String]] =
+    SharedInMemoryTableCatalog.sharedNamespaces
 }
 
 object SharedInMemoryTableCatalog {
   val sharedTables =
     new java.util.concurrent.ConcurrentHashMap[Identifier, Table]()
+  val sharedNamespaces =
+    new java.util.concurrent.ConcurrentHashMap[
+      List[String], Map[String, String]]()
 
-  def reset(): Unit = sharedTables.clear()
+  def reset(): Unit = {
+    sharedTables.clear()
+    sharedNamespaces.clear()
+  }
 }

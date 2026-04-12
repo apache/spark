@@ -51,6 +51,40 @@ import org.apache.spark.sql.types._
 class DataSourceV2ConcurrencyRefreshSuite
   extends QueryTest with SharedSparkSession {
 
+  // Error condition constants
+  private val COL_MISMATCH =
+    "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH"
+  private val ID_MISMATCH =
+    "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.TABLE_ID_MISMATCH"
+  private val VIEW_PLAN_CHANGED =
+    "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION"
+  private val SQL_VIEW_CHANGED =
+    "INCOMPATIBLE_VIEW_SCHEMA_CHANGE"
+
+  // In parameterized tests the exact error parameters (table names, column
+  // details, view DDL suggestions) vary per mod. Override the ignorable set
+  // so checkError validates the condition without requiring exact params.
+  // Non-parameterized tests that pass explicit parameters still check them
+  // (parameters override the ignorable set per the base implementation).
+  override protected def checkErrorIgnorableParameters
+    : Map[String, Set[String]] =
+    super.checkErrorIgnorableParameters ++ Map(
+      COL_MISMATCH ->
+        Set("tableName", "errors"),
+      ID_MISMATCH ->
+        Set("tableName", "capturedTableId", "currentTableId"),
+      VIEW_PLAN_CHANGED ->
+        Set("viewName", "tableName", "colType", "errors"),
+      SQL_VIEW_CHANGED ->
+        Set("viewName", "colName", "expectedNum",
+          "actualCols", "suggestion"),
+      "CANNOT_UP_CAST_DATATYPE" ->
+        Set("expression", "sourceType", "targetType",
+          "details"),
+      "NUM_COLUMNS_MISMATCH" ->
+        Set("operator", "firstNumColumns",
+          "secondNumColumns", "refName"))
+
   override protected def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.ANSI_ENABLED, true)
     .set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
@@ -126,20 +160,36 @@ class DataSourceV2ConcurrencyRefreshSuite
   // Modification Definitions
   // =====================================================================
 
+  // Expected result rows for OK cases. Error conditions for failure cases.
   case class Mod(
       name: String,
       fn: String => Unit,
       tempViewOk: Boolean,
       dfOk: Boolean,
-      joinOk: Boolean)
+      joinOk: Boolean,
+      tempViewRows: Seq[Row] = Nil,
+      dfRows: Seq[Row] = Nil,
+      joinRows: Seq[Row] = Nil,
+      // Error conditions when the modification breaks the access pattern.
+      // Defaults cover most schema change failures; override for special
+      // cases like drop/recreate (TABLE_ID_MISMATCH).
+      dfCondition: String = COL_MISMATCH,
+      viewPlanCondition: String = VIEW_PLAN_CHANGED,
+      sqlViewCondition: String = SQL_VIEW_CHANGED)
 
   private val mods: Seq[Mod] = Seq(
     Mod("data write",
       t => sql(s"INSERT INTO $t VALUES (2, 200)"),
-      tempViewOk = true, dfOk = true, joinOk = true),
+      tempViewOk = true, dfOk = true, joinOk = true,
+      tempViewRows = Seq(Row(1, 100), Row(2, 200)),
+      dfRows = Seq(Row(1, 100), Row(2, 200)),
+      joinRows = Seq(Row(1, 100, 1, 100), Row(2, 200, 2, 200))),
     Mod("column addition",
       t => sql(s"ALTER TABLE $t ADD COLUMN new_col INT"),
-      tempViewOk = true, dfOk = true, joinOk = true),
+      tempViewOk = true, dfOk = true, joinOk = true,
+      tempViewRows = Seq(Row(1, 100)),
+      dfRows = Seq(Row(1, 100)),
+      joinRows = Seq(Row(1, 100, 1, 100, null))),
     Mod("column removal",
       t => sql(s"ALTER TABLE $t DROP COLUMN salary"),
       tempViewOk = false, dfOk = false, joinOk = false),
@@ -148,45 +198,77 @@ class DataSourceV2ConcurrencyRefreshSuite
       tempViewOk = false, dfOk = false, joinOk = false),
     Mod("type widening INT to BIGINT",
       t => sql(s"ALTER TABLE $t ALTER COLUMN salary TYPE BIGINT"),
-      tempViewOk = false, dfOk = false, joinOk = false),
+      tempViewOk = false, dfOk = false, joinOk = false,
+      sqlViewCondition = "CANNOT_UP_CAST_DATATYPE"),
     Mod("drop+add column same type",
       t => { sql(s"ALTER TABLE $t DROP COLUMN salary")
              sql(s"ALTER TABLE $t ADD COLUMN salary INT") },
-      tempViewOk = true, dfOk = true, joinOk = true),
+      tempViewOk = true, dfOk = true, joinOk = true,
+      // InMemoryTable preserves row data across drop+add (no column mapping).
+      // Real connectors (Delta/Iceberg) would return null for the recreated
+      // column. This is the gap that column IDs (Spark 4.2) will fix.
+      tempViewRows = Seq(Row(1, 100)),
+      dfRows = Seq(Row(1, 100)),
+      joinRows = Seq(Row(1, 100, 1, 100))),
     Mod("drop+add column different type",
       t => { sql(s"ALTER TABLE $t DROP COLUMN salary")
              sql(s"ALTER TABLE $t ADD COLUMN salary STRING") },
-      tempViewOk = false, dfOk = false, joinOk = false),
+      tempViewOk = false, dfOk = false, joinOk = false,
+      sqlViewCondition = "CANNOT_UP_CAST_DATATYPE"),
     Mod("drop/recreate table",
       t => { sql(s"DROP TABLE $t")
              sql(s"CREATE TABLE $t (id INT, salary INT) USING foo") },
-      tempViewOk = true, dfOk = false, joinOk = false))
+      tempViewOk = true, dfOk = false, joinOk = false,
+      tempViewRows = Seq.empty,
+      dfCondition = ID_MISMATCH))
 
-  // External modifications via catalog API (bypass session cache invalidation)
+  // External modifications via catalog API (bypass session cache invalidation).
+  // These simulate "someone else changed the table" without going through
+  // SparkSession SQL, so session cache invalidation is NOT triggered.
   private val extMods: Seq[Mod] = Seq(
     Mod("ext column addition",
-      _ => cat.alterTable(IDENT, TableChange.addColumn(Array("new_col"), IntegerType, true)),
-      tempViewOk = true, dfOk = true, joinOk = true),
+      _ => cat.alterTable(IDENT,
+        TableChange.addColumn(Array("new_col"), IntegerType, true)),
+      tempViewOk = true, dfOk = true, joinOk = true,
+      tempViewRows = Seq(Row(1, 100)),
+      dfRows = Seq(Row(1, 100)),
+      joinRows = Seq(Row(1, 100, 1, 100, null))),
     Mod("ext column removal",
-      _ => cat.alterTable(IDENT, TableChange.deleteColumn(Array("salary"), false)),
+      _ => cat.alterTable(IDENT,
+        TableChange.deleteColumn(Array("salary"), false)),
       tempViewOk = false, dfOk = false, joinOk = false),
     Mod("ext column rename",
-      _ => cat.alterTable(IDENT, TableChange.renameColumn(Array("salary"), "pay")),
+      _ => cat.alterTable(IDENT,
+        TableChange.renameColumn(Array("salary"), "pay")),
       tempViewOk = false, dfOk = false, joinOk = false),
     Mod("ext type widening",
-      _ => cat.alterTable(IDENT, TableChange.updateColumnType(Array("salary"), LongType)),
+      _ => cat.alterTable(IDENT,
+        TableChange.updateColumnType(Array("salary"), LongType)),
       tempViewOk = false, dfOk = false, joinOk = false),
     Mod("ext data truncation",
       _ => cat.loadTable(IDENT, util.Set.of(TableWritePrivilege.DELETE))
               .asInstanceOf[TruncatableTable].truncateTable(),
-      tempViewOk = true, dfOk = true, joinOk = true),
+      tempViewOk = true, dfOk = true, joinOk = true,
+      tempViewRows = Seq.empty,
+      dfRows = Seq.empty,
+      joinRows = Seq.empty),
     Mod("ext drop+add column same type",
-      _ => { cat.alterTable(IDENT, TableChange.deleteColumn(Array("salary"), false))
-             cat.alterTable(IDENT, TableChange.addColumn(Array("salary"), IntegerType, true)) },
-      tempViewOk = true, dfOk = true, joinOk = true),
+      _ => { cat.alterTable(IDENT,
+               TableChange.deleteColumn(Array("salary"), false))
+             cat.alterTable(IDENT,
+               TableChange.addColumn(
+                 Array("salary"), IntegerType, true)) },
+      tempViewOk = true, dfOk = true, joinOk = true,
+      // InMemoryTable preserves data across drop+add (no column mapping)
+      tempViewRows = Seq(Row(1, 100)),
+      dfRows = Seq(Row(1, 100)),
+      joinRows = Seq(Row(1, 100, 1, 100))),
     Mod("ext drop+add column different type",
-      _ => { cat.alterTable(IDENT, TableChange.deleteColumn(Array("salary"), false))
-             cat.alterTable(IDENT, TableChange.addColumn(Array("salary"), StringType, true)) },
+      _ => { cat.alterTable(IDENT,
+               TableChange.deleteColumn(Array("salary"), false))
+             cat.alterTable(IDENT,
+               TableChange.addColumn(
+                 Array("salary"), StringType, true)) },
       tempViewOk = false, dfOk = false, joinOk = false))
 
   // =====================================================================
@@ -201,9 +283,35 @@ class DataSourceV2ConcurrencyRefreshSuite
         checkAnswer(spark.table("tmp"), Seq(Row(1, 100)))
         mod.fn(T)
         if (mod.tempViewOk) {
-          spark.table("tmp").collect() // should not throw
+          checkAnswer(spark.table("tmp"), mod.tempViewRows)
         } else {
-          intercept[AnalysisException] { spark.table("tmp").collect() }
+          checkError(
+            exception = intercept[AnalysisException] {
+              spark.table("tmp").collect()
+            },
+            condition = mod.viewPlanCondition)
+        }
+      }
+    }
+  }
+
+  // Section 1 external: "someone else changed the table" via catalog API.
+  // The doc distinguishes session vs external for every temp view scenario.
+  extMods.foreach { mod =>
+    test(s"[S1-ext] temp view: ${mod.name}") {
+      withTable(T) {
+        setupTable()
+        spark.table(T).createOrReplaceTempView("tmp")
+        checkAnswer(spark.table("tmp"), Seq(Row(1, 100)))
+        mod.fn(T)
+        if (mod.tempViewOk) {
+          checkAnswer(spark.table("tmp"), mod.tempViewRows)
+        } else {
+          checkError(
+            exception = intercept[AnalysisException] {
+              spark.table("tmp").collect()
+            },
+            condition = mod.viewPlanCondition)
         }
       }
     }
@@ -236,12 +344,37 @@ class DataSourceV2ConcurrencyRefreshSuite
         val df1 = spark.table(T)
         mod.fn(T)
         val df2 = spark.table(T)
+        val joined = df1.join(df2, df1("id") === df2("id"))
         if (mod.joinOk) {
-          df1.join(df2, df1("id") === df2("id")).collect()
+          checkAnswer(joined, mod.joinRows)
         } else {
-          intercept[AnalysisException] {
-            df1.join(df2, df1("id") === df2("id")).collect()
-          }
+          checkError(
+            exception = intercept[AnalysisException] {
+              joined.collect()
+            },
+            condition = mod.dfCondition)
+        }
+      }
+    }
+  }
+
+  // Section 3 external: join with external modifications
+  extMods.foreach { mod =>
+    test(s"[S3-ext] join: ${mod.name}") {
+      withTable(T) {
+        setupTable()
+        val df1 = spark.table(T)
+        mod.fn(T)
+        val df2 = spark.table(T)
+        val joined = df1.join(df2, df1("id") === df2("id"))
+        if (mod.joinOk) {
+          checkAnswer(joined, mod.joinRows)
+        } else {
+          checkError(
+            exception = intercept[AnalysisException] {
+              joined.collect()
+            },
+            condition = mod.dfCondition)
         }
       }
     }
@@ -258,9 +391,55 @@ class DataSourceV2ConcurrencyRefreshSuite
         val df = spark.table(T)
         mod.fn(T)
         if (mod.dfOk) {
-          df.collect()
+          checkAnswer(df, mod.dfRows)
         } else {
-          intercept[AnalysisException] { df.collect() }
+          checkError(
+            exception = intercept[AnalysisException] { df.collect() },
+            condition = mod.dfCondition)
+        }
+      }
+    }
+  }
+
+  // Section 4 show variant: access DF before modification, then again after.
+  // show/count/head create derived DFs with new QEs each time, so they
+  // always reflect the latest data after refresh. This matches the doc's
+  // "show" scenarios in Section 4 where df.show() is called before and after.
+  mods.foreach { mod =>
+    test(s"[S4-show] DataFrame show before and after: ${mod.name}") {
+      withTable(T) {
+        setupTable()
+        val df = spark.table(T)
+        // First access: materializes analyzed plan but does NOT pin
+        // collect() QE because count() creates a derived DF
+        assert(df.count() === 1)
+        mod.fn(T)
+        // Second access: count creates new derived DF with new QE.
+        // The refresh phase detects stale table and reloads.
+        if (mod.dfOk) {
+          assert(df.count() === mod.dfRows.length.toLong)
+        } else {
+          checkError(
+            exception = intercept[AnalysisException] { df.count() },
+            condition = mod.dfCondition)
+        }
+      }
+    }
+  }
+
+  // Section 4a external: DataFrame first access with external mods
+  extMods.foreach { mod =>
+    test(s"[S4a-ext] DataFrame first access: ${mod.name}") {
+      withTable(T) {
+        setupTable()
+        val df = spark.table(T)
+        mod.fn(T)
+        if (mod.dfOk) {
+          checkAnswer(df, mod.dfRows)
+        } else {
+          checkError(
+            exception = intercept[AnalysisException] { df.collect() },
+            condition = mod.dfCondition)
         }
       }
     }
@@ -335,9 +514,31 @@ class DataSourceV2ConcurrencyRefreshSuite
           s"SELECT * FROM $T WHERE id IN (SELECT id FROM $T WHERE salary > 0)")
         mod.fn(T)
         if (mod.dfOk) {
-          df.collect()
+          checkAnswer(df, mod.dfRows)
         } else {
-          intercept[AnalysisException] { df.collect() }
+          checkError(
+            exception = intercept[AnalysisException] { df.collect() },
+            condition = mod.dfCondition)
+        }
+      }
+    }
+  }
+
+  // Section 6 external: subquery with external modifications
+  extMods.foreach { mod =>
+    test(s"[S6-ext] subquery same table: ${mod.name}") {
+      withTable(T) {
+        setupTable()
+        val df = spark.sql(
+          s"""SELECT * FROM $T WHERE id IN
+             |(SELECT id FROM $T WHERE salary > 0)""".stripMargin)
+        mod.fn(T)
+        if (mod.dfOk) {
+          checkAnswer(df, mod.dfRows)
+        } else {
+          checkError(
+            exception = intercept[AnalysisException] { df.collect() },
+            condition = mod.dfCondition)
         }
       }
     }
@@ -359,11 +560,13 @@ class DataSourceV2ConcurrencyRefreshSuite
         // names at creation time, so removals/renames/type changes
         // cause INCOMPATIBLE_VIEW_SCHEMA_CHANGE.
         if (mod.tempViewOk) {
-          spark.table("tmp").collect()
+          checkAnswer(spark.table("tmp"), mod.tempViewRows)
         } else {
-          intercept[AnalysisException] {
-            spark.table("tmp").collect()
-          }
+          checkError(
+            exception = intercept[AnalysisException] {
+              spark.table("tmp").collect()
+            },
+            condition = mod.sqlViewCondition)
         }
       }
     }
@@ -585,7 +788,9 @@ class DataSourceV2ConcurrencyRefreshSuite
           if (mod.dfOk) {
             df.collect()
           } else {
-            intercept[AnalysisException] { df.collect() }
+            checkError(
+              exception = intercept[AnalysisException] { df.collect() },
+              condition = mod.dfCondition)
           }
         }
       }
@@ -608,7 +813,9 @@ class DataSourceV2ConcurrencyRefreshSuite
         if (mod.joinOk) {
           joined.collect()
         } else {
-          intercept[AnalysisException] { joined.collect() }
+          checkError(
+            exception = intercept[AnalysisException] { joined.collect() },
+            condition = mod.dfCondition)
         }
       }
     }
@@ -636,7 +843,9 @@ class DataSourceV2ConcurrencyRefreshSuite
       sql(s"INSERT INTO $T VALUES (2, 200)")
       sql(s"ALTER TABLE $T RENAME COLUMN salary TO pay")
       // Column rename is incompatible
-      intercept[AnalysisException] { df.collect() }
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -648,9 +857,11 @@ class DataSourceV2ConcurrencyRefreshSuite
       sql(s"ALTER TABLE $T ADD COLUMN bonus INT")
       val df2 = spark.table(T)
       // Type widening is incompatible for df1
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         df1.join(df2, df1("id") === df2("id")).collect()
-      }
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -675,7 +886,9 @@ class DataSourceV2ConcurrencyRefreshSuite
       sql(s"ALTER TABLE $T ADD COLUMN bonus INT")
       sql(s"ALTER TABLE $T DROP COLUMN extra")
       // Column removal is incompatible
-      intercept[AnalysisException] { df.collect() }
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -687,7 +900,9 @@ class DataSourceV2ConcurrencyRefreshSuite
       sql(s"ALTER TABLE $T DROP COLUMN a")
       sql(s"ALTER TABLE $T ADD COLUMN a STRING") // different type
       // Column type changed from INT to STRING
-      intercept[AnalysisException] { df.collect() }
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -874,7 +1089,9 @@ class DataSourceV2ConcurrencyRefreshSuite
       sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
       val df = spark.table(T)
       sql(s"ALTER TABLE $T DROP COLUMN salary")
-      intercept[AnalysisException] { df.collect() }
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -887,7 +1104,9 @@ class DataSourceV2ConcurrencyRefreshSuite
       // Add nested field  - incompatible for temp views (only top-level additions allowed)
       cat.alterTable(IDENT,
         TableChange.addColumn(Array("data", "bonus"), IntegerType, true))
-      intercept[AnalysisException] { spark.table("tmp").collect() }
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("tmp").collect() },
+        condition = VIEW_PLAN_CHANGED)
     }
   }
 
@@ -911,7 +1130,9 @@ class DataSourceV2ConcurrencyRefreshSuite
       spark.table(T).createOrReplaceTempView("tmp")
       sql(s"ALTER TABLE $T ALTER COLUMN salary DROP NOT NULL")
       // Nullability change is incompatible
-      intercept[AnalysisException] { spark.table("tmp").collect() }
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("tmp").collect() },
+        condition = VIEW_PLAN_CHANGED)
     }
   }
 
@@ -921,7 +1142,9 @@ class DataSourceV2ConcurrencyRefreshSuite
       sql(s"INSERT INTO $T VALUES (1, 100)")
       val df = spark.table(T)
       sql(s"ALTER TABLE $T ALTER COLUMN salary DROP NOT NULL")
-      intercept[AnalysisException] { df.collect() }
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -930,7 +1153,9 @@ class DataSourceV2ConcurrencyRefreshSuite
       setupTable()
       spark.table(T).createOrReplaceTempView("tmp")
       sql(s"ALTER TABLE $T ALTER COLUMN salary TYPE DOUBLE")
-      intercept[AnalysisException] { spark.table("tmp").collect() }
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("tmp").collect() },
+        condition = VIEW_PLAN_CHANGED)
     }
   }
 
@@ -939,7 +1164,9 @@ class DataSourceV2ConcurrencyRefreshSuite
       setupTable()
       spark.table(T).createOrReplaceTempView("tmp")
       sql(s"ALTER TABLE $T ALTER COLUMN salary TYPE STRING")
-      intercept[AnalysisException] { spark.table("tmp").collect() }
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("tmp").collect() },
+        condition = VIEW_PLAN_CHANGED)
     }
   }
 
@@ -1007,9 +1234,11 @@ class DataSourceV2ConcurrencyRefreshSuite
       // Modify only T
       sql(s"ALTER TABLE $T DROP COLUMN salary")
       // Join should fail because df1 references removed column
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         df1.join(df2, df1("id") === df2("id")).collect()
-      }
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -1035,7 +1264,9 @@ class DataSourceV2ConcurrencyRefreshSuite
       checkAnswer(spark.table("v2"), Seq(Row(1, 100, "x")))
       sql(s"ALTER TABLE $T DROP COLUMN extra")
       // Querying v2 should propagate the error from v1's validation
-      intercept[AnalysisException] { spark.table("v2").collect() }
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("v2").collect() },
+        condition = VIEW_PLAN_CHANGED)
     }
   }
 
@@ -1062,6 +1293,18 @@ class DataSourceV2ConcurrencyRefreshSuite
   private def setOpOk(mod: Mod): Boolean =
     mod.joinOk && mod.name != "column addition"
 
+  // Set operations (union/except/intersect) throw NUM_COLUMNS_MISMATCH
+  // when column counts differ, ID_MISMATCH for drop/recreate, or
+  // the mod's dfCondition for type/rename incompatibilities.
+  private def setOpCondition(mod: Mod): String = {
+    if (mod.name.contains("column addition") ||
+        mod.name.contains("column removal")) {
+      "NUM_COLUMNS_MISMATCH"
+    } else {
+      mod.dfCondition
+    }
+  }
+
   mods.foreach { mod =>
     test(s"[union] df1.union(df2): ${mod.name}") {
       withTable(T) {
@@ -1072,9 +1315,11 @@ class DataSourceV2ConcurrencyRefreshSuite
         if (setOpOk(mod)) {
           df1.union(df2).collect()
         } else {
-          intercept[AnalysisException] {
-            df1.union(df2).collect()
-          }
+          checkError(
+            exception = intercept[AnalysisException] {
+              df1.union(df2).collect()
+            },
+            condition = setOpCondition(mod))
         }
       }
     }
@@ -1092,9 +1337,11 @@ class DataSourceV2ConcurrencyRefreshSuite
         if (setOpOk(mod)) {
           df1.except(df2).collect()
         } else {
-          intercept[AnalysisException] {
-            df1.except(df2).collect()
-          }
+          checkError(
+            exception = intercept[AnalysisException] {
+              df1.except(df2).collect()
+            },
+            condition = setOpCondition(mod))
         }
       }
     }
@@ -1112,9 +1359,11 @@ class DataSourceV2ConcurrencyRefreshSuite
         if (setOpOk(mod)) {
           df1.intersect(df2).collect()
         } else {
-          intercept[AnalysisException] {
-            df1.intersect(df2).collect()
-          }
+          checkError(
+            exception = intercept[AnalysisException] {
+              df1.intersect(df2).collect()
+            },
+            condition = setOpCondition(mod))
         }
       }
     }
@@ -1132,9 +1381,11 @@ class DataSourceV2ConcurrencyRefreshSuite
         if (mod.dfOk) {
           df.union(df).collect()
         } else {
-          intercept[AnalysisException] {
-            df.union(df).collect()
-          }
+          checkError(
+            exception = intercept[AnalysisException] {
+              df.union(df).collect()
+            },
+            condition = mod.dfCondition)
         }
       }
     }
@@ -1156,9 +1407,11 @@ class DataSourceV2ConcurrencyRefreshSuite
         if (mod.dfOk) {
           aggregated.collect()
         } else {
-          intercept[AnalysisException] {
-            aggregated.collect()
-          }
+          checkError(
+            exception = intercept[AnalysisException] {
+              aggregated.collect()
+            },
+            condition = mod.dfCondition)
         }
       }
     }
@@ -1188,9 +1441,11 @@ class DataSourceV2ConcurrencyRefreshSuite
         if (mod.dfOk) {
           df1.join(df2, df1("id") === df2("id")).collect()
         } else {
-          intercept[AnalysisException] {
-            df1.join(df2, df1("id") === df2("id")).collect()
-          }
+          checkError(
+            exception = intercept[AnalysisException] {
+              df1.join(df2, df1("id") === df2("id")).collect()
+            },
+            condition = mod.dfCondition)
         }
       }
     }
@@ -1213,13 +1468,15 @@ class DataSourceV2ConcurrencyRefreshSuite
             .join(fresh, spark.table("old_v")("id") === fresh("id"))
             .collect()
         } else {
-          intercept[AnalysisException] {
-            spark.table("old_v")
-              .join(
-                fresh,
-                spark.table("old_v")("id") === fresh("id"))
-              .collect()
-          }
+          checkError(
+            exception = intercept[AnalysisException] {
+              spark.table("old_v")
+                .join(
+                  fresh,
+                  spark.table("old_v")("id") === fresh("id"))
+                .collect()
+            },
+            condition = mod.viewPlanCondition)
         }
       }
     }
@@ -1236,12 +1493,11 @@ class DataSourceV2ConcurrencyRefreshSuite
         TableChange.addColumn(Array("new_col"), IntegerType, true))
       // writing from stale DF to same table should fail
       // (commands use PROHIBIT_CHANGES mode)
-      val e = intercept[AnalysisException] {
-        source.writeTo(T).append()
-      }
-      assert(
-        e.getMessage.contains("incompatible changes") ||
-        e.getMessage.contains("INCOMPATIBLE"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          source.writeTo(T).append()
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -1267,9 +1523,11 @@ class DataSourceV2ConcurrencyRefreshSuite
         val source = spark.table(T).filter("id < 10")
         mod.fn(T)
         // CTAS from DF whose source table changed incompatibly
-        intercept[AnalysisException] {
-          source.writeTo(t2).createOrReplace()
-        }
+        checkError(
+          exception = intercept[AnalysisException] {
+            source.writeTo(t2).createOrReplace()
+          },
+          condition = mod.dfCondition)
       }
     }
   }
@@ -1296,12 +1554,11 @@ class DataSourceV2ConcurrencyRefreshSuite
       val source = spark.table(T).filter("id < 10")
       sql(s"ALTER TABLE $T ADD COLUMN new_col INT")
       // Column addition changes schema -- commands prohibit this
-      val e = intercept[AnalysisException] {
-        source.writeTo(t2).createOrReplace()
-      }
-      assert(
-        e.getMessage.contains("incompatible changes") ||
-        e.getMessage.contains("INCOMPATIBLE"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          source.writeTo(t2).createOrReplace()
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -1554,10 +1811,12 @@ class DataSourceV2ConcurrencyRefreshSuite
       val df2 = spark.table(T)
 
       // column removal is incompatible
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         df1.join(df2, df1("id") === df2("id"), "left_anti")
           .collect()
-      }
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -1706,9 +1965,11 @@ class DataSourceV2ConcurrencyRefreshSuite
       sql(s"ALTER TABLE $t1 DROP COLUMN salary")
 
       // join should detect the incompatible change in t1
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         df1.join(df2, df1("id") === df2("id")).collect()
-      }
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -1875,9 +2136,11 @@ class DataSourceV2ConcurrencyRefreshSuite
       val source = spark.table(T)
       cat.alterTable(IDENT,
         TableChange.deleteColumn(Array("salary"), false))
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         source.writeTo(T).append()
-      }
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -1888,9 +2151,11 @@ class DataSourceV2ConcurrencyRefreshSuite
       cat.alterTable(IDENT,
         TableChange.deleteColumn(Array("salary"), false))
       import org.apache.spark.sql.functions.lit
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         source.writeTo(T).overwrite(lit(true))
-      }
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -1904,9 +2169,11 @@ class DataSourceV2ConcurrencyRefreshSuite
       val ptIdent = Identifier.of(Array("ns1", "ns2"), "ptbl")
       cat.alterTable(ptIdent,
         TableChange.deleteColumn(Array("data"), false))
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         source.writeTo(pt).overwritePartitions()
-      }
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -1916,9 +2183,11 @@ class DataSourceV2ConcurrencyRefreshSuite
       val source = spark.table(T)
       cat.alterTable(IDENT,
         TableChange.deleteColumn(Array("salary"), false))
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         source.write.insertInto(T)
-      }
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -1929,9 +2198,11 @@ class DataSourceV2ConcurrencyRefreshSuite
       cat.alterTable(IDENT,
         TableChange.updateColumnType(
           Array("salary"), LongType))
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         source.writeTo(T).append()
-      }
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -1941,9 +2212,11 @@ class DataSourceV2ConcurrencyRefreshSuite
       val source = spark.table(T)
       cat.alterTable(IDENT,
         TableChange.renameColumn(Array("salary"), "pay"))
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         source.writeTo(T).append()
-      }
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -1957,9 +2230,11 @@ class DataSourceV2ConcurrencyRefreshSuite
         TableChange.addColumn(
           Array("bonus"), StringType, true))
       // CTAS to different table correctly fails
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         source.writeTo(t2).createOrReplace()
-      }
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -1973,9 +2248,11 @@ class DataSourceV2ConcurrencyRefreshSuite
         TableChange.deleteColumn(Array("salary"), false))
       // V1 saveAsTable(append) uses name-based AppendData
       // but detects column arity mismatch -- correctly rejects
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         source.write.mode("append").saveAsTable(T)
-      }
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -1987,9 +2264,11 @@ class DataSourceV2ConcurrencyRefreshSuite
         TableChange.deleteColumn(Array("salary"), false))
       // V1 saveAsTable(overwrite) uses ReplaceTableAsSelect
       // refresh correctly detects COLUMNS_MISMATCH
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         source.write.mode("overwrite").saveAsTable(T)
-      }
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -2110,9 +2389,11 @@ class DataSourceV2ConcurrencyRefreshSuite
       val source = spark.table(T)
       cat.alterTable(IDENT,
         TableChange.deleteColumn(Array("salary"), false))
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         source.write.mode("append").saveAsTable(T)
-      }
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -2208,9 +2489,11 @@ class DataSourceV2ConcurrencyRefreshSuite
         TableChange.deleteColumn(Array("salary"), false))
       // SQL INSERT OVERWRITE from view to modified table
       // SQL re-analyzes: src still has 2 cols, target has 1
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         sql(s"INSERT OVERWRITE $T SELECT * FROM src")
-      }
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -2227,9 +2510,11 @@ class DataSourceV2ConcurrencyRefreshSuite
         TableChange.deleteColumn(Array("salary"), false))
       // SQL INSERT from temp view: the view re-resolves
       // and detects the column removal
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         sql(s"INSERT INTO $t2 SELECT * FROM src")
-      }
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -2244,9 +2529,11 @@ class DataSourceV2ConcurrencyRefreshSuite
           Array("bonus"), StringType, true))
       // CTAS to different table fails because command
       // uses PROHIBIT_CHANGES and detects schema change
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         source.writeTo(t2).createOrReplace()
-      }
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -2307,7 +2594,9 @@ class DataSourceV2ConcurrencyRefreshSuite
       sql(s"ALTER TABLE $T DROP COLUMN salary")
 
       // subquery references salary which was dropped
-      intercept[AnalysisException] { df.collect() }
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -2680,7 +2969,9 @@ class DataSourceV2ConcurrencyRefreshSuite
       val df = spark.read.table(T)
       sql(s"ALTER TABLE $T DROP COLUMN extra")
       // First access after removal should detect incompatibility
-      intercept[AnalysisException] { df.collect() }
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -2756,9 +3047,11 @@ class DataSourceV2ConcurrencyRefreshSuite
       sql(s"ALTER TABLE $t1 DROP COLUMN salary")
 
       // ns1.tbl incompatible but ns2.tbl unchanged
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         df1.join(df2, df1("id") === df2("id")).collect()
-      }
+        },
+        condition = COL_MISMATCH)
 
       // ns2.tbl alone should still work
       checkAnswer(df2, Seq(Row(1, 50)))
@@ -2812,9 +3105,11 @@ class DataSourceV2ConcurrencyRefreshSuite
       sql(s"ALTER TABLE $T DROP COLUMN extra")
 
       // Error should propagate through all levels
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         spark.table("v3").collect()
-      }
+        },
+        condition = VIEW_PLAN_CHANGED)
     }
   }
 
@@ -2987,9 +3282,11 @@ class DataSourceV2ConcurrencyRefreshSuite
       sql(s"ALTER TABLE $T ADD COLUMN bonus INT")
       // saveAsTable goes through command path which
       // detects schema change (PROHIBIT_CHANGES).
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         df.write.saveAsTable(t2)
-      }
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -3051,7 +3348,9 @@ class DataSourceV2ConcurrencyRefreshSuite
       sql(s"ALTER TABLE $T ALTER COLUMN id DROP NOT NULL")
       // Nullability change (NOT NULL -> nullable) is
       // detected as incompatible schema change
-      intercept[AnalysisException] { df.collect() }
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -3102,13 +3401,17 @@ class DataSourceV2ConcurrencyRefreshSuite
       sql(s"ALTER TABLE $T DROP COLUMN extra")
 
       // DF view: detects removal, throws
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         spark.table("df_v").collect()
-      }
+        },
+        condition = VIEW_PLAN_CHANGED)
       // SQL view: also fails (SELECT * captured column names)
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         spark.table("sql_v").collect()
-      }
+        },
+        condition = VIEW_PLAN_CHANGED)
     }
   }
 
@@ -3170,10 +3473,11 @@ class DataSourceV2ConcurrencyRefreshSuite
 
       // Command: same DF used in CTAS fails because
       // PROHIBIT_CHANGES mode rejects any schema change
-      val e = intercept[AnalysisException] {
-        df.writeTo(t2).createOrReplace()
-      }
-      assert(e.getMessage.contains("incompatible"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.writeTo(t2).createOrReplace()
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -3196,9 +3500,11 @@ class DataSourceV2ConcurrencyRefreshSuite
       // Join: refresh validates BOTH tables, not just
       // the one with a version mismatch. df2's schema
       // change is detected.
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         df1.join(df2, df1("id") === df2("id")).collect()
-      }
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -3451,9 +3757,11 @@ class DataSourceV2ConcurrencyRefreshSuite
           Array("items", "element", "price"),
           IntegerType, true))
       // Temp view: nested addition inside array is incompatible
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         spark.table("tmp").collect()
-      }
+        },
+        condition = VIEW_PLAN_CHANGED)
     }
   }
 
@@ -3470,9 +3778,11 @@ class DataSourceV2ConcurrencyRefreshSuite
           Array("props", "value", "extra"),
           StringType, true))
       // Temp view: nested addition inside map is incompatible
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         spark.table("tmp").collect()
-      }
+        },
+        condition = VIEW_PLAN_CHANGED)
     }
   }
 
@@ -3489,7 +3799,9 @@ class DataSourceV2ConcurrencyRefreshSuite
         TableChange.updateColumnType(
           Array("tags", "element"), StringType))
       // Array element type change is incompatible
-      intercept[AnalysisException] { df.collect() }
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -3503,7 +3815,9 @@ class DataSourceV2ConcurrencyRefreshSuite
       cat.alterTable(IDENT,
         TableChange.updateColumnType(
           Array("props", "value"), StringType))
-      intercept[AnalysisException] { df.collect() }
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -3655,7 +3969,9 @@ class DataSourceV2ConcurrencyRefreshSuite
       session2.sql(s"ALTER TABLE $ST DROP COLUMN salary")
 
       // Session 1's DF should detect the incompatible change
-      intercept[AnalysisException] { df.collect() }
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -3994,7 +4310,9 @@ class DataSourceV2ConcurrencyRefreshSuite
       val df = spark.table(NI)
       sql(s"ALTER TABLE $NI DROP COLUMN salary")
       // Column validation still works (doesn't depend on ID)
-      intercept[AnalysisException] { df.collect() }
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -4166,11 +4484,13 @@ class DataSourceV2ConcurrencyRefreshSuite
       // Left semi: only left side columns in output.
       // Right side schema change should still be detected
       // because refresh validates ALL relations in the plan.
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         df1.join(
           df2, df1("id") === df2("id"), "left_semi")
           .collect()
-      }
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -4181,11 +4501,13 @@ class DataSourceV2ConcurrencyRefreshSuite
       val df1 = spark.table(T)
       sql(s"ALTER TABLE $T DROP COLUMN salary")
       val df2 = spark.table(T)
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         df1.join(
           df2, df1("id") === df2("id"), "full_outer")
           .collect()
-      }
+        },
+        condition = COL_MISMATCH)
     }
   }
 
@@ -4226,9 +4548,11 @@ class DataSourceV2ConcurrencyRefreshSuite
       val df2 = spark.table(T)
       // df1 captured (id, salary), df2 has (id).
       // Refresh detects salary was removed from df1's table.
-      intercept[AnalysisException] {
+      checkError(
+        exception = intercept[AnalysisException] {
         df1.unionByName(df2).collect()
-      }
+        },
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION")
     }
   }
 
