@@ -2066,6 +2066,137 @@ class DataSourceV2ConcurrencyRefreshSuite
     }
   }
 
+  // Explicit verification of every V1 insertInto mode
+  test("[ok] df.write.mode(append).insertInto rejects col removal") {
+    withTable(T) {
+      setupTable()
+      val source = spark.table(T)
+      cat.alterTable(IDENT,
+        TableChange.deleteColumn(Array("salary"), false))
+      checkError(
+        exception = intercept[AnalysisException] {
+          source.write.mode("append").insertInto(T)
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS" +
+          ".COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "errors" -> "- `salary` INT has been removed"))
+    }
+  }
+
+  test("[ok] df.write.mode(overwrite).insertInto rejects col removal") {
+    withTable(T) {
+      setupTable()
+      val source = spark.table(T)
+      cat.alterTable(IDENT,
+        TableChange.deleteColumn(Array("salary"), false))
+      checkError(
+        exception = intercept[AnalysisException] {
+          source.write.mode("overwrite").insertInto(T)
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS" +
+          ".COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "errors" -> "- `salary` INT has been removed"))
+    }
+  }
+
+  // Explicit verification of every V1 saveAsTable mode
+  test("[ok] df.write.mode(append).saveAsTable rejects col removal") {
+    withTable(T) {
+      setupTable()
+      val source = spark.table(T)
+      cat.alterTable(IDENT,
+        TableChange.deleteColumn(Array("salary"), false))
+      intercept[AnalysisException] {
+        source.write.mode("append").saveAsTable(T)
+      }
+    }
+  }
+
+  test("[ok] df.write.mode(overwrite).saveAsTable rejects col removal") {
+    withTable(T) {
+      setupTable()
+      val source = spark.table(T)
+      cat.alterTable(IDENT,
+        TableChange.deleteColumn(Array("salary"), false))
+      checkError(
+        exception = intercept[AnalysisException] {
+          source.write.mode("overwrite").saveAsTable(T)
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS" +
+          ".COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "errors" -> "- `salary` INT has been removed"))
+    }
+  }
+
+  // Explicit verification of every V2 writeTo mode
+  test("[fixed] writeTo.append rejects col removal") {
+    withTable(T) {
+      setupTable()
+      val source = spark.table(T)
+      cat.alterTable(IDENT,
+        TableChange.deleteColumn(Array("salary"), false))
+      checkError(
+        exception = intercept[AnalysisException] {
+          source.writeTo(T).append()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS" +
+          ".COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "errors" -> "- `salary` INT has been removed"))
+    }
+  }
+
+  test("[fixed] writeTo.overwrite rejects col removal") {
+    withTable(T) {
+      setupTable()
+      val source = spark.table(T)
+      cat.alterTable(IDENT,
+        TableChange.deleteColumn(Array("salary"), false))
+      import org.apache.spark.sql.functions.lit
+      checkError(
+        exception = intercept[AnalysisException] {
+          source.writeTo(T).overwrite(lit(true))
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS" +
+          ".COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "errors" -> "- `salary` INT has been removed"))
+    }
+  }
+
+  test("[fixed] writeTo.overwritePartitions rejects col removal") {
+    val pt = "testcat.ns1.ns2.ptbl"
+    withTable(pt) {
+      sql(s"""CREATE TABLE $pt
+        (data STRING, id INT) USING foo
+        PARTITIONED BY (id)""")
+      sql(s"INSERT INTO $pt VALUES ('a', 1)")
+      val source = spark.table(pt)
+      val ptIdent = Identifier.of(Array("ns1", "ns2"), "ptbl")
+      cat.alterTable(ptIdent,
+        TableChange.deleteColumn(Array("data"), false))
+      checkError(
+        exception = intercept[AnalysisException] {
+          source.writeTo(pt).overwritePartitions()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS" +
+          ".COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" ->
+            "`testcat`.`ns1`.`ns2`.`ptbl`",
+          "errors" ->
+            "- `data` STRING has been removed"))
+    }
+  }
+
   test("[ok] SQL INSERT OVERWRITE rejects after col removal") {
     withTable(T) {
       setupTable()
