@@ -526,6 +526,24 @@ class DataSourceV2TablePinningRefreshSuite
     }
   }
 
+  test("[3.2-ext] join after external ADD COLUMN: df1 preserves schema") {
+    withTable(T) {
+      setupTable()
+      val df1 = spark.table(T) // 2-col schema
+
+      val ext = extSession
+      ext.sql(s"ALTER TABLE $T ADD COLUMN new_col INT").collect()
+      ext.sql(s"INSERT INTO $T VALUES (2, 200, -1)").collect()
+
+      val df2 = spark.table(T) // 3-col schema
+
+      val joined = df1.join(df2, df1("id") === df2("id"))
+      checkAnswer(
+        joined,
+        Seq(Row(1, 100, 1, 100, null), Row(2, 200, 2, 200, -1)))
+    }
+  }
+
   test("[3.3] join after session DROP COLUMN fails") {
     withTable(T) {
       setupTable()
@@ -866,6 +884,23 @@ class DataSourceV2TablePinningRefreshSuite
     }
   }
 
+  test("[4.1-collect-ext] stale collect after external write") {
+    withTable(T) {
+      setupTable()
+      val df = spark.sql(s"SELECT * FROM $T")
+      // First collect: pins QE
+      checkAnswer(df, Seq(Row(1, 100)))
+
+      extSession.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+
+      // Stale: collect reuses pinned QE
+      checkAnswer(df, Seq(Row(1, 100)))
+
+      // But count (new derived DF) sees fresh data
+      assert(df.count() === 2)
+    }
+  }
+
   test("[4.2-show] DataFrame preserves schema after session ADD COLUMN") {
     withTable(T) {
       setupTable()
@@ -874,6 +909,21 @@ class DataSourceV2TablePinningRefreshSuite
 
       sql(s"ALTER TABLE $T ADD COLUMN new_col INT")
       sql(s"INSERT INTO $T VALUES (2, 200, -1)")
+
+      // count sees 2 rows with original schema
+      assert(df.count() === 2)
+    }
+  }
+
+  test("[4.2-show-ext] DataFrame preserves schema after external ADD COLUMN") {
+    withTable(T) {
+      setupTable()
+      val df = spark.table(T)
+      assert(df.count() === 1)
+
+      val ext = extSession
+      ext.sql(s"ALTER TABLE $T ADD COLUMN new_col INT").collect()
+      ext.sql(s"INSERT INTO $T VALUES (2, 200, -1)").collect()
 
       // count sees 2 rows with original schema
       assert(df.count() === 2)
@@ -930,6 +980,85 @@ class DataSourceV2TablePinningRefreshSuite
       assert(df.count() === 1)
 
       sql(s"ALTER TABLE $T ALTER COLUMN salary TYPE BIGINT")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.count() },
+        condition = COL_MISMATCH)
+    }
+  }
+
+  test("[4.4-show-ext] DataFrame fails after external drop/recreate") {
+    withTable(T) {
+      setupTable()
+      val df = spark.table(T)
+      assert(df.count() === 1)
+
+      val ext = extSession
+      ext.sql(s"DROP TABLE $T").collect()
+      ext.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+
+      checkError(
+        exception = intercept[AnalysisException] { df.count() },
+        condition = ID_MISMATCH)
+    }
+  }
+
+  // Section 4 Scenario 5: drop+add column with same name and type
+  test("[4.S5-show] DataFrame fails after session drop+add column same type") {
+    withTable(T) {
+      setupTable()
+      val df = spark.table(T)
+      assert(df.count() === 1)
+
+      sql(s"ALTER TABLE $T DROP COLUMN salary")
+      sql(s"ALTER TABLE $T ADD COLUMN salary INT")
+
+      // In 4.1: name+type match, passes (no column ID check)
+      // In 4.2: column ID will make this fail
+      checkAnswer(df, Seq(Row(1, 100)))
+    }
+  }
+
+  test("[4.S5-show-ext] DataFrame after external drop+add column same type") {
+    withTable(T) {
+      setupTable()
+      val df = spark.table(T)
+      assert(df.count() === 1)
+
+      val ext = extSession
+      ext.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+      ext.sql(s"ALTER TABLE $T ADD COLUMN salary INT").collect()
+
+      // Name+type match: passes in 4.1 (no column ID)
+      checkAnswer(df, Seq(Row(1, 100)))
+    }
+  }
+
+  // Section 4 Scenario 6: drop+add column with same name but different type
+  test("[4.S6-show] DataFrame fails after session drop+add column different type") {
+    withTable(T) {
+      setupTable()
+      val df = spark.table(T)
+      assert(df.count() === 1)
+
+      sql(s"ALTER TABLE $T DROP COLUMN salary")
+      sql(s"ALTER TABLE $T ADD COLUMN salary STRING")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.count() },
+        condition = COL_MISMATCH)
+    }
+  }
+
+  test("[4.S6-show-ext] DataFrame fails after external drop+add column different type") {
+    withTable(T) {
+      setupTable()
+      val df = spark.table(T)
+      assert(df.count() === 1)
+
+      val ext = extSession
+      ext.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+      ext.sql(s"ALTER TABLE $T ADD COLUMN salary STRING").collect()
 
       checkError(
         exception = intercept[AnalysisException] { df.count() },
