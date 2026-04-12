@@ -2022,8 +2022,8 @@ class DataSourceV2TablePinningRefreshSuite
 
       // Repeated sql() should reflect session schema change
       val result = sql(s"SELECT * FROM $CT").collect()
-      assert(result.nonEmpty,
-        "Should see data after session schema change on caching connector")
+      assert(result.length == 2,
+        "Should see both rows after session schema change on caching connector")
     }
   }
 

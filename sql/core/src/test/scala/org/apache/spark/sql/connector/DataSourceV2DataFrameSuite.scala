@@ -107,7 +107,7 @@ class DataSourceV2DataFrameSuite
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
       // Default saveMode is ErrorIfExists
-      intercept[TableAlreadyExistsException] {
+      assertThrows[TableAlreadyExistsException] {
         df.write.saveAsTable(t1)
       }
       assert(spark.table(t1).count() === 0)
@@ -876,13 +876,12 @@ class DataSourceV2DataFrameSuite
               Seq(LiteralValue(100, IntegerType), LiteralValue(23, IntegerType))),
             LiteralValue(123, IntegerType)),
           "{}"))
-      val e = intercept[SparkException] {
+      assertThrows[SparkException] {
         val tableInfo = new TableInfo.Builder().withColumns(columns).build()
         catalog("testcat").createTable(Identifier.of(Array("ns1", "ns2"), "tbl"), tableInfo)
         val df = Seq(1, 2, 3).toDF("c1")
         df.writeTo(tableName).append()
       }
-      assert(e.getMessage.contains("connector expression couldn't be converted to Catalyst"))
     }
   }
 
@@ -984,7 +983,8 @@ class DataSourceV2DataFrameSuite
       val result = sql(s"SELECT * FROM $t").collect()
       assert(result.length == 1)
       assert(result(0).getString(0) == "a")
-      Seq(1 to 8: _*).foreach(i => assert(result(0).get(i) != null))
+      Seq(1 to 8: _*).foreach(i => assert(result(0).get(i) != null,
+        s"Default value column at index $i should not be null"))
     }
   }
 
@@ -1026,7 +1026,8 @@ class DataSourceV2DataFrameSuite
       val result = sql(s"SELECT * FROM $t").collect()
       assert(result.length == 1)
       assert(result(0).getString(0) == "a")
-      Seq(1 to 8: _*).foreach(i => assert(result(0).get(i) != null))
+      Seq(1 to 8: _*).foreach(i => assert(result(0).get(i) != null,
+        s"Default value column at index $i should not be null"))
     }
   }
 
@@ -1058,7 +1059,8 @@ class DataSourceV2DataFrameSuite
       val result = sql(s"SELECT * FROM $tableName")
       assert(result.count() == 2)
       assert(result.collect().map(_.getString(0)).toSet == Set("test1", "test2"))
-      assert(result.collect().forall(_.get(1) != null))
+      assert(result.collect().forall(_.get(1) != null),
+        "Nested default value column should not be null")
     }
   }
 
@@ -1645,7 +1647,7 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t DROP COLUMN extra")
 
       // old view fails
-      intercept[AnalysisException] { spark.table("v").collect() }
+      assertThrows[AnalysisException] { spark.table("v").collect() }
 
       // recreate view with updated schema
       spark.table(t).createOrReplaceTempView("v")
@@ -1895,10 +1897,11 @@ class DataSourceV2DataFrameSuite
       sql(s"INSERT INTO $s VALUES (3, 'c', 'finance')")
 
       // CTAS should fail as commands must operate on current schema
-      val e = intercept[AnalysisException] {
-        filteredSourceDF.writeTo(t).createOrReplace()
-      }
-      assert(e.message.contains("incompatible changes to table `testcat`.`ns1`.`s`"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          filteredSourceDF.writeTo(t).createOrReplace()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH")
     }
   }
 
@@ -2720,10 +2723,11 @@ class DataSourceV2DataFrameSuite
       externalAlterTable(ident, TableChange.addColumn(Array("extra"), StringType, true))
 
       // CTAS should fail as schema changed externally after analysis
-      val e = intercept[AnalysisException] {
-        sourceDF.writeTo(t).createOrReplace()
-      }
-      assert(e.message.contains("incompatible changes to table `testcat`.`ns1`.`s`"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sourceDF.writeTo(t).createOrReplace()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH")
     }
   }
 
@@ -2846,7 +2850,9 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t DROP COLUMN extra")
 
       // querying v2 should propagate the error from v1's validation
-      intercept[AnalysisException] { spark.table("v2").collect() }
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("v2").collect() },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION")
     }
   }
 

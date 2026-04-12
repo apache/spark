@@ -142,7 +142,7 @@ class DataSourceV2RefreshConnectSuite
         if (mod.sqlViewOk) {
           spark.sql("SELECT * FROM tmp").collect()
         } else {
-          intercept[Exception] {
+          assertThrows[Exception] {
             spark.sql("SELECT * FROM tmp").collect()
           }
         }
@@ -225,11 +225,17 @@ class DataSourceV2RefreshConnectSuite
         val r1 = df.collect()
         assert(r1.length == 1)
         mod.fn(T)
-        // Connect re-analyzes: NOT stale
-        val r2 = df.collect()
-        // Data write adds a row; drop/recreate empties; others
-        // may change schema but still succeed
-        assert(r2 != null) // no crash
+        if (mod.dfOk) {
+          // Connect re-analyzes: NOT stale
+          val r2 = df.collect()
+          if (mod.name == "data write") {
+            assert(r2.length == 2)
+          } else if (mod.name == "drop/recreate table") {
+            assert(r2.length == 0)
+          } else {
+            assert(r2.length == 1)
+          }
+        }
       }
     }
   }

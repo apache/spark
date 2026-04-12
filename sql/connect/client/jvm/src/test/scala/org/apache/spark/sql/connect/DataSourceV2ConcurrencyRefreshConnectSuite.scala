@@ -273,7 +273,13 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         if (mod.dfOk) {
           // Connect re-analyzes: NOT stale
           val r2 = df.collect()
-          assert(r2 != null) // no crash
+          if (mod.name == "data write") {
+            assert(r2.length == 2)
+          } else if (mod.name == "drop/recreate table") {
+            assert(r2.length == 0)
+          } else {
+            assert(r2.length == 1)
+          }
         } else {
           assertThrows[Exception] { df.collect() }
         }
@@ -723,8 +729,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       // SQL view re-analyzes: SELECT * picks up new columns
       val r = spark.sql("SELECT * FROM tmp").collect()
       assert(r.length == 1)
-      // Connect re-expands SELECT *: should see all 7 columns
-      assert(r(0).length >= 2) // at least original columns
+      // Connect re-expands SELECT *: id, salary, col_1..col_5
+      assert(r(0).length == 7)
     }
   }
 
@@ -751,9 +757,10 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       checkAnswer(
         spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
       spark.sql(s"INSERT INTO $T VALUES (2, 200)")
-      // Session write may invalidate cache
-      val r = spark.sql(s"SELECT * FROM $T").collect()
-      assert(r.length >= 1) // at least original row
+      // Session write invalidates cache; sees both rows
+      checkAnswer(
+        spark.sql(s"SELECT * FROM $T"),
+        Seq(Row(1, 100), Row(2, 200)))
       spark.sql(s"UNCACHE TABLE IF EXISTS $T")
     }
   }
@@ -828,8 +835,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
             .toArray(Array.empty[Throwable])
             .map(_.getMessage).mkString("; ")}")
       }
-      // Final consistency: table is readable
-      assert(spark.sql(s"SELECT * FROM $T").collect().length >= 1)
+      // Final consistency: original + all inserts (2..10)
+      assert(spark.sql(s"SELECT * FROM $T").collect().length == 10)
     }
   }
 

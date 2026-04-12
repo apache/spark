@@ -993,8 +993,8 @@ class DataSourceV2ConcurrencyRefreshSuite
           s"Unexpected errors: ${errors.toArray(Array.empty[Throwable])
               .map(_.getMessage).mkString("; ")}")
       }
-      // Final consistency: table is readable
-      assert(spark.sql(s"SELECT * FROM $T").collect().length >= 1)
+      // Final consistency: table has original + all inserts (2..10)
+      assert(spark.sql(s"SELECT * FROM $T").collect().length == 10)
     }
   }
 
@@ -1508,8 +1508,8 @@ class DataSourceV2ConcurrencyRefreshSuite
       sql(s"INSERT INTO $T VALUES (2, 200)")
       // data-only change: schema is unchanged, so command succeeds
       source.writeTo(T).append()
-      // table should have original + new insert + appended rows
-      assert(spark.table(T).count() >= 2)
+      // table has: (1,100) original + (2,200) insert + (1,100)(2,200) appended
+      assert(spark.table(T).count() == 4)
     }
   }
 
@@ -1542,7 +1542,7 @@ class DataSourceV2ConcurrencyRefreshSuite
         // Schema-compatible change: CTAS succeeds because
         // column names and types haven't changed
         source.writeTo(t2).createOrReplace()
-        assert(spark.table(t2).count() >= 1)
+        assert(spark.table(t2).count() == 1)
       }
     }
   }
@@ -1616,19 +1616,14 @@ class DataSourceV2ConcurrencyRefreshSuite
       sql(s"INSERT INTO $T VALUES (2, 200, 50)")
       val df2 = spark.table(T)
 
-      // df1 has schema (id, salary), df2 has (id, salary, bonus)
-      // union requires same number of columns -- df1 preserves
-      // its original schema, df2 has 3 columns.
-      // This may fail if schemas don't align for union.
-      try {
-        val result = df1.union(df2).collect()
-        // If it succeeds, verify results are reasonable
-        assert(result.nonEmpty)
-      } catch {
-        case _: AnalysisException =>
-        // Union requires matching column count; schema mismatch
-        // is expected when df1 has 2 cols and df2 has 3
-      }
+      // df1 has schema (id, salary), df2 has (id, salary, bonus).
+      // Union requires same column count. df1 preserves its
+      // original 2-column schema, df2 has 3 columns after refresh.
+      checkError(
+        exception = intercept[AnalysisException] {
+          df1.union(df2).collect()
+        },
+        condition = "NUM_COLUMNS_MISMATCH")
     }
   }
 
@@ -2341,7 +2336,7 @@ class DataSourceV2ConcurrencyRefreshSuite
       // INSERT INTO with column list is name-based
       // source has (id, salary), target only accepts (id)
       sql(s"INSERT INTO $t2 (id) SELECT id FROM $T")
-      assert(spark.table(t2).count() >= 1)
+      assert(spark.table(t2).count() == 1)
     }
   }
 
@@ -3575,8 +3570,7 @@ class DataSourceV2ConcurrencyRefreshSuite
       sql(s"INSERT INTO $T VALUES (4, 400)")
       assert(spark.table(T).count() == 4)
 
-      // Never goes backward
-      assert(spark.table(T).count() >= 4)
+      assert(spark.table(T).count() == 4)
     }
   }
 
@@ -4126,9 +4120,9 @@ class DataSourceV2ConcurrencyRefreshSuite
             .map(_.getMessage).mkString("; ")}")
       }
 
-      // After concurrent ops, table should be readable
+      // After concurrent ops: 1 original + 4 inserts (2..5) = 5
       assert(spark.sql(s"SELECT * FROM $ST")
-        .collect().length >= 1)
+        .collect().length == 5)
     }
   }
 
@@ -4345,8 +4339,8 @@ class DataSourceV2ConcurrencyRefreshSuite
       val result = spark.sql(
         s"SELECT id, data, _partition FROM $pt").collect()
       assert(result.length == 2)
-      assert(result(0).getString(2) != null,
-        "_partition should not be null")
+      assert(result(0).getString(2).nonEmpty,
+        "_partition should be a non-empty partition string")
     }
   }
 
@@ -4536,7 +4530,7 @@ class DataSourceV2ConcurrencyRefreshSuite
       // this with allowMissingColumns=true
       val result = df1.unionByName(
         df2, allowMissingColumns = true).collect()
-      assert(result.length >= 2)
+      assert(result.length == 4)
     }
   }
 
@@ -4613,8 +4607,8 @@ class DataSourceV2ConcurrencyRefreshSuite
         s"SELECT id, sum(salary) FROM $T GROUP BY CUBE(id)")
       sql(s"INSERT INTO $T VALUES (3, 300)")
       val result = df.collect()
-      // Cube includes all combinations + grand total
-      assert(result.length >= 3)
+      // Cube: 3 per-id groups + 1 grand total (null id) = 4 rows
+      assert(result.length == 4)
     }
   }
 
@@ -4626,7 +4620,8 @@ class DataSourceV2ConcurrencyRefreshSuite
         s"SELECT id, sum(salary) FROM $T GROUP BY ROLLUP(id)")
       sql(s"INSERT INTO $T VALUES (3, 300)")
       val result = df.collect()
-      assert(result.length >= 3)
+      // Rollup: 3 per-id groups + 1 grand total (null id) = 4 rows
+      assert(result.length == 4)
     }
   }
 
@@ -4663,9 +4658,9 @@ class DataSourceV2ConcurrencyRefreshSuite
       setupTable()
       val df = spark.table(T)
       sql(s"INSERT INTO $T VALUES (2, 200)")
-      // describe creates a new plan
+      // describe creates a new plan: count, mean, stddev, min, max
       val result = df.describe("salary").collect()
-      assert(result.length > 0)
+      assert(result.length == 5)
     }
   }
 
