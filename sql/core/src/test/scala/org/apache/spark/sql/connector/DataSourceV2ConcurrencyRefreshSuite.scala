@@ -3055,4 +3055,188 @@ class DataSourceV2ConcurrencyRefreshSuite
       sql(s"UNCACHE TABLE IF EXISTS $T")
     }
   }
+
+  // =====================================================================
+  // SPARK TICKET GAPS
+  // E2E tests for scenarios covered by V2TableUtilSuite unit tests
+  // and specific SPARK tickets but missing from our suites.
+  // =====================================================================
+
+  // --- SPARK-54686: nested field additions in arrays/maps ---
+
+  test("[ticket] temp view: new field inside array element struct") {
+    withTable(T) {
+      sql(s"""CREATE TABLE $T
+        (id INT, items ARRAY<STRUCT<name: STRING>>) USING foo""")
+      sql(s"""INSERT INTO $T VALUES
+        (1, array(named_struct('name', 'a')))""")
+      spark.table(T).createOrReplaceTempView("tmp")
+      // Add field inside array element struct
+      cat.alterTable(IDENT,
+        TableChange.addColumn(
+          Array("items", "element", "price"),
+          IntegerType, true))
+      // Temp view: nested addition inside array is incompatible
+      intercept[AnalysisException] {
+        spark.table("tmp").collect()
+      }
+    }
+  }
+
+  test("[ticket] temp view: new field inside map value struct") {
+    withTable(T) {
+      sql(s"""CREATE TABLE $T
+        (id INT, props MAP<STRING, STRUCT<val: INT>>) USING foo""")
+      sql(s"""INSERT INTO $T VALUES
+        (1, map('k', named_struct('val', 10)))""")
+      spark.table(T).createOrReplaceTempView("tmp")
+      // Add field inside map value struct
+      cat.alterTable(IDENT,
+        TableChange.addColumn(
+          Array("props", "value", "extra"),
+          StringType, true))
+      // Temp view: nested addition inside map is incompatible
+      intercept[AnalysisException] {
+        spark.table("tmp").collect()
+      }
+    }
+  }
+
+  // --- V2TableUtilSuite: array/map type changes ---
+
+  test("[ticket] DataFrame: array element type change") {
+    withTable(T) {
+      sql(s"""CREATE TABLE $T
+        (id INT, tags ARRAY<INT>) USING foo""")
+      sql(s"INSERT INTO $T VALUES (1, array(10, 20))")
+      val df = spark.table(T)
+      // Change array element type INT -> STRING
+      cat.alterTable(IDENT,
+        TableChange.updateColumnType(
+          Array("tags", "element"), StringType))
+      // Array element type change is incompatible
+      intercept[AnalysisException] { df.collect() }
+    }
+  }
+
+  test("[ticket] DataFrame: map value type change") {
+    withTable(T) {
+      sql(s"""CREATE TABLE $T
+        (id INT, props MAP<STRING, INT>) USING foo""")
+      sql(s"INSERT INTO $T VALUES (1, map('a', 1))")
+      val df = spark.table(T)
+      // Change map value type INT -> STRING
+      cat.alterTable(IDENT,
+        TableChange.updateColumnType(
+          Array("props", "value"), StringType))
+      intercept[AnalysisException] { df.collect() }
+    }
+  }
+
+  // --- SPARK-55631: ALTER TABLE RENAME invalidates cache ---
+
+  test("[ticket] ALTER TABLE RENAME COLUMN invalidates cache") {
+    withTable(T) {
+      setupTable()
+      sql(s"CACHE TABLE $T")
+      assertCached(spark.table(T))
+      checkAnswer(spark.table(T), Seq(Row(1, 100)))
+      sql(s"ALTER TABLE $T RENAME COLUMN salary TO pay")
+      // Cache should be invalidated, new schema visible
+      val result = spark.table(T).collect()
+      assert(result(0).length == 2)
+    }
+  }
+
+  test("[ticket] ALTER TABLE ALTER COLUMN TYPE invalidates cache") {
+    withTable(T) {
+      setupTable()
+      sql(s"CACHE TABLE $T")
+      assertCached(spark.table(T))
+      sql(s"ALTER TABLE $T ALTER COLUMN salary TYPE BIGINT")
+      // Cache should be invalidated
+      spark.table(T).collect()
+    }
+  }
+
+  // --- SPARK-54004: uncache by unqualified name ---
+
+  test("[ticket] UNCACHE TABLE by unqualified name after USE") {
+    withTable(T) {
+      setupTable()
+      sql(s"CACHE TABLE $T")
+      assertCached(spark.table(T))
+      // Switch to the namespace and uncache by short name
+      sql("USE testcat")
+      sql("USE NAMESPACE ns1.ns2")
+      sql("UNCACHE TABLE tbl")
+      assertNotCached(spark.table(T))
+    }
+  }
+
+  // --- Case-insensitive column matching during refresh ---
+
+  test("[ticket] case-insensitive column matching in refresh") {
+    withTable(T) {
+      // Create with mixed case
+      sql(s"""CREATE TABLE $T
+        (Id INT, Salary INT) USING foo""")
+      sql(s"INSERT INTO $T VALUES (1, 100)")
+      val df = spark.table(T)
+      // Add column with different case
+      sql(s"ALTER TABLE $T ADD COLUMN BONUS INT")
+      // Should succeed: column addition is compatible
+      // regardless of case
+      df.collect()
+    }
+  }
+
+  // --- SPARK-54387: recaching with copyOnLoad ---
+
+  test("[ticket] recaching works with copyOnLoad catalog") {
+    withTable(T) {
+      setupTable()
+      // CACHE TABLE then INSERT (triggers recache)
+      sql(s"CACHE TABLE $T")
+      assertCached(spark.table(T))
+      checkAnswer(spark.table(T), Seq(Row(1, 100)))
+      // Multiple inserts trigger multiple recaches
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+      assertCached(spark.table(T))
+      checkAnswer(
+        spark.table(T),
+        Seq(Row(1, 100), Row(2, 200)))
+      sql(s"INSERT INTO $T VALUES (3, 300)")
+      assertCached(spark.table(T))
+      checkAnswer(
+        spark.table(T),
+        Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
+      sql(s"UNCACHE TABLE IF EXISTS $T")
+    }
+  }
+
+  // --- SPARK-54341: time travel spec preserved in refresh ---
+
+  test("[ticket] time travel table skipped during refresh") {
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    val version = "v1"
+    withTable(T) {
+      sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $T VALUES (1, 100)")
+      cat.pinTable(ident, version)
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+
+      // Time travel DF should be skipped by refresh
+      val tvDf = spark.sql(
+        s"SELECT * FROM $T VERSION AS OF '$version'")
+      checkAnswer(tvDf, Seq(Row(1, 100)))
+
+      // More changes should not affect time travel DF
+      sql(s"INSERT INTO $T VALUES (3, 300)")
+      checkAnswer(tvDf, Seq(Row(1, 100)))
+
+      // Current version DF should see all data
+      assert(spark.table(T).count() == 3)
+    }
+  }
 }
