@@ -1993,6 +1993,115 @@ class DataSourceV2ConcurrencyRefreshSuite
     }
   }
 
+  // V1 insertInto with overwrite mode
+  test("[ok] df.write.insertInto overwrite rejects col removal") {
+    withTable(T) {
+      setupTable()
+      val source = spark.table(T)
+      cat.alterTable(IDENT,
+        TableChange.deleteColumn(Array("salary"), false))
+      checkError(
+        exception = intercept[AnalysisException] {
+          source.write.mode("overwrite").insertInto(T)
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS" +
+          ".COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "errors" -> "- `salary` INT has been removed"))
+    }
+  }
+
+  // V2 writeTo create/replace
+  test("[fixed] writeTo.createOrReplace rejects col removal") {
+    val t2 = "testcat.ns1.ns2.tbl2"
+    withTable(T, t2) {
+      setupTable()
+      sql(s"CREATE TABLE $t2 (id INT, salary INT) USING foo")
+      val source = spark.table(T)
+      cat.alterTable(IDENT,
+        TableChange.deleteColumn(Array("salary"), false))
+      checkError(
+        exception = intercept[AnalysisException] {
+          source.writeTo(t2).createOrReplace()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS" +
+          ".COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "errors" -> "- `salary` INT has been removed"))
+    }
+  }
+
+  // SQL INSERT INTO ... SELECT (position based)
+  test("[ok] SQL INSERT INTO SELECT rejects col count mismatch") {
+    val t2 = "testcat.ns1.ns2.tbl2"
+    withTable(T, t2) {
+      setupTable()
+      sql(s"CREATE TABLE $t2 (id INT) USING foo")
+      // SQL INSERT is position based: source has 2 cols,
+      // target has 1. Rejects with arity mismatch.
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO $t2 SELECT * FROM $T")
+        },
+        condition =
+          "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl2`",
+          "tableColumns" -> "`id`",
+          "dataColumns" -> "`id`, `salary`"))
+    }
+  }
+
+  test("[ok] SQL INSERT INTO by name rejects col mismatch") {
+    val t2 = "testcat.ns1.ns2.tbl2"
+    withTable(T, t2) {
+      setupTable()
+      sql(s"CREATE TABLE $t2 (id INT) USING foo")
+      // INSERT INTO with column list is name-based
+      // source has (id, salary), target only accepts (id)
+      sql(s"INSERT INTO $t2 (id) SELECT id FROM $T")
+      assert(spark.table(t2).count() >= 1)
+    }
+  }
+
+  test("[ok] SQL INSERT OVERWRITE rejects after col removal") {
+    withTable(T) {
+      setupTable()
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+      // Create a temp view as "source" with old schema
+      spark.table(T).createOrReplaceTempView("src")
+      // Remove column from target
+      cat.alterTable(IDENT,
+        TableChange.deleteColumn(Array("salary"), false))
+      // SQL INSERT OVERWRITE from view to modified table
+      // SQL re-analyzes: src still has 2 cols, target has 1
+      intercept[AnalysisException] {
+        sql(s"INSERT OVERWRITE $T SELECT * FROM src")
+      }
+    }
+  }
+
+  // SQL INSERT with stale temp view
+  test("[ok] SQL INSERT from stale DF view after schema change") {
+    val t2 = "testcat.ns1.ns2.tbl2"
+    withTable(T, t2) {
+      setupTable()
+      sql(s"CREATE TABLE $t2 (id INT, salary INT) USING foo")
+      // Create DF temp view capturing old schema
+      spark.table(T).createOrReplaceTempView("src")
+      // Change source table schema
+      cat.alterTable(IDENT,
+        TableChange.deleteColumn(Array("salary"), false))
+      // SQL INSERT from temp view: the view re-resolves
+      // and detects the column removal
+      intercept[AnalysisException] {
+        sql(s"INSERT INTO $t2 SELECT * FROM src")
+      }
+    }
+  }
+
   test("[gap] CTAS from stale source to different table fails") {
     val t2 = "testcat.ns1.ns2.tbl2"
     withTable(T, t2) {
