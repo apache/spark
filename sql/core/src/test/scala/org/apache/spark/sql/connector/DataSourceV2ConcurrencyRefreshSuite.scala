@@ -1865,40 +1865,36 @@ class DataSourceV2ConcurrencyRefreshSuite
   // determineSchemaValidationMode returns PROHIBIT_CHANGES for
   // any plan containing a Command. Verify with various commands.
 
-  // BUG: writeTo/insertInto to the same table does NOT detect
-  // schema changes. The analyzer re-resolves the source DF's
-  // DataSourceV2Relation during the new AppendData analysis,
-  // erasing the captured schema. Then ResolveOutputRelation
-  // silently projects away extra columns to match the target.
-  // The doc says commands should use PROHIBIT_CHANGES.
-  // Fix requires preserving original schema before analysis.
+  // FIX: DataFrameWriterV2.runCommand now validates the source
+  // DF's table versions BEFORE constructing the command, so
+  // schema changes are caught before the analyzer erases them.
 
-  test("[bug] writeTo(sameTable).append() after column removal") {
+  test("[fixed] writeTo(sameTable).append() rejects col removal") {
     withTable(T) {
       setupTable()
       val source = spark.table(T)
       cat.alterTable(IDENT,
         TableChange.deleteColumn(Array("salary"), false))
-      // BUG: silently succeeds, drops salary from write
-      source.writeTo(T).append()
-      assert(spark.table(T).count() >= 1)
+      intercept[AnalysisException] {
+        source.writeTo(T).append()
+      }
     }
   }
 
-  test("[bug] writeTo(sameTable).overwrite() after column removal") {
+  test("[fixed] writeTo(sameTable).overwrite() rejects col removal") {
     withTable(T) {
       setupTable()
       val source = spark.table(T)
       cat.alterTable(IDENT,
         TableChange.deleteColumn(Array("salary"), false))
-      // BUG: same code path as append -- silently adapts
       import org.apache.spark.sql.functions.lit
-      source.writeTo(T).overwrite(lit(true))
-      // If it didn't throw, the bug is confirmed
+      intercept[AnalysisException] {
+        source.writeTo(T).overwrite(lit(true))
+      }
     }
   }
 
-  test("[bug] writeTo(sameTable).overwritePartitions() after col removal") {
+  test("[fixed] writeTo(sameTable).overwritePartitions() rejects") {
     val pt = "testcat.ns1.ns2.ptbl"
     withTable(pt) {
       sql(s"""CREATE TABLE $pt
@@ -1908,49 +1904,46 @@ class DataSourceV2ConcurrencyRefreshSuite
       val ptIdent = Identifier.of(Array("ns1", "ns2"), "ptbl")
       cat.alterTable(ptIdent,
         TableChange.deleteColumn(Array("data"), false))
-      // BUG: same code path -- silently adapts
-      source.writeTo(pt).overwritePartitions()
-      // If it didn't throw, the bug is confirmed
+      intercept[AnalysisException] {
+        source.writeTo(pt).overwritePartitions()
+      }
     }
   }
 
-  test("[bug] df.write.insertInto(sameTable) after column removal") {
+  test("[ok] df.write.insertInto rejects column removal") {
     withTable(T) {
       setupTable()
       val source = spark.table(T)
       cat.alterTable(IDENT,
         TableChange.deleteColumn(Array("salary"), false))
-      // V1 insertInto uses position-based resolution:
-      // source has 2 cols, target has 1 -- correctly rejects
       intercept[AnalysisException] {
         source.write.insertInto(T)
       }
     }
   }
 
-  test("[bug] writeTo(sameTable).append() after type change") {
+  test("[fixed] writeTo(sameTable).append() rejects type change") {
     withTable(T) {
       setupTable()
       val source = spark.table(T)
       cat.alterTable(IDENT,
         TableChange.updateColumnType(
           Array("salary"), LongType))
-      // BUG: type change not detected when writing to same table
-      source.writeTo(T).append()
-      assert(spark.table(T).count() >= 1)
+      intercept[AnalysisException] {
+        source.writeTo(T).append()
+      }
     }
   }
 
-  test("[bug] writeTo(sameTable).append() after column rename") {
+  test("[fixed] writeTo(sameTable).append() rejects col rename") {
     withTable(T) {
       setupTable()
       val source = spark.table(T)
       cat.alterTable(IDENT,
         TableChange.renameColumn(Array("salary"), "pay"))
-      // BUG: rename not detected -- source's salary resolves
-      // to nothing in the target, silently dropped
-      source.writeTo(T).append()
-      assert(spark.table(T).count() >= 1)
+      intercept[AnalysisException] {
+        source.writeTo(T).append()
+      }
     }
   }
 
