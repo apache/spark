@@ -279,7 +279,7 @@ object OrcUtils extends Logging {
       s"array<${getOrcSchemaString(a.elementType)}>"
     case m: MapType =>
       s"map<${getOrcSchemaString(m.keyType)},${getOrcSchemaString(m.valueType)}>"
-    case _: DayTimeIntervalType | _: TimestampNTZType | TimeType => LongType.catalogString
+    case _: DayTimeIntervalType | _: TimestampNTZType | _: TimeType => LongType.catalogString
     case _: YearMonthIntervalType => IntegerType.catalogString
     case _ => dt.catalogString
   }
@@ -303,7 +303,7 @@ object OrcUtils extends Logging {
           val typeDesc = new TypeDescription(TypeDescription.Category.TIMESTAMP)
           typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, t.typeName)
           Some(typeDesc)
-        case TimeType =>
+        case _: TimeType =>
           val typeDesc = new TypeDescription(TypeDescription.Category.LONG)
           typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, TimeType.typeName)
           Some(typeDesc)

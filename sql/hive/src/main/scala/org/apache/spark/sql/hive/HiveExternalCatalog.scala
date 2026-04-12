@@ -1474,7 +1474,8 @@ object HiveExternalCatalog {
   private[spark] def isHiveCompatibleDataType(dt: DataType): Boolean = dt match {
     case _: AnsiIntervalType => false
     case _: TimestampNTZType => false
-    case TimeType => false
+    // TimeType is Hive-compatible as it's stored as BIGINT
+    case _: TimeType => true
     case s: StructType => s.forall(f => isHiveCompatibleDataType(f.dataType))
     case a: ArrayType => isHiveCompatibleDataType(a.elementType)
     case m: MapType =>

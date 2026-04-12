@@ -43,6 +43,12 @@ class TimeType private () extends DatetimeType {
   private[spark] override def asNullable: TimeType = this
 
   /**
+   * For Hive compatibility, TIME type is stored as BIGINT.
+   * Override catalogString to return "bigint" instead of "time".
+   */
+  override def catalogString: String = "bigint"
+
+  /**
    * Ordering for TIME values (microseconds since midnight).
    */
   @transient

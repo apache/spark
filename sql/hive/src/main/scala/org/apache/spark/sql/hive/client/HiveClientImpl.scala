@@ -1054,13 +1054,13 @@ private[hive] object HiveClientImpl extends Logging {
     // the tailing spaces may lost if we are not going to pad it.
     val typeString = if (SQLConf.get.charVarcharAsString) {
       c.dataType match {
-        case TimeType => "bigint"  // TIME is stored as BIGINT in Hive
+        case _: TimeType => "bigint"  // TIME is stored as BIGINT in Hive
         case _ => c.dataType.catalogString
       }
     } else {
       CharVarcharUtils.getRawTypeString(c.metadata).getOrElse(
         c.dataType match {
-          case TimeType => "bigint"  // TIME is stored as BIGINT in Hive
+          case _: TimeType => "bigint"  // TIME is stored as BIGINT in Hive
           case _ => c.dataType.catalogString
         })
     }
