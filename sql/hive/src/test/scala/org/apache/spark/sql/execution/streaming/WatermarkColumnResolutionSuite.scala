@@ -22,12 +22,14 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
 /**
- * Reproduces UNRESOLVED_COLUMN when STREAM JOIN uses WATERMARK with alias.
+ * Regression tests for ResolveEventTimeWatermark in HiveSessionStateBuilder.
  *
- * Uses the Hive session state (production default in Databricks) which is
- * missing ResolveEventTimeWatermark in extendedResolutionRules.
- * This causes UnresolvedEventTimeWatermark (output=Nil) to persist through
- * analysis, blocking column resolution in JOIN conditions.
+ * SPARK-53687 introduced UnresolvedEventTimeWatermark / ResolveEventTimeWatermark but only
+ * added the rule to BaseSessionStateBuilder, missing HiveSessionStateBuilder (used in all
+ * Databricks production environments). Without the rule, UnresolvedEventTimeWatermark
+ * (output=Nil) persists through analysis, breaking any SQL query that uses the WATERMARK clause.
+ *
+ * Uses TestHiveSingleton to go through HiveSessionStateBuilder, matching production behavior.
  */
 class WatermarkColumnResolutionSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
@@ -77,6 +79,17 @@ class WatermarkColumnResolutionSuite extends QueryTest with TestHiveSingleton wi
         |SELECT *
         |FROM STREAM(wm_events) WATERMARK ts DELAY OF INTERVAL 10 SECONDS d
         |ORDER BY d.a
+        |""".stripMargin)
+  }
+
+  test("STREAM with computed WATERMARK expression resolves correctly") {
+    createTestTables()
+    analyzeStreamSQL(
+      """
+        |SELECT *
+        |FROM STREAM(wm_events) WATERMARK CAST(ts AS TIMESTAMP) AS wm_time
+        |  DELAY OF INTERVAL 10 SECONDS d
+        |WHERE d.a > 1
         |""".stripMargin)
   }
 }
