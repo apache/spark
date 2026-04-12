@@ -1865,15 +1865,26 @@ class DataSourceV2ConcurrencyRefreshSuite
   // determineSchemaValidationMode returns PROHIBIT_CHANGES for
   // any plan containing a Command. Verify with various commands.
 
-  test("[gap] writeTo append succeeds after column removal") {
+  test("[gap] writeTo append silently adapts after column removal") {
     withTable(T) {
       setupTable()
       val source = spark.table(T)
-      sql(s"ALTER TABLE $T DROP COLUMN salary")
-      // writeTo().append() re-resolves the source against
-      // the current target schema, so it succeeds even after
-      // column removal. The stale source DF's extra column
-      // is silently dropped during write resolution.
+      cat.alterTable(IDENT,
+        TableChange.deleteColumn(Array("salary"), false))
+      // BUG: writeTo(sameTable).append() does NOT detect the
+      // schema change. The analyzer re-resolves the source's
+      // DataSourceV2Relation during analysis of the AppendData
+      // command, replacing the captured table (with salary)
+      // with a fresh load (without salary). Then
+      // ResolveOutputRelation silently projects away extra
+      // columns to match the target. The refresh phase sees
+      // only the adapted plan and finds no mismatch.
+      //
+      // The doc says commands should use PROHIBIT_CHANGES to
+      // reject any schema change. This is a known divergence.
+      // Fix requires preventing the analyzer from re-resolving
+      // pre-analyzed DataSourceV2Relation nodes in
+      // V2WriteCommand.query.
       source.writeTo(T).append()
       assert(spark.table(T).count() >= 1)
     }
