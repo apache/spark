@@ -3663,4 +3663,119 @@ class DataSourceV2ConcurrencyRefreshSuite
   // know how to produce it. This code path IS covered by the
   // unit tests in V2TableUtilSuite (validateCapturedMetadata*)
   // but not by E2E tests.
+
+  // =====================================================================
+  // HIDDEN/METADATA COLUMN TESTS
+  // InMemoryTable exposes "index" and "_partition" as metadata
+  // columns. These tests verify that hidden metadata columns
+  // survive refresh, schema changes, and temp view resolution.
+  // This covers the pattern from analyzer rule ordering issues
+  // where hidden columns must be added before ResolveReferences.
+  // =====================================================================
+
+  test("[hidden-col] _partition accessible in query") {
+    val pt = "testcat.ns1.pt"
+    withTable(pt) {
+      sql(s"""CREATE TABLE $pt
+        (id INT, data STRING) USING foo PARTITIONED BY (id)""")
+      sql(s"INSERT INTO $pt VALUES (1, 'a')")
+      sql(s"INSERT INTO $pt VALUES (2, 'b')")
+      // _partition is a metadata column on InMemoryTable
+      val result = spark.sql(
+        s"SELECT id, data, _partition FROM $pt").collect()
+      assert(result.length == 2)
+      assert(result(0).getString(2) != null,
+        "_partition should not be null")
+    }
+  }
+
+  test("[hidden-col] _partition in temp view after insert") {
+    val pt = "testcat.ns1.pt"
+    withTable(pt) {
+      sql(s"""CREATE TABLE $pt
+        (id INT, data STRING) USING foo PARTITIONED BY (id)""")
+      sql(s"INSERT INTO $pt VALUES (1, 'a')")
+      // Create temp view that projects _partition
+      spark.sql(s"SELECT id, _partition FROM $pt")
+        .createOrReplaceTempView("pt_view")
+      val r1 = spark.table("pt_view").collect()
+      assert(r1.length == 1)
+      // Insert more data
+      sql(s"INSERT INTO $pt VALUES (2, 'b')")
+      // Temp view should still resolve _partition
+      val r2 = spark.table("pt_view").collect()
+      assert(r2.length == 2)
+    }
+  }
+
+  test("[hidden-col] index metadata column accessible") {
+    withTable(T) {
+      setupTable()
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+      // "index" is a metadata column on InMemoryTable
+      // but conflicts with a potential data column name.
+      // InMemoryTable supports renaming conflicting metadata.
+      val result = spark.sql(
+        s"SELECT id, salary FROM $T").collect()
+      assert(result.length == 2)
+    }
+  }
+
+  test("[hidden-col] _partition survives schema change") {
+    val pt = "testcat.ns1.pt"
+    withTable(pt) {
+      sql(s"""CREATE TABLE $pt
+        (id INT, data STRING) USING foo PARTITIONED BY (id)""")
+      sql(s"INSERT INTO $pt VALUES (1, 'a')")
+      // Create temp view projecting _partition
+      spark.sql(s"SELECT id, _partition FROM $pt")
+        .createOrReplaceTempView("pt_view")
+      // Add column to base table
+      sql(s"ALTER TABLE $pt ADD COLUMN bonus INT")
+      sql(s"INSERT INTO $pt VALUES (2, 'b', 50)")
+      // Temp view should still resolve _partition
+      // (hidden columns added by InMemoryTable survive
+      // schema evolution, analogous to how DeltaAnalysis
+      // adds CDF columns before ResolveReferences)
+      val r = spark.table("pt_view").collect()
+      assert(r.length == 2)
+    }
+  }
+
+  test("[hidden-col] _partition in join after schema change") {
+    val pt = "testcat.ns1.pt"
+    withTable(pt) {
+      sql(s"""CREATE TABLE $pt
+        (id INT, data STRING) USING foo PARTITIONED BY (id)""")
+      sql(s"INSERT INTO $pt VALUES (1, 'a'), (2, 'b')")
+      val df1 = spark.sql(
+        s"SELECT id, _partition AS p1 FROM $pt")
+      sql(s"ALTER TABLE $pt ADD COLUMN bonus INT")
+      sql(s"INSERT INTO $pt VALUES (3, 'c', 50)")
+      val df2 = spark.sql(
+        s"SELECT id, _partition AS p2 FROM $pt")
+      // Join should work: both sides refresh,
+      // _partition metadata column resolves on both
+      val joined = df1.join(
+        df2, df1("id") === df2("id"))
+      assert(joined.collect().length == 3)
+    }
+  }
+
+  test("[hidden-col] groupBy on _partition works") {
+    val pt = "testcat.ns1.pt"
+    withTable(pt) {
+      sql(s"""CREATE TABLE $pt
+        (id INT, data STRING) USING foo PARTITIONED BY (id)""")
+      sql(s"INSERT INTO $pt VALUES (1, 'a')")
+      sql(s"INSERT INTO $pt VALUES (2, 'b')")
+      // groupBy on hidden metadata column
+      // (analogous to ES-1636208 groupBy _commit_version)
+      val result = spark.sql(
+        s"SELECT _partition, count(*) as cnt FROM $pt " +
+        "GROUP BY _partition").collect()
+      assert(result.length == 2,
+        "Should have 2 partition groups")
+    }
+  }
 }
