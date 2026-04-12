@@ -21,7 +21,7 @@ Arrow Python UDFs
 
 .. currentmodule:: pyspark.sql.functions
 
-.. versionadded:: 4.2.0
+.. versionadded:: 4.1.0
 
 Native Arrow UDFs operate directly on ``pyarrow.Array`` objects without converting to Pandas or
 row-by-row Python objects. This preserves the columnar layout end-to-end, avoids unnecessary data
@@ -33,7 +33,8 @@ configuration is required.
 .. note::
 
     Native Arrow UDFs can also be defined via :func:`udf` with ``pyarrow.Array`` type hints.
-    Python type hints are used to detect the function type automatically.
+    Python type hints determine which evaluation type the UDF uses
+    (e.g., arrays-to-array vs. arrays-to-scalar).
 
 Native Arrow UDF Types
 ----------------------
@@ -41,7 +42,7 @@ Native Arrow UDF Types
 Arrays to Array
 ~~~~~~~~~~~~~~~
 
-The type hint is ``pyarrow.Array``, ... -> ``pyarrow.Array``.
+The type hint can be expressed as ``pyarrow.Array``, ... -> ``pyarrow.Array``.
 
 The function takes one or more ``pyarrow.Array`` and outputs one ``pyarrow.Array``.
 The output should always be of the same length as the input.
@@ -63,7 +64,7 @@ The output should always be of the same length as the input.
     # |      JOHN DOE|
     # +--------------+
 
-Arrow UDFs can return struct types:
+Arrow UDFs can return struct results (i.e., multiple named fields):
 
 .. code-block:: python
 
@@ -109,7 +110,7 @@ Arrow UDFs support keyword arguments:
 Iterator of Arrays to Iterator of Arrays
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The type hint is ``Iterator[pyarrow.Array]`` -> ``Iterator[pyarrow.Array]``.
+The type hint can be expressed as ``Iterator[pyarrow.Array]`` -> ``Iterator[pyarrow.Array]``.
 
 The function takes an iterator of ``pyarrow.Array`` and outputs an iterator of ``pyarrow.Array``.
 The length of the entire output should be the same as the entire input.
@@ -139,7 +140,7 @@ This is useful when the UDF execution requires expensive initialization.
 Iterator of Multiple Arrays to Iterator of Arrays
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The type hint is ``Iterator[Tuple[pyarrow.Array, ...]]`` -> ``Iterator[pyarrow.Array]``.
+The type hint can be expressed as ``Iterator[Tuple[pyarrow.Array, ...]]`` -> ``Iterator[pyarrow.Array]``.
 
 The function takes an iterator of a tuple of multiple ``pyarrow.Array`` and outputs an
 iterator of ``pyarrow.Array``. Use this when the UDF requires multiple input columns.
@@ -173,9 +174,10 @@ iterator of ``pyarrow.Array``. Use this when the UDF requires multiple input col
 Arrays to Scalar
 ~~~~~~~~~~~~~~~~
 
-The type hint is ``pyarrow.Array``, ... -> ``Any``.
+The type hint can be expressed as ``pyarrow.Array``, ... -> a scalar type
+(e.g., ``float``, ``int``, or ``pyarrow.Scalar``; not ``pyarrow.Array`` or ``Iterator``).
 
-The function takes ``pyarrow.Array`` and returns a scalar value. The returned scalar can be
+The function takes one or more ``pyarrow.Array`` and returns a scalar value. The returned scalar can be
 a Python primitive type (e.g., ``int`` or ``float``), a NumPy data type, or a ``pyarrow.Scalar``
 instance which supports complex return types.
 
@@ -257,7 +259,7 @@ This UDF can also be used as window functions:
 Iterator of Arrays to Scalar
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The type hint is ``Iterator[pyarrow.Array]`` -> ``Any``.
+The type hint can be expressed as ``Iterator[pyarrow.Array]`` -> a scalar type.
 
 The function takes an iterator of ``pyarrow.Array`` and returns a scalar value. This is useful for
 grouped aggregations where the UDF can process all batches iteratively, which is more
@@ -293,7 +295,7 @@ memory-efficient than loading all data at once.
 Iterator of Multiple Arrays to Scalar
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The type hint is ``Iterator[Tuple[pyarrow.Array, ...]]`` -> ``Any``.
+The type hint can be expressed as ``Iterator[Tuple[pyarrow.Array, ...]]`` -> a scalar type.
 
 The function takes an iterator of a tuple of multiple ``pyarrow.Array`` and returns a scalar value.
 This is useful for grouped aggregations with multiple input columns.
@@ -477,9 +479,11 @@ The user-defined functions do not support conditional expressions or short circu
 in boolean expressions. If the functions can fail on special rows, incorporate the
 condition into the functions.
 
-The data type of returned ``pyarrow.Array`` from the user-defined functions should match the
-defined ``returnType``. When there is a mismatch, Spark might do conversion on the returned data.
-The conversion is not guaranteed to be correct and results should be checked for accuracy.
+The Arrow data type of the returned ``pyarrow.Array`` should match the declared ``returnType``.
+When there is a mismatch, Spark will attempt to convert the returned data to the expected type.
+By default, this conversion uses Arrow's safe casting, which raises an error on overflow or
+precision loss. This behavior is controlled by
+``spark.sql.execution.pandas.convertToArrowArraySafely`` (default ``true`` since Spark 4.1).
 
 Supported SQL types are the same as for Arrow-based conversion. See
 `Supported SQL Types <arrow_pandas.rst#supported-sql-types>`_ for details.
@@ -489,7 +493,6 @@ See Also
 
 .. currentmodule:: pyspark.sql.functions
 
-* :func:`arrow_udf` -- Create a native Arrow UDF
 * :func:`udf` -- Create a Python UDF (with optional Arrow optimization)
 * :func:`arrow_udtf` -- Create a vectorized Arrow UDTF (see `Arrow Python UDTFs <arrow_python_udtf.rst>`_)
 * :func:`pandas_udf` -- Create a Pandas UDF
