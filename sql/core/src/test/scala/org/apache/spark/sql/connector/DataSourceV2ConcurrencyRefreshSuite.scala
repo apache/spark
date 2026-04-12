@@ -1865,28 +1865,138 @@ class DataSourceV2ConcurrencyRefreshSuite
   // determineSchemaValidationMode returns PROHIBIT_CHANGES for
   // any plan containing a Command. Verify with various commands.
 
-  test("[gap] writeTo append silently adapts after column removal") {
+  // BUG: writeTo/insertInto to the same table does NOT detect
+  // schema changes. The analyzer re-resolves the source DF's
+  // DataSourceV2Relation during the new AppendData analysis,
+  // erasing the captured schema. Then ResolveOutputRelation
+  // silently projects away extra columns to match the target.
+  // The doc says commands should use PROHIBIT_CHANGES.
+  // Fix requires preserving original schema before analysis.
+
+  test("[bug] writeTo(sameTable).append() after column removal") {
     withTable(T) {
       setupTable()
       val source = spark.table(T)
       cat.alterTable(IDENT,
         TableChange.deleteColumn(Array("salary"), false))
-      // BUG: writeTo(sameTable).append() does NOT detect the
-      // schema change. The analyzer re-resolves the source's
-      // DataSourceV2Relation during analysis of the AppendData
-      // command, replacing the captured table (with salary)
-      // with a fresh load (without salary). Then
-      // ResolveOutputRelation silently projects away extra
-      // columns to match the target. The refresh phase sees
-      // only the adapted plan and finds no mismatch.
-      //
-      // The doc says commands should use PROHIBIT_CHANGES to
-      // reject any schema change. This is a known divergence.
-      // Fix requires preventing the analyzer from re-resolving
-      // pre-analyzed DataSourceV2Relation nodes in
-      // V2WriteCommand.query.
+      // BUG: silently succeeds, drops salary from write
       source.writeTo(T).append()
       assert(spark.table(T).count() >= 1)
+    }
+  }
+
+  test("[bug] writeTo(sameTable).overwrite() after column removal") {
+    withTable(T) {
+      setupTable()
+      val source = spark.table(T)
+      cat.alterTable(IDENT,
+        TableChange.deleteColumn(Array("salary"), false))
+      // BUG: same code path as append -- silently adapts
+      import org.apache.spark.sql.functions.lit
+      source.writeTo(T).overwrite(lit(true))
+      // If it didn't throw, the bug is confirmed
+    }
+  }
+
+  test("[bug] writeTo(sameTable).overwritePartitions() after col removal") {
+    val pt = "testcat.ns1.ns2.ptbl"
+    withTable(pt) {
+      sql(s"""CREATE TABLE $pt
+        (data STRING, id INT) USING foo PARTITIONED BY (id)""")
+      sql(s"INSERT INTO $pt VALUES ('a', 1)")
+      val source = spark.table(pt)
+      val ptIdent = Identifier.of(Array("ns1", "ns2"), "ptbl")
+      cat.alterTable(ptIdent,
+        TableChange.deleteColumn(Array("data"), false))
+      // BUG: same code path -- silently adapts
+      source.writeTo(pt).overwritePartitions()
+      // If it didn't throw, the bug is confirmed
+    }
+  }
+
+  test("[bug] df.write.insertInto(sameTable) after column removal") {
+    withTable(T) {
+      setupTable()
+      val source = spark.table(T)
+      cat.alterTable(IDENT,
+        TableChange.deleteColumn(Array("salary"), false))
+      // V1 insertInto uses position-based resolution:
+      // source has 2 cols, target has 1 -- correctly rejects
+      intercept[AnalysisException] {
+        source.write.insertInto(T)
+      }
+    }
+  }
+
+  test("[bug] writeTo(sameTable).append() after type change") {
+    withTable(T) {
+      setupTable()
+      val source = spark.table(T)
+      cat.alterTable(IDENT,
+        TableChange.updateColumnType(
+          Array("salary"), LongType))
+      // BUG: type change not detected when writing to same table
+      source.writeTo(T).append()
+      assert(spark.table(T).count() >= 1)
+    }
+  }
+
+  test("[bug] writeTo(sameTable).append() after column rename") {
+    withTable(T) {
+      setupTable()
+      val source = spark.table(T)
+      cat.alterTable(IDENT,
+        TableChange.renameColumn(Array("salary"), "pay"))
+      // BUG: rename not detected -- source's salary resolves
+      // to nothing in the target, silently dropped
+      source.writeTo(T).append()
+      assert(spark.table(T).count() >= 1)
+    }
+  }
+
+  // Contrast: writeTo DIFFERENT table DOES detect schema change
+  test("[bug-contrast] writeTo(differentTable) detects column addition") {
+    val t2 = "testcat.ns1.ns2.tbl2"
+    withTable(T, t2) {
+      setupTable()
+      val source = spark.table(T).filter("id < 10")
+      cat.alterTable(IDENT,
+        TableChange.addColumn(
+          Array("bonus"), StringType, true))
+      // CTAS to different table correctly fails
+      intercept[AnalysisException] {
+        source.writeTo(t2).createOrReplace()
+      }
+    }
+  }
+
+  // --- V1 Writer API tests (correctly reject) ---
+
+  test("[ok] df.write.saveAsTable(append) rejects col removal") {
+    withTable(T) {
+      setupTable()
+      val source = spark.table(T)
+      cat.alterTable(IDENT,
+        TableChange.deleteColumn(Array("salary"), false))
+      // V1 saveAsTable(append) uses name-based AppendData
+      // but detects column arity mismatch -- correctly rejects
+      intercept[AnalysisException] {
+        source.write.mode("append").saveAsTable(T)
+      }
+    }
+  }
+
+  test("[ok] df.write.saveAsTable(overwrite) rejects col removal") {
+    withTable(T) {
+      setupTable()
+      val source = spark.table(T)
+      cat.alterTable(IDENT,
+        TableChange.deleteColumn(Array("salary"), false))
+      // V1 saveAsTable(overwrite) uses ReplaceTableAsSelect
+      // refresh correctly detects COLUMNS_MISMATCH
+      intercept[AnalysisException] {
+        source.write.mode("overwrite").saveAsTable(T)
+      }
     }
   }
 
