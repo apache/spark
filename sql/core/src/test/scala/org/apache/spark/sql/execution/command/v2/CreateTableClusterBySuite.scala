@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryPartitionTable}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
-import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference}
+import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, Transform}
 import org.apache.spark.sql.execution.command
 
 /**
@@ -36,6 +36,40 @@ class CreateTableClusterBySuite extends command.CreateTableClusterBySuiteBase
       .asInstanceOf[InMemoryPartitionTable]
     assert(partTable.partitioning ===
       Array(ClusterByTransform(clusteringColumns.map(FieldReference(_)))))
+  }
+
+  override def validateClusterBy(
+      tableName: String,
+      clusteringColumns: Seq[String],
+      expectedTransforms: Seq[Option[Transform]]): Unit = {
+    val (catalog, namespace, table) = parseTableName(tableName)
+    val catalogPlugin = spark.sessionState.catalogManager.catalog(catalog)
+    val partTable = catalogPlugin.asTableCatalog
+      .loadTable(Identifier.of(Array(namespace), table))
+      .asInstanceOf[InMemoryPartitionTable]
+    val clusterByTransform = partTable.partitioning
+      .collectFirst { case c: ClusterByTransform => c }
+      .getOrElse(fail("No ClusterByTransform found in partitioning"))
+    val actualColumnNames = clusterByTransform.columnNames
+    assert(actualColumnNames.length === clusteringColumns.length)
+    actualColumnNames.zip(clusteringColumns).foreach {
+      case (actual, expectedColName) =>
+        assert(actual.fieldNames().toSeq === Seq(expectedColName))
+    }
+    clusteringColumns.zip(expectedTransforms).zipWithIndex.foreach {
+      case ((_, expectedTransform), idx) =>
+        expectedTransform match {
+          case None =>
+            assert(clusterByTransform.transforms.forall(_.columnIndex != idx),
+              s"Expected no transform for column at index $idx")
+          case Some(transform) =>
+            val actual = clusterByTransform.transforms.find(_.columnIndex == idx)
+            assert(actual.isDefined,
+              s"Expected transform for column at index $idx")
+            assert(actual.get.function === transform.name(),
+              s"Transform name mismatch for column at index $idx")
+        }
+    }
   }
 
   test("test REPLACE TABLE with clustering columns") {

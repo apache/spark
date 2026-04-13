@@ -315,7 +315,7 @@ abstract class InMemoryBaseTable(
         }
       case ClusterByTransform(columnNames) =>
         columnNames.map { colName =>
-          extractor(colName.fieldNames, cleanedSchema, row)._1
+          extractor(colName.asInstanceOf[NamedReference].fieldNames, cleanedSchema, row)._1
         }
     }.toImmutableArraySeq
   }

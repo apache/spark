@@ -848,6 +848,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "CLUSTER_BY_EXPRESSION_INCORRECT_COLUMN_REFERENCE": {
+    "message" : [
+      "CLUSTER BY expression <expressionType> has either no column reference, or a column reference in an unsupported argument position."
+    ],
+    "sqlState" : "42000"
+  },
   "CLUSTERING_COLUMNS_MISMATCH" : {
     "message" : [
       "Specified clustering does not match that of the existing table <tableName>.",

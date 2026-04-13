@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{CheckConstraint, Expression, T
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.connector.catalog.{DefaultValue, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.ArrayImplicits._
@@ -309,9 +310,19 @@ case class AlterColumns(
 case class AlterTableClusterBy(
     table: LogicalPlan, clusterBySpec: Option[ClusterBySpec]) extends AlterTableCommand {
   override def changes: Seq[TableChange] = {
+    val clusterByTransforms = clusterBySpec.map { spec =>
+      if (spec.clusteringColumnTransforms.nonEmpty) {
+        spec.clusteringColumnTransforms.map {
+          case None => java.util.Optional.empty[Transform]()
+          case Some(transform) => java.util.Optional.of[Transform](transform)
+        }.toArray
+      } else {
+        spec.columnNames.map(_ => java.util.Optional.empty[Transform]()).toArray
+      }
+    }.getOrElse(Array.empty[java.util.Optional[Transform]])
     Seq(TableChange.clusterBy(clusterBySpec
       .map(_.columnNames.toArray) // CLUSTER BY (col1, col2, ...)
-      .getOrElse(Array.empty)))
+      .getOrElse(Array.empty), clusterByTransforms))
   }
 
   protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)

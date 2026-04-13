@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, quoteNameParts, QuotingUtils}
-import org.apache.spark.sql.connector.expressions.{BucketTransform, ClusterByTransform, FieldReference, IdentityTransform, LogicalExpressions, Transform}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, ClusterByColumnTransform, ClusterByTransform, FieldReference, IdentityTransform, LiteralValue, LogicalExpressions, NamedReference, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
@@ -56,7 +56,17 @@ private[sql] object CatalogV2Implicits {
   }
 
   implicit class ClusterByHelper(spec: ClusterBySpec) {
-    def asTransform: Transform = clusterBy(spec.columnNames.toArray)
+    def asTransform: Transform = {
+      val transforms = spec.clusteringColumnTransforms.zipWithIndex.collect {
+        case (Some(t), colIdx) =>
+          ClusterByColumnTransform(
+            columnIndex = colIdx,
+            argumentIndex = t.arguments().indexWhere(_.isInstanceOf[NamedReference]),
+            function = t.name(),
+            arguments = t.arguments().collect { case l: LiteralValue[_] => l }.toSeq)
+      }
+      ClusterByTransform(spec.columnNames, transforms)
+    }
   }
 
   implicit class TransformHelper(transforms: Seq[Transform]) {
@@ -80,12 +90,16 @@ private[sql] object CatalogV2Implicits {
               sortCol.map(_.fieldNames.mkString("."))))
           }
 
-        case ClusterByTransform(columnNames) =>
+        case ct @ ClusterByTransform(columnNames) =>
           if (clusterBySpec.nonEmpty) {
             // AstBuilder guarantees that it only passes down one ClusterByTransform.
             throw SparkException.internalError("Cannot have multiple cluster by transforms.")
           }
-          clusterBySpec = Some(ClusterBySpec(columnNames))
+          clusterBySpec = Some(ct match {
+            case c: ClusterByTransform if c.transforms.nonEmpty =>
+              ClusterBySpec(columnNames, c.toClusteringColumnTransforms)
+            case _ => ClusterBySpec(columnNames)
+          })
 
         case transform =>
           throw QueryExecutionErrors.unsupportedPartitionTransformError(transform)

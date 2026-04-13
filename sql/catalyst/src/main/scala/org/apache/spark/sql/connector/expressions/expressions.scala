@@ -158,11 +158,29 @@ private[sql] object BucketTransform {
 }
 
 /**
+ * Minimal description of a per-column transform applied within a CLUSTER BY expression.
+ *
+ * @param columnIndex index into [[ClusterByTransform.columnNames]] identifying the column
+ *                    being transformed.
+ * @param argumentIndex the index in the argument list where the bound clustering column
+ *                      should be substituted. Zero-indexed, and any arguments at or after
+ *                      this index in `arguments` should be shifted to the right by one.
+ * @param function    canonical SQL function name (e.g. "variant_get").
+ * @param arguments   the non-column literal arguments to the function.
+ */
+case class ClusterByColumnTransform(
+    columnIndex: Int,
+    argumentIndex: Int,
+    function: String,
+    arguments: Seq[LiteralValue[_]])
+
+/**
  * This class represents a transform for `ClusterBySpec`. This is used to bundle
  * ClusterBySpec in CreateTable's partitioning transforms to pass it down to analyzer.
  */
 final case class ClusterByTransform(
-    columnNames: Seq[NamedReference]) extends RewritableTransform {
+    columnNames: Seq[NamedReference],
+    transforms: Seq[ClusterByColumnTransform] = Seq.empty) extends RewritableTransform {
 
   override val name: String = "cluster_by"
 
@@ -174,6 +192,20 @@ final case class ClusterByTransform(
 
   override def withReferences(newReferences: Seq[NamedReference]): Transform = {
     this.copy(columnNames = newReferences)
+  }
+
+  /** Converts [[transforms]] to a per-column `Seq[Option[Transform]]` for [[ClusterBySpec]]. */
+  def toClusteringColumnTransforms: Seq[Option[Transform]] = {
+    columnNames.indices.map { idx =>
+      transforms.find(_.columnIndex == idx).map { t =>
+        val args = t.arguments.toArray
+
+        new ClusteringColumnTransform(
+          t.function,
+          args.slice(0, t.argumentIndex) ++
+            Array[Expression](columnNames(idx)) ++ args.slice(t.argumentIndex, args.length))
+      }
+    }
   }
 }
 
@@ -188,6 +220,42 @@ object ClusterByTransform {
       case _ =>
         None
     }
+}
+
+/**
+ * A Transform implementation that wraps a column transform expression for CLUSTER BY.
+ * For example, `CLUSTER BY (UPPER(col))` produces a ClusteringColumnTransform
+ * wrapping the UPPER function with `col` as a NamedReference argument. Used with ClusterBySpec.
+ */
+final class ClusteringColumnTransform(
+    override val name: String,
+    private val args: Array[Expression]) extends Transform {
+
+  override def arguments(): Array[Expression] = args
+
+  override def toString: String = {
+    s"$name(${arguments().map(_.toString).mkString(", ")})"
+  }
+
+  override def describe: String = toString
+
+  override def equals(obj: Any): Boolean = obj match {
+    case other: Transform =>
+      other.name() == this.name &&
+        java.util.Arrays.equals(
+          other.arguments().asInstanceOf[Array[Object]],
+          this.arguments().asInstanceOf[Array[Object]])
+    case _ => false
+  }
+
+  override def hashCode(): Int =
+    java.util.Objects.hash(
+      name,
+      Integer.valueOf(java.util.Arrays.hashCode(arguments().asInstanceOf[Array[Object]])))
+
+  override def references(): Array[NamedReference] = {
+    args.collect { case n: NamedReference => n }
+  }
 }
 
 private[sql] final case class SortedBucketTransform(
@@ -387,7 +455,7 @@ private[sql] object HoursTransform {
   }
 }
 
-private[sql] final case class LiteralValue[T](value: T, dataType: DataType) extends Literal[T] {
+final case class LiteralValue[T](value: T, dataType: DataType) extends Literal[T] {
   override def toString: String = dataType match {
     case StringType => s"'${s"$value".replace("'", "''")}'"
     case BinaryType =>

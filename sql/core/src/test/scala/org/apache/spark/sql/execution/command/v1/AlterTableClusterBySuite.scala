@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
-import org.apache.spark.sql.connector.expressions.FieldReference
+import org.apache.spark.sql.connector.expressions.{FieldReference, Transform}
 import org.apache.spark.sql.execution.command
 
 /**
@@ -38,6 +38,28 @@ trait AlterTableClusterBySuiteBase extends command.AlterTableClusterBySuiteBase
     val (_, db, t) = parseTableName(tableName)
     val table = catalog.getTableMetadata(TableIdentifier(t, Some(db)))
     assert(table.clusterBySpec === Some(ClusterBySpec(clusteringColumns.map(FieldReference(_)))))
+  }
+
+  override def validateClusterBy(
+      tableName: String,
+      clusteringColumns: Seq[String],
+      expectedTransforms: Seq[Option[Transform]]): Unit = {
+    val catalog = spark.sessionState.catalog
+    val (_, db, t) = parseTableName(tableName)
+    val table = catalog.getTableMetadata(TableIdentifier(t, Some(db)))
+    val spec = table.clusterBySpec.get
+    assert(spec.columnNames === clusteringColumns.map(FieldReference(_)))
+    val actualTransforms = if (spec.clusteringColumnTransforms.nonEmpty) {
+      spec.clusteringColumnTransforms
+    } else {
+      clusteringColumns.map(_ => None)
+    }
+    assert(actualTransforms.length === expectedTransforms.length,
+      s"Expected ${expectedTransforms.length} transforms but got ${actualTransforms.length}")
+    actualTransforms.zip(expectedTransforms).foreach { case (actual, expected) =>
+      assert(actual === expected,
+        s"Transform mismatch: actual=$actual, expected=$expected")
+    }
   }
 }
 

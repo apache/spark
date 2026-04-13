@@ -4873,13 +4873,26 @@ class AstBuilder extends DataTypeAstBuilder
           })
   }
 
+  override def visitExpressionOrMultipartIdentifier(
+      ctx: ExpressionOrMultipartIdentifierContext): Either[Expression, Seq[String]] =
+    withOrigin(ctx) {
+      if (ctx.expression() != null) {
+        scala.util.Left(expression(ctx.expression()))
+      } else {
+        scala.util.Right(typedVisit[Seq[String]](ctx.multipartIdentifier()))
+      }
+    }
+
   /**
    * Create a [[ClusterBySpec]].
    */
   override def visitClusterBySpec(ctx: ClusterBySpecContext): ClusterBySpec = withOrigin(ctx) {
-    val columnNames = ctx.multipartIdentifierList.multipartIdentifier.asScala
-      .map(typedVisit[Seq[String]]).map(FieldReference(_)).toSeq
-    ClusterBySpec(columnNames)
+    val columnReferences =
+      ctx.expressionOrMultipartIdentifierList.expressionOrMultipartIdentifier
+        .asScala
+        .map(visitExpressionOrMultipartIdentifier)
+        .toSeq
+    ClusterBySpec.fromExpressions(columnReferences)
   }
 
   /**
