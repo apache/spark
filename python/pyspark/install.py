@@ -106,7 +106,9 @@ def convert_old_hadoop_version(spark_version: str, hadoop_version: str) -> str:
         "without": "without",
         "without-hadoop": "without-hadoop",
     }
-    spark_version_parts = re.search("^spark-([0-9]+)\\.([0-9]+)\\.[0-9]+(?:\\.dev[0-9]+)?$", spark_version)
+    spark_version_parts = re.search(
+        "^spark-([0-9]+)\\.([0-9]+)\\.[0-9]+(?:\\.dev[0-9]+)?$", spark_version
+    )
     assert spark_version_parts is not None
     spark_major_version = int(spark_version_parts.group(1))
     spark_minor_version = int(spark_version_parts.group(2))
