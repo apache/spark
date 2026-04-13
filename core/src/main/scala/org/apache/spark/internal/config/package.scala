@@ -1955,6 +1955,7 @@ package object config {
       .doc("Maximum number of spill files to merge simultaneously in UnsafeExternalSorter. " +
         "When the number of spill files exceeds this value, a multi-round merge is performed " +
         "to limit the number of concurrently open file readers and avoid OOM during sort-merge. " +
+        "A smaller value uses less memory but incurs more intermediate disk I/O. " +
         "Set to -1 to disable bounded merging (legacy behavior).")
       .internal()
       .version("4.2.0")

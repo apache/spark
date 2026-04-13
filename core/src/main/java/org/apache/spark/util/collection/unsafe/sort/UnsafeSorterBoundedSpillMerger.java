@@ -44,6 +44,11 @@ import org.apache.spark.storage.BlockManager;
  * <p>Unlike the default single-round merge in {@link UnsafeSorterSpillMerger} which opens
  * all spill readers simultaneously (~3MB per reader), this approach caps concurrent readers
  * at {@code mergeFactor}, making memory usage predictable regardless of spill count.</p>
+ *
+ * <p><b>Trade-off:</b> Intermediate merge rounds incur additional disk I/O — each record
+ * is read and rewritten once per intermediate round. A smaller merge factor requires more
+ * rounds (and thus more I/O), while a larger factor uses more memory. The default factor
+ * of 64 typically requires at most one intermediate round for up to ~4000 spill files.</p>
  */
 final class UnsafeSorterBoundedSpillMerger {
 
@@ -95,6 +100,7 @@ final class UnsafeSorterBoundedSpillMerger {
     while (spillsToMerge.size() > mergeFactor) {
       round++;
       List<UnsafeSorterSpillWriter> nextRoundSpills = new ArrayList<>();
+      long roundBytesWritten = 0;
 
       logger.info("Bounded merge round {}: merging {} spill files with merge factor {}",
           MDC.of(LogKeys.MERGE_ROUND, round),
@@ -109,14 +115,21 @@ final class UnsafeSorterBoundedSpillMerger {
           // Single file in this group, no merge needed — carry forward
           nextRoundSpills.add(group.get(0));
         } else {
-          UnsafeSorterSpillWriter merged = mergeGroupToSpill(group);
+          ShuffleWriteMetrics groupMetrics = new ShuffleWriteMetrics();
+          UnsafeSorterSpillWriter merged = mergeGroupToSpill(group, groupMetrics);
           nextRoundSpills.add(merged);
+          roundBytesWritten += groupMetrics.bytesWritten();
 
           // Delete intermediate files that were consumed. Original spill files
           // are not deleted here — those are managed by UnsafeExternalSorter.
           deleteIntermediateFiles(group);
         }
       }
+
+      logger.info("Bounded merge round {} complete: wrote {} bytes to {} intermediate files",
+          MDC.of(LogKeys.MERGE_ROUND, round),
+          MDC.of(LogKeys.MERGE_BYTES_WRITTEN, roundBytesWritten),
+          MDC.of(LogKeys.NUM_SPILL_WRITERS, nextRoundSpills.size()));
 
       // If no merging occurred this round (e.g., all groups were size 1 due to
       // high per-writer record counts), break to avoid an infinite loop.
@@ -179,7 +192,8 @@ final class UnsafeSorterBoundedSpillMerger {
    * Merges a group of spill writers into a single new spill file.
    */
   private UnsafeSorterSpillWriter mergeGroupToSpill(
-      List<UnsafeSorterSpillWriter> group) throws IOException {
+      List<UnsafeSorterSpillWriter> group,
+      ShuffleWriteMetrics writeMetrics) throws IOException {
     long totalRecords = 0;
     UnsafeSorterSpillMerger merger = new UnsafeSorterSpillMerger(
         recordComparator, prefixComparator, group.size());
@@ -194,7 +208,6 @@ final class UnsafeSorterBoundedSpillMerger {
       throw new IllegalStateException(
           "Group record count exceeds Integer.MAX_VALUE: " + totalRecords);
     }
-    ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
     UnsafeSorterSpillWriter outputWriter = new UnsafeSorterSpillWriter(
         blockManager, fileBufferSizeBytes, writeMetrics, (int) totalRecords);
 

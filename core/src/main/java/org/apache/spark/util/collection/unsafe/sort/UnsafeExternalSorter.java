@@ -629,7 +629,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     return inMemSorter.hasSpaceForAnotherRecord();
   }
 
- @VisibleForTesting 
+  @VisibleForTesting
   void setSpillMergeFactor(int mergeFactor) {
     this.spillMergeFactor = mergeFactor;
   }
