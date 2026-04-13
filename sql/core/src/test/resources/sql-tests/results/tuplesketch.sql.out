@@ -757,7 +757,7 @@ SELECT tuple_sketch_estimate_double(
     theta_sketch_agg(key2)))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12), 12, sum)):double>
+struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12, QUICKSELECT), 12, sum)):double>
 -- !query output
 11.0
 
@@ -769,7 +769,7 @@ SELECT tuple_sketch_estimate_double(
     theta_sketch_agg(key2), 15))
 FROM t_long_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 15, sum), theta_sketch_agg(key2, 12), 15, sum)):double>
+struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 15, sum), theta_sketch_agg(key2, 12, QUICKSELECT), 15, sum)):double>
 -- !query output
 11.0
 
@@ -781,7 +781,7 @@ SELECT tuple_sketch_estimate_double(
     theta_sketch_agg(key2)))
 FROM t_double_double_1_1_1_4_through_1_5_1_8
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12), 12, sum)):double>
+struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12, QUICKSELECT), 12, sum)):double>
 -- !query output
 8.0
 
@@ -793,7 +793,7 @@ SELECT tuple_sketch_estimate_double(
     theta_sketch_agg(key2), 14))
 FROM t_string_double_a_d_through_e_h
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12), 14, sum)):double>
+struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12, QUICKSELECT), 14, sum)):double>
 -- !query output
 8.0
 
@@ -805,7 +805,7 @@ SELECT tuple_sketch_estimate_double(
     theta_sketch_agg(key2), 12, 'sum'))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12), 12, sum)):double>
+struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12, QUICKSELECT), 12, sum)):double>
 -- !query output
 11.0
 
@@ -817,7 +817,7 @@ SELECT tuple_sketch_estimate_integer(
     theta_sketch_agg(key2)))
 FROM t_int_int_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_integer(tuple_union_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, sum), theta_sketch_agg(key2, 12), 12, sum)):double>
+struct<tuple_sketch_estimate_integer(tuple_union_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, sum), theta_sketch_agg(key2, 12, QUICKSELECT), 12, sum)):double>
 -- !query output
 11.0
 
@@ -829,7 +829,7 @@ SELECT tuple_sketch_estimate_integer(
     theta_sketch_agg(key2), 12, 'sum'))
 FROM t_int_int_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_integer(tuple_union_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, sum), theta_sketch_agg(key2, 12), 12, sum)):double>
+struct<tuple_sketch_estimate_integer(tuple_union_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, sum), theta_sketch_agg(key2, 12, QUICKSELECT), 12, sum)):double>
 -- !query output
 11.0
 
@@ -841,7 +841,7 @@ SELECT tuple_sketch_estimate_double(
     theta_sketch_agg(key2)))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_intersection_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12), sum)):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12, QUICKSELECT), sum)):double>
 -- !query output
 3.0
 
@@ -853,7 +853,7 @@ SELECT tuple_sketch_estimate_double(
     theta_sketch_agg(key2)))
 FROM t_long_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_intersection_theta_double(tuple_sketch_agg_double(key1, val1, 5, sum), theta_sketch_agg(key2, 12), sum)):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_theta_double(tuple_sketch_agg_double(key1, val1, 5, sum), theta_sketch_agg(key2, 12, QUICKSELECT), sum)):double>
 -- !query output
 3.0
 
@@ -865,7 +865,7 @@ SELECT tuple_sketch_estimate_double(
     theta_sketch_agg(key2)))
 FROM t_double_double_1_1_1_4_through_1_5_1_8
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_intersection_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12), sum)):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12, QUICKSELECT), sum)):double>
 -- !query output
 2.0
 
@@ -877,7 +877,7 @@ SELECT tuple_sketch_estimate_double(
     theta_sketch_agg(key2)))
 FROM t_string_double_a_d_through_e_h
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_intersection_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12), sum)):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12, QUICKSELECT), sum)):double>
 -- !query output
 2.0
 
@@ -889,7 +889,7 @@ SELECT tuple_sketch_estimate_double(
     theta_sketch_agg(key2), 'min'))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_intersection_theta_double(tuple_sketch_agg_double(key1, val1, 12, min), theta_sketch_agg(key2, 12), min)):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_theta_double(tuple_sketch_agg_double(key1, val1, 12, min), theta_sketch_agg(key2, 12, QUICKSELECT), min)):double>
 -- !query output
 3.0
 
@@ -901,7 +901,7 @@ SELECT tuple_sketch_estimate_integer(
     theta_sketch_agg(key2)))
 FROM t_int_int_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_integer(tuple_intersection_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, sum), theta_sketch_agg(key2, 12), sum)):double>
+struct<tuple_sketch_estimate_integer(tuple_intersection_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, sum), theta_sketch_agg(key2, 12, QUICKSELECT), sum)):double>
 -- !query output
 3.0
 
@@ -913,7 +913,7 @@ SELECT tuple_sketch_estimate_integer(
     theta_sketch_agg(key2), 'sum'))
 FROM t_int_int_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_integer(tuple_intersection_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, sum), theta_sketch_agg(key2, 12), sum)):double>
+struct<tuple_sketch_estimate_integer(tuple_intersection_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, sum), theta_sketch_agg(key2, 12, QUICKSELECT), sum)):double>
 -- !query output
 3.0
 
@@ -925,7 +925,7 @@ SELECT tuple_sketch_estimate_double(
     theta_sketch_agg(key2)))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_difference_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12))):double>
+struct<tuple_sketch_estimate_double(tuple_difference_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12, QUICKSELECT))):double>
 -- !query output
 4.0
 
@@ -937,7 +937,7 @@ SELECT tuple_sketch_estimate_double(
     theta_sketch_agg(key2)))
 FROM t_long_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_difference_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12))):double>
+struct<tuple_sketch_estimate_double(tuple_difference_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12, QUICKSELECT))):double>
 -- !query output
 4.0
 
@@ -949,7 +949,7 @@ SELECT tuple_sketch_estimate_double(
     theta_sketch_agg(key2)))
 FROM t_double_double_1_1_1_4_through_1_5_1_8
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_difference_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12))):double>
+struct<tuple_sketch_estimate_double(tuple_difference_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12, QUICKSELECT))):double>
 -- !query output
 3.0
 
@@ -961,7 +961,7 @@ SELECT tuple_sketch_estimate_double(
     theta_sketch_agg(key2)))
 FROM t_string_double_a_d_through_e_h
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_difference_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12))):double>
+struct<tuple_sketch_estimate_double(tuple_difference_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12, QUICKSELECT))):double>
 -- !query output
 3.0
 
@@ -973,7 +973,7 @@ SELECT tuple_sketch_estimate_integer(
     theta_sketch_agg(key2)))
 FROM t_int_int_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_integer(tuple_difference_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, sum), theta_sketch_agg(key2, 12))):double>
+struct<tuple_sketch_estimate_integer(tuple_difference_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, sum), theta_sketch_agg(key2, 12, QUICKSELECT))):double>
 -- !query output
 4.0
 
@@ -985,7 +985,7 @@ SELECT tuple_sketch_estimate_double(
     theta_sketch_agg(key2), 12, 'max'))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, max), theta_sketch_agg(key2, 12), 12, max)):double>
+struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, max), theta_sketch_agg(key2, 12, QUICKSELECT), 12, max)):double>
 -- !query output
 11.0
 
@@ -997,7 +997,7 @@ SELECT tuple_sketch_estimate_double(
     theta_sketch_agg(key2), 12, 'min'))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, min), theta_sketch_agg(key2, 12), 12, min)):double>
+struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, min), theta_sketch_agg(key2, 12, QUICKSELECT), 12, min)):double>
 -- !query output
 11.0
 
@@ -1009,7 +1009,7 @@ SELECT tuple_sketch_estimate_double(
     theta_sketch_agg(key2), 12, 'alwaysone'))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, alwaysone), theta_sketch_agg(key2, 12), 12, alwaysone)):double>
+struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, alwaysone), theta_sketch_agg(key2, 12, QUICKSELECT), 12, alwaysone)):double>
 -- !query output
 11.0
 
@@ -1021,7 +1021,7 @@ SELECT tuple_sketch_estimate_integer(
     theta_sketch_agg(key2), 12, 'max'))
 FROM t_int_int_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_integer(tuple_union_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, max), theta_sketch_agg(key2, 12), 12, max)):double>
+struct<tuple_sketch_estimate_integer(tuple_union_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, max), theta_sketch_agg(key2, 12, QUICKSELECT), 12, max)):double>
 -- !query output
 11.0
 
@@ -1033,7 +1033,7 @@ SELECT tuple_sketch_estimate_integer(
     theta_sketch_agg(key2), 12, 'min'))
 FROM t_int_int_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_integer(tuple_union_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, min), theta_sketch_agg(key2, 12), 12, min)):double>
+struct<tuple_sketch_estimate_integer(tuple_union_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, min), theta_sketch_agg(key2, 12, QUICKSELECT), 12, min)):double>
 -- !query output
 11.0
 
@@ -1045,7 +1045,7 @@ SELECT tuple_sketch_estimate_integer(
     theta_sketch_agg(key2), 12, 'alwaysone'))
 FROM t_int_int_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_integer(tuple_union_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, alwaysone), theta_sketch_agg(key2, 12), 12, alwaysone)):double>
+struct<tuple_sketch_estimate_integer(tuple_union_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, alwaysone), theta_sketch_agg(key2, 12, QUICKSELECT), 12, alwaysone)):double>
 -- !query output
 11.0
 
@@ -1057,7 +1057,7 @@ SELECT tuple_sketch_estimate_double(
     theta_sketch_agg(key2), 'max'))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_intersection_theta_double(tuple_sketch_agg_double(key1, val1, 12, max), theta_sketch_agg(key2, 12), max)):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_theta_double(tuple_sketch_agg_double(key1, val1, 12, max), theta_sketch_agg(key2, 12, QUICKSELECT), max)):double>
 -- !query output
 3.0
 
@@ -1069,7 +1069,7 @@ SELECT tuple_sketch_estimate_double(
     theta_sketch_agg(key2), 'alwaysone'))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_intersection_theta_double(tuple_sketch_agg_double(key1, val1, 12, alwaysone), theta_sketch_agg(key2, 12), alwaysone)):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_theta_double(tuple_sketch_agg_double(key1, val1, 12, alwaysone), theta_sketch_agg(key2, 12, QUICKSELECT), alwaysone)):double>
 -- !query output
 3.0
 
@@ -1081,7 +1081,7 @@ SELECT tuple_sketch_estimate_integer(
     theta_sketch_agg(key2), 'max'))
 FROM t_int_int_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_integer(tuple_intersection_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, max), theta_sketch_agg(key2, 12), max)):double>
+struct<tuple_sketch_estimate_integer(tuple_intersection_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, max), theta_sketch_agg(key2, 12, QUICKSELECT), max)):double>
 -- !query output
 3.0
 
@@ -1093,7 +1093,7 @@ SELECT tuple_sketch_estimate_integer(
     theta_sketch_agg(key2), 'min'))
 FROM t_int_int_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_integer(tuple_intersection_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, min), theta_sketch_agg(key2, 12), min)):double>
+struct<tuple_sketch_estimate_integer(tuple_intersection_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, min), theta_sketch_agg(key2, 12, QUICKSELECT), min)):double>
 -- !query output
 3.0
 
@@ -1105,7 +1105,7 @@ SELECT tuple_sketch_estimate_integer(
     theta_sketch_agg(key2), 'alwaysone'))
 FROM t_int_int_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_integer(tuple_intersection_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, alwaysone), theta_sketch_agg(key2, 12), alwaysone)):double>
+struct<tuple_sketch_estimate_integer(tuple_intersection_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, alwaysone), theta_sketch_agg(key2, 12, QUICKSELECT), alwaysone)):double>
 -- !query output
 3.0
 
@@ -2601,7 +2601,7 @@ SELECT tuple_sketch_estimate_double(
     second => theta_sketch_agg(key2)))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12), 12, sum)):double>
+struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12, QUICKSELECT), 12, sum)):double>
 -- !query output
 11.0
 
@@ -2614,7 +2614,7 @@ SELECT tuple_sketch_estimate_double(
     lgNomEntries => 14))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12), 14, sum)):double>
+struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12, QUICKSELECT), 14, sum)):double>
 -- !query output
 11.0
 
@@ -2627,7 +2627,7 @@ SELECT tuple_sketch_estimate_double(
     mode => 'max'))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12), 12, max)):double>
+struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12, QUICKSELECT), 12, max)):double>
 -- !query output
 11.0
 
@@ -2641,7 +2641,7 @@ SELECT tuple_sketch_estimate_double(
     first => tuple_sketch_agg_double(key1, val1)))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12), 15, min)):double>
+struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12, QUICKSELECT), 15, min)):double>
 -- !query output
 11.0
 
@@ -2654,7 +2654,7 @@ SELECT tuple_sketch_estimate_integer(
     lgNomEntries => 14))
 FROM t_int_int_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate_integer(tuple_union_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, sum), theta_sketch_agg(key2, 12), 14, sum)):double>
+struct<tuple_sketch_estimate_integer(tuple_union_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, sum), theta_sketch_agg(key2, 12, QUICKSELECT), 14, sum)):double>
 -- !query output
 11.0
 
@@ -3366,7 +3366,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"STRING\"",
     "paramIndex" : "third",
     "requiredType" : "\"INT\"",
-    "sqlExpr" : "\"tuple_union_theta_double(tuple_sketch_agg_double(col1, 1.0, 12, sum), theta_sketch_agg(col2, 12), invalid, sum)\""
+    "sqlExpr" : "\"tuple_union_theta_double(tuple_sketch_agg_double(col1, 1.0, 12, sum), theta_sketch_agg(col2, 12, QUICKSELECT), invalid, sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3396,7 +3396,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "hint" : "",
     "msg" : "[TUPLE_INVALID_SKETCH_MODE] Invalid call to `tuple_union_theta_double`: mode 'invalid_mode' is not supported. Valid modes are: sum, min, max, alwaysone. SQLSTATE: 22023",
-    "sqlExpr" : "\"tuple_union_theta_double(tuple_sketch_agg_double(col1, 1.0, 12, sum), theta_sketch_agg(col2, 12), 12, invalid_mode)\""
+    "sqlExpr" : "\"tuple_union_theta_double(tuple_sketch_agg_double(col1, 1.0, 12, sum), theta_sketch_agg(col2, 12, QUICKSELECT), 12, invalid_mode)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3603,7 +3603,7 @@ org.apache.spark.SparkRuntimeException
 SELECT tuple_union_theta_double(CAST(NULL AS BINARY), theta_sketch_agg(key1))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_union_theta_double(CAST(NULL AS BINARY), theta_sketch_agg(key1, 12), 12, sum):binary>
+struct<tuple_union_theta_double(CAST(NULL AS BINARY), theta_sketch_agg(key1, 12, QUICKSELECT), 12, sum):binary>
 -- !query output
 NULL
 
@@ -3629,7 +3629,7 @@ NULL
 SELECT tuple_intersection_theta_double(CAST(NULL AS BINARY), theta_sketch_agg(key1))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_intersection_theta_double(CAST(NULL AS BINARY), theta_sketch_agg(key1, 12), sum):binary>
+struct<tuple_intersection_theta_double(CAST(NULL AS BINARY), theta_sketch_agg(key1, 12, QUICKSELECT), sum):binary>
 -- !query output
 NULL
 
@@ -3655,7 +3655,7 @@ NULL
 SELECT tuple_difference_theta_double(CAST(NULL AS BINARY), theta_sketch_agg(key1))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_difference_theta_double(CAST(NULL AS BINARY), theta_sketch_agg(key1, 12)):binary>
+struct<tuple_difference_theta_double(CAST(NULL AS BINARY), theta_sketch_agg(key1, 12, QUICKSELECT)):binary>
 -- !query output
 NULL
 
