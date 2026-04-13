@@ -85,7 +85,7 @@ class ProgressReporterSuite extends StreamTest {
             assert(i >= 0 && p.length > i + 1)
           }
         },
-        AssertOnQuery("idle trigger must reset metrics") { q =>
+        Execute("idle trigger must reset metrics") { q =>
           val p = q.recentProgress.filter(_.stateOperators.nonEmpty)
           val i = p.lastIndexWhere(_.stateOperators.head.numRowsRemoved > 0)
           assert(i >= 0, "no eviction batch found")
@@ -94,7 +94,6 @@ class ProgressReporterSuite extends StreamTest {
           assert(so.numRowsUpdated === 0, s"numRowsUpdated=${so.numRowsUpdated}")
           assert(so.numRowsDroppedByWatermark === 0,
             s"numRowsDroppedByWatermark=${so.numRowsDroppedByWatermark}")
-          true
         },
         StopStream
       )
