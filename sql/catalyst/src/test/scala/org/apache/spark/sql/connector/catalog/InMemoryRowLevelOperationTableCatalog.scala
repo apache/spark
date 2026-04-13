@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.catalog
 
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.connector.catalog.transactions.{Transaction, TransactionInfo}
+import org.apache.spark.sql.types.StructType
 
 class InMemoryRowLevelOperationTableCatalog
     extends InMemoryTableCatalog
@@ -55,11 +56,7 @@ class InMemoryRowLevelOperationTableCatalog
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
     val table = loadTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
     val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
-    val schema = CatalogV2Util.applySchemaChanges(
-      table.schema,
-      changes,
-      tableProvider = Some("in-memory"),
-      statementType = "ALTER TABLE")
+    val schema = computeAlterTableSchema(table.schema, changes.toSeq)
     val partitioning = CatalogV2Util.applyClusterByChanges(table.partitioning, schema, changes)
     val constraints = CatalogV2Util.collectConstraintChanges(table, changes)
 
@@ -79,6 +76,16 @@ class InMemoryRowLevelOperationTableCatalog
     tables.put(ident, newTable)
 
     newTable
+  }
+
+  /**
+   * Computes the schema that would result from applying `changes` to `currentSchema`.
+   * Overriding this allows subclasses to simulate catalogs that selectively ignore some changes
+   * (e.g. [[PartialSchemaEvolutionCatalog]]).
+   */
+  def computeAlterTableSchema(currentSchema: StructType, changes: Seq[TableChange]): StructType = {
+    CatalogV2Util.applySchemaChanges(
+      currentSchema, changes, tableProvider = Some("in-memory"), statementType = "ALTER TABLE")
   }
 }
 
@@ -108,4 +115,12 @@ class PartialSchemaEvolutionCatalog extends InMemoryRowLevelOperationTableCatalo
     tables.put(ident, newTable)
     newTable
   }
+
+  // When used inside a transaction, TxnTableCatalog.alterTable uses this method to compute
+  // the resulting schema instead of calling CatalogV2Util.applySchemaChanges directly.
+  // Returning the current schema unchanged mirrors the behaviour of alterTable above (silently
+  // ignore all column changes), so ResolveSchemaEvolution can still detect pending changes.
+  override def computeAlterTableSchema(
+      currentSchema: StructType,
+      changes: Seq[TableChange]): StructType = currentSchema
 }

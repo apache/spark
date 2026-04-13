@@ -128,9 +128,12 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
     // AlterTable may be called by ResolveSchemaEvolution when schema evolution is enabled. Thus,
     // it needs to be transactional. The schema changes are only propagated to the delegate at
     // commit time.
+    //
+    // We delegate schema computation to the underlying catalog so that catalogs that selectively
+    // ignore some changes (e.g. PartialSchemaEvolutionCatalog) have the same behaviour inside a
+    // transaction. This lets ResolveSchemaEvolution detect pending changes correctly.
     val txnTable = tables.get(ident)
-    val schema = CatalogV2Util.applySchemaChanges(
-      txnTable.schema, changes, tableProvider = Some("in-memory"), statementType = "ALTER TABLE")
+    val schema = delegate.computeAlterTableSchema(txnTable.schema, changes.toSeq)
 
     if (schema.fields.isEmpty) {
       throw new IllegalArgumentException(s"Cannot drop all fields")
