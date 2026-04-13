@@ -43,6 +43,12 @@ class TimeType private () extends DatetimeType {
   private[spark] override def asNullable: TimeType = this
 
   /**
+   * The type name for TIME type in JSON serialization and SQL.
+   * Includes precision (6) for microsecond precision.
+   */
+  override def typeName: String = "time(6)"
+
+  /**
    * For Hive compatibility, TIME type is stored as BIGINT.
    * Override catalogString to return "bigint" instead of "time".
    */
