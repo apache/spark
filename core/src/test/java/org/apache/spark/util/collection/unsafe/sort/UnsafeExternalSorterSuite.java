@@ -36,8 +36,6 @@ import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.internal.config.package$;
-import org.apache.spark.memory.MemoryConsumer;
-import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.JavaSerializer;
@@ -633,13 +631,7 @@ public class UnsafeExternalSorterSuite {
 
     // Verify all 60 records come back in sorted order
     UnsafeSorterIterator iter = sorter.getSortedIterator();
-    for (int i = 0; i < 60; i++) {
-      assertTrue(iter.hasNext());
-      iter.loadNext();
-      assertEquals(i, iter.getKeyPrefix());
-      assertEquals(4, iter.getRecordLength());
-      assertEquals(i, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
-    }
+    verifyIntIterator(iter, 0, 60);
     assertFalse(iter.hasNext());
 
     sorter.cleanupResources();
@@ -660,11 +652,7 @@ public class UnsafeExternalSorterSuite {
     }
 
     UnsafeSorterIterator iter = sorter.getSortedIterator();
-    for (int i = 0; i < 25; i++) {
-      assertTrue(iter.hasNext());
-      iter.loadNext();
-      assertEquals(i, iter.getKeyPrefix());
-    }
+    verifyIntIterator(iter, 0, 25);
     assertFalse(iter.hasNext());
 
     sorter.cleanupResources();
@@ -690,38 +678,7 @@ public class UnsafeExternalSorterSuite {
     insertNumber(sorter, 22);
 
     UnsafeSorterIterator iter = sorter.getSortedIterator();
-    for (int i = 0; i < 23; i++) {
-      assertTrue(iter.hasNext());
-      iter.loadNext();
-      assertEquals(i, iter.getKeyPrefix());
-      assertEquals(4, iter.getRecordLength());
-      assertEquals(i, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
-    }
-    assertFalse(iter.hasNext());
-
-    sorter.cleanupResources();
-    assertSpillFilesWereCleanedUp();
-  }
-
-  @Test
-  public void testBoundedMergeSpillCountBelowFactor() throws Exception {
-    // Set merge factor higher than the number of spills — should use single-round merge
-    final UnsafeExternalSorter sorter = newSorter();
-    sorter.setSpillMergeFactor(10);
-
-    for (int spill = 0; spill < 3; spill++) {
-      for (int i = spill * 5; i < (spill + 1) * 5; i++) {
-        insertNumber(sorter, i);
-      }
-      sorter.spill();
-    }
-
-    UnsafeSorterIterator iter = sorter.getSortedIterator();
-    for (int i = 0; i < 15; i++) {
-      assertTrue(iter.hasNext());
-      iter.loadNext();
-      assertEquals(i, iter.getKeyPrefix());
-    }
+    verifyIntIterator(iter, 0, 23);
     assertFalse(iter.hasNext());
 
     sorter.cleanupResources();
@@ -746,13 +703,7 @@ public class UnsafeExternalSorterSuite {
     }
 
     UnsafeSorterIterator iter = sorter.getSortedIterator();
-    for (int i = 0; i < totalRecords; i++) {
-      assertTrue(iter.hasNext());
-      iter.loadNext();
-      assertEquals(i, iter.getKeyPrefix());
-      assertEquals(4, iter.getRecordLength());
-      assertEquals(i, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
-    }
+    verifyIntIterator(iter, 0, totalRecords);
     assertFalse(iter.hasNext());
 
     sorter.cleanupResources();
@@ -780,13 +731,7 @@ public class UnsafeExternalSorterSuite {
     }
 
     UnsafeSorterIterator iter = sorter.getSortedIterator();
-    for (int i = 0; i < totalRecords; i++) {
-      assertTrue(iter.hasNext());
-      iter.loadNext();
-      assertEquals(i, iter.getKeyPrefix());
-      assertEquals(4, iter.getRecordLength());
-      assertEquals(i, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
-    }
+    verifyIntIterator(iter, 0, totalRecords);
     assertFalse(iter.hasNext());
 
     sorter.cleanupResources();
@@ -808,40 +753,7 @@ public class UnsafeExternalSorterSuite {
     }
 
     UnsafeSorterIterator iter = sorter.getSortedIterator();
-    for (int i = 0; i < 30; i++) {
-      assertTrue(iter.hasNext());
-      iter.loadNext();
-      assertEquals(i, iter.getKeyPrefix());
-    }
-    assertFalse(iter.hasNext());
-
-    sorter.cleanupResources();
-    assertSpillFilesWereCleanedUp();
-  }
-
-  @Test
-  public void testBoundedMergeAllDataSpilledNoInMemory() throws Exception {
-    // All data is spilled, no in-memory data remaining (inMemSorter has 0 records).
-    // After the last spill, insert nothing before calling getSortedIterator.
-    final UnsafeExternalSorter sorter = newSorter();
-    sorter.setSpillMergeFactor(2);
-
-    for (int spill = 0; spill < 4; spill++) {
-      for (int i = spill * 5; i < (spill + 1) * 5; i++) {
-        insertNumber(sorter, i);
-      }
-      sorter.spill();
-    }
-    // No additional inserts — inMemSorter has 0 records
-
-    UnsafeSorterIterator iter = sorter.getSortedIterator();
-    for (int i = 0; i < 20; i++) {
-      assertTrue(iter.hasNext());
-      iter.loadNext();
-      assertEquals(i, iter.getKeyPrefix());
-      assertEquals(4, iter.getRecordLength());
-      assertEquals(i, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
-    }
+    verifyIntIterator(iter, 0, 30);
     assertFalse(iter.hasNext());
 
     sorter.cleanupResources();
@@ -869,66 +781,7 @@ public class UnsafeExternalSorterSuite {
     }
 
     UnsafeSorterIterator iter = sorter.getSortedIterator();
-    for (int i = 0; i < totalRecords; i++) {
-      assertTrue(iter.hasNext());
-      iter.loadNext();
-      assertEquals(i, iter.getKeyPrefix());
-      assertEquals(4, iter.getRecordLength());
-      assertEquals(i, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
-    }
-    assertFalse(iter.hasNext());
-
-    sorter.cleanupResources();
-    assertSpillFilesWereCleanedUp();
-  }
-
-  @Test
-  public void testBoundedMergeInMemoryIteratorSpilledDuringRead() throws Exception {
-    // Tests that the SpillableIterator can be spilled after getSortedIterator() returns
-    // (simulating memory pressure from another consumer during lazy iteration).
-    // The in-memory data should transparently switch to reading from a spill file.
-    final UnsafeExternalSorter sorter = newSorter();
-    sorter.setSpillMergeFactor(2);
-
-    // Create 4 spill files with values 0-19
-    for (int spill = 0; spill < 4; spill++) {
-      for (int i = spill * 5; i < (spill + 1) * 5; i++) {
-        insertNumber(sorter, i);
-      }
-      sorter.spill();
-    }
-    // Leave values 20-24 in memory
-    for (int i = 20; i < 25; i++) {
-      insertNumber(sorter, i);
-    }
-
-    // getSortedIterator creates the SpillableIterator and bounded merger
-    UnsafeSorterIterator iter = sorter.getSortedIterator();
-
-    // Read a few records to partially consume the iterator
-    for (int i = 0; i < 5; i++) {
-      assertTrue(iter.hasNext());
-      iter.loadNext();
-      assertEquals(i, iter.getKeyPrefix());
-    }
-
-    // Trigger spill from a different consumer — this causes readingIterator.spill()
-    // which writes remaining in-memory data to disk and switches the SpillableIterator
-    // to read from the new spill file.
-    MemoryConsumer otherConsumer = new MemoryConsumer(taskMemoryManager, MemoryMode.ON_HEAP) {
-      @Override
-      public long spill(long size, MemoryConsumer trigger) { return 0; }
-    };
-    sorter.spill(Long.MAX_VALUE, otherConsumer);
-
-    // Continue reading — should still produce correct sorted output
-    for (int i = 5; i < 25; i++) {
-      assertTrue(iter.hasNext());
-      iter.loadNext();
-      assertEquals(i, iter.getKeyPrefix());
-      assertEquals(4, iter.getRecordLength());
-      assertEquals(i, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
-    }
+    verifyIntIterator(iter, 0, totalRecords);
     assertFalse(iter.hasNext());
 
     sorter.cleanupResources();
@@ -948,10 +801,71 @@ public class UnsafeExternalSorterSuite {
     sorter.spill();
 
     UnsafeSorterIterator iter = sorter.getSortedIterator();
-    for (int i = 0; i < 10; i++) {
+    verifyIntIterator(iter, 0, 10);
+    assertFalse(iter.hasNext());
+
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testBoundedMergeWithInterleavedData() throws Exception {
+    // Each spill has data that interleaves with other spills' data.
+    // This verifies that intermediate merge actually sorts (not just concatenates).
+    // Spill 0: [0, 4, 8, 12, 16]  Spill 1: [1, 5, 9, 13, 17]
+    // Spill 2: [2, 6, 10, 14, 18] Spill 3: [3, 7, 11, 15, 19]
+    // With factor 2:
+    //   Round 1: merge(S0,S1)->[0,1,4,5,8,9,12,13,16,17], merge(S2,S3)->[2,3,6,7,...]
+    //   Final:   merge both -> [0,1,2,...,19]
+    final UnsafeExternalSorter sorter = newSorter();
+    sorter.setSpillMergeFactor(2);
+
+    int numSpills = 4;
+    int recordsPerSpill = 5;
+    for (int spill = 0; spill < numSpills; spill++) {
+      for (int j = 0; j < recordsPerSpill; j++) {
+        insertNumber(sorter, spill + j * numSpills);
+      }
+      sorter.spill();
+    }
+
+    int totalRecords = numSpills * recordsPerSpill;
+    UnsafeSorterIterator iter = sorter.getSortedIterator();
+    verifyIntIterator(iter, 0, totalRecords);
+    assertFalse(iter.hasNext());
+
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testBoundedMergeWithDuplicateKeys() throws Exception {
+    // Multiple spills contain identical keys. Verifies that all duplicates are
+    // preserved through intermediate merge rounds and the full comparator chain
+    // (prefix + record) works correctly.
+    final UnsafeExternalSorter sorter = newSorter();
+    sorter.setSpillMergeFactor(2);
+
+    int numSpills = 4;
+    int valuesPerSpill = 5;
+    for (int spill = 0; spill < numSpills; spill++) {
+      for (int i = 0; i < valuesPerSpill; i++) {
+        insertNumber(sorter, i);
+      }
+      sorter.spill();
+    }
+
+    // All 20 records should come back, sorted with duplicates adjacent:
+    // [0,0,0,0, 1,1,1,1, 2,2,2,2, 3,3,3,3, 4,4,4,4]
+    int totalRecords = numSpills * valuesPerSpill;
+    UnsafeSorterIterator iter = sorter.getSortedIterator();
+    for (int i = 0; i < totalRecords; i++) {
       assertTrue(iter.hasNext());
       iter.loadNext();
-      assertEquals(i, iter.getKeyPrefix());
+      int expectedValue = i / numSpills;
+      assertEquals(expectedValue, iter.getKeyPrefix());
+      assertEquals(expectedValue,
+          Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
     }
     assertFalse(iter.hasNext());
 

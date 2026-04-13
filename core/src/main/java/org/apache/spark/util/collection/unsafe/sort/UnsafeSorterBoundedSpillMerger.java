@@ -190,8 +190,10 @@ final class UnsafeSorterBoundedSpillMerger {
       merger.addSpillIfNotEmpty(reader);
     }
 
-    assert totalRecords <= Integer.MAX_VALUE :
-        "Group record count exceeds Integer.MAX_VALUE: " + totalRecords;
+    if (totalRecords > Integer.MAX_VALUE) {
+      throw new IllegalStateException(
+          "Group record count exceeds Integer.MAX_VALUE: " + totalRecords);
+    }
     ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
     UnsafeSorterSpillWriter outputWriter = new UnsafeSorterSpillWriter(
         blockManager, fileBufferSizeBytes, writeMetrics, (int) totalRecords);
