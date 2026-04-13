@@ -18,39 +18,10 @@
 #
 
 import argparse
-import os
-import re
 import sys
 import traceback
 
-try:
-    import jira.client
-
-    JIRA_IMPORTED = True
-except ImportError:
-    JIRA_IMPORTED = False
-
-# ASF JIRA access token
-JIRA_ACCESS_TOKEN = os.environ.get("JIRA_ACCESS_TOKEN")
-JIRA_API_BASE = "https://issues.apache.org/jira"
-
-
-def fail(msg):
-    print(msg)
-    sys.exit(-1)
-
-
-def get_jira_client():
-    return jira.client.JIRA(
-        {"server": JIRA_API_BASE}, token_auth=JIRA_ACCESS_TOKEN, timeout=(3.05, 30)
-    )
-
-
-def list_components(asf_jira):
-    components = asf_jira.project_components("SPARK")
-    components = [c for c in components if not c.raw.get("archived", False)]
-    for c in sorted(components, key=lambda x: x.name):
-        print(c.name)
+from spark_jira_utils import create_jira_issue, get_jira_client, list_components
 
 
 def main():
@@ -72,35 +43,8 @@ def main():
     )
     args = parser.parse_args()
 
-    def check_jira_access():
-        errors = []
-        if not JIRA_IMPORTED:
-            errors.append("jira-python library not installed, run 'pip install jira'")
-        if not JIRA_ACCESS_TOKEN:
-            errors.append("JIRA_ACCESS_TOKEN env-var not set")
-        if errors:
-            fail("Cannot create JIRA ticket automatically (%s). "
-                 "Please create the ticket manually at %s"
-                 % ("; ".join(errors), JIRA_API_BASE))
-        return get_jira_client()
-
-    def detect_affected_version(asf_jira):
-        versions = asf_jira.project_versions("SPARK")
-        versions = [
-            x
-            for x in versions
-            if not x.raw["released"]
-            and not x.raw["archived"]
-            and re.match(r"\d+\.\d+\.\d+", x.name)
-        ]
-        versions = sorted(versions, key=lambda x: x.name, reverse=True)
-        if not versions:
-            fail("Cannot detect affected version. "
-                 "Please create the ticket manually at %s" % JIRA_API_BASE)
-        return versions[0].name
-
     if args.list_components:
-        asf_jira = check_jira_access()
+        asf_jira = get_jira_client()
         list_components(asf_jira)
         return
 
@@ -116,29 +60,10 @@ def main():
     if not args.parent and not args.type:
         parser.error("-t/--type is required when not creating a subtask")
 
-    asf_jira = check_jira_access()
-    affected_version = detect_affected_version(asf_jira)
-
-    issue_dict = {
-        "project": {"key": "SPARK"},
-        "summary": args.title,
-        "description": "",
-        "versions": [{"name": affected_version}],
-    }
-
-    issue_dict["components"] = [{"name": args.component}]
-
-    if args.parent:
-        issue_dict["issuetype"] = {"name": "Sub-task"}
-        issue_dict["parent"] = {"key": args.parent}
-    else:
-        issue_dict["issuetype"] = {"name": args.type}
-
-    try:
-        new_issue = asf_jira.create_issue(fields=issue_dict)
-        print(new_issue.key)
-    except Exception as e:
-        fail("Failed to create JIRA issue: %s" % e)
+    asf_jira = get_jira_client()
+    jira_id = create_jira_issue(asf_jira, args.title, args.component,
+                                parent=args.parent, issue_type=args.type)
+    print(jira_id)
 
 
 if __name__ == "__main__":
