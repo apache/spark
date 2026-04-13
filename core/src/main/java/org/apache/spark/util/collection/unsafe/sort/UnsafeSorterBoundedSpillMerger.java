@@ -61,6 +61,7 @@ final class UnsafeSorterBoundedSpillMerger {
   private final BlockManager blockManager;
   private final SerializerManager serializerManager;
   private final int fileBufferSizeBytes;
+  private int intermediateRoundsCompleted;
   // Tracks files created by intermediate merge rounds, so we only delete these
   // (not original spill files that may be carried forward across rounds).
   private final Set<File> intermediateFiles = new HashSet<>();
@@ -130,6 +131,7 @@ final class UnsafeSorterBoundedSpillMerger {
           MDC.of(LogKeys.MERGE_ROUND, round),
           MDC.of(LogKeys.MERGE_BYTES_WRITTEN, roundBytesWritten),
           MDC.of(LogKeys.NUM_SPILL_WRITERS, nextRoundSpills.size()));
+      intermediateRoundsCompleted++;
 
       // If no merging occurred this round (e.g., all groups were size 1 due to
       // high per-writer record counts), break to avoid an infinite loop.
@@ -238,6 +240,10 @@ final class UnsafeSorterBoundedSpillMerger {
         }
       }
     }
+  }
+
+  int getIntermediateRoundsCompleted() {
+    return intermediateRoundsCompleted;
   }
 
   /**

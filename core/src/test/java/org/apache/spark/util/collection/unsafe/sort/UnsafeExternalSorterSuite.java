@@ -632,8 +632,10 @@ public class UnsafeExternalSorterSuite {
       sorter.spill();
     }
 
-    // Verify all 60 records come back in sorted order
+    // Verify bounded merge was triggered with 1 intermediate round
+    // 6 spills, factor 3: round 1 merges [3,3] → 2 files, then final merge
     UnsafeSorterIterator iter = sorter.getSortedIterator();
+    assertEquals(1, sorter.getSpillMergeRounds());
     verifyIntIterator(iter, 0, 60);
     assertFalse(iter.hasNext());
 
@@ -655,6 +657,7 @@ public class UnsafeExternalSorterSuite {
     }
 
     UnsafeSorterIterator iter = sorter.getSortedIterator();
+    assertEquals(0, sorter.getSpillMergeRounds());
     verifyIntIterator(iter, 0, 25);
     assertFalse(iter.hasNext());
 
@@ -680,7 +683,9 @@ public class UnsafeExternalSorterSuite {
     insertNumber(sorter, 21);
     insertNumber(sorter, 22);
 
+    // 4 spills, factor 2: round 1 merges [2,2] → 2 files, then final merge
     UnsafeSorterIterator iter = sorter.getSortedIterator();
+    assertEquals(1, sorter.getSpillMergeRounds());
     verifyIntIterator(iter, 0, 23);
     assertFalse(iter.hasNext());
 
@@ -705,7 +710,9 @@ public class UnsafeExternalSorterSuite {
       sorter.spill();
     }
 
+    // 8 spills, factor 2: round 1 [2,2,2,2]→4, round 2 [2,2]→2, then final
     UnsafeSorterIterator iter = sorter.getSortedIterator();
+    assertEquals(2, sorter.getSpillMergeRounds());
     verifyIntIterator(iter, 0, totalRecords);
     assertFalse(iter.hasNext());
 
@@ -755,7 +762,9 @@ public class UnsafeExternalSorterSuite {
       sorter.spill();
     }
 
+    // 5 spills == factor 5: single-round merge, no bounded merge triggered
     UnsafeSorterIterator iter = sorter.getSortedIterator();
+    assertEquals(0, sorter.getSpillMergeRounds());
     verifyIntIterator(iter, 0, 30);
     assertFalse(iter.hasNext());
 
@@ -783,7 +792,9 @@ public class UnsafeExternalSorterSuite {
       sorter.spill();
     }
 
+    // 20 spills, factor 3: round 1 → 7 files, round 2 → 3 files, then final
     UnsafeSorterIterator iter = sorter.getSortedIterator();
+    assertEquals(2, sorter.getSpillMergeRounds());
     verifyIntIterator(iter, 0, totalRecords);
     assertFalse(iter.hasNext());
 

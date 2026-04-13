@@ -635,6 +635,11 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     this.spillMergeFactor = mergeFactor;
   }
 
+  @VisibleForTesting
+  int getSpillMergeRounds() {
+    return boundedMerger == null ? 0 : boundedMerger.getIntermediateRoundsCompleted();
+  }
+
   private static void spillIterator(UnsafeSorterIterator inMemIterator,
       UnsafeSorterSpillWriter spillWriter) throws IOException {
     while (inMemIterator.hasNext()) {
