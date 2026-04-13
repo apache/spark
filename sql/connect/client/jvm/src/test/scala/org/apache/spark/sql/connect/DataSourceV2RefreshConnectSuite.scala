@@ -89,9 +89,9 @@ class DataSourceV2RefreshConnectSuite
           s"ALTER TABLE $t RENAME COLUMN salary TO pay"),
       sqlViewOk = false,
       dfOk = true),
+    // InMemoryTable throws ClassCastException for type widening:
+    // stored Integer values cannot be read as Long.
     Mod(
-      // InMemoryTable throws ClassCastException for type widening:
-      // stored Integer values cannot be read as Long.
       "type widening INT to BIGINT",
       t =>
         spark.sql(
@@ -215,7 +215,9 @@ class DataSourceV2RefreshConnectSuite
         if (mod.dfOk) {
           df.collect()
         } else {
-          assertThrows[Exception] { df.collect() }
+          assertThrows[Exception] {
+            df.collect()
+          }
         }
       }
     }
@@ -290,7 +292,9 @@ class DataSourceV2RefreshConnectSuite
         if (mod.dfOk) {
           df.collect()
         } else {
-          assertThrows[Exception] { df.collect() }
+          assertThrows[Exception] {
+            df.collect()
+          }
         }
       }
     }
@@ -407,7 +411,9 @@ class DataSourceV2RefreshConnectSuite
       spark.sql(
         s"ALTER TABLE $T ALTER COLUMN salary TYPE BIGINT")
       spark.sql(s"INSERT INTO $T VALUES (2, 200)")
-      assertThrows[Exception] { df.collect() }
+      assertThrows[Exception] {
+        df.collect()
+      }
     }
   }
 

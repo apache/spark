@@ -139,7 +139,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     // Real connectors (Delta/Iceberg) handle this correctly.
     Mod(
       "type widening INT to BIGINT",
-      t => spark.sql(s"ALTER TABLE $t ALTER COLUMN salary TYPE BIGINT"),
+      t =>
+        spark.sql(
+          s"ALTER TABLE $t ALTER COLUMN salary TYPE BIGINT"),
       sqlViewOk = false,
       dfOk = false),
     Mod(
@@ -250,7 +252,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         if (mod.dfOk) {
           df.collect()
         } else {
-          assertThrows[Exception] { df.collect() }
+          assertThrows[Exception] {
+            df.collect()
+          }
         }
       }
     }
@@ -281,7 +285,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
             assert(r2.length == 1)
           }
         } else {
-          assertThrows[Exception] { df.collect() }
+          assertThrows[Exception] {
+            df.collect()
+          }
         }
       }
     }
@@ -330,7 +336,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         if (mod.dfOk) {
           df.collect()
         } else {
-          assertThrows[Exception] { df.collect() }
+          assertThrows[Exception] {
+            df.collect()
+          }
         }
       }
     }
@@ -457,16 +465,22 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
               barrier.await(30, TimeUnit.SECONDS)
               for (_ <- 1 to 10) {
                 try spark.sql(s"SELECT * FROM $T").collect()
-                catch { case e: Throwable if isExpectedError(e) => }
+                catch {
+                  case e: Throwable if isExpectedError(e) =>
+                }
               }
-            } catch { case e: Throwable => errors.add(e) }
+            } catch {
+              case e: Throwable => errors.add(e)
+            }
           })
 
           val writer = exec.submit(new Runnable {
             override def run(): Unit = try {
               barrier.await(30, TimeUnit.SECONDS)
               mod.fn(T)
-            } catch { case e: Throwable => errors.add(e) }
+            } catch {
+              case e: Throwable => errors.add(e)
+            }
           })
 
           reader.get(60, TimeUnit.SECONDS)
@@ -500,9 +514,13 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
                 barrier.await(30, TimeUnit.SECONDS)
                 for (_ <- 1 to 5) {
                   try spark.sql(s"SELECT * FROM $T").collect()
-                  catch { case e: Throwable if isExpectedError(e) => }
+                  catch {
+                  case e: Throwable if isExpectedError(e) =>
                 }
-              } catch { case e: Throwable => errors.add(e) }
+                }
+              } catch {
+              case e: Throwable => errors.add(e)
+            }
             })
           }
 
@@ -510,7 +528,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
             override def run(): Unit = try {
               barrier.await(30, TimeUnit.SECONDS)
               mod.fn(T)
-            } catch { case e: Throwable => errors.add(e) }
+            } catch {
+              case e: Throwable => errors.add(e)
+            }
           })
 
           (readers :+ writer).foreach(_.get(60, TimeUnit.SECONDS))
@@ -543,16 +563,22 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
               barrier.await(30, TimeUnit.SECONDS)
               for (_ <- 1 to 10) {
                 try spark.sql("SELECT * FROM tmp").collect()
-                catch { case e: Throwable if isExpectedError(e) => }
+                catch {
+                  case e: Throwable if isExpectedError(e) =>
+                }
               }
-            } catch { case e: Throwable => errors.add(e) }
+            } catch {
+              case e: Throwable => errors.add(e)
+            }
           })
 
           val writer = exec.submit(new Runnable {
             override def run(): Unit = try {
               barrier.await(30, TimeUnit.SECONDS)
               mod.fn(T)
-            } catch { case e: Throwable => errors.add(e) }
+            } catch {
+              case e: Throwable => errors.add(e)
+            }
           })
 
           reader.get(60, TimeUnit.SECONDS)
@@ -585,16 +611,22 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
               barrier.await(30, TimeUnit.SECONDS)
               for (_ <- 1 to 10) {
                 try spark.sql(s"SELECT * FROM $T").collect()
-                catch { case e: Throwable if isExpectedError(e) => }
+                catch {
+                  case e: Throwable if isExpectedError(e) =>
+                }
               }
-            } catch { case e: Throwable => errors.add(e) }
+            } catch {
+              case e: Throwable => errors.add(e)
+            }
           })
 
           val writer = exec.submit(new Runnable {
             override def run(): Unit = try {
               barrier.await(30, TimeUnit.SECONDS)
               mod.fn(T)
-            } catch { case e: Throwable => errors.add(e) }
+            } catch {
+              case e: Throwable => errors.add(e)
+            }
           })
 
           reader.get(60, TimeUnit.SECONDS)
@@ -649,7 +681,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
           if (mod.dfOk) {
             df.collect()
           } else {
-            assertThrows[Exception] { df.collect() }
+            assertThrows[Exception] {
+            df.collect()
+          }
           }
         }
       }
@@ -713,7 +747,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         s"ALTER TABLE $T ALTER COLUMN salary TYPE BIGINT")
       spark.sql(s"ALTER TABLE $T ADD COLUMN bonus INT")
       // InMemoryTable throws ClassCastException: INT data read as BIGINT
-      assertThrows[Exception] { df.collect() }
+      assertThrows[Exception] {
+        df.collect()
+      }
     }
   }
 
@@ -779,7 +815,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
             barrier.await(30, TimeUnit.SECONDS)
             try spark.sql(
               s"ALTER TABLE $T ADD COLUMN extra STRING")
-            catch { case _: Exception => }
+            catch {
+              case _: Exception =>
+            }
           }
         })
         val renamer = exec.submit(new Runnable {
@@ -787,7 +825,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
             barrier.await(30, TimeUnit.SECONDS)
             try spark.sql(
               s"ALTER TABLE $T RENAME COLUMN bonus TO reward")
-            catch { case _: Exception => }
+            catch {
+              case _: Exception =>
+            }
           }
         })
         adder.get(30, TimeUnit.SECONDS)
@@ -815,9 +855,13 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
               barrier.await(30, TimeUnit.SECONDS)
               for (_ <- 1 to 20) {
                 try spark.sql(s"SELECT * FROM $T").collect()
-                catch { case e: Throwable if isExpectedError(e) => }
+                catch {
+                  case e: Throwable if isExpectedError(e) =>
+                }
               }
-            } catch { case e: Throwable => errors.add(e) }
+            } catch {
+              case e: Throwable => errors.add(e)
+            }
           })
         }
         val writer = exec.submit(new Runnable {
@@ -826,9 +870,13 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
             for (i <- 2 to 10) {
               try spark.sql(
                 s"INSERT INTO $T VALUES ($i, ${i * 100})")
-              catch { case _: Exception => }
+              catch {
+              case _: Exception =>
             }
-          } catch { case e: Throwable => errors.add(e) }
+            }
+          } catch {
+            case e: Throwable => errors.add(e)
+          }
         })
         (readers :+ writer).foreach(_.get(120, TimeUnit.SECONDS))
         assert(errors.isEmpty,
@@ -854,9 +902,13 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
               barrier.await(30, TimeUnit.SECONDS)
               for (_ <- 1 to 15) {
                 try spark.sql(s"SELECT * FROM $T").collect()
-                catch { case e: Throwable if isExpectedError(e) => }
+                catch {
+                  case e: Throwable if isExpectedError(e) =>
+                }
               }
-            } catch { case e: Throwable => errors.add(e) }
+            } catch {
+              case e: Throwable => errors.add(e)
+            }
           })
         }
         val schemaChanger = exec.submit(new Runnable {
@@ -866,7 +918,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
               spark.sql(
                 s"ALTER TABLE $T ADD COLUMN col_$i INT")
             }
-          } catch { case e: Throwable => errors.add(e) }
+          } catch {
+            case e: Throwable => errors.add(e)
+          }
         })
         (readers :+ schemaChanger).foreach(
           _.get(120, TimeUnit.SECONDS))
@@ -893,9 +947,13 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
               barrier.await(30, TimeUnit.SECONDS)
               for (_ <- 1 to 15) {
                 try spark.sql("SELECT * FROM tmp").collect()
-                catch { case e: Throwable if isExpectedError(e) => }
+                catch {
+                  case e: Throwable if isExpectedError(e) =>
+                }
               }
-            } catch { case e: Throwable => errors.add(e) }
+            } catch {
+              case e: Throwable => errors.add(e)
+            }
           })
         }
         val writers = (1 to 2).map { i =>
@@ -906,9 +964,13 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
                 try spark.sql(
                   s"INSERT INTO $T VALUES " +
                   s"(${i * 10 + j}, ${i * 10 + j})")
-                catch { case _: Exception => }
+                catch {
+              case _: Exception =>
+            }
               }
-            } catch { case e: Throwable => errors.add(e) }
+            } catch {
+              case e: Throwable => errors.add(e)
+            }
           })
         }
         val allFutures: Seq[java.util.concurrent.Future[_]] =
@@ -946,14 +1008,18 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
                   case e: Throwable if isExpectedError(e) =>
                 }
               }
-            } catch { case e: Throwable => errors.add(e) }
+            } catch {
+              case e: Throwable => errors.add(e)
+            }
           })
 
           val writer = exec.submit(new Runnable {
             override def run(): Unit = try {
               barrier.await(30, TimeUnit.SECONDS)
               mod.fn(T)
-            } catch { case e: Throwable => errors.add(e) }
+            } catch {
+              case e: Throwable => errors.add(e)
+            }
           })
 
           reader.get(60, TimeUnit.SECONDS)
@@ -998,7 +1064,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       spark.sql(
         s"ALTER TABLE $T ALTER COLUMN salary TYPE BIGINT")
       spark.sql(s"INSERT INTO $T VALUES (2, 200)")
-      assertThrows[Exception] { df.collect() }
+      assertThrows[Exception] {
+        df.collect()
+      }
     }
   }
 
@@ -1276,7 +1344,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
                 case e: Throwable if isExpectedError(e) =>
               }
             }
-          } catch { case e: Throwable => errors.add(e) }
+          } catch {
+            case e: Throwable => errors.add(e)
+          }
         })
         val writer = exec.submit(new Runnable {
           override def run(): Unit = try {
@@ -1284,17 +1354,25 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
             for (i <- 2 to 5) {
               try spark.sql(
                 s"INSERT INTO $T VALUES ($i, ${i * 100})")
-              catch { case _: Exception => }
+              catch {
+              case _: Exception =>
             }
-          } catch { case e: Throwable => errors.add(e) }
+            }
+          } catch {
+            case e: Throwable => errors.add(e)
+          }
         })
         val schemaChanger = exec.submit(new Runnable {
           override def run(): Unit = try {
             barrier.await(30, TimeUnit.SECONDS)
             try spark.sql(
               s"ALTER TABLE $T ADD COLUMN bonus INT")
-            catch { case _: Exception => }
-          } catch { case e: Throwable => errors.add(e) }
+            catch {
+              case _: Exception =>
+            }
+          } catch {
+            case e: Throwable => errors.add(e)
+          }
         })
         reader.get(60, TimeUnit.SECONDS)
         writer.get(60, TimeUnit.SECONDS)
