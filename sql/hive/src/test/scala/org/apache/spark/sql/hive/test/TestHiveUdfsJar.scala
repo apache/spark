@@ -63,6 +63,8 @@ object TestHiveUdfsJar {
   private def readResource(name: String): String = {
     val url = Thread.currentThread().getContextClassLoader.getResource(name)
     assert(url != null, s"Resource not found: $name")
-    new String(url.openStream().readAllBytes(), StandardCharsets.UTF_8)
+    Utils.tryWithResource(url.openStream()) { is =>
+      new String(is.readAllBytes(), StandardCharsets.UTF_8)
+    }
   }
 }
