@@ -198,7 +198,6 @@ private[sql] object PythonSQLUtils extends Logging {
   /**
    * Validates that the input [[DataFrame]] has exactly one column of StringType
    * and converts it to a Dataset[String].
-   * This is used by PySpark to avoid manual Dataset[String] conversion on the Python side.
    */
   private def toStringDataset(df: DataFrame): Dataset[String] = {
     val fields = df.schema.fields
