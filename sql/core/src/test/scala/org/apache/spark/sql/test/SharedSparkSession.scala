@@ -83,6 +83,16 @@ trait SharedSparkSession extends QueryTest with SharedSparkSessionBase {
 }
 
 /**
+ * Extends SharedSparkSession to explicitly provide [[classic.SparkSession]].
+ *
+ * Use this trait to indicate that this test is classic-only, i.e. it would not make sense to run
+ * this test with a [[org.apache.spark.sql.connect.SparkSession]].
+ */
+trait SharedClassicSparkSession extends SharedSparkSession with ClassicSQLTestUtils {
+  override def spark: classic.SparkSession = super.spark
+}
+
+/**
  * Helper trait for SQL test suites where all tests share a single [[TestSparkSession]].
  */
 trait SharedSparkSessionBase
