@@ -48,7 +48,10 @@ import org.apache.spark.storage.BlockManager;
  * <p><b>Trade-off:</b> Intermediate merge rounds incur additional disk I/O — each record
  * is read and rewritten once per intermediate round. A smaller merge factor requires more
  * rounds (and thus more I/O), while a larger factor uses more memory. The default factor
- * of 64 typically requires at most one intermediate round for up to ~4000 spill files.</p>
+ * of 64 typically requires at most one intermediate round for up to ~4000 spill files.
+ * Consumed files (both original spills and prior-round intermediates) are deleted eagerly
+ * after each group merge, keeping peak disk overhead to roughly one group's worth of data
+ * above the original spill total.</p>
  */
 final class UnsafeSorterBoundedSpillMerger {
 
@@ -62,8 +65,8 @@ final class UnsafeSorterBoundedSpillMerger {
   private final SerializerManager serializerManager;
   private final int fileBufferSizeBytes;
   private int intermediateRoundsCompleted;
-  // Tracks files created by intermediate merge rounds, so we only delete these
-  // (not original spill files that may be carried forward across rounds).
+  // Tracks files created by intermediate merge rounds for safety-net cleanup
+  // in cleanupIntermediateFiles() if merge() fails partway through.
   private final Set<File> intermediateFiles = new HashSet<>();
 
   UnsafeSorterBoundedSpillMerger(
@@ -121,9 +124,9 @@ final class UnsafeSorterBoundedSpillMerger {
           nextRoundSpills.add(merged);
           roundBytesWritten += groupMetrics.bytesWritten();
 
-          // Delete intermediate files that were consumed. Original spill files
-          // are not deleted here — those are managed by UnsafeExternalSorter.
-          deleteIntermediateFiles(group);
+          // Eagerly delete all consumed files (original + intermediate) to
+          // reduce peak disk usage.
+          deleteConsumedFiles(group);
         }
       }
 
@@ -228,14 +231,15 @@ final class UnsafeSorterBoundedSpillMerger {
     return outputWriter;
   }
 
-  private void deleteIntermediateFiles(List<UnsafeSorterSpillWriter> writers) {
+  private void deleteConsumedFiles(List<UnsafeSorterSpillWriter> writers) {
     for (UnsafeSorterSpillWriter writer : writers) {
       File file = writer.getFile();
-      // Only delete files created by this merger (intermediate files).
-      // Original spill files are managed by UnsafeExternalSorter.deleteSpillFiles().
-      if (file != null && intermediateFiles.contains(file) && file.exists()) {
+      // Delete all consumed files eagerly — both original spill files and intermediate
+      // files from prior rounds. UnsafeExternalSorter.deleteSpillFiles() handles
+      // already-deleted files gracefully via file.exists() check.
+      if (file != null && file.exists()) {
         if (!file.delete()) {
-          logger.warn("Failed to delete intermediate spill file {}",
+          logger.warn("Failed to delete consumed spill file {}",
               MDC.of(LogKeys.PATH, file.getAbsolutePath()));
         }
       }
