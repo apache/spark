@@ -56,10 +56,9 @@ final class UnsafeSorterBoundedSpillMerger {
   private final BlockManager blockManager;
   private final SerializerManager serializerManager;
   private final int fileBufferSizeBytes;
-  private final List<File> intermediateFiles = new ArrayList<>();
   // Tracks files created by intermediate merge rounds, so we only delete these
   // (not original spill files that may be carried forward across rounds).
-  private final Set<File> intermediateFileSet = new HashSet<>();
+  private final Set<File> intermediateFiles = new HashSet<>();
 
   UnsafeSorterBoundedSpillMerger(
       int mergeFactor,
@@ -90,28 +89,28 @@ final class UnsafeSorterBoundedSpillMerger {
       List<UnsafeSorterSpillWriter> spillWriters,
       @Nullable UnsafeSorterIterator inMemIterator) throws IOException {
 
-    List<UnsafeSorterSpillWriter> currentWriters = new ArrayList<>(spillWriters);
+    List<UnsafeSorterSpillWriter> spillsToMerge = new ArrayList<>(spillWriters);
     int round = 0;
 
-    while (currentWriters.size() > mergeFactor) {
+    while (spillsToMerge.size() > mergeFactor) {
       round++;
-      List<UnsafeSorterSpillWriter> nextRoundWriters = new ArrayList<>();
+      List<UnsafeSorterSpillWriter> nextRoundSpills = new ArrayList<>();
 
       logger.info("Bounded merge round {}: merging {} spill files with merge factor {}",
           MDC.of(LogKeys.MERGE_ROUND, round),
-          MDC.of(LogKeys.NUM_SPILL_WRITERS, currentWriters.size()),
+          MDC.of(LogKeys.NUM_SPILL_WRITERS, spillsToMerge.size()),
           MDC.of(LogKeys.MERGE_FACTOR, mergeFactor));
 
       // Partition writers into groups bounded by both merge factor (for memory) and
       // Integer.MAX_VALUE total records (to prevent int overflow in spill file headers).
-      List<List<UnsafeSorterSpillWriter>> groups = partitionWriters(currentWriters);
+      List<List<UnsafeSorterSpillWriter>> groups = partitionWriters(spillsToMerge);
       for (List<UnsafeSorterSpillWriter> group : groups) {
         if (group.size() == 1) {
           // Single file in this group, no merge needed — carry forward
-          nextRoundWriters.add(group.get(0));
+          nextRoundSpills.add(group.get(0));
         } else {
           UnsafeSorterSpillWriter merged = mergeGroupToSpill(group);
-          nextRoundWriters.add(merged);
+          nextRoundSpills.add(merged);
 
           // Delete intermediate files that were consumed. Original spill files
           // are not deleted here — those are managed by UnsafeExternalSorter.
@@ -121,21 +120,25 @@ final class UnsafeSorterBoundedSpillMerger {
 
       // If no merging occurred this round (e.g., all groups were size 1 due to
       // high per-writer record counts), break to avoid an infinite loop.
-      if (nextRoundWriters.size() == currentWriters.size()) {
-        currentWriters = nextRoundWriters;
+      if (nextRoundSpills.size() == spillsToMerge.size()) {
+        logger.warn("Bounded merge made no progress in round {} — {} writers remain, " +
+            "falling back to unbounded final merge",
+            MDC.of(LogKeys.MERGE_ROUND, round),
+            MDC.of(LogKeys.NUM_SPILL_WRITERS, spillsToMerge.size()));
+        spillsToMerge = nextRoundSpills;
         break;
       }
-      currentWriters = nextRoundWriters;
+      spillsToMerge = nextRoundSpills;
     }
 
     // Final merge: remaining writers fit within the merge factor
     logger.info("Final merge round: merging {} spill files",
-        MDC.of(LogKeys.NUM_SPILL_WRITERS, currentWriters.size()));
+        MDC.of(LogKeys.NUM_SPILL_WRITERS, spillsToMerge.size()));
 
     final UnsafeSorterSpillMerger finalMerger = new UnsafeSorterSpillMerger(
         recordComparator, prefixComparator,
-        currentWriters.size() + (inMemIterator != null ? 1 : 0));
-    for (UnsafeSorterSpillWriter writer : currentWriters) {
+        spillsToMerge.size() + (inMemIterator != null ? 1 : 0));
+    for (UnsafeSorterSpillWriter writer : spillsToMerge) {
       finalMerger.addSpillIfNotEmpty(writer.getReader(serializerManager));
     }
     if (inMemIterator != null) {
@@ -177,7 +180,7 @@ final class UnsafeSorterBoundedSpillMerger {
    */
   private UnsafeSorterSpillWriter mergeGroupToSpill(
       List<UnsafeSorterSpillWriter> group) throws IOException {
-    int totalRecords = 0;
+    long totalRecords = 0;
     UnsafeSorterSpillMerger merger = new UnsafeSorterSpillMerger(
         recordComparator, prefixComparator, group.size());
 
@@ -187,9 +190,15 @@ final class UnsafeSorterBoundedSpillMerger {
       merger.addSpillIfNotEmpty(reader);
     }
 
+    assert totalRecords <= Integer.MAX_VALUE :
+        "Group record count exceeds Integer.MAX_VALUE: " + totalRecords;
     ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
     UnsafeSorterSpillWriter outputWriter = new UnsafeSorterSpillWriter(
-        blockManager, fileBufferSizeBytes, writeMetrics, totalRecords);
+        blockManager, fileBufferSizeBytes, writeMetrics, (int) totalRecords);
+
+    // Track the intermediate file immediately so cleanupIntermediateFiles() can
+    // clean it up if an exception occurs during the merge write loop below.
+    intermediateFiles.add(outputWriter.getFile());
 
     UnsafeSorterIterator sorted = merger.getSortedIterator();
     while (sorted.hasNext()) {
@@ -199,9 +208,6 @@ final class UnsafeSorterBoundedSpillMerger {
           sorted.getRecordLength(), sorted.getKeyPrefix());
     }
     outputWriter.close();
-    File outputFile = outputWriter.getFile();
-    intermediateFiles.add(outputFile);
-    intermediateFileSet.add(outputFile);
     return outputWriter;
   }
 
@@ -210,7 +216,7 @@ final class UnsafeSorterBoundedSpillMerger {
       File file = writer.getFile();
       // Only delete files created by this merger (intermediate files).
       // Original spill files are managed by UnsafeExternalSorter.deleteSpillFiles().
-      if (file != null && intermediateFileSet.contains(file) && file.exists()) {
+      if (file != null && intermediateFiles.contains(file) && file.exists()) {
         if (!file.delete()) {
           logger.warn("Failed to delete intermediate spill file {}",
               MDC.of(LogKeys.PATH, file.getAbsolutePath()));

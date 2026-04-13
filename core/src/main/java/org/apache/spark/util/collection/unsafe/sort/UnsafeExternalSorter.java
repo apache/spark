@@ -610,10 +610,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       return boundedMerger.merge(spillWriters, inMemIter);
     } else {
       // Original single-round merge: open all spill readers at once
-      if (spillWriters.size() > 1) {
-        logger.info("Merging {} spill files in single round",
-            MDC.of(LogKeys.NUM_SPILL_WRITERS, spillWriters.size()));
-      }
+      logger.info("Merging {} spill files in single round",
+          MDC.of(LogKeys.NUM_SPILL_WRITERS, spillWriters.size()));
       final UnsafeSorterSpillMerger spillMerger = new UnsafeSorterSpillMerger(
         recordComparatorSupplier.get(), prefixComparator, spillWriters.size());
       for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
