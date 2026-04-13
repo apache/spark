@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.BindReferences
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.Projection
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, FalseLiteral, GeneratePredicate, JavaCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, GeneratePredicate, JavaCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Context, Copy, Delete, Discard, Insert, Instruction, Keep, ROW_ID, Split, Update}
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -112,7 +112,51 @@ case class MergeRowsExec(
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    generateInstructionExecutionCode(ctx, input)
+    val funcName = ctx.freshName("mergeProcessRow")
+    val (args, params, paramExprs) =
+      buildConsumeParameters(ctx, input)
+    val body = generateInstructionExecutionCode(ctx, paramExprs)
+
+    ctx.addNewFunction(funcName,
+      s"""
+         |private void $funcName(${params.mkString(", ")})
+         |    throws java.io.IOException {
+         |  $body
+         |}
+       """.stripMargin)
+
+    s"$funcName(${args.mkString(", ")});"
+  }
+
+  private def buildConsumeParameters(
+      ctx: CodegenContext,
+      input: Seq[ExprCode]): (Seq[String], Seq[String], Seq[ExprCode]) = {
+    val args = Seq.newBuilder[String]
+    val params = Seq.newBuilder[String]
+    val paramExprs = Seq.newBuilder[ExprCode]
+
+    input.zip(child.output).zipWithIndex.foreach {
+      case ((ev, attr), i) =>
+        val paramName = ctx.freshName(s"mergeExpr_$i")
+        val paramType = CodeGenerator.javaType(attr.dataType)
+        args += ev.value.toString
+        params += s"$paramType $paramName"
+
+        val paramIsNull = if (!attr.nullable) {
+          FalseLiteral
+        } else {
+          val isNull = ctx.freshName(s"mergeIsNull_$i")
+          args += ev.isNull.toString
+          params += s"boolean $isNull"
+          JavaCode.isNullVariable(isNull)
+        }
+
+        paramExprs += ExprCode(
+          paramIsNull,
+          JavaCode.variable(paramName, attr.dataType))
+    }
+
+    (args.result(), params.result(), paramExprs.result())
   }
 
   /**
@@ -151,12 +195,12 @@ case class MergeRowsExec(
     val targetPresentExpr = generatePredicateCode(ctx, isTargetRowPresent, child.output, inputExprs)
 
     // Code for each instruction type
-    val matchedInstructionsCode = generateInstructionsCode(ctx, matchedInstructions,
-      inputExprs, sourcePresent = true)
-    val notMatchedInstructionsCode = generateInstructionsCode(ctx, notMatchedInstructions,
-      inputExprs, sourcePresent = true)
-    val notMatchedBySourceInstructionsCode = generateInstructionsCode(ctx,
-      notMatchedBySourceInstructions, inputExprs, sourcePresent = false)
+    val matchedInstructionsCode = generateInstructionsCode(
+      ctx, matchedInstructions, inputExprs, sourcePresent = true)
+    val notMatchedInstructionsCode = generateInstructionsCode(
+      ctx, notMatchedInstructions, inputExprs, sourcePresent = true)
+    val notMatchedBySourceInstructionsCode = generateInstructionsCode(
+      ctx, notMatchedBySourceInstructions, inputExprs, sourcePresent = false)
 
     val cardinalityValidationCode = if (checkCardinality) {
       val rowIdOrdinal = child.output.indexWhere(attr => conf.resolver(attr.name, ROW_ID))
@@ -231,7 +275,7 @@ case class MergeRowsExec(
            |${code.code}
            |if (${code.value}) {
            |  $metricUpdateCode
-           |  return; // Discard row
+           |  return;  // Do nothing
            |}
        """.stripMargin
 
@@ -251,7 +295,6 @@ case class MergeRowsExec(
            |}
        """.stripMargin
       case _ =>
-        // Codegen not implemented
         throw new SparkUnsupportedOperationException(
           errorClass = "_LEGACY_ERROR_TEMP_3073",
           messageParameters = Map("instruction" -> instruction.toString))
