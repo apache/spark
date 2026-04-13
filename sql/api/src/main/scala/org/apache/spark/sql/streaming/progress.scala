@@ -68,7 +68,7 @@ class StateOperatorProgress private[spark] (
   private[sql] def copy(
       newNumRowsUpdated: Long,
       newNumRowsDroppedByWatermark: Long,
-      newNumRowsRemoved: Long = numRowsRemoved): StateOperatorProgress =
+      newNumRowsRemoved: Long): StateOperatorProgress =
     new StateOperatorProgress(
       operatorName = operatorName,
       numRowsTotal = numRowsTotal,

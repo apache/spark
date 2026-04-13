@@ -60,13 +60,13 @@ class ProgressReporterSuite extends StreamTest {
           val evictionIdx = progresses.lastIndexWhere(_.stateOperators.head.numRowsRemoved > 0)
           assert(evictionIdx >= 0, "Expected eviction batch in progresses")
 
-          val idleProgresses = progresses.drop(evictionIdx + 1).filter(_.batchDuration <= 1)
+          val idleProgresses =
+            progresses.drop(evictionIdx + 1).filter(_.batchDuration == 0)
           assert(
             idleProgresses.nonEmpty,
             "Expected idle trigger progress after eviction, after eviction: " +
               progresses.drop(evictionIdx).map(p =>
-                s"(bid=${p.batchId},dur=${p.batchDuration}," +
-                  s"removed=${p.stateOperators.head.numRowsRemoved})").mkString(", "))
+                s"(batchId=${p.batchId},duration=${p.batchDuration}").mkString(", "))
 
           val idleProgress = idleProgresses.head
           assert(
@@ -75,10 +75,12 @@ class ProgressReporterSuite extends StreamTest {
               s"${idleProgress.stateOperators.head.numRowsRemoved}")
           assert(
             idleProgress.stateOperators.head.numRowsUpdated === 0,
-            s"numRowsUpdated should be 0 in idle trigger")
+            s"numRowsUpdated should be 0 in idle trigger but got " +
+              s"${idleProgress.stateOperators.head.numRowsUpdated}")
           assert(
             idleProgress.stateOperators.head.numRowsDroppedByWatermark === 0,
-            s"numRowsDroppedByWatermark should be 0 in idle trigger")
+            s"numRowsDroppedByWatermark should be 0 in idle trigger but got " +
+              s"${idleProgress.stateOperators.head.numRowsDroppedByWatermark}")
           true
         },
         StopStream
