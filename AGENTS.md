@@ -8,7 +8,7 @@ Before the first code read, edit, or test in a session, ensure a clean working e
 2. If the latest commit on `<upstream>/master` is more than a day old (check with `git log -1 --format="%ci" <upstream>/master`), run `git fetch <upstream> master`.
 3. If there are uncommitted changes (check with `git status`), ask the user to stash them before proceeding.
 4. Switch to the appropriate branch:
-   - **Existing PR**: look for a local branch matching the PR branch name. If found, switch to it and inform the user. If not found, ask whether to fetch it or if there is a local branch under a different name.
+   - **Existing PR**: resolve the PR branch name via `gh api repos/databricks-eng/runtime/pulls/<number> --jq '.head.ref'`, then look for a local branch matching that name. If found, switch to it and inform the user. If not found, ask whether to fetch it or if there is a local branch under a different name.
    - **New edits**: ask the user to choose: create a new git worktree from `<upstream>/master` and work from there (recommended), or create and switch to a new branch from `<upstream>/master`.
    - **Reading code or running tests**: use `<upstream>/master`.
 
@@ -71,9 +71,28 @@ Run a single test case:
 
     python/run-tests --testnames "pyspark.sql.tests.test_catalog CatalogTests.test_current_database"
 
+## Investigating PR CI Failures
+
+Do NOT download full job logs to grep for errors — they are very large and slow. Instead, use the test report annotations on the fork.
+
+Step 1 — Get the fork owner and the latest commit SHA of the PR:
+
+    gh api repos/apache/spark/pulls/<PR_NUMBER> --jq '{owner: .head.repo.owner.login, sha: .head.sha}'
+
+Step 2 — Find the "Report test results" check run on the fork's commit:
+
+    gh api repos/<OWNER>/spark/commits/<SHA>/check-runs \
+      --jq '.check_runs[] | select(.name == "Report test results") | {id: .id, annotations: .output.annotations_count}'
+
+Step 3 — Fetch failure annotations:
+
+    gh api repos/<OWNER>/spark/check-runs/<CHECK_RUN_ID>/annotations
+
+Each annotation contains the test class, test name, and failure message.
+
 ## Pull Request Workflow
 
-PR title requires a JIRA ticket ID (e.g., `[SPARK-xxxx][SQL] Title`). Ask the user to create a new ticket or provide an existing one if not given. Follow the template in `.github/PULL_REQUEST_TEMPLATE` for the PR description.
+PR title requires a JIRA ticket ID (e.g., `[SPARK-xxxx][SQL] Title`). Ask the user to create a new ticket or provide an existing one if not given. Before writing the PR description, read `.github/PULL_REQUEST_TEMPLATE` and fill in every section from that file.
 
 DO NOT push to the upstream repo. Always push to the personal fork. Open PRs against `master` on the upstream repo.
 

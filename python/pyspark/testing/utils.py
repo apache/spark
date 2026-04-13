@@ -103,6 +103,14 @@ grpc_status_requirement_message = "" if have_grpc_status else "No module named '
 have_zstandard = have_package("zstandard")
 zstandard_requirement_message = "" if have_zstandard else "No module named 'zstandard'"
 
+have_kafka = have_package("kafka")
+kafka_requirement_message = "" if have_kafka else "No module named 'kafka'"
+
+have_testcontainers = have_package("testcontainers")
+testcontainers_requirement_message = (
+    "" if have_testcontainers else "No module named 'testcontainers'"
+)
+
 
 googleapis_common_protos_requirement_message = ""
 
@@ -1055,9 +1063,9 @@ def assertDataFrameEqual(
                 return all(compare_vals(x, y) for x, y in zip(val1, val2))
             elif isinstance(val1, dict) and isinstance(val2, dict):
                 return (
-                    len(val1.keys()) == len(val2.keys())
+                    len(val1) == len(val2)
                     and val1.keys() == val2.keys()
-                    and all(compare_vals(val1[k], val2[k]) for k in val1.keys())
+                    and all(compare_vals(val1[k], val2[k]) for k in val1)
                 )
             elif isinstance(val1, float) and isinstance(val2, float):
                 if abs(val1 - val2) > (atol + rtol * abs(val2)):

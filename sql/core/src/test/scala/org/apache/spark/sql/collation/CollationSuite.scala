@@ -2519,9 +2519,13 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         withTable("t") {
           sql("CREATE TABLE t (c1 STRING COLLATE UTF8_LCASE)")
           sql("INSERT INTO t VALUES ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE)")
+          sql(
+            """INSERT INTO t
+              |VALUES ('c' COLLATE UTF8_LCASE), ('d' COLLATE UNICODE)
+              |AS vals(c1)""".stripMargin)
           checkAnswer(
             sql("SELECT * FROM t"),
-            Seq(Row("a"), Row("b"))
+            Seq(Row("a"), Row("b"), Row("c"), Row("d"))
           )
         }
       }
@@ -2597,6 +2601,14 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           checkAnswer(
             sql("SELECT * FROM testcat.t"),
             Seq(Row("a"), Row("b"))
+          )
+          sql(
+            """INSERT INTO testcat.t REPLACE WHERE TRUE
+              |  VALUES ('c' COLLATE UTF8_LCASE), ('d' COLLATE UNICODE)
+              |  AS vals(c1)""".stripMargin)
+          checkAnswer(
+            sql("SELECT * FROM testcat.t"),
+            Seq(Row("c"), Row("d"))
           )
         }
       }

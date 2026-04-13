@@ -177,6 +177,42 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
             # Read the text file as a DataFrame.
             self.assert_eq(self.connect.read.csv(d).toPandas(), self.spark.read.csv(d).toPandas())
 
+    def test_json_with_dataframe_input(self):
+        json_df = self.connect.createDataFrame(
+            [('{"name": "Alice", "age": 25}',), ('{"name": "Bob", "age": 30}',)],
+            schema="value STRING",
+        )
+        result = self.connect.read.json(json_df)
+        expected = [Row(age=25, name="Alice"), Row(age=30, name="Bob")]
+        self.assertEqual(sorted(result.collect(), key=lambda r: r.name), expected)
+
+    def test_json_with_dataframe_input_and_schema(self):
+        json_df = self.connect.createDataFrame(
+            [('{"name": "Alice", "age": 25}',), ('{"name": "Bob", "age": 30}',)],
+            schema="value STRING",
+        )
+        result = self.connect.read.json(json_df, schema="name STRING, age INT")
+        expected = [Row(name="Alice", age=25), Row(name="Bob", age=30)]
+        self.assertEqual(sorted(result.collect(), key=lambda r: r.name), expected)
+
+    def test_json_with_dataframe_input_non_string_column(self):
+        int_df = self.connect.createDataFrame([(1,), (2,)], schema="value INT")
+        with self.assertRaisesRegex(Exception, "DATAFRAME_INPUT_NOT_STRING_TYPE"):
+            self.connect.read.json(int_df).collect()
+
+    def test_json_with_dataframe_input_multiple_columns(self):
+        multi_df = self.connect.createDataFrame(
+            [('{"name": "Alice"}', "extra"), ('{"name": "Bob"}', "extra")],
+            schema="value STRING, other STRING",
+        )
+        with self.assertRaisesRegex(Exception, "DATAFRAME_INPUT_NOT_SINGLE_COLUMN"):
+            self.connect.read.json(multi_df).collect()
+
+    def test_json_with_dataframe_input_zero_columns(self):
+        empty_schema_df = self.connect.range(1).select()
+        with self.assertRaisesRegex(Exception, "DATAFRAME_INPUT_NOT_SINGLE_COLUMN"):
+            self.connect.read.json(empty_schema_df).collect()
+
     def test_multi_paths(self):
         # SPARK-42041: DataFrameReader should support list of paths
 

@@ -1457,6 +1457,18 @@
     ],
     "sqlState" : "KD011"
   },
+  "DATAFRAME_INPUT_NOT_SINGLE_COLUMN" : {
+    "message" : [
+      "Input DataFrame must have exactly one column, but got <numColumns>."
+    ],
+    "sqlState" : "42K09"
+  },
+  "DATAFRAME_INPUT_NOT_STRING_TYPE" : {
+    "message" : [
+      "Input DataFrame column must be StringType, but got <dataType>."
+    ],
+    "sqlState" : "42K09"
+  },
   "DATATYPE_CANNOT_ORDER" : {
     "message" : [
       "Type <dataType> does not support ordered operations."

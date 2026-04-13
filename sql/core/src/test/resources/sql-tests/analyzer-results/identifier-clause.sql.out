@@ -328,6 +328,7 @@ Project [c1#x]
 DESCRIBE IDENTIFIER('ta' || 'b')
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`tab`, false, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.tab, V1Table(default.tab), [c1#x]
 
 
 -- !query
@@ -353,6 +354,7 @@ ShowTableProperties [key#x, value#x]
 SHOW COLUMNS FROM IDENTIFIER('ta' || 'b')
 -- !query analysis
 ShowColumnsCommand `spark_catalog`.`default`.`tab`, [col_name#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.tab, V1Table(default.tab), [c1#x, c2#x]
 
 
 -- !query
@@ -1625,24 +1627,28 @@ CreateDataSourceTableCommand `spark_catalog`.`identifier_clause_test_schema`.`te
 DESCRIBE TABLE IDENTIFIER('test_desc')
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`identifier_clause_test_schema`.`test_desc`, false, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), identifier_clause_test_schema.test_desc, V1Table(identifier_clause_test_schema.test_desc), [c1#x]
 
 
 -- !query
 DESCRIBE FORMATTED IDENTIFIER('test_desc')
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`identifier_clause_test_schema`.`test_desc`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), identifier_clause_test_schema.test_desc, V1Table(identifier_clause_test_schema.test_desc), [c1#x]
 
 
 -- !query
 DESCRIBE EXTENDED IDENTIFIER('test_desc')
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`identifier_clause_test_schema`.`test_desc`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), identifier_clause_test_schema.test_desc, V1Table(identifier_clause_test_schema.test_desc), [c1#x]
 
 
 -- !query
 DESC IDENTIFIER('test_desc')
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`identifier_clause_test_schema`.`test_desc`, false, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), identifier_clause_test_schema.test_desc, V1Table(identifier_clause_test_schema.test_desc), [c1#x]
 
 
 -- !query
@@ -1700,12 +1706,14 @@ RefreshTableCommand `spark_catalog`.`identifier_clause_test_schema`.`test_table`
 DESCRIBE IDENTIFIER('identifier_clause_test_schema.test_table')
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`identifier_clause_test_schema`.`test_table`, false, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), identifier_clause_test_schema.test_table, V1Table(identifier_clause_test_schema.test_table), [c1#x]
 
 
 -- !query
 SHOW COLUMNS FROM IDENTIFIER('identifier_clause_test_schema.test_table')
 -- !query analysis
 ShowColumnsCommand `spark_catalog`.`identifier_clause_test_schema`.`test_table`, [col_name#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), identifier_clause_test_schema.test_table, V1Table(identifier_clause_test_schema.test_table), [c1#x]
 
 
 -- !query
