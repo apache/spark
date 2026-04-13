@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{JOIN, UNION}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Pushes down `Join` through `Union` when the right side of the join is small enough
@@ -47,19 +48,24 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{JOIN, UNION}
  *
  * Applicable join types: Inner, LeftOuter.
  */
-object PushDownJoinThroughUnion
+case class PushDownJoinThroughUnion(override val conf: SQLConf)
   extends Rule[LogicalPlan]
   with JoinSelectionHelper {
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsAllPatterns(JOIN, UNION), ruleId) {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!conf.getConf(SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED)) return plan
+    plan.transformUpWithPruning(
+      _.containsAllPatterns(JOIN, UNION), ruleId) {
 
     case join @ Join(u: Union, right, joinType, joinCond, hint)
       if (joinType == Inner || joinType == LeftOuter) &&
         canPlanAsBroadcastHashJoin(join, conf) &&
         // Exclude right subtrees containing subqueries, as DeduplicateRelations
         // may not correctly handle correlated references when cloning.
-        !right.exists(_.expressions.exists(SubqueryExpression.hasSubquery)) =>
+        !right.exists(_.expressions.exists(SubqueryExpression.hasSubquery)) &&
+        // Exclude non-deterministic right subtrees, as duplicating them would
+        // change query semantics (each copy could produce different results).
+        !right.exists(_.expressions.exists(!_.deterministic)) =>
 
       val unionHeadOutput = u.children.head.output
       val newChildren = u.children.zipWithIndex.map { case (child, idx) =>
@@ -77,6 +83,7 @@ object PushDownJoinThroughUnion
         Join(child, newRight, joinType, newCond, hint)
       }
       u.withNewChildren(newChildren)
+  }
   }
 
   /**
