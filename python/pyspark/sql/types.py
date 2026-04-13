@@ -1990,8 +1990,10 @@ class UserDefinedType(DataType):
         pyClass = pyUDT[split + 1 :]
         m = __import__(pyModule, globals(), locals(), [pyClass])
         if not hasattr(m, pyClass):
-            s = base64.b64decode(json["serializedClass"].encode("utf-8"))
-            UDT = CloudPickleSerializer().loads(s)
+            raise PySparkValueError(
+                errorClass="UNSUPPORTED_OPERATION",
+                messageParameters={"operation": "unpickling user defined types"},
+            )
         else:
             UDT = getattr(m, pyClass)
         return UDT()
