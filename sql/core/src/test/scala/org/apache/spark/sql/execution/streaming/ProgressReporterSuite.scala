@@ -78,22 +78,24 @@ class ProgressReporterSuite extends StreamTest {
         // resetExecStatsForNoExecution which must zero out
         // per-batch metrics.
         AdvanceManualClock(1 * 1000),
-        Execute("wait for idle trigger progress") { q =>
+        Execute("idle trigger must reset per-batch metrics") { q =>
           eventually(Timeout(streamingTimeout)) {
-            val p = q.recentProgress.filter(_.stateOperators.nonEmpty)
-            val i = p.lastIndexWhere(_.stateOperators.head.numRowsRemoved > 0)
-            assert(i >= 0 && p.length > i + 1)
+            val progress = q.recentProgress.filter(_.stateOperators.nonEmpty)
+            val lastEviction = progress.lastIndexWhere { p =>
+              p.durationMs.containsKey("addBatch") &&
+                p.stateOperators.head.numRowsRemoved > 0
+            }
+            assert(lastEviction >= 0, "no eviction batch found")
+            val idleIdx = progress.indexWhere(
+              !_.durationMs.containsKey("addBatch"), lastEviction + 1)
+            assert(idleIdx > lastEviction,
+              "no idle trigger found after eviction batch")
+            val so = progress(idleIdx).stateOperators.head
+            assert(so.numRowsRemoved === 0, s"numRowsRemoved=${so.numRowsRemoved}")
+            assert(so.numRowsUpdated === 0, s"numRowsUpdated=${so.numRowsUpdated}")
+            assert(so.numRowsDroppedByWatermark === 0,
+              s"numRowsDroppedByWatermark=${so.numRowsDroppedByWatermark}")
           }
-        },
-        Execute("idle trigger must reset metrics") { q =>
-          val p = q.recentProgress.filter(_.stateOperators.nonEmpty)
-          val i = p.lastIndexWhere(_.stateOperators.head.numRowsRemoved > 0)
-          assert(i >= 0, "no eviction batch found")
-          val so = p(i + 1).stateOperators.head
-          assert(so.numRowsRemoved === 0, s"numRowsRemoved=${so.numRowsRemoved}")
-          assert(so.numRowsUpdated === 0, s"numRowsUpdated=${so.numRowsUpdated}")
-          assert(so.numRowsDroppedByWatermark === 0,
-            s"numRowsDroppedByWatermark=${so.numRowsDroppedByWatermark}")
         },
         StopStream
       )
