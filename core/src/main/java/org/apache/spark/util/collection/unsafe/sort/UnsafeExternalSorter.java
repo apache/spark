@@ -112,7 +112,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       (int) SparkEnv.get().conf().get(package$.MODULE$.UNSAFE_SORTER_SPILL_MERGE_FACTOR());
 
   @Nullable
-  private UnsafeSorterBoundedSpillMerger boundedMerger;
+  private volatile UnsafeSorterBoundedSpillMerger boundedMerger;
 
   public static UnsafeExternalSorter createWithExistingInMemorySorter(
       TaskMemoryManager taskMemoryManager,
@@ -629,7 +629,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     return inMemSorter.hasSpaceForAnotherRecord();
   }
 
-  @VisibleForTesting void setSpillMergeFactor(int mergeFactor) {
+ @VisibleForTesting 
+  void setSpillMergeFactor(int mergeFactor) {
     this.spillMergeFactor = mergeFactor;
   }
 
