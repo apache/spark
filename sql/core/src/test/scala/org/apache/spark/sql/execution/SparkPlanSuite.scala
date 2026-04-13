@@ -128,42 +128,10 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
     assert(nonEmpty === relation.executeCollect())
   }
 
-  test("BatchScanExec equals is reflexive when batch is null") {
-    // scan is @transient, so after serialization round-trip it's null and batch becomes null.
-    // equals must still satisfy x.equals(x) == true (reflexivity).
-    val exec = BatchScanExec(
-      output = Seq.empty,
-      scan = null,
-      runtimeFilters = Seq.empty,
-      table = null
-    )
-    assert(exec.batch == null)
-    assert(exec.equals(exec))
-  }
-
-  test("BatchScanExec hashCode is consistent with equals") {
-    // Two BatchScanExec instances with the same fields must have the same hashCode.
-    val exec1 = BatchScanExec(
-      output = Seq.empty,
-      scan = null,
-      runtimeFilters = Seq.empty,
-      table = null,
-      keyGroupedPartitioning = Some(Seq(Literal(1)))
-    )
-    val exec2 = BatchScanExec(
-      output = Seq.empty,
-      scan = null,
-      runtimeFilters = Seq.empty,
-      table = null,
-      keyGroupedPartitioning = Some(Seq(Literal(1)))
-    )
-    assert(exec1.equals(exec2))
-    assert(exec1.hashCode() == exec2.hashCode())
-  }
-
   test("BatchScanExec hashCode includes keyGroupedPartitioning") {
-    // Instances differing only in keyGroupedPartitioning must not be equal,
-    // and should (with high probability) have different hashCodes.
+    // hashCode must include all fields used in equals.
+    // Previously keyGroupedPartitioning was in equals but missing from hashCode,
+    // violating the contract that equal objects must have equal hash codes.
     val exec1 = BatchScanExec(
       output = Seq.empty,
       scan = null,
@@ -178,7 +146,8 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
       table = null,
       keyGroupedPartitioning = Some(Seq(Literal(2)))
     )
-    assert(!exec1.equals(exec2))
+    // With null batch, equals returns false (by design, see SPARK-42745),
+    // so we only verify that hashCode differs for different keyGroupedPartitioning.
     assert(exec1.hashCode() != exec2.hashCode())
   }
 

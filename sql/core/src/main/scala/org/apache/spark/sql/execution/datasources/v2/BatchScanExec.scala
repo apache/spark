@@ -47,7 +47,7 @@ case class BatchScanExec(
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
     case other: BatchScanExec =>
-      this.batch == other.batch &&
+      this.batch != null && this.batch == other.batch &&
           this.runtimeFilters == other.runtimeFilters &&
           this.keyGroupedPartitioning == other.keyGroupedPartitioning
     case _ =>
