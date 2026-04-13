@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData, STUtils}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.ops.ClientTypeOps
+import org.apache.spark.sql.types.ops.TypeApiOps
 import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, UTF8String, VariantVal}
 
 object EvaluatePython {
@@ -43,7 +43,7 @@ object EvaluatePython {
   private[python] class BytesWrapper(val data: Array[Byte])
 
   def needConversionInPython(dt: DataType): Boolean =
-    ClientTypeOps(dt).map(_.needConversionInPython)
+    TypeApiOps(dt).flatMap(_.needConversionInPython)
       .getOrElse(needConversionInPythonDefault(dt))
 
   private def needConversionInPythonDefault(dt: DataType): Boolean = dt match {
@@ -117,7 +117,7 @@ object EvaluatePython {
    * null if the type of obj is unexpected. Because Python doesn't enforce the type.
    */
   def makeFromJava(dataType: DataType): Any => Any =
-    ClientTypeOps(dataType).map(_.makeFromJava).getOrElse(makeFromJavaDefault(dataType))
+    TypeApiOps(dataType).flatMap(_.makeFromJava).getOrElse(makeFromJavaDefault(dataType))
 
   private def makeFromJavaDefault(dataType: DataType): Any => Any = dataType match {
     case BooleanType => (obj: Any) => nullSafeConvert(obj) {

@@ -33,10 +33,7 @@ import org.apache.spark.sql.types.{DataType, TimeType}
  * This class implements all TypeApiOps methods for the TIME data type:
  *   - String formatting: uses FractionTimeFormatter for consistent output
  *   - Row encoding: uses LocalTimeEncoder for java.time.LocalTime
- *
- * Additionally, it implements ClientTypeOps for:
  *   - Arrow conversion (ArrowUtils)
- *   - JDBC mapping (JdbcUtils)
  *   - Python interop (EvaluatePython)
  *   - Hive formatting (HiveResult)
  *   - Thrift type mapping (SparkExecuteStatementOperation)
@@ -48,7 +45,7 @@ import org.apache.spark.sql.types.{DataType, TimeType}
  *   The TimeType with precision information
  * @since 4.2.0
  */
-class TimeTypeApiOps(val t: TimeType) extends TypeApiOps with ClientTypeOps {
+class TimeTypeApiOps(val t: TimeType) extends TypeApiOps {
 
   override def dataType: DataType = t
 
@@ -69,25 +66,25 @@ class TimeTypeApiOps(val t: TimeType) extends TypeApiOps with ClientTypeOps {
 
   override def getEncoder: AgnosticEncoder[_] = LocalTimeEncoder
 
-  // ==================== Client Type Operations (ClientTypeOps) ====================
+  // ==================== Optional Operations ====================
 
-  override def toArrowType(timeZoneId: String): ArrowType = {
-    new ArrowType.Time(TimeUnit.NANOSECOND, 8 * 8)
+  override def toArrowType(timeZoneId: String): Option[ArrowType] = {
+    Some(new ArrowType.Time(TimeUnit.NANOSECOND, 8 * 8))
   }
 
-  override def needConversionInPython: Boolean = true
+  override def needConversionInPython: Option[Boolean] = Some(true)
 
-  override def makeFromJava: Any => Any = (obj: Any) =>
+  override def makeFromJava: Option[Any => Any] = Some((obj: Any) =>
     nullSafeConvert(obj) {
       case c: Long => c
       // Py4J serializes values between MIN_INT and MAX_INT as Ints, not Longs
       case c: Int => c.toLong
-    }
+    })
 
-  override def formatExternal(value: Any): String = {
+  override def formatExternal(value: Any): Option[String] = {
     val nanos = SparkDateTimeUtils.localTimeToNanos(value.asInstanceOf[LocalTime])
-    timeFormatter.format(nanos)
+    Some(timeFormatter.format(nanos))
   }
 
-  override def thriftTypeName: String = "STRING_TYPE"
+  override def thriftTypeName: Option[String] = Some("STRING_TYPE")
 }

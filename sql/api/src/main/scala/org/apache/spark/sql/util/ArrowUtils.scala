@@ -29,7 +29,7 @@ import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
 import org.apache.spark.SparkException
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.ops.ClientTypeOps
+import org.apache.spark.sql.types.ops.TypeApiOps
 import org.apache.spark.util.ArrayImplicits._
 
 private[sql] object ArrowUtils {
@@ -40,8 +40,8 @@ private[sql] object ArrowUtils {
 
   /** Maps data type from Spark to Arrow. NOTE: timeZoneId required for TimestampTypes */
   def toArrowType(dt: DataType, timeZoneId: String, largeVarTypes: Boolean = false): ArrowType =
-    ClientTypeOps(dt)
-      .map(_.toArrowType(timeZoneId))
+    TypeApiOps(dt)
+      .flatMap(_.toArrowType(timeZoneId))
       .getOrElse(toArrowTypeDefault(dt, timeZoneId, largeVarTypes))
 
   private def toArrowTypeDefault(
@@ -77,7 +77,7 @@ private[sql] object ArrowUtils {
     }
 
   def fromArrowType(dt: ArrowType): DataType =
-    ClientTypeOps.fromArrowType(dt).getOrElse(fromArrowTypeDefault(dt))
+    TypeApiOps.fromArrowType(dt).getOrElse(fromArrowTypeDefault(dt))
 
   private def fromArrowTypeDefault(dt: ArrowType): DataType = dt match {
     case ArrowType.Bool.INSTANCE => BooleanType

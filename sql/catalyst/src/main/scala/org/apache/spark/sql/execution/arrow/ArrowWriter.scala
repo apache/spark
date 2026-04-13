@@ -24,7 +24,7 @@ import org.apache.arrow.vector.complex._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
-import org.apache.spark.sql.catalyst.types.ops.CatalystTypeOps
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.STUtils
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
@@ -54,7 +54,7 @@ object ArrowWriter {
   private[sql] def createFieldWriter(vector: ValueVector): ArrowFieldWriter = {
     val field = vector.getField()
     val dt = ArrowUtils.fromArrowField(field)
-    CatalystTypeOps(dt).map(_.createArrowFieldWriter(vector))
+    TypeOps(dt).flatMap(_.createArrowFieldWriter(vector))
       .getOrElse(createFieldWriterDefault(dt, vector))
   }
 

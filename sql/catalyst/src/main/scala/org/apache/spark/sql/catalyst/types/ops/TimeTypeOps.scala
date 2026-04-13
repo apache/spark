@@ -41,8 +41,6 @@ import org.apache.spark.sql.types.ops.TimeTypeApiOps
  * It also inherits client-side operations from TimeTypeApiOps:
  *   - String formatting (FractionTimeFormatter)
  *   - Row encoding (LocalTimeEncoder)
- *
- * Additionally, it implements CatalystTypeOps for:
  *   - Serializer/deserializer expression building (SerializerBuildHelper, DeserializerBuildHelper)
  *   - Arrow field writer creation (ArrowWriter)
  *
@@ -57,7 +55,7 @@ import org.apache.spark.sql.types.ops.TimeTypeApiOps
  * @since 4.2.0
  */
 case class TimeTypeOps(override val t: TimeType)
-    extends TimeTypeApiOps(t) with TypeOps with CatalystTypeOps {
+    extends TimeTypeApiOps(t) with TypeOps {
 
   // ==================== Physical Type Representation ====================
 
@@ -91,27 +89,27 @@ case class TimeTypeOps(override val t: TimeType)
     DateTimeUtils.nanosToLocalTime(row.getLong(column))
   }
 
-  // ==================== Catalyst Type Operations (CatalystTypeOps) ====================
+  // ==================== Optional Operations ====================
 
-  override def createSerializer(input: Expression): Expression = {
-    StaticInvoke(
+  override def createSerializer(input: Expression): Option[Expression] = {
+    Some(StaticInvoke(
       DateTimeUtils.getClass,
       t,
       "localTimeToNanos",
       input :: Nil,
-      returnNullable = false)
+      returnNullable = false))
   }
 
-  override def createDeserializer(path: Expression): Expression = {
-    StaticInvoke(
+  override def createDeserializer(path: Expression): Option[Expression] = {
+    Some(StaticInvoke(
       DateTimeUtils.getClass,
       ObjectType(classOf[java.time.LocalTime]),
       "nanosToLocalTime",
       path :: Nil,
-      returnNullable = false)
+      returnNullable = false))
   }
 
-  override def createArrowFieldWriter(vector: ValueVector): ArrowFieldWriter = {
-    new TimeWriter(vector.asInstanceOf[TimeNanoVector])
+  override def createArrowFieldWriter(vector: ValueVector): Option[ArrowFieldWriter] = {
+    Some(new TimeWriter(vector.asInstanceOf[TimeNanoVector]))
   }
 }

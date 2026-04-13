@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, Bo
 import org.apache.spark.sql.catalyst.encoders.EncoderUtils.{externalDataTypeFor, isNativeEncoder, lenientExternalDataTypeFor}
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, CheckOverflow, CreateNamedStruct, Expression, IsNull, KnownNotNull, Literal, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.types.ops.CatalystTypeOps
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, CharVarcharCodegenUtils, DateTimeUtils, GenericArrayData, IntervalUtils, STUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -337,7 +337,7 @@ object SerializerBuildHelper {
     // Framework dispatch runs before encoder-type checks (AgnosticExpressionPathEncoder,
     // isNativeEncoder) in the default path. This is safe because framework types use dedicated
     // leaf encoders (e.g., LocalTimeEncoder), never migration shims or native primitives.
-    CatalystTypeOps(enc.dataType).map(_.createSerializer(input))
+    TypeOps(enc.dataType).flatMap(_.createSerializer(input))
       .getOrElse(createSerializerDefault(enc, input))
 
   private def createSerializerDefault(
