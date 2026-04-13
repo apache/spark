@@ -700,6 +700,20 @@ document.addEventListener("DOMContentLoaded", function () {
     renderPlanViz();
   }
 
+  // Copy SQL description to clipboard
+  var copySqlBtn = document.getElementById("copy-sql-btn");
+  if (copySqlBtn) {
+    copySqlBtn.addEventListener("click", function () {
+      var sqlEl = document.getElementById("sql-description");
+      var text = sqlEl ? sqlEl.textContent : "";
+      navigator.clipboard.writeText(text.trim()).then(function () {
+        if (typeof showToast === "function") {
+          showToast("SQL copied to clipboard", "success");
+        }
+      });
+    });
+  }
+
   // Copy physical plan text to clipboard
   var copyPlanBtn = document.getElementById("copy-plan-btn");
   if (copyPlanBtn) {

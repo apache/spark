@@ -102,7 +102,10 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             <label for="plan-viz-format-select">
               <a id="plan-viz-download-btn" class="downloadbutton">Download</a>
             </label>
-            <button id="copy-plan-btn" class="btn btn-sm btn-outline-secondary ms-2"
+            <button id="copy-sql-btn" class="btn btn-sm btn-outline-secondary ms-2"
+                    type="button" title="Copy SQL to clipboard">
+              &#x1f4cb; Copy SQL</button>
+            <button id="copy-plan-btn" class="btn btn-sm btn-outline-secondary ms-1"
                     type="button" title="Copy physical plan to clipboard">
               &#x1f4cb; Copy Plan</button>
             <button id="copy-link-btn" class="btn btn-sm btn-outline-secondary ms-1"
@@ -111,11 +114,17 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
           </div>
         </div>
 
+      val sqlDescription =
+        <div id="sql-description" style="display:none">
+          {executionUIData.description}
+        </div>
+
       val metrics = sqlStore.executionMetrics(executionId)
       val graph = sqlStore.planGraph(executionId)
       val configs = Option(executionUIData.modifiedConfigs).getOrElse(Map.empty)
 
       summary ++
+        sqlDescription ++
         planVisualization(request, metrics, graph) ++
         physicalPlanDescription(executionUIData.physicalPlanDescription) ++
         jobsTable(request, executionUIData) ++
