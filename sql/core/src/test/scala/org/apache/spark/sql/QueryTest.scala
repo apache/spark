@@ -403,12 +403,18 @@ trait QueryTestBase
 
   // Blocking uncache table for tests
   protected def uncacheTable(tableName: String): Unit = {
-    val tableIdent = spark.sessionState.sqlParser.parseTableIdentifier(tableName)
-    val cascade = !spark.sessionState.catalog.isTempView(tableIdent)
-    spark.sharedState.cacheManager.uncacheQuery(
-      spark.table(tableName).asInstanceOf[classic.Dataset[_]],
-      cascade = cascade,
-      blocking = true)
+    spark match {
+      case spark: classic.SparkSession =>
+        val tableIdent = spark.sessionState.sqlParser.parseTableIdentifier(tableName)
+        val cascade = !spark.sessionState.catalog.isTempView(tableIdent)
+        spark.sharedState.cacheManager.uncacheQuery(
+          spark.table(tableName),
+          cascade = cascade,
+          blocking = true)
+      case spark =>
+        // TODO i guess this doesn't block?!
+        spark.sql(s"UNCACHE TABLE $tableName")
+    }
   }
 
   /**
