@@ -27,7 +27,7 @@ import org.apache.spark.api.python.DechunkedInputStream
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.CLASS_LOADER
 import org.apache.spark.security.SocketAuthServer
-import org.apache.spark.sql.{internal, Column, DataFrame, DataFrameReader, Encoders, Row, SparkSession, TableArg}
+import org.apache.spark.sql.{internal, Column, DataFrame, DataFrameReader, Dataset, Encoders, Row, SparkSession, TableArg}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -195,42 +195,27 @@ private[sql] object PythonSQLUtils extends Logging {
   @scala.annotation.varargs
   def internalFn(name: String, inputs: Column*): Column = Column.internalFn(name, inputs: _*)
 
-  /**
-   * Parses a [[DataFrame]] containing JSON strings into a structured [[DataFrame]].
-   * The input DataFrame must have exactly one column of StringType.
-   * This is used by PySpark to avoid manual Dataset[String] conversion on the Python side.
-   */
+  private def toStringDataset(df: DataFrame): Dataset[String] = {
+    val fields = df.schema.fields
+    if (fields.length != 1) {
+      throw QueryCompilationErrors.dataframeInputNotSingleColumnError(fields.length)
+    }
+    if (fields.head.dataType != org.apache.spark.sql.types.StringType) {
+      throw QueryCompilationErrors.dataframeInputNotStringTypeError(fields.head.dataType)
+    }
+    df.as(Encoders.STRING)
+  }
+
   def jsonFromDataFrame(
       reader: DataFrameReader,
       df: DataFrame): DataFrame = {
-    val classicReader = reader.asInstanceOf[ClassicDataFrameReader]
-    val fields = df.schema.fields
-    if (fields.length != 1) {
-      throw QueryCompilationErrors.dataframeInputNotSingleColumnError(fields.length)
-    }
-    if (fields.head.dataType != org.apache.spark.sql.types.StringType) {
-      throw QueryCompilationErrors.dataframeInputNotStringTypeError(fields.head.dataType)
-    }
-    classicReader.json(df.as(Encoders.STRING))
+    reader.asInstanceOf[ClassicDataFrameReader].json(toStringDataset(df))
   }
 
-  /**
-   * Parses a [[DataFrame]] containing CSV strings into a structured [[DataFrame]].
-   * The input DataFrame must have exactly one column of StringType.
-   * This is used by PySpark to avoid manual Dataset[String] conversion on the Python side.
-   */
   def csvFromDataFrame(
       reader: DataFrameReader,
       df: DataFrame): DataFrame = {
-    val classicReader = reader.asInstanceOf[ClassicDataFrameReader]
-    val fields = df.schema.fields
-    if (fields.length != 1) {
-      throw QueryCompilationErrors.dataframeInputNotSingleColumnError(fields.length)
-    }
-    if (fields.head.dataType != org.apache.spark.sql.types.StringType) {
-      throw QueryCompilationErrors.dataframeInputNotStringTypeError(fields.head.dataType)
-    }
-    classicReader.csv(df.as(Encoders.STRING))
+    reader.asInstanceOf[ClassicDataFrameReader].csv(toStringDataset(df))
   }
 
   def cleanupPythonWorkerLogs(sessionUUID: String, sparkContext: SparkContext): Unit = {
