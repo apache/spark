@@ -381,7 +381,7 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
 
   test("Star target with columns renames") {
     val df = sql("SELECT * FROM VALUES(1,2)")
-    val newDf = df.withColumnsRenamed(Seq("col2"), Seq("newCol2"))
+    val newDf = df.withColumnsRenamed(Map("col2" -> "newCol2"))
     checkResolverGuard(plan = newDf.queryExecution.logical, None)
   }
 
