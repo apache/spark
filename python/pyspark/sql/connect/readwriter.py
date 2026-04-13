@@ -371,8 +371,6 @@ class DataFrameReader(OptionUtils):
         )
         if isinstance(path, str):
             path = [path]
-        if isinstance(path, list):
-            return self.load(path=path, format="csv", schema=schema)
 
         from pyspark.sql.connect.dataframe import DataFrame
 
@@ -389,14 +387,7 @@ class DataFrameReader(OptionUtils):
                     options=self._options,
                 )
             )
-        raise PySparkTypeError(
-            errorClass="NOT_EXPECTED_TYPE",
-            messageParameters={
-                "arg_name": "path",
-                "expected_type": "str, list, or DataFrame",
-                "arg_type": type(path).__name__,
-            },
-        )
+        return self.load(path=path, format="csv", schema=schema)
 
     csv.__doc__ = PySparkDataFrameReader.csv.__doc__
 

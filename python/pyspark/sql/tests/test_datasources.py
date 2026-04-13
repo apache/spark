@@ -172,7 +172,7 @@ class DataSourcesTestsMixin:
 
     def test_csv_with_dataframe_input_non_string_column(self):
         int_df = self.spark.createDataFrame([(1,), (2,)], schema="value INT")
-        with self.assertRaisesRegex(Exception, "PARSE_INPUT_NOT_STRING_TYPE"):
+        with self.assertRaisesRegex(Exception, "DATAFRAME_INPUT_NOT_STRING_TYPE"):
             self.spark.read.csv(int_df).collect()
 
     def test_csv_with_dataframe_input_multiple_columns(self):
@@ -180,13 +180,12 @@ class DataSourcesTestsMixin:
             [("Alice,25", "extra"), ("Bob,30", "extra")],
             schema="value STRING, other STRING",
         )
-        result = self.spark.read.csv(multi_df)
-        expected = [Row(_c0="Alice", _c1="25"), Row(_c0="Bob", _c1="30")]
-        self.assertEqual(sorted(result.collect(), key=lambda r: r._c0), expected)
+        with self.assertRaisesRegex(Exception, "DATAFRAME_INPUT_NOT_SINGLE_COLUMN"):
+            self.spark.read.csv(multi_df).collect()
 
     def test_csv_with_dataframe_input_zero_columns(self):
         empty_schema_df = self.spark.range(1).select()
-        with self.assertRaisesRegex(Exception, "PARSE_INPUT_NOT_STRING_TYPE"):
+        with self.assertRaisesRegex(Exception, "DATAFRAME_INPUT_NOT_SINGLE_COLUMN"):
             self.spark.read.csv(empty_schema_df).collect()
 
     def test_xml(self):
