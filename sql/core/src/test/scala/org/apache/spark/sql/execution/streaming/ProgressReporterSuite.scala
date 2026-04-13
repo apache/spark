@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.scalatest.concurrent.Eventually.eventually
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
+
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
 import org.apache.spark.sql.internal.SQLConf
@@ -24,13 +27,10 @@ import org.apache.spark.sql.streaming.{OutputMode, StreamTest, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
 class ProgressReporterSuite extends StreamTest {
-
   import testImplicits._
 
-  test("no-data batch resets numRowsRemoved to zero via resetExecStatsForNoExecution") {
-    // After a stateful operator evicts state rows via watermark, subsequent no-execution triggers
-    // must report numRowsRemoved=0. Exercises: finishNoExecutionTrigger ->
-    // resetExecStatsForNoExecution -> StateOperatorProgress.copy
+  test("no-data batch resets numRowsRemoved to zero" +
+      " via resetExecStatsForNoExecution") {
     val clock = new StreamManualClock
     val input = MemoryStream[Int]
     val agg = input.toDF()
@@ -38,48 +38,62 @@ class ProgressReporterSuite extends StreamTest {
       .withWatermark("ts", "10 seconds")
       .groupBy(window($"ts", "10 seconds"))
       .agg(count("*") as "cnt")
+      .select($"window".getField("start").cast("long"), $"cnt")
 
-    withSQLConf(SQLConf.STREAMING_POLLING_DELAY.key -> "0") {
+    // noDataProgressEventInterval=0 ensures idle-trigger progress
+    // is always recorded regardless of clock gap.
+    withSQLConf(
+        SQLConf.STREAMING_POLLING_DELAY.key -> "0",
+        SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "0") {
       testStream(agg, outputMode = OutputMode.Update)(
-        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        StartStream(
+          Trigger.ProcessingTime("1 second"),
+          triggerClock = clock),
+        // Batch 0: [1,2,3] -> window [0s,10s) cnt=3.
+        // Watermark after: max(1,2,3)-10 < 0 -> stays 0.
         AddData(input, 1, 2, 3),
         AdvanceManualClock(1 * 1000),
+        CheckNewAnswer((0L, 3L)),
+        // Batch 1: [21] -> window [20s,30s) cnt=1.
+        // Watermark used: 0 (no eviction yet).
+        // Watermark after: 21-10 = 11.
         AddData(input, 21),
         AdvanceManualClock(1 * 1000),
-        Execute("verify eviction") { q =>
-          val lastProgress = q.recentProgress.filter(_.stateOperators.nonEmpty).last
-          val removed = lastProgress.stateOperators.head.numRowsRemoved
-          assert(removed > 0, s"Expected eviction but numRowsRemoved=$removed")
-        },
-        // Manual clock advance schedules the next trigger; with no runnable batch the engine
-        // reports progress via finishNoExecutionTrigger -> resetExecStatsForNoExecution.
+        CheckNewAnswer((20L, 1L)),
+        // Batch 2: no-data cleanup with watermark=11.
+        // Evicts window [0s,10s) (end 10 <= 11).
         AdvanceManualClock(1 * 1000),
-        AssertOnQuery("numRowsRemoved must be 0 in idle trigger after eviction") { q =>
-          val progresses = q.recentProgress.filter(_.stateOperators.nonEmpty)
-          val evictionIdx = progresses.lastIndexWhere(_.stateOperators.head.numRowsRemoved > 0)
-          assert(evictionIdx >= 0, "Expected eviction batch in progresses")
-
-          val idleProgresses =
-            progresses.drop(evictionIdx + 1).filter(_.batchDuration == 0)
-          assert(
-            idleProgresses.nonEmpty,
-            "Expected idle trigger progress after eviction, after eviction: " +
-              progresses.drop(evictionIdx).map(p =>
-                s"(batchId=${p.batchId},duration=${p.batchDuration}").mkString(", "))
-
-          val idleProgress = idleProgresses.head
-          assert(
-            idleProgress.stateOperators.head.numRowsRemoved === 0,
-            s"numRowsRemoved should be 0 in idle trigger but got " +
-              s"${idleProgress.stateOperators.head.numRowsRemoved}")
-          assert(
-            idleProgress.stateOperators.head.numRowsUpdated === 0,
-            s"numRowsUpdated should be 0 in idle trigger but got " +
-              s"${idleProgress.stateOperators.head.numRowsUpdated}")
-          assert(
-            idleProgress.stateOperators.head.numRowsDroppedByWatermark === 0,
-            s"numRowsDroppedByWatermark should be 0 in idle trigger but got " +
-              s"${idleProgress.stateOperators.head.numRowsDroppedByWatermark}")
+        Execute("wait for cleanup batch") { q =>
+          eventually(Timeout(streamingTimeout)) {
+            assert(q.lastProgress.batchId >= 2)
+          }
+        },
+        Execute("verify eviction") { q =>
+          val removed = q.recentProgress
+            .filter(_.stateOperators.nonEmpty)
+            .exists(_.stateOperators.head.numRowsRemoved > 0)
+          assert(removed, "Expected numRowsRemoved > 0")
+        },
+        // Idle trigger — finishNoExecutionTrigger calls
+        // resetExecStatsForNoExecution which must zero out
+        // per-batch metrics.
+        AdvanceManualClock(1 * 1000),
+        Execute("wait for idle trigger progress") { q =>
+          eventually(Timeout(streamingTimeout)) {
+            val p = q.recentProgress.filter(_.stateOperators.nonEmpty)
+            val i = p.lastIndexWhere(_.stateOperators.head.numRowsRemoved > 0)
+            assert(i >= 0 && p.length > i + 1)
+          }
+        },
+        AssertOnQuery("idle trigger must reset metrics") { q =>
+          val p = q.recentProgress.filter(_.stateOperators.nonEmpty)
+          val i = p.lastIndexWhere(_.stateOperators.head.numRowsRemoved > 0)
+          assert(i >= 0, "no eviction batch found")
+          val so = p(i + 1).stateOperators.head
+          assert(so.numRowsRemoved === 0, s"numRowsRemoved=${so.numRowsRemoved}")
+          assert(so.numRowsUpdated === 0, s"numRowsUpdated=${so.numRowsUpdated}")
+          assert(so.numRowsDroppedByWatermark === 0,
+            s"numRowsDroppedByWatermark=${so.numRowsDroppedByWatermark}")
           true
         },
         StopStream
