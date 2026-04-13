@@ -92,12 +92,18 @@ function descriptionHtml(exec) {
   var desc = exec.description || "";
   var basePath = uiRoot + appBasePath;
   var url = basePath + "/SQL/execution/?id=" + exec.id;
+  var link;
   if (desc.length > 100) {
     var short = escapeHtml(desc.substring(0, 100)) + "...";
-    return '<a href="' + url + '" title="' + escapeHtml(desc) + '">' +
+    link = '<a href="' + url + '" title="' + escapeHtml(desc) + '">' +
       short + '</a>';
+  } else {
+    link = '<a href="' + url + '">' + (escapeHtml(desc) || exec.id) + '</a>';
   }
-  return '<a href="' + url + '">' + (escapeHtml(desc) || exec.id) + '</a>';
+  var copyBtn = '<button class="btn btn-sm btn-outline-secondary ms-1 copy-sql-btn" ' +
+    'type="button" title="Copy SQL to clipboard" ' +
+    'data-sql="' + escapeHtml(desc) + '">&#x1f4cb;</button>';
+  return link + copyBtn;
 }
 
 // Remove client-side filter — status filtering is now server-side
@@ -225,6 +231,15 @@ $(document).ready(function () {
 
     $("#status-filter").on("change", function () {
       table.draw();
+    });
+
+    // Copy SQL to clipboard via delegated handler on the DataTable
+    $("#sql-table").on("click", ".copy-sql-btn", function (e) {
+      e.stopPropagation();
+      var sql = $(this).attr("data-sql");
+      if (sql) {
+        navigator.clipboard.writeText(sql);
+      }
     });
 
   } // end init
