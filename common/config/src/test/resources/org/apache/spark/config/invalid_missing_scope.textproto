@@ -17,10 +17,10 @@
 
 configs {
   key: "spark.test.missing.scope"
-  value_type: BOOL
+  value_type: VALUE_TYPE_BOOL
   default_value: "true"
-  visibility: PUBLIC
+  visibility: VISIBILITY_PUBLIC
+  binding_policy: BINDING_POLICY_NOT_APPLICABLE
   doc: "A config with missing scope"
   version: "4.0.0"
 }
-

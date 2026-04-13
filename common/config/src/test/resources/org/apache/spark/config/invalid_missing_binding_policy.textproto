@@ -13,15 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Second test file with a key that duplicates one in test_configs.textproto
+# Test file with missing binding_policy field
 
 configs {
-  key: "spark.test.bool.config"
+  key: "spark.test.missing.binding.policy"
   value_type: VALUE_TYPE_BOOL
-  default_value: "false"
+  default_value: "true"
   scope: SCOPE_SESSION
   visibility: VISIBILITY_PUBLIC
-  binding_policy: BINDING_POLICY_SESSION
-  doc: "Duplicate of spark.test.bool.config"
+  doc: "A config with missing binding_policy"
   version: "4.0.0"
 }

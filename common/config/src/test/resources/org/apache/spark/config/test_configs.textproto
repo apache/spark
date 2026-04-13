@@ -17,30 +17,33 @@
 
 configs {
   key: "spark.test.bool.config"
-  value_type: BOOL
+  value_type: VALUE_TYPE_BOOL
   default_value: "true"
-  scope: SESSION
-  visibility: PUBLIC
+  scope: SCOPE_SESSION
+  visibility: VISIBILITY_PUBLIC
+  binding_policy: BINDING_POLICY_SESSION
   doc: "A test boolean config"
   version: "4.0.0"
 }
 
 configs {
   key: "spark.test.int.config"
-  value_type: INT
+  value_type: VALUE_TYPE_INT
   default_value: "42"
-  scope: CLUSTER
-  visibility: INTERNAL
+  scope: SCOPE_CLUSTER
+  visibility: VISIBILITY_INTERNAL
+  binding_policy: BINDING_POLICY_NOT_APPLICABLE
   doc: "A test integer config"
   version: "4.0.0"
 }
 
 configs {
   key: "spark.test.long.doc.config"
-  value_type: STRING
+  value_type: VALUE_TYPE_STRING
   default_value: "test"
-  scope: SESSION
-  visibility: PUBLIC
+  scope: SCOPE_SESSION
+  visibility: VISIBILITY_PUBLIC
+  binding_policy: BINDING_POLICY_PERSISTED
   doc: "This is a very long documentation string that spans multiple lines. "
        "It demonstrates the prototext multi-line string concatenation feature. "
        "Each quoted segment will be concatenated together into a single string, "
@@ -50,11 +53,11 @@ configs {
 
 configs {
   key: "spark.test.string.config"
-  value_type: STRING
+  value_type: VALUE_TYPE_STRING
   default_value: "default_value"
-  scope: SESSION
-  visibility: PUBLIC
+  scope: SCOPE_SESSION
+  visibility: VISIBILITY_PUBLIC
+  binding_policy: BINDING_POLICY_NOT_APPLICABLE
   doc: "A test string config"
   version: "4.0.0"
 }
-

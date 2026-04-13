@@ -25,26 +25,38 @@ option java_package = "org.apache.spark.config.protobuf";
 enum Scope {
   SCOPE_UNSPECIFIED = 0;
   // The config is effective for the entire Spark cluster.
-  CLUSTER = 1;
+  SCOPE_CLUSTER = 1;
   // The config is effective for the current session.
-  SESSION = 2;
+  SCOPE_SESSION = 2;
 }
 
 // The type of the config value
 enum ValueType {
   VALUE_TYPE_UNSPECIFIED = 0;
-  BOOL = 1;
-  INT = 2;
-  LONG = 3;
-  DOUBLE = 4;
-  STRING = 5;
+  VALUE_TYPE_BOOL = 1;
+  VALUE_TYPE_INT = 2;
+  VALUE_TYPE_LONG = 3;
+  VALUE_TYPE_DOUBLE = 4;
+  VALUE_TYPE_STRING = 5;
 }
 
 // The visibility of the config
 enum Visibility {
   VISIBILITY_UNSPECIFIED = 0;
-  PUBLIC = 1;
-  INTERNAL = 2;
+  VISIBILITY_PUBLIC = 1;
+  VISIBILITY_INTERNAL = 2;
+}
+
+// The binding policy of the config for SQL views, UDFs, and procedures.
+enum BindingPolicy {
+  BINDING_POLICY_UNSPECIFIED = 0;
+  // The config value propagates from the active session to views/UDFs/procedures.
+  BINDING_POLICY_SESSION = 1;
+  // The config uses the value saved at view/UDF/procedure creation time,
+  // or the Spark default if none was saved.
+  BINDING_POLICY_PERSISTED = 2;
+  // The config does not apply to views/UDFs/procedures. At runtime, behaves like SESSION.
+  BINDING_POLICY_NOT_APPLICABLE = 3;
 }
 
 // A single config entry
@@ -67,11 +79,14 @@ message ConfigEntry {
   // [Required] The visibility of the config (PUBLIC or INTERNAL)
   optional Visibility visibility = 6;
 
+  // [Required] The binding policy for SQL views, UDFs, and procedures.
+  optional BindingPolicy binding_policy = 7;
+
   // [Required] Documentation for the config
-  optional string doc = 7;
+  optional string doc = 8;
 
   // The Spark version when this config was introduced
-  optional string version = 8;
+  optional string version = 9;
 }
 
 // A collection of config entries

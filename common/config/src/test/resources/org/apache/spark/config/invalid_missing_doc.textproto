@@ -17,10 +17,10 @@
 
 configs {
   key: "spark.test.missing.doc"
-  value_type: BOOL
+  value_type: VALUE_TYPE_BOOL
   default_value: "true"
-  scope: SESSION
-  visibility: PUBLIC
+  scope: SCOPE_SESSION
+  visibility: VISIBILITY_PUBLIC
+  binding_policy: BINDING_POLICY_NOT_APPLICABLE
   version: "4.0.0"
 }
-

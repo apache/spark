@@ -17,21 +17,22 @@
 
 configs {
   key: "spark.test.z.config"
-  value_type: BOOL
+  value_type: VALUE_TYPE_BOOL
   default_value: "true"
-  scope: SESSION
-  visibility: PUBLIC
+  scope: SCOPE_SESSION
+  visibility: VISIBILITY_PUBLIC
+  binding_policy: BINDING_POLICY_NOT_APPLICABLE
   doc: "Z config"
   version: "4.0.0"
 }
 
 configs {
   key: "spark.test.a.config"
-  value_type: BOOL
+  value_type: VALUE_TYPE_BOOL
   default_value: "true"
-  scope: SESSION
-  visibility: PUBLIC
+  scope: SCOPE_SESSION
+  visibility: VISIBILITY_PUBLIC
+  binding_policy: BINDING_POLICY_NOT_APPLICABLE
   doc: "A config - should come before Z"
   version: "4.0.0"
 }
-

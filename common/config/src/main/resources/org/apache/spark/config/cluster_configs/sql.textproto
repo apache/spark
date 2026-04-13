@@ -17,10 +17,11 @@
 
 configs {
   key: "spark.sql.ui.retainedExecutions"
-  value_type: INT
+  value_type: VALUE_TYPE_INT
   default_value: "1000"
-  scope: CLUSTER
-  visibility: PUBLIC
+  scope: SCOPE_CLUSTER
+  visibility: VISIBILITY_PUBLIC
+  binding_policy: BINDING_POLICY_NOT_APPLICABLE
   doc: "Number of executions to retain in the Spark UI."
   version: "1.5.0"
 }

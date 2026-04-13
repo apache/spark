@@ -128,7 +128,7 @@ object SQLConf {
 
   def isStaticConfigKey(key: String): Boolean = {
     staticConfKeys.contains(key) ||
-      Option(ConfigRegistry.getConfig(key)).exists(_.getScope == Scope.CLUSTER)
+      Option(ConfigRegistry.getConfig(key)).exists(_.getScope == Scope.SCOPE_CLUSTER)
   }
 
   def buildConf(key: String): ConfigBuilder = ConfigBuilder(key).onCreate(register)

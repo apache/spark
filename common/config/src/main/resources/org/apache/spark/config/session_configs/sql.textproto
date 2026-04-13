@@ -17,10 +17,11 @@
 
 configs {
   key: "spark.sql.optimizer.datasourceV2ExprFolding"
-  value_type: BOOL
+  value_type: VALUE_TYPE_BOOL
   default_value: "true"
-  scope: SESSION
-  visibility: INTERNAL
+  scope: SCOPE_SESSION
+  visibility: VISIBILITY_INTERNAL
+  binding_policy: BINDING_POLICY_NOT_APPLICABLE
   doc: "When this config is set to true, do safe constant folding for the "
        "expressions before translation and pushdown."
   version: "4.1.0"
@@ -28,20 +29,22 @@ configs {
 
 configs {
   key: "spark.sql.optimizer.maxIterations"
-  value_type: INT
+  value_type: VALUE_TYPE_INT
   default_value: "100"
-  scope: SESSION
-  visibility: INTERNAL
+  scope: SCOPE_SESSION
+  visibility: VISIBILITY_INTERNAL
+  binding_policy: BINDING_POLICY_NOT_APPLICABLE
   doc: "The max number of iterations the optimizer runs."
   version: "2.0.0"
 }
 
 configs {
   key: "spark.sql.shuffledHashJoinFactor"
-  value_type: INT
+  value_type: VALUE_TYPE_INT
   default_value: "3"
-  scope: SESSION
-  visibility: PUBLIC
+  scope: SCOPE_SESSION
+  visibility: VISIBILITY_PUBLIC
+  binding_policy: BINDING_POLICY_NOT_APPLICABLE
   doc: "The shuffle hash join can be selected if the data size of small "
        "side multiplied by this factor is still smaller than the large side."
   version: "3.3.0"

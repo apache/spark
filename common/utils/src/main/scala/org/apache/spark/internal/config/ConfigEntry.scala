@@ -19,7 +19,7 @@ package org.apache.spark.internal.config
 
 import org.apache.spark.SparkException
 import org.apache.spark.config.ConfigRegistry
-import org.apache.spark.config.protobuf.{ConfigEntry => ProtoConfigEntry, ValueType, Visibility}
+import org.apache.spark.config.protobuf.{BindingPolicy, ConfigEntry => ProtoConfigEntry, ValueType, Visibility}
 import org.apache.spark.util.SparkEnvUtils
 
 // ====================================================================================
@@ -300,8 +300,9 @@ private[spark] class ProtoBackedConfigEntry[T](
     valueConverter = valueConverter,
     stringConverter = stringConverter,
     doc = protoEntry.getDoc,
-    isPublic = protoEntry.getVisibility != Visibility.INTERNAL,
-    version = protoEntry.getVersion
+    isPublic = protoEntry.getVisibility != Visibility.VISIBILITY_INTERNAL,
+    version = protoEntry.getVersion,
+    bindingPolicy = ProtoBackedConfigEntry.toBindingPolicy(protoEntry)
   ) {
 
   override def defaultValueString: String =
@@ -334,6 +335,18 @@ private[spark] class ProtoBackedConfigEntry[T](
       },
       stringConverter
     )
+  }
+}
+
+private[spark] object ProtoBackedConfigEntry {
+  def toBindingPolicy(
+      protoEntry: ProtoConfigEntry): Option[ConfigBindingPolicy.Value] = {
+    protoEntry.getBindingPolicy match {
+      case BindingPolicy.BINDING_POLICY_SESSION => Some(ConfigBindingPolicy.SESSION)
+      case BindingPolicy.BINDING_POLICY_PERSISTED => Some(ConfigBindingPolicy.PERSISTED)
+      case BindingPolicy.BINDING_POLICY_NOT_APPLICABLE => Some(ConfigBindingPolicy.NOT_APPLICABLE)
+      case _ => None
+    }
   }
 }
 
@@ -395,15 +408,15 @@ private[spark] object ConfigEntry {
   private def createProtoBackedConfigEntry(
       protoEntry: ProtoConfigEntry): ProtoBackedConfigEntry[_] = {
     protoEntry.getValueType match {
-      case ValueType.BOOL =>
+      case ValueType.VALUE_TYPE_BOOL =>
         new ProtoBackedConfigEntry[Boolean](protoEntry, _.toBoolean, _.toString)
-      case ValueType.INT =>
+      case ValueType.VALUE_TYPE_INT =>
         new ProtoBackedConfigEntry[Int](protoEntry, _.toInt, _.toString)
-      case ValueType.LONG =>
+      case ValueType.VALUE_TYPE_LONG =>
         new ProtoBackedConfigEntry[Long](protoEntry, _.toLong, _.toString)
-      case ValueType.DOUBLE =>
+      case ValueType.VALUE_TYPE_DOUBLE =>
         new ProtoBackedConfigEntry[Double](protoEntry, _.toDouble, _.toString)
-      case ValueType.STRING =>
+      case ValueType.VALUE_TYPE_STRING =>
         new ProtoBackedConfigEntry[String](protoEntry, identity[String], identity[String])
       case other =>
         throw SparkException.internalError(s"Unsupported value type: $other")

@@ -24,6 +24,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
+import org.apache.spark.config.protobuf.BindingPolicy;
 import org.apache.spark.config.protobuf.ConfigEntry;
 import org.apache.spark.config.protobuf.Scope;
 import org.apache.spark.config.protobuf.ValueType;
@@ -80,6 +81,9 @@ public class ConfigRegistrySuite {
       }
       if (config.getVisibility() == Visibility.VISIBILITY_UNSPECIFIED) {
         missingFields.add("visibility");
+      }
+      if (config.getBindingPolicy() == BindingPolicy.BINDING_POLICY_UNSPECIFIED) {
+        missingFields.add("binding_policy");
       }
       if (config.getDoc().isEmpty()) {
         missingFields.add("doc");
@@ -141,12 +145,13 @@ public class ConfigRegistrySuite {
     ConfigEntry config = registry.get("spark.test.bool.config");
     assertNotNull(config);
     assertEquals("spark.test.bool.config", config.getKey());
-    assertEquals(ValueType.BOOL, config.getValueType());
+    assertEquals(ValueType.VALUE_TYPE_BOOL, config.getValueType());
     assertEquals("true", config.getDefaultValue());
-    assertEquals(Scope.SESSION, config.getScope());
-    assertEquals(Visibility.PUBLIC, config.getVisibility());
+    assertEquals(Scope.SCOPE_SESSION, config.getScope());
+    assertEquals(Visibility.VISIBILITY_PUBLIC, config.getVisibility());
     assertEquals("A test boolean config", config.getDoc());
     assertEquals("4.0.0", config.getVersion());
+    assertEquals(BindingPolicy.BINDING_POLICY_SESSION, config.getBindingPolicy());
   }
 
   @Test
@@ -154,12 +159,13 @@ public class ConfigRegistrySuite {
     ConfigEntry config = registry.get("spark.test.int.config");
     assertNotNull(config);
     assertEquals("spark.test.int.config", config.getKey());
-    assertEquals(ValueType.INT, config.getValueType());
+    assertEquals(ValueType.VALUE_TYPE_INT, config.getValueType());
     assertEquals("42", config.getDefaultValue());
-    assertEquals(Scope.CLUSTER, config.getScope());
-    assertEquals(Visibility.INTERNAL, config.getVisibility());
+    assertEquals(Scope.SCOPE_CLUSTER, config.getScope());
+    assertEquals(Visibility.VISIBILITY_INTERNAL, config.getVisibility());
     assertEquals("A test integer config", config.getDoc());
     assertEquals("4.0.0", config.getVersion());
+    assertEquals(BindingPolicy.BINDING_POLICY_NOT_APPLICABLE, config.getBindingPolicy());
   }
 
   @Test
@@ -167,12 +173,13 @@ public class ConfigRegistrySuite {
     ConfigEntry config = registry.get("spark.test.string.config");
     assertNotNull(config);
     assertEquals("spark.test.string.config", config.getKey());
-    assertEquals(ValueType.STRING, config.getValueType());
+    assertEquals(ValueType.VALUE_TYPE_STRING, config.getValueType());
     assertEquals("default_value", config.getDefaultValue());
-    assertEquals(Scope.SESSION, config.getScope());
-    assertEquals(Visibility.PUBLIC, config.getVisibility());
+    assertEquals(Scope.SCOPE_SESSION, config.getScope());
+    assertEquals(Visibility.VISIBILITY_PUBLIC, config.getVisibility());
     assertEquals("A test string config", config.getDoc());
     assertEquals("4.0.0", config.getVersion());
+    assertEquals(BindingPolicy.BINDING_POLICY_NOT_APPLICABLE, config.getBindingPolicy());
   }
 
   @Test
@@ -191,10 +198,10 @@ public class ConfigRegistrySuite {
     ConfigEntry config = registry.get("spark.test.long.doc.config");
     assertNotNull(config);
     assertEquals("spark.test.long.doc.config", config.getKey());
-    assertEquals(ValueType.STRING, config.getValueType());
+    assertEquals(ValueType.VALUE_TYPE_STRING, config.getValueType());
     assertEquals("test", config.getDefaultValue());
-    assertEquals(Scope.SESSION, config.getScope());
-    assertEquals(Visibility.PUBLIC, config.getVisibility());
+    assertEquals(Scope.SCOPE_SESSION, config.getScope());
+    assertEquals(Visibility.VISIBILITY_PUBLIC, config.getVisibility());
     // Verify multi-line string concatenation works
     String expectedDoc = "This is a very long documentation string that spans multiple lines. " +
         "It demonstrates the prototext multi-line string concatenation feature. " +
@@ -268,6 +275,17 @@ public class ConfigRegistrySuite {
     assertTrue(error.getMessage().contains("Missing required fields"));
     assertTrue(error.getMessage().contains("doc"));
     assertTrue(error.getMessage().contains("spark.test.missing.doc"));
+    assertTrue(error.getMessage().contains(file));
+  }
+
+  @Test
+  public void testValidationMissingBindingPolicy() {
+    String file = "org/apache/spark/config/invalid_missing_binding_policy.textproto";
+    Throwable error = assertThrows(Throwable.class,
+        () -> validateConfigsInOneFile(file));
+    assertTrue(error.getMessage().contains("Missing required fields"));
+    assertTrue(error.getMessage().contains("binding_policy"));
+    assertTrue(error.getMessage().contains("spark.test.missing.binding.policy"));
     assertTrue(error.getMessage().contains(file));
   }
 
