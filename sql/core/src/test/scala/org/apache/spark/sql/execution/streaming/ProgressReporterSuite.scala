@@ -48,9 +48,8 @@ class ProgressReporterSuite extends StreamTest {
         AdvanceManualClock(1 * 1000),
         Execute("verify eviction") { q =>
           val lastProgress = q.recentProgress.filter(_.stateOperators.nonEmpty).last
-          assert(
-            lastProgress.stateOperators.head.numRowsRemoved > 0,
-            s"Expected eviction but numRowsRemoved=${lastProgress.stateOperators.head.numRowsRemoved}")
+          val removed = lastProgress.stateOperators.head.numRowsRemoved
+          assert(removed > 0, s"Expected eviction but numRowsRemoved=$removed")
         },
         // Manual clock advance schedules the next trigger; with no runnable batch the engine
         // reports progress via finishNoExecutionTrigger -> resetExecStatsForNoExecution.
