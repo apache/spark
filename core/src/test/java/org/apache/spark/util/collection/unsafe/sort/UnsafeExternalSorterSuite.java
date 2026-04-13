@@ -169,6 +169,7 @@ public class UnsafeExternalSorterSuite {
       pageSizeBytes,
       spillElementsThreshold,
       spillSizeThreshold,
+      /* spillMergeFactor */ -1,
       shouldUseRadixSort());
   }
 
@@ -460,6 +461,7 @@ public class UnsafeExternalSorterSuite {
       pageSizeBytes,
       spillElementsThreshold,
       spillSizeThreshold,
+      /* spillMergeFactor */ -1,
       shouldUseRadixSort());
     long[] record = new long[100];
     int recordSize = record.length * 8;
@@ -523,6 +525,7 @@ public class UnsafeExternalSorterSuite {
       pageSizeBytes,
       spillElementsThreshold,
       spillSizeThreshold,
+      /* spillMergeFactor */ -1,
       shouldUseRadixSort());
 
     // Peak memory should be monotonically increasing. More specifically, every time

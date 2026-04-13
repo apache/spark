@@ -28,14 +28,12 @@ import java.util.function.Supplier;
 
 import com.google.common.annotations.VisibleForTesting;
 
-import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
-import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
@@ -107,9 +105,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   private long totalSortTimeNanos = 0L;
   private volatile SpillableIterator readingIterator = null;
 
-  private int spillMergeFactor =
-    SparkEnv.get() == null ? -1 :
-      (int) SparkEnv.get().conf().get(package$.MODULE$.UNSAFE_SORTER_SPILL_MERGE_FACTOR());
+  private int spillMergeFactor;
 
   @Nullable
   private volatile UnsafeSorterBoundedSpillMerger boundedMerger;
@@ -125,12 +121,13 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       long pageSizeBytes,
       int numElementsForSpillThreshold,
       long sizeInBytesForSpillThreshold,
+      int spillMergeFactor,
       UnsafeInMemorySorter inMemorySorter,
       long existingMemoryConsumption) throws IOException {
     UnsafeExternalSorter sorter = new UnsafeExternalSorter(taskMemoryManager, blockManager,
       serializerManager, taskContext, recordComparatorSupplier, prefixComparator, initialSize,
         pageSizeBytes, numElementsForSpillThreshold, sizeInBytesForSpillThreshold,
-        inMemorySorter, false /* ignored */);
+        spillMergeFactor, inMemorySorter, false /* ignored */);
     sorter.spill(Long.MAX_VALUE, sorter);
     taskContext.taskMetrics().incMemoryBytesSpilled(existingMemoryConsumption);
     sorter.totalSpillBytes += existingMemoryConsumption;
@@ -150,10 +147,12 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       long pageSizeBytes,
       int numElementsForSpillThreshold,
       long sizeInBytesForSpillThreshold,
+      int spillMergeFactor,
       boolean canUseRadixSort) {
     return new UnsafeExternalSorter(taskMemoryManager, blockManager, serializerManager,
       taskContext, recordComparatorSupplier, prefixComparator, initialSize, pageSizeBytes,
-      numElementsForSpillThreshold, sizeInBytesForSpillThreshold, null, canUseRadixSort);
+      numElementsForSpillThreshold, sizeInBytesForSpillThreshold, spillMergeFactor,
+      null, canUseRadixSort);
   }
 
   private UnsafeExternalSorter(
@@ -167,6 +166,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       long pageSizeBytes,
       int numElementsForSpillThreshold,
       long sizeInBytesForSpillThreshold,
+      int spillMergeFactor,
       @Nullable UnsafeInMemorySorter existingInMemorySorter,
       boolean canUseRadixSort) {
     super(taskMemoryManager, pageSizeBytes, taskMemoryManager.getTungstenMemoryMode());
@@ -176,6 +176,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     this.taskContext = taskContext;
     this.recordComparatorSupplier = recordComparatorSupplier;
     this.prefixComparator = prefixComparator;
+    this.spillMergeFactor = spillMergeFactor;
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility for units
     // this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024
     this.fileBufferSizeBytes = 32 * 1024;
