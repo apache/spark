@@ -135,7 +135,7 @@ trait SharedSparkSessionBase
   /**
    * The [[TestSparkSession]] to use for all tests in this suite.
    */
-  protected override def spark: classic.SparkSession = _spark
+  protected override def spark: SparkSession = _spark
 
   /**
    * The [[TestSQLContext]] to use for all tests in this suite.
