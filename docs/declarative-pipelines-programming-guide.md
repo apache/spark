@@ -573,7 +573,7 @@ AS SELECT * FROM source;
 </div>
 </div>
 
-SDP itself does not restrict which table formats can be used. However, the table format must be supported by the configured catalog. For example, a Delta catalog only supports Delta tables, while the default session catalog supports Parquet, ORC, and other built-in formats.
+SDP itself does not restrict which table formats can be used. Any table format available in your Spark environment can be specified. By default, tables are created using Spark's default format (`parquet`), which is configured by `spark.sql.sources.default`.
 
 ### How Materialized Views are Refreshed
 
@@ -595,13 +595,13 @@ Unlike materialized views, streaming tables support **incremental processing**:
 2. New data is appended to the existing table data.
 3. A checkpoint tracks the processing progress so subsequent runs resume from where the last run left off.
 
-Streaming tables require a checkpoint directory on a Hadoop-compatible file system (e.g., HDFS, Amazon S3, Azure ADLS Gen2, Google Cloud Storage, or local file system). The checkpoint directory is configured via the `storage` field in the pipeline spec file.
+Streaming tables require a checkpoint directory on a Hadoop-compatible file system (e.g., local file system, HDFS, Amazon S3, Azure ADLS Gen2, Google Cloud Storage). The checkpoint directory is configured via the `storage` field in the pipeline spec file.
 
 Streaming tables also support **schema evolution**: when the schema of incoming data changes, SDP merges the new schema with the existing table schema automatically.
 
 ### Full Refresh
 
-You can force a full refresh of specific datasets or the entire pipeline using the `--full-refresh` or `--full-refresh-all` CLI options. A full refresh:
+You can force a full refresh of specific datasets or the entire pipeline using the `--full-refresh` or `--full-refresh-all` CLI options, respectively. A full refresh:
 
 - For **materialized views**: has no special effect, since every refresh is already a full recomputation.
 - For **streaming tables**: clears all existing data and checkpoints, reprocessing all available source data from scratch.
