@@ -3774,7 +3774,8 @@ object SQLConf {
     buildConf("spark.sql.streaming.checkpoint.fileChecksum.enabled")
       .internal()
       .doc("When true, checksum would be generated and verified for checkpoint files. " +
-        "This is used to detect file corruption.")
+        "This is used to detect file corruption. This is only enabled when " +
+        "STATE_STORE_CHECKPOINT_FORMAT_VERSION >= 2")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)

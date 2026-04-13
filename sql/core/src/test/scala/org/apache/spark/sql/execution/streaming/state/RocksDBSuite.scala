@@ -264,7 +264,14 @@ trait AlsoTestWithRocksDBFeatures
       val newTestName = s"$testName - with enableStateStoreCheckpointIds = " +
         s"$enableStateStoreCheckpointIds"
       testWithColumnFamilies(newTestName, testMode, testTags: _*) { colFamiliesEnabled =>
-        testBody(enableStateStoreCheckpointIds, colFamiliesEnabled)
+        val v2Confs = if (enableStateStoreCheckpointIds) {
+          Seq(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2")
+        } else {
+          Seq.empty
+        }
+        withSQLConf(v2Confs: _*) {
+          testBody(enableStateStoreCheckpointIds, colFamiliesEnabled)
+        }
       }
     }
   }
@@ -277,7 +284,14 @@ trait AlsoTestWithRocksDBFeatures
       val newTestName = s"$testName - with enableStateStoreCheckpointIds = " +
         s"$enableStateStoreCheckpointIds"
       test(newTestName, testTags: _*) {
-        testBody(enableStateStoreCheckpointIds)
+        val v2Confs = if (enableStateStoreCheckpointIds) {
+          Seq(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2")
+        } else {
+          Seq.empty
+        }
+        withSQLConf(v2Confs: _*) {
+          testBody(enableStateStoreCheckpointIds)
+        }
       }
     }
   }
@@ -290,7 +304,14 @@ trait AlsoTestWithRocksDBFeatures
       val newTestName = s"$testName - with enableStateStoreCheckpointIds = " +
         s"$enableStateStoreCheckpointIds"
       testWithChangelogCheckpointingDisabled(newTestName, testTags: _*) {
-        enableStateStoreCheckpointIds => testBody(enableStateStoreCheckpointIds)
+        val v2Confs = if (enableStateStoreCheckpointIds) {
+          Seq(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2")
+        } else {
+          Seq.empty
+        }
+        withSQLConf(v2Confs: _*) {
+          testBody(enableStateStoreCheckpointIds)
+        }
       }
     }
   }
