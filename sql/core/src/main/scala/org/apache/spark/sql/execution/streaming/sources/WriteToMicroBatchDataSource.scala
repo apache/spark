@@ -19,9 +19,10 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolveSchemaEvolution}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SupportsSchemaEvolution, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode, WriteWithSchemaEvolution}
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsWrite, TableChange, TableWritePrivilege}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.connector.catalog.{SupportsWrite, TableChange, TableWritePrivilege}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2CatalogAndIdentifier}
 import org.apache.spark.sql.streaming.OutputMode
 
@@ -43,7 +44,7 @@ case class WriteToMicroBatchDataSource(
     outputMode: OutputMode,
     override val withSchemaEvolution: Boolean,
     batchId: Option[Long] = None)
-  extends UnaryNode with SupportsSchemaEvolution {
+  extends UnaryNode with WriteWithSchemaEvolution {
   override def child: LogicalPlan = query
   override def output: Seq[Attribute] = Nil
 
@@ -61,16 +62,18 @@ case class WriteToMicroBatchDataSource(
     if (relation.isEmpty || !schemaEvolutionEnabled || !schemaEvolutionReady) {
       return Seq.empty
     }
-    val currentTableSchema = relation.get match {
-      case ExtractV2CatalogAndIdentifier(catalog, ident) =>
+
+    val currentRelation = relation.get match {
+      case r @ ExtractV2CatalogAndIdentifier(catalog, ident) =>
         // Loading the current table from the catalog ensures we don't use a stale schema.
-        CatalogV2Util.v2ColumnsToStructType(
-          catalog.loadTable(ident).columns())
-      case _ =>
-        relation.get.schema
+        val currentTable = catalog.loadTable(ident)
+        r.copy(
+          table = currentTable,
+          output = DataTypeUtils.toAttributes(currentTable.columns))
+      case r => r
     }
-    ResolveSchemaEvolution.computeSchemaChanges(
-      currentTableSchema, query.schema, isByName = true).toSeq
+    ResolveSchemaEvolution.computeSupportedSchemaChanges(
+      currentRelation, query.schema, isByName = true).toSeq
   }
 
   override val writePrivileges: Set[TableWritePrivilege] = Set(TableWritePrivilege.INSERT)
