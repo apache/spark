@@ -40,7 +40,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{MapStatus, MergeStatus, ShuffleOutputStatus}
-import org.apache.spark.shuffle.MetadataFetchFailedException
+import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId, ShuffleMergedBlockId}
 import org.apache.spark.util._
 import org.apache.spark.util.ArrayImplicits._
@@ -1358,7 +1358,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
         shuffleId, startPartition, endPartition, mapOutputStatuses, startMapIndex,
           actualEndMapIndex, Option(mergedOutputStatuses))
     } catch {
-      case e: MetadataFetchFailedException =>
+      case e: FetchFailedException =>
         // We experienced a fetch failure so our mapStatuses cache is outdated; clear it:
         mapStatuses.clear()
         mergeStatuses.clear()
@@ -1376,14 +1376,14 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     try {
       val mergeStatus = mergeResultStatuses(partitionId)
       // If the original MergeStatus is no longer available, we cannot identify the list of
-      // unmerged blocks to fetch in this case. Throw MetadataFetchFailedException in this case.
+      // unmerged blocks to fetch in this case. Throw FetchFailedException in this case.
       MapOutputTracker.validateStatus(mergeStatus, shuffleId, partitionId)
       // Use the MergeStatus's partition level bitmap since we are doing partition level fallback
       MapOutputTracker.getMapStatusesForMergeStatus(shuffleId, partitionId,
         mapOutputStatuses, mergeStatus.tracker)
     } catch {
       // We experienced a fetch failure so our mapStatuses cache is outdated; clear it
-      case e: MetadataFetchFailedException =>
+      case e: FetchFailedException =>
         mapStatuses.clear()
         mergeStatuses.clear()
         throw e
@@ -1404,7 +1404,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
         chunkTracker)
     } catch {
       // We experienced a fetch failure so our mapStatuses cache is outdated; clear it:
-      case e: MetadataFetchFailedException =>
+      case e: FetchFailedException =>
         mapStatuses.clear()
         mergeStatuses.clear()
         throw e
@@ -1778,7 +1778,9 @@ private[spark] object MapOutputTracker extends Logging {
       val errorMessage = log"Missing an output location for shuffle ${MDC(SHUFFLE_ID, shuffleId)} partition ${MDC(PARTITION_ID, partition)}"
       // scalastyle:on
       logError(errorMessage)
-      throw new MetadataFetchFailedException(shuffleId, partition, errorMessage.message)
+      // this error indicates a problem with the stage that produced the shuffle data
+      // a FetchFailedException repeats that stage
+      throw new FetchFailedException(null, shuffleId, -1L, -1, partition, errorMessage.message)
     }
   }
 }

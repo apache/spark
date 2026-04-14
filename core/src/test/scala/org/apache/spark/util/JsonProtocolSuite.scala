@@ -1338,6 +1338,10 @@ private[spark] object JsonProtocolSuite extends Assertions {
         assert(r1.reduceId === r2.reduceId)
         assert(r1.bmAddress === r2.bmAddress)
         assert(r1.message === r2.message)
+      case (r1: MetadataFetchFailed, r2: MetadataFetchFailed) =>
+        assert(r1.shuffleId === r2.shuffleId)
+        assert(r1.reduceId === r2.reduceId)
+        assert(r1.message === r2.message)
       case (r1: ExceptionFailure, r2: ExceptionFailure) =>
         assert(r1.className === r2.className)
         assert(r1.description === r2.description)

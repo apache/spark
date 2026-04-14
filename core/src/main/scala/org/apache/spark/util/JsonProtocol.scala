@@ -703,6 +703,10 @@ private[spark] object JsonProtocol extends JsonUtils {
         g.writeNumberField("Map Index", fetchFailed.mapIndex)
         g.writeNumberField("Reduce ID", fetchFailed.reduceId)
         g.writeStringField("Message", fetchFailed.message)
+      case metadataFetchFailed: MetadataFetchFailed =>
+        g.writeNumberField("Shuffle ID", metadataFetchFailed.shuffleId)
+        g.writeNumberField("Reduce ID", metadataFetchFailed.reduceId)
+        g.writeStringField("Message", metadataFetchFailed.message)
       case exceptionFailure: ExceptionFailure =>
         g.writeStringField("Class Name", exceptionFailure.className)
         g.writeStringField("Description", exceptionFailure.description)
@@ -1413,6 +1417,7 @@ private[spark] object JsonProtocol extends JsonUtils {
     val success = Utils.getFormattedClassName(Success)
     val resubmitted = Utils.getFormattedClassName(Resubmitted)
     val fetchFailed = Utils.getFormattedClassName(FetchFailed)
+    val metadataFetchFailed = Utils.getFormattedClassName(MetadataFetchFailed)
     val exceptionFailure = Utils.getFormattedClassName(ExceptionFailure)
     val taskResultLost = Utils.getFormattedClassName(TaskResultLost)
     val taskKilled = Utils.getFormattedClassName(TaskKilled)
@@ -1441,6 +1446,11 @@ private[spark] object JsonProtocol extends JsonUtils {
         val message = jsonOption(json.get("Message")).map(_.asText)
         new FetchFailed(blockManagerAddress, shuffleId, mapId, mapIndex, reduceId,
           message.getOrElse("Unknown reason"))
+      case `metadataFetchFailed` =>
+        val shuffleId = json.get("Shuffle ID").extractInt
+        val reduceId = json.get("Reduce ID").extractInt
+        val message = jsonOption(json.get("Message")).map(_.asText)
+        new MetadataFetchFailed(shuffleId, reduceId, message.getOrElse("Unknown reason"))
       case `exceptionFailure` =>
         val className = json.get("Class Name").extractString
         val description = json.get("Description").extractString

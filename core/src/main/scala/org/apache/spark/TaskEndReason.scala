@@ -21,6 +21,7 @@ import java.io.{ObjectInputStream, ObjectOutputStream}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.TASK_MAX_FAILURES_COUNTS_METADATA_FETCH_FAILURES
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{AccumulatorV2, Utils}
@@ -105,6 +106,29 @@ case class FetchFailed(
    * due to one bad node.
    */
   override def countTowardsTaskFailures: Boolean = false
+}
+
+/**
+ * :: DeveloperApi ::
+ * Task failed to fetch shuffle metadata from a remote node. This failure is expected to recover
+ * by simply repeating the task. This does not count towards task failures, so the stage will never
+ * fail due to this failure.
+ */
+@DeveloperApi
+case class MetadataFetchFailed(
+    shuffleId: Int,
+    reduceId: Int,
+    message: String)
+  extends TaskFailedReason {
+  override def toErrorString: String = {
+    s"MetadataFetchFailed(shuffleId=$shuffleId, reduceId=$reduceId, message=\n$message\n)"
+  }
+
+  /**
+   * Metadata fetch failures count toward task failures as configured.
+   */
+  override def countTowardsTaskFailures: Boolean = Option(SparkEnv.get.conf)
+    .forall(_.get(TASK_MAX_FAILURES_COUNTS_METADATA_FETCH_FAILURES))
 }
 
 /**
