@@ -288,6 +288,14 @@ private[spark] class FallbackConfigEntry[T] (
   }
 }
 
+/**
+ * Marker trait for config entries backed by proto definitions.
+ */
+private[spark] sealed trait ProtoBackedBase
+
+/**
+ * A proto-backed config entry with a default value.
+ */
 private[spark] class ProtoBackedConfigEntry[T](
     protoEntry: ProtoConfigEntry,
     valueConverter: String => T,
@@ -303,7 +311,7 @@ private[spark] class ProtoBackedConfigEntry[T](
     isPublic = protoEntry.getVisibility != Visibility.VISIBILITY_INTERNAL,
     version = protoEntry.getVersion,
     bindingPolicy = ProtoBackedConfigEntry.toBindingPolicy(protoEntry)
-  ) {
+  ) with ProtoBackedBase {
 
   override def defaultValueString: String =
     defaultValue.map(stringConverter).getOrElse(ConfigEntry.UNDEFINED)
@@ -338,6 +346,33 @@ private[spark] class ProtoBackedConfigEntry[T](
   }
 }
 
+/**
+ * A proto-backed config entry that does not have a default value.
+ */
+private[spark] class ProtoBackedOptionalConfigEntry[T](
+    protoEntry: ProtoConfigEntry,
+    rawValueConverter: String => T,
+    rawStringConverter: T => String)
+  extends ConfigEntry[Option[T]](
+    key = protoEntry.getKey,
+    prependedKey = None,
+    prependSeparator = "",
+    alternatives = Nil,
+    valueConverter = s => Some(rawValueConverter(s)),
+    stringConverter = v => v.map(rawStringConverter).orNull,
+    doc = protoEntry.getDoc,
+    isPublic = protoEntry.getVisibility != Visibility.VISIBILITY_INTERNAL,
+    version = protoEntry.getVersion,
+    bindingPolicy = ProtoBackedConfigEntry.toBindingPolicy(protoEntry)
+  ) with ProtoBackedBase {
+
+  override def defaultValueString: String = ConfigEntry.UNDEFINED
+
+  override def readFrom(reader: ConfigReader): Option[T] = {
+    readString(reader).map(rawValueConverter)
+  }
+}
+
 private[spark] object ProtoBackedConfigEntry {
   def toBindingPolicy(
       protoEntry: ProtoConfigEntry): Option[ConfigBindingPolicy.Value] = {
@@ -367,7 +402,7 @@ private[spark] object ConfigEntry {
     val existing = knownConfigs.putIfAbsent(entry.key, entry)
     if (existing != null) {
       // Only allow overwriting proto-backed configs (enhancement pattern)
-      require(existing.isInstanceOf[ProtoBackedConfigEntry[_]],
+      require(existing.isInstanceOf[ProtoBackedBase],
         s"Config entry ${entry.key} already registered!")
       knownConfigs.put(entry.key, entry)
     }
@@ -384,42 +419,53 @@ private[spark] object ConfigEntry {
     }
   }
 
-  def listAllProtoBackedConfigs(): java.util.Collection[ProtoBackedConfigEntry[_]] = {
-    // Lazy filtering view - no intermediate allocation
-    new java.util.AbstractCollection[ProtoBackedConfigEntry[_]]() {
-      override def iterator(): java.util.Iterator[ProtoBackedConfigEntry[_]] = {
-        knownConfigs.values().stream()
-          .filter(_.isInstanceOf[ProtoBackedConfigEntry[_]])
-          .map(_.asInstanceOf[ProtoBackedConfigEntry[_]])
-          .iterator()
+  def findProtoDefinedEntry(key: String): ConfigEntry[_] = {
+    if (ConfigRegistry.containsConfig(key)) knownConfigs.get(key) else null
+  }
+
+  def listAllProtoDefinedConfigs(): java.util.Collection[ConfigEntry[_]] = {
+    new java.util.AbstractCollection[ConfigEntry[_]]() {
+      override def iterator(): java.util.Iterator[ConfigEntry[_]] = {
+        val keys = ConfigRegistry.allKeys().iterator()
+        new java.util.Iterator[ConfigEntry[_]]() {
+          override def hasNext: Boolean = keys.hasNext
+          override def next(): ConfigEntry[_] = knownConfigs.get(keys.next())
+        }
       }
 
-      override def size(): Int = {
-        var count = 0
-        knownConfigs.values().forEach {
-          case _: ProtoBackedConfigEntry[_] => count += 1
-          case _ =>
-        }
-        count
-      }
+      override def size(): Int = ConfigRegistry.allKeys().size()
     }
   }
 
   private def createProtoBackedConfigEntry(
-      protoEntry: ProtoConfigEntry): ProtoBackedConfigEntry[_] = {
+      protoEntry: ProtoConfigEntry): ConfigEntry[_] = {
+    val hasDefault = protoEntry.hasDefaultValue ||
+      (SparkEnvUtils.isTesting && protoEntry.hasTestDefault)
     protoEntry.getValueType match {
       case ValueType.VALUE_TYPE_BOOL =>
-        new ProtoBackedConfigEntry[Boolean](protoEntry, _.toBoolean, _.toString)
+        createTypedEntry[Boolean](protoEntry, hasDefault, _.toBoolean, _.toString)
       case ValueType.VALUE_TYPE_INT =>
-        new ProtoBackedConfigEntry[Int](protoEntry, _.toInt, _.toString)
+        createTypedEntry[Int](protoEntry, hasDefault, _.toInt, _.toString)
       case ValueType.VALUE_TYPE_LONG =>
-        new ProtoBackedConfigEntry[Long](protoEntry, _.toLong, _.toString)
+        createTypedEntry[Long](protoEntry, hasDefault, _.toLong, _.toString)
       case ValueType.VALUE_TYPE_DOUBLE =>
-        new ProtoBackedConfigEntry[Double](protoEntry, _.toDouble, _.toString)
+        createTypedEntry[Double](protoEntry, hasDefault, _.toDouble, _.toString)
       case ValueType.VALUE_TYPE_STRING =>
-        new ProtoBackedConfigEntry[String](protoEntry, identity[String], identity[String])
+        createTypedEntry[String](protoEntry, hasDefault, identity[String], identity[String])
       case other =>
         throw SparkException.internalError(s"Unsupported value type: $other")
+    }
+  }
+
+  private def createTypedEntry[T](
+      protoEntry: ProtoConfigEntry,
+      hasDefault: Boolean,
+      valueConverter: String => T,
+      stringConverter: T => String): ConfigEntry[_] = {
+    if (hasDefault) {
+      new ProtoBackedConfigEntry[T](protoEntry, valueConverter, stringConverter)
+    } else {
+      new ProtoBackedOptionalConfigEntry[T](protoEntry, valueConverter, stringConverter)
     }
   }
 }

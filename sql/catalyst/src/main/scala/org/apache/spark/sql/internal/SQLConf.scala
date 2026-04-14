@@ -90,17 +90,19 @@ object SQLConf {
   }
 
   private[internal] def getConfigEntry(key: String): ConfigEntry[_] = {
-    Option(sqlConfEntries.get(key)).getOrElse(ConfigEntry.findProtoBackedEntry(key))
+    Option(sqlConfEntries.get(key)).getOrElse(ConfigEntry.findProtoDefinedEntry(key))
   }
 
+  // TODO: once all configs are migrated to textproto, this can be replaced by
+  //  ConfigEntry.listAllEntries() and callers can filter by config properties.
   private[sql] def getConfigEntries(): util.Collection[ConfigEntry[_]] = {
     // Lazy concatenating view - no intermediate allocation
     new util.AbstractCollection[ConfigEntry[_]]() {
-      private lazy val protoConfigs = ConfigEntry.listAllProtoBackedConfigs()
+      private lazy val protoConfigs = ConfigEntry.listAllProtoDefinedConfigs()
 
       override def iterator(): util.Iterator[ConfigEntry[_]] = {
         val first = sqlConfEntries.values().iterator()
-        val second = protoConfigs.iterator().asInstanceOf[util.Iterator[ConfigEntry[_]]]
+        val second = protoConfigs.iterator()
         new util.Iterator[ConfigEntry[_]]() {
           override def hasNext: Boolean = first.hasNext || second.hasNext
           override def next(): ConfigEntry[_] =

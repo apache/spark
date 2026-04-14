@@ -33,10 +33,11 @@ Add a new `configs` block to the appropriate `.textproto` file:
 ```protobuf
 configs {
   key: "spark.sql.myFeature.enabled"
-  value_type: BOOL
+  value_type: VALUE_TYPE_BOOL
   default_value: "true"
-  scope: SESSION
-  visibility: PUBLIC
+  scope: SCOPE_SESSION
+  visibility: VISIBILITY_PUBLIC
+  binding_policy: BINDING_POLICY_SESSION
   doc: "When true, enables my new feature."
   version: "4.0.0"
 }
@@ -45,7 +46,7 @@ configs {
 **Notes**:
 - See `config_schema.proto` for field details and requirements
 - Configs within each file must be ordered alphabetically by key
-- These constraints are validated at load time
+- These constraints are validated by tests
 
 ### Step 3: Register the Config File (if new)
 
@@ -66,10 +67,11 @@ For long documentation strings, use protobuf string concatenation:
 ```protobuf
 configs {
   key: "spark.sql.myFeature.threshold"
-  value_type: INT
+  value_type: VALUE_TYPE_INT
   default_value: "100"
-  scope: SESSION
-  visibility: PUBLIC
+  scope: SCOPE_SESSION
+  visibility: VISIBILITY_PUBLIC
+  binding_policy: BINDING_POLICY_NOT_APPLICABLE
   doc: "This is a long documentation string that spans multiple lines. "
        "Simply place multiple quoted strings adjacent to each other "
        "and protobuf will concatenate them automatically."
@@ -107,7 +109,7 @@ def myFunc(conf: SQLConf): Unit = {
 
 ### Adding Config Value Validation
 
-For configs that need to validate its value, create a `ConfigEntry` and use `checkValue`:
+For configs that need to validate their values, create a `ConfigEntry` and use `checkValue`:
 
 ```scala
 val MY_THRESHOLD = buildConfFromConfigFile[Int]("spark.sql.myFeature.threshold")
