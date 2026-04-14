@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
