@@ -28,12 +28,12 @@ import org.apache.spark.annotation.Evolving;
 public interface UpdateSummary extends WriteSummary {
 
   /**
-   * Returns the number of rows updated.
+   * Returns the number of rows updated, or -1 if not found.
    */
   long numUpdatedRows();
 
   /**
-   * Returns the number of rows copied unmodified.
+   * Returns the number of rows copied unmodified, or -1 if not found.
    */
   long numCopiedRows();
 }

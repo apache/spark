@@ -314,12 +314,12 @@ case class ReplaceDataExec(
     refreshCache: () => Unit,
     projections: ReplaceDataProjections,
     write: Write,
-    override val rowLevelCommand: Option[RowLevelOperation.Command])
-  extends V2ExistingTableWriteExec {
+    rowLevelCommand: RowLevelOperation.Command)
+  extends RowLevelWriteExec {
 
   override def writingTask: WritingSparkTask[_] = {
     val metricCounter = rowLevelCommand match {
-      case Some(UPDATE) =>
+      case UPDATE =>
         val isUpdatedIndex = query.output.indexWhere(_.name == IS_UPDATED_COLUMN)
         Some(BooleanMetricCounter(
           isUpdatedIndex, operationMetrics("numUpdatedRows"), operationMetrics("numCopiedRows")))
@@ -349,8 +349,8 @@ case class WriteDeltaExec(
     refreshCache: () => Unit,
     projections: WriteDeltaProjections,
     write: DeltaWrite,
-    override val rowLevelCommand: Option[RowLevelOperation.Command] = None)
-  extends V2ExistingTableWriteExec {
+    rowLevelCommand: RowLevelOperation.Command)
+  extends RowLevelWriteExec {
 
   override lazy val writingTask: WritingSparkTask[_] = {
     if (projections.metadataProjection.isDefined) {
@@ -422,12 +422,57 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec {
 }
 
 /**
+ * A trait for row-level write operations (UPDATE, DELETE, MERGE) that carry the command.
+ */
+trait RowLevelWriteExec extends V2ExistingTableWriteExec {
+  def rowLevelCommand: RowLevelOperation.Command
+
+  override lazy val operationMetrics: Map[String, SQLMetric] = rowLevelCommand match {
+    case UPDATE =>
+      Map(
+        "numUpdatedRows" -> SQLMetrics.createMetric(sparkContext, "number of updated rows"),
+        "numCopiedRows" -> SQLMetrics.createMetric(sparkContext, "number of copied rows"))
+    case _ => Map.empty
+  }
+
+  /**
+   * Returns the value of the named metric, or -1 if the metric is not found.
+   */
+  private def getMetricValue(metrics: Map[String, SQLMetric], name: String): Long = {
+    metrics.get(name).map(_.value).getOrElse(-1L)
+  }
+
+  override protected def getWriteSummary(query: SparkPlan): Option[WriteSummary] = {
+    rowLevelCommand match {
+      case MERGE =>
+        collectFirst(query) { case m: MergeRowsExec => m }.map { n =>
+          val metrics = n.metrics
+          MergeSummaryImpl(
+            getMetricValue(metrics, "numTargetRowsCopied"),
+            getMetricValue(metrics, "numTargetRowsDeleted"),
+            getMetricValue(metrics, "numTargetRowsUpdated"),
+            getMetricValue(metrics, "numTargetRowsInserted"),
+            getMetricValue(metrics, "numTargetRowsMatchedUpdated"),
+            getMetricValue(metrics, "numTargetRowsMatchedDeleted"),
+            getMetricValue(metrics, "numTargetRowsNotMatchedBySourceUpdated"),
+            getMetricValue(metrics, "numTargetRowsNotMatchedBySourceDeleted"))
+        }
+      case UPDATE =>
+        Some(UpdateSummaryImpl(
+          getMetricValue(operationMetrics, "numUpdatedRows"),
+          getMetricValue(operationMetrics, "numCopiedRows")))
+      case DELETE =>
+        None
+    }
+  }
+}
+
+/**
  * The base physical plan for writing data into data source v2.
  */
 trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSparkPlanHelper {
   def query: SparkPlan
   def writingTask: WritingSparkTask[_] = DataWritingSparkTask()
-  def rowLevelCommand: Option[RowLevelOperation.Command] = None
 
   var commitProgress: Option[StreamWriterCommitProgress] = None
 
@@ -435,14 +480,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
   override def output: Seq[Attribute] = Nil
 
   protected val customMetrics: Map[String, SQLMetric] = Map.empty
-
-  protected lazy val operationMetrics: Map[String, SQLMetric] = rowLevelCommand match {
-    case Some(UPDATE) =>
-      Map(
-        "numUpdatedRows" -> SQLMetrics.createMetric(sparkContext, "number of updated rows"),
-        "numCopiedRows" -> SQLMetrics.createMetric(sparkContext, "number of copied rows"))
-    case _ => Map.empty
-  }
+  def operationMetrics: Map[String, SQLMetric] = Map.empty
 
   override lazy val metrics = customMetrics ++ operationMetrics
 
@@ -514,29 +552,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
     Nil
   }
 
-  private def getWriteSummary(query: SparkPlan): Option[WriteSummary] = {
-    rowLevelCommand.flatMap {
-      case MERGE =>
-        collectFirst(query) { case m: MergeRowsExec => m }.map { n =>
-          val metrics = n.metrics
-          MergeSummaryImpl(
-            metrics.get("numTargetRowsCopied").map(_.value).getOrElse(-1L),
-            metrics.get("numTargetRowsDeleted").map(_.value).getOrElse(-1L),
-            metrics.get("numTargetRowsUpdated").map(_.value).getOrElse(-1L),
-            metrics.get("numTargetRowsInserted").map(_.value).getOrElse(-1L),
-            metrics.get("numTargetRowsMatchedUpdated").map(_.value).getOrElse(-1L),
-            metrics.get("numTargetRowsMatchedDeleted").map(_.value).getOrElse(-1L),
-            metrics.get("numTargetRowsNotMatchedBySourceUpdated").map(_.value).getOrElse(-1L),
-            metrics.get("numTargetRowsNotMatchedBySourceDeleted").map(_.value).getOrElse(-1L))
-        }
-      case UPDATE =>
-        Some(UpdateSummaryImpl(
-          operationMetrics.get("numUpdatedRows").map(_.value).get,
-          operationMetrics.get("numCopiedRows").map(_.value).get))
-      case DELETE =>
-        None
-    }
-  }
+  protected def getWriteSummary(query: SparkPlan): Option[WriteSummary] = None
 }
 
 trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serializable {

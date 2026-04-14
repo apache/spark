@@ -369,7 +369,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         refreshCache(r), // use the original relation to refresh the cache
         projections,
         write,
-        Some(rd.operation.command)) :: Nil
+        rd.operation.command) :: Nil
 
     case wd @ WriteDelta(
         _: DataSourceV2Relation,
@@ -382,7 +382,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         refreshCache(r), // use the original relation to refresh the cache
         projections,
         write,
-        Some(wd.operation.command)) :: Nil
+        wd.operation.command) :: Nil
 
     case MergeRows(isSourceRowPresent, isTargetRowPresent, matchedInstructions,
         notMatchedInstructions, notMatchedBySourceInstructions, checkCardinality, output, child) =>
