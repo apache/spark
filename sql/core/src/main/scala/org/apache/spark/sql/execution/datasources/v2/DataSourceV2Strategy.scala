@@ -358,17 +358,31 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           throw SparkException.internalError("Unexpected table relation: " + other)
       }
 
-    case rd @ ReplaceData(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections,
+    case rd @ ReplaceData(
+        _: DataSourceV2Relation,
+        _, query,
+        r: DataSourceV2Relation,
+        projections,
         _, Some(write)) =>
-      // use the original relation to refresh the cache
-      ReplaceDataExec(planLater(query), refreshCache(r), projections, write,
-        Some(rd.operation.command())) :: Nil
+      ReplaceDataExec(
+        planLater(query),
+        refreshCache(r), // use the original relation to refresh the cache
+        projections,
+        write,
+        Some(rd.operation.command)) :: Nil
 
-    case wd @ WriteDelta(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections,
+    case wd @ WriteDelta(
+        _: DataSourceV2Relation,
+        _, query,
+        r: DataSourceV2Relation,
+        projections,
         Some(write)) =>
-      // use the original relation to refresh the cache
-      WriteDeltaExec(planLater(query), refreshCache(r), projections, write,
-        Some(wd.operation.command())) :: Nil
+      WriteDeltaExec(
+        planLater(query),
+        refreshCache(r), // use the original relation to refresh the cache
+        projections,
+        write,
+        Some(wd.operation.command)) :: Nil
 
     case MergeRows(isSourceRowPresent, isTargetRowPresent, matchedInstructions,
         notMatchedInstructions, notMatchedBySourceInstructions, checkCardinality, output, child) =>

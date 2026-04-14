@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, MergeSummaryImpl, PhysicalWriteInfoImpl, RowLevelOperation, UpdateSummaryImpl, Write, WriterCommitMessage, WriteSummary}
+import org.apache.spark.sql.connector.write.RowLevelOperation.Command._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -318,7 +319,7 @@ case class ReplaceDataExec(
 
   override def writingTask: WritingSparkTask[_] = {
     val metricCounter = rowLevelCommand match {
-      case Some(RowLevelOperation.Command.UPDATE) =>
+      case Some(UPDATE) =>
         val isUpdatedIndex = query.output.indexWhere(_.name == IS_UPDATED_COLUMN)
         Some(BooleanMetricCounter(
           isUpdatedIndex, operationMetrics("numUpdatedRows"), operationMetrics("numCopiedRows")))
@@ -436,11 +437,10 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
   protected val customMetrics: Map[String, SQLMetric] = Map.empty
 
   protected lazy val operationMetrics: Map[String, SQLMetric] = rowLevelCommand match {
-    case Some(RowLevelOperation.Command.UPDATE) =>
+    case Some(UPDATE) =>
       Map(
         "numUpdatedRows" -> SQLMetrics.createMetric(sparkContext, "number of updated rows"),
-        "numCopiedRows" -> SQLMetrics.createMetric(sparkContext, "number of copied rows")
-      )
+        "numCopiedRows" -> SQLMetrics.createMetric(sparkContext, "number of copied rows"))
     case _ => Map.empty
   }
 
@@ -516,7 +516,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
 
   private def getWriteSummary(query: SparkPlan): Option[WriteSummary] = {
     rowLevelCommand.flatMap {
-      case RowLevelOperation.Command.MERGE =>
+      case MERGE =>
         collectFirst(query) { case m: MergeRowsExec => m }.map { n =>
           val metrics = n.metrics
           MergeSummaryImpl(
@@ -527,15 +527,13 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
             metrics.get("numTargetRowsMatchedUpdated").map(_.value).getOrElse(-1L),
             metrics.get("numTargetRowsMatchedDeleted").map(_.value).getOrElse(-1L),
             metrics.get("numTargetRowsNotMatchedBySourceUpdated").map(_.value).getOrElse(-1L),
-            metrics.get("numTargetRowsNotMatchedBySourceDeleted").map(_.value).getOrElse(-1L)
-          )
+            metrics.get("numTargetRowsNotMatchedBySourceDeleted").map(_.value).getOrElse(-1L))
         }
-      case RowLevelOperation.Command.UPDATE =>
+      case UPDATE =>
         Some(UpdateSummaryImpl(
           operationMetrics.get("numUpdatedRows").map(_.value).get,
-          operationMetrics.get("numCopiedRows").map(_.value).get
-        ))
-      case RowLevelOperation.Command.DELETE =>
+          operationMetrics.get("numCopiedRows").map(_.value).get))
+      case DELETE =>
         None
     }
   }
