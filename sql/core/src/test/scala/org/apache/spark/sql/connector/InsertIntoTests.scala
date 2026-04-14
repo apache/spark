@@ -19,15 +19,16 @@ package org.apache.spark.sql.connector
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.functions.{array, map, struct}
+import org.apache.spark.sql.functions.{array, lit, map, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types._
 
 /**
  * A collection of "INSERT INTO" tests that can be run through the SQL or DataFrameWriter APIs.
@@ -1028,19 +1029,256 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     }
   }
 
-  test("Insert schema evolution: type widening int to long") {
+  test("Insert schema evolution: type widening int to long by position") {
     val t1 = s"${catalogAndNamespace}tbl"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id int, data string) USING $v2Format")
-      // Insert with long value to trigger type evolution from int to long.
+      doInsert(t1, Seq((1, "a")).toDF("id", "data"))
       doInsertWithSchemaEvolution(t1,
-        Seq((Long.MaxValue, "a")).toDF("id", "data"))
+        Seq((Long.MaxValue, "b")).toDF("id", "data"))
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
-        Seq(Row(Long.MaxValue, "a")))
-      // Verify the schema was widened to long.
+        Seq(Row(1L, "a"), Row(Long.MaxValue, "b")))
+      assert(spark.table(t1).schema("id").dataType === LongType)
+    }
+  }
+
+  test("Insert schema evolution: type widening int to long by name") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id int, data string) USING $v2Format")
+      doInsert(t1, Seq((1, "a")).toDF("id", "data"))
+      doInsertWithSchemaEvolution(t1,
+        Seq(("b", Long.MaxValue)).toDF("data", "id"), byName = true)
+      checkAnswer(
+        sql(s"SELECT * FROM $t1"),
+        Seq(Row(1L, "a"), Row(Long.MaxValue, "b")))
+      assert(spark.table(t1).schema("id").dataType === LongType)
+    }
+  }
+
+  test("Insert schema evolution: type widening + extra column combined") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id int, data string) USING $v2Format")
+      doInsert(t1, Seq((1, "a")).toDF("id", "data"))
+      doInsertWithSchemaEvolution(t1,
+        Seq((Long.MaxValue, "b", true)).toDF("id", "data", "active"))
+      checkAnswer(
+        sql(s"SELECT * FROM $t1"),
+        Seq(
+          Row(1L, "a", null),
+          Row(Long.MaxValue, "b", true)))
       val schema = spark.table(t1).schema
       assert(schema("id").dataType === LongType)
+      assert(schema.fieldNames.contains("active"))
+    }
+  }
+
+  test("Insert schema evolution: type widening nested struct field by position") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, info struct<value:int,name:string>) USING $v2Format")
+      doInsert(t1,
+        Seq((1L, "Alice", 100)).toDF("id", "name", "value")
+          .select($"id", struct($"value", $"name").as("info")))
+      doInsertWithSchemaEvolution(t1,
+        Seq((2L, "Bob", Long.MaxValue)).toDF("id", "name", "value")
+          .select($"id", struct($"value", $"name").as("info")))
+      checkAnswer(
+        sql(s"SELECT id, info.value, info.name FROM $t1"),
+        Seq(Row(1L, 100L, "Alice"), Row(2L, Long.MaxValue, "Bob")))
+      val infoType = spark.table(t1).schema("info").dataType.asInstanceOf[StructType]
+      assert(infoType("value").dataType === LongType)
+    }
+  }
+
+  test("Insert schema evolution: type widening nested struct field by name") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, info struct<value:int,name:string>) USING $v2Format")
+      doInsert(t1,
+        Seq((1L, "Alice", 100)).toDF("id", "name", "value")
+          .select($"id", struct($"value", $"name").as("info")))
+      doInsertWithSchemaEvolution(t1,
+        Seq((2L, "Bob", Long.MaxValue)).toDF("id", "name", "value")
+          .select($"id", struct($"name", $"value").as("info")),
+        byName = true)
+      checkAnswer(
+        sql(s"SELECT id, info.value, info.name FROM $t1"),
+        Seq(Row(1L, 100L, "Alice"), Row(2L, Long.MaxValue, "Bob")))
+      val infoType = spark.table(t1).schema("info").dataType.asInstanceOf[StructType]
+      assert(infoType("value").dataType === LongType)
+    }
+  }
+
+  test("Insert schema evolution: type widening in array element struct by position") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, arr array<struct<value:int>>) USING $v2Format")
+      doInsert(t1,
+        Seq((1L, 100)).toDF("id", "value")
+          .select($"id", array(struct($"value")).as("arr")))
+      doInsertWithSchemaEvolution(t1,
+        Seq((2L, Long.MaxValue)).toDF("id", "value")
+          .select($"id", array(struct($"value")).as("arr")))
+      checkAnswer(
+        sql(s"SELECT id, arr[0].value FROM $t1"),
+        Seq(Row(1L, 100L), Row(2L, Long.MaxValue)))
+      val arrType = spark.table(t1).schema("arr").dataType.asInstanceOf[ArrayType]
+      val elemType = arrType.elementType.asInstanceOf[StructType]
+      assert(elemType("value").dataType === LongType)
+    }
+  }
+
+  test("Insert schema evolution: type widening in map value struct by position") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, m map<string,struct<value:int>>) USING $v2Format")
+      doInsert(t1,
+        Seq((1L, "k1", 100)).toDF("id", "key", "value")
+          .select($"id", map($"key", struct($"value")).as("m")))
+      doInsertWithSchemaEvolution(t1,
+        Seq((2L, "k2", Long.MaxValue)).toDF("id", "key", "value")
+          .select($"id", map($"key", struct($"value")).as("m")))
+      checkAnswer(
+        sql(s"SELECT id, m['k1'].value, m['k2'].value FROM $t1"),
+        Seq(Row(1L, 100L, null), Row(2L, null, Long.MaxValue)))
+      val mapType = spark.table(t1).schema("m").dataType.asInstanceOf[MapType]
+      val valueType = mapType.valueType.asInstanceOf[StructType]
+      assert(valueType("value").dataType === LongType)
+    }
+  }
+
+  test("Insert schema evolution: type widening with overwrite mode") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id int, data string) USING $v2Format")
+      doInsert(t1, Seq((1, "a")).toDF("id", "data"))
+      doInsertWithSchemaEvolution(t1,
+        Seq((Long.MaxValue, "b")).toDF("id", "data"), mode = SaveMode.Overwrite)
+      checkAnswer(
+        sql(s"SELECT * FROM $t1"),
+        Seq(Row(Long.MaxValue, "b")))
+      assert(spark.table(t1).schema("id").dataType === LongType)
+    }
+  }
+
+  test("Insert schema evolution: no type narrowing - inserting int into long should not change") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+      doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+      // Inserting an int into a long column should not narrow the schema.
+      doInsertWithSchemaEvolution(t1, Seq((2, "b")).toDF("id", "data"))
+      checkAnswer(
+        sql(s"SELECT * FROM $t1"),
+        Seq(Row(1L, "a"), Row(2L, "b")))
+      // Schema should still be long.
+      assert(spark.table(t1).schema("id").dataType === LongType)
+    }
+  }
+
+  test("Insert schema evolution: type widening and other type mismatch") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id float, data string) USING $v2Format")
+      doInsert(t1, Seq((1f, "a")).toDF("id", "data"))
+      // Inserting a double into a float should widen the schema, inserting an int into a string
+      // should retain the string type.
+      doInsertWithSchemaEvolution(t1, Seq((2d, 3)).toDF("id", "data"))
+      checkAnswer(
+        sql(s"SELECT * FROM $t1"),
+        Seq(Row(1d, "a"), Row(2d, "3")))
+      assert(spark.table(t1).schema("id").dataType === DoubleType)
+      assert(spark.table(t1).schema("data").dataType === StringType)
+    }
+  }
+
+  test("Insert schema evolution: incompatible type change - struct to atomic fails") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, info struct<value:int>) USING $v2Format")
+      // Inserting a string where a struct is expected is incompatible and should fail.
+      checkError(
+        exception = intercept[SparkException] {
+          doInsertWithSchemaEvolution(t1, Seq((1L, "not_a_struct")).toDF("id", "info"))
+        },
+        condition = "_LEGACY_ERROR_TEMP_2095",
+        parameters = Map(
+          "left" -> new StructType()
+            .add("id", LongType)
+            .add("info", new StructType().add("value", IntegerType))
+            .toString,
+          "right" -> new StructType()
+            .add("id", LongType, nullable = false)
+            .add("info", StringType)
+            .toString
+      ))
+    }
+  }
+
+  test("Insert schema evolution: source NullType column does not change target type by position") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+      doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+      // Insert a null value with NullType - should not change the target column type.
+      doInsertWithSchemaEvolution(t1,
+        Seq(2L).toDF("id").withColumn("data", lit(null)))
+      checkAnswer(
+        sql(s"SELECT * FROM $t1"),
+        Seq(Row(1L, "a"), Row(2L, null)))
+      assert(spark.table(t1).schema("data").dataType === StringType)
+    }
+  }
+
+  test("Insert schema evolution: source NullType column does not change target type by name") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+      doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+      doInsertWithSchemaEvolution(t1,
+        Seq(2L).toDF("id").withColumn("data", lit(null)),
+        byName = true)
+      checkAnswer(
+        sql(s"SELECT * FROM $t1"),
+        Seq(Row(1L, "a"), Row(2L, null)))
+      assert(spark.table(t1).schema("data").dataType === StringType)
+    }
+  }
+
+  test("Insert schema evolution: source NullType for nested struct field by position") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, info struct<value:int,name:string>) USING $v2Format")
+      doInsert(t1,
+        Seq((1L, "Alice", 100)).toDF("id", "name", "value")
+          .select($"id", struct($"value", $"name").as("info")))
+      // Insert with NullType for nested field - should not change the struct field type.
+      doInsertWithSchemaEvolution(t1,
+        Seq(2L).toDF("id")
+          .withColumn("info", struct(lit(null).as("value"), lit("Bob").as("name"))))
+      checkAnswer(
+        sql(s"SELECT id, info.value, info.name FROM $t1"),
+        Seq(Row(1L, 100, "Alice"), Row(2L, null, "Bob")))
+      val infoType = spark.table(t1).schema("info").dataType.asInstanceOf[StructType]
+      assert(infoType("value").dataType === IntegerType)
+    }
+  }
+
+  test("Insert schema evolution: type widening without schema evolution flag") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id int, data string) USING $v2Format")
+      doInsert(t1, Seq((1, "a")).toDF("id", "data"))
+      // Insert without schema evolution - should cast to target type, not widen.
+      doInsert(t1, Seq((2L, "b")).toDF("id", "data"))
+      checkAnswer(
+        sql(s"SELECT * FROM $t1"),
+        Seq(Row(1, "a"), Row(2, "b")))
+      // Schema should still be int since we didn't use schema evolution.
+      assert(spark.table(t1).schema("id").dataType === IntegerType)
     }
   }
 }

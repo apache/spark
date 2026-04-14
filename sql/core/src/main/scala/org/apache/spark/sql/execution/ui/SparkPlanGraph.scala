@@ -88,6 +88,31 @@ case class SparkPlanGraph(
 
 object SparkPlanGraph {
 
+  /** Maximum character length for DOT graph node labels. */
+  private val MAX_LABEL_LENGTH = 36
+
+  /** Pattern to detect dot-separated qualified names (e.g., catalog.schema.table). */
+  private val QUALIFIED_NAME_PATTERN =
+    java.util.regex.Pattern.compile(".*\\w+\\.\\w+\\.\\w+.*")
+
+  /**
+   * Truncate a node label for compact display in the plan visualization graph.
+   * Only truncates labels containing dot-separated qualified names (e.g.,
+   * catalog.schema.table) which can become very long with custom catalogs.
+   * Uses middle-ellipsis to preserve the operator prefix and the table name.
+   * The full name is always available in the tooltip and side panel.
+   */
+  private[ui] def truncateLabel(label: String): String = {
+    if (label == null || label.length <= MAX_LABEL_LENGTH ||
+        !QUALIFIED_NAME_PATTERN.matcher(label).matches()) {
+      label
+    } else {
+      val half = (MAX_LABEL_LENGTH - 3) / 2
+      label.substring(0, half) + "..." +
+        label.substring(label.length - half)
+    }
+  }
+
   /**
    * Build a SparkPlanGraph from the root of a SparkPlan tree.
    */
@@ -199,7 +224,8 @@ class SparkPlanGraphNode(
   def makeDotNode(metricsValue: Map[Long, String]): String = {
     val nodeId = s"node$id"
     val tooltip = StringEscapeUtils.escapeJava(desc)
-    val labelStr = StringEscapeUtils.escapeJava(name)
+    val labelStr = StringEscapeUtils.escapeJava(
+      SparkPlanGraph.truncateLabel(name))
     s"""  $id [id="$nodeId" label="$labelStr" tooltip="$tooltip"];"""
   }
 }

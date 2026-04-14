@@ -931,9 +931,11 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         val parsed2 = parseAndResolve(sql2)
         if (useV1Command) {
           val expected1 = DescribeTableCommand(
+            parsed1.asInstanceOf[DescribeTableCommand].child,
             TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
             Map.empty, false, parsed1.output)
           val expected2 = DescribeTableCommand(
+            parsed2.asInstanceOf[DescribeTableCommand].child,
             TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
             Map.empty, true, parsed2.output)
 
@@ -957,6 +959,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         val parsed3 = parseAndResolve(sql3)
         if (useV1Command) {
           val expected3 = DescribeTableCommand(
+            parsed3.asInstanceOf[DescribeTableCommand].child,
             TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
             Map("a" -> "1"), false, parsed3.output)
           comparePlans(parsed3, expected3)

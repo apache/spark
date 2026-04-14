@@ -178,6 +178,32 @@ object PushDownUtils extends Logging {
   }
 
   /**
+   * Separates partition filters from data filters and converts pushable partition
+   * filters to [[PartitionPredicateImpl]] instances.
+   *
+   * Callers must first flatten nested partition field references via
+   * [[flattenNestedPartitionFilters]] with [[ExprId]] matching the [[PartitionPredicateField]]s.
+   *
+   * @param flattenedFilters Catalyst filter expressions with partition field references
+   *                         already flattened.
+   * @param partitionFields Partition field metadata.
+   * @return a pair of (created partition predicates, remaining filters not converted).
+   */
+  private[v2] def createPartitionPredicates(
+      flattenedFilters: Seq[Expression],
+      partitionFields: Seq[PartitionPredicateField])
+  : (Seq[PartitionPredicateImpl], Seq[Expression]) = {
+    val partitionAttributes = partitionFields.map(_.attrRef)
+    val (partFilters, nonPartitionFilters) =
+      DataSourceUtils.getPartitionFiltersAndDataFilters(partitionAttributes, flattenedFilters)
+    val (pushable, nonPushable) = partFilters.partition(isPushablePartitionFilter)
+    val (partitionPredicates, errorPartitionPredicates) = pushable.partitionMap { e =>
+      PartitionPredicateImpl(e, partitionFields).toLeft(e)
+    }
+    (partitionPredicates, nonPartitionFilters ++ nonPushable ++ errorPartitionPredicates)
+  }
+
+  /**
    * If the scan supports iterative filtering, infer additional partition filters,
    * convert these and unused partition filters to PartitionPredicates,
    * and push them down in another pass. (See SPARK-55596)
@@ -186,22 +212,15 @@ object PushDownUtils extends Logging {
       scanBuilder: SupportsPushDownV2Filters,
       partitionFields: Seq[PartitionPredicateField],
       remainingFilters: Seq[Expression]): Seq[Expression] = {
-    val normalizedToOriginal = normalizeNestedPartitionFilters(remainingFilters, partitionFields)
-    val normalized = normalizedToOriginal.keys.toSeq
-    val partitionAttributes = partitionFields.map(_.attrRef)
-    // may infer additional partition filters
-    val (partFilters, nonPartitionFilters) =
-      DataSourceUtils.getPartitionFiltersAndDataFilters(partitionAttributes, normalized)
-    val (pushable, nonPushable) = partFilters.partition(isPushablePartitionFilter)
-    val (partitionPredicates, errorPartitionPredicates) = pushable.partitionMap { e =>
-      PartitionPredicateImpl(e, partitionFields).toLeft(e)
-    }
-    val rejectedPartitionFilters = scanBuilder.pushPredicates(partitionPredicates.toArray).map {
+    val flattenedToOriginal = flattenNestedPartitionFilters(remainingFilters, partitionFields)
+    val flattened = flattenedToOriginal.keys.toSeq
+    val (partPredicates, remaining) = createPartitionPredicates(flattened, partitionFields)
+    val rejectedPartitionFilters = scanBuilder.pushPredicates(partPredicates.toArray).map {
       p => p.asInstanceOf[PartitionPredicateImpl].expression
     }.toSeq
-    (nonPartitionFilters ++ nonPushable ++ errorPartitionPredicates ++ rejectedPartitionFilters)
-      .filter(normalizedToOriginal.contains)
-      .map(normalizedToOriginal)
+    (remaining ++ rejectedPartitionFilters)
+      .filter(flattenedToOriginal.contains)
+      .map(flattenedToOriginal)
   }
 
   private def isPushablePartitionFilter(f: Expression) =
@@ -218,9 +237,9 @@ object PushDownUtils extends Logging {
    * (identity transform on a nested field), the analyzer produces
    * `GetStructField(attr("s"), "tz")`. This method replaces that chain with `attr("s.tz")`.
    *
-   * Returns a map from normalized expression to original.
+   * Returns a map from flattened expression to original.
    */
-  private def normalizeNestedPartitionFilters(
+  private[v2] def flattenNestedPartitionFilters(
       filters: Seq[Expression],
       partitionFields: Seq[PartitionPredicateField])
   : Map[Expression, Expression] = {

@@ -39,11 +39,12 @@ dlog () {
 
 acquire_sbt_jar () {
   SBT_VERSION=`awk -F "=" '/sbt\.version/ {print $2}' ./project/build.properties`
-  # DEFAULT_ARTIFACT_REPOSITORY env variable can be used to only fetch
-  # artifacts from internal repos only.
+  # Artifacts are fetched from DEFAULT_ARTIFACT_REPOSITORY if set, then
+  # MAVEN_MIRROR_URL, and finally the default Google mirror of Maven Central.
   # Ex:
   #   DEFAULT_ARTIFACT_REPOSITORY=https://artifacts.internal.com/libs-release/
-  DEFAULT_ARTIFACT_REPOSITORY=${DEFAULT_ARTIFACT_REPOSITORY:-https://maven-central.storage-download.googleapis.com/maven2/}
+  local default_repo=${MAVEN_MIRROR_URL:-https://maven-central.storage-download.googleapis.com/maven2/}
+  DEFAULT_ARTIFACT_REPOSITORY=${DEFAULT_ARTIFACT_REPOSITORY:-$default_repo}
   URL1=${DEFAULT_ARTIFACT_REPOSITORY%/}/org/scala-sbt/sbt-launch/${SBT_VERSION}/sbt-launch-${SBT_VERSION}.jar
   JAR=build/sbt-launch-${SBT_VERSION}.jar
 
@@ -181,6 +182,20 @@ run() {
   process_args "$@"
   set -- "${residual_args[@]}"
   argumentCount=$#
+
+  # If MAVEN_MIRROR_URL is set, generate a repositories config so the SBT launcher
+  # resolves SBT and Scala through the mirror during the boot phase.
+  # Skip if the user already configured -Dsbt.repository.config.
+  if [[ -n "$MAVEN_MIRROR_URL" && ! "$SBT_OPTS" =~ sbt\.repository\.config ]]; then
+    local sbt_repo_config="$(mktemp /tmp/sbt-repositories.XXXXXX)"
+    trap "rm -f '$sbt_repo_config'" EXIT
+    cat > "$sbt_repo_config" <<EOF
+[repositories]
+  local
+  maven-mirror: ${MAVEN_MIRROR_URL}
+EOF
+    addJava "-Dsbt.repository.config=$sbt_repo_config"
+  fi
 
   # run sbt
   execRunner "$java_cmd" \

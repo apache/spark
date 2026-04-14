@@ -43,7 +43,6 @@ import org.apache.spark.sql.types.StructField
 class ResolveColumnDefaultInCommandInputQuery(val catalogManager: CatalogManager)
   extends SQLConfHelper with ColumnResolutionHelper {
 
-  // TODO (SPARK-43752): support v2 write commands as well.
   def apply(plan: LogicalPlan): LogicalPlan = plan match {
     case i: InsertIntoStatement if conf.enableDefaultColumns && i.table.resolved &&
         i.query.containsPattern(UNRESOLVED_ATTRIBUTE) =>
@@ -89,6 +88,12 @@ class ResolveColumnDefaultInCommandInputQuery(val catalogManager: CatalogManager
       // column of the query is the DEFAULT column, we should get the default value expression
       // defined for the n-th variable of the SET.
       s.withNewChildren(Seq(resolveColumnDefault(s.sourceQuery, expectedQuerySchema)))
+
+    // SPARK-43752: resolve column "DEFAULT" in V2 write commands.
+    case v2: V2WriteCommand if conf.enableDefaultColumns && v2.table.resolved &&
+        v2.query.containsPattern(UNRESOLVED_ATTRIBUTE) =>
+      val expectedQuerySchema = v2.table.schema
+      v2.withNewQuery(resolveColumnDefault(v2.query, expectedQuerySchema))
 
     case _ => plan
   }

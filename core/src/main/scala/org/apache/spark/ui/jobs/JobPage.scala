@@ -530,6 +530,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
         </div>
     }
     UIUtils.headerSparkPage(
-      request, s"Details for Job $jobId", content, parent, showVisualization = true)
+      request, s"Details for Job $jobId", content, parent, showVisualization = true,
+      useTimeline = true)
   }
 }

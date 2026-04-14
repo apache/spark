@@ -27,14 +27,16 @@ import org.apache.spark.api.python.DechunkedInputStream
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.CLASS_LOADER
 import org.apache.spark.security.SocketAuthServer
-import org.apache.spark.sql.{internal, Column, DataFrame, Row, SparkSession, TableArg}
+import org.apache.spark.sql.{internal, Column, DataFrame, DataFrameReader, Dataset, Encoders, Row, SparkSession, TableArg}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.classic.{DataFrameReader => ClassicDataFrameReader}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.ExpressionUtils.expression
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.python.EvaluatePython
@@ -192,6 +194,33 @@ private[sql] object PythonSQLUtils extends Logging {
 
   @scala.annotation.varargs
   def internalFn(name: String, inputs: Column*): Column = Column.internalFn(name, inputs: _*)
+
+  /**
+   * Validates that the input [[DataFrame]] has exactly one column of StringType
+   * and converts it to a Dataset[String].
+   */
+  private def toStringDataset(df: DataFrame): Dataset[String] = {
+    val fields = df.schema.fields
+    if (fields.length != 1) {
+      throw QueryCompilationErrors.dataframeInputNotSingleColumnError(fields.length)
+    }
+    if (fields.head.dataType != org.apache.spark.sql.types.StringType) {
+      throw QueryCompilationErrors.dataframeInputNotStringTypeError(fields.head.dataType)
+    }
+    df.as(Encoders.STRING)
+  }
+
+  def jsonFromDataFrame(
+      reader: DataFrameReader,
+      df: DataFrame): DataFrame = {
+    reader.asInstanceOf[ClassicDataFrameReader].json(toStringDataset(df))
+  }
+
+  def csvFromDataFrame(
+      reader: DataFrameReader,
+      df: DataFrame): DataFrame = {
+    reader.asInstanceOf[ClassicDataFrameReader].csv(toStringDataset(df))
+  }
 
   def cleanupPythonWorkerLogs(sessionUUID: String, sparkContext: SparkContext): Unit = {
     if (!sparkContext.isStopped) {

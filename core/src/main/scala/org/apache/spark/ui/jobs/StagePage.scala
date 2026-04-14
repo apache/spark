@@ -243,7 +243,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           <script type="module" nonce={CspNonce.get}>{Unparsed(js)}</script>
         </div>
         UIUtils.headerSparkPage(request, stageHeader, content, parent, showVisualization = true,
-          useDataTables = true)
+          useDataTables = true, useTimeline = true)
 
   }
 
