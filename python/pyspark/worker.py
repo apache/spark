@@ -2807,6 +2807,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
         assert num_udfs == 1, "One GROUPED_MAP_ARROW UDF expected here."
         grouped_udf, arg_offsets, return_type, num_udf_args = udfs[0]
         parsed_offsets = extract_key_value_indexes(arg_offsets)
+        assert len(parsed_offsets) == 1, "Expected one pair of offsets for GROUPED_MAP_ARROW UDF."
 
         arrow_return_type = to_arrow_type(
             return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
@@ -2874,6 +2875,9 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
         assert num_udfs == 1, "One GROUPED_MAP_ARROW_ITER UDF expected here."
         grouped_udf, arg_offsets, return_type, num_udf_args = udfs[0]
         parsed_offsets = extract_key_value_indexes(arg_offsets)
+        assert len(parsed_offsets) == 1, (
+            "Expected one pair of offsets for GROUPED_MAP_ARROW_ITER UDF."
+        )
 
         arrow_return_type = to_arrow_type(
             return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
