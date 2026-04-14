@@ -18,7 +18,7 @@
 import sys
 import random
 import math
-from typing import Hashable, Iterable, Iterator, Optional, TypeVar
+from typing import Generic, Hashable, Iterable, Iterator, Optional, TypeVar
 
 
 T = TypeVar("T")
@@ -63,7 +63,7 @@ class RDDSamplerBase:
                 p += self._random.expovariate(mean)
         return k
 
-    def func[T](self, split: int, iterator: Iterable[T]) -> Iterator[T]:
+    def func(self, split: int, iterator: Iterable[T]) -> Iterator[T]:
         raise NotImplementedError
 
 
@@ -72,7 +72,7 @@ class RDDSampler(RDDSamplerBase):
         RDDSamplerBase.__init__(self, withReplacement, seed)
         self._fraction = fraction
 
-    def func[T](self, split: int, iterator: Iterable[T]) -> Iterator[T]:
+    def func(self, split: int, iterator: Iterable[T]) -> Iterator[T]:
         self.initRandomGenerator(split)
         if self._withReplacement:
             for obj in iterator:
@@ -94,21 +94,21 @@ class RDDRangeSampler(RDDSamplerBase):
         self._lowerBound = lowerBound
         self._upperBound = upperBound
 
-    def func[T](self, split: int, iterator: Iterable[T]) -> Iterator[T]:
+    def func(self, split: int, iterator: Iterable[T]) -> Iterator[T]:
         self.initRandomGenerator(split)
         for obj in iterator:
             if self._lowerBound <= self.getUniformSample() < self._upperBound:
                 yield obj
 
 
-class RDDStratifiedSampler[K: Hashable](RDDSamplerBase):
+class RDDStratifiedSampler(RDDSamplerBase, Generic[K]):
     def __init__(
         self, withReplacement: bool, fractions: dict[K, float], seed: Optional[int] = None
     ) -> None:
         RDDSamplerBase.__init__(self, withReplacement, seed)
         self._fractions = fractions
 
-    def func[T](self, split: int, iterator: Iterable[tuple[K, T]]) -> Iterator[tuple[K, T]]:  # type: ignore[override]
+    def func(self, split: int, iterator: Iterable[tuple[K, T]]) -> Iterator[tuple[K, T]]:  # type: ignore[override]
         self.initRandomGenerator(split)
         if self._withReplacement:
             for key, val in iterator:

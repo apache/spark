@@ -508,9 +508,7 @@ class DictWrapper:
             prefix += "."
         canonical_key = prefix + key
 
-        candidates = [
-            k for k in d.keys() if all(x in k.split(".") for x in canonical_key.split("."))
-        ]
+        candidates = [k for k in d if all(x in k.split(".") for x in canonical_key.split("."))]
         if len(candidates) == 1 and candidates[0] == canonical_key:
             set_option(canonical_key, val)
         else:
@@ -527,9 +525,7 @@ class DictWrapper:
             prefix += "."
         canonical_key = prefix + key
 
-        candidates = [
-            k for k in d.keys() if all(x in k.split(".") for x in canonical_key.split("."))
-        ]
+        candidates = [k for k in d if all(x in k.split(".") for x in canonical_key.split("."))]
         if len(candidates) == 1 and candidates[0] == canonical_key:
             return get_option(canonical_key)
         elif len(candidates) == 0:
@@ -549,7 +545,7 @@ class DictWrapper:
             candidates = d.keys()
             offset = 0
         else:
-            candidates = [k for k in d.keys() if all(x in k.split(".") for x in prefix.split("."))]
+            candidates = [k for k in d if all(x in k.split(".") for x in prefix.split("."))]
             offset = len(prefix) + 1  # prefix (e.g. "compute.") to trim.
         return [c[offset:] for c in candidates]
 

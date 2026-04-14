@@ -1389,12 +1389,15 @@ class CatalogSuite extends SparkFunSuite {
     catalog.createTable(srcIdent, columns, emptyTrans, srcProps)
     val sourceTable = catalog.loadTable(srcIdent)
 
-    // tableInfo contains only user overrides; schema and partitioning come from sourceTable
+    // tableInfo has columns/partitions/constraints from source plus user-specified properties
     val overrides = Map("user.key" -> "user.value").asJava
     val tableInfo = new TableInfo.Builder()
+      .withColumns(sourceTable.columns())
+      .withPartitions(sourceTable.partitioning())
+      .withConstraints(sourceTable.constraints())
       .withProperties(overrides)
       .build()
-    catalog.createTableLike(dstIdent, sourceTable, tableInfo)
+    catalog.createTableLike(dstIdent, tableInfo, sourceTable)
 
     val dst = catalog.loadTable(dstIdent)
     assert(dst.properties.asScala("user.key") == "user.value",
@@ -1410,11 +1413,14 @@ class CatalogSuite extends SparkFunSuite {
     catalog.createTable(srcIdent, columns, emptyTrans, srcProps)
     val sourceTable = catalog.loadTable(srcIdent)
 
-    // tableInfo contains no overrides; connector reads schema and properties from sourceTable
+    // tableInfo has columns/partitions/constraints from source; no explicit property overrides
     val tableInfo = new TableInfo.Builder()
+      .withColumns(sourceTable.columns())
+      .withPartitions(sourceTable.partitioning())
+      .withConstraints(sourceTable.constraints())
       .withProperties(emptyProps)
       .build()
-    catalog.createTableLike(dstIdent, sourceTable, tableInfo)
+    catalog.createTableLike(dstIdent, tableInfo, sourceTable)
 
     val dst = catalog.loadTable(dstIdent)
     assert(dst.properties.asScala("format.version") == "2",
@@ -1432,12 +1438,15 @@ class CatalogSuite extends SparkFunSuite {
     catalog.createTable(srcIdent, columns, emptyTrans, srcProps)
     val sourceTable = catalog.loadTable(srcIdent)
 
-    // user explicitly overrides format.version
+    // user explicitly overrides format.version; columns/partitions/constraints from source
     val overrides = Map("format.version" -> "2").asJava
     val tableInfo = new TableInfo.Builder()
+      .withColumns(sourceTable.columns())
+      .withPartitions(sourceTable.partitioning())
+      .withConstraints(sourceTable.constraints())
       .withProperties(overrides)
       .build()
-    catalog.createTableLike(dstIdent, sourceTable, tableInfo)
+    catalog.createTableLike(dstIdent, tableInfo, sourceTable)
 
     val dst = catalog.loadTable(dstIdent)
     assert(dst.properties.asScala("format.version") == "2",
@@ -1460,14 +1469,18 @@ class CatalogSuite extends SparkFunSuite {
     catalog.createTable(srcIdent, srcTableInfo)
     val sourceTable = catalog.loadTable(srcIdent)
 
+    // tableInfo has columns/partitions/constraints from source (Spark's responsibility now)
     val tableInfo = new TableInfo.Builder()
+      .withColumns(sourceTable.columns())
+      .withPartitions(sourceTable.partitioning())
+      .withConstraints(sourceTable.constraints())
       .withProperties(emptyProps)
       .build()
-    catalog.createTableLike(dstIdent, sourceTable, tableInfo)
+    catalog.createTableLike(dstIdent, tableInfo, sourceTable)
 
     val dst = catalog.loadTable(dstIdent)
     assert(dst.constraints().toSet == constraints.toSet,
-      "connector should copy source constraints from sourceTable.constraints()")
+      "constraints from source should be in tableInfo and applied to the target")
   }
 
   test("createTableLike: catalog without createTableLike override throws " +
@@ -1485,10 +1498,13 @@ class CatalogSuite extends SparkFunSuite {
     val sourceTable = catalog.loadTable(srcIdent)
 
     val tableInfo = new TableInfo.Builder()
+      .withColumns(sourceTable.columns())
+      .withPartitions(sourceTable.partitioning())
+      .withConstraints(sourceTable.constraints())
       .withProperties(Map.empty[String, String].asJava)
       .build()
     val ex = intercept[UnsupportedOperationException] {
-      catalog.createTableLike(dstIdent, sourceTable, tableInfo)
+      catalog.createTableLike(dstIdent, tableInfo, sourceTable)
     }
     assert(ex.getMessage.contains("basic"),
       "Exception should mention the catalog name")

@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Implicits, DataSourceV2Relation, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Implicits, DataSourceV2Relation, DataSourceV2ScanRelation, ExtractV2Scan}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -50,7 +50,7 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     // apply special dynamic filtering only for group-based row-level operations
     case GroupBasedRowLevelOperation(replaceData, _, Some(cond),
-        DataSourceV2ScanRelation(_, scan: SupportsRuntimeV2Filtering, _, _, _))
+        ExtractV2Scan(scan: SupportsRuntimeV2Filtering))
         if conf.runtimeRowLevelOperationGroupFilterEnabled && cond != TrueLiteral
           && scan.filterAttributes().nonEmpty =>
 

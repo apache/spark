@@ -490,70 +490,49 @@ class RocksDB(
         // Handle normal checkpoint loading
         closeDB(ignoreException = false)
 
-        val (latestSnapshotVersion, latestSnapshotUniqueId) = {
-          // Special handling when version is 0.
-          // When loading the very first version (0), stateStoreCkptId does not need to be defined
-          // because there won't be 0.changelog / 0.zip file created in RocksDB under v2.
-          if (version == 0) {
-            assert(stateStoreCkptId.isEmpty,
-              "stateStoreCkptId should be empty when version is zero")
-            (0L, None)
-          // When there is a snapshot file, it is the ground truth, we can skip
-          // reconstructing the lineage from changelog file.
-          } else if (fileManager.existsSnapshotFile(version, stateStoreCkptId)) {
+        if (version == 0) {
+          // Version 0 is the empty initial state — load directly without
+          // DFS listing or auto-repair overhead.
+          assert(stateStoreCkptId.isEmpty,
+            "stateStoreCkptId should be empty when version is zero")
+          currVersionLineage = Array.empty
+          val metadata = fileManager.loadCheckpointFromDfs(0,
+            workingDir, rocksDBFileMapping, None)
+          loadedVersion = 0
+          lastSnapshotVersion = 0
+          fileManager.setMaxSeenVersion(0)
+          openLocalRocksDB(metadata)
+          reportSnapshotUploadToCoordinator(0)
+        } else {
+          // Build initial lineage. If the exact snapshot file exists on DFS, use a
+          // sparse lineage (just the target version) as an optimization to skip reading
+          // the changelog header. If auto-repair is needed later,
+          // getEligibleSnapshotsForRepair() will enrich this via getFullLineage().
+          if (fileManager.existsSnapshotFile(version, stateStoreCkptId)) {
             currVersionLineage = Array(LineageItem(version, stateStoreCkptId.get))
-            (version, stateStoreCkptId)
           } else {
             currVersionLineage = getLineageFromChangelogFile(version, stateStoreCkptId) :+
               LineageItem(version, stateStoreCkptId.get)
             currVersionLineage = currVersionLineage.sortBy(_.version)
+          }
+          // Delegate to AutoSnapshotLoader which handles both the happy path
+          // and auto-repair fallback to older snapshots. Sets loadedVersion to
+          // the actually loaded snapshot version as a side effect.
+          currVersionLineage =
+            loadSnapshotWithCheckpointId(version, stateStoreCkptId, currVersionLineage)
 
-            val latestSnapshotVersionsAndUniqueId =
-              fileManager.getLatestSnapshotVersionAndUniqueIdFromLineage(currVersionLineage)
-            latestSnapshotVersionsAndUniqueId match {
-              case Some(pair) => (pair._1, Option(pair._2))
-              case None if currVersionLineage.head.version == 1L =>
-                logDebug(log"Cannot find latest snapshot based on lineage but first version " +
-                  log"is 1, use 0 as default. Lineage: ${MDC(LogKeys.LINEAGE, lineageManager)}")
-                (0L, None)
-              case _ =>
-                throw QueryExecutionErrors.cannotFindBaseSnapshotCheckpoint(
-                  printLineageItems(currVersionLineage))
+          // Replay changelogs from the loaded snapshot version to the target version.
+          if (loadedVersion != version) {
+            val versionsAndUniqueIds = currVersionLineage.collect {
+              case i if i.version > loadedVersion && i.version <= version =>
+                (i.version, Option(i.checkpointUniqueId))
             }
+            replayChangelog(versionsAndUniqueIds)
+            loadedVersion = version
           }
         }
-
-        logInfo(log"Loaded latestSnapshotVersion: ${
-          MDC(LogKeys.SNAPSHOT_VERSION, latestSnapshotVersion)}, latestSnapshotUniqueId: ${
-          MDC(LogKeys.UUID, latestSnapshotUniqueId)}")
-
-        val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion,
-          workingDir, rocksDBFileMapping, latestSnapshotUniqueId)
-        // version 0 is the empty initial state; loadCheckpointFromDfs skips DFS for it
         loadedFromDfs = version > 0
-        loadedVersion = latestSnapshotVersion
-
-        // reset the last snapshot version to the latest available snapshot version
-        lastSnapshotVersion = latestSnapshotVersion
         lineageManager.resetLineage(currVersionLineage)
-
-        // Initialize maxVersion upon successful load from DFS
-        fileManager.setMaxSeenVersion(version)
-
-        // Report this snapshot version to the coordinator
-        reportSnapshotUploadToCoordinator(latestSnapshotVersion)
-
-        openLocalRocksDB(metadata)
-
-        if (loadedVersion != version) {
-          val versionsAndUniqueIds = currVersionLineage.collect {
-            case i if i.version > loadedVersion && i.version <= version =>
-              (i.version, Option(i.checkpointUniqueId))
-          }
-          replayChangelog(versionsAndUniqueIds)
-          loadedVersion = version
-          lineageManager.resetLineage(currVersionLineage)
-        }
         // After changelog replay the numKeysOnWritingVersion will be updated to
         // the correct number of keys in the loaded version.
         numKeysOnLoadedVersion = numKeysOnWritingVersion
@@ -679,14 +658,20 @@ class RocksDB(
     this
   }
 
-  private def loadSnapshotWithoutCheckpointId(versionToLoad: Long): Long = {
-    // Don't allow auto snapshot repair if changelog checkpointing is not enabled
-    // since it relies on changelog to rebuild state.
-    val allowAutoSnapshotRepair = if (enableChangelogCheckpointing) {
+  /**
+   * Whether auto snapshot repair is allowed. Repair is only allowed when
+   * changelog checkpointing is enabled, since repair relies on replaying
+   * changelogs to rebuild state from an older snapshot.
+   */
+  private def allowAutoSnapshotRepair: Boolean = {
+    if (enableChangelogCheckpointing) {
       conf.stateStoreConf.autoSnapshotRepairEnabled
     } else {
       false
     }
+  }
+
+  private def loadSnapshotWithoutCheckpointId(versionToLoad: Long): Long = {
     val snapshotLoader = new AutoSnapshotLoader(
       allowAutoSnapshotRepair,
       conf.stateStoreConf.autoSnapshotRepairNumFailuresBeforeActivating,
@@ -694,7 +679,8 @@ class RocksDB(
       loggingId) {
       override protected def beforeLoad(): Unit = closeDB(ignoreException = false)
 
-      override protected def loadSnapshotFromCheckpoint(snapshotVersion: Long): Unit = {
+      override protected def loadSnapshotFromCheckpoint(
+          snapshotVersion: Long, uniqueId: Option[String]): Unit = {
         val remoteMetaData = fileManager.loadCheckpointFromDfs(snapshotVersion,
           workingDir, rocksDBFileMapping)
 
@@ -717,14 +703,115 @@ class RocksDB(
         loadedVersion = -1  // invalidate loaded data
       }
 
-      override protected def getEligibleSnapshots(version: Long): Seq[Long] = {
-        fileManager.getEligibleSnapshotsForVersion(version)
+      override protected def getEligibleSnapshots(
+          version: Long): Seq[(Long, Option[String])] = {
+        fileManager.getEligibleSnapshotsForVersion(version).map((_, None))
       }
     }
 
     val (version, autoRepairCompleted) = snapshotLoader.loadSnapshot(versionToLoad)
     performedSnapshotAutoRepair = autoRepairCompleted
     version
+  }
+
+  /**
+   * V2-aware snapshot loading with auto-repair support.
+   * Uses lineage to discover eligible snapshots and falls back to older ones if corrupt.
+   * Loads only the snapshot; changelog replay to reach versionToLoad is the caller's
+   * responsibility.
+   *
+   * Sets [[performedSnapshotAutoRepair]] as a side effect if auto-repair was used,
+   * and sets [[loadedVersion]] to the actually loaded snapshot version.
+   *
+   * @param versionToLoad The target version to load
+   * @param stateStoreCkptId The checkpoint ID for the target version (for lineage enrichment)
+   * @param initialLineage The lineage for the target version (may be enriched by
+   *                       getAdditionalEligibleSnapshots during auto-repair)
+   * @return The lineage array to assign to currVersionLineage. During auto-repair,
+   *         this may contain more entries than the initial sparse lineage.
+   */
+  private def loadSnapshotWithCheckpointId(
+      versionToLoad: Long,
+      stateStoreCkptId: Option[String],
+      initialLineage: Array[LineageItem]): Array[LineageItem] = {
+    // Local var (intentionally named differently from the class field currVersionLineage)
+    // so that getAdditionalEligibleSnapshots can enrich the lineage and
+    // getEligibleSnapshots (re-called after enrichment) sees the updated lineage.
+    var workingLineage = initialLineage
+
+    val snapshotLoader = new AutoSnapshotLoader(
+      allowAutoSnapshotRepair,
+      conf.stateStoreConf.autoSnapshotRepairNumFailuresBeforeActivating,
+      conf.stateStoreConf.autoSnapshotRepairMaxChangeFileReplay,
+      loggingId) {
+      override protected def beforeLoad(): Unit = closeDB(ignoreException = false)
+
+      override protected def loadSnapshotFromCheckpoint(
+          snapshotVersion: Long, uniqueId: Option[String]): Unit = {
+        // Validate that the working lineage covers all versions needed to replay
+        // from this snapshot to versionToLoad. If not, throw so AutoSnapshotLoader
+        // treats this as a snapshot load failure and tries the next snapshot.
+        // This guards against falling back to a snapshot (e.g., version 0) when
+        // the lineage was not enriched (e.g., getFullLineage failed).
+        if (snapshotVersion != versionToLoad) {
+          val neededVersions = ((snapshotVersion + 1) to versionToLoad).toSet
+          val availableVersions = workingLineage.collect {
+            case i if i.version > snapshotVersion && i.version <= versionToLoad => i.version
+          }.toSet
+          if (availableVersions != neededVersions) {
+            throw new IllegalStateException(
+              s"Cannot replay changelogs from snapshot $snapshotVersion to $versionToLoad: " +
+              s"lineage is incomplete, missing versions " +
+              s"${(neededVersions diff availableVersions).toSeq.sorted.mkString(",")}")
+          }
+        }
+
+        val remoteMetaData = fileManager.loadCheckpointFromDfs(snapshotVersion,
+          workingDir, rocksDBFileMapping, uniqueId)
+
+        loadedVersion = snapshotVersion
+        fileManager.setMaxSeenVersion(versionToLoad)
+        openLocalRocksDB(remoteMetaData)
+        lastSnapshotVersion = snapshotVersion
+        reportSnapshotUploadToCoordinator(snapshotVersion)
+      }
+
+      override protected def onLoadSnapshotFromCheckpointFailure(): Unit = {
+        loadedVersion = -1
+      }
+
+      override protected def getEligibleSnapshots(
+          version: Long): Seq[(Long, Option[String])] = {
+        fileManager.getSnapshotVersionsAndUniqueIdsFromLineage(workingLineage)
+          .map { case (ver, id) => (ver, Option(id)) }
+      }
+
+      override protected def getAdditionalEligibleSnapshots(
+          version: Long): Seq[(Long, Option[String])] = {
+        // Build lineage back to (versionToLoad - maxChangeFileReplay) so that
+        // auto-repair can discover older snapshots in the lineage. We don't walk
+        // all the way to version 1 since snapshots beyond maxChangeFileReplay
+        // would be filtered out anyway.
+        if (stateStoreCkptId.isDefined) {
+          try {
+            val startVer = math.max(1L,
+              versionToLoad - conf.stateStoreConf.autoSnapshotRepairMaxChangeFileReplay)
+            workingLineage = getFullLineage(startVer, versionToLoad, stateStoreCkptId)
+          } catch {
+            case NonFatal(e) =>
+              logWarning(log"Failed to enrich lineage via getFullLineage during " +
+                log"auto-repair for version ${MDC(LogKeys.VERSION_NUM, versionToLoad)}. " +
+                log"Falling back to existing lineage; repair options may be limited.", e)
+          }
+        }
+        // Re-discover eligible snapshots from the (potentially enriched) lineage
+        getEligibleSnapshots(version)
+      }
+    }
+
+    val (_, autoRepairCompleted) = snapshotLoader.loadSnapshot(versionToLoad)
+    performedSnapshotAutoRepair = autoRepairCompleted
+    workingLineage
   }
 
   /**

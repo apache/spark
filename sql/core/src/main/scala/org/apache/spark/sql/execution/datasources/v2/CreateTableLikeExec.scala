@@ -26,7 +26,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, TableInfo}
+import org.apache.spark.sql.catalyst.plans.logical.SerdeInfo
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, Table, TableCatalog, TableInfo, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
@@ -38,11 +40,12 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * must override [[TableCatalog.createTableLike]]; the default implementation throws
  * [[UnsupportedOperationException]].
  *
- * The [[TableInfo]] passed to [[TableCatalog.createTableLike]] contains strictly user-specified
- * overrides: TBLPROPERTIES, LOCATION, and USING provider (only if explicitly given).
- * Schema, partitioning, source provider, source TBLPROPERTIES, constraints, and owner are NOT
- * pre-populated; connectors read all source metadata directly from [[sourceTable]] and are
- * responsible for setting the owner.
+ * The [[TableInfo]] passed to [[TableCatalog.createTableLike]] contains all explicit information
+ * for the new table: columns and partitioning copied from the source, constraints copied from
+ * the source, user-specified TBLPROPERTIES / LOCATION / USING provider (if given),
+ * ROW FORMAT / STORED AS converted to hive properties (if given), and
+ * [[TableCatalog.PROP_OWNER]] set to the current user. Source table properties are intentionally
+ * excluded so that connectors can decide which custom properties to clone via [[sourceTable]].
  */
 case class CreateTableLikeExec(
     targetCatalog: TableCatalog,
@@ -50,6 +53,7 @@ case class CreateTableLikeExec(
     sourceTable: Table,
     location: Option[URI],
     provider: Option[String],
+    serdeInfo: Option[SerdeInfo],
     properties: Map[String, String],
     ifNotExists: Boolean) extends LeafV2CommandExec {
 
@@ -57,23 +61,14 @@ case class CreateTableLikeExec(
 
   override protected def run(): Seq[InternalRow] = {
     if (!targetCatalog.tableExists(targetIdent)) {
-      // Build strictly user-specified overrides: explicit TBLPROPERTIES, LOCATION (if given),
-      // and USING provider (if given). Provider and owner are not included here; connectors
-      // are responsible for reading PROP_PROVIDER from sourceTable.properties() and for
-      // setting the owner via CurrentUserContext.getCurrentUser.
-      val locationProp: Option[(String, String)] =
-        location.map(uri => TableCatalog.PROP_LOCATION -> CatalogUtils.URIToString(uri))
-
-      val finalProps =
-        properties ++
-          provider.map(TableCatalog.PROP_PROVIDER -> _) ++
-          locationProp
-
       try {
-        val userSpecifiedOverrides = new TableInfo.Builder()
-          .withProperties(finalProps.asJava)
+        val tableInfo = new TableInfo.Builder()
+          .withColumns(targetColumns)
+          .withPartitions(sourceTable.partitioning)
+          .withConstraints(sourceTable.constraints)
+          .withProperties(targetProperties.asJava)
           .build()
-        targetCatalog.createTableLike(targetIdent, sourceTable, userSpecifiedOverrides)
+        targetCatalog.createTableLike(targetIdent, tableInfo, sourceTable)
       } catch {
         case _: TableAlreadyExistsException if ifNotExists =>
           logWarning(
@@ -85,4 +80,23 @@ case class CreateTableLikeExec(
 
     Seq.empty
   }
+
+  // Derive target columns from source; for V1Table sources apply CharVarcharUtils to preserve
+  // CHAR/VARCHAR types as declared rather than collapsed to StringType.
+  private def targetColumns: Array[Column] =
+    sourceTable match {
+      case v1: V1Table =>
+        CatalogV2Util.structTypeToV2Columns(CharVarcharUtils.getRawSchema(v1.catalogTable.schema))
+      case _ =>
+        sourceTable.columns
+    }
+
+  // Source table properties are intentionally excluded; connectors read sourceTable
+  // to clone any additional format-specific or custom state they need.
+  private def targetProperties: Map[String, String] =
+    CatalogV2Util.withDefaultOwnership(
+      properties ++
+        CatalogV2Util.convertToProperties(serdeInfo) ++
+        provider.map(TableCatalog.PROP_PROVIDER -> _) ++
+        location.map(uri => TableCatalog.PROP_LOCATION -> CatalogUtils.URIToString(uri)))
 }

@@ -18,8 +18,6 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.ShowCachedTables
 
 /**
  * Clear all cached data from the in-memory cache.
@@ -29,19 +27,5 @@ case object ClearCacheCommand extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
     sparkSession.catalog.clearCache()
     Seq.empty[Row]
-  }
-}
-
-/**
- * The command for `SHOW CACHED TABLES`.
- */
-case object ShowCachedTablesCommand extends LeafRunnableCommand {
-
-  override val output: Seq[Attribute] = ShowCachedTables.output
-
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sharedState.cacheManager.listNamedCachedTables().map { case (name, level) =>
-      Row(name, level.description)
-    }
   }
 }

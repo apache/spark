@@ -1685,9 +1685,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def unsupportedJDBCNamespaceChangeInCatalogError(changes: Seq[NamespaceChange]): Throwable = {
+    val changesDesc = changes.map(_.toString).mkString("; ")
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1120",
-      messageParameters = Map("changes" -> changes.toString()))
+      messageParameters = Map("changes" -> changesDesc))
   }
 
   private def tableDoesNotSupportError(cmd: String, table: Table): Throwable = {
@@ -3493,6 +3494,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "columnName" -> toSQLId(columnName)
       )
     )
+  }
+
+  def dataframeInputNotSingleColumnError(numColumns: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "DATAFRAME_INPUT_NOT_SINGLE_COLUMN",
+      messageParameters = Map("numColumns" -> numColumns.toString))
+  }
+
+  def dataframeInputNotStringTypeError(dataType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "DATAFRAME_INPUT_NOT_STRING_TYPE",
+      messageParameters = Map("dataType" -> toSQLType(dataType)))
   }
 
   def textDataSourceWithMultiColumnsError(schema: StructType): Throwable = {

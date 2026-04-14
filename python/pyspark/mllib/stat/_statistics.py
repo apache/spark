@@ -181,7 +181,7 @@ class Statistics:
         # Check inputs to determine whether a single value or a matrix is needed for output.
         # Since it's legal for users to use the method name as the second argument, we need to
         # check if y is used to specify the method name instead.
-        if type(y) == str:
+        if isinstance(y, str):
             raise TypeError("Use 'method=' to specify method name.")
 
         if not y:

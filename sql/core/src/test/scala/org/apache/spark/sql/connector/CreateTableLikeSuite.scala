@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, InMemoryCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, InMemoryCatalog, TableCatalog}
 import org.apache.spark.sql.types.{CharType, IntegerType, LongType, StringType, VarcharType}
 
 class CreateTableLikeSuite extends DatasourceV2SQLBase {
@@ -167,6 +167,33 @@ class CreateTableLikeSuite extends DatasourceV2SQLBase {
     }
   }
 
+  test("PROP_OWNER is set to current user in TableInfo passed to connector") {
+    // Spark sets PROP_OWNER in the TableInfo it passes to createTableLike so that
+    // connectors do not need to call a Catalyst utility to determine the owner.
+    withTable("testcat.src", "testcat.dst") {
+      sql("CREATE TABLE testcat.src (id bigint) USING foo")
+      sql("CREATE TABLE testcat.dst LIKE testcat.src")
+
+      val dst = testCatalog.loadTable(Identifier.of(Array(), "dst"))
+      assert(dst.properties.containsKey(TableCatalog.PROP_OWNER),
+        "PROP_OWNER should be set in TableInfo so connectors do not need to infer it")
+      assert(dst.properties.get(TableCatalog.PROP_OWNER).nonEmpty)
+    }
+  }
+
+  test("columns and partitioning from source are set in TableInfo passed to connector") {
+    withTable("src", "testcat.dst") {
+      sql("CREATE TABLE src (id bigint, data string) USING parquet PARTITIONED BY (data)")
+      sql("CREATE TABLE testcat.dst LIKE src")
+
+      val dst = testCatalog.loadTable(Identifier.of(Array(), "dst"))
+      val columnNames = dst.columns().map(_.name)
+      assert(columnNames === Array("id", "data"))
+      assert(dst.partitioning().nonEmpty,
+        "partitioning from source should be passed in TableInfo")
+    }
+  }
+
   test("user-specified TBLPROPERTIES are applied on target") {
     withTable("src", "testcat.dst") {
       sql("CREATE TABLE src (id bigint) USING parquet")
@@ -268,6 +295,40 @@ class CreateTableLikeSuite extends DatasourceV2SQLBase {
         sql("CREATE TABLE dst LIKE testcat.src")
       }
       assert(ex.getMessage.contains("CREATE TABLE LIKE"))
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // ROW FORMAT / STORED AS propagation
+  // -------------------------------------------------------------------------
+
+  test("STORED AS is converted to hive.stored-as property for v2 target") {
+    withTable("src", "testcat.dst") {
+      sql("CREATE TABLE src (id bigint) USING parquet")
+      sql("CREATE TABLE testcat.dst LIKE src STORED AS textfile")
+
+      val dst = testCatalog.loadTable(Identifier.of(Array(), "dst"))
+      assert(dst.properties.get("hive.stored-as") === "textfile",
+        "STORED AS should be converted to hive.stored-as property")
+    }
+  }
+
+  test("STORED AS INPUTFORMAT/OUTPUTFORMAT are converted to hive properties for v2 target") {
+    withTable("src", "testcat.dst") {
+      sql("CREATE TABLE src (id bigint) USING parquet")
+      sql(
+        """CREATE TABLE testcat.dst LIKE src
+          |STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
+          |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+          |""".stripMargin)
+
+      val dst = testCatalog.loadTable(Identifier.of(Array(), "dst"))
+      assert(dst.properties.get("hive.input-format") ===
+        "org.apache.hadoop.mapred.TextInputFormat",
+        "INPUTFORMAT should be converted to hive.input-format property")
+      assert(dst.properties.get("hive.output-format") ===
+        "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
+        "OUTPUTFORMAT should be converted to hive.output-format property")
     }
   }
 

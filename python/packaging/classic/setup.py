@@ -149,6 +149,7 @@ if in_spark:
 # For Arrow, you should also check ./pom.xml and ensure there are no breaking changes in the
 # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
 # Also don't forget to update python/docs/source/getting_started/install.rst,
+# python/docs/source/tutorial/sql/arrow_pandas.rst,
 # python/packaging/client/setup.py, and python/packaging/connect/setup.py
 _minimum_pandas_version = "2.2.0"
 _minimum_numpy_version = "1.21"

@@ -220,16 +220,41 @@ jobs:
           bash -c "$CMD" &
           RELEASE_PID=$!
 
-          # Tail logs during dry run
+          # Stream Docker build logs to the job console. Wait until each file exists (they appear when each
+          # run_silent starts). If the release script exits early, stop waiting so we do not hang forever on
+          # docker-build.log when the base image build fails.
+          TAIL_PID_BASE=
+          TAIL_PID1=
+
+          BASE_LOG_FILE="$RELEASE_DIR/docker-build-base.log"
+          echo "Waiting for log file: $BASE_LOG_FILE"
+          while [ ! -f "$BASE_LOG_FILE" ]; do
+            if ! kill -0 "$RELEASE_PID" 2>/dev/null; then
+              echo "Release process exited before $BASE_LOG_FILE was created."
+              break
+            fi
+            sleep 3
+          done
+          if [ -f "$BASE_LOG_FILE" ]; then
+            echo "Base log file found. Starting tail."
+            tail -F "$BASE_LOG_FILE" &
+            TAIL_PID_BASE=$!
+          fi
+
           LOG_FILE="$RELEASE_DIR/docker-build.log"
           echo "Waiting for log file: $LOG_FILE"
           while [ ! -f "$LOG_FILE" ]; do
+            if ! kill -0 "$RELEASE_PID" 2>/dev/null; then
+              echo "Release process exited before $LOG_FILE was created."
+              break
+            fi
             sleep 3
           done
-            
-          echo "Log file found. Starting tail."
-          tail -F "$LOG_FILE" &
-          TAIL_PID1=$!
+          if [ -f "$LOG_FILE" ]; then
+            echo "Docker image log file found. Starting tail."
+            tail -F "$LOG_FILE" &
+            TAIL_PID1=$!
+          fi
 
           (
             LOGGED_FILES=()
@@ -248,11 +273,13 @@ jobs:
           TAIL_PID2=$!
 
           wait $RELEASE_PID
-          kill $TAIL_PID1 $TAIL_PID2 || true
+          [ -n "${TAIL_PID_BASE:-}" ] && kill "$TAIL_PID_BASE" 2>/dev/null || true
+          [ -n "${TAIL_PID1:-}" ] && kill "$TAIL_PID1" 2>/dev/null || true
+          kill "$TAIL_PID2" 2>/dev/null || true
 
           # Redact sensitive information in log files
           shopt -s globstar nullglob
-          FILES=("$RELEASE_DIR/docker-build.log" "$OUTPUT_DIR/"*.log)
+          FILES=("$RELEASE_DIR/docker-build-base.log" "$RELEASE_DIR/docker-build.log" "$OUTPUT_DIR/"*.log)
           PATTERNS=("$ASF_USERNAME" "$ASF_PASSWORD" "$GPG_PRIVATE_KEY" "$GPG_PASSPHRASE" "$PYPI_API_TOKEN" "$ASF_NEXUS_TOKEN")
           for file in "${FILES[@]}"; do
             [ -f "$file" ] || continue
@@ -275,10 +302,10 @@ jobs:
 
           # Zip logs/output
           if [ "$DRYRUN_MODE" = "1" ]; then
-            zip logs.zip "$RELEASE_DIR/docker-build.log" "$OUTPUT_DIR/"*.log
+            zip logs.zip "$RELEASE_DIR/docker-build-base.log" "$RELEASE_DIR/docker-build.log" "$OUTPUT_DIR/"*.log
             zip -9 output.zip -r "$OUTPUT_DIR"
           else
-            zip -P "$ASF_PASSWORD" logs.zip "$RELEASE_DIR/docker-build.log" "$OUTPUT_DIR/"*.log
+            zip -P "$ASF_PASSWORD" logs.zip "$RELEASE_DIR/docker-build-base.log" "$RELEASE_DIR/docker-build.log" "$OUTPUT_DIR/"*.log
             zip -9 -P "$ASF_PASSWORD" output.zip -r "$OUTPUT_DIR"
           fi
       - name: Upload logs

@@ -2464,30 +2464,24 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         index = self._psdf._internal.index_spark_column_names[0]
         index_spark_type = self._psdf._internal.index_fields[0].spark_type
 
+        pd_version = LooseVersion(pd.__version__)
+
         stat_exprs = []
         for psser, scol in zip(self._agg_columns, self._agg_columns_scols):
             name = psser._internal.data_spark_column_names[0]
 
-            if LooseVersion(pd.__version__) < "3.0.0" or skipna:
+            if pd_version < "3.0.0" or skipna:
                 order_column = scol.desc_nulls_last()
 
                 window = Window.partitionBy(*groupkey_names).orderBy(
                     order_column, NATURAL_ORDER_COLUMN_NAME
                 )
 
-                has_na_name = "__has_na_{}__".format(name)
-                sdf = sdf.withColumn(has_na_name, scol.isNull()).withColumn(
+                sdf = sdf.withColumn(
                     name,
                     F.when(F.row_number().over(window) == 1, scol_for(sdf, index)).otherwise(None),
                 )
-                if skipna:
-                    stat_exprs.append(F.max(scol_for(sdf, name)).alias(name))
-                else:
-                    stat_exprs.append(
-                        F.when(F.max(scol_for(sdf, has_na_name)), None)
-                        .otherwise(F.max(scol_for(sdf, name)))
-                        .alias(name)
-                    )
+                stat_exprs.append(F.max(scol_for(sdf, name)).alias(name))
             else:
                 # pandas 3 skipna=False: raise on any NA, otherwise return all-missing labels
                 stat_exprs.append(
@@ -2565,29 +2559,24 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         index = self._psdf._internal.index_spark_column_names[0]
         index_spark_type = self._psdf._internal.index_fields[0].spark_type
 
+        pd_version = LooseVersion(pd.__version__)
+
         stat_exprs = []
         for psser, scol in zip(self._agg_columns, self._agg_columns_scols):
             name = psser._internal.data_spark_column_names[0]
 
-            if LooseVersion(pd.__version__) < "3.0.0" or skipna:
+            if pd_version < "3.0.0" or skipna:
                 order_column = scol.asc_nulls_last()
 
                 window = Window.partitionBy(*groupkey_names).orderBy(
                     order_column, NATURAL_ORDER_COLUMN_NAME
                 )
-                has_na_name = "__has_na_{}__".format(name)
-                sdf = sdf.withColumn(has_na_name, scol.isNull()).withColumn(
+
+                sdf = sdf.withColumn(
                     name,
                     F.when(F.row_number().over(window) == 1, scol_for(sdf, index)).otherwise(None),
                 )
-                if skipna:
-                    stat_exprs.append(F.max(scol_for(sdf, name)).alias(name))
-                else:
-                    stat_exprs.append(
-                        F.when(F.max(scol_for(sdf, has_na_name)), None)
-                        .otherwise(F.max(scol_for(sdf, name)))
-                        .alias(name)
-                    )
+                stat_exprs.append(F.max(scol_for(sdf, name)).alias(name))
             else:
                 # pandas 3 skipna=False: raise on any NA, otherwise return all-missing labels
                 stat_exprs.append(

@@ -113,6 +113,17 @@ class BroadcastExchangeSuite extends SparkPlanTest
     broadcastExchangeNode.resetMetrics()
     assert(metrics("numOutputRows").value == 1)
   }
+
+  test("SPARK-56455: broadcast should fail when table size exceeds maxBroadcastTableSize") {
+    withSQLConf(SQLConf.MAX_BROADCAST_TABLE_SIZE.key -> "100") {
+      val df = spark.range(1000).toDF()
+      val joinDF = df.join(broadcast(df), "id")
+      val ex = intercept[SparkException] {
+        joinDF.collect()
+      }
+      assert(ex.getCondition == "_LEGACY_ERROR_TEMP_2249")
+    }
+  }
 }
 
 // Additional tests run in 'local-cluster' mode.

@@ -109,6 +109,10 @@ class SparkSubmitSuite
   private val emptyIvySettings = File.createTempFile("ivy", ".xml")
   Files.writeString(emptyIvySettings.toPath, "<ivysettings />")
 
+  private val testJarPath: String = {
+    val url = TestUtils.createJarWithClasses(Seq("SparkSubmitSuite_Dummy"))
+    new File(url.toURI).getAbsolutePath
+  }
   private val submit = new SparkSubmit()
 
   override def beforeEach(): Unit = {
@@ -502,8 +506,7 @@ class SparkSubmitSuite
 
   test("SPARK-47495: Not to add primary resource to jars again" +
     " in k8s client mode & driver runs inside a POD") {
-    val testJar = "src/test/resources/TestUDTF.jar"
-    assume(new File(testJar).exists)
+    val testJar = testJarPath
     val clArgs = Seq(
       "--deploy-mode", "client",
       "--proxy-user", "test.user",
@@ -518,12 +521,11 @@ class SparkSubmitSuite
     val appArgs = new SparkSubmitArguments(clArgs)
     val (_, _, sparkConf, _) = submit.prepareSubmitEnvironment(appArgs)
     sparkConf.get("spark.jars").contains("jarToIgnore") shouldBe false
-    sparkConf.get("spark.jars").contains("TestUDTF") shouldBe true
+    sparkConf.get("spark.jars").contains("testJar") shouldBe true
   }
 
   test("SPARK-33782: handles k8s files download to current directory") {
-    val testJar = "src/test/resources/TestUDTF.jar"
-    assume(new File(testJar).exists)
+    val testJar = testJarPath
     val clArgs = Seq(
       "--deploy-mode", "client",
       "--proxy-user", "test.user",
@@ -548,21 +550,22 @@ class SparkSubmitSuite
     conf.get("spark.kubernetes.namespace") should be ("spark")
     conf.get("spark.kubernetes.driver.container.image") should be ("bar")
 
+    val testJarName = new File(testJar).getName
     Files.exists(Paths.get("test_metrics_config.properties")) should be (true)
     Files.exists(Paths.get("test_metrics_system.properties")) should be (true)
     Files.exists(Paths.get("log4j2.properties")) should be (true)
-    Files.exists(Paths.get("TestUDTF.jar")) should be (true)
+    Files.exists(Paths.get(testJarName)) should be (true)
     Files.delete(Paths.get("test_metrics_config.properties"))
     Files.delete(Paths.get("test_metrics_system.properties"))
     Files.delete(Paths.get("log4j2.properties"))
-    Files.delete(Paths.get("TestUDTF.jar"))
+    Files.delete(Paths.get(testJarName))
   }
 
   test("SPARK-47475: Avoid jars download if scheme matches " +
     "spark.kubernetes.jars.avoidDownloadSchemes " +
     "in k8s client mode & driver runs inside a POD") {
-    val testJar = "src/test/resources/TestUDTF.jar"
-    assume(new File(testJar).exists)
+    val testJar = testJarPath
+    val testJarName = new File(testJar).getName
     val hadoopConf = new Configuration()
     updateConfWithFakeS3Fs(hadoopConf)
     withTempDir { tmpDir =>
@@ -588,17 +591,17 @@ class SparkSubmitSuite
       val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs, Some(hadoopConf))
       conf.get("spark.master") should be("k8s://https://host:port")
       conf.get("spark.jars").contains(remoteJarFile) shouldBe true
-      conf.get("spark.jars").contains("TestUDTF") shouldBe true
+      conf.get("spark.jars").contains(testJarName) shouldBe true
 
       Files.exists(Paths.get("test_metrics_config.properties")) should be(true)
       Files.exists(Paths.get("test_metrics_system.properties")) should be(true)
       Files.exists(Paths.get("log4j2.properties")) should be(true)
-      Files.exists(Paths.get("TestUDTF.jar")) should be(true)
+      Files.exists(Paths.get(testJarName)) should be(true)
       Files.exists(Paths.get(notToDownload.getName)) should be(false)
       Files.delete(Paths.get("test_metrics_config.properties"))
       Files.delete(Paths.get("test_metrics_system.properties"))
       Files.delete(Paths.get("log4j2.properties"))
-      Files.delete(Paths.get("TestUDTF.jar"))
+      Files.delete(Paths.get(testJarName))
     }
   }
 
@@ -1629,6 +1632,38 @@ class SparkSubmitSuite
     assertResult(3)(runSparkSubmit(args, expectFailure = true))
   }
 
+  test("SPARK-54774: k8s submit failed should keep same exit code with user code") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val fileSystem = Utils.getHadoopFileSystem("/",
+      SparkHadoopUtil.get.newConfiguration(new SparkConf()))
+    withTempDir { testDir =>
+      val testDirPath = new Path(testDir.getAbsolutePath())
+      val args = Seq(
+        "--class", K8sExitCodeTestApplication.getClass.getName.stripSuffix("$"),
+        "--name", "testApp",
+        "--master", "k8s://host:port",
+        "--conf", "spark.ui.enabled=false",
+        "--conf", "spark.master.rest.enabled=false",
+        "--conf", "spark.kubernetes.authenticate.driver.serviceAccountName=default",
+        "--conf", "spark.eventLog.enabled=true",
+        "--conf", "spark.eventLog.rolling.enabled=false",
+        "--conf", "spark.eventLog.testing=true",
+        "--conf", s"spark.eventLog.dir=${testDirPath.toUri.toString}",
+        unusedJar.toString
+      )
+      // The test application throws SparkUserAppException with exit code 42,
+      // so SparkContext.stop(42) should be called in k8s mode
+      runSparkSubmit(args, expectFailure = true)
+      val listStatus = fileSystem.listStatus(testDirPath)
+      val logData = EventLogFileReader.openEventLog(listStatus.last.getPath, fileSystem)
+      Source.fromInputStream(logData)(Codec.UTF8).getLines().filter { line =>
+        line.contains("SparkListenerApplicationEnd")
+      }.foreach { line =>
+        assert(line.contains("\"ExitCode\":42"))
+      }
+    }
+  }
+
   private def testRemoteResources(
       enableHttpFs: Boolean,
       forceDownloadSchemes: Seq[String] = Nil): Unit = {
@@ -1932,7 +1967,7 @@ class SparkSubmitSuite
       TestUtils.createJar(Seq(text1), zipFile1)
       val testFile = "test_metrics_config.properties"
       val testPyFile = "test_metrics_system.properties"
-      val testJar = "TestUDTF.jar"
+      val testJar = new File(testJarPath).getName
       val clArgs = Seq(
         "--deploy-mode", "client",
         "--proxy-user", "test.user",
@@ -1945,7 +1980,7 @@ class SparkSubmitSuite
         "--conf", "spark.kubernetes.submitInDriver=true",
         "--files", s"src/test/resources/$testFile",
         "--py-files", s"src/test/resources/$testPyFile",
-        "--jars", s"src/test/resources/$testJar",
+        "--jars", testJarPath,
         "--archives", s"${zipFile1.getAbsolutePath}#test_archives",
         "/home/thejar.jar",
         "arg1")
@@ -2116,4 +2151,24 @@ class TestSparkApplication extends SparkApplication with Matchers {
     throw new SparkException(args(0))
   }
 
+}
+
+object K8sExitCodeTestApplication {
+  def main(args: Array[String]): Unit = {
+    TestUtils.configTestLog4j2("INFO")
+    // Use local master to ensure SparkContext can be created in test environment
+    // The k8s master is set in SparkSubmit args, which triggers the finally block logic
+    val conf = new SparkConf().setMaster("local[2]")
+    val sc = new SparkContext(conf)
+    try {
+      // Create a simple RDD to ensure SparkContext is active
+      sc.parallelize(1 to 10).count()
+      // Throw SparkUserAppException with a specific exit code
+      // This simulates a user application failure
+      throw new SparkUserAppException(42)
+    } finally {
+      // Note: In k8s mode, SparkSubmit should call sc.stop(42) in the finally block
+      // We don't call stop() here to let SparkSubmit handle it
+    }
+  }
 }

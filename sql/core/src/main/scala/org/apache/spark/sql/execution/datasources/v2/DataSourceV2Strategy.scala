@@ -119,8 +119,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case PhysicalOperation(project, filters, DataSourceV2ScanRelation(
-      v2Relation, V1ScanWrapper(scan, pushed, pushedDownOperators), output, _, _)) =>
+    case PhysicalOperation(project, filters, ExtractV2ScanInfo(
+      v2Relation, V1ScanWrapper(scan, pushed, pushedDownOperators), output)) =>
       val v1Relation = scan.toV1TableScan[BaseRelation with TableScan](session.sqlContext)
       if (v1Relation.schema != scan.readSchema()) {
         throw QueryExecutionErrors.fallbackV1RelationReportsInconsistentSchemaError(
@@ -146,7 +146,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         project, filters, dsScan, needsUnsafeConversion = false) :: Nil
 
     case PhysicalOperation(project, filters,
-        DataSourceV2ScanRelation(_, scan: LocalScan, output, _, _)) =>
+        ExtractV2ScanInfo(_, scan: LocalScan, output)) =>
       val localScanExec = LocalTableScanExec(output, scan.rows().toImmutableArraySeq, None)
       DataSourceV2Strategy.withProjectAndFilter(
         project, filters, localScanExec, needsUnsafeConversion = false) :: Nil
@@ -245,7 +245,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     // Views are wrapped in V1Table so the exec can extract schema and provider uniformly.
     case CreateTableLike(
         ResolvedIdentifier(catalog, ident), source,
-        locationStr, provider, _, properties, ifNotExists) =>
+        locationStr, provider, serdeInfo, properties, ifNotExists) =>
       val table = source match {
         case ResolvedTable(_, _, t, _) => t
         case ResolvedPersistentView(_, _, meta) => V1Table(meta)
@@ -258,7 +258,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         else uri
       }
       CreateTableLikeExec(catalog.asTableCatalog, ident, table,
-        location, provider, properties, ifNotExists) :: Nil
+        location, provider, serdeInfo, properties, ifNotExists) :: Nil
 
     case RefreshTable(r: ResolvedTable) =>
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r, includeTimeTravel = true)) :: Nil
@@ -346,7 +346,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case DeleteFromTable(relation, condition) =>
       relation match {
-        case DataSourceV2ScanRelation(r, _, output, _, _) =>
+        case ExtractV2ScanInfo(r, _, output) =>
           val table = r.table
           if (SubqueryExpression.hasSubquery(condition)) {
             throw QueryCompilationErrors.unsupportedDeleteByConditionWithSubqueryError(condition)
