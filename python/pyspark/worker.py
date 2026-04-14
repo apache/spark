@@ -264,6 +264,7 @@ class BroadcastInfo:
     secret: Optional[str]
     variables: list[tuple[int, Optional[str]]]
 
+    @classmethod
     def from_stream(cls, stream: IO) -> "BroadcastInfo":
         needs_broadcast_decryption_server = read_bool(stream)
         num_broadcast_variables = read_int(stream)
@@ -315,7 +316,7 @@ class UDFInfo:
             if length == SpecialLengths.END_OF_DATA_SECTION:
                 raise EOFError
             elif length == SpecialLengths.NULL:
-                udfs.append(None)
+                raise PySparkValueError("Unexpected NULL value for UDF")
             else:
                 data = stream.read(length)
                 if len(data) < length:
@@ -328,7 +329,56 @@ class UDFInfo:
 
 
 @dataclasses.dataclass
-class UDFInitInfo:
+class UDTFInfo:
+    args: list[int]
+    kwargs: dict[str, int]
+    partition_child_indexes: list[int]
+    pickled_analyze_result: Optional[Callable]
+    handler: Callable
+    return_type: StructType
+    name: str
+
+    @classmethod
+    def from_stream(cls, stream: IO) -> "UDTFInfo":
+        args = []
+        kwargs = {}
+        for _ in range(read_int(stream)):
+            offset = read_int(stream)
+            if read_bool(stream):
+                name = utf8_deserializer.loads(stream)
+                kwargs[name] = offset
+            else:
+                args.append(offset)
+        partition_child_indexes = [read_int(stream) for _ in range(read_int(stream))]
+        if read_bool(stream):
+            pickled_analyze_result = pickleSer._read_with_length(stream)
+        else:
+            pickled_analyze_result = None
+        handler = read_command(pickleSer, stream)
+        if not isinstance(handler, type):
+            raise PySparkRuntimeError(
+                f"Invalid UDTF handler type. Expected a class (type 'type'), but "
+                f"got an instance of {type(handler).__name__}."
+            )
+        return_type = _parse_datatype_json_string(utf8_deserializer.loads(stream))
+        if not isinstance(return_type, StructType):
+            raise PySparkRuntimeError(
+                f"The return type of a UDTF must be a struct type, but got {type(return_type)}."
+            )
+        name = utf8_deserializer.loads(stream)
+        return cls(
+            args=args,
+            kwargs=kwargs,
+            partition_child_indexes=partition_child_indexes,
+            pickled_analyze_result=pickled_analyze_result,
+            handler=handler,
+            return_type=return_type,
+            name=name,
+        )
+
+
+@dataclasses.dataclass
+class WorkerInitInfo:
     split_index: int
     python_version: str
     spark_files_dir: str
@@ -338,10 +388,10 @@ class UDFInitInfo:
     eval_type: int
     runner_conf: dict[str, str]
     eval_conf: dict[str, str]
-    udf: list[UDFInfo]
+    udf: Optional[Union[UDTFInfo, list[UDFInfo]]]
 
     @classmethod
-    def from_stream(cls, stream: IO) -> "UDFInitInfo":
+    def from_stream(cls, stream: IO) -> "WorkerInitInfo":
         split_index = read_int(stream)
         if split_index == -1:
             sys.exit(-1)
@@ -363,9 +413,21 @@ class UDFInitInfo:
             k = utf8_deserializer.loads(stream)
             v = utf8_deserializer.loads(stream)
             eval_conf[k] = v
-        udf = []
-        for _ in range(read_int(stream)):
-            udf.append(UDFInfo.from_stream(stream))
+
+        udf: Optional[Union[UDTFInfo, list[UDFInfo]]]
+
+        if eval_type == PythonEvalType.NON_UDF:
+            udf = None
+        elif eval_type in (
+            PythonEvalType.SQL_TABLE_UDF,
+            PythonEvalType.SQL_ARROW_TABLE_UDF,
+            PythonEvalType.SQL_ARROW_UDTF,
+        ):
+            udf = UDTFInfo.from_stream(stream)
+        else:
+            udf = []
+            for _ in range(read_int(stream)):
+                udf.append(UDFInfo.from_stream(stream))
 
         return cls(
             split_index=split_index,
