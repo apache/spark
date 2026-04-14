@@ -39,6 +39,10 @@ if [ "$RUNNING_IN_DOCKER" = "1" ]; then
     # JAVA_HOME for the openjdk package.
     export JAVA_HOME=/usr
   fi
+
+  # If ~/.m2 has metadata for hamcrest-core:1.3 but no JAR, Coursier can fail with
+  # "file:.../hamcrest-core-1.3.jar: not found". Drop that tree so artifacts re-resolve.
+  rm -rf "${HOME}/.m2/repository/org/hamcrest/hamcrest-core/1.3"
 else
   # Outside docker, need to ask for information about the release.
   get_release_info
