@@ -2234,7 +2234,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     // TODO(SPARK-50244): ADD JAR is inside `sql()` thus isolated. This will break an existing Hive
     //  use case (one session adds JARs and another session uses them). After we sort out the Hive
     //  isolation issue we will decide if the next assert should be wrapped inside `withResources`.
-    spark.artifactManager.withResources {
+    spark.sessionState.artifactManager.withResources {
       assert(new File(SparkFiles.get(s"${directoryToAdd.getName}/${testFile.getName}")).exists())
     }
   }
