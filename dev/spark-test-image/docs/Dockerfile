@@ -32,6 +32,7 @@ ENV DEBCONF_NONINTERACTIVE_SEEN=true
 RUN apt-get update && apt-get install -y \
     build-essential \
     ca-certificates \
+    cmake \
     curl \
     gfortran \
     git \

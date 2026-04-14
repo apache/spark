@@ -38,7 +38,7 @@ import org.apache.spark.sql.avro.AvroCompressionCodec._
 import org.apache.spark.sql.avro.AvroOptions.IGNORE_EXTENSION
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.execution.datasources.OutputWriterFactory
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, OutputWriterFactory}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -151,15 +151,17 @@ private[sql] object AvroUtils extends Logging {
                 case DEFLATE => Some(sqlConf.getConf(SQLConf.AVRO_DEFLATE_LEVEL), codecName)
                 case XZ => Some(sqlConf.getConf(SQLConf.AVRO_XZ_LEVEL), codecName)
                 case ZSTANDARD =>
-                  jobConf.setBoolean(AvroOutputFormat.ZSTD_BUFFERPOOL_KEY,
-                    sqlConf.getConf(SQLConf.AVRO_ZSTANDARD_BUFFER_POOL_ENABLED))
+                  DataSourceUtils.setConfIfAbsent(jobConf,
+                    AvroOutputFormat.ZSTD_BUFFERPOOL_KEY,
+                    sqlConf.getConf(SQLConf.AVRO_ZSTANDARD_BUFFER_POOL_ENABLED).toString)
                   Some(sqlConf.getConf(SQLConf.AVRO_ZSTANDARD_LEVEL), "zstd")
                 case _ => None
               }
               levelAndCodecName.foreach { case (level, mapredCodecName) =>
+                val levelKey = s"avro.mapred.$mapredCodecName.level"
+                DataSourceUtils.setConfIfAbsent(jobConf, levelKey, level.toString)
                 logInfo(log"Compressing Avro output using the ${MDC(CODEC_NAME, codecName)} " +
-                  log"codec at level ${MDC(CODEC_LEVEL, level)}")
-                jobConf.setInt(s"avro.mapred.$mapredCodecName.level", level.toInt)
+                  log"codec at level ${MDC(CODEC_LEVEL, jobConf.get(levelKey))}")
               }
             } else {
               logInfo(log"Compressing Avro output using the ${MDC(CODEC_NAME, codecName)} codec")

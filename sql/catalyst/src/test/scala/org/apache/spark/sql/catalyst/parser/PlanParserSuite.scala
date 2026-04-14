@@ -831,9 +831,14 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(s"$sql tablesample(100 rows)",
       table("t").limit(100).select(star()))
     assertEqual(s"$sql tablesample(43 percent) as x",
-      Sample(0, .43d, withReplacement = false, 10L, table("t").as("x")).select(star()))
+      Sample(0, .43d, withReplacement = false, None, table("t").as("x")).select(star()))
     assertEqual(s"$sql tablesample(bucket 4 out of 10) as x",
-      Sample(0, .4d, withReplacement = false, 10L, table("t").as("x")).select(star()))
+      Sample(0, .4d, withReplacement = false, None, table("t").as("x")).select(star()))
+    // REPEATABLE clause produces Some(seed)
+    assertEqual(s"$sql tablesample(43 percent) repeatable (10) as x",
+      Sample(0, .43d, withReplacement = false, 10L, table("t").as("x")).select(star()))
+    assertEqual(s"$sql tablesample(bucket 4 out of 10) repeatable (99) as x",
+      Sample(0, .4d, withReplacement = false, 99L, table("t").as("x")).select(star()))
 
     val sql1 = s"$sql tablesample(bucket 4 out of 10 on x) as x"
     val fragment1 = "tablesample(bucket 4 out of 10 on x)"

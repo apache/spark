@@ -128,7 +128,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     }
 
     UIUtils.headerSparkPage(
-      request, s"Details for Query $executionId", content, parent)
+      request, s"Details for Query $executionId", content, parent, useTimeline = true)
   }
 
 

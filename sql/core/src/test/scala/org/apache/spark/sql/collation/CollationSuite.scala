@@ -2479,4 +2479,249 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       )
     }
   }
+
+  test("INSERT VALUES with NULLs into collated columns") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (c1 STRING COLLATE UTF8_LCASE, c2 STRING COLLATE UTF8_LCASE)")
+          sql("INSERT INTO t VALUES ('a', NULL), (NULL, NULL)")
+          checkAnswer(
+            sql("SELECT * FROM t"),
+            Seq(Row("a", null), Row(null, null))
+          )
+        }
+      }
+    }
+  }
+
+  test("INSERT VALUES with DEFAULT into collated columns") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (c1 STRING COLLATE UTF8_LCASE, c2 STRING COLLATE UTF8_LCASE)")
+          sql("INSERT INTO t VALUES ('a', DEFAULT), (DEFAULT, DEFAULT)")
+          checkAnswer(
+            sql("SELECT * FROM t"),
+            Seq(Row("a", null), Row(null, null))
+          )
+        }
+      }
+    }
+  }
+
+  test("INSERT VALUES with explicit conflicting collations") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (c1 STRING COLLATE UTF8_LCASE)")
+          sql("INSERT INTO t VALUES ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE)")
+          sql(
+            """INSERT INTO t
+              |VALUES ('c' COLLATE UTF8_LCASE), ('d' COLLATE UNICODE)
+              |AS vals(c1)""".stripMargin)
+          checkAnswer(
+            sql("SELECT * FROM t"),
+            Seq(Row("a"), Row("b"), Row("c"), Row("d"))
+          )
+        }
+      }
+    }
+  }
+
+  test("INSERT VALUES with CAST to conflicting collated string types") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (c1 STRING COLLATE UTF8_LCASE)")
+          sql(
+            """INSERT INTO t VALUES
+              |  (CAST('a' AS STRING COLLATE UTF8_LCASE)),
+              |  (CAST('b' AS STRING COLLATE UNICODE))""".stripMargin)
+          checkAnswer(
+            sql("SELECT * FROM t"),
+            Seq(Row("a"), Row("b"))
+          )
+        }
+      }
+    }
+  }
+
+  test("INSERT VALUES with mixed collations and NULLs") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          sql(
+            """CREATE TABLE t (
+              |  c1 STRING COLLATE UTF8_LCASE,
+              |  c2 STRING COLLATE UNICODE
+              |)""".stripMargin)
+          sql("INSERT INTO t VALUES ('hello', 'world'), (NULL, NULL)")
+          checkAnswer(
+            sql("SELECT * FROM t"),
+            Seq(Row("hello", "world"), Row(null, null))
+          )
+        }
+      }
+    }
+  }
+
+  test("INSERT OVERWRITE VALUES with collated columns") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (c1 STRING COLLATE UTF8_LCASE)")
+          sql("INSERT INTO t VALUES ('x')")
+          sql("INSERT OVERWRITE t VALUES ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE)")
+          checkAnswer(
+            sql("SELECT * FROM t"),
+            Seq(Row("a"), Row("b"))
+          )
+        }
+      }
+    }
+  }
+
+  test("INSERT REPLACE WHERE VALUES with collated columns") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("testcat.t") {
+          sql("CREATE TABLE testcat.t (c1 STRING COLLATE UTF8_LCASE)")
+          sql("INSERT INTO testcat.t VALUES ('x')")
+          sql(
+            """INSERT INTO testcat.t REPLACE WHERE TRUE
+              |  VALUES ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE)""".stripMargin)
+          checkAnswer(
+            sql("SELECT * FROM testcat.t"),
+            Seq(Row("a"), Row("b"))
+          )
+          sql(
+            """INSERT INTO testcat.t REPLACE WHERE TRUE
+              |  VALUES ('c' COLLATE UTF8_LCASE), ('d' COLLATE UNICODE)
+              |  AS vals(c1)""".stripMargin)
+          checkAnswer(
+            sql("SELECT * FROM testcat.t"),
+            Seq(Row("c"), Row("d"))
+          )
+        }
+      }
+    }
+  }
+
+  test("INSERT VALUES with nested collated types") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (c1 ARRAY<STRING COLLATE UTF8_LCASE>)")
+          sql("INSERT INTO t VALUES (array('a', 'b')), (array('c'))")
+          checkAnswer(
+            sql("SELECT * FROM t"),
+            Seq(Row(Seq("a", "b")), Row(Seq("c")))
+          )
+        }
+      }
+    }
+  }
+
+  test("collation stripping for type resolution must not affect expression evaluation") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (c1 BOOLEAN)")
+          sql("INSERT INTO t VALUES ('a' COLLATE UTF8_LCASE = 'A')")
+          checkAnswer(sql("SELECT * FROM t"), Row(true))
+        }
+      }
+    }
+  }
+
+  test("INSERT SELECT FROM VALUES with conflicting collations should fail") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (c1 STRING COLLATE UTF8_LCASE)")
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(
+                """INSERT INTO t
+                  |SELECT * FROM VALUES
+                  |  ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE) AS T(c1)""".stripMargin)
+            },
+            condition = "INVALID_INLINE_TABLE.INCOMPATIBLE_TYPES_IN_INLINE_TABLE",
+            parameters = Map("colName" -> "`c1`"),
+            queryContext = Array(ExpectedContext(
+              "VALUES\n  ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE) AS T(c1)"))
+          )
+        }
+      }
+    }
+  }
+
+  test("standalone SELECT VALUES with conflicting collations should fail") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(
+              "SELECT * FROM VALUES ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE) AS T(c1)")
+          },
+          condition = "INVALID_INLINE_TABLE.INCOMPATIBLE_TYPES_IN_INLINE_TABLE",
+          parameters = Map("colName" -> "`c1`"),
+          queryContext = Array(ExpectedContext(
+            "VALUES ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE) AS T(c1)"))
+        )
+      }
+    }
+  }
+
+  test("CTAS with conflicting collations in VALUES should fail") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(
+                """CREATE TABLE t AS
+                  |SELECT * FROM VALUES
+                  |  ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE) AS T(c1)""".stripMargin)
+            },
+            condition = "INVALID_INLINE_TABLE.INCOMPATIBLE_TYPES_IN_INLINE_TABLE",
+            parameters = Map("colName" -> "`c1`"),
+            queryContext = Array(ExpectedContext(
+              "VALUES\n  ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE) AS T(c1)"))
+          )
+        }
+      }
+    }
+  }
+
+  test("CTAS with DEFAULT COLLATION and plain string literals in inline table") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          sql(
+            """CREATE TABLE t DEFAULT COLLATION UTF8_LCASE AS
+              |SELECT * FROM VALUES ('a'), ('b') AS T(c1) WHERE c1 = 'A'
+              |""".stripMargin)
+          checkAnswer(sql("SELECT COUNT(*) FROM t"), Seq(Row(1)))
+          checkAnswer(sql("SELECT DISTINCT COLLATION(c1) FROM t"),
+            Row(s"${fullyQualifiedPrefix}UTF8_LCASE"))
+        }
+      }
+    }
+  }
+
 }

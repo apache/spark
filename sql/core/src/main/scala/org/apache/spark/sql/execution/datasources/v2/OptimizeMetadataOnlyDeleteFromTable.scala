@@ -43,13 +43,17 @@ object OptimizeMetadataOnlyDeleteFromTable extends Rule[LogicalPlan] with Predic
         case table: SupportsDeleteV2 if !SubqueryExpression.hasSubquery(cond) =>
           val predicates = splitConjunctivePredicates(cond)
           val normalizedPredicates = DataSourceStrategy.normalizeExprs(predicates, relation.output)
-          val filters = toDataSourceV2Filters(normalizedPredicates)
-          val allPredicatesTranslated = normalizedPredicates.size == filters.length
-          if (allPredicatesTranslated && table.canDeleteWhere(filters)) {
-            logDebug(s"Switching to delete with filters: ${filters.mkString("[", ", ", "]")}")
-            DeleteFromTableWithFilters(relation, filters.toImmutableArraySeq)
+          val filtersOpt = tryTranslateToV2(normalizedPredicates)
+          if (filtersOpt.exists(table.canDeleteWhere)) {
+            logDebug(s"Switching to delete with filters: " +
+              s"${filtersOpt.get.mkString("[", ", ", "]")}")
+            DeleteFromTableWithFilters(relation, filtersOpt.get.toImmutableArraySeq)
           } else {
-            rowLevelPlan
+            tryDeleteWithPartitionPredicates(table, relation, normalizedPredicates)
+              .getOrElse {
+                logDebug(s"Falling back to row-level delete on ${relation.table.name()}")
+                rowLevelPlan
+              }
           }
 
         case _: TruncatableTable if cond == TrueLiteral =>
@@ -60,14 +64,46 @@ object OptimizeMetadataOnlyDeleteFromTable extends Rule[LogicalPlan] with Predic
       }
   }
 
-  private def toDataSourceV2Filters(predicates: Seq[Expression]): Array[Predicate] = {
-    predicates.flatMap { p =>
+  /**
+   * Attempts to convert partition-column filters to [[PartitionPredicate]]s and
+   * combine them with translated V2 data filters for a metadata-only delete. (See SPARK-55596)
+   *
+   * Returns [[Some]] with the plan if the table accepts the combined predicates,
+   * or [[None]] if partition predicates cannot be created or the table rejects them.
+   */
+  private def tryDeleteWithPartitionPredicates(
+      table: SupportsDeleteV2,
+      relation: DataSourceV2Relation,
+      normalizedPredicates: Seq[Expression]): Option[LogicalPlan] = {
+    for {
+      partitionFields <- PushDownUtils.getPartitionPredicateSchema(relation)
+      flattenedFilters = PushDownUtils.flattenNestedPartitionFilters(
+        normalizedPredicates, partitionFields).keys.toSeq
+      (candidatePredicates, remainingFilters) =
+        PushDownUtils.createPartitionPredicates(flattenedFilters, partitionFields)
+      // None if no partition predicates created
+      partPredicates <- Option.when(candidatePredicates.nonEmpty)(candidatePredicates)
+      // None if any remaining filter cannot be translated to V2
+      dataV2Filters <- tryTranslateToV2(remainingFilters)
+      combined = partPredicates.toArray ++ dataV2Filters
+      if table.canDeleteWhere(combined)
+    } yield {
+      logDebug(s"Switching to delete with PartitionPredicate filters: " +
+        s"${combined.mkString("[", ", ", "]")}")
+      DeleteFromTableWithFilters(relation, combined.toImmutableArraySeq)
+    }
+  }
+
+  /** Translates all expressions to V2 filters, or returns [[None]] if any fail. */
+  private def tryTranslateToV2(predicates: Seq[Expression]): Option[Array[Predicate]] = {
+    val filters = predicates.flatMap { p =>
       val filter = DataSourceV2Strategy.translateFilterV2(p)
       if (filter.isEmpty) {
         logDebug(s"Cannot translate expression to data source filter: $p")
       }
       filter
     }.toArray
+    Option.when(filters.length == predicates.size)(filters)
   }
 
   private object RewrittenRowLevelCommand {

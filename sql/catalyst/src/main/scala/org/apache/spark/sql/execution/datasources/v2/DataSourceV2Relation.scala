@@ -157,13 +157,22 @@ case class DataSourceV2Relation(
  * @param keyGroupedPartitioning if set, the partitioning expressions that are used to split the
  *                               rows in the scan across different partitions
  * @param ordering if set, the ordering provided by the scan
+ * @param pushedFilters Catalyst expressions for filters that were fully pushed to the data
+ *                      source and do not appear as post-scan filters
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
     scan: Scan,
     output: Seq[AttributeReference],
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
-    ordering: Option[Seq[SortOrder]] = None) extends LeafNode with NamedRelation {
+    ordering: Option[Seq[SortOrder]] = None,
+    pushedFilters: Seq[Expression] = Seq.empty) extends LeafNode with NamedRelation {
+
+  // TODO: Override validConstraints to return ExpressionSet(pushedFilters) so that pushed
+  // filters participate in constraint propagation (InferFiltersFromConstraints, PruneFilters).
+  // This changes which filters InferFiltersFromConstraints adds or removes (e.g., it may
+  // skip adding IsNotNull when the scan already implies it, or infer new filters across
+  // joins), so plan stability testing is needed first.
 
   override def name: String = relation.name
 
@@ -197,7 +206,8 @@ case class DataSourceV2ScanRelation(
       ),
       ordering = ordering.map(
         _.map(o => o.copy(child = QueryPlan.normalizeExpressions(o.child, output)))
-      )
+      ),
+      pushedFilters = pushedFilters.map(QueryPlan.normalizeExpressions(_, output))
     )
   }
 }
@@ -283,6 +293,17 @@ object ExtractV2CatalogAndIdentifier {
         None
     }
   }
+}
+
+object ExtractV2Scan {
+  def unapply(scanRelation: DataSourceV2ScanRelation): Option[Scan] =
+    Some(scanRelation.scan)
+}
+
+object ExtractV2ScanInfo {
+  def unapply(scanRelation: DataSourceV2ScanRelation)
+      : Option[(DataSourceV2Relation, Scan, Seq[AttributeReference])] =
+    Some((scanRelation.relation, scanRelation.scan, scanRelation.output))
 }
 
 object DataSourceV2Relation {

@@ -165,7 +165,7 @@ def unpack_pipeline_spec(spec_data: Mapping[str, Any]) -> PipelineSpec:
         "libraries",
     }
     REQUIRED_FIELDS = ["name", "storage"]
-    for key in spec_data.keys():
+    for key in spec_data:
         if key not in ALLOWED_FIELDS:
             raise PySparkException(
                 errorClass="PIPELINE_SPEC_UNEXPECTED_FIELD", messageParameters={"field_name": key}

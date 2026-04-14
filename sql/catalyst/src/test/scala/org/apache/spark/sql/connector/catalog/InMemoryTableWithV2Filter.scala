@@ -140,31 +140,36 @@ object InMemoryTableWithV2Filter {
       partitionNames: Seq[String],
       filters: Array[Predicate]): Iterable[Seq[Any]] = {
     keys.filter { partValues =>
-      filters.flatMap(splitAnd).forall {
-        case p: Predicate if p.name().equals("=") =>
-          p.children()(1).asInstanceOf[LiteralValue[_]].value ==
-            InMemoryBaseTable.extractValue(p.children()(0).toString, partitionNames, partValues)
-        case p: Predicate if p.name().equals("<=>") =>
-          val attrVal = InMemoryBaseTable
-            .extractValue(p.children()(0).toString, partitionNames, partValues)
-          val value = p.children()(1).asInstanceOf[LiteralValue[_]].value
-          if (attrVal == null && value == null) {
-            true
-          } else if (attrVal == null || value == null) {
-            false
-          } else {
-            value == attrVal
-          }
-        case p: Predicate if p.name().equals("IS_NULL") =>
-          val attr = p.children()(0).toString
-          null == InMemoryBaseTable.extractValue(attr, partitionNames, partValues)
-        case p: Predicate if p.name().equals("IS_NOT_NULL") =>
-          val attr = p.children()(0).toString
-          null != InMemoryBaseTable.extractValue(attr, partitionNames, partValues)
-        case p: Predicate if p.name().equals("ALWAYS_TRUE") => true
-        case f =>
-          throw new IllegalArgumentException(s"Unsupported filter type: $f")
-      }
+      val resolve: String => Any = attr =>
+        InMemoryBaseTable.extractValue(attr, partitionNames, partValues)
+      filters.flatMap(splitAnd).forall(evalPredicate(_, resolve))
+    }
+  }
+
+  /**
+   * Evaluates a single V2 predicate by resolving column values through the
+   * given function. Supports =, <=>, IS_NULL, IS_NOT_NULL, and ALWAYS_TRUE.
+   */
+  def evalPredicate(
+      pred: Predicate,
+      resolveValue: String => Any): Boolean = {
+    lazy val attr = pred.children()(0).toString
+    pred.name() match {
+      case "=" =>
+        resolveValue(attr) ==
+          pred.children()(1).asInstanceOf[LiteralValue[_]].value
+      case "<=>" =>
+        val attrVal = resolveValue(attr)
+        val litVal =
+          pred.children()(1).asInstanceOf[LiteralValue[_]].value
+        (attrVal == null && litVal == null) ||
+          (attrVal != null && litVal != null && attrVal == litVal)
+      case "IS_NULL" => resolveValue(attr) == null
+      case "IS_NOT_NULL" => resolveValue(attr) != null
+      case "ALWAYS_TRUE" => true
+      case other =>
+        throw new IllegalArgumentException(
+          s"Unsupported filter type: $other")
     }
   }
 

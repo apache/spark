@@ -94,18 +94,6 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     cachedData.size
   }
 
-  /**
-   * Returns cache entries that were registered with an explicit table/view name (e.g.
-   * `CACHE TABLE` / `Catalog.cacheTable`). Anonymous `Dataset.cache()` entries are omitted.
-   */
-  private[sql] def listNamedCachedTables(): Seq[(String, StorageLevel)] = this.synchronized {
-    cachedData.flatMap { cd =>
-      cd.cachedRepresentation.cacheBuilder.tableName.map { n =>
-        (n, cd.cachedRepresentation.cacheBuilder.storageLevel)
-      }
-    }
-  }
-
   // Test-only
   def cacheQuery(query: Dataset[_]): Unit = {
     cacheQuery(query, tableName = None, storageLevel = MEMORY_AND_DISK)
