@@ -118,10 +118,8 @@ class InMemoryTable(
 
   override def alterTableWithData(
       data: Array[BufferedRows],
-      newSchema: StructType,
-      renames: Map[String, String] = Map.empty): InMemoryTable = {
-    super.alterTableWithData(data, newSchema, renames)
-      .asInstanceOf[InMemoryTable]
+      newSchema: StructType): InMemoryTable = {
+    super.alterTableWithData(data, newSchema).asInstanceOf[InMemoryTable]
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {

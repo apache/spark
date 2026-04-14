@@ -24,20 +24,18 @@ import org.apache.spark.sql.connect.test.IntegrationTestUtils.isAssemblyJarsDirE
 /**
  * DSv2 table refresh and pinning tests for Spark Connect mode.
  *
- * In Connect, every action re-analyzes the plan on the server.
- * This means:
- * - No stale QueryExecution (collect is NOT pinned)
- * - Schema changes are picked up on every access
- * - Type widening, column rename, column removal all succeed
- *   (plan is re-analyzed with new schema)
- * - Joins/unions/etc always see consistent latest version
+ * In Connect, every action re-analyzes the plan on the server. This means:
+ *   - No stale QueryExecution (collect is NOT pinned)
+ *   - Schema changes are picked up on every access
+ *   - Type widening, column rename, column removal all succeed (plan is re-analyzed with new
+ *     schema)
+ *   - Joins/unions/etc always see consistent latest version
  *
  * This suite systematically tests ALL combinations of:
- * - 8 modification types x 8 access patterns
- * - Key behavioral differences from classic mode
+ *   - 8 modification types x 8 access patterns
+ *   - Key behavioral differences from classic mode
  */
-class DataSourceV2RefreshConnectSuite
-  extends QueryTest with RemoteSparkSession with SQLHelper {
+class DataSourceV2RefreshConnectSuite extends QueryTest with RemoteSparkSession with SQLHelper {
 
   private val T = "testcat.ns1.ns2.tbl"
 
@@ -47,8 +45,7 @@ class DataSourceV2RefreshConnectSuite
   }
 
   private def assumeCanRun(): Unit = {
-    assume(spark != null && isAssemblyJarsDirExists,
-      "Spark Connect server not available")
+    assume(spark != null && isAssemblyJarsDirExists, "Spark Connect server not available")
   }
 
   // =====================================================================
@@ -60,11 +57,7 @@ class DataSourceV2RefreshConnectSuite
   // re-analysis. Adding columns or data is fine.
   // In Connect, DataFrames re-analyze on every action.
   // ALL modifications succeed for DataFrames.
-  case class Mod(
-      name: String,
-      fn: String => Unit,
-      sqlViewOk: Boolean,
-      dfOk: Boolean)
+  case class Mod(name: String, fn: String => Unit, sqlViewOk: Boolean, dfOk: Boolean)
 
   private val mods: Seq[Mod] = Seq(
     Mod(
@@ -84,18 +77,14 @@ class DataSourceV2RefreshConnectSuite
       dfOk = true),
     Mod(
       "column rename",
-      t =>
-        spark.sql(
-          s"ALTER TABLE $t RENAME COLUMN salary TO pay"),
+      t => spark.sql(s"ALTER TABLE $t RENAME COLUMN salary TO pay"),
       sqlViewOk = false,
       dfOk = true),
     // InMemoryTable throws ClassCastException for type widening:
     // stored Integer values cannot be read as Long.
     Mod(
       "type widening INT to BIGINT",
-      t =>
-        spark.sql(
-          s"ALTER TABLE $t ALTER COLUMN salary TYPE BIGINT"),
+      t => spark.sql(s"ALTER TABLE $t ALTER COLUMN salary TYPE BIGINT"),
       sqlViewOk = false,
       dfOk = false),
     Mod(
@@ -118,8 +107,7 @@ class DataSourceV2RefreshConnectSuite
       "drop/recreate table",
       t => {
         spark.sql(s"DROP TABLE $t")
-        spark.sql(
-          s"CREATE TABLE $t (id INT, salary INT) USING foo")
+        spark.sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
       },
       sqlViewOk = true,
       dfOk = true))
@@ -136,10 +124,8 @@ class DataSourceV2RefreshConnectSuite
       assumeCanRun()
       withTable(T) {
         setupTable()
-        spark.sql(
-          s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
-        checkAnswer(
-          spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
+        spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
+        checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
         mod.fn(T)
         if (mod.sqlViewOk) {
           spark.sql("SELECT * FROM tmp").collect()
@@ -162,8 +148,7 @@ class DataSourceV2RefreshConnectSuite
       assumeCanRun()
       withTable(T) {
         setupTable()
-        checkAnswer(
-          spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
+        checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
         mod.fn(T)
         if (mod.dfOk) {
           spark.sql(s"SELECT * FROM $T").collect()
@@ -264,8 +249,7 @@ class DataSourceV2RefreshConnectSuite
       withTable(T) {
         setupTable()
         spark.sql(s"CACHE TABLE $T")
-        checkAnswer(
-          spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
+        checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
         try {
           mod.fn(T)
           spark.sql(s"SELECT * FROM $T").collect()
@@ -410,8 +394,7 @@ class DataSourceV2RefreshConnectSuite
       setupTable()
       val df = spark.sql(s"SELECT * FROM $T")
       df.collect()
-      spark.sql(
-        s"ALTER TABLE $T ALTER COLUMN salary TYPE BIGINT")
+      spark.sql(s"ALTER TABLE $T ALTER COLUMN salary TYPE BIGINT")
       spark.sql(s"INSERT INTO $T VALUES (2, 200)")
       assertThrows[Exception] {
         df.collect()
@@ -451,8 +434,7 @@ class DataSourceV2RefreshConnectSuite
       val df = spark.sql(s"SELECT * FROM $T")
       df.collect()
       spark.sql(s"DROP TABLE $T")
-      spark.sql(
-        s"CREATE TABLE $T (id INT, salary INT) USING foo")
+      spark.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
       val r = df.collect()
       assert(r.isEmpty)
     }
@@ -492,7 +474,8 @@ class DataSourceV2RefreshConnectSuite
       val df2 = spark.sql(s"SELECT id AS b FROM $T")
       spark.sql(s"INSERT INTO $T VALUES (3, 300)")
       val df3 = spark.sql(s"SELECT id AS c FROM $T")
-      val joined = df1.join(df2, df1("a") === df2("b"))
+      val joined = df1
+        .join(df2, df1("a") === df2("b"))
         .join(df3, df1("a") === df3("c"))
       assert(joined.collect().length == 3)
     }
@@ -505,8 +488,7 @@ class DataSourceV2RefreshConnectSuite
   test("[connect edge] empty table modification") {
     assumeCanRun()
     withTable(T) {
-      spark.sql(
-        s"CREATE TABLE $T (id INT, salary INT) USING foo")
+      spark.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
       val df = spark.sql(s"SELECT * FROM $T")
       spark.sql(s"ALTER TABLE $T ADD COLUMN bonus INT")
       val r = df.collect()
@@ -563,10 +545,8 @@ class DataSourceV2RefreshConnectSuite
     assumeCanRun()
     withTable(T) {
       setupTable()
-      spark.sql(
-        s"CREATE OR REPLACE TEMP VIEW tv AS SELECT * FROM $T")
-      checkAnswer(
-        spark.sql("SELECT * FROM tv"), Seq(Row(1, 100)))
+      spark.sql(s"CREATE OR REPLACE TEMP VIEW tv AS SELECT * FROM $T")
+      checkAnswer(spark.sql("SELECT * FROM tv"), Seq(Row(1, 100)))
       spark.sql(s"ALTER TABLE $T ADD COLUMN bonus INT")
       spark.sql(s"INSERT INTO $T VALUES (2, 200, 50)")
       // SQL view re-analyzes: SELECT * picks up new column

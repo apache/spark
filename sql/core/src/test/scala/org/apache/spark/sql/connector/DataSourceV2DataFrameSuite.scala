@@ -1901,7 +1901,10 @@ class DataSourceV2DataFrameSuite
         exception = intercept[AnalysisException] {
           filteredSourceDF.writeTo(t).createOrReplace()
         },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH")
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`s`",
+          "errors" -> "- `dep` STRING has been added"))
     }
   }
 
@@ -2727,7 +2730,10 @@ class DataSourceV2DataFrameSuite
         exception = intercept[AnalysisException] {
           sourceDF.writeTo(t).createOrReplace()
         },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH")
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`s`",
+          "errors" -> "- `extra` STRING has been added"))
     }
   }
 
@@ -2852,7 +2858,12 @@ class DataSourceV2DataFrameSuite
       // querying v2 should propagate the error from v1's validation
       checkError(
         exception = intercept[AnalysisException] { spark.table("v2").collect() },
-        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION")
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`v2`",
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" -> "- `extra` STRING has been removed"))
     }
   }
 

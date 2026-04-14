@@ -25,33 +25,29 @@ import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession, SQLHelp
 import org.apache.spark.sql.connect.test.IntegrationTestUtils.isAssemblyJarsDirExists
 
 /**
- * Comprehensive concurrency tests for DSv2 table refresh and pinning
- * in Spark Connect mode.
+ * Comprehensive concurrency tests for DSv2 table refresh and pinning in Spark Connect mode.
  *
- * Mirrors DataSourceV2ConcurrencyRefreshSuite (classic) but adapted for
- * Connect where every action re-analyzes the plan on the server.
+ * Mirrors DataSourceV2ConcurrencyRefreshSuite (classic) but adapted for Connect where every
+ * action re-analyzes the plan on the server.
  *
- * Key behavioral differences from classic:
- *   No stale QueryExecution (collect is NOT pinned)
- *   Schema changes are picked up on every access
- *   Type widening, column rename, column removal all succeed for DataFrames
- *   Joins/unions/etc always see consistent latest version
+ * Key behavioral differences from classic: No stale QueryExecution (collect is NOT pinned) Schema
+ * changes are picked up on every access Type widening, column rename, column removal all succeed
+ * for DataFrames Joins/unions/etc always see consistent latest version
  *
  * All modifications are via SQL (no catalog API access in Connect).
  *
- * Systematically tests:
- *   8 modification types x 8 access patterns (sequential)
- *   8 modification types x 4 concurrency modes (multi-threaded)
- *   Compound modifications, stress tests, edge cases
+ * Systematically tests: 8 modification types x 8 access patterns (sequential) 8 modification
+ * types x 4 concurrency modes (multi-threaded) Compound modifications, stress tests, edge cases
  */
 class DataSourceV2ConcurrencyRefreshConnectSuite
-  extends QueryTest with RemoteSparkSession with SQLHelper {
+    extends QueryTest
+    with RemoteSparkSession
+    with SQLHelper {
 
   private val T = "testcat.ns1.ns2.tbl"
 
   private def assumeCanRun(): Unit = {
-    assume(spark != null && isAssemblyJarsDirExists,
-      "Spark Connect server not available")
+    assume(spark != null && isAssemblyJarsDirExists, "Spark Connect server not available")
   }
 
   private def setupTable(): Unit = {
@@ -70,8 +66,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   private class PhaseBarrier(name: String) {
     private val latch = new CountDownLatch(1)
     def await(ms: Long = 30000): Unit =
-      require(latch.await(ms, TimeUnit.MILLISECONDS),
-        s"PhaseBarrier '$name' timed out")
+      require(latch.await(ms, TimeUnit.MILLISECONDS), s"PhaseBarrier '$name' timed out")
     def unblock(): Unit = latch.countDown()
   }
 
@@ -87,18 +82,19 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   /** Returns true if the throwable is an expected concurrency error. */
   private def isExpectedError(e: Throwable): Boolean = e match {
     case _: Exception
-      if e.getMessage != null &&
-        (e.getMessage.contains("INCOMPATIBLE") ||
-         e.getMessage.contains("TABLE_ID_MISMATCH") ||
-         e.getMessage.contains("COLUMNS_MISMATCH") ||
-         e.getMessage.contains("not found") ||
-         e.getMessage.contains("schema") ||
-         e.getMessage.contains("NUM_COLUMNS_MISMATCH") ||
-         e.getMessage.contains("CANNOT_UP_CAST_DATATYPE") ||
-         e.getMessage.contains("TABLE_OR_VIEW_NOT_FOUND") ||
-         e.getMessage.contains("VIEW_SCHEMA") ||
-         e.getMessage.contains("ClassCastException") ||
-         e.getMessage.contains("does not exist")) => true
+        if e.getMessage != null &&
+          (e.getMessage.contains("INCOMPATIBLE") ||
+            e.getMessage.contains("TABLE_ID_MISMATCH") ||
+            e.getMessage.contains("COLUMNS_MISMATCH") ||
+            e.getMessage.contains("not found") ||
+            e.getMessage.contains("schema") ||
+            e.getMessage.contains("NUM_COLUMNS_MISMATCH") ||
+            e.getMessage.contains("CANNOT_UP_CAST_DATATYPE") ||
+            e.getMessage.contains("TABLE_OR_VIEW_NOT_FOUND") ||
+            e.getMessage.contains("VIEW_SCHEMA") ||
+            e.getMessage.contains("ClassCastException") ||
+            e.getMessage.contains("does not exist")) =>
+      true
     case se: Exception if se.getCause != null => isExpectedError(se.getCause)
     case _ => false
   }
@@ -110,11 +106,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   // In Connect, SQL temp views (SELECT *) capture column names at
   // creation. Removing/renaming/retyping breaks re-analysis.
   // DataFrames re-analyze on every action, so ALL mods succeed for DFs.
-  case class Mod(
-      name: String,
-      fn: String => Unit,
-      sqlViewOk: Boolean,
-      dfOk: Boolean)
+  case class Mod(name: String, fn: String => Unit, sqlViewOk: Boolean, dfOk: Boolean)
 
   private val mods: Seq[Mod] = Seq(
     Mod(
@@ -142,9 +134,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     // Real connectors (Delta/Iceberg) handle this correctly.
     Mod(
       "type widening INT to BIGINT",
-      t =>
-        spark.sql(
-          s"ALTER TABLE $t ALTER COLUMN salary TYPE BIGINT"),
+      t => spark.sql(s"ALTER TABLE $t ALTER COLUMN salary TYPE BIGINT"),
       sqlViewOk = false,
       dfOk = false),
     Mod(
@@ -181,10 +171,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       assumeCanRun()
       withTable(T) {
         setupTable()
-        spark.sql(
-          s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
-        checkAnswer(
-          spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
+        spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
+        checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
         mod.fn(T)
         if (mod.sqlViewOk) {
           spark.sql("SELECT * FROM tmp").collect()
@@ -207,8 +195,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       assumeCanRun()
       withTable(T) {
         setupTable()
-        checkAnswer(
-          spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
+        checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
         mod.fn(T)
         if (mod.dfOk) {
           spark.sql(s"SELECT * FROM $T").collect()
@@ -306,8 +293,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       withTable(T) {
         setupTable()
         spark.sql(s"CACHE TABLE $T")
-        checkAnswer(
-          spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
+        checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
         mod.fn(T)
         if (mod.dfOk) {
           // Session modification may invalidate cache; no crash
@@ -356,10 +342,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       assumeCanRun()
       withTable(T) {
         setupTable()
-        spark.sql(
-          s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
-        checkAnswer(
-          spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
+        spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
+        checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
         mod.fn(T)
         if (mod.sqlViewOk) {
           spark.sql("SELECT * FROM tmp").collect()
@@ -488,10 +472,12 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
 
           reader.get(60, TimeUnit.SECONDS)
           writer.get(60, TimeUnit.SECONDS)
-          assert(errors.isEmpty,
+          assert(
+            errors.isEmpty,
             s"Unexpected errors: ${errors
-              .toArray(Array.empty[Throwable])
-              .map(_.getMessage).mkString("; ")}")
+                .toArray(Array.empty[Throwable])
+                .map(_.getMessage)
+                .mkString("; ")}")
         }
       }
     }
@@ -518,12 +504,12 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
                 for (_ <- 1 to 5) {
                   try spark.sql(s"SELECT * FROM $T").collect()
                   catch {
-                  case e: Throwable if isExpectedError(e) =>
-                }
+                    case e: Throwable if isExpectedError(e) =>
+                  }
                 }
               } catch {
-              case e: Throwable => errors.add(e)
-            }
+                case e: Throwable => errors.add(e)
+              }
             })
           }
 
@@ -537,10 +523,12 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
           })
 
           (readers :+ writer).foreach(_.get(60, TimeUnit.SECONDS))
-          assert(errors.isEmpty,
+          assert(
+            errors.isEmpty,
             s"Unexpected errors: ${errors
-              .toArray(Array.empty[Throwable])
-              .map(_.getMessage).mkString("; ")}")
+                .toArray(Array.empty[Throwable])
+                .map(_.getMessage)
+                .mkString("; ")}")
         }
       }
     }
@@ -555,8 +543,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       assumeCanRun()
       withTable(T) {
         setupTable()
-        spark.sql(
-          s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
+        spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
         withExecutor() { exec =>
           val barrier = new CyclicBarrier(2)
           val errors = new ConcurrentLinkedQueue[Throwable]()
@@ -586,10 +573,12 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
 
           reader.get(60, TimeUnit.SECONDS)
           writer.get(60, TimeUnit.SECONDS)
-          assert(errors.isEmpty,
+          assert(
+            errors.isEmpty,
             s"Unexpected errors: ${errors
-              .toArray(Array.empty[Throwable])
-              .map(_.getMessage).mkString("; ")}")
+                .toArray(Array.empty[Throwable])
+                .map(_.getMessage)
+                .mkString("; ")}")
         }
       }
     }
@@ -634,10 +623,12 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
 
           reader.get(60, TimeUnit.SECONDS)
           writer.get(60, TimeUnit.SECONDS)
-          assert(errors.isEmpty,
+          assert(
+            errors.isEmpty,
             s"Unexpected errors: ${errors
-              .toArray(Array.empty[Throwable])
-              .map(_.getMessage).mkString("; ")}")
+                .toArray(Array.empty[Throwable])
+                .map(_.getMessage)
+                .mkString("; ")}")
         }
         spark.sql(s"UNCACHE TABLE IF EXISTS $T")
       }
@@ -677,16 +668,15 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
 
           modDone.await()
           writer.get(30, TimeUnit.SECONDS)
-          assert(error.get() == null,
-            s"Writer failed: ${error.get()}")
+          assert(error.get() == null, s"Writer failed: ${error.get()}")
 
           // Phase 3: Execute DataFrame
           if (mod.dfOk) {
             df.collect()
           } else {
             assertThrows[Exception] {
-            df.collect()
-          }
+              df.collect()
+            }
           }
         }
       }
@@ -746,8 +736,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     withTable(T) {
       setupTable()
       val df = spark.sql(s"SELECT * FROM $T")
-      spark.sql(
-        s"ALTER TABLE $T ALTER COLUMN salary TYPE BIGINT")
+      spark.sql(s"ALTER TABLE $T ALTER COLUMN salary TYPE BIGINT")
       spark.sql(s"ALTER TABLE $T ADD COLUMN bonus INT")
       // InMemoryTable throws ClassCastException: INT data read as BIGINT
       assertThrows[Exception] {
@@ -760,8 +749,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     assumeCanRun()
     withTable(T) {
       setupTable()
-      spark.sql(
-        s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
+      spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
       for (i <- 1 to 5) {
         spark.sql(s"ALTER TABLE $T ADD COLUMN col_$i INT")
       }
@@ -777,8 +765,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   test("[compound] add column + remove column + DataFrame") {
     assumeCanRun()
     withTable(T) {
-      spark.sql(
-        s"CREATE TABLE $T (id INT, salary INT, extra STRING) USING foo")
+      spark.sql(s"CREATE TABLE $T (id INT, salary INT, extra STRING) USING foo")
       spark.sql(s"INSERT INTO $T VALUES (1, 100, 'x')")
       val df = spark.sql(s"SELECT * FROM $T")
       spark.sql(s"ALTER TABLE $T ADD COLUMN bonus INT")
@@ -794,13 +781,10 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     withTable(T) {
       setupTable()
       spark.sql(s"CACHE TABLE $T")
-      checkAnswer(
-        spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
       spark.sql(s"INSERT INTO $T VALUES (2, 200)")
       // Session write invalidates cache; sees both rows
-      checkAnswer(
-        spark.sql(s"SELECT * FROM $T"),
-        Seq(Row(1, 100), Row(2, 200)))
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200)))
       spark.sql(s"UNCACHE TABLE IF EXISTS $T")
     }
   }
@@ -808,16 +792,14 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   test("[compound] concurrent add + rename in separate threads") {
     assumeCanRun()
     withTable(T) {
-      spark.sql(
-        s"CREATE TABLE $T (id INT, salary INT, bonus INT) USING foo")
+      spark.sql(s"CREATE TABLE $T (id INT, salary INT, bonus INT) USING foo")
       spark.sql(s"INSERT INTO $T VALUES (1, 100, 50)")
       withExecutor() { exec =>
         val barrier = new CyclicBarrier(2)
         val adder = exec.submit(new Runnable {
           override def run(): Unit = {
             barrier.await(30, TimeUnit.SECONDS)
-            try spark.sql(
-              s"ALTER TABLE $T ADD COLUMN extra STRING")
+            try spark.sql(s"ALTER TABLE $T ADD COLUMN extra STRING")
             catch {
               case _: Exception =>
             }
@@ -826,8 +808,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         val renamer = exec.submit(new Runnable {
           override def run(): Unit = {
             barrier.await(30, TimeUnit.SECONDS)
-            try spark.sql(
-              s"ALTER TABLE $T RENAME COLUMN bonus TO reward")
+            try spark.sql(s"ALTER TABLE $T RENAME COLUMN bonus TO reward")
             catch {
               case _: Exception =>
             }
@@ -871,21 +852,22 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
           override def run(): Unit = try {
             barrier.await(30, TimeUnit.SECONDS)
             for (i <- 2 to 10) {
-              try spark.sql(
-                s"INSERT INTO $T VALUES ($i, ${i * 100})")
+              try spark.sql(s"INSERT INTO $T VALUES ($i, ${i * 100})")
               catch {
-              case _: Exception =>
-            }
+                case _: Exception =>
+              }
             }
           } catch {
             case e: Throwable => errors.add(e)
           }
         })
         (readers :+ writer).foreach(_.get(120, TimeUnit.SECONDS))
-        assert(errors.isEmpty,
+        assert(
+          errors.isEmpty,
           s"Unexpected errors: ${errors
-            .toArray(Array.empty[Throwable])
-            .map(_.getMessage).mkString("; ")}")
+              .toArray(Array.empty[Throwable])
+              .map(_.getMessage)
+              .mkString("; ")}")
       }
       // Final consistency: original + all inserts (2..10)
       assert(spark.sql(s"SELECT * FROM $T").collect().length == 10)
@@ -918,19 +900,19 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
           override def run(): Unit = try {
             barrier.await(30, TimeUnit.SECONDS)
             for (i <- 1 to 5) {
-              spark.sql(
-                s"ALTER TABLE $T ADD COLUMN col_$i INT")
+              spark.sql(s"ALTER TABLE $T ADD COLUMN col_$i INT")
             }
           } catch {
             case e: Throwable => errors.add(e)
           }
         })
-        (readers :+ schemaChanger).foreach(
-          _.get(120, TimeUnit.SECONDS))
-        assert(errors.isEmpty,
+        (readers :+ schemaChanger).foreach(_.get(120, TimeUnit.SECONDS))
+        assert(
+          errors.isEmpty,
           s"Unexpected errors: ${errors
-            .toArray(Array.empty[Throwable])
-            .map(_.getMessage).mkString("; ")}")
+              .toArray(Array.empty[Throwable])
+              .map(_.getMessage)
+              .mkString("; ")}")
       }
     }
   }
@@ -939,8 +921,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     assumeCanRun()
     withTable(T) {
       setupTable()
-      spark.sql(
-        s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
+      spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
       withExecutor(6) { exec =>
         val barrier = new CyclicBarrier(6)
         val errors = new ConcurrentLinkedQueue[Throwable]()
@@ -964,12 +945,12 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
             override def run(): Unit = try {
               barrier.await(30, TimeUnit.SECONDS)
               for (j <- 1 to 5) {
-                try spark.sql(
-                  s"INSERT INTO $T VALUES " +
-                  s"(${i * 10 + j}, ${i * 10 + j})")
+                try
+                  spark.sql(s"INSERT INTO $T VALUES " +
+                    s"(${i * 10 + j}, ${i * 10 + j})")
                 catch {
-              case _: Exception =>
-            }
+                  case _: Exception =>
+                }
               }
             } catch {
               case e: Throwable => errors.add(e)
@@ -979,10 +960,12 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         val allFutures: Seq[java.util.concurrent.Future[_]] =
           readers ++ writers
         allFutures.foreach(_.get(120, TimeUnit.SECONDS))
-        assert(errors.isEmpty,
+        assert(
+          errors.isEmpty,
           s"Unexpected errors: ${errors
-            .toArray(Array.empty[Throwable])
-            .map(_.getMessage).mkString("; ")}")
+              .toArray(Array.empty[Throwable])
+              .map(_.getMessage)
+              .mkString("; ")}")
       }
     }
   }
@@ -1027,10 +1010,12 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
 
           reader.get(60, TimeUnit.SECONDS)
           writer.get(60, TimeUnit.SECONDS)
-          assert(errors.isEmpty,
+          assert(
+            errors.isEmpty,
             s"Unexpected errors: ${errors
-              .toArray(Array.empty[Throwable])
-              .map(_.getMessage).mkString("; ")}")
+                .toArray(Array.empty[Throwable])
+                .map(_.getMessage)
+                .mkString("; ")}")
         }
       }
     }
@@ -1064,8 +1049,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       setupTable()
       val df = spark.sql(s"SELECT * FROM $T")
       df.collect()
-      spark.sql(
-        s"ALTER TABLE $T ALTER COLUMN salary TYPE BIGINT")
+      spark.sql(s"ALTER TABLE $T ALTER COLUMN salary TYPE BIGINT")
       spark.sql(s"INSERT INTO $T VALUES (2, 200)")
       assertThrows[Exception] {
         df.collect()
@@ -1105,8 +1089,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       val df = spark.sql(s"SELECT * FROM $T")
       df.collect()
       spark.sql(s"DROP TABLE $T")
-      spark.sql(
-        s"CREATE TABLE $T (id INT, salary INT) USING foo")
+      spark.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
       val r = df.collect()
       assert(r.isEmpty)
     }
@@ -1150,7 +1133,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       val df2 = spark.sql(s"SELECT id AS b FROM $T")
       spark.sql(s"INSERT INTO $T VALUES (3, 300)")
       val df3 = spark.sql(s"SELECT id AS c FROM $T")
-      val joined = df1.join(df2, df1("a") === df2("b"))
+      val joined = df1
+        .join(df2, df1("a") === df2("b"))
         .join(df3, df1("a") === df3("c"))
       assert(joined.collect().length == 3)
     }
@@ -1171,9 +1155,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
 
       extSession.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
 
-      checkAnswer(
-        spark.sql(s"SELECT * FROM $T"),
-        Seq(Row(1, 100), Row(2, 200)))
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200)))
       spark.sql(s"UNCACHE TABLE IF EXISTS $T")
     }
   }
@@ -1186,9 +1168,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
       spark.sql(s"INSERT INTO $T VALUES (2, 200)")
-      checkAnswer(
-        spark.sql(s"SELECT * FROM $T"),
-        Seq(Row(1, 100), Row(2, 200)))
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200)))
       spark.sql(s"UNCACHE TABLE IF EXISTS $T")
     }
   }
@@ -1201,14 +1181,10 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
       spark.sql(s"INSERT INTO $T VALUES (2, 200)")
-      checkAnswer(
-        spark.sql(s"SELECT * FROM $T"),
-        Seq(Row(1, 100), Row(2, 200)))
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200)))
 
       extSession.sql(s"INSERT INTO $T VALUES (3, 300)").collect()
-      checkAnswer(
-        spark.sql(s"SELECT * FROM $T"),
-        Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
       spark.sql(s"UNCACHE TABLE IF EXISTS $T")
     }
   }
@@ -1224,9 +1200,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       ext.sql(s"ALTER TABLE $T ADD COLUMN bonus INT").collect()
       ext.sql(s"INSERT INTO $T VALUES (2, 200, 50)").collect()
 
-      checkAnswer(
-        spark.sql(s"SELECT * FROM $T"),
-        Seq(Row(1, 100, null), Row(2, 200, 50)))
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100, null), Row(2, 200, 50)))
       spark.sql(s"UNCACHE TABLE IF EXISTS $T")
     }
   }
@@ -1241,9 +1215,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       spark.sql(s"ALTER TABLE $T ADD COLUMN extra INT")
       spark.sql(s"INSERT INTO $T VALUES (2, 200, 77)")
 
-      checkAnswer(
-        spark.sql(s"SELECT * FROM $T"),
-        Seq(Row(1, 100, null), Row(2, 200, 77)))
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100, null), Row(2, 200, 77)))
       spark.sql(s"UNCACHE TABLE IF EXISTS $T")
     }
   }
@@ -1256,9 +1228,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
       spark.sql(s"ALTER TABLE $T ADD COLUMN new_col INT")
-      checkAnswer(
-        spark.sql(s"SELECT * FROM $T"),
-        Seq(Row(1, 100, null)))
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100, null)))
       spark.sql(s"UNCACHE TABLE IF EXISTS $T")
     }
   }
@@ -1302,14 +1272,10 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
       spark.sql(s"INSERT INTO $T VALUES (2, 200)")
-      checkAnswer(
-        spark.sql(s"SELECT * FROM $T"),
-        Seq(Row(1, 100), Row(2, 200)))
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200)))
 
       spark.sql(s"REFRESH TABLE $T")
-      checkAnswer(
-        spark.sql(s"SELECT * FROM $T"),
-        Seq(Row(1, 100), Row(2, 200)))
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200)))
       spark.sql(s"UNCACHE TABLE IF EXISTS $T")
     }
   }
@@ -1321,8 +1287,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   test("[edge] empty table modification") {
     assumeCanRun()
     withTable(T) {
-      spark.sql(
-        s"CREATE TABLE $T (id INT, salary INT) USING foo")
+      spark.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
       val df = spark.sql(s"SELECT * FROM $T")
       spark.sql(s"ALTER TABLE $T ADD COLUMN bonus INT")
       val r = df.collect()
@@ -1378,10 +1343,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     assumeCanRun()
     withTable(T) {
       setupTable()
-      spark.sql(
-        s"CREATE OR REPLACE TEMP VIEW tv AS SELECT * FROM $T")
-      checkAnswer(
-        spark.sql("SELECT * FROM tv"), Seq(Row(1, 100)))
+      spark.sql(s"CREATE OR REPLACE TEMP VIEW tv AS SELECT * FROM $T")
+      checkAnswer(spark.sql("SELECT * FROM tv"), Seq(Row(1, 100)))
       spark.sql(s"ALTER TABLE $T ADD COLUMN bonus INT")
       spark.sql(s"INSERT INTO $T VALUES (2, 200, 50)")
       // SQL view re-analyzes: SELECT * picks up new column
@@ -1418,8 +1381,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       val df2 = spark.sql(s"SELECT id AS uid FROM $T")
       val unioned = df1.union(df2)
       val fresh = spark.sql(s"SELECT id AS fid FROM $T")
-      val result = unioned.join(
-        fresh, unioned("uid") === fresh("fid"))
+      val result = unioned.join(fresh, unioned("uid") === fresh("fid"))
       // Both re-analyze: 2 union rows x 2 join
       assert(result.collect().length == 4)
     }
@@ -1445,8 +1407,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       val df1 = spark.sql(s"SELECT id AS id1, salary AS s1 FROM $T")
       spark.sql(s"INSERT INTO $T VALUES (2, 200)")
       val df2 = spark.sql(s"SELECT id AS id2, salary AS s2 FROM $T")
-      val result = df1.join(
-        df2, df1("id1") === df2("id2"), "left_outer")
+      val result = df1.join(df2, df1("id1") === df2("id2"), "left_outer")
       assert(result.collect().length == 2)
     }
   }
@@ -1480,11 +1441,10 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
           override def run(): Unit = try {
             barrier.await(30, TimeUnit.SECONDS)
             for (i <- 2 to 5) {
-              try spark.sql(
-                s"INSERT INTO $T VALUES ($i, ${i * 100})")
+              try spark.sql(s"INSERT INTO $T VALUES ($i, ${i * 100})")
               catch {
-              case _: Exception =>
-            }
+                case _: Exception =>
+              }
             }
           } catch {
             case e: Throwable => errors.add(e)
@@ -1493,8 +1453,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         val schemaChanger = exec.submit(new Runnable {
           override def run(): Unit = try {
             barrier.await(30, TimeUnit.SECONDS)
-            try spark.sql(
-              s"ALTER TABLE $T ADD COLUMN bonus INT")
+            try spark.sql(s"ALTER TABLE $T ADD COLUMN bonus INT")
             catch {
               case _: Exception =>
             }
@@ -1505,9 +1464,12 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         reader.get(60, TimeUnit.SECONDS)
         writer.get(60, TimeUnit.SECONDS)
         schemaChanger.get(60, TimeUnit.SECONDS)
-        assert(errors.isEmpty, s"Unexpected errors: ${
-          errors.toArray(Array.empty[Throwable])
-            .map(_.getMessage).mkString("; ")}")
+        assert(
+          errors.isEmpty,
+          s"Unexpected errors: ${errors
+              .toArray(Array.empty[Throwable])
+              .map(_.getMessage)
+              .mkString("; ")}")
       }
       spark.sql(s"UNCACHE TABLE IF EXISTS $T")
     }
