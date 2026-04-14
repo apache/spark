@@ -20,6 +20,7 @@ configs {
   value_type: VALUE_TYPE_BOOL
   default_value: "false"
   scope: SCOPE_SESSION
+  mutability: MUTABILITY_DYNAMIC
   visibility: VISIBILITY_PUBLIC
   binding_policy: BINDING_POLICY_SESSION
   doc: "Duplicate of spark.test.bool.config"

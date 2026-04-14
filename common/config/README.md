@@ -36,6 +36,7 @@ configs {
   value_type: VALUE_TYPE_BOOL
   default_value: "true"
   scope: SCOPE_SESSION
+  mutability: MUTABILITY_DYNAMIC
   visibility: VISIBILITY_PUBLIC
   binding_policy: BINDING_POLICY_SESSION
   doc: "When true, enables my new feature."
@@ -70,6 +71,7 @@ configs {
   value_type: VALUE_TYPE_INT
   default_value: "100"
   scope: SCOPE_SESSION
+  mutability: MUTABILITY_DYNAMIC
   visibility: VISIBILITY_PUBLIC
   binding_policy: BINDING_POLICY_NOT_APPLICABLE
   doc: "This is a long documentation string that spans multiple lines. "

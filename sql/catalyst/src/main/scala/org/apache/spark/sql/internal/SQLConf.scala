@@ -36,7 +36,7 @@ import org.slf4j.event.Level
 
 import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.config.ConfigRegistry
-import org.apache.spark.config.protobuf.Scope
+import org.apache.spark.config.protobuf.Mutability
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{ConfigBindingPolicy, _}
 import org.apache.spark.internal.io.FileCommitProtocol
@@ -77,6 +77,9 @@ object SQLConf {
   private def register(entry: ConfigEntry[_]): Unit = sqlConfEntriesUpdateLock.synchronized {
     require(!sqlConfEntries.containsKey(entry.key),
       s"Duplicate SQLConfigEntry. ${entry.key} has been registered")
+    require(!ConfigRegistry.containsConfig(entry.key),
+      s"${entry.key} is defined in a .textproto config file. " +
+        s"Use buildConfFromConfigFile instead of buildConf.")
     val updatedMap = new java.util.HashMap[String, ConfigEntry[_]](sqlConfEntries)
     updatedMap.put(entry.key, entry)
     sqlConfEntries = updatedMap
@@ -130,7 +133,7 @@ object SQLConf {
 
   def isStaticConfigKey(key: String): Boolean = {
     staticConfKeys.contains(key) ||
-      Option(ConfigRegistry.getConfig(key)).exists(_.getScope == Scope.SCOPE_CLUSTER)
+      Option(ConfigRegistry.getConfig(key)).exists(_.getMutability == Mutability.MUTABILITY_STATIC)
   }
 
   def buildConf(key: String): ConfigBuilder = ConfigBuilder(key).onCreate(register)

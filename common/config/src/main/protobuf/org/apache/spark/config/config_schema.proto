@@ -59,6 +59,15 @@ enum BindingPolicy {
   BINDING_POLICY_NOT_APPLICABLE = 3;
 }
 
+// Whether the config can be changed after system initialization.
+enum Mutability {
+  MUTABILITY_UNSPECIFIED = 0;
+  // The config is fixed once the Spark application starts.
+  MUTABILITY_STATIC = 1;
+  // The config can be changed at runtime (e.g., via SET).
+  MUTABILITY_DYNAMIC = 2;
+}
+
 // A single config entry
 message ConfigEntry {
   // [Required] The config key.
@@ -73,20 +82,23 @@ message ConfigEntry {
   // The default value to use during testing, if different from default_value
   optional string test_default = 4;
 
-  // [Required] The scope of the config (CLUSTER or SESSION)
+  // [Required] The scope of the config (CLUSTER or SESSION).
   optional Scope scope = 5;
 
-  // [Required] The visibility of the config (PUBLIC or INTERNAL)
-  optional Visibility visibility = 6;
+  // [Required] Whether the config can be changed after system initialization.
+  optional Mutability mutability = 6;
+
+  // [Required] The visibility of the config (PUBLIC or INTERNAL).
+  optional Visibility visibility = 7;
 
   // [Required] The binding policy for SQL views, UDFs, and procedures.
-  optional BindingPolicy binding_policy = 7;
+  optional BindingPolicy binding_policy = 8;
 
-  // [Required] Documentation for the config
-  optional string doc = 8;
+  // [Required] Documentation for the config.
+  optional string doc = 9;
 
-  // The Spark version when this config was introduced
-  optional string version = 9;
+  // The Spark version when this config was introduced.
+  optional string version = 10;
 }
 
 // A collection of config entries

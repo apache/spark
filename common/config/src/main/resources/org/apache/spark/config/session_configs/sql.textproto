@@ -20,6 +20,7 @@ configs {
   value_type: VALUE_TYPE_BOOL
   default_value: "true"
   scope: SCOPE_SESSION
+  mutability: MUTABILITY_DYNAMIC
   visibility: VISIBILITY_INTERNAL
   binding_policy: BINDING_POLICY_NOT_APPLICABLE
   doc: "When this config is set to true, do safe constant folding for the "
@@ -32,6 +33,7 @@ configs {
   value_type: VALUE_TYPE_INT
   default_value: "100"
   scope: SCOPE_SESSION
+  mutability: MUTABILITY_DYNAMIC
   visibility: VISIBILITY_INTERNAL
   binding_policy: BINDING_POLICY_NOT_APPLICABLE
   doc: "The max number of iterations the optimizer runs."
@@ -43,6 +45,7 @@ configs {
   value_type: VALUE_TYPE_INT
   default_value: "3"
   scope: SCOPE_SESSION
+  mutability: MUTABILITY_DYNAMIC
   visibility: VISIBILITY_PUBLIC
   binding_policy: BINDING_POLICY_NOT_APPLICABLE
   doc: "The shuffle hash join can be selected if the data size of small "

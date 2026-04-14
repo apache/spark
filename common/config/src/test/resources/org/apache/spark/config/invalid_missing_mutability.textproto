@@ -13,15 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Test file with missing key field
+# Test file with missing mutability field
 
 configs {
+  key: "spark.test.missing.mutability"
   value_type: VALUE_TYPE_BOOL
   default_value: "true"
   scope: SCOPE_SESSION
-  mutability: MUTABILITY_DYNAMIC
   visibility: VISIBILITY_PUBLIC
   binding_policy: BINDING_POLICY_NOT_APPLICABLE
-  doc: "A config with missing key"
+  doc: "A config with missing mutability"
   version: "4.0.0"
 }

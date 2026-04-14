@@ -19,6 +19,7 @@ configs {
   key: "spark.test.missing.value.type"
   default_value: "true"
   scope: SCOPE_SESSION
+  mutability: MUTABILITY_DYNAMIC
   visibility: VISIBILITY_PUBLIC
   binding_policy: BINDING_POLICY_NOT_APPLICABLE
   doc: "A config with missing value_type"

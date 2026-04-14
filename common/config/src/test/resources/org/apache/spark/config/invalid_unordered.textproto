@@ -20,6 +20,7 @@ configs {
   value_type: VALUE_TYPE_BOOL
   default_value: "true"
   scope: SCOPE_SESSION
+  mutability: MUTABILITY_DYNAMIC
   visibility: VISIBILITY_PUBLIC
   binding_policy: BINDING_POLICY_NOT_APPLICABLE
   doc: "Z config"
@@ -31,6 +32,7 @@ configs {
   value_type: VALUE_TYPE_BOOL
   default_value: "true"
   scope: SCOPE_SESSION
+  mutability: MUTABILITY_DYNAMIC
   visibility: VISIBILITY_PUBLIC
   binding_policy: BINDING_POLICY_NOT_APPLICABLE
   doc: "A config - should come before Z"

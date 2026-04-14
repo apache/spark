@@ -20,6 +20,7 @@ configs {
   value_type: VALUE_TYPE_BOOL
   default_value: "true"
   scope: SCOPE_SESSION
+  mutability: MUTABILITY_DYNAMIC
   binding_policy: BINDING_POLICY_NOT_APPLICABLE
   doc: "A config with missing visibility"
   version: "4.0.0"

@@ -20,6 +20,7 @@ configs {
   value_type: VALUE_TYPE_INT
   default_value: "1000"
   scope: SCOPE_CLUSTER
+  mutability: MUTABILITY_STATIC
   visibility: VISIBILITY_PUBLIC
   binding_policy: BINDING_POLICY_NOT_APPLICABLE
   doc: "Number of executions to retain in the Spark UI."

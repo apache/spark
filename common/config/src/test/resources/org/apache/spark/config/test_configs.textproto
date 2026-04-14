@@ -20,6 +20,7 @@ configs {
   value_type: VALUE_TYPE_BOOL
   default_value: "true"
   scope: SCOPE_SESSION
+  mutability: MUTABILITY_DYNAMIC
   visibility: VISIBILITY_PUBLIC
   binding_policy: BINDING_POLICY_SESSION
   doc: "A test boolean config"
@@ -31,6 +32,7 @@ configs {
   value_type: VALUE_TYPE_INT
   default_value: "42"
   scope: SCOPE_CLUSTER
+  mutability: MUTABILITY_STATIC
   visibility: VISIBILITY_INTERNAL
   binding_policy: BINDING_POLICY_NOT_APPLICABLE
   doc: "A test integer config"
@@ -42,6 +44,7 @@ configs {
   value_type: VALUE_TYPE_STRING
   default_value: "test"
   scope: SCOPE_SESSION
+  mutability: MUTABILITY_DYNAMIC
   visibility: VISIBILITY_PUBLIC
   binding_policy: BINDING_POLICY_PERSISTED
   doc: "This is a very long documentation string that spans multiple lines. "
@@ -56,6 +59,7 @@ configs {
   value_type: VALUE_TYPE_STRING
   default_value: "default_value"
   scope: SCOPE_SESSION
+  mutability: MUTABILITY_DYNAMIC
   visibility: VISIBILITY_PUBLIC
   binding_policy: BINDING_POLICY_NOT_APPLICABLE
   doc: "A test string config"

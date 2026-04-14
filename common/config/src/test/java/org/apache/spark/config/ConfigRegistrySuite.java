@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 
 import org.apache.spark.config.protobuf.BindingPolicy;
 import org.apache.spark.config.protobuf.ConfigEntry;
+import org.apache.spark.config.protobuf.Mutability;
 import org.apache.spark.config.protobuf.Scope;
 import org.apache.spark.config.protobuf.ValueType;
 import org.apache.spark.config.protobuf.Visibility;
@@ -85,12 +86,28 @@ public class ConfigRegistrySuite {
       if (config.getBindingPolicy() == BindingPolicy.BINDING_POLICY_UNSPECIFIED) {
         missingFields.add("binding_policy");
       }
+      if (config.getMutability() == Mutability.MUTABILITY_UNSPECIFIED) {
+        missingFields.add("mutability");
+      }
       if (config.getDoc().isEmpty()) {
         missingFields.add("doc");
       }
       if (!missingFields.isEmpty()) {
         String keyInfo = config.getKey().isEmpty() ? "" : " for key '" + config.getKey() + "'";
         fail("Missing required fields " + missingFields + keyInfo + " in " + file);
+      }
+
+      // TODO: Relax this constraint once the config framework fully supports
+      //  cluster-scoped dynamic configs and session-scoped static configs.
+      if (config.getScope() == Scope.SCOPE_CLUSTER
+          && config.getMutability() != Mutability.MUTABILITY_STATIC) {
+        fail("CLUSTER scope config must be STATIC" +
+            " for key '" + config.getKey() + "' in " + file);
+      }
+      if (config.getScope() == Scope.SCOPE_SESSION
+          && config.getMutability() != Mutability.MUTABILITY_DYNAMIC) {
+        fail("SESSION scope config must be DYNAMIC" +
+            " for key '" + config.getKey() + "' in " + file);
       }
 
       // Validate alphabetical ordering
@@ -286,6 +303,17 @@ public class ConfigRegistrySuite {
     assertTrue(error.getMessage().contains("Missing required fields"));
     assertTrue(error.getMessage().contains("binding_policy"));
     assertTrue(error.getMessage().contains("spark.test.missing.binding.policy"));
+    assertTrue(error.getMessage().contains(file));
+  }
+
+  @Test
+  public void testValidationMissingMutability() {
+    String file = "org/apache/spark/config/invalid_missing_mutability.textproto";
+    Throwable error = assertThrows(Throwable.class,
+        () -> validateConfigsInOneFile(file));
+    assertTrue(error.getMessage().contains("Missing required fields"));
+    assertTrue(error.getMessage().contains("mutability"));
+    assertTrue(error.getMessage().contains("spark.test.missing.mutability"));
     assertTrue(error.getMessage().contains(file));
   }
 
