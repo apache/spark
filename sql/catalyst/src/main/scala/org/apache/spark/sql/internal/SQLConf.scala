@@ -761,6 +761,7 @@ object SQLConf {
         "to broadcast. This can improve performance by allowing each Union branch to " +
         "directly perform a broadcast join, avoiding materializing the entire Union result.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
