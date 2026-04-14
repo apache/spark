@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Explode
+import org.apache.spark.sql.catalyst.expressions.{Explode, Rand}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Union}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -227,5 +227,15 @@ class PushDownJoinThroughUnionSuite extends PlanTest {
       assert(ids_i.intersect(ids_j).isEmpty,
         s"Union children $i and $j share ExprIds: ${ids_i.intersect(ids_j)}")
     }
+  }
+
+  test("Do not push down when right side contains non-deterministic expressions") {
+    val rightWithRand = testRelation3
+      .select($"e", Rand(10).as("rand_val"))
+    val union = Union(testRelation1, testRelation2)
+    val query = union.join(rightWithRand, Inner, Some($"a" === $"e"))
+    val optimized = Optimize.execute(query.analyze)
+
+    comparePlans(optimized, query.analyze)
   }
 }
