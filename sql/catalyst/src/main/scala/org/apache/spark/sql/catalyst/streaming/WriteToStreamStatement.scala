@@ -44,6 +44,7 @@ import org.apache.spark.sql.streaming.{OutputMode, Trigger}
  *                for unsupported operations, which happens during resolution.
  * @param inputQuery  The analyzed query plan from the streaming DataFrame.
  * @param catalogAndIdent Catalog and identifier for the sink, set when it is a V2 catalog table
+ * @param withSchemaEvolution  Whether to evolve the sink table schema to match the source.
  */
 case class WriteToStreamStatement(
     userSpecifiedName: Option[String],
@@ -55,8 +56,9 @@ case class WriteToStreamStatement(
     hadoopConf: Configuration,
     trigger: Trigger,
     inputQuery: LogicalPlan,
-    catalogAndIdent: Option[(TableCatalog, Identifier)] = None,
-    catalogTable: Option[CatalogTable] = None) extends UnaryNode {
+    catalogAndIdent: Option[(TableCatalog, Identifier)],
+    catalogTable: Option[CatalogTable],
+    withSchemaEvolution: Boolean) extends UnaryNode {
 
   override def isStreaming: Boolean = true
 

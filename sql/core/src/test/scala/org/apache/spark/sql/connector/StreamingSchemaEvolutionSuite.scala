@@ -19,38 +19,11 @@ package org.apache.spark.sql.connector
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.{Row, SparkSessionExtensions}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
-import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSource
-import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
+import org.apache.spark.sql.streaming.{OutputMode, StreamTest, Trigger}
 import org.apache.spark.sql.types._
-
-/**
- * An analyzer rule that enables schema evolution on streaming micro-batch writes.
- *
- * This rule is injected via SparkSessionExtensions for testing purposes. In production,
- * schema evolution would be enabled through a user-facing mechanism (e.g. SQL syntax or
- * write option) which does not exist yet.
- */
-class EnableStreamingSchemaEvolution extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
-    case w: WriteToMicroBatchDataSource if !w.withSchemaEvolution =>
-      w.copy(withSchemaEvolution = true)
-  }
-}
-
-/**
- * SparkSessionExtensions provider that injects [[EnableStreamingSchemaEvolution]].
- */
-class StreamingSchemaEvolutionExtensions extends (SparkSessionExtensions => Unit) {
-  override def apply(extensions: SparkSessionExtensions): Unit = {
-    extensions.injectResolutionRule(_ => new EnableStreamingSchemaEvolution)
-  }
-}
 
 /**
  * Tests for schema evolution in streaming writes using DataSourceV2.
@@ -64,17 +37,13 @@ class StreamingSchemaEvolutionSuite
 
   import testImplicits._
 
-  override protected def sparkConf: SparkConf = {
-    super.sparkConf
-      .set("spark.sql.extensions", classOf[StreamingSchemaEvolutionExtensions].getName)
-  }
-
   private val catalogName = "testcat"
   private val namespace = "ns"
   private val tableIdent = s"$catalogName.$namespace.test_table"
 
   before {
-    spark.conf.set(s"spark.sql.catalog.$catalogName", classOf[InMemoryTableCatalog].getName)
+    spark.conf.set(
+      s"spark.sql.catalog.$catalogName", classOf[InMemoryTableCatalog].getName)
     sql(s"CREATE NAMESPACE IF NOT EXISTS $catalogName.$namespace")
   }
 
@@ -92,6 +61,7 @@ class StreamingSchemaEvolutionSuite
         val df = input.toDF().toDF("id", "data", "amount")
 
         val query = df.writeStream
+          .withSchemaEvolution()
           .option("checkpointLocation", checkpointDir.getCanonicalPath)
           .outputMode(OutputMode.Append())
           .toTable(tableIdent)
@@ -108,7 +78,7 @@ class StreamingSchemaEvolutionSuite
         assert(result.schema == StructType(Seq(
           StructField("id", IntegerType),
           StructField("data", StringType),
-          StructField("amount", DoubleType, nullable = true))))
+          StructField("amount", DoubleType))))
       }
     }
   }
@@ -122,6 +92,7 @@ class StreamingSchemaEvolutionSuite
         val df = input.toDF().toDF("id", "data")
 
         val query = df.writeStream
+          .withSchemaEvolution()
           .option("checkpointLocation", checkpointDir.getCanonicalPath)
           .outputMode(OutputMode.Append())
           .toTable(tableIdent)
@@ -151,6 +122,7 @@ class StreamingSchemaEvolutionSuite
         val df = input.toDF().toDF("id", "data", "amount")
 
         val query = df.writeStream
+          .withSchemaEvolution()
           .option("checkpointLocation", checkpointDir.getCanonicalPath)
           .outputMode(OutputMode.Append())
           .toTable(tableIdent)
@@ -174,7 +146,7 @@ class StreamingSchemaEvolutionSuite
         assert(result.schema == StructType(Seq(
           StructField("id", IntegerType),
           StructField("data", StringType),
-          StructField("amount", DoubleType, nullable = true))))
+          StructField("amount", DoubleType))))
       }
     }
   }
@@ -188,6 +160,7 @@ class StreamingSchemaEvolutionSuite
         val df = input.toDF().toDF("id", "data", "amount")
 
         val query = df.writeStream
+          .withSchemaEvolution()
           .option("checkpointLocation", checkpointDir.getCanonicalPath)
           .outputMode(OutputMode.Append())
           .toTable(tableIdent)
@@ -203,8 +176,8 @@ class StreamingSchemaEvolutionSuite
         checkAnswer(result, Seq(Row(1, "a", 10.0)))
         assert(result.schema == StructType(Seq(
           StructField("id", IntegerType),
-          StructField("data", StringType, nullable = true),
-          StructField("amount", DoubleType, nullable = true))))
+          StructField("data", StringType),
+          StructField("amount", DoubleType))))
       }
     }
   }
@@ -220,6 +193,7 @@ class StreamingSchemaEvolutionSuite
         val df = input.toDF().toDF("id", "data", "amount")
 
         val query = df.writeStream
+          .withSchemaEvolution()
           .option("checkpointLocation", checkpointDir.getCanonicalPath)
           .outputMode(OutputMode.Append())
           .toTable(tableIdent)
@@ -240,6 +214,36 @@ class StreamingSchemaEvolutionSuite
     }
   }
 
+  test("streaming write without withSchemaEvolution - schema not evolved") {
+    withTable(tableIdent) {
+      withTempDir { checkpointDir =>
+        sql(s"CREATE TABLE $tableIdent (id INT, data STRING)")
+
+        val input = MemoryStream[(Int, String, Double)]
+        val df = input.toDF().toDF("id", "data", "amount")
+
+        // No .withSchemaEvolution() call.
+        val query = df.writeStream
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .outputMode(OutputMode.Append())
+          .toTable(tableIdent)
+
+        try {
+          input.addData((1, "a", 10.0))
+          query.processAllAvailable()
+        } finally {
+          query.stop()
+        }
+
+        // Schema should NOT have been evolved since withSchemaEvolution was not called.
+        val result = spark.table(tableIdent)
+        assert(result.schema == StructType(Seq(
+          StructField("id", IntegerType),
+          StructField("data", StringType))))
+      }
+    }
+  }
+
   test("streaming restart after schema evolution preserves data") {
     withTable(tableIdent) {
       withTempDir { checkpointDir =>
@@ -250,6 +254,7 @@ class StreamingSchemaEvolutionSuite
         val df1 = input1.toDF().toDF("id", "data")
 
         val query1 = df1.writeStream
+          .withSchemaEvolution()
           .option("checkpointLocation", checkpointDir.getCanonicalPath)
           .outputMode(OutputMode.Append())
           .toTable(tableIdent)
@@ -268,7 +273,10 @@ class StreamingSchemaEvolutionSuite
         val df2 = input2.toDF().toDF("id", "data", "amount")
 
         val query2 = df2.writeStream
-          .option("checkpointLocation", s"${checkpointDir.getCanonicalPath}_2")
+          .withSchemaEvolution()
+          .option(
+            "checkpointLocation",
+            s"${checkpointDir.getCanonicalPath}_2")
           .outputMode(OutputMode.Append())
           .toTable(tableIdent)
 
@@ -287,7 +295,7 @@ class StreamingSchemaEvolutionSuite
         assert(result.schema == StructType(Seq(
           StructField("id", IntegerType),
           StructField("data", StringType),
-          StructField("amount", DoubleType, nullable = true))))
+          StructField("amount", DoubleType))))
       }
     }
   }
@@ -302,6 +310,7 @@ class StreamingSchemaEvolutionSuite
         val df1 = input1.toDF().toDF("id", "data")
 
         val query1 = df1.writeStream
+          .withSchemaEvolution()
           .option("checkpointLocation", checkpointDir.getCanonicalPath)
           .outputMode(OutputMode.Append())
           .toTable(tableIdent)
@@ -317,13 +326,14 @@ class StreamingSchemaEvolutionSuite
         // that happened while the query was down.
         sql(s"ALTER TABLE $tableIdent ADD COLUMN amount DOUBLE")
 
-        // Second query: write with the new column. Schema evolution should detect
-        // that the table already has the column and not try to add it again.
         val input2 = MemoryStream[(Int, String, Double)]
         val df2 = input2.toDF().toDF("id", "data", "amount")
 
         val query2 = df2.writeStream
-          .option("checkpointLocation", s"${checkpointDir.getCanonicalPath}_2")
+          .withSchemaEvolution()
+          .option(
+            "checkpointLocation",
+            s"${checkpointDir.getCanonicalPath}_2")
           .outputMode(OutputMode.Append())
           .toTable(tableIdent)
 
@@ -338,10 +348,266 @@ class StreamingSchemaEvolutionSuite
         assert(result.schema == StructType(Seq(
           StructField("id", IntegerType),
           StructField("data", StringType),
-          StructField("amount", DoubleType, nullable = true))))
+          StructField("amount", DoubleType))))
       }
     }
   }
+
+  test("schema evolution with Trigger.Once") {
+    withTable(tableIdent) {
+      withTempDir { checkpointDir =>
+        sql(s"CREATE TABLE $tableIdent (id INT, data STRING)")
+
+        val input = MemoryStream[(Int, String, Double)]
+        val df = input.toDF().toDF("id", "data", "amount")
+        input.addData((1, "a", 10.0), (2, "b", 20.0))
+
+        val query = df.writeStream
+          .withSchemaEvolution()
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .trigger(Trigger.Once())
+          .toTable(tableIdent)
+
+        try {
+          query.processAllAvailable()
+        } finally {
+          query.stop()
+        }
+
+        val result = spark.table(tableIdent)
+        checkAnswer(result, Seq(Row(1, "a", 10.0), Row(2, "b", 20.0)))
+        assert(result.schema == StructType(Seq(
+          StructField("id", IntegerType),
+          StructField("data", StringType),
+          StructField("amount", DoubleType))))
+      }
+    }
+  }
+
+  test("schema evolution with Trigger.AvailableNow") {
+    withTable(tableIdent) {
+      withTempDir { checkpointDir =>
+        sql(s"CREATE TABLE $tableIdent (id INT, data STRING)")
+
+        val input = MemoryStream[(Int, String, Double)]
+        val df = input.toDF().toDF("id", "data", "amount")
+        input.addData((1, "a", 10.0))
+
+        val query = df.writeStream
+          .withSchemaEvolution()
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .trigger(Trigger.AvailableNow())
+          .toTable(tableIdent)
+
+        try {
+          query.processAllAvailable()
+        } finally {
+          query.stop()
+        }
+
+        val result = spark.table(tableIdent)
+        checkAnswer(result, Seq(Row(1, "a", 10.0)))
+        assert(result.schema == StructType(Seq(
+          StructField("id", IntegerType),
+          StructField("data", StringType),
+          StructField("amount", DoubleType))))
+      }
+    }
+  }
+
+  test("incremental schema evolution across multiple restarts") {
+    withTable(tableIdent) {
+      withTempDir { checkpointDir =>
+        sql(s"CREATE TABLE $tableIdent (id INT)")
+
+        // First query: add "data" column.
+        val input1 = MemoryStream[(Int, String)]
+        val df1 = input1.toDF().toDF("id", "data")
+
+        val query1 = df1.writeStream
+          .withSchemaEvolution()
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .outputMode(OutputMode.Append())
+          .toTable(tableIdent)
+
+        try {
+          input1.addData((1, "a"))
+          query1.processAllAvailable()
+        } finally {
+          query1.stop()
+        }
+
+        assert(spark.table(tableIdent).schema == StructType(Seq(
+          StructField("id", IntegerType),
+          StructField("data", StringType))))
+
+        // Second query: add "amount" column on top of the already-evolved schema.
+        val input2 = MemoryStream[(Int, String, Double)]
+        val df2 = input2.toDF().toDF("id", "data", "amount")
+
+        val query2 = df2.writeStream
+          .withSchemaEvolution()
+          .option(
+            "checkpointLocation",
+            s"${checkpointDir.getCanonicalPath}_2")
+          .outputMode(OutputMode.Append())
+          .toTable(tableIdent)
+
+        try {
+          input2.addData((2, "b", 20.0))
+          query2.processAllAvailable()
+        } finally {
+          query2.stop()
+        }
+
+        val result = spark.table(tableIdent)
+        checkAnswer(result, Seq(
+          Row(1, "a", null),
+          Row(2, "b", 20.0)))
+        assert(result.schema == StructType(Seq(
+          StructField("id", IntegerType),
+          StructField("data", StringType),
+          StructField("amount", DoubleType))))
+
+        // Third query: no new columns - schema should stay the same.
+        val input3 = MemoryStream[(Int, String, Double)]
+        val df3 = input3.toDF().toDF("id", "data", "amount")
+
+        val query3 = df3.writeStream
+          .withSchemaEvolution()
+          .option(
+            "checkpointLocation",
+            s"${checkpointDir.getCanonicalPath}_3")
+          .outputMode(OutputMode.Append())
+          .toTable(tableIdent)
+
+        try {
+          input3.addData((3, "c", 30.0))
+          query3.processAllAvailable()
+        } finally {
+          query3.stop()
+        }
+
+        val result2 = spark.table(tableIdent)
+        assert(result2.schema == StructType(Seq(
+          StructField("id", IntegerType),
+          StructField("data", StringType),
+          StructField("amount", DoubleType))))
+      }
+    }
+  }
+
+  test("stop and restart same query - schema evolved on restart") {
+    withTable(tableIdent) {
+      withTempDir { checkpointDir =>
+        sql(s"CREATE TABLE $tableIdent (id INT, data STRING)")
+
+        // First run: matching schema, no evolution.
+        val input1 = MemoryStream[(Int, String)]
+        val df1 = input1.toDF().toDF("id", "data")
+
+        val query1 = df1.writeStream
+          .withSchemaEvolution()
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .outputMode(OutputMode.Append())
+          .toTable(tableIdent)
+
+        try {
+          input1.addData((1, "a"))
+          query1.processAllAvailable()
+          input1.addData((2, "b"))
+          query1.processAllAvailable()
+        } finally {
+          query1.stop()
+        }
+
+        checkAnswer(spark.table(tableIdent), Seq(Row(1, "a"), Row(2, "b")))
+
+        // Second run: new source schema with extra column.
+        // Uses a different checkpoint since MemoryStream state can't be
+        // reused across restarts with a different schema.
+        val input2 = MemoryStream[(Int, String, Double)]
+        val df2 = input2.toDF().toDF("id", "data", "amount")
+
+        val query2 = df2.writeStream
+          .withSchemaEvolution()
+          .option(
+            "checkpointLocation",
+            s"${checkpointDir.getCanonicalPath}_2")
+          .outputMode(OutputMode.Append())
+          .toTable(tableIdent)
+
+        try {
+          input2.addData((3, "c", 30.0))
+          query2.processAllAvailable()
+        } finally {
+          query2.stop()
+        }
+
+        val result = spark.table(tableIdent)
+        checkAnswer(result, Seq(
+          Row(1, "a", null),
+          Row(2, "b", null),
+          Row(3, "c", 30.0)))
+      }
+    }
+  }
+
+  test("schema evolution with Trigger.Once across restart") {
+    withTable(tableIdent) {
+      withTempDir { checkpointDir =>
+        sql(s"CREATE TABLE $tableIdent (id INT)")
+
+        // First run: Trigger.Once with extra column.
+        val input1 = MemoryStream[(Int, String)]
+        val df1 = input1.toDF().toDF("id", "data")
+        input1.addData((1, "a"))
+
+        val query1 = df1.writeStream
+          .withSchemaEvolution()
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .trigger(Trigger.Once())
+          .toTable(tableIdent)
+
+        try {
+          query1.processAllAvailable()
+        } finally {
+          query1.stop()
+        }
+
+        assert(spark.table(tableIdent).schema == StructType(Seq(
+          StructField("id", IntegerType),
+          StructField("data", StringType))))
+
+        // Second run: Trigger.Once with yet another extra column.
+        val input2 = MemoryStream[(Int, String, Double)]
+        val df2 = input2.toDF().toDF("id", "data", "amount")
+        input2.addData((2, "b", 20.0))
+
+        val query2 = df2.writeStream
+          .withSchemaEvolution()
+          .option(
+            "checkpointLocation",
+            s"${checkpointDir.getCanonicalPath}_2")
+          .trigger(Trigger.Once())
+          .toTable(tableIdent)
+
+        try {
+          query2.processAllAvailable()
+        } finally {
+          query2.stop()
+        }
+
+        val result = spark.table(tableIdent)
+        checkAnswer(result, Seq(Row(1, "a", null), Row(2, "b", 20.0)))
+        assert(result.schema == StructType(Seq(
+          StructField("id", IntegerType),
+          StructField("data", StringType),
+          StructField("amount", DoubleType))))
+      }
+    }
+  }
+
 
   test("streaming write with type widening") {
     withTable(tableIdent) {
@@ -352,6 +618,7 @@ class StreamingSchemaEvolutionSuite
         val df = input.toDF().toDF("id", "value")
 
         val query = df.writeStream
+          .withSchemaEvolution()
           .option("checkpointLocation", checkpointDir.getCanonicalPath)
           .outputMode(OutputMode.Append())
           .toTable(tableIdent)

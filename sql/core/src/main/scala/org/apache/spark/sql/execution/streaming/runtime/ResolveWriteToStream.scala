@@ -72,7 +72,8 @@ object ResolveWriteToStream extends Rule[LogicalPlan] {
         deleteCheckpointOnStop,
         s.inputQuery,
         s.catalogAndIdent,
-        s.catalogTable)
+        s.catalogTable,
+        s.withSchemaEvolution)
   }
 
   def resolveCheckpointLocation(s: WriteToStreamStatement): (String, Boolean) = {

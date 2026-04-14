@@ -83,6 +83,12 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T])
   }
 
   /** @inheritdoc */
+  def withSchemaEvolution(): this.type = {
+    sinkBuilder.setWithSchemaEvolution(true)
+    this
+  }
+
+  /** @inheritdoc */
   def format(source: String): this.type = {
     sinkBuilder.setFormat(source)
     this

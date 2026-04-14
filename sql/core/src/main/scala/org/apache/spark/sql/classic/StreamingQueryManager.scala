@@ -24,7 +24,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, QUERY_ID, RUN_ID}
@@ -186,7 +186,8 @@ class StreamingQueryManager private[sql] (
       trigger: Trigger,
       triggerClock: Clock,
       catalogAndIdent: Option[(TableCatalog, Identifier)] = None,
-      catalogTable: Option[CatalogTable] = None): StreamingQueryWrapper = {
+      catalogTable: Option[CatalogTable] = None,
+      withSchemaEvolution: Boolean = false): StreamingQueryWrapper = {
     val analyzedPlan = df.queryExecution.analyzed
     df.queryExecution.assertAnalyzed()
 
@@ -216,7 +217,8 @@ class StreamingQueryManager private[sql] (
       trigger,
       analyzedPlan,
       catalogAndIdent,
-      catalogTable)
+      catalogTable,
+      withSchemaEvolution)
 
     val analyzedStreamWritePlan =
       sparkSession.sessionState.executePlan(dataStreamWritePlan).analyzed
@@ -224,6 +226,12 @@ class StreamingQueryManager private[sql] (
 
     (sink, trigger) match {
       case (_: SupportsWrite, trigger: ContinuousTrigger) =>
+        if (withSchemaEvolution) {
+          throw new SparkUnsupportedOperationException(
+            errorClass =
+              "UNSUPPORTED_STREAMING_SCHEMA_EVOLUTION.CONTINUOUS_TRIGGER",
+            messageParameters = Map.empty[String, String])
+        }
         new StreamingQueryWrapper(new ContinuousExecution(
           sparkSession,
           trigger,
@@ -287,7 +295,8 @@ class StreamingQueryManager private[sql] (
       trigger: Trigger = Trigger.ProcessingTime(0),
       triggerClock: Clock = new SystemClock(),
       catalogAndIdent: Option[(TableCatalog, Identifier)] = None,
-      catalogTable: Option[CatalogTable] = None): StreamingQuery = {
+      catalogTable: Option[CatalogTable] = None,
+      withSchemaEvolution: Boolean = false): StreamingQuery = {
     val query = createQuery(
       userSpecifiedName,
       userSpecifiedCheckpointLocation,
@@ -300,7 +309,8 @@ class StreamingQueryManager private[sql] (
       trigger,
       triggerClock,
       catalogAndIdent,
-      catalogTable)
+      catalogTable,
+      withSchemaEvolution)
     // scalastyle:on argcount
 
     // The following code block checks if a stream with the same name or id is running. Then it

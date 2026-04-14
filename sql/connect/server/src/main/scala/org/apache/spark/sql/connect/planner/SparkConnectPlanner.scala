@@ -3482,6 +3482,10 @@ class SparkConnectPlanner(
       writer.queryName(writeOp.getQueryName)
     }
 
+    if (writeOp.getWithSchemaEvolution) {
+      writer.withSchemaEvolution()
+    }
+
     if (writeOp.hasForeachWriter) {
       if (writeOp.getForeachWriter.hasPythonFunction) {
         val foreach = writeOp.getForeachWriter.getPythonFunction

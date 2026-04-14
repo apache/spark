@@ -31,6 +31,8 @@ import org.apache.spark.sql.streaming.OutputMode
  * Note that this logical plan does not have a corresponding physical plan, as it will be converted
  * to [[org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2 WriteToDataSourceV2]]
  * with [[MicroBatchWrite]] before execution.
+ *
+ * @param withSchemaEvolution Whether to evolve the sink table schema to match the source.
  */
 case class WriteToMicroBatchDataSource(
     relation: Option[DataSourceV2Relation],
@@ -39,8 +41,8 @@ case class WriteToMicroBatchDataSource(
     queryId: String,
     writeOptions: Map[String, String],
     outputMode: OutputMode,
-    batchId: Option[Long] = None,
-    override val withSchemaEvolution: Boolean = false)
+    override val withSchemaEvolution: Boolean,
+    batchId: Option[Long] = None)
   extends UnaryNode with SupportsSchemaEvolution {
   override def child: LogicalPlan = query
   override def output: Seq[Attribute] = Nil
@@ -55,16 +57,13 @@ case class WriteToMicroBatchDataSource(
   override lazy val schemaEvolutionReady: Boolean =
     relation.exists(_.resolved) && query.resolved
 
-  // Use `def` rather than `lazy val`: the streaming plan may be analyzed multiple times
-  // (e.g. by V2TableRefreshUtil or CacheManager), each time starting from the original plan
-  // with a stale relation schema. Loading the current table from the catalog ensures we
-  // compare against the actual table state and don't re-trigger already-applied evolution.
   override def pendingSchemaChanges: Seq[TableChange] = {
     if (relation.isEmpty || !schemaEvolutionEnabled || !schemaEvolutionReady) {
       return Seq.empty
     }
     val currentTableSchema = relation.get match {
       case ExtractV2CatalogAndIdentifier(catalog, ident) =>
+        // Loading the current table from the catalog ensures we don't use a stale schema.
         CatalogV2Util.v2ColumnsToStructType(
           catalog.loadTable(ident).columns())
       case _ =>

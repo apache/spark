@@ -8180,6 +8180,23 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_STREAMING_SCHEMA_EVOLUTION" : {
+    "message" : [
+      "Schema evolution is not supported for this streaming write:"
+    ],
+    "subClass" : {
+      "CONTINUOUS_TRIGGER" : {
+        "message" : [
+          "Continuous triggers are not supported. Use a micro-batch trigger instead."
+        ]
+      },
+      "NOT_V2_TABLE" : {
+        "message" : [
+          "The sink is not a V2 table. Schema evolution requires a V2 table that supports the AUTOMATIC_SCHEMA_EVOLUTION capability."
+        ]
+      }
+    }
+  },
   "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY" : {
     "message" : [
       "Unsupported subquery expression:"

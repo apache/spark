@@ -25,6 +25,8 @@ import org.apache.spark.sql.streaming.OutputMode
 
 /**
  * Used to create a [[StreamExecution]].
+ *
+ * @param withSchemaEvolution Whether to evolve the sink table schema to match the source.
  */
 case class WriteToStream(
     name: String,
@@ -34,7 +36,8 @@ case class WriteToStream(
     deleteCheckpointOnStop: Boolean,
     inputQuery: LogicalPlan,
     catalogAndIdent: Option[(TableCatalog, Identifier)] = None,
-    catalogTable: Option[CatalogTable]) extends UnaryNode {
+    catalogTable: Option[CatalogTable],
+    withSchemaEvolution: Boolean) extends UnaryNode {
 
   override def isStreaming: Boolean = true
 

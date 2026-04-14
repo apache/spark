@@ -171,6 +171,19 @@ abstract class DataStreamWriter[T] extends WriteConfigMethods[DataStreamWriter[T
   }
 
   /**
+   * Enables automatic schema evolution for the streaming write. When enabled, if the source
+   * schema has columns not present in the sink table (or type changes), the sink table schema
+   * will be evolved to accommodate the new schema before data is written. The sink table must
+   * support the `AUTOMATIC_SCHEMA_EVOLUTION` capability.
+   *
+   * Schema evolution is applied at query analysis time: when the streaming query is started
+   * (or restarted after failure), the table schema is evolved if needed.
+   *
+   * @since 4.2.0
+   */
+  def withSchemaEvolution(): this.type
+
+  /**
    * Starts the execution of the streaming query, which will continually output results to the
    * given path as new data arrives. The returned
    * [[org.apache.spark.sql.streaming.StreamingQuery]] object can be used to interact with the

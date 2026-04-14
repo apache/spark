@@ -84,6 +84,12 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
   }
 
   /** @inheritdoc */
+  def withSchemaEvolution(): this.type = {
+    this.schemaEvolution = true
+    this
+  }
+
+  /** @inheritdoc */
   def format(source: String): this.type = {
     this.source = source
     this
@@ -205,7 +211,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     tableInstance match {
       case t: SupportsWrite if t.supports(STREAMING_WRITE) =>
-        startQuery(t, extraOptions, catalogAndIdent = Some(catalog.asTableCatalog, identifier))
+        startQuery(t, extraOptions, catalogAndIdent = Some(catalog.asTableCatalog, identifier),
+          withSchemaEvolution = schemaEvolution)
       case t: V2TableWithV1Fallback =>
         writeToV1Table(t.v1Table)
       case t: V1Table =>
@@ -299,7 +306,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
       newOptions: CaseInsensitiveMap[String],
       recoverFromCheckpoint: Boolean = true,
       catalogAndIdent: Option[(TableCatalog, Identifier)] = None,
-      catalogTable: Option[CatalogTable] = None): StreamingQuery = {
+      catalogTable: Option[CatalogTable] = None,
+      withSchemaEvolution: Boolean = false): StreamingQuery = {
     if (trigger.isInstanceOf[RealTimeTrigger]) {
       RealTimeModeAllowlist.checkAllowedSink(
         sink,
@@ -321,7 +329,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
       recoverFromCheckpointLocation = recoverFromCheckpoint,
       trigger = trigger,
       catalogAndIdent = catalogAndIdent,
-      catalogTable = catalogTable)
+      catalogTable = catalogTable,
+      withSchemaEvolution = withSchemaEvolution)
   }
 
   private def createV1Sink(optionsWithPath: CaseInsensitiveMap[String]): Sink = {
@@ -444,6 +453,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
   private var partitioningColumns: Option[Seq[String]] = None
 
   private var clusteringColumns: Option[Seq[String]] = None
+
+  private var schemaEvolution: Boolean = false
 }
 
 object DataStreamWriter {

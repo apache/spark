@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkIllegalArgumentException, SparkIllegalStateException}
+import org.apache.spark.{SparkIllegalArgumentException, SparkIllegalStateException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -358,9 +358,16 @@ class MicroBatchExecution(
           query = _logicalPlan,
           queryId = id.toString,
           extraOptions,
-          outputMode)
+          outputMode,
+          withSchemaEvolution = plan.withSchemaEvolution)
 
       case s: Sink =>
+        if (plan.withSchemaEvolution) {
+          throw new SparkUnsupportedOperationException(
+            errorClass =
+              "UNSUPPORTED_STREAMING_SCHEMA_EVOLUTION.NOT_V2_TABLE",
+            messageParameters = Map.empty[String, String])
+        }
         // SinkV1 is not compatible with Real-Time Mode due to API limitations.
         // SinkV1 does not support writing outputs row by row.
         if (trigger.isInstanceOf[RealTimeTrigger]) {
