@@ -968,7 +968,7 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 4.0.0
 
-        .. versionchanged:: 4.1.0
+        .. versionchanged:: 4.2.0
             Supports DataFrame input.
 
         Parameters
