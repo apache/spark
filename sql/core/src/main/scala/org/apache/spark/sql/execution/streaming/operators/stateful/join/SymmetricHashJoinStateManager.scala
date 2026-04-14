@@ -854,11 +854,16 @@ class SymmetricHashJoinStateManagerV4(
     def scanEvictedKeys(
         endTimestamp: Long,
         startTimestamp: Option[Long] = None): Iterator[EvictedKeysResult] = {
+      // If startTimestamp == Long.MaxValue, everything has already been evicted;
+      // nothing can match, so return immediately.
+      if (startTimestamp.contains(Long.MaxValue)) {
+        return Iterator.empty
+      }
+
       // rangeScanWithMultiValues: startKey is inclusive, endKey is exclusive.
       // startTimestamp is exclusive (already evicted), so we seek from st + 1.
-      val startKeyRow = startTimestamp.flatMap { st =>
-        if (st < Long.MaxValue) Some(createScanBoundaryRow(st + 1))
-        else None
+      val startKeyRow = startTimestamp.map { st =>
+        createScanBoundaryRow(st + 1)
       }
       // endTimestamp is inclusive, so we use endTimestamp + 1 as the exclusive upper bound.
       // When endTimestamp == Long.MaxValue we cannot add 1, so endKeyRow is None. This is

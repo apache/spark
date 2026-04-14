@@ -1178,10 +1178,9 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
       // --- overflow boundary: startTimestamp = Some(Long.MaxValue) ---
       Seq(10, 20).foreach(append(40, _))
       // startTimestamp=Long.MaxValue (exclusive) means everything <= Long.MaxValue was already
-      // evicted. Since startKeyRow falls back to None, endTimestamp=50 bounds the scan.
-      // All remaining entries (10, 20, 30) have timestamps <= 50, so they are evicted.
-      assert(evictByTs.evictByTimestamp(50, Some(Long.MaxValue)) === 3)
-      assert(get(40) === Seq.empty)
+      // evicted. Nothing can remain, so the scan returns an empty iterator immediately.
+      assert(evictByTs.evictByTimestamp(50, Some(Long.MaxValue)) === 0)
+      assert(get(40) === Seq(10, 20, 30))
     }
   }
 
