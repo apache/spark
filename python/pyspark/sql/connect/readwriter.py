@@ -300,7 +300,7 @@ class DataFrameReader(OptionUtils):
 
     def csv(
         self,
-        path: PathOrPaths,
+        path: Union[PathOrPaths, "DataFrame"],
         schema: Optional[Union[StructType, str]] = None,
         sep: Optional[str] = None,
         encoding: Optional[str] = None,
@@ -371,6 +371,22 @@ class DataFrameReader(OptionUtils):
         )
         if isinstance(path, str):
             path = [path]
+
+        from pyspark.sql.connect.dataframe import DataFrame
+
+        if isinstance(path, DataFrame):
+            # Schema must be set explicitly here because the DataFrame path
+            # bypasses load(), which normally calls self.schema(schema).
+            if schema is not None:
+                self.schema(schema)
+            return self._df(
+                Parse(
+                    child=path._plan,
+                    format=proto.Parse.ParseFormat.PARSE_FORMAT_CSV,
+                    schema=self._schema,
+                    options=self._options,
+                )
+            )
         return self.load(path=path, format="csv", schema=schema)
 
     csv.__doc__ = PySparkDataFrameReader.csv.__doc__

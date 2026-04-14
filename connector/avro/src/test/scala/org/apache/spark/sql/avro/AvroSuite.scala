@@ -22,7 +22,7 @@ import java.net.URI
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.sql.{Date, Timestamp}
 import java.time.{LocalDate, LocalDateTime}
-import java.util.UUID
+import java.util.{Collections => JCollections, UUID}
 
 import scala.jdk.CollectionConverters._
 
@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA, UTC}
 import org.apache.spark.sql.execution.{FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileDataSourceV2, FileTable}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
@@ -3481,6 +3481,18 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       // Verify data integrity
       checkAnswer(readDf, df)
     }
+  }
+
+  test("SPARK-56457: Avro V2 formatName matches V1 FileFormat.toString") {
+    val v2Provider = DataSource.lookupDataSourceV2("avro", spark.sessionState.conf)
+    assert(v2Provider.isDefined)
+    val dsV2 = v2Provider.get.asInstanceOf[FileDataSourceV2]
+    val v1Format = dsV2.fallbackFileFormat.getDeclaredConstructor().newInstance()
+    val emptyProps = JCollections.emptyMap[String, String]()
+    val v2Table = dsV2.getTable(
+      new StructType(), Array.empty, emptyProps).asInstanceOf[FileTable]
+    assert(v2Table.formatName == v1Format.toString,
+      s"V2 formatName '${v2Table.formatName}' != V1 toString '${v1Format.toString}'")
   }
 
   test("Geospatial types are not supported in Avro") {

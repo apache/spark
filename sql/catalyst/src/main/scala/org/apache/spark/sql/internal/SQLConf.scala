@@ -755,6 +755,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED =
+    buildConf("spark.sql.optimizer.pushDownJoinThroughUnion.enabled")
+      .doc("When true, pushes down Join through Union when the right side is small enough " +
+        "to broadcast. This can improve performance by allowing each Union branch to " +
+        "directly perform a broadcast join, avoiding materializing the entire Union result.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val EXPRESSION_PROJECTION_CANDIDATE_LIMIT =
     buildConf("spark.sql.optimizer.expressionProjectionCandidateLimit")
       .doc("The maximum number of the candidate of output expressions whose alias are replaced." +

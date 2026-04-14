@@ -146,7 +146,7 @@
     <parquet.version>1.17.0</parquet.version>
     <orc.version>2.3.0</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>12.1.7</jetty.version>
+    <jetty.version>12.1.8</jetty.version>
     <jakartaservlet.version>6.0.0</jakartaservlet.version>
     <!-- SPARK-46938: Required by Hive / LibThrift libs -->
     <javaxservlet.version>4.0.1</javaxservlet.version>
@@ -202,7 +202,7 @@
     <gson.version>2.13.2</gson.version>
     <janino.version>3.1.9</janino.version>
     <jersey.version>3.1.11</jersey.version>
-    <joda.version>2.14.0</joda.version>
+    <joda.version>2.14.1</joda.version>
     <jsr305.version>3.0.0</jsr305.version>
     <jaxb.version>2.2.11</jaxb.version>
     <libthrift.version>0.16.0</libthrift.version>
@@ -345,7 +345,7 @@
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
     <mssql.jdbc.version>13.2.1.jre11</mssql.jdbc.version>
     <ojdbc17.version>23.26.1.0.0</ojdbc17.version>
-    <databricks.jdbc.version>2.7.1</databricks.jdbc.version>
+    <databricks.jdbc.version>3.3.1</databricks.jdbc.version>
     <snowflake.jdbc.version>4.0.2</snowflake.jdbc.version>
     <terajdbc.version>20.00.00.39</terajdbc.version>
     <!-- Used for SBT build to retrieve the Spark version -->
@@ -889,7 +889,7 @@
       <dependency>
         <groupId>at.yawk.lz4</groupId>
         <artifactId>lz4-java</artifactId>
-        <version>1.10.4</version>
+        <version>1.11.0</version>
       </dependency>
       <dependency>
         <groupId>com.github.luben</groupId>

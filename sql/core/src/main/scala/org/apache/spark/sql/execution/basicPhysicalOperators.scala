@@ -256,8 +256,11 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // Apply CSE to otherPreds only (notNullPreds are simple IsNotNull checks with no CSE value).
     val (inputVarsCode, subExprsCode, predicateCode) =
       if (conf.subexpressionEliminationEnabled && otherPreds.nonEmpty) {
+        // Bind against child.output (not output) so that columns in
+        // notNullAttributes keep their original nullable=true for the
+        // CSE precomputation, which runs BEFORE IsNotNull short-circuits.
         val boundOtherPreds = otherPreds.map(
-          BindReferences.bindReference(_, output))
+          BindReferences.bindReference(_, child.output))
         // Pre-evaluate input variables before CSE analysis: CSE clears
         // ctx.currentVars[i].code as a side effect; without this pre-evaluation, Janino fails
         // with "Unknown variable or type" when notNullPreds reference the same input columns.
@@ -270,7 +273,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
           var code = ""
           ctx.withSubExprEliminationExprs(subExprs.states) {
             code = generatePredicateCode(
-              ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes)
+              ctx, child.output, input, child.output, notNullPreds, otherPreds, notNullAttributes)
             Seq.empty
           }
           code
