@@ -30,7 +30,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
 /**
  * A collection of sample data used in SQL tests.
  */
-private[sql] trait SQLTestData extends SparkSessionProvider { self =>
+trait SQLTestData extends SparkSessionProvider { self =>
   import SQLTestData._
 
   // Note: all test data should be lazy because the SparkSession is not set up yet.
