@@ -24,11 +24,10 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.catalyst.analysis.RewriteUpdateTable.IS_UPDATED_COLUMN
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, TableSpec, UnaryNode}
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils, ReplaceDataProjections, WriteDeltaProjections}
-import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSERT_OPERATION, REINSERT_OPERATION, UPDATE_OPERATION, WRITE_OPERATION, WRITE_WITH_METADATA_OPERATION}
+import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSERT_OPERATION, REINSERT_OPERATION, UPDATE_OPERATION, WRITE_COPIED_OPERATION, WRITE_OPERATION, WRITE_UPDATED_OPERATION, WRITE_WITH_METADATA_OPERATION}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
@@ -318,21 +317,11 @@ case class ReplaceDataExec(
   extends RowLevelWriteExec {
 
   override def writingTask: WritingSparkTask[_] = {
-    val metricCounter = rowLevelCommand match {
-      case UPDATE =>
-        val isUpdatedIndex = query.output.indexWhere(_.name == IS_UPDATED_COLUMN)
-        Some(BooleanMetricCounter(
-          isUpdatedIndex, operationMetrics("numUpdatedRows"), operationMetrics("numCopiedRows")))
-      case _ => None
-    }
     projections match {
       case ReplaceDataProjections(dataProj, Some(metadataProj)) =>
-        DataAndMetadataWritingSparkTask(dataProj, metadataProj, metricCounter)
-      // TODO: add test coverage for ReplaceData without metadata attributes
-      case ReplaceDataProjections(dataProj, None) if metricCounter.isDefined =>
-        DataWritingSparkTask(Some(dataProj), metricCounter)
-      case _ =>
-        DataWritingSparkTask()
+        DataAndMetadataWritingSparkTask(dataProj, metadataProj, operationMetrics)
+      case ReplaceDataProjections(dataProj, None) =>
+        DataWithProjectionWritingSparkTask(dataProj, operationMetrics)
     }
   }
 
@@ -472,7 +461,7 @@ trait RowLevelWriteExec extends V2ExistingTableWriteExec {
  */
 trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSparkPlanHelper {
   def query: SparkPlan
-  def writingTask: WritingSparkTask[_] = DataWritingSparkTask()
+  def writingTask: WritingSparkTask[_] = DataWritingSparkTask
 
   var commitProgress: Option[StreamWriterCommitProgress] = None
 
@@ -651,37 +640,34 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
   }
 }
 
-/**
- * Reads a boolean column at the given ordinal and increments one of two metrics per row.
- */
-case class BooleanMetricCounter(
-    ordinal: Int,
-    trueMetric: SQLMetric,
-    falseMetric: SQLMetric) extends Serializable {
-  def count(row: InternalRow): Unit = {
-    if (row.getBoolean(ordinal)) {
-      trueMetric.add(1L)
-    } else {
-      falseMetric.add(1L)
-    }
-  }
-}
-
 case class DataAndMetadataWritingSparkTask(
     dataProj: ProjectingInternalRow,
     metadataProj: ProjectingInternalRow,
-    metricCounter: Option[BooleanMetricCounter] = None)
+    operationMetrics: Map[String, SQLMetric] = Map.empty)
   extends WritingSparkTask[DataWriter[InternalRow]] {
+
+  private lazy val numUpdatedRows = operationMetrics.get("numUpdatedRows")
+  private lazy val numCopiedRows = operationMetrics.get("numCopiedRows")
 
   override protected def write(
       writer: DataWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
     while (iter.hasNext) {
       val row = iter.next()
-      metricCounter.foreach(_.count(row))
-
       val operation = row.getInt(0)
 
       operation match {
+        case WRITE_UPDATED_OPERATION =>
+          numUpdatedRows.foreach(_.add(1L))
+          dataProj.project(row)
+          metadataProj.project(row)
+          writer.write(metadataProj, dataProj)
+
+        case WRITE_COPIED_OPERATION =>
+          numCopiedRows.foreach(_.add(1L))
+          dataProj.project(row)
+          metadataProj.project(row)
+          writer.write(metadataProj, dataProj)
+
         case WRITE_WITH_METADATA_OPERATION =>
           dataProj.project(row)
           metadataProj.project(row)
@@ -698,28 +684,46 @@ case class DataAndMetadataWritingSparkTask(
   }
 }
 
-case class DataWritingSparkTask(
-    dataProj: Option[ProjectingInternalRow] = None,
-    metricCounter: Option[BooleanMetricCounter] = None)
+case class DataWithProjectionWritingSparkTask(
+    dataProj: ProjectingInternalRow,
+    operationMetrics: Map[String, SQLMetric] = Map.empty)
   extends WritingSparkTask[DataWriter[InternalRow]] {
+
+  private lazy val numUpdatedRows = operationMetrics.get("numUpdatedRows")
+  private lazy val numCopiedRows = operationMetrics.get("numCopiedRows")
 
   override protected def write(
       writer: DataWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
-    if (dataProj.isEmpty && metricCounter.isEmpty) {
-      writer.writeAll(iter)
-    } else {
-      while (iter.hasNext) {
-        val row = iter.next()
-        metricCounter.foreach(_.count(row))
-        dataProj match {
-          case Some(proj) =>
-            proj.project(row)
-            writer.write(proj)
-          case None =>
-            writer.write(row)
-        }
+    while (iter.hasNext) {
+      val row = iter.next()
+      val operation = row.getInt(0)
+
+      operation match {
+        case WRITE_UPDATED_OPERATION =>
+          numUpdatedRows.foreach(_.add(1L))
+          dataProj.project(row)
+          writer.write(dataProj)
+
+        case WRITE_COPIED_OPERATION =>
+          numCopiedRows.foreach(_.add(1L))
+          dataProj.project(row)
+          writer.write(dataProj)
+
+        case WRITE_WITH_METADATA_OPERATION | WRITE_OPERATION =>
+          dataProj.project(row)
+          writer.write(dataProj)
+
+        case other =>
+          throw new SparkException(s"Unexpected operation ID: $other")
       }
     }
+  }
+}
+
+object DataWritingSparkTask extends WritingSparkTask[DataWriter[InternalRow]] {
+  override protected def write(
+      writer: DataWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
+    writer.writeAll(iter)
   }
 }
 
