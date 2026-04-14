@@ -1355,6 +1355,8 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None) extends U
        LQS krapS
       > SELECT _FUNC_(array(2, 1, 4, 3));
        [3,4,1,2]
+      > SELECT hex(_FUNC_(x'CAFE'));
+       FECA
   """,
   group = "collection_funcs",
   since = "1.5.0",

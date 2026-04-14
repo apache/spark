@@ -2175,6 +2175,15 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     testBinary()
     df.cache()
     testBinary()
+
+    // Verify that reverse preserves BinaryType and does not cast to StringType
+    val resultType = df.select(reverse($"b")).schema.head.dataType
+    assert(resultType === BinaryType,
+      s"reverse on BinaryType column should return BinaryType, but got $resultType")
+    df.createOrReplaceTempView("binary_test")
+    val sqlResultType = spark.sql("SELECT reverse(b) FROM binary_test").schema.head.dataType
+    assert(sqlResultType === BinaryType,
+      s"reverse(b) via SQL should return BinaryType, but got $sqlResultType")
   }
 
   test("reverse function - array for primitive type not containing null") {
