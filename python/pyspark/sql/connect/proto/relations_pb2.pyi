@@ -4455,7 +4455,7 @@ class Parse(google.protobuf.message.Message):
         """(Optional) DataType representing the schema. If not set, Spark will infer the schema."""
     @property
     def options(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
-        """Options for the csv/json parser. The map key is case insensitive."""
+        """Options for the csv/json/xml parser. The map key is case insensitive."""
     def __init__(
         self,
         *,
