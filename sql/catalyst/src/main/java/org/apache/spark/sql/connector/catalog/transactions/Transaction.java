@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog.transactions;
 
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.catalog.CatalogPlugin;
 import org.apache.spark.sql.connector.catalog.TransactionalCatalogPlugin;
 
@@ -32,6 +33,7 @@ import java.io.Closeable;
  *
  * @since 4.2.0
  */
+@Evolving
 public interface Transaction extends Closeable {
 
   /**

@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.connector.catalog.transactions;
 
+import org.apache.spark.annotation.Evolving;
+
 /**
  * Metadata about a transaction.
  *
  * @since 4.2.0
  */
+@Evolving
 public interface TransactionInfo {
   /**
    * Returns a unique identifier for this transaction.

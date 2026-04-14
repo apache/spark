@@ -287,9 +287,8 @@ class QueryExecution(
       // the transaction was active.
       if (transactionOpt.isDefined) {
         normalized
-      }
-      else {
-        // clone the plan to avoid sharing the plan instance between different stages like
+      } else {
+        // Clone the plan to avoid sharing the plan instance between different stages like
         // analyzing, optimizing and planning.
         sparkSession.sharedState.cacheManager.useCachedData(normalized.clone())
       }

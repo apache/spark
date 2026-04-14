@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.catalog.transactions.Transaction;
 import org.apache.spark.sql.connector.catalog.transactions.TransactionInfo;
 
@@ -28,6 +29,7 @@ import org.apache.spark.sql.connector.catalog.transactions.TransactionInfo;
  *
  * @since 4.2.0
  */
+@Evolving
 public interface TransactionalCatalogPlugin extends CatalogPlugin {
 
   /**
