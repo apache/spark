@@ -85,6 +85,13 @@ private[spark] object Tests {
       .booleanConf
       .createWithDefault(false)
 
+  val INJECT_SHUFFLE_FETCH_FAILURES =
+    ConfigBuilder("spark.testing.injectShuffleFetchFailures")
+      .doc("Injecting fetch failures for shuffle stages by providing an invalid BlockManager " +
+        "location for the first stage attempt. Testing only flag!")
+      .booleanConf
+      .createWithDefault(false)
+
   val TEST_SKIP_ESS_REGISTER = ConfigBuilder("spark.testing.skipESSRegister")
     .version("4.0.0")
     .doc("None of Spark testing modes (local, local-cluster) enables shuffle service. So it is " +

@@ -34,7 +34,7 @@ import org.apache.spark.util.AccumulatorContext.internOption
  */
 class SQLMetric(
     val metricType: String,
-    initValue: Long = 0L) extends AccumulatorV2[Long, Long] {
+    val initValue: Long = 0L) extends AccumulatorV2[Long, Long] {
   // initValue defines the initial value of the metric. 0 is the lowest value considered valid.
   // If a SQLMetric is invalid, it is set to 0 upon receiving any updates, and it also reports
   // 0 as its value to avoid exposing it to the user programmatically.
@@ -45,7 +45,7 @@ class SQLMetric(
   // for SPARK-11013.
   assert(initValue <= 0)
   // _value will always be either initValue or non-negative.
-  private var _value = initValue
+  private[metric] var _value = initValue
 
   override def copy(): SQLMetric = {
     val newAcc = new SQLMetric(metricType, initValue)
@@ -110,7 +110,7 @@ class SQLMetric(
 }
 
 object SQLMetrics {
-  private val SUM_METRIC = "sum"
+  private[metric] val SUM_METRIC = "sum"
   private val SIZE_METRIC = "size"
   private val TIMING_METRIC = "timing"
   private val NS_TIMING_METRIC = "nsTiming"
@@ -120,7 +120,7 @@ object SQLMetrics {
 
   val cachedSQLAccumIdentifier = Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER)
 
-  private val metricsCache: LoadingCache[String, Option[String]] =
+  private[metric] val metricsCache: LoadingCache[String, Option[String]] =
     CacheBuilder.newBuilder().maximumSize(10000)
     .build(new CacheLoader[String, Option[String]] {
       override def load(name: String): Option[String] = {
