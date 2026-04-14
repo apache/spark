@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
+import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
@@ -171,7 +172,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           val partitionSet = AttributeSet(partitionAttrs)
           if (partitionSet.nonEmpty) {
             postScanFilters.filter { f =>
-              SubqueryExpression.hasSubquery(f) &&
+              f.containsPattern(SCALAR_SUBQUERY) &&
                 f.references.nonEmpty &&
                 f.references.subsetOf(partitionSet)
             }

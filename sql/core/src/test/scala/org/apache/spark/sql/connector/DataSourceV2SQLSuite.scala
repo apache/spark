@@ -4320,7 +4320,7 @@ class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
 
   override protected val catalogAndNamespace = "testv2filter.ns1.ns2."
 
-  test("SPARK-XXXXX: scalar subquery filters on partition columns are pushed into runtimeFilters") {
+  test("SPARK-56467: scalar subquery filters on partition columns are pushed into runtimeFilters") {
     val tbl = s"${catalogAndNamespace}tbl"
     val dim = s"${catalogAndNamespace}dim"
     withTable(tbl, dim) {
