@@ -44,9 +44,10 @@ def get_jira_client():
     if not JIRA_ACCESS_TOKEN:
         errors.append("JIRA_ACCESS_TOKEN env-var not set")
     if errors:
-        fail("Cannot create JIRA ticket automatically (%s). "
-             "Please create the ticket manually at %s"
-             % ("; ".join(errors), JIRA_API_BASE))
+        fail(
+            "Cannot create JIRA ticket automatically (%s). "
+            "Please create the ticket manually at %s" % ("; ".join(errors), JIRA_API_BASE)
+        )
     return jira.client.JIRA(
         {"server": JIRA_API_BASE}, token_auth=JIRA_ACCESS_TOKEN, timeout=(3.05, 30)
     )
@@ -58,14 +59,14 @@ def detect_affected_version(asf_jira):
     versions = [
         x
         for x in versions
-        if not x.raw["released"]
-        and not x.raw["archived"]
-        and re.match(r"\d+\.\d+\.\d+", x.name)
+        if not x.raw["released"] and not x.raw["archived"] and re.match(r"\d+\.\d+\.\d+", x.name)
     ]
     versions = sorted(versions, key=lambda x: x.name, reverse=True)
     if not versions:
-        fail("Cannot detect affected version. "
-             "Please create the ticket manually at %s" % JIRA_API_BASE)
+        fail(
+            "Cannot detect affected version. "
+            "Please create the ticket manually at %s" % JIRA_API_BASE
+        )
     return versions[0].name
 
 
