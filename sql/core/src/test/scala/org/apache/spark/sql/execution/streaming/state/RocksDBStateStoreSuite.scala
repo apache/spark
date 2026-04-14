@@ -2474,6 +2474,62 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
+  test("SPARK-56476: RocksDBStateStore.creatingProvider tracks the originating provider") {
+    // Verify that a RocksDBStateStore correctly tracks which provider created it.
+    val storeId = StateStoreId(newDir(), 0L, 1)
+
+    tryWithProviderResource(newStoreProvider(storeId)) { provider1 =>
+      val store = provider1.getStore(0)
+      put(store, "a", 0, 1)
+      store.commit()
+
+      val readStore = provider1.getReadStore(1)
+        .asInstanceOf[provider1.RocksDBStateStore]
+      assert(readStore.creatingProvider eq provider1,
+        "creatingProvider should be the provider that created the store")
+
+      tryWithProviderResource(newStoreProvider(storeId)) { provider2 =>
+        assert(readStore.creatingProvider ne provider2,
+          "creatingProvider should NOT match a different provider instance")
+      }
+      readStore.abort()
+    }
+  }
+
+  test("SPARK-56476: upgradeReadStoreToWriteStore delegates to original provider " +
+    "when called on a different provider") {
+    // This test verifies the fix: when upgradeReadStoreToWriteStore detects that the read
+    // store was created by a different provider, it delegates to that provider so the
+    // upgrade succeeds instead of failing with StateStoreInvalidStamp.
+    val storeId = StateStoreId(newDir(), 0L, 1)
+
+    tryWithProviderResource(newStoreProvider(storeId)) { provider1 =>
+      // Write version 0
+      val store = provider1.getStore(0)
+      put(store, "a", 0, 1)
+      store.commit()
+
+      // Get a read store from provider1
+      val readStore = provider1.getReadStore(1)
+
+      // Create a brand-new provider (simulating eviction from loadedProviders)
+      tryWithProviderResource(newStoreProvider(storeId)) { provider2 =>
+        // Without the fix, this would fail with StateStoreInvalidStamp because provider2's
+        // state machine never issued provider1's read store stamp. With the fix, provider2
+        // detects the mismatch and delegates to provider1.
+        val writeStore = provider2.upgradeReadStoreToWriteStore(readStore, 1, None)
+        assert(get(writeStore, "a", 0) === Some(1))
+        put(writeStore, "a", 0, 2)
+        writeStore.commit()
+
+        // Verify the committed data via provider2
+        val verifyStore = provider2.getStore(2)
+        assert(get(verifyStore, "a", 0) === Some(2))
+        verifyStore.abort()
+      }
+    }
+  }
+
   test("verify operation validation before and after commit") {
     tryWithProviderResource(newStoreProvider(useColumnFamilies = false)) { provider =>
       val store = provider.getStore(0)
