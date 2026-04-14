@@ -4416,11 +4416,13 @@ class Parse(google.protobuf.message.Message):
         PARSE_FORMAT_UNSPECIFIED: Parse._ParseFormat.ValueType  # 0
         PARSE_FORMAT_CSV: Parse._ParseFormat.ValueType  # 1
         PARSE_FORMAT_JSON: Parse._ParseFormat.ValueType  # 2
+        PARSE_FORMAT_XML: Parse._ParseFormat.ValueType  # 3
 
     class ParseFormat(_ParseFormat, metaclass=_ParseFormatEnumTypeWrapper): ...
     PARSE_FORMAT_UNSPECIFIED: Parse.ParseFormat.ValueType  # 0
     PARSE_FORMAT_CSV: Parse.ParseFormat.ValueType  # 1
     PARSE_FORMAT_JSON: Parse.ParseFormat.ValueType  # 2
+    PARSE_FORMAT_XML: Parse.ParseFormat.ValueType  # 3
 
     class OptionsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor

@@ -222,6 +222,12 @@ private[sql] object PythonSQLUtils extends Logging {
     reader.asInstanceOf[ClassicDataFrameReader].csv(toStringDataset(df))
   }
 
+  def xmlFromDataFrame(
+      reader: DataFrameReader,
+      df: DataFrame): DataFrame = {
+    reader.asInstanceOf[ClassicDataFrameReader].xml(toStringDataset(df))
+  }
+
   def cleanupPythonWorkerLogs(sessionUUID: String, sparkContext: SparkContext): Unit = {
     if (!sparkContext.isStopped) {
       try {
