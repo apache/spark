@@ -251,7 +251,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
         throw QueryCompilationErrors.sourceNotSupportedWithContinuousTriggerError(source)
       }
       val sink = new ForeachBatchSink[T](foreachBatchWriter, ds.exprEnc)
-      startQuery(sink, extraOptions, catalogTable = catalogTable)
+      startQuery(sink, extraOptions, catalogTable = catalogTable,
+        withSchemaEvolution = schemaEvolution)
     } else {
       val cls = DataSource.lookupDataSource(source, ds.sparkSession.sessionState.conf)
       val disabledSources =
@@ -297,7 +298,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
         createV1Sink(optionsWithPath)
       }
 
-      startQuery(sink, optionsWithPath, catalogTable = catalogTable)
+      startQuery(sink, optionsWithPath, catalogTable = catalogTable,
+        withSchemaEvolution = schemaEvolution)
     }
   }
 

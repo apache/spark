@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
@@ -608,6 +609,60 @@ class StreamingSchemaEvolutionSuite
     }
   }
 
+
+  test("withSchemaEvolution rejected with continuous trigger") {
+    withTable(tableIdent) {
+      withTempDir { checkpointDir =>
+        sql(s"CREATE TABLE $tableIdent (id INT, data STRING)")
+
+        val input = MemoryStream[(Int, String, Double)]
+        val df = input.toDF().toDF("id", "data", "amount")
+
+        val e = intercept[SparkUnsupportedOperationException] {
+          df.writeStream
+            .withSchemaEvolution()
+            .option("checkpointLocation", checkpointDir.getCanonicalPath)
+            .trigger(Trigger.Continuous("1 second"))
+            .toTable(tableIdent)
+        }
+        assert(e.getCondition ==
+          "UNSUPPORTED_STREAMING_SCHEMA_EVOLUTION.CONTINUOUS_TRIGGER")
+      }
+    }
+  }
+
+  test("withSchemaEvolution rejected for V1 sink") {
+    withTempDir { checkpointDir =>
+      val input = MemoryStream[(Int, String)]
+      val df = input.toDF().toDF("id", "data")
+      input.addData((1, "a"))
+
+      // foreachBatch creates a V1 ForeachBatchSink. The error surfaces
+      // when the streaming thread evaluates MicroBatchExecution.logicalPlan.
+      val query = df.writeStream
+        .withSchemaEvolution()
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .foreachBatch { (batch: org.apache.spark.sql.Dataset[Row], _: Long) =>
+          ()
+        }
+        .start()
+
+      try {
+        val e = intercept[
+          org.apache.spark.sql.streaming.StreamingQueryException] {
+          query.processAllAvailable()
+        }
+        assert(e.getCause
+          .isInstanceOf[SparkUnsupportedOperationException])
+        assert(e.getCause
+          .asInstanceOf[SparkUnsupportedOperationException]
+          .getCondition ==
+          "UNSUPPORTED_STREAMING_SCHEMA_EVOLUTION.NOT_V2_TABLE")
+      } finally {
+        query.stop()
+      }
+    }
+  }
 
   test("streaming write with type widening") {
     withTable(tableIdent) {
