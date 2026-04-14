@@ -34,8 +34,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOper
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.execution.streaming.state.{DropLastNFieldsStatePartitionKeyExtractor, KeyStateEncoderSpec, NoopStatePartitionKeyExtractor, NoPrefixKeyStateEncoderSpec, StatePartitionKeyExtractor, StateSchemaBroadcast, StateStore, StateStoreCheckpointInfo, StateStoreColFamilySchema, StateStoreConf, StateStoreErrors, StateStoreId, StateStoreMetrics, StateStoreProvider, StateStoreProviderId, SupportsFineGrainedReplay, TimestampAsPostfixKeyStateEncoderSpec, TimestampAsPrefixKeyStateEncoderSpec, TimestampKeyStateEncoder}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DataType, DateType, DoubleType, FloatType, IntegerType, LongType, NullType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.types.{BooleanType, DataType, LongType, NullType, StructField, StructType}
 import org.apache.spark.util.NextIterator
 
 /**
@@ -702,6 +701,7 @@ class SymmetricHashJoinStateManagerV4(
         }
 
         private var currentTs = -1L
+        private var pastUpperBound = false
         private val valueAndMatchPairs = scala.collection.mutable.ArrayBuffer[ValueAndMatchPair]()
 
         private def flushAccumulated(): GetValuesResult = {
@@ -719,16 +719,16 @@ class SymmetricHashJoinStateManagerV4(
 
         @tailrec
         override protected def getNext(): GetValuesResult = {
-          if (!iter.hasNext) {
+          if (pastUpperBound || !iter.hasNext) {
             flushAccumulated()
           } else {
             val unsafeRowPair = iter.next()
             val ts = TimestampKeyStateEncoder.extractTimestamp(unsafeRowPair.key)
 
-            // Filter out entries outside [minTs, maxTs]. This is essential when using
-            // prefixScan (which returns all timestamps for the key) and serves as a
-            // safety guard for rangeScan as well.
-            if (ts < minTs || ts > maxTs) {
+            if (ts > maxTs) {
+              pastUpperBound = true
+              getNext()
+            } else if (ts < minTs) {
               getNext()
             } else if (currentTs == -1L || currentTs == ts) {
               currentTs = ts
@@ -819,22 +819,16 @@ class SymmetricHashJoinStateManagerV4(
     case class EvictedKeysResult(key: UnsafeRow, timestamp: Long, numValues: Int)
 
     private def defaultInternalRow(schema: StructType): InternalRow = {
-      InternalRow.fromSeq(schema.map(f => defaultValueForType(f.dataType)))
+      InternalRow.fromSeq(schema.map(f => Literal.default(f.dataType).value))
     }
 
-    private def defaultValueForType(dt: DataType): Any = dt match {
-      case BooleanType => false
-      case ByteType => 0.toByte
-      case ShortType => 0.toShort
-      case IntegerType | DateType => 0
-      case LongType | TimestampType | TimestampNTZType => 0L
-      case FloatType => 0.0f
-      case DoubleType => 0.0
-      case StringType => UTF8String.EMPTY_UTF8
-      case BinaryType => Array.emptyByteArray
-      case st: StructType => defaultInternalRow(st)
-      case _ => null
-    }
+    /**
+     * Reusable default key row for scan boundary construction. Safe to reuse because
+     * createKeyRow only reads this row (via BoundReference evaluations) and writes to
+     * the projection's own internal buffer.
+     */
+    private lazy val defaultKey: UnsafeRow = UnsafeProjection.create(keySchema)
+      .apply(defaultInternalRow(keySchema))
 
     /**
      * Build a scan boundary row for rangeScan. The TsWithKeyTypeStore uses
@@ -844,8 +838,6 @@ class SymmetricHashJoinStateManagerV4(
      * timestamp matters for ordering in the prefix encoder.
      */
     private def createScanBoundaryRow(timestamp: Long): UnsafeRow = {
-      val defaultKey = UnsafeProjection.create(keySchema)
-        .apply(defaultInternalRow(keySchema))
       createKeyRow(defaultKey, timestamp).copy()
     }
 

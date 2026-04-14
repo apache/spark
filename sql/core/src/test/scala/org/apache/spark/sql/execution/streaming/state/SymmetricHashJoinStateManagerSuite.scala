@@ -1158,6 +1158,30 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
       // startTimestamp=39 (exclusive) means entries >= 40 are scanned; endTimestamp=40 inclusive
       assert(evictByTs.evictByTimestamp(40, Some(39)) === 1)
       assert(get(40) === Seq(10, 50))
+
+      // --- overflow boundary: endTimestamp = Long.MaxValue ---
+      // Restore entries for a clean slate
+      Seq(20, 30, 40).foreach(append(40, _))
+      // endTimestamp=Long.MaxValue with no startTimestamp: evicts all entries
+      assert(evictByTs.evictByTimestamp(Long.MaxValue) === 5)
+      assert(get(40) === Seq.empty)
+
+      // --- overflow boundary: startTimestamp = Some(Long.MinValue) ---
+      Seq(10, 20, 30).foreach(append(40, _))
+      // startTimestamp=Long.MinValue (exclusive), endTimestamp=20 (inclusive):
+      // Long.MinValue is excluded per the contract (already evicted), so the scan
+      // starts from Long.MinValue + 1. Since no real entry has timestamp Long.MinValue,
+      // this effectively scans all entries up to endTimestamp.
+      assert(evictByTs.evictByTimestamp(20, Some(Long.MinValue)) === 2)
+      assert(get(40) === Seq(30))
+
+      // --- overflow boundary: startTimestamp = Some(Long.MaxValue) ---
+      Seq(10, 20).foreach(append(40, _))
+      // startTimestamp=Long.MaxValue (exclusive) means everything <= Long.MaxValue was already
+      // evicted. Since startKeyRow falls back to None, endTimestamp=50 bounds the scan.
+      // All remaining entries (10, 20, 30) have timestamps <= 50, so they are evicted.
+      assert(evictByTs.evictByTimestamp(50, Some(Long.MaxValue)) === 3)
+      assert(get(40) === Seq.empty)
     }
   }
 
