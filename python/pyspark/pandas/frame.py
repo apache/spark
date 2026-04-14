@@ -9234,7 +9234,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return DataFrame(internal)
 
     def compare(
-        self, other: "DataFrame", keep_shape: bool = False, keep_equal: bool = False
+        self, other: "DataFrame", *, keep_shape: bool = False, keep_equal: bool = False
     ) -> "DataFrame":
         """
         Compare to another DataFrame and show the differences.
@@ -9366,11 +9366,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             column_labels.append(column_label + ("other",))
 
         if diff_conditions:
-            # Filter rows where at least one column differs.
-            row_mask = reduce(lambda a, b: a | b, [cond for _, cond in diff_conditions])
-            sdf = sdf.filter(row_mask)
-
-            # Determine which columns have any difference and prune the rest.
+            # Determine which columns have any difference.  This aggregation
+            # on the full (unfiltered) frame is equivalent to aggregating the
+            # filtered result because every row that has a difference in column
+            # X is retained by the row filter (at least column X differs).
+            # Computing it before the filter lets Spark execute the subsequent
+            # filter+select as a single pass without caching.
             has_diff = sdf.select(
                 [
                     F.max(cond.cast("int")).alias(name_like_string(label))
@@ -9397,6 +9398,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 data_spark_columns = [data_spark_columns[j] for j in keep_indices]
                 column_labels = new_column_labels
                 data_col_names = new_data_col_names
+
+            # Filter rows where at least one column differs.
+            row_mask = reduce(lambda a, b: a | b, [cond for _, cond in diff_conditions])
+            sdf = sdf.filter(row_mask)
 
         sdf = sdf.select(*index_scols, *data_spark_columns, NATURAL_ORDER_COLUMN_NAME)
         internal = InternalFrame(

@@ -146,30 +146,30 @@ class CompareFrameMixin:
         self._assert_compare_eq(pdf1, pdf2, keep_shape=True, keep_equal=True)
 
     def test_compare_different_index(self):
+        psdf1 = ps.DataFrame(
+            {"a": [1, 2, 3, 4, 5], "b": [1, 2, 3, 4, 5]},
+            index=pd.Index([1, 2, 3, 4, 5]),
+        )
+        psdf2 = ps.DataFrame(
+            {"a": [2, 2, 3, 4, 1], "b": [2, 2, 3, 4, 1]},
+            index=pd.Index([5, 4, 3, 2, 1]),
+        )
         with self.assertRaisesRegex(
             ValueError, "Can only compare identically-labeled DataFrame objects"
         ):
-            psdf1 = ps.DataFrame(
-                {"a": [1, 2, 3, 4, 5], "b": [1, 2, 3, 4, 5]},
-                index=pd.Index([1, 2, 3, 4, 5]),
-            )
-            psdf2 = ps.DataFrame(
-                {"a": [2, 2, 3, 4, 1], "b": [2, 2, 3, 4, 1]},
-                index=pd.Index([5, 4, 3, 2, 1]),
-            )
             psdf1.compare(psdf2)
 
     def test_compare_different_columns(self):
+        psdf1 = ps.DataFrame({"a": [1, 2], "b": [3, 4]})
+        psdf2 = ps.DataFrame({"a": [1, 2], "c": [3, 4]})
         with self.assertRaisesRegex(
             ValueError, "can only compare identically-labeled DataFrame objects"
         ):
-            psdf1 = ps.DataFrame({"a": [1, 2], "b": [3, 4]})
-            psdf2 = ps.DataFrame({"a": [1, 2], "c": [3, 4]})
             psdf1.compare(psdf2)
 
     def test_compare_type_error(self):
+        psdf = ps.DataFrame({"a": [1, 2]})
         with self.assertRaises(TypeError):
-            psdf = ps.DataFrame({"a": [1, 2]})
             psdf.compare([1, 2])
 
     def test_compare_eager_check_disabled(self):
