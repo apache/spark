@@ -87,6 +87,18 @@ class InMemoryTableWithV2Filter(
                 })
               }
             }
+          case p : Predicate if p.name().equals("=") =>
+            if (p.children().length == 2) {
+              val filterRef = p.children()(0).asInstanceOf[FieldReference].references.head
+              if (filterRef.toString.equals(ref.toString)) {
+                val matchingKey = p.children()(1).asInstanceOf[LiteralValue[_]].value.toString
+                data = data.filter(partition => {
+                  val key = partition.asInstanceOf[BufferedRows].keyString()
+                  key == matchingKey
+                })
+              }
+            }
+          case _ => // Ignore unsupported predicate types
         }
       }
     }

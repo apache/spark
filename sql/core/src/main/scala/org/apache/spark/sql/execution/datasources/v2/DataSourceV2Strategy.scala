@@ -27,7 +27,7 @@ import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -38,7 +38,7 @@ import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
-import org.apache.spark.sql.connector.read.LocalScan
+import org.apache.spark.sql.connector.read.{LocalScan, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream, SupportsRealTimeMode}
 import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -155,10 +155,33 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // projection and filters were already pushed down in the optimizer.
       // this uses PhysicalOperation to get the projection and ensure that if the batch scan does
       // not support columnar, a projection is added to convert the rows to UnsafeRow.
-      val (runtimeFilters, postScanFilters) = filters.partition {
+      val (dynamicFilters, postScanFilters) = filters.partition {
         case _: DynamicPruning => true
         case _ => false
       }
+
+      // Extract scalar subquery filters on partition columns for runtime pushdown.
+      // These filters stay in postScanFilters for correctness (FilterExec above scan),
+      // but are also routed into runtimeFilters so BatchScanExec can use them for
+      // partition pruning via SupportsRuntimeV2Filtering.filter().
+      val scalarSubqueryFilters = relation.scan match {
+        case s: SupportsRuntimeV2Filtering =>
+          val partitionAttrs = V2ExpressionUtils.resolveRefs[Attribute](
+            s.filterAttributes.toImmutableArraySeq, relation)
+          val partitionSet = AttributeSet(partitionAttrs)
+          if (partitionSet.nonEmpty) {
+            postScanFilters.filter { f =>
+              SubqueryExpression.hasSubquery(f) &&
+                f.references.nonEmpty &&
+                f.references.subsetOf(partitionSet)
+            }
+          } else {
+            Seq.empty
+          }
+        case _ => Seq.empty
+      }
+      val runtimeFilters = dynamicFilters ++ scalarSubqueryFilters
+
       val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters,
         relation.ordering, relation.relation.table, relation.keyGroupedPartitioning)
       DataSourceV2Strategy.withProjectAndFilter(
