@@ -21,8 +21,8 @@ common/config/src/main/
 
 ### Step 1: Choose the Right File
 
-- **CLUSTER scope**: If the config applies to the entire Spark cluster, add to a file in `cluster_configs/` directory.
-- **SESSION scope**: If the config applies to a Spark session, add to a file in `session_configs/` directory.
+- **CLUSTER scope** (`MUTABILITY_STATIC`): If the config applies to the entire Spark cluster and cannot be changed at runtime, add to a file in `cluster_configs/` directory.
+- **SESSION scope** (`MUTABILITY_DYNAMIC`): If the config applies to a Spark session and can be changed at runtime (e.g., via `SET`), add to a file in `session_configs/` directory.
 
 Currently, SQL configs go in `sql.textproto`. New categories can have their own files.
 
