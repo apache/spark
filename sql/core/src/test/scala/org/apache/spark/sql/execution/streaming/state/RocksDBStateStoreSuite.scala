@@ -3182,15 +3182,9 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           }
 
           // For RocksDB State store, files left:
-          // With effective minVersionsToRetain = 2 and minVersionsToDelete = 1, we retain
-          // changelog versions 1-6 plus snapshots for 2 and 6 (each with checksum files).
-          // Files: 1-6.changelog (6) + 2.zip, 6.zip (2) => 8 main + 8 checksum.
-          // NOTE: 1.changelog (and associated checksum file) are retained because changelog
-          // files only get cleaned up after the preceding snapshot is deleted. Since there is
-          // no snapshot for version 0, the changelog file for version 1 will be retained till
-          // `2.zip` becomes eligible for deletion.
+          // 6.changelog (+ checksum file), 6.zip (+ checksum file)
           verifyChecksumFiles(storeId.storeCheckpointLocation().toString,
-            expectedNumFiles = 16, expectedNumChecksumFiles = 8)
+            expectedNumFiles = 4, expectedNumChecksumFiles = 2)
         }
 
         // turn off file checksum, and verify that the previously created checksum files
@@ -3208,11 +3202,9 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
             // now verify no checksum files are left
             // For RocksDB State store, files left:
-            // With effective minVersionsToRetain = 2, we retain versions 8-12 plus snapshots
-            // for 8 and 12 (no checksum files).
-            // Files: 8-12.changelog (5) + 8.zip, 12.zip (2) => 7 main files.
+            // 12.changelog, 12.zip
             verifyChecksumFiles(storeId.storeCheckpointLocation().toString,
-              expectedNumFiles = 7, expectedNumChecksumFiles = 0)
+              expectedNumFiles = 2, expectedNumChecksumFiles = 0)
           }
         }
       }

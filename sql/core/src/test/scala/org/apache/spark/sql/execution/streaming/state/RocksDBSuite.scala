@@ -3571,7 +3571,9 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
 
     // reload version 2 - should succeed
-    withDB(remoteDir, version = 2, conf = conf) { db =>
+    withDB(remoteDir, version = 2, conf = conf,
+      enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+      versionToUniqueId = versionToUniqueId) { db =>
     }
   }
 
@@ -3605,7 +3607,9 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           db.commit() // create snapshot again
 
           // load version 1 - should succeed
-          withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf) { db =>
+          withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf,
+            enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+            versionToUniqueId = versionToUniqueId) { db =>
           }
 
           // upload recently created snapshot
@@ -3613,7 +3617,9 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           assert(snapshotVersionsPresent(remoteDir) == Seq(1))
 
           // load version 1 again - should succeed
-          withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf) { db =>
+          withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf,
+            enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+            versionToUniqueId = versionToUniqueId) { db =>
           }
         }
       }
@@ -3746,7 +3752,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
                 if (inc > 1) {
                   // Create changelog files in the gap
                   for (j <- 1 to inc - 1) {
-                    db2.load(curVer + j)
+                    db2.load(curVer + j, versionToUniqueId.get(curVer + j))
                     db2.put("foo", "bar")
                     db2.commit()
                   }
