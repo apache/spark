@@ -21,8 +21,6 @@ Arrow Python UDFs
 
 .. currentmodule:: pyspark.sql.functions
 
-.. versionadded:: 4.1.0
-
 Native Arrow UDFs operate directly on ``pyarrow.Array`` objects without converting to Pandas or
 row-by-row Python objects. This preserves the columnar layout end-to-end, avoids unnecessary data
 copies, and enables vectorized processing using Arrow's native compute functions.
@@ -33,8 +31,9 @@ configuration is required.
 .. note::
 
     Native Arrow UDFs can also be defined via :func:`udf` with ``pyarrow.Array`` type hints.
-    Python type hints determine which evaluation type the UDF uses
-    (e.g., arrays-to-array vs. arrays-to-scalar).
+    The type hints in the function signature determine which kind of Arrow UDF is created
+    (e.g., returning ``pa.Array`` creates an array-to-array UDF, while returning ``float``
+    creates an aggregate UDF).
 
 Native Arrow UDF Types
 ----------------------
@@ -64,7 +63,7 @@ The output should always be of the same length as the input.
     # |      JOHN DOE|
     # +--------------+
 
-Arrow UDFs can return struct results (i.e., multiple named fields):
+When the ``returnType`` is a struct type, the function returns a ``pa.StructArray``:
 
 .. code-block:: python
 
@@ -174,10 +173,11 @@ iterator of ``pyarrow.Array``. Use this when the UDF requires multiple input col
 Arrays to Scalar
 ~~~~~~~~~~~~~~~~
 
-The type hint can be expressed as ``pyarrow.Array``, ... -> a scalar type
-(e.g., ``float``, ``int``, or ``pyarrow.Scalar``; not ``pyarrow.Array`` or ``Iterator``).
+The type hint can be expressed as ``pyarrow.Array``, ... -> ``Any``.
 
-The function takes one or more ``pyarrow.Array`` and returns a scalar value. The returned scalar can be
+The function takes one or more ``pyarrow.Array`` and returns a scalar value. The return type
+annotation can be any type other than ``pa.Array``, ``Iterator``, or ``Tuple``, which match the
+array-to-array or iterator patterns above. The returned scalar can be
 a Python primitive type (e.g., ``int`` or ``float``), a NumPy data type, or a ``pyarrow.Scalar``
 instance which supports complex return types.
 
@@ -475,15 +475,13 @@ For detailed usage, please see :meth:`PandasCogroupedOps.applyInArrow`.
 Notes
 -----
 
-The user-defined functions do not support conditional expressions or short circuiting
-in boolean expressions. If the functions can fail on special rows, incorporate the
-condition into the functions.
+SQL boolean expressions do not short-circuit: in ``WHERE cond AND udf(x)``, the UDF may be
+called on all rows regardless of ``cond``. If the function can fail on certain input values
+(e.g., division by zero), handle those cases inside the function itself.
 
 The Arrow data type of the returned ``pyarrow.Array`` should match the declared ``returnType``.
-When there is a mismatch, Spark will attempt to convert the returned data to the expected type.
-By default, this conversion uses Arrow's safe casting, which raises an error on overflow or
-precision loss. This behavior is controlled by
-``spark.sql.execution.pandas.convertToArrowArraySafely`` (default ``true`` since Spark 4.1).
+When there is a mismatch, Spark will attempt to convert the returned data to the expected type
+using Arrow's safe casting, which raises an error on overflow or precision loss.
 
 Supported SQL types are the same as for Arrow-based conversion. See
 `Supported SQL Types <arrow_pandas.rst#supported-sql-types>`_ for details.
