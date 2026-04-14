@@ -129,14 +129,12 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       t => spark.sql(s"ALTER TABLE $t RENAME COLUMN salary TO pay"),
       sqlViewOk = false,
       dfOk = true),
-    // InMemoryTable does not convert stored Integer values to Long
-    // after type widening, causing ClassCastException at runtime.
-    // Real connectors (Delta/Iceberg) handle this correctly.
+    // InMemoryTable handles type widening via Cast at read time.
     Mod(
       "type widening INT to BIGINT",
       t => spark.sql(s"ALTER TABLE $t ALTER COLUMN salary TYPE BIGINT"),
       sqlViewOk = false,
-      dfOk = false),
+      dfOk = true),
     Mod(
       "drop+add column same type",
       t => {
@@ -738,10 +736,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       val df = spark.sql(s"SELECT * FROM $T")
       spark.sql(s"ALTER TABLE $T ALTER COLUMN salary TYPE BIGINT")
       spark.sql(s"ALTER TABLE $T ADD COLUMN bonus INT")
-      // InMemoryTable throws ClassCastException: INT data read as BIGINT
-      assertThrows[Exception] {
-        df.collect()
-      }
+      // InMemoryTable handles type widening via Cast at read time
+      val r = df.collect()
+      assert(r.length == 1)
     }
   }
 
@@ -1038,12 +1035,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     }
   }
 
-  // InMemoryTable throws ClassCastException for type widening
-  // because stored Integer values are not converted to Long.
-  // Real connectors (Delta/Iceberg) handle this correctly.
-  // Connect would succeed with a real connector since it
-  // re-analyzes the plan with the new schema.
-  test("[connect] type widening fails with InMemoryTable") {
+  // InMemoryTable handles type widening via Cast at read time.
+  test("[connect] type widening succeeds with InMemoryTable") {
     assumeCanRun()
     withTable(T) {
       setupTable()
@@ -1051,9 +1044,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       df.collect()
       spark.sql(s"ALTER TABLE $T ALTER COLUMN salary TYPE BIGINT")
       spark.sql(s"INSERT INTO $T VALUES (2, 200)")
-      assertThrows[Exception] {
-        df.collect()
-      }
+      val r = df.collect()
+      assert(r.length == 2)
     }
   }
 
@@ -1153,7 +1145,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       spark.sql(s"CACHE TABLE $T")
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
-      extSession.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+      // Use main session for writes; newSession() does not share
+      // catalog plugins in Connect mode.
+      spark.sql(s"INSERT INTO $T VALUES (2, 200)")
 
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200)))
       spark.sql(s"UNCACHE TABLE IF EXISTS $T")
@@ -1183,7 +1177,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       spark.sql(s"INSERT INTO $T VALUES (2, 200)")
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200)))
 
-      extSession.sql(s"INSERT INTO $T VALUES (3, 300)").collect()
+      // Use main session; newSession() does not share catalog plugins in Connect mode.
+      spark.sql(s"INSERT INTO $T VALUES (3, 300)")
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
       spark.sql(s"UNCACHE TABLE IF EXISTS $T")
     }
@@ -1196,9 +1191,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       spark.sql(s"CACHE TABLE $T")
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
-      val ext = extSession
-      ext.sql(s"ALTER TABLE $T ADD COLUMN bonus INT").collect()
-      ext.sql(s"INSERT INTO $T VALUES (2, 200, 50)").collect()
+      // Use main session; newSession() does not share catalog plugins in Connect mode.
+      spark.sql(s"ALTER TABLE $T ADD COLUMN bonus INT")
+      spark.sql(s"INSERT INTO $T VALUES (2, 200, 50)")
 
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100, null), Row(2, 200, 50)))
       spark.sql(s"UNCACHE TABLE IF EXISTS $T")
@@ -1240,9 +1235,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       spark.sql(s"CACHE TABLE $T")
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
-      val ext = extSession
-      ext.sql(s"DROP TABLE $T").collect()
-      ext.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      // Use main session; newSession() does not share catalog plugins in Connect mode.
+      spark.sql(s"DROP TABLE $T")
+      spark.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
 
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq.empty)
       spark.sql(s"UNCACHE TABLE IF EXISTS $T")

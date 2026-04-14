@@ -80,13 +80,12 @@ class DataSourceV2RefreshConnectSuite extends QueryTest with RemoteSparkSession 
       t => spark.sql(s"ALTER TABLE $t RENAME COLUMN salary TO pay"),
       sqlViewOk = false,
       dfOk = true),
-    // InMemoryTable throws ClassCastException for type widening:
-    // stored Integer values cannot be read as Long.
+    // InMemoryTable handles type widening via Cast at read time.
     Mod(
       "type widening INT to BIGINT",
       t => spark.sql(s"ALTER TABLE $t ALTER COLUMN salary TYPE BIGINT"),
       sqlViewOk = false,
-      dfOk = false),
+      dfOk = true),
     Mod(
       "drop+add column same type",
       t => {
@@ -388,7 +387,7 @@ class DataSourceV2RefreshConnectSuite extends QueryTest with RemoteSparkSession 
   // InMemoryTable throws ClassCastException for type widening
   // because stored Integer values cannot be read as Long.
   // Real connectors (Delta/Iceberg) handle this correctly.
-  test("[connect] type widening fails with InMemoryTable") {
+  test("[connect] type widening succeeds with InMemoryTable") {
     assumeCanRun()
     withTable(T) {
       setupTable()
@@ -396,9 +395,8 @@ class DataSourceV2RefreshConnectSuite extends QueryTest with RemoteSparkSession 
       df.collect()
       spark.sql(s"ALTER TABLE $T ALTER COLUMN salary TYPE BIGINT")
       spark.sql(s"INSERT INTO $T VALUES (2, 200)")
-      assertThrows[Exception] {
-        df.collect()
-      }
+      val r = df.collect()
+      assert(r.length == 2)
     }
   }
 
