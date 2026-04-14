@@ -59,6 +59,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     spark.sql(s"INSERT INTO $T VALUES (1, 100)")
   }
 
+  /** Second client session on the same Connect server (shared DSv2 catalog). */
+  private def extSession: SparkSession = spark.newSession()
+
   // =====================================================================
   // Infrastructure
   // =====================================================================
@@ -1154,16 +1157,34 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   }
 
   // =====================================================================
-  // CACHE TABLE + concurrent operations
+  // CACHE TABLE: [connect][5.x] Connect scenarios (main spark vs extSession).
+  // Classic equivalents: DataSourceV2TablePinningRefreshSuite [5.1]-[5.6]
+  // and [5.1-main], [5.3-main], [5.5-main] (classic [S5-session] vs [S5-ext]).
   // =====================================================================
 
-  test("[connect] CACHE TABLE + INSERT refreshes") {
+  test("[connect][5.1] CACHE TABLE then external data write") {
     assumeCanRun()
     withTable(T) {
       setupTable()
       spark.sql(s"CACHE TABLE $T")
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
+
+      extSession.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+
       checkAnswer(
-        spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
+        spark.sql(s"SELECT * FROM $T"),
+        Seq(Row(1, 100), Row(2, 200)))
+      spark.sql(s"UNCACHE TABLE IF EXISTS $T")
+    }
+  }
+
+  test("[connect][5.1-main] CACHE TABLE then main session data write") {
+    assumeCanRun()
+    withTable(T) {
+      setupTable()
+      spark.sql(s"CACHE TABLE $T")
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
+
       spark.sql(s"INSERT INTO $T VALUES (2, 200)")
       checkAnswer(
         spark.sql(s"SELECT * FROM $T"),
@@ -1172,12 +1193,119 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     }
   }
 
-  test("[connect] REFRESH TABLE after CACHE TABLE") {
+  test("[connect][5.2] CACHE TABLE: session write then external write") {
     assumeCanRun()
     withTable(T) {
       setupTable()
       spark.sql(s"CACHE TABLE $T")
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
+
       spark.sql(s"INSERT INTO $T VALUES (2, 200)")
+      checkAnswer(
+        spark.sql(s"SELECT * FROM $T"),
+        Seq(Row(1, 100), Row(2, 200)))
+
+      extSession.sql(s"INSERT INTO $T VALUES (3, 300)").collect()
+      checkAnswer(
+        spark.sql(s"SELECT * FROM $T"),
+        Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
+      spark.sql(s"UNCACHE TABLE IF EXISTS $T")
+    }
+  }
+
+  test("[connect][5.3] CACHE TABLE then external schema change + data") {
+    assumeCanRun()
+    withTable(T) {
+      setupTable()
+      spark.sql(s"CACHE TABLE $T")
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
+
+      val ext = extSession
+      ext.sql(s"ALTER TABLE $T ADD COLUMN bonus INT").collect()
+      ext.sql(s"INSERT INTO $T VALUES (2, 200, 50)").collect()
+
+      checkAnswer(
+        spark.sql(s"SELECT * FROM $T"),
+        Seq(Row(1, 100, null), Row(2, 200, 50)))
+      spark.sql(s"UNCACHE TABLE IF EXISTS $T")
+    }
+  }
+
+  test("[connect][5.3-main] CACHE TABLE then main session schema change + data") {
+    assumeCanRun()
+    withTable(T) {
+      setupTable()
+      spark.sql(s"CACHE TABLE $T")
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
+
+      spark.sql(s"ALTER TABLE $T ADD COLUMN extra INT")
+      spark.sql(s"INSERT INTO $T VALUES (2, 200, 77)")
+
+      checkAnswer(
+        spark.sql(s"SELECT * FROM $T"),
+        Seq(Row(1, 100, null), Row(2, 200, 77)))
+      spark.sql(s"UNCACHE TABLE IF EXISTS $T")
+    }
+  }
+
+  test("[connect][5.4] CACHE TABLE: session schema change rebuilds cache") {
+    assumeCanRun()
+    withTable(T) {
+      setupTable()
+      spark.sql(s"CACHE TABLE $T")
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
+
+      spark.sql(s"ALTER TABLE $T ADD COLUMN new_col INT")
+      checkAnswer(
+        spark.sql(s"SELECT * FROM $T"),
+        Seq(Row(1, 100, null)))
+      spark.sql(s"UNCACHE TABLE IF EXISTS $T")
+    }
+  }
+
+  test("[connect][5.5] CACHE TABLE: external drop/recreate sees new empty table") {
+    assumeCanRun()
+    withTable(T) {
+      setupTable()
+      spark.sql(s"CACHE TABLE $T")
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
+
+      val ext = extSession
+      ext.sql(s"DROP TABLE $T").collect()
+      ext.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq.empty)
+      spark.sql(s"UNCACHE TABLE IF EXISTS $T")
+    }
+  }
+
+  test("[connect][5.5-main] CACHE TABLE: main session drop/recreate sees new empty table") {
+    assumeCanRun()
+    withTable(T) {
+      setupTable()
+      spark.sql(s"CACHE TABLE $T")
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
+
+      spark.sql(s"DROP TABLE $T")
+      spark.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
+
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq.empty)
+      spark.sql(s"UNCACHE TABLE IF EXISTS $T")
+    }
+  }
+
+  test("[connect][5.6] REFRESH TABLE after CACHE TABLE picks up current data") {
+    assumeCanRun()
+    withTable(T) {
+      setupTable()
+      spark.sql(s"CACHE TABLE $T")
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
+
+      spark.sql(s"INSERT INTO $T VALUES (2, 200)")
+      checkAnswer(
+        spark.sql(s"SELECT * FROM $T"),
+        Seq(Row(1, 100), Row(2, 200)))
+
       spark.sql(s"REFRESH TABLE $T")
       checkAnswer(
         spark.sql(s"SELECT * FROM $T"),

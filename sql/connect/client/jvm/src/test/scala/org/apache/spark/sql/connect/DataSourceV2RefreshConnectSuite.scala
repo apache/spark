@@ -254,6 +254,8 @@ class DataSourceV2RefreshConnectSuite
 
   // =====================================================================
   // Section 5: CACHE TABLE (session writes)
+  // Numbered [connect][5.x] scenarios: DataSourceV2ConcurrencyRefreshConnectSuite.
+  // Classic [5.x] / [5.x-main]: DataSourceV2TablePinningRefreshSuite.
   // =====================================================================
 
   mods.foreach { mod =>
@@ -493,35 +495,6 @@ class DataSourceV2RefreshConnectSuite
       val joined = df1.join(df2, df1("a") === df2("b"))
         .join(df3, df1("a") === df3("c"))
       assert(joined.collect().length == 3)
-    }
-  }
-
-  test("[connect] CACHE TABLE + INSERT refreshes") {
-    assumeCanRun()
-    withTable(T) {
-      setupTable()
-      spark.sql(s"CACHE TABLE $T")
-      checkAnswer(
-        spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
-      spark.sql(s"INSERT INTO $T VALUES (2, 200)")
-      checkAnswer(
-        spark.sql(s"SELECT * FROM $T"),
-        Seq(Row(1, 100), Row(2, 200)))
-      spark.sql(s"UNCACHE TABLE IF EXISTS $T")
-    }
-  }
-
-  test("[connect] REFRESH TABLE after CACHE TABLE") {
-    assumeCanRun()
-    withTable(T) {
-      setupTable()
-      spark.sql(s"CACHE TABLE $T")
-      spark.sql(s"INSERT INTO $T VALUES (2, 200)")
-      spark.sql(s"REFRESH TABLE $T")
-      checkAnswer(
-        spark.sql(s"SELECT * FROM $T"),
-        Seq(Row(1, 100), Row(2, 200)))
-      spark.sql(s"UNCACHE TABLE IF EXISTS $T")
     }
   }
 

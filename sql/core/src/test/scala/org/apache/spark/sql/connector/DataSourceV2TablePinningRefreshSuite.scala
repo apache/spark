@@ -1096,6 +1096,9 @@ class DataSourceV2TablePinningRefreshSuite
 
   // =========================================================================
   // [5] CACHE TABLE
+  // Each scenario where writes use extSession also has a -main variant using
+  // the same SparkSession as CACHE TABLE (sql(...)), for parity with
+  // DataSourceV2ConcurrencyRefreshConnectSuite [connect][5.x-main].
   // =========================================================================
 
   // Section 5 Scenario 1: external write after CACHE TABLE
@@ -1117,6 +1120,21 @@ class DataSourceV2TablePinningRefreshSuite
       // This diverges from the doc's proposed behavior. Real connectors
       // (Delta/Iceberg) would pin the cache since they have independent
       // table instances per session.
+      checkAnswer(
+        spark.table(T),
+        Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  test("[5.1-main] CACHE TABLE then main session data write") {
+    withTable(T) {
+      setupTable()
+      sql(s"CACHE TABLE $T")
+      assertCached(spark.table(T))
+      checkAnswer(spark.table(T), Seq(Row(1, 100)))
+
+      sql(s"INSERT INTO $T VALUES (2, 200)")
+
       checkAnswer(
         spark.table(T),
         Seq(Row(1, 100), Row(2, 200)))
@@ -1174,6 +1192,21 @@ class DataSourceV2TablePinningRefreshSuite
     }
   }
 
+  test("[5.3-main] CACHE TABLE then main session schema change + data") {
+    withTable(T) {
+      setupTable()
+      sql(s"CACHE TABLE $T")
+      checkAnswer(spark.table(T), Seq(Row(1, 100)))
+
+      sql(s"ALTER TABLE $T ADD COLUMN extra INT")
+      sql(s"INSERT INTO $T VALUES (2, 200, 77)")
+
+      checkAnswer(
+        spark.table(T),
+        Seq(Row(1, 100, null), Row(2, 200, 77)))
+    }
+  }
+
   // Section 5 Scenario 4: session schema change + external data
   // Proposed: session change invalidates, external invisible
   //   -> (1, 100, null) with 3-col schema
@@ -1206,6 +1239,19 @@ class DataSourceV2TablePinningRefreshSuite
       // The cache entry references the old table. The new table
       // has a different ID. The refresh detects the ID change and
       // the query sees the new empty table.
+      checkAnswer(spark.table(T), Seq.empty)
+    }
+  }
+
+  test("[5.5-main] main session drop/recreate with CACHE TABLE") {
+    withTable(T) {
+      setupTable()
+      sql(s"CACHE TABLE $T")
+      checkAnswer(spark.table(T), Seq(Row(1, 100)))
+
+      sql(s"DROP TABLE $T")
+      sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
+
       checkAnswer(spark.table(T), Seq.empty)
     }
   }
