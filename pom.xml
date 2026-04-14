@@ -382,6 +382,10 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
+    <repository>
+  <id>databricks-maven-proxy</id>
+  <url>https://maven-proxy.dev.databricks.com</url>
+  </repository>
   </repositories>
   <pluginRepositories>
     <pluginRepository>

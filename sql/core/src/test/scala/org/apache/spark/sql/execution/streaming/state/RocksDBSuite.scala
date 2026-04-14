@@ -3614,7 +3614,13 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
 
           // upload recently created snapshot
           db.doMaintenance()
-          assert(snapshotVersionsPresent(remoteDir) == Seq(1))
+          // With V2 checkpoint format, each commit gets a unique ID so the second
+          // version-1 snapshot has a different filename and both coexist on disk.
+          if (enableStateStoreCheckpointIds) {
+            assert(snapshotVersionsPresent(remoteDir) == Seq(1, 1))
+          } else {
+            assert(snapshotVersionsPresent(remoteDir) == Seq(1))
+          }
 
           // load version 1 again - should succeed
           withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf,
