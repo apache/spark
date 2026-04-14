@@ -51,6 +51,8 @@ abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(10, 1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
+
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
   }
 
   test("update with nondeterministic conditions") {
@@ -89,5 +91,7 @@ abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, -1, -1, "invalid") :: Row(2, 2, 200, "software") :: Row(3, 3, 300, "hr") :: Nil)
+
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
   }
 }
