@@ -2,9 +2,7 @@
 
 ## Pre-flight Checks
 
-These checks apply to all tasks **except** answering questions about the code or its behavior. For those, skip these checks and work directly on whatever branch is currently checked out.
-
-Before the first edit or test in a session, ensure a clean working environment. DO NOT skip these checks:
+Before the first code edit or running test in a session, ensure a clean working environment. DO NOT skip these checks:
 
 1. Run `git remote -v` to identify the personal fork and upstream (`apache/spark`). If unclear, ask the user to configure their remotes following the standard convention (`origin` for the fork, `upstream` for `apache/spark`).
 2. If the latest commit on `<upstream>/master` is more than a day old (check with `git log -1 --format="%ci" <upstream>/master`), run `git fetch <upstream> master`.
