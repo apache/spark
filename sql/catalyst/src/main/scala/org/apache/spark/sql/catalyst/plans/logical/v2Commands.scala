@@ -1061,6 +1061,7 @@ case class MergeIntoTable(
     actions.forall {
       case a: UpdateAction => MergeIntoTable.areSchemaEvolutionReady(a.assignments, sourceTable)
       case a: InsertAction => MergeIntoTable.areSchemaEvolutionReady(a.assignments, sourceTable)
+      case _: DeleteAction => true
       case _ => false
     }
   }
