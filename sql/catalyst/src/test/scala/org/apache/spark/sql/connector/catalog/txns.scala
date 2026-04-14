@@ -129,9 +129,9 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
     // it needs to be transactional. The schema changes are only propagated to the delegate at
     // commit time.
     //
-    // We delegate schema computation to the underlying catalog so that catalogs that selectively
-    // ignore some changes (e.g. PartialSchemaEvolutionCatalog) have the same behaviour inside a
-    // transaction. This lets ResolveSchemaEvolution detect pending changes correctly.
+    // We delegate schema computation to the underlying catalog so that catalogs with special
+    // handling (e.g. PartialSchemaEvolutionCatalog) have the same behaviour inside a
+    // transaction.
     val txnTable = tables.get(ident)
     val schema = delegate.computeAlterTableSchema(txnTable.schema, changes.toSeq)
 

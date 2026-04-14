@@ -92,6 +92,8 @@ private[sql] object V2TableReference {
     create(relation, TemporaryViewContext(viewName))
   }
 
+  // V2TableReference nodes in the transaction context are produced by
+  // UnresolveTransactionRelations which unresolves already resolved relations.
   def createForTransaction(relation: DataSourceV2Relation): V2TableReference = {
     create(relation, TransactionContext)
   }
@@ -125,6 +127,10 @@ private[sql] object V2TableReferenceUtils extends SQLConfHelper {
   }
 
   private def validateLoadedTableInTransaction(table: Table, ref: V2TableReference): Unit = {
+    // Do not allow schema evolution to pre-analysed dataframes that are later used in
+    // transactional writes. This is because the entire plans was built based on the original schema
+    // and any schema change would make the plan structurally invalid. This is inline with the
+    // semantics of SPARK-54444.
     val dataErrors = V2TableUtil.validateCapturedColumns(
       table = table,
       originCols = ref.info.columns,

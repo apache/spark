@@ -80,7 +80,7 @@ class InMemoryRowLevelOperationTableCatalog
 
   /**
    * Computes the schema that would result from applying `changes` to `currentSchema`.
-   * Overriding this allows subclasses to simulate catalogs that selectively ignore some changes
+   * Can be overridden by subclasses to simulate catalogs that selectively ignore changes
    * (e.g. [[PartialSchemaEvolutionCatalog]]).
    */
   def computeAlterTableSchema(currentSchema: StructType, changes: Seq[TableChange]): StructType = {
@@ -105,9 +105,10 @@ class PartialSchemaEvolutionCatalog extends InMemoryRowLevelOperationTableCatalo
       case _ => false
     }
     val properties = CatalogV2Util.applyPropertiesChanges(table.properties, propertyChanges)
+    val schema = computeAlterTableSchema(table.schema, changes.toSeq)
     val newTable = new InMemoryRowLevelOperationTable(
       name = table.name,
-      schema = table.schema,
+      schema = schema,
       partitioning = table.partitioning,
       properties = properties,
       constraints = table.constraints)
@@ -116,10 +117,7 @@ class PartialSchemaEvolutionCatalog extends InMemoryRowLevelOperationTableCatalo
     newTable
   }
 
-  // When used inside a transaction, TxnTableCatalog.alterTable uses this method to compute
-  // the resulting schema instead of calling CatalogV2Util.applySchemaChanges directly.
-  // Returning the current schema unchanged mirrors the behaviour of alterTable above (silently
-  // ignore all column changes), so ResolveSchemaEvolution can still detect pending changes.
+  // Ignores all schema changes and returns the current schema unchanged.
   override def computeAlterTableSchema(
       currentSchema: StructType,
       changes: Seq[TableChange]): StructType = currentSchema
