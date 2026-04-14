@@ -725,6 +725,11 @@ class SymmetricHashJoinStateManagerV4(
             val unsafeRowPair = iter.next()
             val ts = TimestampKeyStateEncoder.extractTimestamp(unsafeRowPair.key)
 
+            if (useRangeScan) {
+              assert(ts >= minTs && ts <= maxTs,
+                s"rangeScan returned unexpected timestamp $ts outside [$minTs, $maxTs]")
+            }
+
             if (ts > maxTs) {
               pastUpperBound = true
               getNext()
