@@ -95,9 +95,14 @@ def main():
     if not args.component:
         args.component = choose_components(asf_jira)
 
-    jira_id = create_jira_issue(asf_jira, args.title, args.component,
-                                parent=args.parent, issue_type=args.type,
-                                version=args.version)
+    jira_id = create_jira_issue(
+        asf_jira,
+        args.title,
+        args.component,
+        parent=args.parent,
+        issue_type=args.type,
+        version=args.version,
+    )
     print("Created JIRA issue: %s" % jira_id)
 
     create_and_checkout_branch(jira_id)

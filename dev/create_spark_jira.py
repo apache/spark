@@ -61,8 +61,9 @@ def main():
         parser.error("-t/--type is required when not creating a subtask")
 
     asf_jira = get_jira_client()
-    jira_id = create_jira_issue(asf_jira, args.title, args.component,
-                                parent=args.parent, issue_type=args.type)
+    jira_id = create_jira_issue(
+        asf_jira, args.title, args.component, parent=args.parent, issue_type=args.type
+    )
     print(jira_id)
 
 
