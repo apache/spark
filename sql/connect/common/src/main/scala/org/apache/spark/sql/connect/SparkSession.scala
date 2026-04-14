@@ -84,6 +84,8 @@ class SparkSession private[sql] (
     extends sql.SparkSession
     with Logging {
 
+  private val releaseLock = new Object
+  private var released = false
   private[this] val allocator = new RootAllocator()
   private[sql] lazy val cleaner = new SessionCleaner(this)
 
@@ -696,19 +698,26 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   override def close(): Unit = {
-    if (releaseSessionOnClose) {
+    releaseLock.synchronized {
+      if (releaseSessionOnClose && !released && !client.channel.isShutdown) {
+        try {
+          client.releaseSession()
+          released = true
+        } catch {
+          case e: Exception => logWarning("session.stop: Failed to release session", e)
+        }
+      }
       try {
-        client.releaseSession()
+        client.shutdown()
       } catch {
-        case e: Exception => logWarning("session.stop: Failed to release session", e)
+        case e: Exception => logWarning("session.stop: Failed to shutdown the client", e)
+      }
+      try {
+        allocator.close()
+      } catch {
+        case e: Exception => logWarning("session.stop: Failed to close the allocator", e)
       }
     }
-    try {
-      client.shutdown()
-    } catch {
-      case e: Exception => logWarning("session.stop: Failed to shutdown the client", e)
-    }
-    allocator.close()
     SparkSession.onSessionClose(this)
     SparkSession.server.synchronized {
       if (SparkSession.server.isDefined) {
