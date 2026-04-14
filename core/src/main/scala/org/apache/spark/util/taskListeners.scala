@@ -44,6 +44,16 @@ trait TaskFailureListener extends EventListener {
   def onTaskFailure(context: TaskContext, error: Throwable): Unit
 }
 
+/**
+ * :: DeveloperApi ::
+ *
+ * Listener providing a callback function to invoke when a task's execution is interrupted.
+ */
+@DeveloperApi
+trait TaskInterruptListener extends EventListener {
+  def onTaskInterrupted(context: TaskContext, reason: String): Unit
+}
+
 
 /**
  * Exception thrown when there is an exception in executing the callback in TaskCompletionListener.

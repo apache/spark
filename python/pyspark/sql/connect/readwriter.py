@@ -25,7 +25,9 @@ from pyspark.sql.connect.plan import (
     LogicalPlan,
     WriteOperation,
     WriteOperationV2,
+    Parse,
 )
+import pyspark.sql.connect.proto as proto
 from pyspark.sql.types import StructType
 from pyspark.sql.utils import to_str
 from pyspark.sql.readwriter import (
@@ -165,7 +167,7 @@ class DataFrameReader(OptionUtils):
 
     def json(
         self,
-        path: PathOrPaths,
+        path: Union[PathOrPaths, "DataFrame"],
         schema: Optional[Union[StructType, str]] = None,
         primitivesAsString: Optional[Union[bool, str]] = None,
         prefersDecimal: Optional[Union[bool, str]] = None,
@@ -220,7 +222,32 @@ class DataFrameReader(OptionUtils):
         )
         if isinstance(path, str):
             path = [path]
-        return self.load(path=path, format="json", schema=schema)
+        if isinstance(path, list):
+            return self.load(path=path, format="json", schema=schema)
+
+        from pyspark.sql.connect.dataframe import DataFrame
+
+        if isinstance(path, DataFrame):
+            # Schema must be set explicitly here because the DataFrame path
+            # bypasses load(), which normally calls self.schema(schema).
+            if schema is not None:
+                self.schema(schema)
+            return self._df(
+                Parse(
+                    child=path._plan,
+                    format=proto.Parse.ParseFormat.PARSE_FORMAT_JSON,
+                    schema=self._schema,
+                    options=self._options,
+                )
+            )
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "path",
+                "expected_type": "str, list, or DataFrame",
+                "arg_type": type(path).__name__,
+            },
+        )
 
     json.__doc__ = PySparkDataFrameReader.json.__doc__
 
@@ -273,7 +300,7 @@ class DataFrameReader(OptionUtils):
 
     def csv(
         self,
-        path: PathOrPaths,
+        path: Union[PathOrPaths, "DataFrame"],
         schema: Optional[Union[StructType, str]] = None,
         sep: Optional[str] = None,
         encoding: Optional[str] = None,
@@ -344,6 +371,22 @@ class DataFrameReader(OptionUtils):
         )
         if isinstance(path, str):
             path = [path]
+
+        from pyspark.sql.connect.dataframe import DataFrame
+
+        if isinstance(path, DataFrame):
+            # Schema must be set explicitly here because the DataFrame path
+            # bypasses load(), which normally calls self.schema(schema).
+            if schema is not None:
+                self.schema(schema)
+            return self._df(
+                Parse(
+                    child=path._plan,
+                    format=proto.Parse.ParseFormat.PARSE_FORMAT_CSV,
+                    schema=self._schema,
+                    options=self._options,
+                )
+            )
         return self.load(path=path, format="csv", schema=schema)
 
     csv.__doc__ = PySparkDataFrameReader.csv.__doc__

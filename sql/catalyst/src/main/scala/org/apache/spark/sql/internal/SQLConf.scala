@@ -755,6 +755,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED =
+    buildConf("spark.sql.optimizer.pushDownJoinThroughUnion.enabled")
+      .doc("When true, pushes down Join through Union when the right side is small enough " +
+        "to broadcast. This can improve performance by allowing each Union branch to " +
+        "directly perform a broadcast join, avoiding materializing the entire Union result.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val EXPRESSION_PROJECTION_CANDIDATE_LIMIT =
     buildConf("spark.sql.optimizer.expressionProjectionCandidateLimit")
       .doc("The maximum number of the candidate of output expressions whose alias are replaced." +
@@ -4420,6 +4430,19 @@ object SQLConf {
       .intConf
       .createWithDefault(3)
 
+  val ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED =
+    buildConf("spark.sql.execution.arrow.pythonUDF.columnarInput.enabled")
+      .doc("When true, Arrow-based Python UDFs (pandas UDFs) can accept " +
+        "columnar input directly from upstream operators that produce " +
+        "Arrow-backed ColumnarBatch (e.g., DataSource V2 connectors), " +
+        "bypassing the ColumnarToRow and ArrowWriter conversion. " +
+        "This optimization reduces data transfer overhead between " +
+        "the JVM and Python worker processes.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.transformWithStateInPySpark.maxStateRecordsPerBatch")
       .doc("When using TransformWithState in PySpark (both Python Row and Pandas), limit " +
@@ -8007,6 +8030,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def arrowCompressionCodec: String = getConf(ARROW_EXECUTION_COMPRESSION_CODEC)
 
   def arrowZstdCompressionLevel: Int = getConf(ARROW_EXECUTION_ZSTD_COMPRESSION_LEVEL)
+
+  def arrowPySparkUDFColumnarInputEnabled: Boolean =
+    getConf(ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED)
 
   def arrowTransformWithStateInPySparkMaxStateRecordsPerBatch: Int =
     getConf(ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH)

@@ -1,4 +1,0 @@
-data/artifact-tests/junitLargeJar.jar
-data/artifact-tests/smallJar.jar
-sql/connect/common/src/test/resources/artifact-tests/junitLargeJar.jar
-sql/connect/common/src/test/resources/artifact-tests/smallJar.jar

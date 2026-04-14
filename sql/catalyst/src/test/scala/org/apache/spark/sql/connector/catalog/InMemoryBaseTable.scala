@@ -63,7 +63,8 @@ abstract class InMemoryBaseTable(
     val advisoryPartitionSize: Option[Long] = None,
     val isDistributionStrictlyRequired: Boolean = true,
     val numRowsPerSplit: Int = Int.MaxValue)
-  extends Table with SupportsRead with SupportsWrite with SupportsMetadataColumns {
+  extends Table with SupportsRead with SupportsWrite with SupportsMetadataColumns
+    with SupportsSchemaEvolution {
 
   // Tracks the current version number of the table.
   protected var tableVersion: Int = 0
@@ -122,6 +123,19 @@ abstract class InMemoryBaseTable(
   }
 
   override def schema(): StructType = CatalogV2Util.v2ColumnsToStructType(columns())
+
+  override def supportsColumnChange(change: TableChange.ColumnChange): Boolean = change match {
+    case typeChange: TableChange.UpdateColumnType =>
+      val fieldNames = typeChange.fieldNames()
+      val newType = typeChange.newDataType()
+
+      // Only allow changing to a strictly wider type.
+      schema()
+        .findNestedField(fieldNames.toImmutableArraySeq, includeCollections = true)
+        .exists { field => Cast.canUpCast(field._2.dataType, newType) }
+    case _: TableChange.AddColumn => true
+    case _ => false
+  }
 
   // purposely exposes a metadata column that conflicts with a data column in some tests
   override val metadataColumns: Array[MetadataColumn] = Array(IndexColumn, PartitionKeyColumn)
@@ -932,7 +946,13 @@ private class BufferedRowsReader(
             }
 
           case dt =>
-            row.get(writeIndex, dt)
+            val writeType = writeSchema.fields(writeIndex).dataType
+            val value = row.get(writeIndex, writeType)
+            if (writeType != dt && value != null) {
+              castElement(value, dt, writeType)
+            } else {
+              value
+            }
         }
       case (None, Some(_)) =>
         ResolveDefaultColumns.getExistenceDefaultValue(field)

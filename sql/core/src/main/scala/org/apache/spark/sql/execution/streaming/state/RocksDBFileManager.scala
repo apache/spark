@@ -453,14 +453,14 @@ class RocksDBFileManager(
   /**
    * Based on the ground truth lineage loaded from changelog file (lineage), this function
    * does file listing to find all snapshot (version, uniqueId) pairs, and finds
-   * the ground truth latest snapshot (version, uniqueId) the db instance needs to load.
+   * all snapshots that match the lineage, sorted by version descending.
    *
    * @param lineage The ground truth lineage loaded from changelog file, sorted by id
-   * @return The ground truth latest snapshot (version, uniqueId) the db instance needs to load,
-   *         when the return value is None it means ther is no such snapshot found.
+   * @return All snapshot (version, uniqueId) pairs matching the lineage, sorted descending
+   *         by version. Empty if no matching snapshots found.
    */
-  def getLatestSnapshotVersionAndUniqueIdFromLineage(
-      lineage: Array[LineageItem]): Option[(Long, String)] = {
+  def getSnapshotVersionsAndUniqueIdsFromLineage(
+      lineage: Array[LineageItem]): Seq[(Long, String)] = {
     val path = new Path(dfsRootDir)
     if (fm.exists(path)) {
       fm.list(path, onlyZipFiles)
@@ -471,10 +471,24 @@ class RocksDBFileManager(
         }
         .sortBy(_._1)
         .reverse
-        .headOption
+        .toSeq
     } else {
-      None
+      Seq.empty
     }
+  }
+
+  /**
+   * Based on the ground truth lineage loaded from changelog file (lineage), this function
+   * does file listing to find all snapshot (version, uniqueId) pairs, and finds
+   * the ground truth latest snapshot (version, uniqueId) the db instance needs to load.
+   *
+   * @param lineage The ground truth lineage loaded from changelog file, sorted by id
+   * @return The ground truth latest snapshot (version, uniqueId) the db instance needs to load,
+   *         when the return value is None it means ther is no such snapshot found.
+   */
+  def getLatestSnapshotVersionAndUniqueIdFromLineage(
+      lineage: Array[LineageItem]): Option[(Long, String)] = {
+    getSnapshotVersionsAndUniqueIdsFromLineage(lineage).headOption
   }
 
   /** Get the latest version available in the DFS directory. If no data present, it returns 0. */

@@ -218,22 +218,25 @@ private[spark] object UIUtils extends Logging {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/bootstrap.min.css")} type="text/css"/>
-    <link rel="stylesheet"
-          href={prependBaseUri(request, "/static/vis-timeline-graph2d.min.css")} type="text/css"/>
     <link rel="stylesheet" href={prependBaseUri(request, "/static/webui.css")} type="text/css"/>
-    <link rel="stylesheet"
-          href={prependBaseUri(request, "/static/timeline-view.css")} type="text/css"/>
     <script src={prependBaseUri(request, "/static/sorttable.js")} ></script>
     <script src={prependBaseUri(request, "/static/jquery.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/vis-timeline-graph2d.min.js")}></script>
     <script src={prependBaseUri(request, "/static/bootstrap.bundle.min.js")}></script>
     <script src={prependBaseUri(request, "/static/initialize-tooltips.js")}></script>
     <script src={prependBaseUri(request, "/static/table.js")}></script>
-    <script src={prependBaseUri(request, "/static/timeline-view.js")}></script>
     <script src={prependBaseUri(request, "/static/log-view.js")}></script>
     <script src={prependBaseUri(request, "/static/webui.js")}></script>
     <script src={prependBaseUri(request, "/static/scroll-button.js")} type="module"></script>
     <script nonce={CspNonce.get}>setUIRoot('{UIUtils.uiRoot(request)}')</script>
+  }
+
+  def timelineHeaderNodes(request: HttpServletRequest): Seq[Node] = {
+    <link rel="stylesheet"
+          href={prependBaseUri(request, "/static/vis-timeline-graph2d.min.css")} type="text/css"/>
+    <link rel="stylesheet"
+          href={prependBaseUri(request, "/static/timeline-view.css")} type="text/css"/>
+    <script src={prependBaseUri(request, "/static/vis-timeline-graph2d.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/timeline-view.js")}></script>
   }
 
   def vizHeaderNodes(request: HttpServletRequest): Seq[Node] = {
@@ -266,7 +269,8 @@ private[spark] object UIUtils extends Logging {
       activeTab: SparkUITab,
       helpText: Option[String] = None,
       showVisualization: Boolean = false,
-      useDataTables: Boolean = false): Seq[Node] = {
+      useDataTables: Boolean = false,
+      useTimeline: Boolean = false): Seq[Node] = {
 
     val appName = activeTab.appName
     val shortAppName = if (appName.length < 36) appName else appName.take(32) + "..."
@@ -288,6 +292,7 @@ private[spark] object UIUtils extends Logging {
         <script nonce={CspNonce.get}>setAppBasePath('{activeTab.basePath}')</script>
         {if (showVisualization) vizHeaderNodes(request) else Seq.empty}
         {if (useDataTables) dataTablesHeaderNodes(request) else Seq.empty}
+        {if (useTimeline) timelineHeaderNodes(request) else Seq.empty}
         <link rel="shortcut icon"
               href={prependBaseUri(request, "/static/spark-logo.svg")}></link>
         <title>{appName} - {title}</title>
@@ -352,7 +357,8 @@ private[spark] object UIUtils extends Logging {
       request: HttpServletRequest,
       content: => Seq[Node],
       title: String,
-      useDataTables: Boolean = false): Seq[Node] = {
+      useDataTables: Boolean = false,
+      useTimeline: Boolean = false): Seq[Node] = {
     <html data-bs-theme="light">
       <head>
         {commonHeaderNodes(request)}
@@ -361,6 +367,7 @@ private[spark] object UIUtils extends Logging {
           "localStorage.getItem('spark-theme')||" +
           "(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'))")}</script>
         {if (useDataTables) dataTablesHeaderNodes(request) else Seq.empty}
+        {if (useTimeline) timelineHeaderNodes(request) else Seq.empty}
         <link rel="shortcut icon"
               href={prependBaseUri(request, "/static/spark-logo.svg")}></link>
         <title>{title}</title>

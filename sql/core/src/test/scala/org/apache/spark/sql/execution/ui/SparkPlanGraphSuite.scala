@@ -66,4 +66,62 @@ class SparkPlanGraphSuite extends SparkFunSuite {
     assert(json.contains("\"desc\":\"WholeStageCodegen (1)\""),
       "cluster should include desc field")
   }
+
+  test("SPARK-56331: truncateLabel returns short labels unchanged") {
+    assert(SparkPlanGraph.truncateLabel("Sort") === "Sort")
+    assert(SparkPlanGraph.truncateLabel("Filter") === "Filter")
+    assert(SparkPlanGraph.truncateLabel("HashAggregate") === "HashAggregate")
+    assert(SparkPlanGraph.truncateLabel("SortMergeJoin Inner") === "SortMergeJoin Inner")
+    assert(SparkPlanGraph.truncateLabel(null) === null)
+    assert(SparkPlanGraph.truncateLabel("") === "")
+  }
+
+  test("SPARK-56331: truncateLabel does not truncate long operator names") {
+    // Long operator names without qualified paths should NOT be truncated
+    val insertCmd = "Execute InsertIntoHadoopFsRelationCommand"
+    assert(SparkPlanGraph.truncateLabel(insertCmd) === insertCmd)
+    val longOp = "BroadcastHashJoin Inner BuildRight with very long hint"
+    assert(SparkPlanGraph.truncateLabel(longOp) === longOp)
+  }
+
+  test("SPARK-56331: truncateLabel truncates qualified catalog paths") {
+    val exactly36 = "Scan spark_catalog.default.store_sal"
+    assert(SparkPlanGraph.truncateLabel(exactly36) === exactly36)
+
+    val longScan =
+      "Scan parquet spark_catalog.very_long_schema_name.catalog_sales"
+    val truncated = SparkPlanGraph.truncateLabel(longScan)
+    assert(truncated.length <= 36,
+      s"Truncated label should be <= 36 chars but was ${truncated.length}")
+    assert(truncated.startsWith("Scan parquet spa"),
+      "Should preserve operator prefix")
+    assert(truncated.endsWith("catalog_sales"),
+      "Should preserve table name at the end")
+    assert(truncated.contains("..."),
+      "Should contain ellipsis in the middle")
+  }
+
+  test("SPARK-56331: DOT label truncated, tooltip keeps full name") {
+    val longName = "ScanTransformer parquet " +
+      "spark_catalog.abcdefghijklmnopqrstuvwxyz.store_sales"
+    val node = new SparkPlanGraphNode(
+      id = 1, name = longName, desc = longName,
+      metrics = Seq.empty)
+    val dot = node.makeDotNode(Map.empty)
+    assert(dot.contains("..."), "DOT label should contain ellipsis")
+    assert(dot.contains("tooltip=\"" + longName + "\""),
+      "Tooltip should contain the full name")
+  }
+
+  test("SPARK-56331: JSON details keep full name") {
+    val longName = "ScanTransformer parquet " +
+      "spark_catalog.abcdefghijklmnopqrstuvwxyz.store_sales"
+    val node = new SparkPlanGraphNode(
+      id = 1, name = longName, desc = longName,
+      metrics = Seq.empty)
+    val graph = SparkPlanGraph(Seq(node), Seq.empty)
+    val json = graph.makeNodeDetailsJson(Map.empty)
+    assert(json.contains(longName),
+      "JSON details should contain the full untruncated name")
+  }
 }
