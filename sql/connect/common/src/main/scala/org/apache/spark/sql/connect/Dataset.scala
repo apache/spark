@@ -778,7 +778,7 @@ class Dataset[T] private[sql] (
     }
   }
 
-  override protected[sql] def withColumnsRenamed(
+  override protected[spark] def withColumnsRenamed(
       colNames: Seq[String],
       newColNames: Seq[String]): DataFrame = {
     require(
