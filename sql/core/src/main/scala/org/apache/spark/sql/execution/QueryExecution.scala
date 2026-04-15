@@ -148,7 +148,7 @@ class QueryExecution(
     }
   }
 
-  def assertSupported(): Unit = executeWithTransactionContext {
+  def assertSupported(): Unit = withAbortTransactionOnFailure {
     if (sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
       UnsupportedOperationChecker.checkForBatch(analyzed)
     }
@@ -198,7 +198,7 @@ class QueryExecution(
     }
   }
 
-  def analyzed: LogicalPlan = executeWithTransactionContext {
+  def analyzed: LogicalPlan = withAbortTransactionOnFailure {
     lazyAnalyzed.get
   }
 
@@ -210,7 +210,7 @@ class QueryExecution(
     }
   }
 
-  def commandExecuted: LogicalPlan = executeWithTransactionContext {
+  def commandExecuted: LogicalPlan = withAbortTransactionOnFailure {
     lazyCommandExecuted.get
   }
 
@@ -272,7 +272,7 @@ class QueryExecution(
   }
 
   // The plan that has been normalized by custom rules, so that it's more likely to hit cache.
-  def normalized: LogicalPlan = executeWithTransactionContext {
+  def normalized: LogicalPlan = withAbortTransactionOnFailure {
     lazyNormalized.get
   }
 
@@ -294,7 +294,7 @@ class QueryExecution(
     }
   }
 
-  def withCachedData: LogicalPlan = executeWithTransactionContext {
+  def withCachedData: LogicalPlan = withAbortTransactionOnFailure {
     lazyWithCachedData.get
   }
 
@@ -318,7 +318,7 @@ class QueryExecution(
     }
   }
 
-  def optimizedPlan: LogicalPlan = executeWithTransactionContext {
+  def optimizedPlan: LogicalPlan = withAbortTransactionOnFailure {
     lazyOptimizedPlan.get
   }
 
@@ -336,7 +336,7 @@ class QueryExecution(
     attachTransaction(plan)
   }
 
-  def sparkPlan: SparkPlan = executeWithTransactionContext {
+  def sparkPlan: SparkPlan = withAbortTransactionOnFailure {
     lazySparkPlan.get
   }
 
@@ -359,7 +359,7 @@ class QueryExecution(
 
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
-  def executedPlan: SparkPlan = executeWithTransactionContext {
+  def executedPlan: SparkPlan = withAbortTransactionOnFailure {
     lazyExecutedPlan.get
   }
 
@@ -379,7 +379,7 @@ class QueryExecution(
    * Given QueryExecution is not a public class, end users are discouraged to use this: please
    * use `Dataset.rdd` instead where conversion will be applied.
    */
-  def toRdd: RDD[InternalRow] = executeWithTransactionContext {
+  def toRdd: RDD[InternalRow] = withAbortTransactionOnFailure {
     lazyToRdd.get
   }
 
@@ -607,13 +607,10 @@ class QueryExecution(
   }
 
   /**
-   * Executes the given block with the transaction context if exists. If there is an exception
-   * thrown during the execution, the transaction will be aborted.
-   *
-   * Note: The transaction is not committed in this method. The caller should commit the
-   * transaction if the execution is successful.
+   * Runs the given block, aborting the active transaction if an exception is thrown.
+   * If no transaction is active, the block is executed as-is.
    */
-  private def executeWithTransactionContext[T](block: => T): T = transactionOpt match {
+  private def withAbortTransactionOnFailure[T](block: => T): T = transactionOpt match {
     case Some(transaction) =>
       try block
       catch { case e: Throwable => TransactionUtils.abort(transaction); throw e }

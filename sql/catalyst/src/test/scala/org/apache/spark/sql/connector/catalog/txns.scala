@@ -48,11 +48,13 @@ class Txn(override val catalog: TxnTableCatalog) extends Transaction {
     this.state = Committed
   }
 
+  // This is idempotent since nested QEs can cause multiple aborts.
   override def abort(): Unit = {
     if (state == Committed || state == Aborted) return
     this.state = Aborted
   }
 
+  // This is idempotent since nested QEs can cause multiple aborts.
   override def close(): Unit = {
     if (!closed) {
       catalog.clearActiveTransaction()
@@ -64,6 +66,9 @@ class Txn(override val catalog: TxnTableCatalog) extends Transaction {
 // A special table used in row-level operation transactions. It inherits data
 // from the base table upon construction and propagates staged transaction state
 // back after an explicit commit.
+// Note, the in-memory data store does not handle concurrency at the moment. The assumes that the
+// underlying delegate table cannot change from concurrent transactions. Data sources need to
+// implement isolation semantics and make sure they are enforced.
 class TxnTable(val delegate: InMemoryRowLevelOperationTable, schema: StructType)
   extends InMemoryRowLevelOperationTable(
     delegate.name,
@@ -80,10 +85,13 @@ class TxnTable(val delegate: InMemoryRowLevelOperationTable, schema: StructType)
   // A tracker of filters used in each scan.
   val scanEvents = new ArrayBuffer[Array[Filter]]()
 
+  // Record scan events. This is invoked when building a scan for the particular table.
   override protected def recordScanEvent(filters: Array[Filter]): Unit = {
     scanEvents += filters
   }
 
+  // Perform commit if there are any changes. This push metadata and data changes to the
+  // delegate table.
   def commit(): Unit = {
     if (version() != initialVersion) {
       delegate.dataMap.clear()
@@ -98,8 +106,11 @@ class TxnTable(val delegate: InMemoryRowLevelOperationTable, schema: StructType)
   }
 }
 
-// A special table catalog used in row-level operation transactions.
-// Table changes are initially staged in memory and propagated only after an explicit commit.
+// A special table catalog used in row-level operation transactions. The lifecycle of this catalog
+// is tied to the transaction. A new catalog instance is created at the beginning of a transaction
+// and discarded at the end. The catalog is responsible for pinning all tables involved in the
+// transaction. Table changes are initially staged in memory and propagated only after an explicit
+// commit.
 class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends TableCatalog {
 
   private val tables: util.Map[Identifier, TxnTable] = new ConcurrentHashMap[Identifier, TxnTable]()
@@ -112,16 +123,14 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
     throw new UnsupportedOperationException()
   }
 
+  // This is where the table pinning logic should occur. In this implementation, a tables is loaded
+  // (pinned) the first time is accessed. All subsequent accesses should return the same pinned
+  // table.
   override def loadTable(ident: Identifier): Table = {
     tables.computeIfAbsent(ident, _ => {
       val table = delegate.loadTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
       new TxnTable(table, table.schema())
     })
-  }
-
-  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
-    delegate.createTable(ident, tableInfo)
-    loadTable(ident)
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
@@ -145,6 +154,13 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
     newTxnTable
   }
 
+  // TODO: Currently not transactional. Should be revised when Atomic CTAS/RTAS is implemented.
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+    delegate.createTable(ident, tableInfo)
+    loadTable(ident)
+  }
+
+  // TODO: Currently not transactional. Should be revised when Atomic CTAS/RTAS is implemented.
   override def dropTable(ident: Identifier): Boolean = {
     tables.remove(ident)
     delegate.dropTable(ident)
@@ -154,10 +170,13 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
     throw new UnsupportedOperationException()
   }
 
+  // Invoke commit for all tables participated in the transaction. If a table is read-only
+  // this is a no-op.
   def commit(): Unit = {
     tables.values.forEach(table => table.commit())
   }
 
+  // Clear transaction context.
   def clearActiveTransaction(): Unit = {
     delegate.lastTransaction = delegate.transaction
     delegate.transaction = null
