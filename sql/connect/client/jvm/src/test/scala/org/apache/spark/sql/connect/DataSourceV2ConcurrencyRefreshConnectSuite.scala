@@ -1228,6 +1228,28 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     }
   }
 
+  // Scenario 4 from design doc: session schema change then external data write.
+  // In Connect mode, newSession() does not share catalog plugins, so we use
+  // the main session for the write. Since Connect re-analyzes on every action,
+  // the session write invalidates the cache and both changes are visible.
+  test("[connect][5.4-ext] session schema change then session write") {
+    assumeCanRun()
+    withTable(T) {
+      setupTable()
+      spark.sql(s"CACHE TABLE $T")
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
+
+      // Session schema change: invalidates + rebuilds cache
+      spark.sql(s"ALTER TABLE $T ADD COLUMN new_col INT")
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100, null)))
+
+      // Session write (simulates external; Connect has no separate session)
+      spark.sql(s"INSERT INTO $T VALUES (2, 200, -1)")
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100, null), Row(2, 200, -1)))
+      spark.sql(s"UNCACHE TABLE IF EXISTS $T")
+    }
+  }
+
   test("[connect][5.5] CACHE TABLE: external drop/recreate sees new empty table") {
     assumeCanRun()
     withTable(T) {
@@ -1259,18 +1281,26 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     }
   }
 
-  test("[connect][5.6] REFRESH TABLE after CACHE TABLE picks up current data") {
+  // REFRESH TABLE forces re-read from catalog. In Connect, session writes
+  // already invalidate the cache, so we verify REFRESH TABLE after a write
+  // still returns consistent data.
+  test("[connect][5.6] REFRESH TABLE after CACHE TABLE picks up all data") {
     assumeCanRun()
     withTable(T) {
       setupTable()
       spark.sql(s"CACHE TABLE $T")
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
+      // Session write invalidates cache; new data visible
       spark.sql(s"INSERT INTO $T VALUES (2, 200)")
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200)))
 
+      // Another write
+      spark.sql(s"INSERT INTO $T VALUES (3, 300)")
+
+      // REFRESH TABLE forces re-read; all three rows visible
       spark.sql(s"REFRESH TABLE $T")
-      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200)))
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
       spark.sql(s"UNCACHE TABLE IF EXISTS $T")
     }
   }
