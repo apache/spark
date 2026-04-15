@@ -234,8 +234,7 @@ class QueryExecution(
       // for eagerly executed commands we mark this place as beginning of execution.
       tracker.setReadyForExecution()
       val (qe, result) = QueryExecution.runCommand(
-        sparkSession, p, name, refreshPhaseEnabled, mode, Some(shuffleCleanupMode),
-        analyzerOpt = Some(analyzer))
+        sparkSession, p, name, refreshPhaseEnabled, mode, Some(shuffleCleanupMode), Some(analyzer))
       CommandResult(
         qe.analyzed.output,
         qe.commandExecuted,
