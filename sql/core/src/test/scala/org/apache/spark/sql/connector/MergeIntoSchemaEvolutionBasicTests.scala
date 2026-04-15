@@ -1257,4 +1257,12 @@ trait MergeIntoSchemaEvolutionBasicTests extends MergeIntoSchemaEvolutionSuiteBa
       (1, "hr"),
       (3, "dummy")).toDF("pk", "dep")
   )
+
+  testEvolution("delete-only action does not trigger schema evolution")(
+    targetData = Seq((1, "hr"), (2, "software")).toDF("pk", "dep"),
+    sourceData = Seq((2, "dummy", 200)).toDF("pk", "dep", "salary"),
+    clauses = Seq(delete()),
+    expected = Seq((1, "hr")).toDF("pk", "dep"),
+    expectedWithoutEvolution = Seq((1, "hr")).toDF("pk", "dep")
+  )
 }
