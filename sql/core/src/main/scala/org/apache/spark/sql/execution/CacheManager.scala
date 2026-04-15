@@ -466,7 +466,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   /**
    * Optionally returns cached data for the given [[Dataset]]
    */
-  def lookupCachedData(query: org.apache.spark.sql.Dataset[_]): Option[CachedData] = {
+  def lookupCachedData(query: Dataset[_]): Option[CachedData] = {
     lookupCachedDataInternal(query.queryExecution.normalized)
   }
 
