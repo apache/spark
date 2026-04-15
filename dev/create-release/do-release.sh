@@ -40,8 +40,10 @@ if [ "$RUNNING_IN_DOCKER" = "1" ]; then
     export JAVA_HOME=/usr
   fi
 
-  # If ~/.m2 has metadata for hamcrest-core:1.3 but no JAR, Coursier can fail with
-  # "file:.../hamcrest-core-1.3.jar: not found". Drop that tree so artifacts re-resolve.
+  # If ~/.m2 has metadata for hamcrest-core:1.3 but no JAR, Coursier (SBT) can fail with
+  # "file:.../hamcrest-core-1.3.jar: not found". Drop that tree so artifacts re-resolve from
+  # remote repositories. Maven steps (e.g. release-tag.sh) can recreate a broken tree.
+  # See also https://github.com/coursier/coursier/issues/2942
   rm -rf "${HOME}/.m2/repository/org/hamcrest/hamcrest-core/1.3"
 else
   # Outside docker, need to ask for information about the release.
@@ -68,6 +70,9 @@ else
 fi
 
 if should_build "build"; then
+  if [ "$RUNNING_IN_DOCKER" = "1" ]; then
+    rm -rf "${HOME}/.m2/repository/org/hamcrest/hamcrest-core/1.3"
+  fi
   run_silent "Building Spark..." "build.log" \
     "$SELF/release-build.sh" package
 else
