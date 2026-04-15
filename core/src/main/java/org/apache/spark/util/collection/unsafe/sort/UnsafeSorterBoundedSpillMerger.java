@@ -149,7 +149,7 @@ final class UnsafeSorterBoundedSpillMerger {
       spillsToMerge = nextRoundSpills;
     }
 
-    // Final merge: remaining writers fit within the merge factor
+    // Final merge: remaining writers fit within the merge factor.
     logger.info("Final merge round: merging {} spill files",
         MDC.of(LogKeys.NUM_SPILL_WRITERS, spillsToMerge.size()));
 
@@ -209,6 +209,10 @@ final class UnsafeSorterBoundedSpillMerger {
       merger.addSpillIfNotEmpty(reader);
     }
 
+    // Defensive check: partitionWriters() already bounds each group's total records
+    // to Integer.MAX_VALUE (since individual writers use int record counts, overflow
+    // can only happen from summing multiple writers). This assertion guards against
+    // bugs in the partitioning logic, as UnsafeSorterSpillWriter requires an int.
     if (totalRecords > Integer.MAX_VALUE) {
       throw new IllegalStateException(
           "Group record count exceeds Integer.MAX_VALUE: " + totalRecords);
