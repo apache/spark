@@ -105,8 +105,27 @@ class DataSourceV2TablePinningRefreshSuite
     sql(s"INSERT INTO $T VALUES (1, 100)")
   }
 
-  /** External session sharing the same catalog tables. */
-  private def extSession: SparkSession = spark.newSession()
+  /**
+   * Creates a SparkSession with a SEPARATE CacheManager (separate SharedState)
+   * but the same SparkContext and catalog configs. SharedInMemoryTableCatalog
+   * tables are shared via the companion object, so the external session sees
+   * the same table data. This simulates a truly external writer (different JVM
+   * in production) whose writes do NOT invalidate Session 1's CacheManager.
+   */
+  private def extSession: SparkSession = {
+    val savedActive = SparkSession.getActiveSession
+    val savedDefault = SparkSession.getDefaultSession
+    try {
+      SparkSession.clearActiveSession()
+      SparkSession.clearDefaultSession()
+      SparkSession.builder()
+        .sparkContext(spark.sparkContext)
+        .create()
+    } finally {
+      savedDefault.foreach(s => SparkSession.setDefaultSession(s))
+      savedActive.foreach(s => SparkSession.setActiveSession(s))
+    }
+  }
 
   // =========================================================================
   // [1] Temp views with stored plans
@@ -255,10 +274,10 @@ class DataSourceV2TablePinningRefreshSuite
       sql(s"ALTER TABLE $T DROP COLUMN salary")
       sql(s"ALTER TABLE $T ADD COLUMN salary INT")
 
-      // InMemoryTable preserves data through column drop+add (matches by name).
+      // InMemoryTable returns null for drop+re-add (dropped column data is discarded).
       // Real connectors with column IDs (Delta/Iceberg) would detect this as
       // a new column and return null instead.
-      checkAnswer(sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
+      checkAnswer(sql("SELECT * FROM tmp"), Seq(Row(1, null)))
     }
   }
 
@@ -272,7 +291,7 @@ class DataSourceV2TablePinningRefreshSuite
       ext.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
       ext.sql(s"ALTER TABLE $T ADD COLUMN salary INT").collect()
 
-      checkAnswer(sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
+      checkAnswer(sql("SELECT * FROM tmp"), Seq(Row(1, null)))
     }
   }
 
@@ -674,9 +693,9 @@ class DataSourceV2TablePinningRefreshSuite
       val df2 = spark.table(NT)
 
       // No table ID and no column ID: both sides refresh to current.
-      // InMemoryTable preserves data through column drop+add (matches by name).
+      // InMemoryTable returns null for drop+re-add (dropped column data is discarded).
       val joined = df1.join(df2, df1("id") === df2("id"))
-      checkAnswer(joined, Seq(Row(1, 100, 1, 100)))
+      checkAnswer(joined, Seq(Row(1, null, 1, null)))
     }
   }
 
@@ -715,8 +734,8 @@ class DataSourceV2TablePinningRefreshSuite
       sql(s"ALTER TABLE $NT ADD COLUMN salary INT")
 
       // No column ID: name+type match, view resolves normally.
-      // InMemoryTable preserves data through column drop+add (matches by name).
-      checkAnswer(sql("SELECT * FROM nullid_view"), Seq(Row(1, 100)))
+      // InMemoryTable returns null for drop+re-add (dropped column data is discarded).
+      checkAnswer(sql("SELECT * FROM nullid_view"), Seq(Row(1, null)))
     }
   }
 
@@ -750,10 +769,10 @@ class DataSourceV2TablePinningRefreshSuite
 
       val df2 = spark.table(T)
 
-      // InMemoryTable preserves data through column drop+add (matches by name).
+      // InMemoryTable returns null for drop+re-add (dropped column data is discarded).
       // Column IDs (4.2) will make this fail with an exception instead.
       val joined = df1.join(df2, df1("id") === df2("id"))
-      checkAnswer(joined, Seq(Row(1, 100, 1, 100)))
+      checkAnswer(joined, Seq(Row(1, null, 1, null)))
     }
   }
 
@@ -1007,7 +1026,7 @@ class DataSourceV2TablePinningRefreshSuite
   }
 
   // Section 4 Scenario 5: drop+add column with same name and type.
-  // InMemoryTable preserves data through column drop+add (matches by name).
+  // InMemoryTable returns null for drop+re-add (dropped column data is discarded).
   // In 4.2: column ID will make this fail instead.
   test("[4.S5-show] DataFrame after session drop+add column same type") {
     withTable(T) {
@@ -1020,8 +1039,8 @@ class DataSourceV2TablePinningRefreshSuite
 
       // Name+type match, passes (no column ID check).
       // count() created a derived QE so original df QE is fresh here.
-      // InMemoryTable preserves data through column drop+add (matches by name).
-      checkAnswer(df, Seq(Row(1, 100)))
+      // InMemoryTable returns null for drop+re-add (dropped column data is discarded).
+      checkAnswer(df, Seq(Row(1, null)))
     }
   }
 
@@ -1036,8 +1055,8 @@ class DataSourceV2TablePinningRefreshSuite
       ext.sql(s"ALTER TABLE $T ADD COLUMN salary INT").collect()
 
       // Name+type match: passes (no column ID).
-      // InMemoryTable preserves data through column drop+add (matches by name).
-      checkAnswer(df, Seq(Row(1, 100)))
+      // InMemoryTable returns null for drop+re-add (dropped column data is discarded).
+      checkAnswer(df, Seq(Row(1, null)))
     }
   }
 
@@ -1101,7 +1120,7 @@ class DataSourceV2TablePinningRefreshSuite
   // =========================================================================
 
   // Section 5 Scenario 1: external write after CACHE TABLE
-  // Proposed: cached, external change NOT visible -> (1, 100)
+  // Cache pinned: external change NOT visible -> (1, 100)
   test("[5.1] cached table pinned against external data write") {
     withTable(T) {
       setupTable()
@@ -1109,19 +1128,13 @@ class DataSourceV2TablePinningRefreshSuite
       assertCached(spark.table(T))
       checkAnswer(spark.table(T), Seq(Row(1, 100)))
 
-      // External write via newSession
+      // External write via independent session (separate CacheManager)
       extSession.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
 
-      // Doc proposed: external change invisible (pinned cache).
-      // CURRENT BEHAVIOR: with SharedInMemoryTableCatalog, the external
-      // write modifies the shared table. The refresh in QE detects the
-      // version change and serves fresh data, bypassing the cache.
-      // This diverges from the doc's proposed behavior. Real connectors
-      // (Delta/Iceberg) would pin the cache since they have independent
-      // table instances per session.
-      checkAnswer(
-        spark.table(T),
-        Seq(Row(1, 100), Row(2, 200)))
+      // External write does not invalidate this session's CacheManager.
+      // SPARK-54022 cache-aware resolution finds the cached relation,
+      // so the cache stays pinned. Matches Delta/Iceberg behavior.
+      checkAnswer(spark.table(T), Seq(Row(1, 100)))
     }
   }
 
@@ -1154,40 +1167,33 @@ class DataSourceV2TablePinningRefreshSuite
         spark.table(T),
         Seq(Row(1, 100), Row(2, 200)))
 
-      // External write after cache rebuild
+      // External write after cache rebuild (separate CacheManager)
       extSession.sql(s"INSERT INTO $T VALUES (3, 300)").collect()
 
-      // Doc proposed: external write NOT visible.
-      // CURRENT BEHAVIOR: external write IS visible because
-      // SharedInMemoryTableCatalog shares the table map. The refresh
-      // detects the version change from the external write.
+      // External write does not invalidate this session's CacheManager.
+      // Cache stays pinned at the session write's snapshot.
       checkAnswer(
         spark.table(T),
-        Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
+        Seq(Row(1, 100), Row(2, 200)))
     }
   }
 
   // Section 5 Scenario 3: external schema change after CACHE TABLE
-  // Proposed: cached, schema change NOT visible -> (1, 100)
+  // Cache pinned: external schema change NOT visible -> (1, 100)
   test("[5.3] cached table pinned against external schema change") {
     withTable(T) {
       setupTable()
       sql(s"CACHE TABLE $T")
       checkAnswer(spark.table(T), Seq(Row(1, 100)))
 
-      // External schema change + data
+      // External schema change + data (separate CacheManager)
       val ext = extSession
       ext.sql(s"ALTER TABLE $T ADD COLUMN bonus INT").collect()
       ext.sql(s"INSERT INTO $T VALUES (2, 200, 50)").collect()
 
-      // Doc proposed: cache pinned -> (1, 100) with 2-col schema.
-      // CURRENT BEHAVIOR: schema change breaks cache plan matching.
-      // The refresh detects the schema change and the cached plan
-      // no longer matches. Query sees fresh data with new 3-col schema.
-      // This diverges from the doc's proposed behavior.
-      checkAnswer(
-        spark.table(T),
-        Seq(Row(1, 100, null), Row(2, 200, 50)))
+      // External changes do not invalidate this session's CacheManager.
+      // Cache stays pinned at original 2-column schema.
+      checkAnswer(spark.table(T), Seq(Row(1, 100)))
     }
   }
 

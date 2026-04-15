@@ -2185,9 +2185,9 @@ class DataSourceV2DataFrameSuite
       // insert new data
       sql(s"INSERT INTO $t VALUES (2, 200)")
 
-      // temp view resolves salary by name; InMemoryTable preserves old data values
-      // through column drop+add, so both rows are visible through the filter
-      checkAnswer(spark.table("tmp"), Seq(Row(1, 100), Row(2, 200)))
+      // temp view resolves salary by name; InMemoryTable returns null for drop+re-add
+      // (dropped column data is discarded), so only the newly inserted row has salary
+      checkAnswer(spark.table("tmp"), Seq(Row(1, null), Row(2, 200)))
     }
   }
 
@@ -2477,10 +2477,10 @@ class DataSourceV2DataFrameSuite
       val df2 = spark.table(t)
 
       // join refreshes versions - both use latest version
-      // InMemoryTable preserves old data values through column drop+add
+      // InMemoryTable returns null for drop+re-add (dropped column data is discarded)
       val joined = df1.join(df2, df1("id") === df2("id"))
       checkAnswer(joined, Seq(
-        Row(1, 100, 1, 100),
+        Row(1, null, 1, null),
         Row(2, 200, 2, 200)))
     }
   }
@@ -2655,11 +2655,11 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t DROP COLUMN salary")
       sql(s"ALTER TABLE $t ADD COLUMN salary INT")
 
-      // InMemoryTable preserves data through column drop+add,
+      // InMemoryTable returns null for drop+re-add (dropped column data is discarded),
       // so the version refresh detects a compatible change and succeeds
       // The design doc proposes this should eventually fail with column ID mismatch
       // once Spark introduces the notion of column IDs
-      checkAnswer(df, Seq(Row(1, 100)))
+      checkAnswer(df, Seq(Row(1, null)))
     }
   }
 

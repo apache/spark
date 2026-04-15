@@ -222,12 +222,12 @@ class DataSourceV2ConcurrencyRefreshSuite
       t => { sql(s"ALTER TABLE $t DROP COLUMN salary")
              sql(s"ALTER TABLE $t ADD COLUMN salary INT") },
       tempViewOk = true, dfOk = true, joinOk = true,
-      // InMemoryTable preserves data through column drop+add because the
-      // reader matches by name. Column IDs (Spark 4.2) will make this
+      // InMemoryTable returns null for drop+re-add (dropped column data is discarded).
+      // Column IDs (Spark 4.2) will make this
       // fail with an error instead.
-      tempViewRows = Seq(Row(1, 100)),
-      dfRows = Seq(Row(1, 100)),
-      joinRows = Seq(Row(1, 100, 1, 100))),
+      tempViewRows = Seq(Row(1, null)),
+      dfRows = Seq(Row(1, null)),
+      joinRows = Seq(Row(1, null, 1, null))),
     Mod("drop+add column different type",
       t => { sql(s"ALTER TABLE $t DROP COLUMN salary")
              sql(s"ALTER TABLE $t ADD COLUMN salary STRING") },
@@ -277,10 +277,10 @@ class DataSourceV2ConcurrencyRefreshSuite
                TableChange.addColumn(
                  Array("salary"), IntegerType, true)) },
       tempViewOk = true, dfOk = true, joinOk = true,
-      // InMemoryTable preserves data through column drop+add (matches by name)
-      tempViewRows = Seq(Row(1, 100)),
-      dfRows = Seq(Row(1, 100)),
-      joinRows = Seq(Row(1, 100, 1, 100))),
+      // InMemoryTable returns null for drop+re-add (dropped column data is discarded)
+      tempViewRows = Seq(Row(1, null)),
+      dfRows = Seq(Row(1, null)),
+      joinRows = Seq(Row(1, null, 1, null))),
     Mod("ext drop+add column different type",
       _ => { cat.alterTable(IDENT,
                TableChange.deleteColumn(Array("salary"), false))
@@ -4368,8 +4368,8 @@ class DataSourceV2ConcurrencyRefreshSuite
       sql(s"ALTER TABLE $NI DROP COLUMN salary")
       sql(s"ALTER TABLE $NI ADD COLUMN salary INT")
       // No column ID check: name+type match, so refresh passes.
-      // InMemoryTable preserves data through column drop+add (matches by name).
-      checkAnswer(df, Seq(Row(1, 100)))
+      // InMemoryTable returns null for drop+re-add (dropped column data is discarded).
+      checkAnswer(df, Seq(Row(1, null)))
     }
   }
 
@@ -4441,8 +4441,8 @@ class DataSourceV2ConcurrencyRefreshSuite
       sql(s"ALTER TABLE $NI DROP COLUMN salary")
       sql(s"ALTER TABLE $NI ADD COLUMN salary INT")
       // No column ID: name+type match, view picks up current data.
-      // InMemoryTable preserves data through column drop+add (matches by name).
-      checkAnswer(spark.table("ni_tmp"), Seq(Row(1, 100)))
+      // InMemoryTable returns null for drop+re-add (dropped column data is discarded).
+      checkAnswer(spark.table("ni_tmp"), Seq(Row(1, null)))
     }
   }
 
@@ -4455,9 +4455,9 @@ class DataSourceV2ConcurrencyRefreshSuite
       sql(s"ALTER TABLE $NI ADD COLUMN salary INT")
       val df2 = spark.table(NI)
       // No column ID: both sides refresh to current schema.
-      // InMemoryTable preserves data through column drop+add (matches by name).
+      // InMemoryTable returns null for drop+re-add (dropped column data is discarded).
       val joined = df1.join(df2, df1("id") === df2("id"))
-      checkAnswer(joined, Seq(Row(1, 100, 1, 100)))
+      checkAnswer(joined, Seq(Row(1, null, 1, null)))
     }
   }
 
