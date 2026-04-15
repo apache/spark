@@ -40,115 +40,136 @@ private[scheduler] trait StructuredStreamingIdAwareSchedulerLogging extends Logg
   // we gather the query and batch Id from the properties of a given TaskSet
   protected def properties: Properties
   protected def streamingIdAwareLoggingEnabled: Boolean
+  protected def streamingQueryIdLength: Int
 
   override protected def logInfo(msg: => String): Unit =
     super.logInfo(
       StructuredStreamingIdAwareSchedulerLogging
-        .constructStreamingLogEntry(properties, msg, streamingIdAwareLoggingEnabled))
+        .constructStreamingLogEntry(
+          properties, msg, streamingIdAwareLoggingEnabled, streamingQueryIdLength))
 
   override protected def logInfo(entry: LogEntry): Unit = {
     super.logInfo(
       StructuredStreamingIdAwareSchedulerLogging
-        .constructStreamingLogEntry(properties, entry, streamingIdAwareLoggingEnabled))
+        .constructStreamingLogEntry(
+          properties, entry, streamingIdAwareLoggingEnabled, streamingQueryIdLength))
   }
 
   override protected def logInfo(msg: => String, t: Throwable): Unit =
     super.logInfo(
       StructuredStreamingIdAwareSchedulerLogging
-        .constructStreamingLogEntry(properties, msg, streamingIdAwareLoggingEnabled), t)
+        .constructStreamingLogEntry(
+          properties, msg, streamingIdAwareLoggingEnabled, streamingQueryIdLength), t)
 
   override protected def logInfo(entry: LogEntry, t: Throwable): Unit = {
     super.logInfo(
       StructuredStreamingIdAwareSchedulerLogging
-        .constructStreamingLogEntry(properties, entry, streamingIdAwareLoggingEnabled), t)
+        .constructStreamingLogEntry(
+          properties, entry, streamingIdAwareLoggingEnabled, streamingQueryIdLength), t)
   }
 
   override protected def logWarning(msg: => String): Unit =
     super.logWarning(
       StructuredStreamingIdAwareSchedulerLogging
-        .constructStreamingLogEntry(properties, msg, streamingIdAwareLoggingEnabled))
+        .constructStreamingLogEntry(
+          properties, msg, streamingIdAwareLoggingEnabled, streamingQueryIdLength))
 
   override protected def logWarning(entry: LogEntry): Unit = {
     super.logWarning(
       StructuredStreamingIdAwareSchedulerLogging
-        .constructStreamingLogEntry(properties, entry, streamingIdAwareLoggingEnabled))
+        .constructStreamingLogEntry(
+          properties, entry, streamingIdAwareLoggingEnabled, streamingQueryIdLength))
   }
 
   override protected def logWarning(msg: => String, t: Throwable): Unit =
     super.logWarning(
       StructuredStreamingIdAwareSchedulerLogging
-        .constructStreamingLogEntry(properties, msg, streamingIdAwareLoggingEnabled), t)
+        .constructStreamingLogEntry(
+          properties, msg, streamingIdAwareLoggingEnabled, streamingQueryIdLength), t)
 
   override protected def logWarning(entry: LogEntry, t: Throwable): Unit = {
     super.logWarning(
       StructuredStreamingIdAwareSchedulerLogging
-        .constructStreamingLogEntry(properties, entry, streamingIdAwareLoggingEnabled), t)
+        .constructStreamingLogEntry(
+          properties, entry, streamingIdAwareLoggingEnabled, streamingQueryIdLength), t)
   }
 
   override protected def logDebug(msg: => String): Unit =
     super.logDebug(
       StructuredStreamingIdAwareSchedulerLogging
-        .constructStreamingLogEntry(properties, msg, streamingIdAwareLoggingEnabled))
+        .constructStreamingLogEntry(
+          properties, msg, streamingIdAwareLoggingEnabled, streamingQueryIdLength))
 
   override protected def logDebug(entry: LogEntry): Unit = {
     super.logDebug(
       StructuredStreamingIdAwareSchedulerLogging
-        .constructStreamingLogEntry(properties, entry, streamingIdAwareLoggingEnabled))
+        .constructStreamingLogEntry(
+          properties, entry, streamingIdAwareLoggingEnabled, streamingQueryIdLength))
   }
 
   override protected def logDebug(msg: => String, t: Throwable): Unit =
     super.logDebug(
       StructuredStreamingIdAwareSchedulerLogging
-        .constructStreamingLogEntry(properties, msg, streamingIdAwareLoggingEnabled), t)
+        .constructStreamingLogEntry(
+          properties, msg, streamingIdAwareLoggingEnabled, streamingQueryIdLength), t)
 
   override protected def logDebug(entry: LogEntry, t: Throwable): Unit = {
     super.logDebug(
       StructuredStreamingIdAwareSchedulerLogging
-        .constructStreamingLogEntry(properties, entry, streamingIdAwareLoggingEnabled), t)
+        .constructStreamingLogEntry(
+          properties, entry, streamingIdAwareLoggingEnabled, streamingQueryIdLength), t)
   }
 
   override protected def logError(msg: => String): Unit =
     super.logError(
       StructuredStreamingIdAwareSchedulerLogging
-        .constructStreamingLogEntry(properties, msg, streamingIdAwareLoggingEnabled))
+        .constructStreamingLogEntry(
+          properties, msg, streamingIdAwareLoggingEnabled, streamingQueryIdLength))
 
   override protected def logError(entry: LogEntry): Unit = {
     super.logError(
       StructuredStreamingIdAwareSchedulerLogging
-        .constructStreamingLogEntry(properties, entry, streamingIdAwareLoggingEnabled))
+        .constructStreamingLogEntry(
+          properties, entry, streamingIdAwareLoggingEnabled, streamingQueryIdLength))
   }
 
   override protected def logError(msg: => String, t: Throwable): Unit =
     super.logError(
       StructuredStreamingIdAwareSchedulerLogging
-        .constructStreamingLogEntry(properties, msg, streamingIdAwareLoggingEnabled), t)
+        .constructStreamingLogEntry(
+          properties, msg, streamingIdAwareLoggingEnabled, streamingQueryIdLength), t)
 
   override protected def logError(entry: LogEntry, t: Throwable): Unit = {
     super.logError(
       StructuredStreamingIdAwareSchedulerLogging
-        .constructStreamingLogEntry(properties, entry, streamingIdAwareLoggingEnabled), t)
+        .constructStreamingLogEntry(
+          properties, entry, streamingIdAwareLoggingEnabled, streamingQueryIdLength), t)
   }
 
   override protected def logTrace(msg: => String): Unit =
     super.logTrace(
       StructuredStreamingIdAwareSchedulerLogging
-        .constructStreamingLogEntry(properties, msg, streamingIdAwareLoggingEnabled))
+        .constructStreamingLogEntry(
+          properties, msg, streamingIdAwareLoggingEnabled, streamingQueryIdLength))
 
   override protected def logTrace(entry: LogEntry): Unit = {
     super.logTrace(
       StructuredStreamingIdAwareSchedulerLogging
-        .constructStreamingLogEntry(properties, entry, streamingIdAwareLoggingEnabled))
+        .constructStreamingLogEntry(
+          properties, entry, streamingIdAwareLoggingEnabled, streamingQueryIdLength))
   }
 
   override protected def logTrace(msg: => String, t: Throwable): Unit =
     super.logTrace(
       StructuredStreamingIdAwareSchedulerLogging
-        .constructStreamingLogEntry(properties, msg, streamingIdAwareLoggingEnabled), t)
+        .constructStreamingLogEntry(
+          properties, msg, streamingIdAwareLoggingEnabled, streamingQueryIdLength), t)
 
   override protected def logTrace(entry: LogEntry, t: Throwable): Unit = {
     super.logTrace(
       StructuredStreamingIdAwareSchedulerLogging
-        .constructStreamingLogEntry(properties, entry, streamingIdAwareLoggingEnabled), t)
+        .constructStreamingLogEntry(
+          properties, entry, streamingIdAwareLoggingEnabled, streamingQueryIdLength), t)
   }
 }
 
@@ -163,13 +184,15 @@ private[scheduler] object StructuredStreamingIdAwareSchedulerLogging extends Log
   private[scheduler] def constructStreamingLogEntry(
       properties: Properties,
       entry: LogEntry,
-      enabled: Boolean): LogEntry = {
+      enabled: Boolean,
+      queryIdLength: Int): LogEntry = {
     if (!enabled || properties == null) {
       return entry
     }
     // wrap in log entry to defer until log is evaluated
     new LogEntry({
-      val (queryId: Option[String], batchId: Option[String]) = getStreamingProperties(properties)
+      val (queryId: Option[String], batchId: Option[String]) =
+        getStreamingProperties(properties, queryIdLength)
 
       formatMessage(
         queryId,
@@ -182,7 +205,8 @@ private[scheduler] object StructuredStreamingIdAwareSchedulerLogging extends Log
   private[scheduler] def constructStreamingLogEntry(
       properties: Properties,
       msg: => String,
-      enabled: Boolean): LogEntry = {
+      enabled: Boolean,
+      queryIdLength: Int): LogEntry = {
     if (!enabled || properties == null) {
       return new LogEntry(
         MessageWithContext(msg, java.util.Collections.emptyMap())
@@ -190,7 +214,8 @@ private[scheduler] object StructuredStreamingIdAwareSchedulerLogging extends Log
     }
 
     new LogEntry({
-      val (queryId: Option[String], batchId: Option[String]) = getStreamingProperties(properties)
+      val (queryId: Option[String], batchId: Option[String]) =
+        getStreamingProperties(properties, queryIdLength)
 
       MessageWithContext(
         formatMessage(
@@ -237,8 +262,16 @@ private[scheduler] object StructuredStreamingIdAwareSchedulerLogging extends Log
     MessageWithContext(entry.message, entry.context)
   }
 
-  private def getStreamingProperties(properties: Properties): (Option[String], Option[String]) = {
-    val queryId = Option(properties.getProperty(QUERY_ID_KEY)).filter(_.nonEmpty)
+  private def getStreamingProperties(
+      properties: Properties,
+      queryIdLength: Int): (Option[String], Option[String]) = {
+    val queryId = Option(properties.getProperty(QUERY_ID_KEY)).filter(_.nonEmpty).map { id =>
+      if (queryIdLength == -1) {
+        id
+      } else {
+        id.take(queryIdLength)
+      }
+    }
     val batchId = Option(properties.getProperty(BATCH_ID_KEY)).filter(_.nonEmpty)
     (queryId, batchId)
   }

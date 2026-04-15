@@ -303,6 +303,8 @@ private[spark] class TaskSchedulerImpl(
         override protected def properties: Properties = this.taskSet.properties
         override protected val streamingIdAwareLoggingEnabled: Boolean =
           conf.get(STREAMING_ID_AWARE_SCHEDULER_LOGGING_ENABLED)
+        override protected val streamingQueryIdLength: Int =
+          conf.get(STREAMING_ID_AWARE_SCHEDULER_LOGGING_QUERY_ID_LENGTH)
         // ensure log name matches the non-streaming version
         override protected def logName: String = classOf[TaskSetManager].getName
       }

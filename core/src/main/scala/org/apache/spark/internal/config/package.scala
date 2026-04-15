@@ -2381,6 +2381,14 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
+  private[spark] val STREAMING_ID_AWARE_SCHEDULER_LOGGING_QUERY_ID_LENGTH =
+    ConfigBuilder("spark.scheduler.streaming.idAwareLogging.queryIdLength")
+      .doc("Maximum number of characters of the streaming query ID to include " +
+        "in scheduler log messages. Set to -1 to include the full query ID.")
+      .version("4.2.0")
+      .intConf
+      .createWithDefault(5)
+
   private[spark] val SCHEDULER_REVIVE_INTERVAL =
     ConfigBuilder("spark.scheduler.revive.interval")
       .version("0.8.1")

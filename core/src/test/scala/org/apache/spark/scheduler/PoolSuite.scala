@@ -395,7 +395,9 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     }
 
     val logs = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
-    val expectedQueryPrefix = s"[queryId = ${testQueryId}]"
+    // default queryIdLength is 5, so the query ID is truncated
+    val truncatedQueryId = testQueryId.take(5)
+    val expectedQueryPrefix = s"[queryId = $truncatedQueryId]"
     val expectedBatchPrefix = s"[batchId = $testBatchId]"
     val addedLogs = logs.filter(msg =>
       msg.contains("Added task set") &&

@@ -2900,7 +2900,9 @@ class TaskSetManagerSuite
 
     val logs = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
 
-    val expectedQueryPrefix = s"[queryId = ${testQueryId}]"
+    // default queryIdLength is 5, so the query ID is truncated
+    val truncatedQueryId = testQueryId.take(5)
+    val expectedQueryPrefix = s"[queryId = $truncatedQueryId]"
     val expectedBatchPrefix = s"[batchId = $testBatchId]"
 
     // Verify the "Starting" log line includes query Id and batch Id
