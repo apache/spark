@@ -1957,6 +1957,7 @@ package object config {
         "to limit the number of concurrently open file readers and avoid OOM during sort-merge. " +
         "A smaller value uses less memory but incurs more intermediate disk I/O. " +
         "Set to -1 to disable bounded merging (legacy behavior).")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .internal()
       .version("4.2.0")
       .intConf
