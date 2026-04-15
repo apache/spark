@@ -8530,6 +8530,12 @@
     ],
     "sqlState" : "42K0E"
   },
+  "WINDOW_FUNCTION_FRAME_NOT_ORDERED" : {
+    "message" : [
+      "Window function <wf_name> requires the window to be ordered. You need to add an ORDER BY clause. For example: SELECT <wf_expr> OVER (PARTITION BY window_partition ORDER BY window_ordering) FROM table."
+    ],
+    "sqlState" : "42601"
+  },
   "WINDOW_FUNCTION_NOT_ALLOWED_IN_CLAUSE" : {
     "message" : [
       "It is not allowed to use window functions inside <clauseName> clause."
@@ -8799,11 +8805,6 @@
   "_LEGACY_ERROR_TEMP_1036" : {
     "message" : [
       "Window Frame <wf> must match the required frame <required>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1037" : {
-    "message" : [
-      "Window function <wf> requires window to be ordered, please add ORDER BY clause. For example SELECT <wf>(value_expr) OVER (PARTITION BY window_partition ORDER BY window_ordering) from table."
     ]
   },
   "_LEGACY_ERROR_TEMP_1039" : {

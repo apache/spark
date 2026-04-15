@@ -71,10 +71,12 @@ class DataFrameWindowFunctionsSuite extends QueryTest
 
   test("window function should fail if order by clause is not specified") {
     val df = Seq((1, "1"), (2, "2"), (1, "2"), (2, "2")).toDF("key", "value")
-    val e = intercept[AnalysisException](
-      // Here we missed .orderBy("key")!
-      df.select(row_number().over(Window.partitionBy("value"))).collect())
-    assert(e.message.contains("requires window to be ordered"))
+    checkError(
+      exception = intercept[AnalysisException](
+        // Here we missed .orderBy("key")!
+        df.select(row_number().over(Window.partitionBy("value"))).collect()),
+      condition = "WINDOW_FUNCTION_FRAME_NOT_ORDERED",
+      parameters = Map("wf_name" -> "row_number", "wf_expr" -> "row_number()"))
   }
 
   test("corr, covar_pop, stddev_pop functions in specific window") {
