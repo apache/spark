@@ -534,7 +534,8 @@ trait QueryTestBase
    */
   def makeQualifiedPath(path: String): URI = {
     val hadoopPath = new Path(path)
-    val fs = hadoopPath.getFileSystem(spark.sessionState.newHadoopConf())
+    val fs = hadoopPath.getFileSystem(
+      spark.asInstanceOf[classic.SparkSession].sessionState.newHadoopConf())
     fs.makeQualified(hadoopPath).toUri
   }
 
