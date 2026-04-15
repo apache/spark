@@ -588,7 +588,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       s"Complete tables should not evolve schema - isFullRefresh = $isFullRefresh"
     ) {
       val session = spark
-  
 
       val rawGraph =
         new TestGraphRegistrationContext(spark) {
@@ -647,7 +646,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     ) {
       val session = spark
       implicit val sqlCtx: SQLContext = spark.sqlContext
-  
 
       val streamInts = MemoryStream[Int]
       streamInts.addData(1 until 5: _*)
