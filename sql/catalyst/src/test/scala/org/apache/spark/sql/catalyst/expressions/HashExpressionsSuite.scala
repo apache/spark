@@ -23,10 +23,10 @@ import java.time.{Duration, LocalTime, Period, ZoneId, ZoneOffset}
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 
-import org.apache.commons.codec.digest.DigestUtils
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.network.util.JavaUtils.{digestToHexString, sha256Hex}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, ExpressionEncoder}
@@ -65,13 +65,13 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(224)),
       "107c5072b799c4771f328304cfe1ebb375eb6ea7f35a3aa753836fad")
     checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(0)),
-      DigestUtils.sha256Hex("ABC"))
+      sha256Hex("ABC"))
     checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(256)),
-      DigestUtils.sha256Hex("ABC"))
+      sha256Hex("ABC"))
     checkEvaluation(Sha2(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType), Literal(384)),
-      DigestUtils.sha384Hex(Array[Byte](1, 2, 3, 4, 5, 6)))
+      digestToHexString("SHA-384", Array[Byte](1, 2, 3, 4, 5, 6)))
     checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(512)),
-      DigestUtils.sha512Hex("ABC"))
+      digestToHexString("SHA-512", "ABC"))
     // unsupported bit length
     checkEvaluation(Sha2(Literal.create(null, BinaryType), Literal(1024)), null)
     // null input and valid bit length

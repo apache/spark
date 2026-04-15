@@ -23,10 +23,10 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
 import io.grpc.stub.StreamObserver
-import org.apache.commons.codec.digest.DigestUtils.sha256Hex
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ArtifactStatusesResponse
+import org.apache.spark.network.util.JavaUtils.sha256Hex
 import org.apache.spark.sql.connect.ResourceHelper
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.ThreadUtils

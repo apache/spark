@@ -624,6 +624,11 @@ This file is divided into 3 sections:
     <customMessage>Please use Apache Log4j 2 instead.</customMessage>
   </check>
 
+  <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="true">
+    <parameters><parameter name="illegalImports"><![CDATA[org.apache.commons.codec.digest]]></parameter></parameters>
+    <customMessage>Please use org.apache.spark.network.util.JavaUtils.digestToHexString instead.</customMessage>
+  </check>
+
 
   <!-- ================================================================================ -->
   <!--       rules we'd like to enforce, but haven't cleaned up the codebase yet        -->

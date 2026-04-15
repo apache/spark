@@ -32,12 +32,12 @@ import scala.util.control.NonFatal
 import com.google.protobuf.ByteString
 import io.grpc.StatusRuntimeException
 import io.grpc.stub.StreamObserver
-import org.apache.commons.codec.digest.DigestUtils.sha256Hex
 
 import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.AddArtifactsResponse
 import org.apache.spark.connect.proto.AddArtifactsResponse.ArtifactSummary
+import org.apache.spark.network.util.JavaUtils.sha256Hex
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.Artifact.{newCacheArtifact, newIvyArtifacts}
 import org.apache.spark.util.{SparkFileUtils, SparkStringUtils, SparkThreadUtils}
