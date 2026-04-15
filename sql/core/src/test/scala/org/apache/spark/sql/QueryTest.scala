@@ -285,11 +285,10 @@ trait QueryTestBase
    * but the implicits import is needed in the constructor.
    */
   protected object testImplicits
-    extends classic.SQLImplicits
+    extends SQLImplicits
       with classic.ClassicConversions
       with classic.ColumnConversions {
-    override protected def session: classic.SparkSession =
-      self.spark.asInstanceOf[classic.SparkSession]
+    override protected def session: SparkSession = self.spark
     override protected def converter: classic.ColumnNodeToExpressionConverter =
       self.spark.asInstanceOf[classic.SparkSession].converter
   }
