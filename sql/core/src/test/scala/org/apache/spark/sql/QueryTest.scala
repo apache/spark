@@ -667,9 +667,12 @@ trait QueryTestBase
    * Waits for all tasks on all executors to be finished.
    */
   protected def waitForTasksToFinish(): Unit = {
-    eventually(timeout(10.seconds)) {
-      assert(spark.sparkContext.statusTracker
-        .getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+    spark match {
+      case spark: classic.SparkSession =>
+        eventually(timeout(10.seconds)) {
+          assert(spark.sparkContext.statusTracker
+            .getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+        }
     }
   }
 
