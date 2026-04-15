@@ -62,7 +62,9 @@ case class FilterEstimation(plan: Filter) extends Logging {
     }
     val sizeByOutputAttrs = getOutputSize(plan.output, filteredRowCount, newColStats)
     val sizeByChildScaling = if (childRowCount > 0 && filteredRowCount > 0) {
-      ceil(BigDecimal(childStats.sizeInBytes) * BigDecimal(filteredRowCount) / BigDecimal(childRowCount))
+      ceil(
+        BigDecimal(childStats.sizeInBytes) * BigDecimal(filteredRowCount) /
+          BigDecimal(childRowCount))
         .max(BigInt(1))
     } else {
       BigInt(1)
