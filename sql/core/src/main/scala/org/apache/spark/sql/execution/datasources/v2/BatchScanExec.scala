@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, SinglePa
 import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
-import org.apache.spark.sql.execution.{ScalarSubquery => ExecScalarSubquery}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -62,25 +61,10 @@ case class BatchScanExec(
 
   // Visible for testing
   @transient private[sql] lazy val filteredPartitions: Seq[Option[InputPartition]] = {
-    val dppFilters = runtimeFilters.flatMap {
+    val dataSourceFilters = runtimeFilters.flatMap {
       case DynamicPruningExpression(e) => DataSourceV2Strategy.translateRuntimeFilterV2(e)
-      case _ => None
+      case f => DataSourceV2Strategy.translateScalarSubqueryFilterV2(f)
     }
-
-    // Literalize scalar subquery filters and translate to V2 predicates.
-    // Non-DPP runtime filters (scalar subqueries on partition columns) are resolved here:
-    // each ExecScalarSubquery is replaced with its literal value, then the expression
-    // is translated to a V2 Predicate for the connector's filter() call.
-    val scalarSubqueryV2Filters = runtimeFilters.flatMap {
-      case _: DynamicPruning => None
-      case f =>
-        val literalized = f.transform {
-          case s: ExecScalarSubquery => s.toLiteral
-        }
-        DataSourceV2Strategy.translateFilterV2(literalized)
-    }
-
-    val dataSourceFilters = dppFilters ++ scalarSubqueryV2Filters
 
     val originalPartitioning = outputPartitioning
     if (dataSourceFilters.nonEmpty) {
