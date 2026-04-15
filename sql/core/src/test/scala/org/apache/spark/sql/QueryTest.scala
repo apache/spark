@@ -502,9 +502,9 @@ trait QueryTestBase
    * `f` returns.
    */
   protected def activateDatabase(db: String)(f: => Unit): Unit = {
-    spark.sessionState.catalogManager.setCurrentNamespace(Array(db))
+    spark.catalog.setCurrentDatabase(db)
     Utils.tryWithSafeFinally(f)(
-      spark.sessionState.catalogManager.setCurrentNamespace(Array("default")))
+      spark.catalog.setCurrentDatabase("default"))
   }
 
   /**
