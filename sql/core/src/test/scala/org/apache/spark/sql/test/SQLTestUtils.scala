@@ -449,13 +449,13 @@ private[sql] trait SQLTestUtilsBase
    * Strip Spark-side filtering in order to check if a datasource filters rows correctly.
    */
   protected def stripSparkFilter(df: DataFrame): DataFrame = {
-    val classicSpark = spark.asInstanceOf[classic.SparkSession]
     val schema = df.schema
     val withoutFilters = df.queryExecution.executedPlan.transform {
       case FilterExec(_, child) => child
     }
 
-    classicSpark.internalCreateDataFrame(withoutFilters.execute(), schema)
+    spark.asInstanceOf[classic.SparkSession]
+      .internalCreateDataFrame(withoutFilters.execute(), schema)
   }
 
   /**
