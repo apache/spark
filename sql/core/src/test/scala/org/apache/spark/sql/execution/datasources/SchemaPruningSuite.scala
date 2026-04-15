@@ -22,7 +22,7 @@ import java.io.File
 import org.scalactic.Equality
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{classic, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.SchemaPruningTest
 import org.apache.spark.sql.catalyst.expressions.Concat
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -601,7 +601,7 @@ abstract class SchemaPruningSuite
           Concat(Seq($"name.last", $"name.first")))
       ),
       Seq($"a".string, $"b".string),
-      sql("select * from contacts").asInstanceOf[org.apache.spark.sql.classic.DataFrame].logicalPlan
+      sql("select * from contacts").asInstanceOf[classic.DataFrame].logicalPlan
     ).toDF()
     checkScan(query1, "struct<name:struct<first:string,last:string>>")
     checkAnswer(query1,
@@ -618,7 +618,7 @@ abstract class SchemaPruningSuite
     val query2 = Expand(
       Seq(Seq($"name", $"name.last")),
       Seq($"a".struct(name), $"b".string),
-      sql("select * from contacts").asInstanceOf[org.apache.spark.sql.classic.DataFrame].logicalPlan
+      sql("select * from contacts").asInstanceOf[classic.DataFrame].logicalPlan
     ).toDF()
     checkScan(query2, "struct<name:struct<first:string,middle:string,last:string>>")
     checkAnswer(query2,
