@@ -40,8 +40,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   import testImplicits._
 
   test("basic") {
-    val session = spark
-
 
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
@@ -125,8 +123,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("multiple") {
-    val session = spark
-
 
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
@@ -163,8 +159,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("temporary views don't get materialized") {
-    val session = spark
-
 
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
@@ -240,8 +234,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("schema matches existing table schema") {
-    val session = spark
-
 
     sql(s"CREATE TABLE ${TestGraphRegistrationContext.DEFAULT_DATABASE}.t2(x INT)")
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
@@ -269,9 +261,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("invalid schema merge") {
-    val session = spark
     implicit val sqlCtx: SQLContext = spark.sqlContext
-
 
     val streamInts = MemoryStream[Int]
     streamInts.addData(1, 2)
@@ -300,8 +290,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("table materialized with specified schema, even if different from inferred") {
-    val session = spark
-
 
     sql(s"CREATE TABLE ${TestGraphRegistrationContext.DEFAULT_DATABASE}.t4(x INT)")
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
@@ -339,8 +327,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("specified schema incompatible with existing table") {
-    val session = spark
-
 
     sql(s"CREATE TABLE ${TestGraphRegistrationContext.DEFAULT_DATABASE}.t6(x BOOLEAN)")
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
@@ -385,8 +371,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("partition columns with user schema") {
-    val session = spark
-
 
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
@@ -415,8 +399,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("specifying partition column with existing partitioned table") {
-    val session = spark
-
 
     sql(
       s"CREATE TABLE ${TestGraphRegistrationContext.DEFAULT_DATABASE}.t7(x BOOLEAN, y INT) " +
@@ -482,8 +464,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("specifying partition column different from existing partitioned table") {
-    val session = spark
-
 
     sql(
       s"CREATE TABLE ${TestGraphRegistrationContext.DEFAULT_DATABASE}.t8(x BOOLEAN, y INT) " +
@@ -547,8 +527,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("Invalid table properties error during table materialization") {
-    val session = spark
-
 
     // Invalid pipelines property
     val graph1 =
@@ -587,8 +565,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     test(
       s"Complete tables should not evolve schema - isFullRefresh = $isFullRefresh"
     ) {
-      val session = spark
-
       val rawGraph =
         new TestGraphRegistrationContext(spark) {
           registerView("a", query = dfFlowFunc(Seq((1, 2), (2, 3)).toDF("x", "y")))
@@ -644,7 +620,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     test(
       s"Streaming tables should evolve schema only if not full refresh = $isFullRefresh"
     ) {
-      val session = spark
       implicit val sqlCtx: SQLContext = spark.sqlContext
 
       val streamInts = MemoryStream[Int]
@@ -712,8 +687,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   test(
     "materialize only selected tables"
   ) {
-    val session = spark
-
 
     val graph = new TestGraphRegistrationContext(spark) {
       registerTable("a", query = Option(dfFlowFunc(Seq((1, 2), (2, 3)).toDF("x", "y"))))
@@ -759,8 +732,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("tables with arrays and maps") {
-    val session = spark
-
 
     val rawGraph =
       new TestGraphRegistrationContext(spark) {
@@ -855,8 +826,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("materializing no tables doesn't throw") {
-    val session = spark
-
 
     val graph1 =
       new DataflowGraph(flows = Seq.empty, tables = Seq.empty, views = Seq.empty, sinks = Seq.empty)
@@ -886,8 +855,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("cluster columns with user schema") {
-    val session = spark
-
 
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
@@ -923,8 +890,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("specifying cluster column with existing clustered table") {
-    val session = spark
-
 
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
@@ -979,8 +944,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("specifying cluster column different from existing clustered table") {
-    val session = spark
-
 
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
@@ -1018,8 +981,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("cluster columns only (no partitioning)") {
-    val session = spark
-
 
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
@@ -1057,8 +1018,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("materialized view with cluster columns") {
-    val session = spark
-
 
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
@@ -1088,8 +1047,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("partition and cluster columns together should fail") {
-    val session = spark
-
 
     val ex = intercept[TableMaterializationException] {
       materializeGraph(
@@ -1110,8 +1067,6 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("cluster column that doesn't exist in table schema should fail") {
-    val session = spark
-
 
     val ex = intercept[TableMaterializationException] {
       materializeGraph(
