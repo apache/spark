@@ -53,6 +53,16 @@ trait SharedSparkSession extends QueryTest with SharedSparkSessionBase {
       doThreadPostAudit()
     }
   }
+}
+
+/**
+ * Extends SharedSparkSession to explicitly provide [[classic.SparkSession]].
+ *
+ * Use this trait to indicate that this test is classic-only, i.e. it would not make sense to run
+ * this test with a [[org.apache.spark.sql.connect.SparkSession]].
+ */
+trait SharedClassicSparkSession extends SharedSparkSession with ClassicSQLTestUtils {
+  override def spark: classic.SparkSession = super.spark.asInstanceOf[classic.SparkSession]
 
   // Runs func (which must trigger exactly one SQL execution) and returns the SQL metrics of that
   // execution as a map keyed by (planNodeId, planNodeName, metricName) -> metricValue.
@@ -80,16 +90,6 @@ trait SharedSparkSession extends QueryTest with SharedSparkSessionBase {
       .toMap
     statusStore.executionMetrics(execId).map { case (k, v) => sqlMetrics(k) -> v }
   }
-}
-
-/**
- * Extends SharedSparkSession to explicitly provide [[classic.SparkSession]].
- *
- * Use this trait to indicate that this test is classic-only, i.e. it would not make sense to run
- * this test with a [[org.apache.spark.sql.connect.SparkSession]].
- */
-trait SharedClassicSparkSession extends SharedSparkSession with ClassicSQLTestUtils {
-  override def spark: classic.SparkSession = super.spark.asInstanceOf[classic.SparkSession]
 }
 
 /**
