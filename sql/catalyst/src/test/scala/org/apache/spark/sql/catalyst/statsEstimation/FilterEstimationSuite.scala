@@ -388,6 +388,21 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       expectedRowCount = 3)
   }
 
+  test("cint IN (3, 4, 5) - missing min/max but has NDV") {
+    val attrIntNoMinMax = AttributeReference("cint_no_min_max", IntegerType)()
+    val colStatIntNoMinMax = ColumnStat(distinctCount = Some(10), min = None, max = None,
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
+    val childPlan = StatsTestPlan(
+      outputList = Seq(attrIntNoMinMax),
+      rowCount = 10L,
+      attributeStats = AttributeMap(Seq(attrIntNoMinMax -> colStatIntNoMinMax))
+    )
+    validateEstimatedStats(
+      Filter(InSet(attrIntNoMinMax, Set(3, 4, 5)), childPlan),
+      Seq(attrIntNoMinMax -> colStatIntNoMinMax),
+      expectedRowCount = 10)
+  }
+
   test("evaluateInSet with all zeros") {
     validateEstimatedStats(
       Filter(InSet(attrString, Set(3, 4, 5)),
