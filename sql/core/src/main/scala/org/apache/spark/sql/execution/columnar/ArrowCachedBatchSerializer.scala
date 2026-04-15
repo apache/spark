@@ -134,14 +134,20 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       selectedAttributes.map(a => cacheAttributes.map(o => o.exprId).indexOf(a.exprId)).toArray
     // Capture config on driver
     val timeZoneId = conf.sessionLocalTimeZone
+    val prefetchEnabled = conf.arrowCachePrefetchEnabled
 
     input.mapPartitionsInternal { batchIterator =>
-      new ArrowCachedBatchToColumnarBatchIterator(
+      val baseIter = new ArrowCachedBatchToColumnarBatchIterator(
         batchIterator,
         cacheSchema,
         selectedSchema,
         columnIndices,
         timeZoneId)
+      if (prefetchEnabled) {
+        new ArrowPrefetchColumnarBatchIterator(baseIter)
+      } else {
+        baseIter
+      }
     }
   }
 
@@ -191,13 +197,15 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
           }
         }
     } else {
+      val prefetchEnabled = conf.arrowCachePrefetchEnabled
       input.mapPartitionsInternal { batchIterator =>
         new ArrowCachedBatchToInternalRowIterator(
           batchIterator,
           cacheSchema,
           selectedSchema,
           selectedIndices,
-          timeZoneId)
+          timeZoneId,
+          prefetchEnabled)
       }
     }
   }
@@ -1041,7 +1049,11 @@ private class ArrowCachedBatchToInternalRowIterator(
     cacheSchema: StructType,
     selectedSchema: StructType,
     columnIndices: Array[Int],
-    timeZoneId: String) extends Iterator[InternalRow] {
+    timeZoneId: String,
+    prefetchEnabled: Boolean = false) extends Iterator[InternalRow] {
+
+  import java.util.concurrent.{Callable, ExecutionException, Future, Executors,
+    ExecutorService}
 
   private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
     s"ArrowCachedBatchToInternalRowIterator-${TaskContext.get().taskAttemptId()}",
@@ -1053,6 +1065,7 @@ private class ArrowCachedBatchToInternalRowIterator(
   private var currentRowCount: Int = 0
 
   private val numFields = selectedSchema.length
+  private val arrowSchema = ArrowUtils.toArrowSchema(cacheSchema, timeZoneId, false, false)
 
   // Pre-build typed readers per column at init time -- no per-row pattern match
   private val columnReaders: Array[ArrowColumnReader] =
@@ -1061,9 +1074,28 @@ private class ArrowCachedBatchToInternalRowIterator(
   // Write directly to UnsafeRow -- no intermediate SpecificInternalRow + UnsafeProjection
   private val rowWriter = new UnsafeRowWriter(numFields)
 
+  // Prefetch support: deserialize the next batch in background while current batch is consumed
+  private val prefetchExecutor: ExecutorService = if (prefetchEnabled) {
+    Executors.newSingleThreadExecutor(r => {
+      val t = new Thread(r, "arrow-cache-row-prefetch")
+      t.setDaemon(true)
+      t
+    })
+  } else {
+    null
+  }
+  private var prefetchFuture: Future[VectorSchemaRoot] = _
+
   // Register cleanup
   Option(TaskContext.get()).foreach { tc =>
     tc.addTaskCompletionListener[Unit] { _ =>
+      if (prefetchFuture != null) {
+        prefetchFuture.cancel(true)
+        prefetchFuture = null
+      }
+      if (prefetchExecutor != null) {
+        prefetchExecutor.shutdownNow()
+      }
       if (currentRoot != null) {
         currentRoot.close()
         currentRoot = null
@@ -1075,7 +1107,7 @@ private class ArrowCachedBatchToInternalRowIterator(
   override def hasNext: Boolean = {
     if (currentRowIndex < currentRowCount) {
       true
-    } else if (batchIter.hasNext) {
+    } else if (prefetchFuture != null || batchIter.hasNext) {
       loadNextBatch()
       currentRowIndex < currentRowCount
     } else {
@@ -1111,39 +1143,131 @@ private class ArrowCachedBatchToInternalRowIterator(
     rowWriter.getRow()
   }
 
+  /** Deserialize a cached batch into a VectorSchemaRoot. */
+  private def deserializeBatch(cachedBatch: ArrowCachedBatch): VectorSchemaRoot = {
+    val in = new ByteArrayInputStream(cachedBatch.arrowData)
+    val readChannel = new ReadChannel(Channels.newChannel(in))
+    val recordBatch = MessageSerializer.deserializeRecordBatch(readChannel, allocator)
+    try {
+      val root = VectorSchemaRoot.create(arrowSchema, allocator)
+      val loader = new VectorLoader(root)
+      loader.load(recordBatch)
+      root
+    } finally {
+      recordBatch.close()
+    }
+  }
+
+  /** Submit prefetch for the next batch if available. */
+  private def submitPrefetch(): Unit = {
+    if (prefetchEnabled && batchIter.hasNext) {
+      val nextCachedBatch = batchIter.next().asInstanceOf[ArrowCachedBatch]
+      prefetchFuture = prefetchExecutor.submit(new Callable[VectorSchemaRoot] {
+        override def call(): VectorSchemaRoot = deserializeBatch(nextCachedBatch)
+      })
+    }
+  }
+
   private def loadNextBatch(): Unit = {
     if (currentRoot != null) {
       currentRoot.close()
       currentRoot = null
     }
 
-    val cachedBatch = batchIter.next().asInstanceOf[ArrowCachedBatch]
-
-    val arrowData = cachedBatch.arrowData
-    val in = new ByteArrayInputStream(arrowData)
-    val readChannel = new ReadChannel(Channels.newChannel(in))
-
-    val recordBatch = MessageSerializer.deserializeRecordBatch(readChannel, allocator)
-
-    try {
-      val arrowSchema = ArrowUtils.toArrowSchema(cacheSchema, timeZoneId, false, false)
-      val root = VectorSchemaRoot.create(arrowSchema, allocator)
-      currentRoot = root
-
-      val loader = new VectorLoader(root)
-      loader.load(recordBatch)
-
-      // Update pre-built readers with new vectors
-      var i = 0
-      while (i < numFields) {
-        columnReaders(i).setVector(root.getVector(columnIndices(i)))
-        i += 1
+    val root = if (prefetchFuture != null) {
+      // Use the prefetched result
+      val r = try {
+        prefetchFuture.get()
+      } catch {
+        case e: ExecutionException => throw e.getCause
       }
+      prefetchFuture = null
+      r
+    } else {
+      // No prefetch available, deserialize synchronously
+      val cachedBatch = batchIter.next().asInstanceOf[ArrowCachedBatch]
+      deserializeBatch(cachedBatch)
+    }
 
-      currentRowIndex = 0
-      currentRowCount = cachedBatch.numRows
-    } finally {
-      recordBatch.close()
+    currentRoot = root
+
+    // Update pre-built readers with new vectors
+    var i = 0
+    while (i < numFields) {
+      columnReaders(i).setVector(root.getVector(columnIndices(i)))
+      i += 1
+    }
+
+    currentRowIndex = 0
+    currentRowCount = root.getRowCount
+
+    // Start prefetching the next batch while this one is being consumed
+    submitPrefetch()
+  }
+}
+
+/**
+ * Wraps an ArrowCachedBatchToColumnarBatchIterator with background prefetching.
+ * While the current ColumnarBatch is being consumed, the next batch is deserialized
+ * and decompressed in a background thread. This overlaps decompression with consumption
+ * and is most beneficial for compressed Arrow caches (e.g. ZSTD).
+ *
+ * Uses a single-thread executor to avoid per-batch thread creation overhead.
+ *
+ * Enabled via spark.sql.execution.arrow.cache.prefetch.enabled=true.
+ */
+private class ArrowPrefetchColumnarBatchIterator(
+    underlying: ArrowCachedBatchToColumnarBatchIterator) extends Iterator[ColumnarBatch] {
+
+  import java.util.concurrent.{Callable, ExecutionException, Future, Executors}
+
+  private val executor = Executors.newSingleThreadExecutor(r => {
+    val t = new Thread(r, "arrow-cache-prefetch")
+    t.setDaemon(true)
+    t
+  })
+
+  // The prefetched result (null means no more batches)
+  private var prefetchFuture: Future[ColumnarBatch] = _
+
+  // Register cleanup
+  Option(TaskContext.get()).foreach { tc =>
+    tc.addTaskCompletionListener[Unit] { _ =>
+      executor.shutdownNow()
+    }
+  }
+
+  // Kick off prefetch of the first batch immediately
+  submitPrefetch()
+
+  override def hasNext: Boolean = prefetchFuture != null
+
+  override def next(): ColumnarBatch = {
+    if (!hasNext) {
+      throw new NoSuchElementException("No more batches")
+    }
+
+    // Wait for the prefetched batch
+    val batch = try {
+      prefetchFuture.get()
+    } catch {
+      case e: ExecutionException => throw e.getCause
+    }
+
+    // Start prefetching the next batch
+    submitPrefetch()
+
+    batch
+  }
+
+  private def submitPrefetch(): Unit = {
+    if (underlying.hasNext) {
+      prefetchFuture = executor.submit(new Callable[ColumnarBatch] {
+        override def call(): ColumnarBatch = underlying.next()
+      })
+    } else {
+      prefetchFuture = null
+      executor.shutdown()
     }
   }
 }

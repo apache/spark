@@ -4804,6 +4804,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ARROW_CACHE_PREFETCH_ENABLED =
+    buildConf("spark.sql.execution.arrow.cache.prefetch.enabled")
+      .doc("When true, Arrow cache read path prefetches and decompresses the next batch " +
+        "in a background thread while the current batch is being consumed. This can " +
+        "significantly improve read performance for compressed Arrow caches (e.g., ZSTD) " +
+        "by overlapping decompression with consumption. Increases memory usage by up to " +
+        "one additional batch worth of Arrow vectors.")
+      .version("4.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.transformWithStateInPySpark.maxStateRecordsPerBatch")
       .doc("When using TransformWithState in PySpark (both Python Row and Pandas), limit " +
@@ -8740,6 +8751,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def arrowPySparkUDFColumnarInputEnabled: Boolean =
     getConf(ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED)
+
+  def arrowCachePrefetchEnabled: Boolean = getConf(ARROW_CACHE_PREFETCH_ENABLED)
 
   def arrowTransformWithStateInPySparkMaxStateRecordsPerBatch: Int =
     getConf(ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH)

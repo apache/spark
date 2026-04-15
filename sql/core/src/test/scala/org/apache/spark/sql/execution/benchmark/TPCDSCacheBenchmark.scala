@@ -449,6 +449,24 @@ object TPCDSCacheBenchmark extends SqlBasedBenchmark {
           }
         }
 
+        // Arrow cache (zstd level 3 + prefetch)
+        benchmark.addTimerCase(s"Arrow cache (zstd 3 + prefetch)") { timer =>
+          val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
+          try {
+            spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
+            spark.conf.set("spark.sql.execution.arrow.compression.level", "3")
+            spark.conf.set("spark.sql.execution.arrow.cache.prefetch.enabled", "true")
+            loadAndCacheTables(spark, dataDir)
+            spark.sql(querySQL).write.format("noop").mode("overwrite").save()
+            timer.startTiming()
+            spark.sql(querySQL).write.format("noop").mode("overwrite").save()
+            timer.stopTiming()
+            uncacheAllTables(spark)
+          } finally {
+            spark.stop()
+          }
+        }
+
         benchmark.run()
       }
     }
@@ -1034,7 +1052,12 @@ object TPCDSCacheBenchmark extends SqlBasedBenchmark {
       ("Arrow (zstd level 3)",
         classOf[ArrowCachedBatchSerializer].getName,
         Map("spark.sql.execution.arrow.compression.codec" -> "zstd",
-          "spark.sql.execution.arrow.compression.level" -> "3"))
+          "spark.sql.execution.arrow.compression.level" -> "3")),
+      ("Arrow (zstd 3 + prefetch)",
+        classOf[ArrowCachedBatchSerializer].getName,
+        Map("spark.sql.execution.arrow.compression.codec" -> "zstd",
+          "spark.sql.execution.arrow.compression.level" -> "3",
+          "spark.sql.execution.arrow.cache.prefetch.enabled" -> "true"))
     )
 
     // Helper: consume columnar batches directly from cache scan
