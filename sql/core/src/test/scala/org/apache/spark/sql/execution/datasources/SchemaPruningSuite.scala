@@ -601,7 +601,7 @@ abstract class SchemaPruningSuite
           Concat(Seq($"name.last", $"name.first")))
       ),
       Seq($"a".string, $"b".string),
-      sql("select * from contacts").queryExecution.logical
+      sql("select * from contacts").asInstanceOf[org.apache.spark.sql.classic.DataFrame].logicalPlan
     ).toDF()
     checkScan(query1, "struct<name:struct<first:string,last:string>>")
     checkAnswer(query1,
@@ -618,7 +618,7 @@ abstract class SchemaPruningSuite
     val query2 = Expand(
       Seq(Seq($"name", $"name.last")),
       Seq($"a".struct(name), $"b".string),
-      sql("select * from contacts").queryExecution.logical
+      sql("select * from contacts").asInstanceOf[org.apache.spark.sql.classic.DataFrame].logicalPlan
     ).toDF()
     checkScan(query2, "struct<name:struct<first:string,middle:string,last:string>>")
     checkAnswer(query2,
