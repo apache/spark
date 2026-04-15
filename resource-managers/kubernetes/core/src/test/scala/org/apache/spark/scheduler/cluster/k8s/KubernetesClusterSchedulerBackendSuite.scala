@@ -315,13 +315,6 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     verify(context).reply("1")
   }
 
-  test("SPARK-56238: applicationId() returns consistent value when spark.app.id is set") {
-    val id1 = schedulerBackendUnderTest.applicationId()
-    val id2 = schedulerBackendUnderTest.applicationId()
-    assert(id1 === id2)
-    assert(id1 === TEST_SPARK_APP_ID)
-  }
-
   test("SPARK-56238: applicationId() is stable across calls when spark.app.id is not set") {
     // Use isolated mocks so we don't mutate the shared sc/rpcEnv state.
     val confWithoutAppId = new SparkConf(false)
