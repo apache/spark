@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.config.{SCHEDULER_ALLOCATION_FILE, SCHEDULER_MODE}
+import org.apache.spark.internal.config.{SCHEDULER_ALLOCATION_FILE, SCHEDULER_MODE, STREAMING_ID_AWARE_SCHEDULER_LOGGING_ENABLED}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.util.Utils
 
@@ -60,6 +60,8 @@ private[spark] class FIFOSchedulableBuilder(val rootPool: Pool)
 private[spark] class FairSchedulableBuilder(val rootPool: Pool, sc: SparkContext)
   extends SchedulableBuilder with Logging {
 
+  val streamingIdAwareLoggingEnabled: Boolean =
+    sc.conf.get(STREAMING_ID_AWARE_SCHEDULER_LOGGING_ENABLED)
   val schedulerAllocFile = sc.conf.get(SCHEDULER_ALLOCATION_FILE)
   val DEFAULT_SCHEDULER_FILE = "fairscheduler.xml"
   val FAIR_SCHEDULER_PROPERTIES = SparkContext.SPARK_SCHEDULER_POOL
@@ -226,7 +228,8 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, sc: SparkContext
           log"configuration (schedulingMode: " +
           log"${MDC(LogKeys.SCHEDULING_MODE, DEFAULT_SCHEDULING_MODE)}, " +
           log"minShare: ${MDC(MIN_SHARE, DEFAULT_MINIMUM_SHARE)}, " +
-          log"weight: ${MDC(WEIGHT, DEFAULT_WEIGHT)}"
+          log"weight: ${MDC(WEIGHT, DEFAULT_WEIGHT)}",
+          streamingIdAwareLoggingEnabled
         )
       )
     }
@@ -236,7 +239,8 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, sc: SparkContext
       StructuredStreamingIdAwareSchedulerLogging.constructStreamingLogEntry(
         properties,
         log"Added task set ${MDC(LogKeys.TASK_SET_MANAGER, manager.name)} tasks to pool " +
-        log"${MDC(LogKeys.POOL_NAME, poolName)}"
+        log"${MDC(LogKeys.POOL_NAME, poolName)}",
+        streamingIdAwareLoggingEnabled
       )
     )
   }

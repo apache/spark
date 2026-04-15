@@ -66,7 +66,7 @@ class StructuredStreamingIdAwareSchedulerLoggingSuite extends SparkFunSuite {
 
   test("SPARK-56326: constructStreamingLogEntry with String - both queryId and batchId") {
     val result = StructuredStreamingIdAwareSchedulerLogging
-      .constructStreamingLogEntry(propsWithBothIds(), "test message")
+      .constructStreamingLogEntry(propsWithBothIds(), "test message", enabled = true)
 
     assertResult(s"[queryId = $testQueryId] [batchId = $testBatchId] test message")(
       result.message)
@@ -76,7 +76,7 @@ class StructuredStreamingIdAwareSchedulerLoggingSuite extends SparkFunSuite {
 
   test("SPARK-56326: constructStreamingLogEntry with String - only queryId") {
     val result = StructuredStreamingIdAwareSchedulerLogging
-      .constructStreamingLogEntry(propsWithQueryIdOnly(), "test message")
+      .constructStreamingLogEntry(propsWithQueryIdOnly(), "test message", enabled = true)
 
     assertResult(s"[queryId = $testQueryId] test message")(result.message)
     assertContextValue(result.context, LogKeys.QUERY_ID, testQueryId)
@@ -85,7 +85,7 @@ class StructuredStreamingIdAwareSchedulerLoggingSuite extends SparkFunSuite {
 
   test("SPARK-56326: constructStreamingLogEntry with String - no streaming properties") {
     val result = StructuredStreamingIdAwareSchedulerLogging
-      .constructStreamingLogEntry(new Properties(), "test message")
+      .constructStreamingLogEntry(new Properties(), "test message", enabled = true)
 
     assertResult("test message")(result.message)
     assert(result.context.isEmpty)
@@ -93,7 +93,7 @@ class StructuredStreamingIdAwareSchedulerLoggingSuite extends SparkFunSuite {
 
   test("SPARK-56326: constructStreamingLogEntry with String - null properties") {
     val result = StructuredStreamingIdAwareSchedulerLogging
-      .constructStreamingLogEntry(null, "test message")
+      .constructStreamingLogEntry(null, "test message", enabled = true)
 
     assertResult("test message")(result.message)
     assert(result.context.isEmpty)
@@ -103,7 +103,7 @@ class StructuredStreamingIdAwareSchedulerLoggingSuite extends SparkFunSuite {
     val props = new Properties()
     props.setProperty(QUERY_ID_KEY, "")
     val result = StructuredStreamingIdAwareSchedulerLogging
-      .constructStreamingLogEntry(props, "test message")
+      .constructStreamingLogEntry(props, "test message", enabled = true)
 
     assertResult("test message")(result.message)
     assert(result.context.isEmpty)
@@ -114,7 +114,7 @@ class StructuredStreamingIdAwareSchedulerLoggingSuite extends SparkFunSuite {
     props.setProperty(QUERY_ID_KEY, testQueryId)
     props.setProperty(BATCH_ID_KEY, "")
     val result = StructuredStreamingIdAwareSchedulerLogging
-      .constructStreamingLogEntry(props, "test message")
+      .constructStreamingLogEntry(props, "test message", enabled = true)
 
     assertResult(s"[queryId = $testQueryId] test message")(result.message)
     assertContextValue(result.context, LogKeys.QUERY_ID, testQueryId)
@@ -124,7 +124,8 @@ class StructuredStreamingIdAwareSchedulerLoggingSuite extends SparkFunSuite {
   test("SPARK-56326: constructStreamingLogEntry with LogEntry - both queryId and batchId") {
     val result = StructuredStreamingIdAwareSchedulerLogging
       .constructStreamingLogEntry(propsWithBothIds(),
-        log"test message ${MDC(LogKeys.MESSAGE, "Dummy Context")}")
+        log"test message ${MDC(LogKeys.MESSAGE, "Dummy Context")}",
+        enabled = true)
 
     assertResult(s"[queryId = $testQueryId] " +
       s"[batchId = $testBatchId] test message Dummy Context")(
@@ -137,7 +138,8 @@ class StructuredStreamingIdAwareSchedulerLoggingSuite extends SparkFunSuite {
   test("SPARK-56326: constructStreamingLogEntry with LogEntry - only queryId") {
     val result = StructuredStreamingIdAwareSchedulerLogging
       .constructStreamingLogEntry(propsWithQueryIdOnly(),
-        log"test message ${MDC(LogKeys.MESSAGE, "Dummy Context")}")
+        log"test message ${MDC(LogKeys.MESSAGE, "Dummy Context")}",
+        enabled = true)
 
     assertResult(s"[queryId = $testQueryId] test message Dummy Context")(result.message)
     assertContextValue(result.context, LogKeys.QUERY_ID, testQueryId)
@@ -148,7 +150,8 @@ class StructuredStreamingIdAwareSchedulerLoggingSuite extends SparkFunSuite {
   test("SPARK-56326: constructStreamingLogEntry with LogEntry - no streaming properties") {
     val result = StructuredStreamingIdAwareSchedulerLogging
       .constructStreamingLogEntry(new Properties(),
-        log"test message ${MDC(LogKeys.MESSAGE, "Dummy Context")}")
+        log"test message ${MDC(LogKeys.MESSAGE, "Dummy Context")}",
+        enabled = true)
 
     assertResult("test message Dummy Context")(result.message)
     assertContextAbsent(result.context, LogKeys.QUERY_ID)
@@ -159,7 +162,8 @@ class StructuredStreamingIdAwareSchedulerLoggingSuite extends SparkFunSuite {
   test("SPARK-56326: constructStreamingLogEntry with LogEntry - null properties") {
     val result = StructuredStreamingIdAwareSchedulerLogging
       .constructStreamingLogEntry(null,
-        log"test message ${MDC(LogKeys.MESSAGE, "Dummy Context")}")
+        log"test message ${MDC(LogKeys.MESSAGE, "Dummy Context")}",
+        enabled = true)
 
     assertResult("test message Dummy Context")(result.message)
     assertContextAbsent(result.context, LogKeys.QUERY_ID)
@@ -173,7 +177,8 @@ class StructuredStreamingIdAwareSchedulerLoggingSuite extends SparkFunSuite {
     props.setProperty(QUERY_ID_KEY, "")
     val result = StructuredStreamingIdAwareSchedulerLogging
       .constructStreamingLogEntry(props,
-        log"test message ${MDC(LogKeys.MESSAGE, "Dummy Context")}")
+        log"test message ${MDC(LogKeys.MESSAGE, "Dummy Context")}",
+        enabled = true)
 
     assertResult("test message Dummy Context")(result.message)
     assertContextAbsent(result.context, LogKeys.QUERY_ID)
@@ -187,7 +192,8 @@ class StructuredStreamingIdAwareSchedulerLoggingSuite extends SparkFunSuite {
     props.setProperty(BATCH_ID_KEY, "")
     val result = StructuredStreamingIdAwareSchedulerLogging
       .constructStreamingLogEntry(props,
-        log"test message ${MDC(LogKeys.MESSAGE, "Dummy Context")}")
+        log"test message ${MDC(LogKeys.MESSAGE, "Dummy Context")}",
+        enabled = true)
 
     assertResult(s"[queryId = $testQueryId] test message Dummy Context")(result.message)
     assertContextValue(result.context, LogKeys.QUERY_ID, testQueryId)
@@ -203,7 +209,7 @@ class StructuredStreamingIdAwareSchedulerLoggingSuite extends SparkFunSuite {
     })
 
     val result = StructuredStreamingIdAwareSchedulerLogging
-      .constructStreamingLogEntry(propsWithBothIds(), lazyEntry)
+      .constructStreamingLogEntry(propsWithBothIds(), lazyEntry, enabled = true)
 
     // Work should be deferred
     assert(!evaluated,
@@ -227,7 +233,7 @@ class StructuredStreamingIdAwareSchedulerLoggingSuite extends SparkFunSuite {
 
     val entry = log"test message ${MDC(LogKeys.MESSAGE, "Dummy Context")}"
     val result = StructuredStreamingIdAwareSchedulerLogging
-      .constructStreamingLogEntry(props, entry)
+      .constructStreamingLogEntry(props, entry, enabled = true)
 
     assert(!propertiesAccessed,
       "Properties should not be accessed during constructStreamingLogEntry")
@@ -235,5 +241,24 @@ class StructuredStreamingIdAwareSchedulerLoggingSuite extends SparkFunSuite {
     result.message
     assert(propertiesAccessed,
       "Properties should be accessed when .message is called")
+  }
+
+  test("SPARK-56326: constructStreamingLogEntry with String - disabled skips enrichment") {
+    val result = StructuredStreamingIdAwareSchedulerLogging
+      .constructStreamingLogEntry(propsWithBothIds(), "test message", enabled = false)
+
+    assertResult("test message")(result.message)
+    assert(result.context.isEmpty)
+  }
+
+  test("SPARK-56326: constructStreamingLogEntry with LogEntry - disabled skips enrichment") {
+    val entry = log"test message ${MDC(LogKeys.MESSAGE, "Dummy Context")}"
+    val result = StructuredStreamingIdAwareSchedulerLogging
+      .constructStreamingLogEntry(propsWithBothIds(), entry, enabled = false)
+
+    assertResult("test message Dummy Context")(result.message)
+    assertContextAbsent(result.context, LogKeys.QUERY_ID)
+    assertContextAbsent(result.context, LogKeys.BATCH_ID)
+    assertContextValue(result.context, LogKeys.MESSAGE, "Dummy Context")
   }
 }

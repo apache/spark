@@ -2373,6 +2373,14 @@ package object config {
       .enumConf(SchedulingMode)
       .createWithDefault(SchedulingMode.FIFO)
 
+  private[spark] val STREAMING_ID_AWARE_SCHEDULER_LOGGING_ENABLED =
+    ConfigBuilder("spark.scheduler.streaming.idAwareLogging.enabled")
+      .doc("When true, scheduler log messages for streaming tasks include " +
+        "the structured streaming query ID and batch ID.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val SCHEDULER_REVIVE_INTERVAL =
     ConfigBuilder("spark.scheduler.revive.interval")
       .version("0.8.1")
