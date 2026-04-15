@@ -1228,6 +1228,27 @@ class DataSourceV2TablePinningRefreshSuite
     }
   }
 
+  // Scenario 4 from design doc: session schema change then external data write.
+  // Session ALTER invalidates and rebuilds cache. Subsequent external write
+  // does not invalidate (separate CacheManager), so cache stays pinned.
+  test("[5.4-ext] session schema change then external write invisible") {
+    withTable(T) {
+      setupTable()
+      sql(s"CACHE TABLE $T")
+      checkAnswer(spark.table(T), Seq(Row(1, 100)))
+
+      // Session schema change: invalidates + rebuilds cache with 3-col schema
+      sql(s"ALTER TABLE $T ADD COLUMN new_col INT")
+      checkAnswer(spark.table(T), Seq(Row(1, 100, null)))
+
+      // External write after session schema change (separate CacheManager)
+      extSession.sql(s"INSERT INTO $T VALUES (2, 200, -1)").collect()
+
+      // External write invisible: cache pinned after session rebuild
+      checkAnswer(spark.table(T), Seq(Row(1, 100, null)))
+    }
+  }
+
   // Section 5 Scenario 5: external drop/recreate
   // Proposed: Keep as is (empty table after drop/recreate)
   test("[5.5] external drop/recreate with CACHE TABLE") {
@@ -1261,20 +1282,18 @@ class DataSourceV2TablePinningRefreshSuite
     }
   }
 
-  // REFRESH TABLE picks up external changes
-  test("[5.6] REFRESH TABLE after CACHE TABLE picks up external changes") {
+  // REFRESH TABLE picks up otherwise-invisible external changes
+  test("[5.6] REFRESH TABLE picks up external changes after CACHE TABLE") {
     withTable(T) {
       setupTable()
       sql(s"CACHE TABLE $T")
       checkAnswer(spark.table(T), Seq(Row(1, 100)))
 
-      // Session write (invalidates + rebuilds cache)
-      sql(s"INSERT INTO $T VALUES (2, 200)")
-      checkAnswer(
-        spark.table(T),
-        Seq(Row(1, 100), Row(2, 200)))
+      // External write (invisible due to cache pinning, separate CacheManager)
+      extSession.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+      checkAnswer(spark.table(T), Seq(Row(1, 100)))
 
-      // REFRESH TABLE explicitly rebuilds
+      // REFRESH TABLE forces re-read from catalog, picks up external write
       sql(s"REFRESH TABLE $T")
       checkAnswer(
         spark.table(T),
