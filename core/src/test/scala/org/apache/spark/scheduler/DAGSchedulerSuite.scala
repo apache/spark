@@ -6001,7 +6001,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     for (attempt <- 0 until 3) {
       completeShuffleMapStageSuccessfully(0, attempt, numShufflePartitions = 2)
       completeNextStageWithFetchFailure(1, attempt, shuffleDepOne)
-      resubmitFailedStages()
+      scheduler.resubmitFailedStages()
       assert(scheduler.runningStages.nonEmpty)
       assert(!ended)
     }
@@ -6013,7 +6013,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     // Stage 2 runs but fails due to a fetch failure from stage 1, triggering stage 1 to retry.
     completeNextStageWithFetchFailure(2, 0, shuffleDepTwo)
-    resubmitFailedStages()
+    scheduler.resubmitFailedStages()
 
     completeShuffleMapStageSuccessfully(0, 4, numShufflePartitions = 2)
 
