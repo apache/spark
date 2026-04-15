@@ -165,7 +165,7 @@ jobs:
             }"
           echo $precondition # For debugging
           # Remove `\n` to avoid "Invalid format" error
-          precondition="${precondition//$'\n'/}}"
+          precondition="${precondition//$'\n'/}"
           echo "required=$precondition" >> $GITHUB_OUTPUT
         else
           # This is usually set by scheduled jobs.
