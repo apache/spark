@@ -1962,7 +1962,7 @@ package object config {
       .intConf
       .checkValue(v => v == -1 || v >= 2,
         "The merge factor must be -1 (disabled) or at least 2.")
-      .createWithDefault(64)
+      .createWithDefault(-1)
 
   private[spark] val DEFAULT_PLUGINS_LIST = "spark.plugins.defaultList"
 
