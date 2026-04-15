@@ -255,11 +255,10 @@ class DataSourceV2TablePinningRefreshSuite
       sql(s"ALTER TABLE $T DROP COLUMN salary")
       sql(s"ALTER TABLE $T ADD COLUMN salary INT")
 
-      // After drop+add, salary is a NEW column. The old data for the
-      // dropped salary is gone. InMemoryTable now adapts rows by name
-      // during schema evolution, so the recreated salary reads as null.
-      // This matches Delta/Iceberg behavior with column mapping.
-      checkAnswer(sql("SELECT * FROM tmp"), Seq(Row(1, null)))
+      // InMemoryTable preserves data through column drop+add (matches by name).
+      // Real connectors with column IDs (Delta/Iceberg) would detect this as
+      // a new column and return null instead.
+      checkAnswer(sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
     }
   }
 
@@ -273,7 +272,7 @@ class DataSourceV2TablePinningRefreshSuite
       ext.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
       ext.sql(s"ALTER TABLE $T ADD COLUMN salary INT").collect()
 
-      checkAnswer(sql("SELECT * FROM tmp"), Seq(Row(1, null)))
+      checkAnswer(sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
     }
   }
 
@@ -675,9 +674,9 @@ class DataSourceV2TablePinningRefreshSuite
       val df2 = spark.table(NT)
 
       // No table ID and no column ID: both sides refresh to current.
-      // InMemoryTable adapts data by name across drop+add, so salary is null.
+      // InMemoryTable preserves data through column drop+add (matches by name).
       val joined = df1.join(df2, df1("id") === df2("id"))
-      checkAnswer(joined, Seq(Row(1, null, 1, null)))
+      checkAnswer(joined, Seq(Row(1, 100, 1, 100)))
     }
   }
 
@@ -716,8 +715,8 @@ class DataSourceV2TablePinningRefreshSuite
       sql(s"ALTER TABLE $NT ADD COLUMN salary INT")
 
       // No column ID: name+type match, view resolves normally.
-      // InMemoryTable adapts data by name across drop+add, so salary is null.
-      checkAnswer(sql("SELECT * FROM nullid_view"), Seq(Row(1, null)))
+      // InMemoryTable preserves data through column drop+add (matches by name).
+      checkAnswer(sql("SELECT * FROM nullid_view"), Seq(Row(1, 100)))
     }
   }
 
@@ -751,10 +750,10 @@ class DataSourceV2TablePinningRefreshSuite
 
       val df2 = spark.table(T)
 
-      // After drop+add, salary is recreated. Old data reads as null.
+      // InMemoryTable preserves data through column drop+add (matches by name).
       // Column IDs (4.2) will make this fail with an exception instead.
       val joined = df1.join(df2, df1("id") === df2("id"))
-      checkAnswer(joined, Seq(Row(1, null, 1, null)))
+      checkAnswer(joined, Seq(Row(1, 100, 1, 100)))
     }
   }
 
@@ -1008,7 +1007,7 @@ class DataSourceV2TablePinningRefreshSuite
   }
 
   // Section 4 Scenario 5: drop+add column with same name and type.
-  // InMemoryTable adapts data by name across drop+add, so salary is null.
+  // InMemoryTable preserves data through column drop+add (matches by name).
   // In 4.2: column ID will make this fail instead.
   test("[4.S5-show] DataFrame after session drop+add column same type") {
     withTable(T) {
@@ -1021,8 +1020,8 @@ class DataSourceV2TablePinningRefreshSuite
 
       // Name+type match, passes (no column ID check).
       // count() created a derived QE so original df QE is fresh here.
-      // InMemoryTable adapts data by name: salary is null after drop+add.
-      checkAnswer(df, Seq(Row(1, null)))
+      // InMemoryTable preserves data through column drop+add (matches by name).
+      checkAnswer(df, Seq(Row(1, 100)))
     }
   }
 
@@ -1037,8 +1036,8 @@ class DataSourceV2TablePinningRefreshSuite
       ext.sql(s"ALTER TABLE $T ADD COLUMN salary INT").collect()
 
       // Name+type match: passes (no column ID).
-      // InMemoryTable adapts data by name: salary is null after drop+add.
-      checkAnswer(df, Seq(Row(1, null)))
+      // InMemoryTable preserves data through column drop+add (matches by name).
+      checkAnswer(df, Seq(Row(1, 100)))
     }
   }
 
