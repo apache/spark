@@ -684,9 +684,8 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Traverses the RDD dependency graph using a manually maintained stack to prevent
-   * StackOverflowError caused by recursive traversal. For each unvisited RDD, calls
-   * `visitor(rdd, enqueue)` where `enqueue` can be called to schedule additional RDDs for
+   * Like [[traverseRDDGraphUntil]], but does not support early termination. For each unvisited RDD,
+   * calls `visitor(rdd, enqueue)` where `enqueue` can be called to schedule additional RDDs for
    * traversal.
    */
   private def traverseRDDGraph(rdd: RDD[_])(visitor: (RDD[_], RDD[_] => Unit) => Unit): Unit = {
@@ -697,9 +696,11 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Like [[traverseRDDGraph]], but supports early termination: if `visitor` returns `false`, the
-   * traversal stops immediately. Returns `true` if the traversal completed normally, `false`
-   * if it was terminated early by the visitor.
+   * Traverses the RDD dependency graph using a manually maintained stack to prevent
+   * StackOverflowError caused by recursive traversal. For each unvisited RDD, calls
+   * `visitor(rdd, enqueue)` where `enqueue` can be called to schedule additional RDDs for
+   * traversal. If `visitor` returns `false`, the traversal stops immediately. Returns `true`
+   * if the traversal completed normally, `false` if it was terminated early by the visitor.
    */
   private def traverseRDDGraphUntil(
       rdd: RDD[_])(visitor: (RDD[_], RDD[_] => Unit) => Boolean): Boolean = {
