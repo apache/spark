@@ -1138,7 +1138,7 @@ def wrap_memory_profiler(f, eval_type, result_id):
 def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
     chained_func = None
     for udf in udf_info.udfs:
-        f, return_type = pickleSer.loads(udf)
+        f, return_type = read_command(pickleSer, udf)
         if chained_func is None:
             chained_func = f
         else:
@@ -3486,22 +3486,22 @@ def main(infile, outfile):
         )
 
         _accumulatorRegistry.clear()
-        eval_type = read_int(infile)
-        runner_conf = RunnerConf(infile)
-        eval_conf = EvalConf(infile)
+        eval_type = init_info.eval_type
+        runner_conf = RunnerConf(init_info.runner_conf)
+        eval_conf = EvalConf(init_info.eval_conf)
         if eval_type == PythonEvalType.NON_UDF:
-            func, profiler, deserializer, serializer = read_command(pickleSer, init_info.udf)
+            func, profiler, deserializer, serializer = read_command(pickleSer, init_info.udf_info)
         elif eval_type in (
             PythonEvalType.SQL_TABLE_UDF,
             PythonEvalType.SQL_ARROW_TABLE_UDF,
             PythonEvalType.SQL_ARROW_UDTF,
         ):
             func, profiler, deserializer, serializer = read_udtf(
-                pickleSer, init_info.udf, eval_type, runner_conf, eval_conf
+                pickleSer, init_info.udf_info, eval_type, runner_conf, eval_conf
             )
         else:
             func, profiler, deserializer, serializer = read_udfs(
-                pickleSer, init_info.udf, eval_type, runner_conf, eval_conf
+                pickleSer, init_info.udf_info, eval_type, runner_conf, eval_conf
             )
 
         init_time = time.time()

@@ -34,6 +34,7 @@ class TaskContextInfo:
         name: str
         addresses: list[str]
 
+    is_barrier: bool
     conn_info: Optional[Union[str, int]]
     secret: Optional[str]
     stage_id: int
@@ -48,6 +49,7 @@ class TaskContextInfo:
     def from_stream(cls, stream: IO) -> "TaskContextInfo":
         task_context_json = json.loads(utf8_deserializer.loads(stream))
         return cls(
+            is_barrier=task_context_json["isBarrier"],
             conn_info=task_context_json["connInfo"],
             secret=task_context_json["secret"],
             stage_id=task_context_json["stageId"],
@@ -63,31 +65,31 @@ class TaskContextInfo:
         )
 
     def to_task_context(self) -> TaskContext:
-        if self.conn_info is not None:
+        if self.is_barrier:
             return BarrierTaskContext(
                 conn_info=self.conn_info,
                 secret=self.secret,
-                stage_id=self.stage_id,
-                partition_id=self.partition_id,
-                attempt_number=self.attempt_number,
-                task_attempt_id=self.task_attempt_id,
+                stageId=self.stage_id,
+                partitionId=self.partition_id,
+                attemptNumber=self.attempt_number,
+                taskAttemptId=self.task_attempt_id,
                 cpus=self.cpus,
                 resources={
                     k: ResourceInformation(v.name, v.addresses) for k, v in self.resources.items()
                 },
-                local_properties=self.local_properties,
+                localProperties=self.local_properties,
             )
         else:
             return TaskContext(
-                stage_id=self.stage_id,
-                partition_id=self.partition_id,
-                attempt_number=self.attempt_number,
-                task_attempt_id=self.task_attempt_id,
+                stageId=self.stage_id,
+                partitionId=self.partition_id,
+                attemptNumber=self.attempt_number,
+                taskAttemptId=self.task_attempt_id,
                 cpus=self.cpus,
                 resources={
                     k: ResourceInformation(v.name, v.addresses) for k, v in self.resources.items()
                 },
-                local_properties=self.local_properties,
+                localProperties=self.local_properties,
             )
 
 
@@ -114,12 +116,10 @@ class BroadcastInfo:
         for _ in range(num_broadcast_variables):
             bid = read_long(stream)
             path = None
-            if bid >= 0:
-                if not needs_broadcast_decryption_server:
-                    path = utf8_deserializer.loads(stream)
-            else:
-                bid = -bid - 1
+            if bid >= 0 and not needs_broadcast_decryption_server:
+                path = utf8_deserializer.loads(stream)
             variables.append((bid, path))
+
         return cls(conn_info=conn_info, auth_secret=auth_secret, variables=variables)
 
 
@@ -215,7 +215,7 @@ class WorkerInitInfo:
     eval_type: int
     runner_conf: dict[str, str]
     eval_conf: dict[str, str]
-    udf_info: Optional[Union[UDTFInfo, list[UDFInfo]]]
+    udf_info: Union[bytes, UDTFInfo, list[UDFInfo]]
 
     @classmethod
     def from_stream(cls, stream: IO) -> "WorkerInitInfo":
@@ -223,11 +223,13 @@ class WorkerInitInfo:
         if split_index == -1:
             sys.exit(-1)
         python_version = utf8_deserializer.loads(stream)
+        task_context = TaskContextInfo.from_stream(stream)
+
         spark_files_dir = utf8_deserializer.loads(stream)
         python_includes = []
         for _ in range(read_int(stream)):
             python_includes.append(utf8_deserializer.loads(stream))
-        task_context = TaskContextInfo.from_stream(stream)
+
         broadcast = BroadcastInfo.from_stream(stream)
         eval_type = read_int(stream)
         runner_conf = {}
@@ -241,10 +243,10 @@ class WorkerInitInfo:
             v = utf8_deserializer.loads(stream)
             eval_conf[k] = v
 
-        udf_info: Optional[Union[UDTFInfo, list[UDFInfo]]]
+        udf_info: Union[bytes, UDTFInfo, list[UDFInfo]]
 
         if eval_type == PythonEvalType.NON_UDF:
-            udf_info = None
+            udf_info = stream.read(read_int(stream))
         elif eval_type in (
             PythonEvalType.SQL_TABLE_UDF,
             PythonEvalType.SQL_ARROW_TABLE_UDF,
