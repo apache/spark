@@ -488,6 +488,7 @@ class Analyzer(
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
+      ResolveQualify ::
       TimeWindowing ::
       SessionWindowing ::
       ResolveWindowTime ::
@@ -1681,6 +1682,9 @@ class Analyzer(
           Project(child.output, r.copy(resolvedFinal, newChild))
         }
 
+      // Skip the qualify clause here. It will be handled in ResolveQualify.
+      case q: UnresolvedQualify => q
+
       // Filter can host both grouping expressions/aggregate functions and missing attributes.
       // The grouping expressions/aggregate functions resolution takes precedence over missing
       // attributes. See the classdoc of `ResolveReferences` for details.
@@ -2401,6 +2405,8 @@ class Analyzer(
         // and we can't call `LateralJoin.resolveChildren` to resolve outer references. Here we
         // create a fake Project node as the outer plan.
         resolveSubQueries(j, Project(Nil, j.left))
+      // Skip the qualify clause here. It will be handled in ResolveQualify.
+      case q: UnresolvedQualify => q
       // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
       case q: UnaryNode if q.childrenResolved =>
         resolveSubQueries(q, q)
@@ -3995,6 +4001,131 @@ class Analyzer(
         p.transformAllExpressionsWithPruning(_.containsPattern(ANALYSIS_AWARE_EXPRESSION)) {
           case e: AnalysisAwareExpression[_] => e.markAsAnalyzed()
         }
+    }
+  }
+
+  /**
+   * This rule resolves the QUALIFY clause. It resolves the qualify condition against the child
+   * plan's output, extracts window expressions into aliases, validates that at least one window
+   * function is present, and builds a Filter placed after window materialization.
+   *
+   * The resolution follows these steps:
+   * 1. Resolve the qualify condition using the child plan's output (Project or Aggregate).
+   * 2. Extract canonically-unique WindowExpressions from the condition into aliases.
+   * 3. Reject standalone aggregate functions in the condition.
+   * 4. Validate that at least one window function exists in SELECT or in the condition.
+   * 5. Build: Filter(newCond, Project(child.output ++ windowAliases, newChild)) and trim output.
+   *
+   * The resulting Project node contains window expressions that will be handled by
+   * ExtractWindowExpressions in a subsequent analyzer iteration.
+   */
+  object ResolveQualify extends Rule[LogicalPlan] {
+    /**
+     * Resolve the qualify condition using the child output of the top Project/Aggregate
+     * in the plan and add the missing references to the Project/Aggregate and preserve
+     * them in all intermediate operators.
+     */
+    private def resolveQualifyCondition(
+        cond: Expression,
+        candidateAttrs: AttributeSet,
+        plan: LogicalPlan): (Expression, LogicalPlan) = plan match {
+      case agg: Aggregate =>
+        val resolved = resolveExpressionByPlanChildren(cond, agg)
+        val extraAggExprs = mutable.ArrayBuffer.empty[NamedExpression]
+        val newCond = resolved.transform {
+          case grouping if grouping.resolved &&
+            agg.groupingExpressions.exists(grouping.semanticEquals) =>
+            val allAggExprs = agg.aggregateExpressions ++ extraAggExprs.toSeq
+            val index = allAggExprs.indexWhere {
+              case Alias(child, _) => child.semanticEquals(grouping)
+              case o => o.semanticEquals(grouping)
+            }
+            if (index >= 0) {
+              allAggExprs(index).toAttribute
+            } else {
+              grouping match {
+                case ne: NamedExpression =>
+                  extraAggExprs += ne
+                  ne.toAttribute
+                case o: Expression =>
+                  val alias = Alias(o, o.sql)()
+                  extraAggExprs += alias
+                  alias.toAttribute
+              }
+            }
+        }
+        val newAgg = agg.copy(aggregateExpressions = agg.aggregateExpressions ++ extraAggExprs)
+        (newCond, newAgg)
+
+      case p: Project =>
+        val resolved = resolveExpressionByPlanChildren(cond, p)
+        val missingAttrs = (resolved.references -- p.outputSet).intersect(p.child.outputSet)
+        val newProject = p.copy(projectList = p.projectList ++ missingAttrs)
+        (resolved, newProject)
+
+      case w: Window =>
+        val (newCond, newChild) = resolveQualifyCondition(cond, candidateAttrs, w.child)
+        (newCond, w.copy(child = newChild))
+
+      case f: Filter =>
+        val (newCond, newChild) = resolveQualifyCondition(cond, candidateAttrs, f.child)
+        (newCond, f.copy(child = newChild))
+
+      case _ => (cond, plan)
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+      _.containsPattern(UNRESOLVED_QUALIFY)) {
+      case q @ UnresolvedQualify(cond, child) if child.resolved =>
+        val (resolvedByChildren, newChild) =
+          resolveQualifyCondition(cond, child.outputSet, child)
+        // Resolve the condition by the plan's output (aliases from SELECT list).
+        val maybeResolved =
+          resolveExpressionByPlanChildren(resolvedByChildren, q)
+        val newPlan = if (maybeResolved.resolved) {
+          // Extract canonically unique window functions in the qualify condition.
+          val windowExpressionToAliasMap = new java.util.LinkedHashMap[Expression, Alias]()
+          val newCond = maybeResolved.transform {
+            case windowExpression: WindowExpression =>
+              val canonicalized = windowExpression.canonicalized
+              if (windowExpressionToAliasMap.containsKey(canonicalized)) {
+                windowExpressionToAliasMap.get(canonicalized).toAttribute
+              } else {
+                val alias = Alias(windowExpression, windowExpression.sql)()
+                windowExpressionToAliasMap.put(canonicalized, alias)
+                alias.toAttribute
+              }
+            case a: AggregateExpression =>
+              throw QueryCompilationErrors.aggregateInQualifyNotAllowedError(a)
+          }
+          // Ensure at least one window function in SELECT or QUALIFY condition.
+          if (windowExpressionToAliasMap.size() == 0 && !hasWindowInPlan(child)) {
+            throw QueryCompilationErrors.qualifyRequiresWindowFunctionError()
+          }
+          if (windowExpressionToAliasMap.size() > 0) {
+            val projectList =
+              windowExpressionToAliasMap.values().asScala.toSeq
+            Filter(newCond, Project(child.output ++ projectList, newChild))
+          } else {
+            Filter(newCond, newChild)
+          }
+        } else {
+          UnresolvedQualify(maybeResolved, newChild)
+        }
+        // Trim additional attributes to preserve original output.
+        if (!newPlan.sameOutput(q)) {
+          Project(q.output, newPlan)
+        } else {
+          newPlan
+        }
+    }
+
+    /** Check if the resolved child plan already contains a Window node (from SELECT list). */
+    private def hasWindowInPlan(plan: LogicalPlan): Boolean = plan match {
+      case _: Window => true
+      case p: Project => hasWindowInPlan(p.child)
+      case f: Filter => hasWindowInPlan(f.child)
+      case _ => false
     }
   }
 }

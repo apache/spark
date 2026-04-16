@@ -63,6 +63,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveOutputRelation" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolvePivot" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveProcedures" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveQualify" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveRandomSeed" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveReferences" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveRelations" ::
