@@ -1,0 +1,12 @@
+================================================================================================
+Window Sliding Frame - MIN/MAX (non-invertible aggregates)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.18+8-Ubuntu-124.04.1 on Linux 6.6.87.2-microsoft-standard-WSL2
+AMD EPYC 7763 64-Core Processor
+sliding window, W=1001, 16M rows:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+MIN naive (current)                              268035         268531         762          0.1       15976.1       1.0X
+MAX naive (current)                              338106         360862       21621          0.0       20152.7       0.8X
+
+
