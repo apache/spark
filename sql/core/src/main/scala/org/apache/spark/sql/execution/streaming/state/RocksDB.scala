@@ -148,8 +148,8 @@ class RocksDB(
   }
 
   private val dbLogger = createLogger() // for forwarding RocksDB native logs to log4j
-  rocksDbOptions.setStatistics(new Statistics())
-  private val nativeStats = rocksDbOptions.statistics()
+  private val nativeStats = new Statistics()
+  rocksDbOptions.setStatistics(nativeStats)
 
   private val workingDir = createTempDir("workingDir")
 
@@ -2043,6 +2043,7 @@ class RocksDB(
       readOptions.close()
       writeOptions.close()
       flushOptions.close()
+      nativeStats.close()
       rocksDbOptions.close()
       dbLogger.close()
 
