@@ -70,6 +70,7 @@ if TYPE_CHECKING:
     )
     from pyspark.sql.plot import PySparkPlotAccessor
     from pyspark.sql.metrics import ExecutionInfo
+    from pyspark.sql import catalog
 
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
@@ -6264,7 +6265,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def writeTo(self, table: str) -> DataFrameWriterV2:
+    def writeTo(self, table: Union[str, "catalog.Table"]) -> DataFrameWriterV2:
         """
         Create a write configuration builder for v2 sources.
 

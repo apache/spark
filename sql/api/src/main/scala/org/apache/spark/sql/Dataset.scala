@@ -3245,6 +3245,29 @@ abstract class Dataset[T] extends Serializable {
   def writeTo(table: String): DataFrameWriterV2[T]
 
   /**
+   * Create a write configuration builder for v2 sources using a
+   * [[org.apache.spark.sql.catalog.Table]] object returned by `spark.catalog.getTable` or
+   * `spark.catalog.listTables`. This avoids manually reconstructing the qualified name string.
+   *
+   * {{{
+   *   val t = spark.catalog.getTable("spark_catalog.default.my_table")
+   *   df.writeTo(t).append()
+   *
+   *   // copy all tables from one catalog to another
+   *   spark.catalog.listTables("my_db").collect().foreach { t =>
+   *     spark.read.table(t).writeTo(t).createOrReplace()
+   *   }
+   * }}}
+   *
+   * @param table
+   *   a `Table` object as returned by the catalog API.
+   * @group basic
+   * @since 4.2.0
+   */
+  def writeTo(table: org.apache.spark.sql.catalog.Table): DataFrameWriterV2[T] =
+    writeTo(table.qualifiedName)
+
+  /**
    * Returns the content of the Dataset as a Dataset of JSON strings.
    *
    * @since 2.0.0

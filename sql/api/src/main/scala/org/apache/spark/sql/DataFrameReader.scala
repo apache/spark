@@ -498,6 +498,28 @@ abstract class DataFrameReader {
   def table(tableName: String): DataFrame
 
   /**
+   * Returns the specified table as a `DataFrame` using a [[org.apache.spark.sql.catalog.Table]]
+   * object returned by `spark.catalog.getTable` or `spark.catalog.listTables`. This avoids
+   * manually reconstructing the qualified name string.
+   *
+   * {{{
+   *   val t = spark.catalog.getTable("spark_catalog.default.my_table")
+   *   val df = spark.read.table(t)
+   *
+   *   // iterate over all tables in a database
+   *   spark.catalog.listTables("my_db").collect().foreach { t =>
+   *     spark.read.table(t).show()
+   *   }
+   * }}}
+   *
+   * @param table
+   *   a `Table` object as returned by the catalog API.
+   * @since 4.2.0
+   */
+  def table(table: org.apache.spark.sql.catalog.Table): DataFrame =
+    this.table(table.qualifiedName)
+
+  /**
    * Returns the row-level changes (Change Data Capture) from the specified table as a
    * `DataFrame`. Currently this API is only supported for Data Source V2 tables whose catalog
    * implements `TableCatalog.loadChangelog()`.

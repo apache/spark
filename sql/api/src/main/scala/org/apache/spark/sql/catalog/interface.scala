@@ -151,6 +151,27 @@ class Table(
     if (namespace != null && namespace.length == 1) namespace(0) else null
   }
 
+  /**
+   * Returns the fully qualified, backtick-quoted name of this table suitable for use as a table
+   * identifier in SQL or directly with [[org.apache.spark.sql.DataFrameReader#table]] and
+   * [[org.apache.spark.sql.Dataset#writeTo]].
+   *
+   * {{{
+   *   val t = spark.catalog.getTable("spark_catalog.default.my_table")
+   *   val df = spark.read.table(t)
+   *   df.writeTo(t).append()
+   * }}}
+   *
+   * @since 4.2.0
+   */
+  def qualifiedName: String = {
+    import org.apache.spark.sql.catalyst.util.QuotingUtils
+    QuotingUtils.quoteNameParts(
+      Option(catalog).toSeq ++
+        Option(namespace).toSeq.flatMap(_.toSeq) ++
+        Seq(name))
+  }
+
   override def toString: String = {
     "Table[" +
       s"name='$name', " +
