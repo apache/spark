@@ -155,7 +155,7 @@ final class UnsafeSorterBoundedSpillMerger {
 
     final UnsafeSorterSpillMerger finalMerger = new UnsafeSorterSpillMerger(
         recordComparator, prefixComparator,
-        spillsToMerge.size() + (inMemIterator != null ? 1 : 0));
+        spillsToMerge.size() + (inMemIterator != null && inMemIterator.hasNext() ? 1 : 0));
     for (UnsafeSorterSpillWriter writer : spillsToMerge) {
       finalMerger.addSpillIfNotEmpty(writer.getReader(serializerManager));
     }
