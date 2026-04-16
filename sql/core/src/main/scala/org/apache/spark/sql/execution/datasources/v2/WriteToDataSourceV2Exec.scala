@@ -406,7 +406,7 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec {
 }
 
 /**
- * A trait for row-level write operations (UPDATE, DELETE, MERGE) that carry the command.
+ * A trait for row-level write operations (UPDATE, DELETE, MERGE).
  */
 trait RowLevelWriteExec extends V2ExistingTableWriteExec {
   /**
