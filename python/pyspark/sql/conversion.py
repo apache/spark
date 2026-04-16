@@ -1863,28 +1863,7 @@ class ArrowArrayToPandasConversion:
 
         series: pd.Series
 
-        if isinstance(
-            spark_type,
-            (
-                NullType,
-                BinaryType,
-                BooleanType,
-                FloatType,
-                DoubleType,
-                ByteType,
-                ShortType,
-                IntegerType,
-                LongType,
-                DecimalType,
-                StringType,
-                DateType,
-                TimeType,
-                TimestampType,
-                TimestampNTZType,
-                DayTimeIntervalType,
-                YearMonthIntervalType,
-            ),
-        ):
+        if isinstance(spark_type, cls.ARROW_DTYPE_TYPES):
             series = arr.to_pandas(types_mapper=pd.ArrowDtype)
         # elif isinstance(spark_type, UserDefinedType):
         #     TODO: Support UserDefinedType
