@@ -30,4 +30,4 @@ case class ColumnImpl(
     generationExpression: String,
     identityColumnSpec: IdentityColumnSpec,
     metadataInJSON: String,
-    id: String = null) extends Column
+    override val id: String = null) extends Column
