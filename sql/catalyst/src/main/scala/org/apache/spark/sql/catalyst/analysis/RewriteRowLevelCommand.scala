@@ -191,11 +191,12 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       metadataAttrs: Seq[Attribute]): ReplaceDataProjections = {
     val outputs = extractOutputs(plan)
 
-    val outputsWithRow = filterOutputs(outputs, Set(WRITE_WITH_METADATA_OPERATION, WRITE_OPERATION))
+    val outputsWithRow = filterOutputs(outputs,
+      Set(WRITE_OPERATION, WRITE_WITHOUT_METADATA_OPERATION))
     val rowProjection = newLazyProjection(plan, outputsWithRow, rowAttrs)
 
     val metadataProjection = if (metadataAttrs.nonEmpty) {
-      val outputsWithMetadata = filterOutputs(outputs, Set(WRITE_WITH_METADATA_OPERATION))
+      val outputsWithMetadata = filterOutputs(outputs, Set(WRITE_OPERATION))
       Some(newLazyProjection(plan, outputsWithMetadata, metadataAttrs))
     } else {
       None
