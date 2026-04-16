@@ -21,7 +21,6 @@ import java.io.{ObjectInputStream, ObjectOutputStream}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.TASK_MAX_FAILURES_COUNTS_METADATA_FETCH_FAILURES
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{AccumulatorV2, Utils}
@@ -125,10 +124,9 @@ case class MetadataFetchFailed(
   }
 
   /**
-   * Metadata fetch failures count toward task failures as configured.
+   * Metadata fetch failures do not count toward task failures.
    */
-  override def countTowardsTaskFailures: Boolean = Option(SparkEnv.get.conf)
-    .forall(_.get(TASK_MAX_FAILURES_COUNTS_METADATA_FETCH_FAILURES))
+  override def countTowardsTaskFailures: Boolean = false
 }
 
 /**

@@ -943,12 +943,6 @@ package object config {
       .intConf
       .createWithDefault(4)
 
-  private[spark] val TASK_MAX_FAILURES_COUNTS_METADATA_FETCH_FAILURES =
-    ConfigBuilder("spark.task.maxFailures.countsMetadataFetchFailures")
-      .version("4.2.0")
-      .booleanConf
-      .createWithDefault(true)
-
   private[spark] val TASK_REAPER_ENABLED =
     ConfigBuilder("spark.task.reaper.enabled")
       .version("2.0.3")
