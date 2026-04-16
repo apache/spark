@@ -80,7 +80,7 @@ import org.apache.spark.util.{AccumulatorV2, LastAttemptAccumulator}
  * -------------------
  * The metric can be updated directly on the driver side, during the execution of catalyst
  * optimizer. One example is [[ConvertToLocalRelation]] optimization rule, which constant folds
- * pieces of the plan, including potentially folding [[IncrementMetric]] expressions.
+ * pieces of the plan.
  * Execution in this scope is tagged with [[QueryExecution.id]] using
  * [[SparkContext.DATASET_QUERY_EXECUTION_ID_KEY]] property, and this metric is tracking
  * the metric value separately for each QueryExecution.
@@ -109,11 +109,11 @@ import org.apache.spark.util.{AccumulatorV2, LastAttemptAccumulator}
  */
 
 /**
- * A trait that can be mixed-in into a subclass an [[AccumulatorV2]] to make it track the "logical"
+ * A trait that can be mixed into a subclass of [[AccumulatorV2]] to track the "logical"
  * value of the "last attempt" of the execution using the accumulator.
  * In addition to what [[LastAttemptAccumulator]] does, it allows to track the last attempt
  * executed in the scope of a Dataset's QueryExecution, via
- * [[lastAttempValueForDataset]] and [[lastAttemptValueForQueryExecution]] methods.
+ * [[lastAttemptValueForDataset]] and [[lastAttemptValueForQueryExecution]] methods.
  */
 trait SQLLastAttemptAccumulator[IN, OUT, PARTIAL] extends LastAttemptAccumulator[IN, OUT, PARTIAL] {
   this: AccumulatorV2[IN, OUT] =>
@@ -212,7 +212,7 @@ trait SQLLastAttemptAccumulator[IN, OUT, PARTIAL] extends LastAttemptAccumulator
    *
    * @note The output of this method is undefined if this metric was used inside a part of the plan
    *       which was either checkpointed (e.g. df.localCheckpoint(), df.checkpoint()) or cached
-   *       (e.d. df.cache(), df.persist()).
+   *       (e.g. df.cache(), df.persist()).
    *       [[lastAttemptValueForHighestRDDId()]] should return the value from when the execution in
    *       which the plan was cached/checkpointed.
    *
@@ -245,7 +245,7 @@ trait SQLLastAttemptAccumulator[IN, OUT, PARTIAL] extends LastAttemptAccumulator
    *
    * @note The output of this method is undefined if this metric was used inside a part of the plan
    *       which was either checkpointed (e.g. df.localCheckpoint(), df.checkpoint()) or cached
-   *       (e.d. df.cache(), df.persist()).
+   *       (e.g. df.cache(), df.persist()).
    *       [[lastAttemptValueForHighestRDDId()]] should return the value from when the execution in
    *       which the plan was cached/checkpointed.
    *
@@ -315,12 +315,12 @@ object SQLLastAttemptAccumulator extends Logging {
 
       // shuffle exchange stage submitting nodes
       case sl: ShuffleExchangeLike => sl match {
-        // All shuffle exchange implementation create the ShuffledRowRDD / ShuffledBlockRDD
+        // All shuffle exchange implementations create the ShuffledRowRDD / ShuffledBlockRDD
         // with its own scope, and it will be executed in that scope.
         case s: ShuffleExchangeExec => scopeIds(s)
         case p =>
           // Bail out if future unknown implementation is encountered.
-          bailOutReason = Some(s"Unsupported BroadcastExchangeLike: ${p.getClass.getName}")
+          bailOutReason = Some(s"Unsupported ShuffleExchangeLike: ${p.getClass.getName}")
           Nil
       }
 
@@ -349,7 +349,7 @@ object SQLLastAttemptAccumulator extends Logging {
           Nil
         case p =>
           // Bail out if future unknown implementation is encountered.
-          bailOutReason = Some(s"Unsupported BroadcastExchangeLike: ${p.getClass.getName}")
+          bailOutReason = Some(s"Unsupported BaseSubqueryExec: ${p.getClass.getName}")
           Nil
       }
 
@@ -367,11 +367,6 @@ object SQLLastAttemptAccumulator extends Logging {
         //   then the metric would return 0 instead of the value from the cached execution. If the
         //   current executedPlan is the one that materializes the cache, then it would be the
         //   correct value.
-        // - if the metrics is in the top stage of the cachedPlan and AQE is enabled, it will be
-        //   wrapped into a [[TableCacheQueryScanExec]], which would submit a stage.
-        //   Currently this will be misattributed, but that could be fixed if
-        //   [[InMemoryRelation.buildBuffers]] wrapped the creation of `val cached` into an
-        //   RDDOperationScope that attributes it to cachedPlan.
         // - if the metric is in a map stage of the cachedPlan, then it would be correctly
         //   annotated with the scope of that stage, and it would work correctly.
         //

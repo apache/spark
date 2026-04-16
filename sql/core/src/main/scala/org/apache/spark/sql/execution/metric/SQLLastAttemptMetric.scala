@@ -30,9 +30,8 @@ class SQLLastAttemptMetric(
   override protected def partialMergeVal: Long = _value
 
   override protected def partialMerge(value: Long): Unit = {
-    val acc = this.copyAndReset().asInstanceOf[this.type]
-    acc.set(value)
-    merge(acc)
+    if (isZero) _value = 0
+    _value += value
   }
 
   override protected def isMergeable(other: AccumulatorV2[_, _]): Boolean = other match {

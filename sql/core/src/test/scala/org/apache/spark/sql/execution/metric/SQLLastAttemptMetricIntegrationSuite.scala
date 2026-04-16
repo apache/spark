@@ -311,7 +311,7 @@ class SQLLastAttemptMetricIntegrationSuite
     // allRDDs includes wrapper RDDs from repeated collects.
     assert(slam1.lastAttemptValueForAllRDDs() === Some(45))
     assert(slam2.lastAttemptValueForAllRDDs() === Some(10))
-    // slam1 and slam2 are both executed in in df3
+    // slam1 and slam2 are both executed in df3
     assert(slam1.lastAttemptValueForDataset(df3) === Some(10))
     assert(slam2.lastAttemptValueForDataset(df3) === Some(10))
     // slam2 is not executed in df1 and df2.

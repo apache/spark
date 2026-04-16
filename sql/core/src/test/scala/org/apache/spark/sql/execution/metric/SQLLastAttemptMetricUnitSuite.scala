@@ -53,7 +53,8 @@ class SQLLastAttemptMetricUnitSuite extends SparkFunSuite with SharedSparkContex
 
   // Set mock attempt for mock Task, TaskInfo and RDD
   // that can be used with mergeLastAttempt.
-  def setMockAttempt(rddId: Int, partitionId: Int, stageId: Int, stageAttemptId: Int): Unit = {
+  // stageId and stageAttemptId are passed directly to mergeLastAttempt.
+  def setMockAttempt(rddId: Int, partitionId: Int): Unit = {
     // reset to mock defaults
     when(mockTaskInfo.attemptNumber).thenReturn(0)
     when(mockRdd.scope).thenReturn(None)
@@ -62,8 +63,6 @@ class SQLLastAttemptMetricUnitSuite extends SparkFunSuite with SharedSparkContex
     when(mockRdd.id).thenReturn(rddId)
     when(mockTaskInfo.partitionId).thenReturn(partitionId)
   }
-
-  // stageId and stageAttemptId are passed directly to mergeLastAttempt
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -78,7 +77,7 @@ class SQLLastAttemptMetricUnitSuite extends SparkFunSuite with SharedSparkContex
     lastAttemptRddsMapField.setAccessible(false)
     directDriverValueField.setAccessible(false)
     partialMergeValMethod.setAccessible(false)
-    super.beforeAll()
+    super.afterAll()
   }
 
   test("serialization and deserialization") {
@@ -149,37 +148,37 @@ class SQLLastAttemptMetricUnitSuite extends SparkFunSuite with SharedSparkContex
     acc.mergeLastAttempt(slam, null, null, 0, 0, null)
 
     // Let's play with merging acc into slam.
-    setMockAttempt(rddId = 1, partitionId = 0, stageId = 10, stageAttemptId = 10)
+    setMockAttempt(rddId = 1, partitionId = 0)
     acc.set(10)
     slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 10, 10, mockProperties)
     assert(slam.lastAttemptValueForRDDId(1) === Some(10))
 
-    setMockAttempt(rddId = 1, partitionId = 1, stageId = 10, stageAttemptId = 10)
+    setMockAttempt(rddId = 1, partitionId = 1)
     acc.set(10) // new partition id
     slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 10, 10, mockProperties)
     assert(slam.lastAttemptValueForRDDId(1) === Some(20)) // 10 + 10, aggregated new partition id
 
-    setMockAttempt(rddId = 1, partitionId = 1, stageId = 10, stageAttemptId = 9)
+    setMockAttempt(rddId = 1, partitionId = 1)
     acc.set(7) // same partition id, older attempt.
     slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 10, 9, mockProperties)
     assert(slam.lastAttemptValueForRDDId(1) === Some(20)) // no change
 
-    setMockAttempt(rddId = 1, partitionId = 1, stageId = 9, stageAttemptId = 11)
+    setMockAttempt(rddId = 1, partitionId = 1)
     acc.set(7) // same partition id, older stage.
     slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 9, 11, mockProperties)
     assert(slam.lastAttemptValueForRDDId(1) === Some(20)) // no change
 
-    setMockAttempt(rddId = 1, partitionId = 1, stageId = 10, stageAttemptId = 11)
+    setMockAttempt(rddId = 1, partitionId = 1)
     acc.set(7) // same partition id, newer attempt.
     slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 10, 11, mockProperties)
     assert(slam.lastAttemptValueForRDDId(1) === Some(17)) // 10 replaced with 7
 
-    setMockAttempt(rddId = 1, partitionId = 1, stageId = 11, stageAttemptId = 1)
+    setMockAttempt(rddId = 1, partitionId = 1)
     acc.set(8) // same partition id, newer stage.
     slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 11, 1, mockProperties)
     assert(slam.lastAttemptValueForRDDId(1) === Some(18)) // 7 replaced with 8
 
-    setMockAttempt(rddId = 2, partitionId = 2, stageId = 1, stageAttemptId = 1)
+    setMockAttempt(rddId = 2, partitionId = 2)
     acc.set(42) // new RDD
     slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 1, 1, mockProperties)
     assert(slam.lastAttemptValueForRDDId(1) === Some(18)) // no change for rddId=1

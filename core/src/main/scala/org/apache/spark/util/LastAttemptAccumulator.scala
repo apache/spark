@@ -81,8 +81,8 @@ import org.apache.spark.scheduler.TaskInfo
  *  2. Spark SQL.
  *  =============
  *  LastAttemptAccumulator offers simple tracking of the last SQL execution, by assuming that
- *  the last execution will be in the scope of an RDD with the highestid, and using
- *  [[lastAttemptValueForHighestRDDId]. See [[SQLLastAttemptAccumulator]] for more possibilities
+ *  the last execution will be in the scope of an RDD with the highest id, and using
+ *  [[lastAttemptValueForHighestRDDId]]. See [[SQLLastAttemptAccumulator]] for more possibilities
  *  of tracking SQL execution.
  *
  *  Simple last SQL execution tracking
@@ -93,7 +93,7 @@ import org.apache.spark.scheduler.TaskInfo
  *  should correspond to the last execution and the latest AQE plan.
  *  This has some limitations, e.g. doesn't work if the same metric is used in multiple places
  *  in the query plan, and we want all occurrences to be aggregated together.
- *  It also wouldn't work if a SparkPlan splits it execution into multiple RDDs. This for example
+ *  It also wouldn't work if a SparkPlan splits its execution into multiple RDDs. This for example
  *  happens in BroadcastNestedLoopJoinExec with matchedStreamRows and notMatchedBroadcastRows.
  *  One can use this simple last attempt tracking by using lastAttemptLastRDDValue.
  *
@@ -134,7 +134,7 @@ private class LastAttemptRDDVals[@specialized T](
     // (a new Job is submitted that depends on data from the RDD, if it finds it's missing it will
     // recompute it in a new Stage).
     // If a missing output is detected in a Stage while the stage is still running (e.g. executor
-    // is lost or decomissioned while the stage is running, and loses the output of some already
+    // is lost or decommissioned while the stage is running, and loses the output of some already
     // finished tasks), a new Task with new taskAttemptNumber will be started for that Task.
     // There may be multiple Tasks with different taskAttemptNumbers running in parallel due to
     // speculation, but DAGScheduler guarantees that only one of them will reach metrics reporting,
@@ -306,7 +306,7 @@ private case class AccumulatorPartialVal[PARTIAL](
 }
 
 /**
- * A trait that can be mixed-in into a subclass an [[AccumulatorV2]] to make it track the "logical"
+ * A trait that can be mixed into a subclass of [[AccumulatorV2]] to track the "logical"
  * value of the "last attempt" of the execution using the accumulator - aggregated from the last
  * attempts of any Task that calculated some RDD partitions and used this accumulator, and
  * discarding any values coming from earlier attempts that have been recomputed.
@@ -534,7 +534,7 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
   /** Return intermediate value of PARTIAL type that can be merged together by partialMerge. */
   protected def partialMergeVal: PARTIAL
 
-  /** Merge together partial values of PARTIAl type returned by partialMergeVal. */
+  /** Merge together partial values of PARTIAL type returned by partialMergeVal. */
   protected def partialMerge(otherVal: PARTIAL): Unit
 
   /** Check if the other accumulator is mergeable with this one. */
