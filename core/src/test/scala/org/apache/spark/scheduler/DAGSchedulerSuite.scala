@@ -5980,7 +5980,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
-  test("SPARK-56496: maxStageAttempts enforced in failure path when consecutive limit not reached") {
+  test("SPARK-56496: maxStageAttempts enforced in failure path when " +
+    "consecutive limit not reached") {
     // Verify that maxStageAttempts is checked in the failure-handling path (not only in
     // submitStage), so the stage is aborted as soon as the total-attempts ceiling is hit
     // even when the consecutive-failure counter has been cleared by an intervening success.
