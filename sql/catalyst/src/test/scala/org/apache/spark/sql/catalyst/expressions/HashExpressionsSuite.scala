@@ -26,7 +26,6 @@ import scala.language.implicitConversions
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.network.util.JavaUtils.{digestToHexString, sha256Hex}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, ExpressionEncoder}
@@ -65,13 +64,15 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(224)),
       "107c5072b799c4771f328304cfe1ebb375eb6ea7f35a3aa753836fad")
     checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(0)),
-      sha256Hex("ABC"))
+      "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78")
     checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(256)),
-      sha256Hex("ABC"))
+      "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78")
     checkEvaluation(Sha2(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType), Literal(384)),
-      digestToHexString("SHA-384", Array[Byte](1, 2, 3, 4, 5, 6)))
+      "557cfe660c753b830efa61528fc350ef384a7a4b9d3467c6230049bc59548eb8" +
+        "a404874baff89cb0f9bd18400829fdc2")
     checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(512)),
-      digestToHexString("SHA-512", "ABC"))
+      "397118fdac8d83ad98813c50759c85b8c47565d8268bf10da483153b747a7474" +
+        "3a58a90e85aa9f705ce6984ffc128db567489817e4092d050d8a1cc596ddc119")
     // unsupported bit length
     checkEvaluation(Sha2(Literal.create(null, BinaryType), Literal(1024)), null)
     // null input and valid bit length
