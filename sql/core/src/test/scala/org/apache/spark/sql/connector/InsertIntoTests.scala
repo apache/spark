@@ -506,7 +506,7 @@ trait InsertIntoSQLOnlyTests
       }
     }
 
-    test("SPARK-43752: InsertInto: column DEFAULT values") {
+    test("InsertInto: column DEFAULT values") {
       val t1 = s"${catalogAndNamespace}tbl"
       withTable(t1) {
         sql(s"CREATE TABLE $t1 (c1 INT DEFAULT 42, c2 STRING DEFAULT 'hello') USING $v2Format")
