@@ -117,11 +117,11 @@ class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext wi
 
   test("cleanupResources should not NPE when reset fails to reallocate array") {
     // Reproduces a bug where:
-    //   1. insertRecord() triggers spill → reset() → array = null → allocateArray() throws OOM
+    //   1. insertRecord() triggers spill -> reset() -> array = null -> allocateArray() throws OOM
     //   2. OOM propagates out of insertRecord()
     //   3. UnsafeShuffleWriter's finally block calls cleanupResources()
-    //   4. cleanupResources() → freeMemory() → updatePeakMemoryUsed() → getMemoryUsage()
-    //      → inMemSorter.getMemoryUsage() → NPE because inMemSorter.array is still null
+    //   4. cleanupResources() -> freeMemory() -> updatePeakMemoryUsed() -> getMemoryUsage()
+    //      -> inMemSorter.getMemoryUsage() -> NPE because inMemSorter.array is still null
     //
     // The root cause: reset() sets array = null, then allocateArray() fails. The sorter is left
     // with inMemSorter != null but inMemSorter.array == null. cleanupResources() calls
@@ -180,11 +180,11 @@ class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext wi
       sorter.insertRecord(bytes, Platform.BYTE_ARRAY_OFFSET, 1, 0)
     }
 
-    // Enable memory stealing so that when spill → reset() → allocateArray() runs, the freed
+    // Enable memory stealing so that when spill -> reset() -> allocateArray() runs, the freed
     // memory is consumed before allocateArray can use it, causing OOM.
     shouldStealMemory = true
 
-    // insertRecord triggers spill → reset() → array = null → allocateArray fails → OOM
+    // insertRecord triggers spill -> reset() -> array = null -> allocateArray fails -> OOM
     intercept[SparkOutOfMemoryError] {
       sorter.insertRecord(bytes, Platform.BYTE_ARRAY_OFFSET, 1, 0)
     }
@@ -199,8 +199,8 @@ class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext wi
       "inMemSorter.array should be null (reset freed it, allocateArray failed)")
 
     // Without the fix, this NPEs in:
-    //   cleanupResources → freeMemory → updatePeakMemoryUsed → getMemoryUsage
-    //     → inMemSorter.getMemoryUsage → array.size() → NPE
+    //   cleanupResources -> freeMemory -> updatePeakMemoryUsed -> getMemoryUsage
+    //     -> inMemSorter.getMemoryUsage -> array.size() -> NPE
     sorter.cleanupResources()
   }
 }
