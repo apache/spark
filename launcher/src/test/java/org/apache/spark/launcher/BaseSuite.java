@@ -44,7 +44,10 @@ class BaseSuite {
         // Ignore.
       }
     }
-    assertNull(server);
+    // Re-fetch after close(): close() sets the static serverInstance to null, but the
+    // local variable above still holds the old non-null reference, so assertNull(server)
+    // would always fail here if the server was alive at cleanup time.
+    assertNull(LauncherServer.getServer());
   }
 
   protected void waitFor(final SparkAppHandle handle) throws Exception {
