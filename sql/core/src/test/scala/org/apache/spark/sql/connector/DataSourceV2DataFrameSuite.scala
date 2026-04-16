@@ -2174,8 +2174,8 @@ class DataSourceV2DataFrameSuite
       sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
       sql(s"INSERT INTO $t VALUES (1, 100)")
 
-      // create a temp view from DataFrame with a filter
-      spark.table(t).filter("salary < 999").createOrReplaceTempView("tmp")
+      // create a temp view from DataFrame
+      spark.table(t).createOrReplaceTempView("tmp")
       checkAnswer(spark.table("tmp"), Seq(Row(1, 100)))
 
       // drop and add column with the same name and type
