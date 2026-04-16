@@ -142,7 +142,7 @@ def clean_up():
 
 
 # merge the requested PR and return the merge hash
-def merge_pr(pr_num, target_ref, title, body, pr_repo_desc):
+def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author):
     pr_branch_name = "%s_MERGE_PR_%s" % (BRANCH_PREFIX, pr_num)
     target_branch_name = "%s_MERGE_PR_%s_%s" % (BRANCH_PREFIX, pr_num, target_ref.upper())
     run_cmd("git fetch %s pull/%s/head:%s" % (PR_REMOTE_NAME, pr_num, pr_branch_name))
@@ -159,23 +159,23 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc):
         continue_maybe(msg)
         had_conflicts = True
 
-    # First commit author should be considered as the primary author when the rank is the same
+    # Use PR author as the primary author for proper GitHub attribution
+    primary_author = bold_input(
+        'Enter primary author in the format of "name <email>" [%s]: ' % pr_author
+    )
+    if primary_author == "":
+        primary_author = pr_author
+
+    # Collect other commit authors as co-authors
     commit_authors = run_cmd(
         ["git", "log", "HEAD..%s" % pr_branch_name, "--pretty=format:%an <%ae>", "--reverse"]
     ).split("\n")
-    distinct_authors = sorted(
-        list(dict.fromkeys(commit_authors)), key=lambda x: commit_authors.count(x), reverse=True
-    )
-    primary_author = bold_input(
-        'Enter primary author in the format of "name <email>" [%s]: ' % distinct_authors[0]
-    )
-    if primary_author == "":
-        primary_author = distinct_authors[0]
-    else:
-        # When primary author is specified manually, de-dup it from author list and
-        # put it at the head of author list.
-        distinct_authors = list(filter(lambda x: x != primary_author, distinct_authors))
-        distinct_authors.insert(0, primary_author)
+    distinct_authors = list(dict.fromkeys(commit_authors))
+    primary_email = primary_author.split("<")[-1].rstrip(">").lower()
+    co_authors = [
+        a for a in distinct_authors
+        if a.split("<")[-1].rstrip(">").lower() != primary_email
+    ]
 
     merge_message_flags = []
 
@@ -198,10 +198,10 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc):
     # The string "Closes #%s" string is required for GitHub to correctly close the PR
     merge_message_flags += ["-m", "Closes #%s from %s." % (pr_num, pr_repo_desc)]
 
-    authors = "Authored-by:" if len(distinct_authors) == 1 else "Lead-authored-by:"
-    authors += " %s" % (distinct_authors.pop(0))
-    if len(distinct_authors) > 0:
-        authors += "\n" + "\n".join(["Co-authored-by: %s" % a for a in distinct_authors])
+    authors = "Authored-by:" if len(co_authors) == 0 else "Lead-authored-by:"
+    authors += " %s" % primary_author
+    if len(co_authors) > 0:
+        authors += "\n" + "\n".join(["Co-authored-by: %s" % a for a in co_authors])
     authors += "\n" + "Signed-off-by: %s <%s>" % (committer_name, committer_email)
 
     merge_message_flags += ["-m", authors]
@@ -668,6 +668,14 @@ def main():
     base_ref = pr["head"]["ref"]
     pr_repo_desc = "%s/%s" % (user_login, base_ref)
 
+    # Fetch PR author's GitHub profile for commit attribution
+    pr_author_info = get_json("https://api.github.com/users/%s" % user_login)
+    pr_author_name = pr_author_info.get("name") or user_login
+    pr_author_email = pr_author_info.get("email") or (
+        "%s+%s@users.noreply.github.com" % (pr_author_info["id"], user_login)
+    )
+    pr_author = "%s <%s>" % (pr_author_name, pr_author_email)
+
     # Merged pull requests don't appear as merged in the GitHub API;
     # Instead, they're closed by committers.
     merge_commits = [e for e in pr_events if e["event"] == "closed" and e["commit_id"] is not None]
@@ -714,7 +722,7 @@ def main():
 
     merged_refs = [target_ref]
 
-    merge_hash = merge_pr(pr_num, target_ref, title, body, pr_repo_desc)
+    merge_hash = merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author)
 
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
     while bold_input("\n%s (y/N): " % pick_prompt).lower() == "y":
