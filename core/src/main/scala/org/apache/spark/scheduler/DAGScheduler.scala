@@ -274,11 +274,12 @@ private[spark] class DAGScheduler(
    *  - [[maxStageAttempts]]: an absolute ceiling on the *total* number of attempts ever made
    *    for a stage. This counter is never cleared.
    *
-   * Note: the test-only [[disallowStageRetryForTest]] flag forces an abort regardless of these
-   * limits and is checked separately by each call site.
+   * Additionally, if the test-only flag [[disallowStageRetryForTest]] is set, the stage is
+   * aborted regardless of the above limits.
    */
   private def canRetryStage(stage: Stage): Boolean = {
-    stage.failedAttemptIds.size < maxConsecutiveStageAttempts &&
+    !disallowStageRetryForTest &&
+      stage.failedAttemptIds.size < maxConsecutiveStageAttempts &&
       stage.getNextAttemptId < maxStageAttempts
   }
 
@@ -2144,7 +2145,7 @@ private[spark] class DAGScheduler(
     }
 
     stage.failedAttemptIds.add(stage.latestInfo.attemptNumber())
-    val shouldAbortStage = !canRetryStage(stage) || disallowStageRetryForTest
+    val shouldAbortStage = !canRetryStage(stage)
     markStageAsFinished(stage, Some(reason), willRetry = !shouldAbortStage)
 
     if (shouldAbortStage) {
@@ -2388,8 +2389,7 @@ private[spark] class DAGScheduler(
             failedStage.failedAttemptIds.add(task.stageAttemptId)
           }
 
-          val shouldAbortStage =
-            (!canRetryStage(failedStage) || disallowStageRetryForTest)
+          val shouldAbortStage = !canRetryStage(failedStage)
 
           // It is likely that we receive multiple FetchFailed for a single stage (because we have
           // multiple tasks running concurrently on different executors). In that case, it is
@@ -2583,7 +2583,7 @@ private[spark] class DAGScheduler(
           failedStage.failedAttemptIds.add(task.stageAttemptId)
           // TODO Refactor the failure handling logic to combine similar code with that of
           // FetchFailed.
-          val shouldAbortStage = !canRetryStage(failedStage) || disallowStageRetryForTest
+          val shouldAbortStage = !canRetryStage(failedStage)
 
           if (shouldAbortStage) {
             val abortMessage = if (disallowStageRetryForTest) {
