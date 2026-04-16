@@ -19,8 +19,9 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util
 import java.util.Collections
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
 import scala.jdk.CollectionConverters._
 
@@ -47,6 +48,25 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
   private var _name: Option[String] = None
   private var copyOnLoad: Boolean = false
+  private val columnIdCounter = new AtomicLong(0)
+
+  private def assignColumnIds(columns: Array[Column]): Array[Column] = {
+    columns.map(c => Column.withId(c, columnIdCounter.incrementAndGet().toString))
+  }
+
+  private def reconcileColumnIds(
+      oldColumns: Array[Column],
+      newColumns: Array[Column]): Array[Column] = {
+    newColumns.map { newCol =>
+      val normalizedName = newCol.name().toLowerCase(Locale.ROOT)
+      oldColumns.find(_.name().toLowerCase(Locale.ROOT) == normalizedName) match {
+        case Some(oldCol) if oldCol.id() != null =>
+          Column.withId(newCol, oldCol.id())
+        case _ =>
+          Column.withId(newCol, columnIdCounter.incrementAndGet().toString)
+      }
+    }
+  }
 
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     _name = Some(name)
@@ -155,7 +175,8 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
 
     val tableName = s"$name.${ident.quoted}"
-    val table = new InMemoryTable(tableName, columns, partitions, properties, constraints,
+    val columnsWithIds = assignColumnIds(columns)
+    val table = new InMemoryTable(tableName, columnsWithIds, partitions, properties, constraints,
       distribution, ordering, requiredNumPartitions, advisoryPartitionSize,
       distributionStrictlyRequired, numRowsPerSplit)
     tables.put(ident, table)
@@ -181,11 +202,13 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
     table.increaseVersion()
     val currentVersion = table.version()
+    val reconciledColumns = reconcileColumnIds(
+      table.columns(), CatalogV2Util.structTypeToV2Columns(schema))
     val newTable = table match {
       case _: InMemoryTable =>
         new InMemoryTable(
           name = table.name,
-          columns = CatalogV2Util.structTypeToV2Columns(schema),
+          columns = reconciledColumns,
           partitioning = finalPartitioning,
           properties = properties,
           constraints = constraints,

@@ -152,8 +152,12 @@ class V2TableUtilSuite extends SparkFunSuite {
       col("name", StringType, nullable = true))
     val table = TestTableWithMetadataSupport("test", currentCols)
 
-    val e = intercept[AnalysisException] { validateCapturedColumns(table, originCols) }
-    assert(e.message.contains("Choose another name or rename the existing column"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        validateCapturedColumns(table, originCols)
+      },
+      condition = "COLUMN_ALREADY_EXISTS",
+      parameters = Map("columnName" -> "`id`"))
   }
 
   test("validateCapturedColumns - complex types") {
@@ -292,10 +296,12 @@ class V2TableUtilSuite extends SparkFunSuite {
       metaCol("INDEX", StringType, nullable = false)) // duplicate with different case
     val table = TestTableWithMetadataSupport("test", Array.empty, currentMetaCols)
 
-    val e = intercept[AnalysisException] {
-      V2TableUtil.validateCapturedMetadataColumns(table, originMetaCols)
-    }
-    assert(e.message.contains("Choose another name or rename the existing column"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        V2TableUtil.validateCapturedMetadataColumns(table, originMetaCols)
+      },
+      condition = "COLUMN_ALREADY_EXISTS",
+      parameters = Map("columnName" -> "`index`"))
   }
 
   test("validateCapturedMetadataColumns - empty metadata columns") {
@@ -629,6 +635,101 @@ class V2TableUtilSuite extends SparkFunSuite {
     assert(errors.head.contains("`metadata`.`value`.`timestamp` BIGINT has been added"))
   }
 
+  test("validateCapturedColumnIds - no IDs on either side") {
+    val originCols = Array(
+      col("id", LongType, nullable = false),
+      col("name", StringType, nullable = true))
+    val currentCols = Array(
+      col("id", LongType, nullable = false),
+      col("name", StringType, nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumnIds(table, originCols)
+    assert(errors.isEmpty, "No IDs should produce no errors")
+  }
+
+  test("validateCapturedColumnIds - matching IDs") {
+    val originCols = Array(
+      Column.withId(col("id", LongType, nullable = false), "1"),
+      Column.withId(col("name", StringType, nullable = true), "2"))
+    val currentCols = Array(
+      Column.withId(col("id", LongType, nullable = false), "1"),
+      Column.withId(col("name", StringType, nullable = true), "2"))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumnIds(table, originCols)
+    assert(errors.isEmpty, "Matching IDs should produce no errors")
+  }
+
+  test("validateCapturedColumnIds - mismatched IDs") {
+    val originCols = Array(
+      Column.withId(col("id", LongType, nullable = false), "1"),
+      Column.withId(col("salary", IntegerType, nullable = true), "2"))
+    val currentCols = Array(
+      Column.withId(col("id", LongType, nullable = false), "1"),
+      Column.withId(col("salary", IntegerType, nullable = true), "99"))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumnIds(table, originCols)
+    assert(errors.size == 1)
+    assert(errors.head.contains("`salary` column ID has changed from 2 to 99"))
+  }
+
+  test("validateCapturedColumnIds - ID on origin but null on current") {
+    val originCols = Array(
+      Column.withId(col("id", LongType, nullable = false), "1"),
+      Column.withId(col("name", StringType, nullable = true), "2"))
+    val currentCols = Array(
+      col("id", LongType, nullable = false),
+      col("name", StringType, nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumnIds(table, originCols)
+    assert(errors.isEmpty, "Null ID on current side should be skipped")
+  }
+
+  test("validateCapturedColumnIds - ID on current but null on origin") {
+    val originCols = Array(
+      col("id", LongType, nullable = false),
+      col("name", StringType, nullable = true))
+    val currentCols = Array(
+      Column.withId(col("id", LongType, nullable = false), "1"),
+      Column.withId(col("name", StringType, nullable = true), "2"))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumnIds(table, originCols)
+    assert(errors.isEmpty, "Null ID on origin side should be skipped")
+  }
+
+  test("validateCapturedColumnIds - column removed (no ID error)") {
+    val originCols = Array(
+      Column.withId(col("id", LongType, nullable = false), "1"),
+      Column.withId(col("salary", IntegerType, nullable = true), "2"))
+    val currentCols = Array(
+      Column.withId(col("id", LongType, nullable = false), "1"))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumnIds(table, originCols)
+    assert(errors.isEmpty, "Removed columns should not produce ID errors")
+  }
+
+  test("validateCapturedColumnIds - multiple ID mismatches") {
+    val originCols = Array(
+      Column.withId(col("id", LongType, nullable = false), "1"),
+      Column.withId(col("name", StringType, nullable = true), "2"),
+      Column.withId(col("salary", IntegerType, nullable = true), "3"))
+    val currentCols = Array(
+      Column.withId(col("id", LongType, nullable = false), "1"),
+      Column.withId(col("name", StringType, nullable = true), "20"),
+      Column.withId(col("salary", IntegerType, nullable = true), "30"))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumnIds(table, originCols)
+    assert(errors.size == 2)
+    assert(errors.exists(_.contains("`name` column ID has changed from 2 to 20")))
+    assert(errors.exists(_.contains("`salary` column ID has changed from 3 to 30")))
+  }
+
   // simple table without metadata column support
   private case class TestTable(
       override val name: String,
@@ -671,6 +772,12 @@ class V2TableUtilSuite extends SparkFunSuite {
       originCols: Array[Column],
       mode: SchemaValidationMode = PROHIBIT_CHANGES): Seq[String] = {
     V2TableUtil.validateCapturedColumns(table, originCols.toImmutableArraySeq, mode)
+  }
+
+  private def validateCapturedColumnIds(
+      table: Table,
+      originCols: Array[Column]): Seq[String] = {
+    V2TableUtil.validateCapturedColumnIds(table, originCols.toImmutableArraySeq)
   }
 
   private def col(name: String, dataType: DataType, nullable: Boolean): Column = {

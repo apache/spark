@@ -53,7 +53,8 @@ public interface Column {
       boolean nullable,
       String comment,
       String metadataInJSON) {
-    return new ColumnImpl(name, dataType, nullable, comment, null, null, null, metadataInJSON);
+    return new ColumnImpl(name, dataType, nullable, comment, null, null, null,
+            metadataInJSON, null);
   }
 
   static Column create(
@@ -64,7 +65,7 @@ public interface Column {
       ColumnDefaultValue defaultValue,
       String metadataInJSON) {
     return new ColumnImpl(name, dataType, nullable, comment, defaultValue,
-            null, null, metadataInJSON);
+            null, null, metadataInJSON, null);
   }
 
   static Column create(
@@ -75,7 +76,7 @@ public interface Column {
       String generationExpression,
       String metadataInJSON) {
     return new ColumnImpl(name, dataType, nullable, comment, null,
-            generationExpression, null, metadataInJSON);
+            generationExpression, null, metadataInJSON, null);
   }
 
   static Column create(
@@ -86,7 +87,16 @@ public interface Column {
           IdentityColumnSpec identityColumnSpec,
           String metadataInJSON) {
     return new ColumnImpl(name, dataType, nullable, comment, null,
-            null, identityColumnSpec, metadataInJSON);
+            null, identityColumnSpec, metadataInJSON, null);
+  }
+
+  /**
+   * Returns a copy of the given column with the specified ID.
+   */
+  static Column withId(Column col, String id) {
+    return new ColumnImpl(col.name(), col.dataType(), col.nullable(), col.comment(),
+            col.defaultValue(), col.generationExpression(), col.identityColumnSpec(),
+            col.metadataInJSON(), id);
   }
 
   /**
@@ -136,4 +146,18 @@ public interface Column {
    */
   @Nullable
   String metadataInJSON();
+
+  /**
+   * Returns the unique identifier for this column, or null if not supported by the connector.
+   * <p>
+   * Column IDs track column identity across schema evolution. If a column is dropped and re-added
+   * with the same name, the new column must have a different ID. This allows Spark to detect that
+   * the column has been replaced even if the name and type remain the same.
+   * <p>
+   * Connectors that do not support column IDs should return null (the default).
+   */
+  @Nullable
+  default String id() {
+    return null;
+  }
 }

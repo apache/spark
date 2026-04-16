@@ -107,9 +107,11 @@ class DataSourceV2DataFrameSuite
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
       // Default saveMode is ErrorIfExists
-      intercept[TableAlreadyExistsException] {
-        df.write.saveAsTable(t1)
-      }
+      checkError(
+        exception = intercept[TableAlreadyExistsException] {
+          df.write.saveAsTable(t1)
+        },
+        condition = "TABLE_OR_VIEW_ALREADY_EXISTS")
       assert(spark.table(t1).count() === 0)
 
       // appends are by name not by position
@@ -876,13 +878,14 @@ class DataSourceV2DataFrameSuite
               Seq(LiteralValue(100, IntegerType), LiteralValue(23, IntegerType))),
             LiteralValue(123, IntegerType)),
           "{}"))
-      val e = intercept[SparkException] {
+      val exception = intercept[SparkException] {
         val tableInfo = new TableInfo.Builder().withColumns(columns).build()
         catalog("testcat").createTable(Identifier.of(Array("ns1", "ns2"), "tbl"), tableInfo)
         val df = Seq(1, 2, 3).toDF("c1")
         df.writeTo(tableName).append()
       }
-      assert(e.getMessage.contains("connector expression couldn't be converted to Catalyst"))
+      assert(exception.getMessage.contains(
+        "connector expression couldn't be converted to Catalyst"))
     }
   }
 
@@ -1506,6 +1509,165 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("detect column ID change after dropping and re-adding column with same name and type") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (2, 200)")
+
+      // create DataFrame and trigger analysis (captures column IDs)
+      val df = spark.table(t)
+
+      // capture original column IDs
+      val originalCols = catalog("testcat").loadTable(
+        Identifier.of(Array("ns1", "ns2"), "tbl")).columns()
+      val originalSalaryId = originalCols.find(_.name() == "salary").get.id()
+      assert(originalSalaryId != null, "InMemoryTable should assign column IDs")
+
+      // drop and re-add column with same name and type
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+
+      // verify new column has a different ID
+      val newCols = catalog("testcat").loadTable(
+        Identifier.of(Array("ns1", "ns2"), "tbl")).columns()
+      val newSalaryId = newCols.find(_.name() == "salary").get.id()
+      assert(originalSalaryId != newSalaryId,
+        "Re-added column should have a different ID")
+
+      // execution should fail with column ID mismatch
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "errors" -> s"- `salary` column ID has changed from $originalSalaryId to $newSalaryId"))
+    }
+  }
+
+  test("detect table ID change after dropping and recreating table with same schema") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      // create DataFrame and trigger analysis
+      val df = spark.table(t)
+
+      // capture original table ID
+      val originalTable = catalog("testcat").loadTable(ident)
+      val originalId = originalTable.id()
+
+      // drop and recreate table with same schema
+      sql(s"DROP TABLE $t")
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+
+      // load new table and verify IDs are different
+      val newTable = catalog("testcat").loadTable(ident)
+      val newId = newTable.id()
+      assert(originalId != newId)
+
+      // execution should fail with table ID mismatch
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.TABLE_ID_MISMATCH",
+        sqlState = Some("51024"),
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "capturedTableId" -> originalId,
+          "currentTableId" -> newId))
+    }
+  }
+
+  test("column addition does not trigger column ID mismatch") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      // create DataFrame and trigger analysis
+      val df = spark.table(t)
+
+      // add a new column (existing columns keep their IDs)
+      sql(s"ALTER TABLE $t ADD COLUMN bonus INT")
+      sql(s"INSERT INTO $t VALUES (2, 200, 50)")
+
+      // execution should succeed since original columns still have matching IDs
+      checkAnswer(df, Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  test("detect column ID change in join with incrementally constructed queries") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      // create first DataFrame (captures column IDs at analysis time)
+      val df1 = spark.table(t)
+
+      // drop and re-add column with same name and type
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+      sql(s"INSERT INTO $t VALUES (1, 999)")
+
+      // create second DataFrame (captures new column IDs)
+      val df2 = spark.table(t)
+
+      // join should fail because df1 has stale column IDs
+      checkError(
+        exception = intercept[AnalysisException] {
+          df1.join(df2, df1("id") === df2("id")).collect()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH")
+    }
+  }
+
+  test("temp view with drop and re-add column resolves by name") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      // create temp view from DataFrame
+      spark.table(t).createOrReplaceTempView("tmp_view")
+      checkAnswer(spark.sql("SELECT * FROM tmp_view"), Seq(Row(1, 100)))
+
+      // drop and re-add column with same name and type
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+      sql(s"INSERT INTO $t VALUES (2, 200)")
+
+      // temp view should succeed as it resolves by name (like SQL views)
+      // the old salary data is gone, new salary column has null for old rows
+      checkAnswer(
+        spark.sql("SELECT * FROM tmp_view"),
+        Seq(Row(1, null), Row(2, 200)))
+    }
+  }
+
+  test("drop and re-add column with same name but different type detects schema change") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      // create DataFrame and trigger analysis
+      val df = spark.table(t)
+
+      // drop and re-add column with same name but different type
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary STRING")
+
+      // execution should fail (column ID check runs before schema check,
+      // so this will be caught as a column ID mismatch)
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH")
+    }
+  }
+
   test("SPARK-53924: temp view on DSv2 table allows top-level column additions") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -1645,7 +1807,8 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t DROP COLUMN extra")
 
       // old view fails
-      intercept[AnalysisException] { spark.table("v").collect() }
+      val exception = intercept[AnalysisException] { spark.table("v").collect() }
+      assert(exception != null)
 
       // recreate view with updated schema
       spark.table(t).createOrReplaceTempView("v")
@@ -1895,10 +2058,11 @@ class DataSourceV2DataFrameSuite
       sql(s"INSERT INTO $s VALUES (3, 'c', 'finance')")
 
       // CTAS should fail as commands must operate on current schema
-      val e = intercept[AnalysisException] {
+      val exception = intercept[AnalysisException] {
         filteredSourceDF.writeTo(t).createOrReplace()
       }
-      assert(e.message.contains("incompatible changes to table `testcat`.`ns1`.`s`"))
+      assert(exception.message.contains(
+        "incompatible changes to table `testcat`.`ns1`.`s`"))
     }
   }
 

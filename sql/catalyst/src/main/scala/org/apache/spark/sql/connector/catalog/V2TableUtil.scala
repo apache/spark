@@ -19,6 +19,8 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util.Locale
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, MetadataColumnHelper}
@@ -119,6 +121,54 @@ private[sql] object V2TableUtil extends SQLConfHelper {
     val metaCols = filter(originMetaColNames, metadataColumns(table))
     val metaSchema = CatalogV2Util.toStructType(metaCols)
     SchemaUtils.validateSchemaCompatibility(originMetaSchema, metaSchema, resolver, mode)
+  }
+
+  /**
+   * Validates that captured column IDs match the current table columns.
+   *
+   * Only validates columns where both the original and current column have non-null IDs.
+   * If the connector does not support column IDs (returns null), this check is skipped.
+   *
+   * @param table the current table metadata
+   * @param relation the relation with captured columns
+   * @return validation errors, or empty sequence if valid
+   */
+  def validateCapturedColumnIds(
+      table: Table,
+      relation: DataSourceV2Relation): Seq[String] = {
+    validateCapturedColumnIds(table, relation.table.columns.toImmutableArraySeq)
+  }
+
+  /**
+   * Validates that captured column IDs match the current table columns.
+   *
+   * Checks for:
+   *  - Column ID changes (same column name but different ID, indicating the column was
+   *    dropped and re-added)
+   *
+   * Only validates columns where both the original and current column have non-null IDs.
+   *
+   * @param table the current table metadata
+   * @param originCols the originally captured columns
+   * @return validation errors, or empty sequence if valid
+   */
+  def validateCapturedColumnIds(
+      table: Table,
+      originCols: Seq[Column]): Seq[String] = {
+    val currentCols = table.columns.toImmutableArraySeq
+    val errors = new mutable.ArrayBuffer[String]()
+    for (origin <- originCols) {
+      if (origin.id() != null) {
+        val normalizedName = normalize(origin.name())
+        currentCols.find(c => normalize(c.name()) == normalizedName).foreach { current =>
+          if (current.id() != null && current.id() != origin.id()) {
+            errors += s"`${origin.name()}` column ID has changed from " +
+              s"${origin.id()} to ${current.id()}"
+          }
+        }
+      }
+    }
+    errors.toSeq
   }
 
   private def filter(colNames: Seq[String], cols: Seq[MetadataColumn]): Seq[MetadataColumn] = {
