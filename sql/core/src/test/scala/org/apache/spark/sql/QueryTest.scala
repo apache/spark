@@ -23,7 +23,6 @@ import java.nio.file.Files
 import java.util.{Locale, TimeZone, UUID}
 import java.util.regex.Pattern
 
-import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
 
@@ -43,7 +42,6 @@ import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestData
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.storage.StorageLevel
