@@ -48,15 +48,21 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
   private var _name: Option[String] = None
   private var copyOnLoad: Boolean = false
+  private var supportsColumnIds: Boolean = false
   private val columnIdCounter = new AtomicLong(0)
 
   private def assignColumnIds(columns: Array[Column]): Array[Column] = {
-    columns.map(c => Column.withId(c, columnIdCounter.incrementAndGet().toString))
+    if (supportsColumnIds) {
+      columns.map(c => Column.withId(c, columnIdCounter.incrementAndGet().toString))
+    } else {
+      columns
+    }
   }
 
   private def reconcileColumnIds(
       oldColumns: Array[Column],
       newColumns: Array[Column]): Array[Column] = {
+    if (!supportsColumnIds) return newColumns
     newColumns.map { newCol =>
       val normalizedName = newCol.name().toLowerCase(Locale.ROOT)
       oldColumns.find(_.name().toLowerCase(Locale.ROOT) == normalizedName) match {
@@ -71,6 +77,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     _name = Some(name)
     copyOnLoad = options.getBoolean("copyOnLoad", false)
+    supportsColumnIds = options.getBoolean("supportsColumnIds", false)
   }
 
   override def name: String = _name.get

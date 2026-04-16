@@ -53,6 +53,7 @@ class DataSourceV2DataFrameSuite
     .set(SQLConf.ANSI_ENABLED, true)
     .set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
     .set("spark.sql.catalog.testcat.copyOnLoad", "true")
+    .set("spark.sql.catalog.testcat.supportsColumnIds", "true")
     .set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
 
   after {
