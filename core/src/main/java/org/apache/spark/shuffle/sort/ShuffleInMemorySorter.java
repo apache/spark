@@ -128,7 +128,8 @@ final class ShuffleInMemorySorter {
   }
 
   public long getMemoryUsage() {
-    return array.size() * 8;
+    LongArray arr = array;
+    return arr != null ? arr.size() * 8 : 0;
   }
 
   /**
