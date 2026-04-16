@@ -39,7 +39,6 @@ from pyspark.sql.types import (
     ArrayType,
     MapType,
     TimestampType,
-    StructField,
     StructType,
     _has_type,
     DataType,
@@ -263,31 +262,47 @@ def _convert_arrow_table_to_pandas(
         from pyspark.sql.conversion import ArrowArrayToPandasConversion
 
         arrow_dtype_types = ArrowArrayToPandasConversion.ARROW_DTYPE_TYPES
+        pdf = pd.concat(
+            objs=cast(
+                Sequence[pd.Series],
+                [
+                    ArrowArrayToPandasConversion.convert_pyarrow(
+                        arrow_table.column(i), field.dataType, ser_name=field.name
+                    )
+                    if isinstance(field.dataType, arrow_dtype_types)
+                    else _create_converter_to_pandas(
+                        field.dataType,
+                        field.nullable,
+                        timezone=timezone,
+                        struct_in_pandas=struct_handling_mode,
+                        error_on_duplicated_field_names=error_on_duplicated_field_names,
+                    )(arrow_table.column(i).to_pandas(**pandas_options))
+                    for i, field in enumerate(schema.fields)
+                ],
+            ),
+            axis="columns",
+        )
+    else:
+        # Convert arrow columns to pandas Series
+        column_data = (arrow_col.to_pandas(**pandas_options) for arrow_col in arrow_table.columns)
 
-    def _convert_column(arrow_col: "pa.ChunkedArray", field: "StructField") -> "pd.Series":
-        if arrow_dtype and isinstance(field.dataType, arrow_dtype_types):
-            return ArrowArrayToPandasConversion.convert_pyarrow(
-                arrow_col, field.dataType, ser_name=field.name
-            )
-        series = arrow_col.to_pandas(**pandas_options)
-        return _create_converter_to_pandas(
-            field.dataType,
-            field.nullable,
-            timezone=timezone,
-            struct_in_pandas=struct_handling_mode,
-            error_on_duplicated_field_names=error_on_duplicated_field_names,
-        )(series)
-
-    pdf = pd.concat(
-        objs=cast(
-            Sequence[pd.Series],
-            [
-                _convert_column(arrow_table.column(i), schema.fields[i])
-                for i in range(len(schema.fields))
-            ],
-        ),
-        axis="columns",
-    )
+        # Apply Spark-specific type converters to each column
+        pdf = pd.concat(
+            objs=cast(
+                Sequence[pd.Series],
+                (
+                    _create_converter_to_pandas(
+                        field.dataType,
+                        field.nullable,
+                        timezone=timezone,
+                        struct_in_pandas=struct_handling_mode,
+                        error_on_duplicated_field_names=error_on_duplicated_field_names,
+                    )(series)
+                    for series, field in zip(column_data, schema.fields)
+                ),
+            ),
+            axis="columns",
+        )
 
     # Restore original column names (including duplicates)
     pdf.columns = pd.Index(schema.names)
