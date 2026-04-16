@@ -509,6 +509,22 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def tableSampleSystemRepeatableError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM_REPEATABLE",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
+  def tableSampleSystemSampleMethodError(
+      sampleMethod: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM_SAMPLE_METHOD",
+      messageParameters = Map("sampleMethod" -> sampleMethod),
+      ctx)
+  }
+
   def invalidStatementError(operation: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_STATEMENT_OR_CLAUSE",
