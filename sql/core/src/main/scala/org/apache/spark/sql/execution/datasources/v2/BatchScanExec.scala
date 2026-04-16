@@ -54,7 +54,7 @@ case class BatchScanExec(
       false
   }
 
-  override def hashCode(): Int = Objects.hash(batch, runtimeFilters)
+  override def hashCode(): Int = Objects.hash(batch, runtimeFilters, keyGroupedPartitioning)
 
   @transient override lazy val inputPartitions: Seq[InputPartition] =
     batch.planInputPartitions().toImmutableArraySeq

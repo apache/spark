@@ -47,17 +47,29 @@ case class FilterEstimation(plan: Filter) extends Logging {
 
     // Estimate selectivity of this filter predicate, and update column stats if needed.
     // For not-supported condition, set filter selectivity to a conservative estimate 100%
-    val filterSelectivity = calculateFilterSelectivity(plan.condition).getOrElse(1.0)
+    val filterSelectivity =
+      calculateFilterSelectivity(plan.condition).map(boundProbability).getOrElse(1.0)
 
-    val filteredRowCount: BigInt = ceil(BigDecimal(childStats.rowCount.get) * filterSelectivity)
+    val childRowCount = childStats.rowCount.get
+    val filteredRowCount: BigInt =
+      ceil(BigDecimal(childRowCount) * filterSelectivity).min(childRowCount)
     val newColStats = if (filteredRowCount == 0) {
       // The output is empty, we don't need to keep column stats.
       AttributeMap[ColumnStat](Nil)
     } else {
-      colStatsMap.outputColumnStats(rowsBeforeFilter = childStats.rowCount.get,
+      colStatsMap.outputColumnStats(rowsBeforeFilter = childRowCount,
         rowsAfterFilter = filteredRowCount)
     }
-    val filteredSizeInBytes: BigInt = getOutputSize(plan.output, filteredRowCount, newColStats)
+    val sizeByOutputAttrs = getOutputSize(plan.output, filteredRowCount, newColStats)
+    val sizeByChildScaling = if (childRowCount > 0 && filteredRowCount > 0) {
+      ceil(
+        BigDecimal(childStats.sizeInBytes) * BigDecimal(filteredRowCount) /
+          BigDecimal(childRowCount))
+        .max(BigInt(1))
+    } else {
+      BigInt(1)
+    }
+    val filteredSizeInBytes: BigInt = sizeByOutputAttrs.min(sizeByChildScaling)
 
     Some(childStats.copy(sizeInBytes = filteredSizeInBytes, rowCount = Some(filteredRowCount),
       attributeStats = newColStats))

@@ -205,7 +205,7 @@ trait QueryTestBase extends PlanTestBase with SparkSessionProvider { self: Suite
    */
   def assertCached(query: Dataset[_], numCachedTables: Int = 1): Unit = {
     val planWithCaching =
-      query.asInstanceOf[classic.Dataset[_]].queryExecution.withCachedData
+      query.queryExecution.withCachedData
     val cachedData = planWithCaching collect {
       case cached: InMemoryRelation => cached
     }
@@ -222,7 +222,7 @@ trait QueryTestBase extends PlanTestBase with SparkSessionProvider { self: Suite
    */
   def assertCached(query: Dataset[_], cachedName: String, storageLevel: StorageLevel): Unit = {
     val planWithCaching =
-      query.asInstanceOf[classic.Dataset[_]].queryExecution.withCachedData
+      query.queryExecution.withCachedData
     val matched = planWithCaching.exists {
       case cached: InMemoryRelation =>
         val cacheBuilder = cached.cacheBuilder
@@ -242,7 +242,7 @@ trait QueryTestBase extends PlanTestBase with SparkSessionProvider { self: Suite
    * Asserts that a given [[Dataset]] does not have missing inputs in all the analyzed plans.
    */
   def assertEmptyMissingInput(query: Dataset[_]): Unit = {
-    val qe = query.asInstanceOf[classic.Dataset[_]].queryExecution
+    val qe = query.queryExecution
     assert(qe.analyzed.missingInput.isEmpty,
       s"The analyzed logical plan has missing inputs:\n${qe.analyzed}")
     assert(qe.optimizedPlan.missingInput.isEmpty,

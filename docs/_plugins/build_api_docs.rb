@@ -45,6 +45,10 @@ def build_spark_if_necessary
 
   print_header "Building Spark."
   cd(SPARK_PROJECT_ROOT)
+  # Maven may leave POM-only org.hamcrest:hamcrest-core trees under ~/.m2; SBT/Coursier then
+  # fails with "file:.../hamcrest-core-*.jar: not found". Clear before invoking SBT.
+  hamcrest_m2 = File.join(Dir.home, '.m2/repository/org/hamcrest/hamcrest-core')
+  FileUtils.rm_rf(hamcrest_m2)
   command = "NO_PROVIDED_SPARK_JARS=0 build/sbt -Phive -Pkinesis-asl clean package"
   puts "Running '#{command}'; this may take a few minutes..."
   system(command) || raise("Failed to build Spark")

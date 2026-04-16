@@ -26,9 +26,9 @@ import java.util.zip.CRC32
 import com.google.protobuf.ByteString
 import io.grpc.{ManagedChannel, Server}
 import io.grpc.inprocess.{InProcessChannelBuilder, InProcessServerBuilder}
-import org.apache.commons.codec.digest.DigestUtils.sha256Hex
 
 import org.apache.spark.connect.proto.AddArtifactsRequest
+import org.apache.spark.network.util.JavaUtils.sha256Hex
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.test.ConnectFunSuite

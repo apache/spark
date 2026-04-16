@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, SortOrder}
-import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, PartitioningCollection}
-import org.apache.spark.sql.execution.DummySparkPlan
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, SortOrder}
+import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning}
+import org.apache.spark.sql.execution.{DummySparkPlan, LeafExecNode, SafeForKWayMerge}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
@@ -141,4 +142,65 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     assert(!gpe.groupedPartitions.forall(_._2.size <= 1), "expected coalescing")
     assert(gpe.outputOrdering === Nil)
   }
+
+  test("SPARK-55715: sorted merge config enabled but child not SafeForKWayMerge falls back " +
+      "to key-expression ordering") {
+    // DummySparkPlan does not extend SafeForKWayMerge, so childIsSafeForKWayMerge = false and
+    // canUseSortedMerge = false even when the preserve-ordering config is on. outputOrdering must
+    // therefore fall back to key-expression filtering (not return the full child ordering).
+    val partitionKeys = Seq(row(1), row(2), row(1))
+    val childOrdering = Seq(SortOrder(exprA, Ascending), SortOrder(exprC, Ascending))
+    val child = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), partitionKeys),
+      outputOrdering = childOrdering)
+
+    assert(!GroupPartitionsExec(child).groupedPartitions.forall(_._2.size <= 1),
+      "expected coalescing")
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+      // Even though preserve-ordering is enabled, the child is not safe for k-way merge,
+      // so only key-expression orders survive (non-key exprC is dropped).
+      val ordering = GroupPartitionsExec(child).outputOrdering
+      assert(ordering.length === 1)
+      assert(ordering.head.child === exprA)
+    }
+  }
+
+  test("SPARK-55715: coalescing with sorted merge config enabled returns full child ordering") {
+    // Key 1 appears on partitions 0 and 2, causing coalescing.  The child is a LeafExecNode
+    // so childIsSafeForKWayMerge = true.  With the preserve-ordering config enabled, case 2
+    // of outputOrdering kicks in and the full child ordering (including the non-key exprC) must
+    // be returned, not just the subset of key-expression orders.
+    val partitionKeys = Seq(row(1), row(2), row(1))
+    val childOrdering = Seq(SortOrder(exprA, Ascending), SortOrder(exprC, Ascending))
+    val child = DummyLeafSparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), partitionKeys),
+      outputOrdering = childOrdering)
+
+    assert(!GroupPartitionsExec(child).groupedPartitions.forall(_._2.size <= 1),
+      "expected coalescing")
+    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+      // Config enabled: k-way merge preserves full ordering including non-key exprC.
+      assert(GroupPartitionsExec(child).outputOrdering === childOrdering)
+    }
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+      // Sorted-merge config disabled, key-ordering config enabled: only key-expression orders
+      // survive simple concatenation (non-key exprC is dropped).
+      val ordering = GroupPartitionsExec(child).outputOrdering
+      assert(ordering.length === 1)
+      assert(ordering.head.child === exprA)
+    }
+  }
+}
+
+private case class DummyLeafSparkPlan(
+    override val outputOrdering: Seq[SortOrder] = Nil,
+    override val outputPartitioning: Partitioning = UnknownPartitioning(0)
+  ) extends LeafExecNode with SafeForKWayMerge {
+  override protected def doExecute(): RDD[InternalRow] =
+    throw new UnsupportedOperationException
+  override def output: Seq[Attribute] = Seq.empty
 }

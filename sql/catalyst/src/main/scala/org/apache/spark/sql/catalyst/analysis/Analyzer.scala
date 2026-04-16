@@ -1418,6 +1418,12 @@ class Analyzer(
       // to resolve column "DEFAULT" in the child plans so that they must be unresolved.
       case s: SetVariable => resolveColumnDefaultInCommandInputQuery(s)
 
+      // SPARK-43752: resolve column "DEFAULT" in V2 write commands before the
+      // query is fully resolved, matching the InsertIntoStatement behavior above.
+      case v2: V2WriteCommand
+          if v2.table.resolved && v2.query.containsPattern(UNRESOLVED_ATTRIBUTE) =>
+        resolveColumnDefaultInCommandInputQuery(v2)
+
       // Skip FetchCursor - let ResolveFetchCursor handle variable resolution
       // This prevents ResolveReferences from trying to resolve target variables as columns
       case s: SingleStatement if s.parsedPlan.isInstanceOf[FetchCursor] => s

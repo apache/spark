@@ -90,7 +90,7 @@ class PythonOnlyUDT(UserDefinedType):
 
     @classmethod
     def module(cls):
-        return "__main__"
+        return "pyspark.testing.objects"
 
     def serialize(self, obj):
         return [obj.x, obj.y]

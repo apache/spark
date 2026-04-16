@@ -21,7 +21,7 @@ implementation based on the worker specification.
 ```
 udf/worker/
 ├── proto/  Protobuf definition of the worker specification
-│           (UDFWorkerSpecification -- currently a placeholder).
+│           (UDFWorkerSpecification).
 │           WorkerSpecification   -- typed Scala wrapper around the protobuf spec.
 └── core/   Engine-side APIs (all @Experimental):
               WorkerDispatcher      -- manages workers for one spec; creates sessions.

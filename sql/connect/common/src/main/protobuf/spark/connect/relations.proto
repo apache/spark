@@ -1209,12 +1209,13 @@ message Parse {
   // (Optional) DataType representing the schema. If not set, Spark will infer the schema.
   optional DataType schema = 3;
 
-  // Options for the csv/json parser. The map key is case insensitive.
+  // Options for the csv/json/xml parser. The map key is case insensitive.
   map<string, string> options = 4;
   enum ParseFormat {
     PARSE_FORMAT_UNSPECIFIED = 0;
     PARSE_FORMAT_CSV = 1;
     PARSE_FORMAT_JSON = 2;
+    PARSE_FORMAT_XML = 3;
   }
 }
 

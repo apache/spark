@@ -48,7 +48,7 @@ case class TestData(a: Int, b: String)
  */
 @SlowHiveTest
 class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAndAfter {
-  import org.apache.spark.sql.hive.test.TestHive.sparkSession.implicits._
+  import testImplicits._
 
   private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
 

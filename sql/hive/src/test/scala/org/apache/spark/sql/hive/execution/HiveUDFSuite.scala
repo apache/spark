@@ -58,9 +58,10 @@ case class ListStringCaseClass(l: Seq[String])
  */
 @SlowHiveTest
 class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
+  import spark.implicits._
+  import testImplicits.castToImpl
 
   import spark.udf
-  import spark.implicits._
 
   test("spark sql udf test that returns a struct") {
     udf.register("getStruct", (_: Int) => Fields(1, 2, 3, 4, 5))

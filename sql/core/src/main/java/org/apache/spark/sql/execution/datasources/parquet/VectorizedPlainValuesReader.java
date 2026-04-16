@@ -475,9 +475,9 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
       if (buffer.hasArray()) {
         v.putByteArray(rowId + i, buffer.array(), buffer.arrayOffset() + buffer.position(), len);
       } else {
-        byte[] bytes = new byte[len];
-        buffer.get(bytes);
-        v.putByteArray(rowId + i, bytes);
+        // Copy directly from the ByteBuffer into the column vector's backing storage,
+        // bypassing any intermediate byte[] allocation.
+        v.putByteArray(rowId + i, buffer, buffer.position(), len);
       }
     }
   }

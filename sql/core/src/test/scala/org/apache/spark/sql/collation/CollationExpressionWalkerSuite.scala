@@ -35,6 +35,7 @@ import org.apache.spark.util.Utils
  *  collations
  */
 class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSession {
+  import testImplicits._
 
   // Trait to distinguish different cases for generation
   sealed trait CollationType

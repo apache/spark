@@ -290,6 +290,35 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       expectedRowCount = 10)
   }
 
+  test("IS NOT NULL should not increase sizeInBytes over child") {
+    val attrStringLarge = AttributeReference("cstring_large", StringType)()
+    val colStatStringLarge = ColumnStat(distinctCount = Some(10), min = None, max = None,
+      nullCount = Some(0), avgLen = Some(1000), maxLen = Some(1000))
+    val childPlan = StatsTestPlan(
+      outputList = Seq(attrStringLarge),
+      rowCount = 1000,
+      attributeStats = AttributeMap(Seq(attrStringLarge -> colStatStringLarge)),
+      size = Some(1000)
+    )
+    val filter = Filter(IsNotNull(attrStringLarge), childPlan)
+    val filterStats = filter.stats
+    assert(filterStats.rowCount.contains(1000))
+    assert(filterStats.sizeInBytes == 1000)
+  }
+
+  test("Range filter should scale sizeInBytes based on child size") {
+    val childPlan = StatsTestPlan(
+      outputList = Seq(attrInt),
+      rowCount = 10L,
+      attributeStats = AttributeMap(Seq(attrInt -> colStatInt)),
+      size = Some(100)
+    )
+    val filter = Filter(GreaterThan(attrInt, Literal(6)), childPlan)
+    val filterStats = filter.stats
+    assert(filterStats.rowCount.contains(5))
+    assert(filterStats.sizeInBytes == 50)
+  }
+
   test("cint IS NOT NULL && null") {
     // 'cint < null' will be optimized to 'cint IS NOT NULL && null'.
     // More similar cases can be found in the Optimizer NullPropagation.

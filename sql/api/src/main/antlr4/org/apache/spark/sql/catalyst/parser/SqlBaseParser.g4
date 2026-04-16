@@ -1495,7 +1495,7 @@ primitiveType
 dataType
     : complex=ARRAY (LT dataType GT)?                           #complexDataType
     | complex=MAP (LT dataType COMMA dataType GT)?              #complexDataType
-    | complex=STRUCT ((LT complexColTypeList? GT) | NEQ)?       #complexDataType
+    | complex=STRUCT ((LT complexColTypeList? GT) | NEQ {((SqlBaseLexer) getTokenStream().getTokenSource()).decComplexTypeLevelCounter();})?       #complexDataType
     | primitiveType                                             #primitiveDataType
     ;
 

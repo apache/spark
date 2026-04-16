@@ -697,6 +697,44 @@ abstract class FileStreamSinkSuite extends StreamTest {
     }
   }
 
+  test("SPARK-56414: per-write options take precedence over session config in streaming sink") {
+    val inputData = MemoryStream[java.sql.Timestamp]
+
+    val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
+    val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
+
+    // Session sets INT96, but the per-write option overrides to TIMESTAMP_MICROS.
+    withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "INT96") {
+      var query: StreamingQuery = null
+      try {
+        query = inputData.toDF()
+          .toDF("ts")
+          .writeStream
+          .option("checkpointLocation", checkpointDir)
+          .option(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key, "TIMESTAMP_MICROS")
+          .format("parquet")
+          .start(outputDir)
+        inputData.addData(java.sql.Timestamp.valueOf("2024-01-01 12:00:00"))
+        query.processAllAvailable()
+      } finally {
+        if (query != null) query.stop()
+      }
+    }
+
+    // Read back and verify the timestamp column is INT64 (TIMESTAMP_MICROS), not INT96.
+    import org.apache.parquet.hadoop.ParquetFileReader
+    import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    val parquetFiles = new java.io.File(outputDir).listFiles()
+      .filter(_.getName.endsWith(".parquet"))
+    assert(parquetFiles.nonEmpty, "Expected at least one parquet file")
+    val footer = ParquetFileReader.readFooter(hadoopConf,
+      new Path(parquetFiles.head.getAbsolutePath))
+    val tsField = footer.getFileMetaData.getSchema.getFields.asScala
+      .find(_.getName == "ts").get.asPrimitiveType()
+    assert(tsField.getPrimitiveTypeName === PrimitiveTypeName.INT64)
+  }
+
   test("SPARK-50854: Make path fully qualified before passing it to FileStreamSink") {
     val fileFormat = new ParquetFileFormat() // any valid FileFormat
     val partitionColumnNames = Seq.empty[String]

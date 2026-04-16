@@ -20,6 +20,7 @@ import java.sql.Timestamp
 import java.util.Collections
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.rdd.SortedMergeCoalescedRDD
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Literal, TransformExpression}
@@ -252,9 +253,10 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       table: String,
       columns: Array[Column],
       partitions: Array[Transform],
+      ordering: Array[SortOrder] = Array.empty,
       catalog: InMemoryTableCatalog = catalog): Unit = {
     catalog.createTable(Identifier.of(Array("ns"), table),
-      columns, partitions, emptyProps, Distributions.unspecified(), Array.empty, None, None,
+      columns, partitions, emptyProps, Distributions.unspecified(), ordering, None, None,
       numRowsPerSplit = 1)
   }
 
@@ -3091,7 +3093,9 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       assert(groupPartitions(0).outputPartitioning.numPartitions === 2,
         "group partitions should have 2 partition groups")
     }
-    assert(metrics("number of rows read") == "3")
+    assert(metrics.collect {
+      case ((_, "BatchScan testcat.ns.items", "number of rows read"), v) => v
+    } === Seq("3"))
   }
 
   test("SPARK-55619: Custom metrics of coalesced partitions") {
@@ -3106,7 +3110,68 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       val df = sql(s"SELECT * FROM testcat.ns.$items").coalesce(1)
       df.collect()
     }
-    assert(metrics("number of rows read") == "2")
+    assert(metrics.collect {
+      case ((_, "BatchScan testcat.ns.items", "number of rows read"), v) => v
+    } === Seq("2"))
+  }
+
+  test("SPARK-55715: Custom metrics of sorted-merge coalesced partitions") {
+    // items has id=1 on three splits with interleaved arrive_times -- out of order across splits.
+    // purchases has item_id=1 on two splits, also out of order. Both sides coalesce under SMJ,
+    // using SortedMergeCoalescedRDD with multiple concurrent readers per task. This test verifies
+    // that all rows from both tables (5 + 4 = 9) are accounted for in the per-scan metrics.
+    val itemOrdering = Array(
+      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+      sort(FieldReference("arrive_time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(items, itemsColumns, Array(identity("id")), itemOrdering)
+    // Rows inserted out of order: id=1 lands on partitions 1, 3, 4 with arrive_times
+    // [2022-03-10, 2021-05-20, 2025-09-01] -- out of order.
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(3, 'dd', 40.0, cast('2024-01-01' as timestamp)), " +
+      "(1, 'bb', 20.0, cast('2022-03-10' as timestamp)), " +
+      "(2, 'cc', 30.0, cast('2023-06-15' as timestamp)), " +
+      "(1, 'aa', 10.0, cast('2021-05-20' as timestamp)), " +
+      "(1, 'ee', 50.0, cast('2025-09-01' as timestamp))")
+
+    val purchaseOrdering = Array(
+      sort(FieldReference("item_id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+      sort(FieldReference("time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(purchases, purchasesColumns, Array(identity("item_id")), purchaseOrdering)
+    // item_id=1 lands on partitions 1 and 3 with times [2022-03-10, 2021-05-20] -- out of order.
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(2, 30.0, cast('2023-06-15' as timestamp)), " +
+      "(1, 20.0, cast('2022-03-10' as timestamp)), " +
+      "(3, 40.0, cast('2024-01-01' as timestamp)), " +
+      "(1, 10.0, cast('2021-05-20' as timestamp))")
+
+    withSQLConf(
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+      val metrics = runAndFetchMetrics {
+        val df = sql(
+          s"""${selectWithMergeJoinHint("i", "p")}
+             |i.id, i.name
+             |FROM testcat.ns.$items i
+             |JOIN testcat.ns.$purchases p ON p.item_id = i.id AND p.time = i.arrive_time
+             |""".stripMargin)
+        checkAnswer(df, Seq(Row(1, "aa"), Row(1, "bb"), Row(2, "cc"), Row(3, "dd")))
+        val plan = df.queryExecution.executedPlan
+        val groupPartitions = collectAllGroupPartitions(plan)
+        val coalescingGP = groupPartitions.filter(_.groupedPartitions.exists(_._2.size > 1))
+        assert(coalescingGP.nonEmpty, "expected a coalescing GroupPartitionsExec")
+        coalescingGP.foreach { gp =>
+          assert(gp.execute().isInstanceOf[SortedMergeCoalescedRDD[_]],
+            "should use SortedMergeCoalescedRDD when preserve-ordering config is enabled")
+        }
+      }
+      assert(metrics.collect {
+        case ((_, "BatchScan testcat.ns.items", "number of rows read"), v) => v
+      } === Seq("5"))
+      assert(metrics.collect {
+        case ((_, "BatchScan testcat.ns.purchases", "number of rows read"), v) => v
+      } === Seq("4"))
+    }
   }
 
   test("SPARK-55411: Fix ArrayIndexOutOfBoundsException when join keys " +
@@ -3687,6 +3752,164 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
         val sorts = smj.children.flatMap(child => collect(child) { case s: SortExec => s })
         assert(sorts.isEmpty, "should not add SortExec before SMJ when ordering is derived " +
           "from coalesced partition key")
+      }
+    }
+  }
+
+  test("SPARK-55715: preserve outputOrdering when coalescing partitions with sorted merge") {
+    // Both tables are partitioned by their id column and report ordering [id ASC, price ASC]
+    // via SupportsReportOrdering. Each has two rows with id=1 (two splits), so GroupPartitionsExec
+    // must coalesce them. We join on (id, price) = (item_id, price) using SMJ.
+    //
+    // With config enabled:  SortedMergeCoalescedRDD performs a k-way merge preserving the full
+    //   [id ASC, price ASC] ordering -> EnsureRequirements is satisfied -> no SortExec added.
+    // With config disabled: simple CoalescedRDD concatenates the splits and only the key-derived
+    //   [id ASC] ordering survives -> price ordering is lost -> SortExec is added for price.
+    val itemOrdering = Array(
+      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+      sort(FieldReference("arrive_time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(items, itemsColumns, Array(identity("id")), itemOrdering)
+    // Rows inserted out of order: id values are interleaved and arrive_time is not monotone
+    // within each id group, so ordering by [id ASC, arrive_time ASC] is non-trivial.
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(2, 'cc', 30.0, cast('2023-06-15' as timestamp)), " +
+      "(1, 'bb', 20.0, cast('2022-03-10' as timestamp)), " +
+      "(3, 'dd', 40.0, cast('2024-01-01' as timestamp)), " +
+      "(1, 'aa', 10.0, cast('2021-05-20' as timestamp)), " +
+      "(2, 'ee', 50.0, cast('2025-09-01' as timestamp))")
+
+    val purchaseOrdering = Array(
+      sort(FieldReference("item_id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+      sort(FieldReference("time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(purchases, purchasesColumns, Array(identity("item_id")), purchaseOrdering)
+    // Also inserted out of order
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(2, 50.0, cast('2025-09-01' as timestamp)), " +
+      "(1, 10.0, cast('2021-05-20' as timestamp)), " +
+      "(3, 40.0, cast('2024-01-01' as timestamp)), " +
+      "(2, 30.0, cast('2023-06-15' as timestamp)), " +
+      "(1, 20.0, cast('2022-03-10' as timestamp))")
+
+    Seq(true, false).foreach { preserveOrdering =>
+      withSQLConf(
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+          SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+          SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key ->
+            preserveOrdering.toString) {
+        val df = sql(
+          s"""
+             |${selectWithMergeJoinHint("i", "p")}
+             |i.id, i.name
+             |FROM testcat.ns.$items i
+             |JOIN testcat.ns.$purchases p ON p.item_id = i.id AND p.time = i.arrive_time
+             |""".stripMargin)
+        checkAnswer(df, Seq(
+          Row(1, "aa"), Row(1, "bb"), Row(2, "cc"), Row(2, "ee"), Row(3, "dd")))
+
+        val plan = df.queryExecution.executedPlan
+        assert(collectAllShuffles(plan).isEmpty, "should not contain any shuffle")
+
+        val groupPartitions = collectAllGroupPartitions(plan)
+        assert(groupPartitions.nonEmpty, "should contain GroupPartitionsExec for coalescing")
+        assert(groupPartitions.exists(_.groupedPartitions.exists(_._2.size > 1)),
+          "expected coalescing GroupPartitionsExec")
+
+        val smjs = collect(plan) { case j: SortMergeJoinExec => j }
+        assert(smjs.nonEmpty, "expected SortMergeJoinExec in plan")
+        smjs.foreach { smj =>
+          val sorts = smj.children.flatMap(child => collect(child) { case s: SortExec => s })
+          if (preserveOrdering) {
+            assert(sorts.isEmpty,
+              "config enabled: SortedMergeCoalescedRDD preserves [id ASC, arrive_time ASC], " +
+                "no SortExec should be added before SMJ")
+
+            // Also verify the k-way merge RDD is actually used
+            val coalescingGP = groupPartitions.filter(_.groupedPartitions.exists(_._2.size > 1))
+            coalescingGP.foreach { gp =>
+              assert(gp.execute().isInstanceOf[SortedMergeCoalescedRDD[_]],
+                "config enabled: should use SortedMergeCoalescedRDD")
+            }
+          } else {
+            assert(sorts.nonEmpty,
+              "config disabled: simple coalescing loses arrive_time ordering, " +
+                "SortExec should be added before SMJ")
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-55715: preserve outputOrdering when coalescing transform-partitioned splits") {
+    // Both tables are partitioned by years("arrive_time") / years("time") and report ordering
+    // [arrive_time ASC] / [time ASC]. Two rows share the same year bucket (2022 and 2023), so
+    // GroupPartitionsExec coalesces two splits per year. We join solely on
+    // p.time = i.arrive_time (the partition key expression) using SMJ.
+    //
+    // With config enabled:  SortedMergeCoalescedRDD k-way merge preserves [arrive_time ASC]
+    //   ordering -> EnsureRequirements is satisfied -> no SortExec added.
+    // With config disabled: simple CoalescedRDD only preserves the key-derived year ordering ->
+    //   arrive_time ordering within a year is lost -> SortExec is added.
+    val itemOrdering = Array(
+      sort(FieldReference("arrive_time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(items, itemsColumns, Array(years("arrive_time")), itemOrdering)
+    // Inserted out of order: within year 2022, September is before March in insertion order
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(2, 'bb', 20.0, cast('2022-09-20' as timestamp)), " +
+      "(4, 'dd', 40.0, cast('2023-11-05' as timestamp)), " +
+      "(1, 'aa', 10.0, cast('2022-03-15' as timestamp)), " +
+      "(3, 'cc', 30.0, cast('2023-01-10' as timestamp))")
+
+    val purchaseOrdering = Array(
+      sort(FieldReference("time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(purchases, purchasesColumns, Array(years("time")), purchaseOrdering)
+    // Also inserted out of order
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(2, 20.0, cast('2022-09-20' as timestamp)), " +
+      "(4, 40.0, cast('2023-11-05' as timestamp)), " +
+      "(1, 10.0, cast('2022-03-15' as timestamp)), " +
+      "(3, 30.0, cast('2023-01-10' as timestamp))")
+
+    Seq(true, false).foreach { preserveOrdering =>
+      withSQLConf(
+          SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key ->
+            preserveOrdering.toString) {
+        val df = sql(
+          s"""
+             |${selectWithMergeJoinHint("i", "p")}
+             |i.id, i.name
+             |FROM testcat.ns.$items i
+             |JOIN testcat.ns.$purchases p ON p.time = i.arrive_time
+             |""".stripMargin)
+        checkAnswer(df, Seq(Row(1, "aa"), Row(2, "bb"), Row(3, "cc"), Row(4, "dd")))
+
+        val plan = df.queryExecution.executedPlan
+        assert(collectAllShuffles(plan).isEmpty, "should not contain any shuffle")
+
+        val groupPartitions = collectAllGroupPartitions(plan)
+        assert(groupPartitions.nonEmpty, "should contain GroupPartitionsExec for coalescing")
+        assert(groupPartitions.exists(_.groupedPartitions.exists(_._2.size > 1)),
+          "expected coalescing GroupPartitionsExec")
+
+        val smjs = collect(plan) { case j: SortMergeJoinExec => j }
+        assert(smjs.nonEmpty, "expected SortMergeJoinExec in plan")
+        smjs.foreach { smj =>
+          val sorts = smj.children.flatMap(child => collect(child) { case s: SortExec => s })
+          if (preserveOrdering) {
+            assert(sorts.isEmpty,
+              "config enabled: SortedMergeCoalescedRDD preserves [arrive_time ASC], " +
+                "no SortExec should be added before SMJ")
+
+            val coalescingGP = groupPartitions.filter(_.groupedPartitions.exists(_._2.size > 1))
+            coalescingGP.foreach { gp =>
+              assert(gp.execute().isInstanceOf[SortedMergeCoalescedRDD[_]],
+                "config enabled: should use SortedMergeCoalescedRDD")
+            }
+          } else {
+            assert(sorts.nonEmpty,
+              "config disabled: simple coalescing loses arrive_time ordering within a year, " +
+                "SortExec should be added before SMJ")
+          }
+        }
       }
     }
   }
