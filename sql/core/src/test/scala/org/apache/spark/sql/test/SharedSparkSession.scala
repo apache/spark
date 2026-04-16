@@ -61,7 +61,10 @@ trait SharedSparkSession extends QueryTest with SharedSparkSessionBase {
  * Use this trait to indicate that this test is classic-only, i.e. it would not make sense to run
  * this test with a [[org.apache.spark.sql.connect.SparkSession]].
  */
-trait SharedClassicSparkSession extends SharedSparkSession with ClassicSQLTestUtils {
+trait SharedClassicSparkSession
+  extends SharedSparkSession
+    with ClassicSQLTestUtils
+    with classic.SparkSessionProvider {
   override def spark: classic.SparkSession = super.spark.asInstanceOf[classic.SparkSession]
 
   // Runs func (which must trigger exactly one SQL execution) and returns the SQL metrics of that
