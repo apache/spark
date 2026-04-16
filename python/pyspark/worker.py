@@ -26,7 +26,7 @@ import time
 import inspect
 import itertools
 import json
-from typing import Any, Callable, Iterable, Iterator, IO, Optional, Tuple, TYPE_CHECKING, Union
+from typing import Any, Callable, Iterable, Iterator, Optional, Tuple, TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import GroupedBatch
@@ -42,8 +42,6 @@ from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.util import PythonEvalType
 from pyspark.serializers import (
     write_int,
-    read_long,
-    read_bool,
     write_long,
     read_int,
     SpecialLengths,
@@ -96,6 +94,7 @@ from pyspark.util import (
 )
 from pyspark import _NoValue, shuffle
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
+from pyspark.worker_message import WorkerInitInfo
 from pyspark.worker_util import (
     check_python_version,
     get_sock_file_to_executor,
@@ -105,7 +104,6 @@ from pyspark.worker_util import (
     setup_broadcasts,
     setup_memory_limits,
     setup_spark_files,
-    utf8_deserializer,
     Conf,
 )
 from pyspark.logger.worker_io import capture_outputs
@@ -220,227 +218,6 @@ class EvalConf(Conf):
         if offsets is None:
             return None
         return [int(x) for x in offsets.split(",") if x]
-
-
-@dataclasses.dataclass
-class TaskContextInfo:
-    @dataclasses.dataclass
-    class ResourceInfo:
-        name: str
-        addresses: list[str]
-
-    conn_info: Optional[Union[str, int]]
-    secret: Optional[str]
-    stage_id: int
-    partition_id: int
-    attempt_number: int
-    task_attempt_id: int
-    cpus: int
-    resources: dict[str, ResourceInfo]
-    local_properties: dict[str, str]
-
-    @classmethod
-    def from_stream(cls, stream: IO) -> "TaskContextInfo":
-        task_context_json = json.loads(utf8_deserializer.loads(stream))
-        return cls(
-            conn_info=task_context_json["connInfo"],
-            secret=task_context_json["secret"],
-            stage_id=task_context_json["stageId"],
-            partition_id=task_context_json["partitionId"],
-            attempt_number=task_context_json["attemptNumber"],
-            task_attempt_id=task_context_json["taskAttemptId"],
-            cpus=task_context_json["cpus"],
-            resources={
-                k: cls.ResourceInfo(name=v["name"], addresses=v["addresses"])
-                for k, v in task_context_json["resources"].items()
-            },
-            local_properties=task_context_json["localProperties"],
-        )
-
-
-@dataclasses.dataclass
-class BroadcastInfo:
-    conn_info: Optional[Union[str, int]]
-    secret: Optional[str]
-    variables: list[tuple[int, Optional[str]]]
-
-    @classmethod
-    def from_stream(cls, stream: IO) -> "BroadcastInfo":
-        needs_broadcast_decryption_server = read_bool(stream)
-        num_broadcast_variables = read_int(stream)
-        if needs_broadcast_decryption_server:
-            conn_info = read_int(stream)
-            if conn_info == -1:
-                conn_info = utf8_deserializer.loads(stream)
-                secret = None
-            else:
-                secret = utf8_deserializer.loads(stream)
-
-        variables = []
-        for _ in range(num_broadcast_variables):
-            bid = read_long(stream)
-            path = None
-            if bid >= 0:
-                if not needs_broadcast_decryption_server:
-                    path = utf8_deserializer.loads(stream)
-            else:
-                bid = -bid - 1
-            variables.append((bid, path))
-        return cls(conn_info=conn_info, secret=secret, variables=variables)
-
-
-@dataclasses.dataclass
-class UDFInfo:
-    udfs: list[bytes]
-    args: list[int]
-    kwargs: dict[str, int]
-    result_id: int
-
-    @classmethod
-    def from_stream(cls, stream: IO) -> "UDFInfo":
-        num_args = read_int(stream)
-        udfs = []
-        args = []
-        kwargs = {}
-
-        for _ in range(num_args):
-            offset = read_int(stream)
-            if read_bool(stream):
-                name = utf8_deserializer.loads(stream)
-                kwargs[name] = offset
-            else:
-                args.append(offset)
-
-        for i in range(read_int(stream)):
-            length = read_int(stream)
-            if length == SpecialLengths.END_OF_DATA_SECTION:
-                raise EOFError
-            elif length == SpecialLengths.NULL:
-                raise PySparkValueError("Unexpected NULL value for UDF")
-            else:
-                data = stream.read(length)
-                if len(data) < length:
-                    raise EOFError
-                udfs.append(data)
-
-        result_id = read_long(stream)
-
-        return cls(udfs=udfs, args=args, kwargs=kwargs, result_id=result_id)
-
-
-@dataclasses.dataclass
-class UDTFInfo:
-    args: list[int]
-    kwargs: dict[str, int]
-    partition_child_indexes: list[int]
-    pickled_analyze_result: Optional[Callable]
-    handler: Callable
-    return_type: StructType
-    name: str
-
-    @classmethod
-    def from_stream(cls, stream: IO) -> "UDTFInfo":
-        args = []
-        kwargs = {}
-        for _ in range(read_int(stream)):
-            offset = read_int(stream)
-            if read_bool(stream):
-                name = utf8_deserializer.loads(stream)
-                kwargs[name] = offset
-            else:
-                args.append(offset)
-        partition_child_indexes = [read_int(stream) for _ in range(read_int(stream))]
-        if read_bool(stream):
-            pickled_analyze_result = pickleSer._read_with_length(stream)
-        else:
-            pickled_analyze_result = None
-        handler = read_command(pickleSer, stream)
-        if not isinstance(handler, type):
-            raise PySparkRuntimeError(
-                f"Invalid UDTF handler type. Expected a class (type 'type'), but "
-                f"got an instance of {type(handler).__name__}."
-            )
-        return_type = _parse_datatype_json_string(utf8_deserializer.loads(stream))
-        if not isinstance(return_type, StructType):
-            raise PySparkRuntimeError(
-                f"The return type of a UDTF must be a struct type, but got {type(return_type)}."
-            )
-        name = utf8_deserializer.loads(stream)
-        return cls(
-            args=args,
-            kwargs=kwargs,
-            partition_child_indexes=partition_child_indexes,
-            pickled_analyze_result=pickled_analyze_result,
-            handler=handler,
-            return_type=return_type,
-            name=name,
-        )
-
-
-@dataclasses.dataclass
-class WorkerInitInfo:
-    split_index: int
-    python_version: str
-    spark_files_dir: str
-    task_context: TaskContextInfo
-    python_includes: list[str]
-    broadcast: BroadcastInfo
-    eval_type: int
-    runner_conf: dict[str, str]
-    eval_conf: dict[str, str]
-    udf: Optional[Union[UDTFInfo, list[UDFInfo]]]
-
-    @classmethod
-    def from_stream(cls, stream: IO) -> "WorkerInitInfo":
-        split_index = read_int(stream)
-        if split_index == -1:
-            sys.exit(-1)
-        python_version = utf8_deserializer.loads(stream)
-        spark_files_dir = utf8_deserializer.loads(stream)
-        python_includes = []
-        for _ in range(read_int(stream)):
-            python_includes.append(utf8_deserializer.loads(stream))
-        task_context = TaskContextInfo.from_stream(stream)
-        broadcast = BroadcastInfo.from_stream(stream)
-        eval_type = read_int(stream)
-        runner_conf = {}
-        for _ in range(read_int(stream)):
-            k = utf8_deserializer.loads(stream)
-            v = utf8_deserializer.loads(stream)
-            runner_conf[k] = v
-        eval_conf = {}
-        for _ in range(read_int(stream)):
-            k = utf8_deserializer.loads(stream)
-            v = utf8_deserializer.loads(stream)
-            eval_conf[k] = v
-
-        udf: Optional[Union[UDTFInfo, list[UDFInfo]]]
-
-        if eval_type == PythonEvalType.NON_UDF:
-            udf = None
-        elif eval_type in (
-            PythonEvalType.SQL_TABLE_UDF,
-            PythonEvalType.SQL_ARROW_TABLE_UDF,
-            PythonEvalType.SQL_ARROW_UDTF,
-        ):
-            udf = UDTFInfo.from_stream(stream)
-        else:
-            udf = []
-            for _ in range(read_int(stream)):
-                udf.append(UDFInfo.from_stream(stream))
-
-        return cls(
-            split_index=split_index,
-            python_version=python_version,
-            spark_files_dir=spark_files_dir,
-            task_context=task_context,
-            python_includes=python_includes,
-            broadcast=broadcast,
-            eval_type=eval_type,
-            runner_conf=runner_conf,
-            eval_conf=eval_conf,
-            udf=udf,
-        )
 
 
 def report_times(outfile, boot, init, finish, processing_time_ms):
@@ -1358,28 +1135,14 @@ def wrap_memory_profiler(f, eval_type, result_id):
     return profiling_func
 
 
-def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
-    num_arg = read_int(infile)
-
-    args_offsets = []
-    kwargs_offsets = {}
-    for _ in range(num_arg):
-        offset = read_int(infile)
-        if read_bool(infile):
-            name = utf8_deserializer.loads(infile)
-            kwargs_offsets[name] = offset
-        else:
-            args_offsets.append(offset)
-
+def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
     chained_func = None
-    for i in range(read_int(infile)):
-        f, return_type = read_command(pickleSer, infile)
+    for udf in udf_info.udfs:
+        f, return_type = pickleSer.loads(udf)
         if chained_func is None:
             chained_func = f
         else:
             chained_func = chain(chained_func, f)
-
-    result_id = read_long(infile)
 
     # If chained_func is from pyspark.sql.worker, it is to read/write data source.
     # In this case, we check the data_source_profiler config.
@@ -1388,9 +1151,9 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
     else:
         profiler = runner_conf.udf_profiler
     if profiler == "perf":
-        profiling_func = wrap_perf_profiler(chained_func, eval_type, result_id)
+        profiling_func = wrap_perf_profiler(chained_func, eval_type, udf_info.result_id)
     elif profiler == "memory":
-        profiling_func = wrap_memory_profiler(chained_func, eval_type, result_id)
+        profiling_func = wrap_memory_profiler(chained_func, eval_type, udf_info.result_id)
     else:
         profiling_func = chained_func
 
@@ -1403,6 +1166,8 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         # make sure StopIteration's raised in the user code are not ignored
         # when they are processed in a for loop, raise them as RuntimeError's instead
         func = fail_on_stopiteration(profiling_func)
+
+    args_offsets, kwargs_offsets = udf_info.args, udf_info.kwargs
 
     # the last returnType will be the return type of UDF
     if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
@@ -1486,7 +1251,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
 # It expects the UDTF to be in a specific format and performs various checks to
 # ensure the UDTF is valid. This function also prepares a mapper function for applying
 # the UDTF logic to input rows.
-def read_udtf(pickleSer, infile, eval_type, runner_conf, eval_conf):
+def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
         if runner_conf.use_legacy_pandas_udtf_conversion:
             # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
@@ -1507,50 +1272,35 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf, eval_conf):
         # Each row is a group so do not batch but send one by one.
         ser = BatchedSerializer(CPickleSerializer(), 1)
 
-    # See 'PythonUDTFRunner.PythonUDFWriterThread.writeCommand'
-    num_arg = read_int(infile)
-    args_offsets = []
-    kwargs_offsets = {}
-    for _ in range(num_arg):
-        offset = read_int(infile)
-        if read_bool(infile):
-            name = utf8_deserializer.loads(infile)
-            kwargs_offsets[name] = offset
-        else:
-            args_offsets.append(offset)
-    num_partition_child_indexes = read_int(infile)
-    partition_child_indexes = [read_int(infile) for i in range(num_partition_child_indexes)]
-    has_pickled_analyze_result = read_bool(infile)
-    if has_pickled_analyze_result:
-        pickled_analyze_result = pickleSer._read_with_length(infile)
+    if udtf_info.pickled_analyze_result is not None:
+        pickled_analyze_result = pickleSer.loads(udtf_info.pickled_analyze_result)
     else:
         pickled_analyze_result = None
     # Initially we assume that the UDTF __init__ method accepts the pickled AnalyzeResult,
     # although we may set this to false later if we find otherwise.
-    handler = read_command(pickleSer, infile)
+    handler = read_command(pickleSer, udtf_info.handler)
     if not isinstance(handler, type):
         raise PySparkRuntimeError(
             f"Invalid UDTF handler type. Expected a class (type 'type'), but "
             f"got an instance of {type(handler).__name__}."
         )
 
-    return_type = _parse_datatype_json_string(utf8_deserializer.loads(infile))
+    return_type = _parse_datatype_json_string(udtf_info.return_type)
     if not isinstance(return_type, StructType):
         raise PySparkRuntimeError(
             f"The return type of a UDTF must be a struct type, but got {type(return_type)}."
         )
-    udtf_name = utf8_deserializer.loads(infile)
 
     # Update the handler that creates a new UDTF instance to first try calling the UDTF constructor
     # with one argument containing the previous AnalyzeResult. If that fails, then try a constructor
     # with no arguments. In this way each UDTF class instance can decide if it wants to inspect the
     # AnalyzeResult.
     udtf_init_args = inspect.getfullargspec(handler)
-    if has_pickled_analyze_result:
+    if pickled_analyze_result is not None:
         if len(udtf_init_args.args) > 2:
             raise PySparkRuntimeError(
                 errorClass="UDTF_CONSTRUCTOR_INVALID_IMPLEMENTS_ANALYZE_METHOD",
-                messageParameters={"name": udtf_name},
+                messageParameters={"name": udtf_info.name},
             )
         elif len(udtf_init_args.args) == 2:
             prev_handler = handler
@@ -1563,7 +1313,7 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf, eval_conf):
     elif len(udtf_init_args.args) > 1:
         raise PySparkRuntimeError(
             errorClass="UDTF_CONSTRUCTOR_INVALID_NO_ANALYZE_METHOD",
-            messageParameters={"name": udtf_name},
+            messageParameters={"name": udtf_info.name},
         )
 
     class UDTFWithPartitions:
@@ -1601,7 +1351,7 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf, eval_conf):
             self._create_udtf: Callable = create_udtf
             self._udtf = create_udtf()
             self._prev_arguments: list = list()
-            self._partition_child_indexes: list = partition_child_indexes
+            self._partition_child_indexes: list = udtf_info.partition_child_indexes
             self._eval_raised_skip_rest_of_input_table: bool = False
 
         def eval(self, *args, **kwargs) -> Iterator:
@@ -1995,13 +1745,13 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf, eval_conf):
 
     # Instantiate the UDTF class.
     try:
-        if len(partition_child_indexes) > 0:
+        if len(udtf_info.partition_child_indexes) > 0:
             # Determine if this is an Arrow UDTF
             is_arrow_udtf = eval_type == PythonEvalType.SQL_ARROW_UDTF
             if is_arrow_udtf:
-                udtf = ArrowUDTFWithPartition(handler, partition_child_indexes)
+                udtf = ArrowUDTFWithPartition(handler, udtf_info.partition_child_indexes)
             else:
-                udtf = UDTFWithPartitions(handler, partition_child_indexes)
+                udtf = UDTFWithPartitions(handler, udtf_info.partition_child_indexes)
         else:
             udtf = handler()
     except Exception as e:
@@ -2021,11 +1771,11 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf, eval_conf):
     # Check that the arguments provided to the UDTF call match the expected parameters defined
     # in the 'eval' method signature.
     try:
-        inspect.signature(udtf.eval).bind(*args_offsets, **kwargs_offsets)
+        inspect.signature(udtf.eval).bind(*udtf_info.args, **udtf_info.kwargs)
     except TypeError as e:
         raise PySparkRuntimeError(
             errorClass="UDTF_EVAL_METHOD_ARGUMENTS_DO_NOT_MATCH_SIGNATURE",
-            messageParameters={"name": udtf_name, "reason": str(e)},
+            messageParameters={"name": udtf_info.name, "reason": str(e)},
         ) from None
 
     def build_null_checker(return_type: StructType) -> Optional[Callable[[Any], None]]:
@@ -2229,7 +1979,7 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf, eval_conf):
             return evaluate
 
         eval_func_kwargs_support, args_kwargs_offsets = wrap_kwargs_support(
-            getattr(udtf, "eval"), args_offsets, kwargs_offsets
+            getattr(udtf, "eval"), udtf_info.args, udtf_info.kwargs
         )
         eval = wrap_arrow_udtf(eval_func_kwargs_support, return_type)
 
@@ -2391,7 +2141,7 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf, eval_conf):
             return evaluate
 
         eval_func_kwargs_support, args_kwargs_offsets = wrap_kwargs_support(
-            getattr(udtf, "eval"), args_offsets, kwargs_offsets
+            getattr(udtf, "eval"), udtf_info.args, udtf_info.kwargs
         )
         eval = wrap_arrow_udtf(eval_func_kwargs_support, return_type)
 
@@ -2517,7 +2267,7 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf, eval_conf):
             return evaluate
 
         eval_func_kwargs_support, args_kwargs_offsets = wrap_kwargs_support(
-            getattr(udtf, "eval"), args_offsets, kwargs_offsets
+            getattr(udtf, "eval"), udtf_info.args, udtf_info.kwargs
         )
         eval = wrap_pyarrow_udtf(eval_func_kwargs_support, return_type)
 
@@ -2619,7 +2369,7 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf, eval_conf):
             return evaluate
 
         eval_func_kwargs_support, args_kwargs_offsets = wrap_kwargs_support(
-            getattr(udtf, "eval"), args_offsets, kwargs_offsets
+            getattr(udtf, "eval"), udtf_info.args, udtf_info.kwargs
         )
         eval = wrap_udtf(eval_func_kwargs_support, return_type)
 
@@ -2647,7 +2397,7 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf, eval_conf):
         return mapper, None, ser, ser
 
 
-def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
+def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
@@ -2793,12 +2543,12 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
         batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))
         ser = BatchedSerializer(CPickleSerializer(), batch_size)
 
-    # Read all UDFs
-    num_udfs = read_int(infile)
     udfs = [
-        read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=i)
-        for i in range(num_udfs)
+        read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index=udf_index)
+        for udf_index, udf_info in enumerate(udf_info_list)
     ]
+
+    num_udfs = len(udfs)
 
     if eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
         import pyarrow as pa
@@ -3716,52 +3466,49 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
 def main(infile, outfile):
     try:
         boot_time = time.time()
-        split_index = read_int(infile)
-        if split_index == -1:  # for unit tests
-            sys.exit(-1)
+        init_info = WorkerInitInfo.from_stream(infile)
         start_faulthandler_periodic_traceback()
-        check_python_version(infile)
+        check_python_version(init_info.python_version)
 
         memory_limit_mb = int(os.environ.get("PYSPARK_EXECUTOR_MEMORY_MB", "-1"))
         setup_memory_limits(memory_limit_mb)
 
-        task_context_json = json.loads(utf8_deserializer.loads(infile))
-        if task_context_json["isBarrier"]:
-            taskContext = BarrierTaskContext.from_json(task_context_json)
-        else:
-            taskContext = TaskContext.from_json(task_context_json)
-        TaskContext._setTaskContext(taskContext)
+        TaskContext._setTaskContext(init_info.task_context.to_task_context())
 
         shuffle.MemoryBytesSpilled = 0
         shuffle.DiskBytesSpilled = 0
 
-        setup_spark_files(infile)
-        setup_broadcasts(infile)
+        setup_spark_files(init_info.spark_files_dir, init_info.python_includes)
+        setup_broadcasts(
+            init_info.broadcast.variables,
+            init_info.broadcast.conn_info,
+            init_info.broadcast.auth_secret,
+        )
 
         _accumulatorRegistry.clear()
         eval_type = read_int(infile)
         runner_conf = RunnerConf(infile)
         eval_conf = EvalConf(infile)
         if eval_type == PythonEvalType.NON_UDF:
-            func, profiler, deserializer, serializer = read_command(pickleSer, infile)
+            func, profiler, deserializer, serializer = read_command(pickleSer, init_info.udf)
         elif eval_type in (
             PythonEvalType.SQL_TABLE_UDF,
             PythonEvalType.SQL_ARROW_TABLE_UDF,
             PythonEvalType.SQL_ARROW_UDTF,
         ):
             func, profiler, deserializer, serializer = read_udtf(
-                pickleSer, infile, eval_type, runner_conf, eval_conf
+                pickleSer, init_info.udf, eval_type, runner_conf, eval_conf
             )
         else:
             func, profiler, deserializer, serializer = read_udfs(
-                pickleSer, infile, eval_type, runner_conf, eval_conf
+                pickleSer, init_info.udf, eval_type, runner_conf, eval_conf
             )
 
         init_time = time.time()
 
         def process():
             iterator = deserializer.load_stream(infile)
-            out_iter = func(split_index, iterator)
+            out_iter = func(init_info.split_index, iterator)
             try:
                 serializer.dump_stream(out_iter, outfile)
             finally:
