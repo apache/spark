@@ -202,7 +202,8 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     // that's why an extra unconditional instruction that would produce the original row is added
     // as the last MATCHED and NOT MATCHED BY SOURCE instruction
     // this logic is specific to data sources that replace groups of data
-    val carryoverRowsOutput = Literal(WRITE_WITH_METADATA_OPERATION) +: targetTable.output
+    val writeOp = if (metadataAttrs.nonEmpty) WRITE_WITH_METADATA_OPERATION else WRITE_OPERATION
+    val carryoverRowsOutput = Literal(writeOp) +: targetTable.output
     val keepCarryoverRowsInstruction = Keep(Copy, TrueLiteral, carryoverRowsOutput)
 
     val matchedInstructions = matchedActions.map { action =>
@@ -439,7 +440,8 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       case UpdateAction(cond, assignments, _) =>
         val rowValues = assignments.map(_.value)
         val metadataValues = nullifyMetadataOnUpdate(metadataAttrs)
-        val output = Seq(Literal(WRITE_WITH_METADATA_OPERATION)) ++ rowValues ++ metadataValues
+        val writeOp = if (metadataAttrs.nonEmpty) WRITE_WITH_METADATA_OPERATION else WRITE_OPERATION
+        val output = Seq(Literal(writeOp)) ++ rowValues ++ metadataValues
         Keep(Update, cond.getOrElse(TrueLiteral), output)
 
       case DeleteAction(cond) =>
