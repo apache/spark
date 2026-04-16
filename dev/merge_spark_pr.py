@@ -142,7 +142,7 @@ def clean_up():
 
 
 # merge the requested PR and return the merge hash
-def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author):
+def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors):
     pr_branch_name = "%s_MERGE_PR_%s" % (BRANCH_PREFIX, pr_num)
     target_branch_name = "%s_MERGE_PR_%s_%s" % (BRANCH_PREFIX, pr_num, target_ref.upper())
     run_cmd("git fetch %s pull/%s/head:%s" % (PR_REMOTE_NAME, pr_num, pr_branch_name))
@@ -165,17 +165,6 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author):
     )
     if primary_author == "":
         primary_author = pr_author
-
-    # Collect other commit authors as co-authors
-    commit_authors = run_cmd(
-        ["git", "log", "HEAD..%s" % pr_branch_name, "--pretty=format:%an <%ae>", "--reverse"]
-    ).split("\n")
-    distinct_authors = list(dict.fromkeys(commit_authors))
-    primary_email = primary_author.split("<")[-1].rstrip(">").lower()
-    co_authors = [
-        a for a in distinct_authors
-        if a.split("<")[-1].rstrip(">").lower() != primary_email
-    ]
 
     merge_message_flags = []
 
@@ -668,15 +657,15 @@ def main():
     base_ref = pr["head"]["ref"]
     pr_repo_desc = "%s/%s" % (user_login, base_ref)
 
-    # Fetch PR author's GitHub profile for commit attribution
+    # Fetch PR author's GitHub profile and PR commits for commit attribution
     pr_author_info = get_json("https://api.github.com/users/%s" % user_login)
     pr_author_name = pr_author_info.get("name") or user_login
     pr_author_email = pr_author_info.get("email")
+    pr_commits = get_json("%s/pulls/%s/commits" % (GITHUB_API_BASE, pr_num))
     if not pr_author_email:
         # If the GitHub profile has no public email, find the author's email from the
         # PR's git commits. Only use it if GitHub links the commit to the PR author's
         # account (meaning the email is verified on their GitHub account).
-        pr_commits = get_json("%s/pulls/%s/commits" % (GITHUB_API_BASE, pr_num))
         for c in pr_commits:
             commit_author = c.get("author")
             if commit_author and commit_author.get("login") == user_login:
@@ -687,6 +676,19 @@ def main():
             pr_author_info["id"], user_login
         )
     pr_author = "%s <%s>" % (pr_author_name, pr_author_email)
+
+    # Collect co-authors: commit authors whose GitHub login differs from the PR author.
+    # This deduplicates the PR author (who may use multiple emails across commits) by login.
+    co_authors = []
+    seen = set()
+    for c in pr_commits:
+        gh_author = c.get("author")
+        if gh_author and gh_author.get("login") == user_login:
+            continue
+        raw = "%s <%s>" % (c["commit"]["author"]["name"], c["commit"]["author"]["email"])
+        if raw not in seen:
+            seen.add(raw)
+            co_authors.append(raw)
 
     # Merged pull requests don't appear as merged in the GitHub API;
     # Instead, they're closed by committers.
@@ -734,7 +736,7 @@ def main():
 
     merged_refs = [target_ref]
 
-    merge_hash = merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author)
+    merge_hash = merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors)
 
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
     while bold_input("\n%s (y/N): " % pick_prompt).lower() == "y":
