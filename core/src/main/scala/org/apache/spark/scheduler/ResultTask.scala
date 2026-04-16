@@ -25,7 +25,6 @@ import java.util.Properties
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.shuffle.MetadataFetchFailedException
 
 /**
  * A task that sends back the output to the driver application.
@@ -84,16 +83,8 @@ private[spark] class ResultTask[T, U](
       threadMXBean.getCurrentThreadCpuTime
     } else 0L
     val ser = SparkEnv.get.closureSerializer.newInstance()
-    val (rdd, func) = try {
-      ser.deserialize[(RDD[T], (TaskContext, Iterator[T]) => U)](
-        ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
-    } catch {
-      case e: SparkException =>
-        // MetadataFetchFailedException retries the task
-        // this counts towards max task failures
-        // if spark.task.maxFailures.countsMetadataFetchFailures is true.
-        throw new MetadataFetchFailedException(0, partitionId, e.getMessage)
-    }
+    val (rdd, func) = ser.deserialize[(RDD[T], (TaskContext, Iterator[T]) => U)](
+      ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
     _executorDeserializeTimeNs = System.nanoTime() - deserializeStartTimeNs
     _executorDeserializeCpuTime = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
       threadMXBean.getCurrentThreadCpuTime - deserializeStartCpuTime

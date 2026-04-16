@@ -25,7 +25,6 @@ import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.shuffle.MetadataFetchFailedException
 
 /**
  * A ShuffleMapTask divides the elements of an RDD into multiple buckets (based on a partitioner
@@ -88,17 +87,8 @@ private[spark] class ShuffleMapTask(
       threadMXBean.getCurrentThreadCpuTime
     } else 0L
     val ser = SparkEnv.get.closureSerializer.newInstance()
-    val rddAndDep = try {
-      // driver might have dropped broadcast variable due to memory pressure
-      ser.deserialize[(RDD[_], ShuffleDependency[_, _, _])](
-        ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
-    } catch {
-      case e: SparkException =>
-        // MetadataFetchFailedException retries the task
-        // this counts towards max task failures
-        // if spark.task.maxFailures.countsMetadataFetchFailures is true.
-        throw new MetadataFetchFailedException(0, partitionId, e.getMessage)
-    }
+    val rddAndDep = ser.deserialize[(RDD[_], ShuffleDependency[_, _, _])](
+      ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
     _executorDeserializeTimeNs = System.nanoTime() - deserializeStartTimeNs
     _executorDeserializeCpuTime = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
       threadMXBean.getCurrentThreadCpuTime - deserializeStartCpuTime
