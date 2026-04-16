@@ -671,9 +671,21 @@ def main():
     # Fetch PR author's GitHub profile for commit attribution
     pr_author_info = get_json("https://api.github.com/users/%s" % user_login)
     pr_author_name = pr_author_info.get("name") or user_login
-    pr_author_email = pr_author_info.get("email") or (
-        "%s+%s@users.noreply.github.com" % (pr_author_info["id"], user_login)
-    )
+    pr_author_email = pr_author_info.get("email")
+    if not pr_author_email:
+        # If the GitHub profile has no public email, find the author's email from the
+        # PR's git commits. Only use it if GitHub links the commit to the PR author's
+        # account (meaning the email is verified on their GitHub account).
+        pr_commits = get_json("%s/pulls/%s/commits" % (GITHUB_API_BASE, pr_num))
+        for c in pr_commits:
+            commit_author = c.get("author")
+            if commit_author and commit_author.get("login") == user_login:
+                pr_author_email = c["commit"]["author"]["email"]
+                break
+    if not pr_author_email:
+        pr_author_email = "%s+%s@users.noreply.github.com" % (
+            pr_author_info["id"], user_login
+        )
     pr_author = "%s <%s>" % (pr_author_name, pr_author_email)
 
     # Merged pull requests don't appear as merged in the GitHub API;
