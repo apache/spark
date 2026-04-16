@@ -2797,15 +2797,15 @@
       "Detected incompatible changes to table <tableName> after DataFrame/Dataset has been resolved and analyzed, meaning the underlying plan is out of sync. Please, re-create DataFrame/Dataset before attempting to execute the query again."
     ],
     "subClass" : {
-      "COLUMN_ID_MISMATCH" : {
-        "message" : [
-          "Column IDs have changed:",
-          "<errors>"
-        ]
-      },
       "COLUMNS_MISMATCH" : {
         "message" : [
           "Data columns have changed:",
+          "<errors>"
+        ]
+      },
+      "COLUMN_ID_MISMATCH" : {
+        "message" : [
+          "Column IDs have changed:",
           "<errors>"
         ]
       },
