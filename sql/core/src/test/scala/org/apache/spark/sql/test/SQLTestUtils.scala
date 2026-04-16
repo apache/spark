@@ -27,7 +27,7 @@ import org.scalactic.source.Position
 import org.scalatest.{Suite, Tag}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
