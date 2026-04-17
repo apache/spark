@@ -203,9 +203,7 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
  * Helper trait that can be extended by all external SQL test suites.
  * Now a thin alias for [[org.apache.spark.sql.QueryTestBase]].
  */
-private[sql] trait SQLTestUtilsBase
-  extends org.apache.spark.sql.QueryTestBase { self: Suite =>
-}
+private[sql] trait SQLTestUtilsBase extends org.apache.spark.sql.QueryTestBase
 
 private[sql] object SQLTestUtils {
 
