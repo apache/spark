@@ -265,10 +265,11 @@ private[spark] object UI {
     .booleanConf
     .createWithDefault(true)
 
-  val UI_JETTY_STOP_TIMEOUT = ConfigBuilder("spark.ui.jettyStopTimeout")
+  val UI_JETTY_STOP_TIMEOUT = ConfigBuilder("spark.ui.jetty.stopTimeout")
     .internal()
     .doc("Timeout for Jetty servers started in UIs, such as SparkUI, HistoryUI, etc, to stop.")
     .version("4.0.0")
+    .withAlternative("spark.ui.jettyStopTimeout")
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("30s")
 
