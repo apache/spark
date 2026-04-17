@@ -22,8 +22,6 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
