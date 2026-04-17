@@ -2,25 +2,25 @@
 Window Sliding Frame - MIN (non-invertible)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.17.0-1010-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 MIN sliding window, W=1001, 16M rows:     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-MIN naive (current, baseline)                    254155         255171        1195          0.1       15148.8       1.0X
-MIN segtree (default)                             25655          25880         212          0.7        1529.2       9.9X
-MIN segtree (blockSize=256)                       28255          28742         500          0.6        1684.1       9.0X
+MIN naive (current, baseline)                    269315         269757         400          0.1       16052.4       1.0X
+MIN segtree (default)                             30449          32361        2526          0.6        1814.9       8.8X
+MIN segtree (blockSize=256)                       31739          32062         376          0.5        1891.8       8.5X
 
 
 ================================================================================================
 Window Sliding Frame - MAX (non-invertible)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.17.0-1010-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 MAX sliding window, W=1001, 16M rows:     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-MAX naive (current, baseline)                    270463         270869         362          0.1       16120.9       1.0X
-MAX segtree (default)                             26685          26829         138          0.6        1590.5      10.1X
-MAX segtree (blockSize=256)                       28730          29485         678          0.6        1712.4       9.4X
+MAX naive (current, baseline)                    282387         284590        3796          0.1       16831.6       1.0X
+MAX segtree (default)                             31586          34377        2447          0.5        1882.7       8.9X
+MAX segtree (blockSize=256)                       33449          36421        2636          0.5        1993.7       8.4X
 
 
