@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.execution.window
 
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, FrameType, MutableProjection, RowFrame, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
 import org.apache.spark.sql.internal.SQLConf
@@ -40,12 +41,17 @@ private[window] final class SegmentTreeWindowFunctionFrame(
     processor: AggregateProcessor,
     functions: Array[DeclarativeAggregate],
     inputSchema: Seq[Attribute],
+    frameType: FrameType,
     lbound: BoundOrdering,
     ubound: BoundOrdering,
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     conf: SQLConf,
     maxCachedBlocks: Option[Int])
   extends WindowFunctionFrame with AutoCloseable {
+
+  require(frameType == RowFrame,
+    "SegmentTreeWindowFunctionFrame currently supports RowFrame only " +
+      "(RangeFrame tracked in backlog.md#range-frame-support).")
 
   private[this] val fallback =
     new SlidingWindowFunctionFrame(target, processor, lbound, ubound)
@@ -57,6 +63,17 @@ private[window] final class SegmentTreeWindowFunctionFrame(
 
   /** Test hook; the frame integration.5 wires this to a SQLMetric (see backlog). */
   private[window] var fallbackUsed: Boolean = false
+
+  // Register close() once per frame instance so the tree's block cache is
+  // released when the task completes. Keeping the registration here (vs.
+  // inside the factory closure) avoids duplicate listeners when the factory
+  // is invoked multiple times per task.
+  {
+    val tc = TaskContext.get()
+    if (tc != null) {
+      tc.addTaskCompletionListener[Unit](_ => close())
+    }
+  }
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     if (tree != null) {

@@ -21,7 +21,6 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkException
-import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Add, AggregateWindowFunction, Ascending, Attribute, BoundReference, CurrentRow, DateAdd, DateAddYMInterval, DecimalAddNoOverflowCheck, Descending, Expression, ExtractANSIIntervalDays, FrameLessOffsetWindowFunction, FrameType, IdentityProjection, IntegerLiteral, MutableProjection, NamedExpression, OffsetWindowFunction, PythonFuncExpression, RangeFrame, RowFrame, RowOrdering, SortOrder, SpecifiedWindowFrame, TimestampAddInterval, TimestampAddYMInterval, UnaryMinus, UnboundedFollowing, UnboundedPreceding, UnsafeProjection, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate}
@@ -282,21 +281,21 @@ trait WindowEvaluatorFactoryBase {
               val segFns = functions.map(_.asInstanceOf[DeclarativeAggregate])
               val cacheHint = estimateMaxCachedBlocks(lower, upper, frameType, blockSize)
               target: InternalRow => {
-                val frame = new SegmentTreeWindowFunctionFrame(
+                // Task-completion listener registration lives inside the
+                // frame constructor (one per frame instance) to avoid
+                // duplicate listeners when this closure fires multiple
+                // times per task.
+                new SegmentTreeWindowFunctionFrame(
                   target,
                   processor,
                   segFns,
                   childOutput,
+                  frameType,
                   createBoundOrdering(frameType, lower, timeZone),
                   createBoundOrdering(frameType, upper, timeZone),
                   (e, s) => MutableProjection.create(e, s),
                   conf,
                   cacheHint)
-                val tc = TaskContext.get()
-                if (tc != null) {
-                  tc.addTaskCompletionListener[Unit](_ => frame.close())
-                }
-                frame
               }
             } else {
               target: InternalRow => {
@@ -320,6 +319,14 @@ trait WindowEvaluatorFactoryBase {
     }
   }
 
+  /**
+   * Segment-tree path eligibility. The tree relies on `DeclarativeAggregate.mergeExpressions`,
+   * which [[AggregateWindowFunction]]s (e.g. NthValue, NTile, Rank, RowNumber, NullIndex) refuse
+   * with `mergeUnsupportedByWindowFunctionError`. They extend DeclarativeAggregate but are
+   * NOT merge-capable, so we must exclude them here even though the base-class check passes.
+   * Normal aggregate window expressions reach this code as the inner DeclarativeAggregate
+   * unwrapped from [[AggregateExpression]] (see `windowFrameExpressionFactoryPairs.collect`).
+   */
   private def eligibleForSegTree(
       functions: Array[Expression],
       filters: Array[Option[Expression]],
@@ -327,7 +334,9 @@ trait WindowEvaluatorFactoryBase {
     SQLConf.get.windowSegmentTreeEnabled &&
       frameType == RowFrame &&
       filters.forall(_.isEmpty) &&
-      functions.forall(_.isInstanceOf[DeclarativeAggregate]) &&
+      functions.forall { f =>
+        f.isInstanceOf[DeclarativeAggregate] && !f.isInstanceOf[AggregateWindowFunction]
+      } &&
       !functions.exists {
         case ae: AggregateExpression => ae.isDistinct
         case _ => false

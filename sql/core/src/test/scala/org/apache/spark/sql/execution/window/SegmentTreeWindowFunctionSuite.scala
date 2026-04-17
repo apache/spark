@@ -145,12 +145,51 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
 
     // 2. Directly exercise the frame to confirm the fallback flag flips.
     withSQLConf(enabledConf.toSeq: _*) {
-      val frame = SegmentTreeWindowFunctionSuiteHelper.buildSmallPartitionFrame(
-        SQLConf.get, rows = 5)
-      assert(frame.fallbackUsed,
-        "expected fallbackUsed=true for partition smaller than minPartitionRows")
-      frame.close()
+      SegmentTreeWindowFunctionSuiteHelper.withSmallPartitionFrame(
+        SQLConf.get, rows = 5) { frame =>
+        assert(frame.fallbackUsed,
+          "expected fallbackUsed=true for partition smaller than minPartitionRows")
+      }
     }
+  }
+
+  
+  test("NTH_VALUE over ROWS frame falls back cleanly (no mergeExpressions crash)") {
+    // NthValue extends DeclarativeAggregate but its mergeExpressions throws
+    // mergeUnsupportedByWindowFunctionError. eligibleForSegTree must exclude it.
+    val df = baseDF
+    val withSegTree = withSQLConf(enableSegTree.toSeq: _*) {
+      df.selectExpr(
+        "id", "pk",
+        "nth_value(v, 3) OVER (PARTITION BY pk ORDER BY id " +
+          "ROWS BETWEEN 5 PRECEDING AND 5 FOLLOWING) AS n3")
+        .collect().sortBy(_.toString)
+    }
+    val baseline = withSQLConf(disableSegTree.toSeq: _*) {
+      df.selectExpr(
+        "id", "pk",
+        "nth_value(v, 3) OVER (PARTITION BY pk ORDER BY id " +
+          "ROWS BETWEEN 5 PRECEDING AND 5 FOLLOWING) AS n3")
+        .collect().sortBy(_.toString)
+    }
+    assert(withSegTree.toSeq === baseline.toSeq)
+  }
+
+  test("ROW_NUMBER over ROWS frame falls back cleanly (no mergeExpressions crash)") {
+    val df = baseDF
+    val withSegTree = withSQLConf(enableSegTree.toSeq: _*) {
+      df.selectExpr(
+        "id", "pk",
+        "row_number() OVER (PARTITION BY pk ORDER BY id) AS rn")
+        .collect().sortBy(_.toString)
+    }
+    val baseline = withSQLConf(disableSegTree.toSeq: _*) {
+      df.selectExpr(
+        "id", "pk",
+        "row_number() OVER (PARTITION BY pk ORDER BY id) AS rn")
+        .collect().sortBy(_.toString)
+    }
+    assert(withSegTree.toSeq === baseline.toSeq)
   }
 }
 
@@ -169,8 +208,25 @@ private object SegmentTreeWindowFunctionSuiteHelper {
   import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
   import org.apache.spark.sql.types.IntegerType
 
-  def buildSmallPartitionFrame(
-      conf: SQLConf, rows: Int): SegmentTreeWindowFunctionFrame = {
+  def withSmallPartitionFrame(conf: SQLConf, rows: Int)
+      (body: SegmentTreeWindowFunctionFrame => Unit): Unit = {
+    val existing = TaskContext.get()
+    val owned = existing == null
+    val tc = if (owned) {
+      val fake = MemoryTestingUtils.fakeTaskContext(SparkEnv.get)
+      TaskContext.setTaskContext(fake)
+      fake
+    } else existing
+    try {
+      val frame = buildSmallPartitionFrame(conf, rows, tc)
+      try body(frame) finally frame.close()
+    } finally {
+      if (owned) TaskContext.unset()
+    }
+  }
+
+  private def buildSmallPartitionFrame(
+      conf: SQLConf, rows: Int, tc: TaskContext): SegmentTreeWindowFunctionFrame = {
     val attr = AttributeReference("v", IntegerType, nullable = false)()
     val input = Seq[Attribute](attr)
     val fn = Sum(attr)
@@ -182,15 +238,6 @@ private object SegmentTreeWindowFunctionSuiteHelper {
       (es, s) => GenerateMutableProjection.generate(es, s),
       Array[Option[Expression]](None))
     val target = new SpecificInternalRow(Seq(bufAttrs.head.dataType))
-    val tc = {
-      val existing = TaskContext.get()
-      if (existing != null) existing
-      else {
-        val fake = MemoryTestingUtils.fakeTaskContext(SparkEnv.get)
-        TaskContext.setTaskContext(fake)
-        fake
-      }
-    }
     val array = new ExternalAppendOnlyUnsafeRowArray(
       tc.taskMemoryManager(),
       SparkEnv.get.blockManager,
@@ -214,6 +261,7 @@ private object SegmentTreeWindowFunctionSuiteHelper {
       processor,
       Array(fn),
       input,
+      RowFrame,
       RowBoundOrdering(-1),
       RowBoundOrdering(1),
       (es, s) => GenerateMutableProjection.generate(es, s),
