@@ -672,9 +672,7 @@ def main():
                 pr_author_email = c["commit"]["author"]["email"]
                 break
     if not pr_author_email:
-        pr_author_email = "%s+%s@users.noreply.github.com" % (
-            pr_author_info["id"], user_login
-        )
+        pr_author_email = "%s+%s@users.noreply.github.com" % (pr_author_info["id"], user_login)
     pr_author = "%s <%s>" % (pr_author_name, pr_author_email)
 
     # Collect co-authors: commit authors whose GitHub login differs from the PR author.
