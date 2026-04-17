@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, TableSpec, UnaryNode}
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils, ReplaceDataProjections, WriteDeltaProjections}
-import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSERT_OPERATION, REINSERT_OPERATION, UPDATE_OPERATION, WRITE_OPERATION, WRITE_WITHOUT_METADATA_OPERATION}
+import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{COPY_OPERATION, DELETE_OPERATION, INSERT_OPERATION, REINSERT_OPERATION, UPDATE_OPERATION}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
@@ -625,12 +625,12 @@ case class DataAndMetadataWritingSparkTask(
       val operation = row.getInt(0)
 
       operation match {
-        case WRITE_OPERATION =>
+        case UPDATE_OPERATION | COPY_OPERATION =>
           dataProj.project(row)
           metadataProj.project(row)
           writer.write(metadataProj, dataProj)
 
-        case WRITE_WITHOUT_METADATA_OPERATION =>
+        case INSERT_OPERATION =>
           dataProj.project(row)
           writer.write(dataProj)
 
@@ -651,7 +651,7 @@ case class DataWithProjectionWritingSparkTask(
       val operation = row.getInt(0)
 
       operation match {
-        case WRITE_OPERATION | WRITE_WITHOUT_METADATA_OPERATION =>
+        case UPDATE_OPERATION | COPY_OPERATION | INSERT_OPERATION =>
           dataProj.project(row)
           writer.write(dataProj)
 

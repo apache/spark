@@ -72,12 +72,13 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs)
 
     // build a plan with updated and copied over records
-    val updatedAndRemainingRowsPlan = buildReplaceDataUpdateProjection(
-      readRelation, assignments, cond)
+    // the conditional operation column needs to be added in the same Projection as cond is
+    // referencing attributes before the update
+    val writeOp = If(cond, Literal(UPDATE_OPERATION), Literal(COPY_OPERATION))
+    val query = buildReplaceDataUpdateProjection(readRelation, assignments, writeOp, cond)
 
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
-    val query = addOperationColumn(WRITE_OPERATION, updatedAndRemainingRowsPlan)
     val projections = buildReplaceDataProjections(query, relation.output, metadataAttrs)
     val groupFilterCond = if (groupFilterEnabled) Some(cond) else None
     ReplaceData(writeRelation, cond, query, relation, projections, groupFilterCond)
@@ -101,18 +102,19 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // build a plan for updated records that match the condition
     val matchedRowsPlan = Filter(cond, readRelation)
-    val updatedRowsPlan = buildReplaceDataUpdateProjection(matchedRowsPlan, assignments)
+    val updatedRowsPlan = buildReplaceDataUpdateProjection(
+      matchedRowsPlan, assignments, Literal(UPDATE_OPERATION))
 
     // build a plan that contains unmatched rows in matched groups that must be copied over
     val remainingRowFilter = Not(EqualNullSafe(cond, Literal.TrueLiteral))
-    val remainingRowsPlan = Filter(remainingRowFilter, readRelation)
+    val remainingRowsPlan = addOperationColumn(COPY_OPERATION,
+      Filter(remainingRowFilter, readRelation))
 
     // the new state is a union of updated and copied over records
-    val updatedAndRemainingRowsPlan = Union(updatedRowsPlan, remainingRowsPlan)
+    val query = Union(updatedRowsPlan, remainingRowsPlan)
 
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
-    val query = addOperationColumn(WRITE_OPERATION, updatedAndRemainingRowsPlan)
     val projections = buildReplaceDataProjections(query, relation.output, metadataAttrs)
     val groupFilterCond = if (groupFilterEnabled) Some(cond) else None
     ReplaceData(writeRelation, cond, query, relation, projections, groupFilterCond)
@@ -122,6 +124,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
   private def buildReplaceDataUpdateProjection(
       plan: LogicalPlan,
       assignments: Seq[Assignment],
+      operation: Expression,
       cond: Expression = TrueLiteral): LogicalPlan = {
 
     // the plan output may include metadata columns at the end
@@ -143,7 +146,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       }
     }
 
-    Project(updatedValues, plan)
+    val operationCol = Alias(operation, OPERATION_COLUMN)()
+    Project(operationCol +: updatedValues, plan)
   }
 
   // build a rewrite plan for sources that support row deltas
