@@ -61,35 +61,39 @@ case class BatchScanExec(
 
   // Visible for testing
   @transient private[sql] lazy val filteredPartitions: Seq[Option[InputPartition]] = {
-    val dataSourceFilters = runtimeFilters.flatMap {
-      case DynamicPruningExpression(e) => DataSourceV2Strategy.translateRuntimeFilterV2(e)
-      case f => DataSourceV2Strategy.translateScalarSubqueryFilterV2(f)
-    }
-
     val originalPartitioning = outputPartitioning
-    // the cast is safe as runtime filters are only assigned if the scan can be filtered
-    val filterableScan = scan.asInstanceOf[SupportsRuntimeV2Filtering]
-    var filtered = false
+    val pushedFilters = if (runtimeFilters.nonEmpty) {
+      // the cast is safe as runtime filters are only assigned if the scan can be filtered
+      val filterableScan = scan.asInstanceOf[SupportsRuntimeV2Filtering]
 
-    if (dataSourceFilters.nonEmpty) {
-      filterableScan.filter(dataSourceFilters.toArray)
-      filtered = true
-    }
-
-    // If the scan supports iterative filtering, derive PartitionPredicates from the
-    // runtime filters and push them in a second pass. (See SPARK-55596)
-    if (filterableScan.supportsIterativeFiltering()) {
-      PushDownUtils.getPartitionPredicateSchema(table, output).foreach { partitionFields =>
-        val partPredicates =
-          PushDownUtils.createRuntimePartitionPredicates(runtimeFilters, partitionFields)
-        if (partPredicates.nonEmpty) {
-          filterableScan.filter(partPredicates.toArray)
-          filtered = true
-        }
+      // push down translatable runtime filters
+      val dataSourceFilters = runtimeFilters.flatMap {
+        case DynamicPruningExpression(e) => DataSourceV2Strategy.translateRuntimeFilterV2(e)
+        case f => DataSourceV2Strategy.translateScalarSubqueryFilterV2(f)
       }
+      if (dataSourceFilters.nonEmpty) {
+        filterableScan.filter(dataSourceFilters.toArray)
+      }
+
+      // If the scan supports iterative filtering, derive PartitionPredicates from the
+      // runtime filters and push them in a second pass. (See SPARK-55596)
+      val partPredicates = if (filterableScan.supportsIterativeFiltering()) {
+        PushDownUtils.getPartitionPredicateSchema(table, output).map { partitionFields =>
+          PushDownUtils.createRuntimePartitionPredicates(runtimeFilters, partitionFields)
+        }.getOrElse(Seq.empty)
+      } else {
+        Seq.empty
+      }
+      if (partPredicates.nonEmpty) {
+        filterableScan.filter(partPredicates.toArray)
+      }
+
+      dataSourceFilters ++ partPredicates
+    } else {
+      Seq.empty
     }
 
-    if (filtered) {
+    if (pushedFilters.nonEmpty) {
       // call toBatch again to get filtered partitions
       val newPartitions = scan.toBatch.planInputPartitions()
 
