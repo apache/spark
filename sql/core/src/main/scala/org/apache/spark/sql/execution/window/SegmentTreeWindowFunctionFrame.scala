@@ -75,6 +75,16 @@ private[window] final class SegmentTreeWindowFunctionFrame(
   // Two cursors over `rowArray`; `lowerRow` / `upperRow` hold the currently-
   // buffered head of each cursor (pre-fetched in `prepare` -- fix so
   // `RangeBoundOrdering.compare` is never called with a null row on round 0).
+  //
+  // Spill-safety invariant: when `rowArray` spills, its iterator reuses a
+  // single `UnsafeRow` object whose pointer is rebound on each `next()`.
+  // That is tolerated here because the cursor is **read-before-advance**:
+  // each `writeRange` loop iteration reads `lowerRow`/`upperRow` for
+  // comparison before calling `getNextOrNull(...)`. Between `write()`
+  // calls the pointer's content is stable (this frame is the sole consumer
+  // of each iterator). DO NOT cache a historical row into a separate field
+  // without an explicit `.copy()`; the shared reusable UnsafeRow would
+  // silently mutate.
   private[this] var lowerIter: Iterator[UnsafeRow] = _
   private[this] var upperIter: Iterator[UnsafeRow] = _
   private[this] var lowerRow: UnsafeRow = _

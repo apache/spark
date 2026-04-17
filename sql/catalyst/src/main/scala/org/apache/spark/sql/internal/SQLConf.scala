@@ -4101,7 +4101,6 @@ object SQLConf {
       .doc("Use block-chunked segment tree for moving aggregate window frames " +
         "whose functions are all DeclarativeAggregate without FILTER/DISTINCT.")
       .version("4.1.0")
-      .internal()
       .booleanConf
       .createWithDefault(false)
 
@@ -4119,7 +4118,6 @@ object SQLConf {
     buildConf("spark.sql.window.segmentTree.blockSize")
       .doc("Block size for the block-chunked segment tree used by moving window frames.")
       .version("4.1.0")
-      .internal()
       .intConf
       .checkValue(_ >= 16, "blockSize must be >= 16")
       .createWithDefault(65536)
