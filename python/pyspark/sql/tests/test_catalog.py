@@ -651,14 +651,26 @@ class CatalogTestsMixin:
             self.assertEqual(rows[1][0], 2)
             self.assertEqual(rows[1][1], "b")
 
-            # writeTo accepts a Table object directly; typical use: filter listTables then write
-            non_temp = [t for t in spark.catalog.listTables("default") if not t.isTemporary]
-            self.assertEqual(len(non_temp), 1)
-            spark.createDataFrame([(3, "c")], ["id", "name"]).writeTo(non_temp[0]).append()
-            rows = sorted(spark.read.table(t).collect(), key=lambda r: r[0])
-            self.assertEqual(len(rows), 3)
-            self.assertEqual(rows[2][0], 3)
-            self.assertEqual(rows[2][1], "c")
+        # writeTo accepts a Table object directly; requires a V2 catalog
+        # typical use: filter listTables then write
+        with self.sql_conf(
+            {
+                "spark.sql.catalog.testcat": (
+                    "org.apache.spark.sql.connector.catalog.InMemoryTableCatalog"
+                )
+            }
+        ):
+            spark.sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns")
+            with self.table("testcat.ns.tbl"):
+                spark.sql("CREATE TABLE testcat.ns.tbl (id INT, name STRING) USING foo")
+                non_temp = [
+                    t
+                    for t in spark.catalog.listTables("testcat.ns")
+                    if not t.isTemporary
+                ]
+                self.assertEqual(len(non_temp), 1)
+                spark.createDataFrame([(3, "c")], ["id", "name"]).writeTo(non_temp[0]).append()
+                self.assertEqual(spark.read.table(non_temp[0]).count(), 1)
 
 
 class CatalogTests(CatalogTestsMixin, ReusedSQLTestCase):

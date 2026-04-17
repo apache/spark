@@ -491,12 +491,20 @@ class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelpe
       // read.table accepts a Table object
       val rows = spark.read.table(tableObj).collect().map(r => (r.getInt(0), r.getString(1))).toSet
       assert(rows == Set((1, "a"), (2, "b")))
+    }
 
-      // writeTo accepts a Table object; typical use: filter listTables then write
-      val nonTemp = spark.catalog.listTables("default").collect().filter(!_.isTemporary)
-      assert(nonTemp.length == 1)
-      Seq((3, "c"), (4, "d")).toDF("id", "name").writeTo(nonTemp.head).append()
-      assert(spark.read.table(tableObj).count() == 4)
+    // writeTo accepts a Table object; requires a V2 catalog
+    // typical use: filter listTables then write
+    withSQLConf("spark.sql.catalog.testcat" ->
+        "org.apache.spark.sql.connector.catalog.InMemoryTableCatalog") {
+      spark.sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns").collect()
+      withTable("testcat.ns.tbl") {
+        spark.sql("CREATE TABLE testcat.ns.tbl (id INT, name STRING) USING foo").collect()
+        val nonTemp = spark.catalog.listTables("testcat.ns").collect().filter(!_.isTemporary)
+        assert(nonTemp.length == 1)
+        Seq((3, "c"), (4, "d")).toDF("id", "name").writeTo(nonTemp.head).append()
+        assert(spark.read.table(nonTemp.head).count() == 2)
+      }
     }
   }
 }
