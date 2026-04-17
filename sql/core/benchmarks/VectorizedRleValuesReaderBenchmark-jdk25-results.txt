@@ -1,0 +1,82 @@
+================================================================================================
+Boolean decode
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.17.0-1010-azure
+AMD EPYC 7763 64-Core Processor
+RLE readBooleans decode:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+cold reader, trueRatio=0.0                            0              0           0       6055.4           0.2       1.0X
+reused reader, trueRatio=0.0                          0              0           0      58763.5           0.0       9.7X
+cold reader, trueRatio=0.1                            1              2           0        707.0           1.4       0.1X
+reused reader, trueRatio=0.1                          2              2           0        563.8           1.8       0.1X
+cold reader, trueRatio=0.5                            1              1           0        746.8           1.3       0.1X
+reused reader, trueRatio=0.5                          1              1           0        743.0           1.3       0.1X
+cold reader, trueRatio=0.9                            1              2           0        707.2           1.4       0.1X
+reused reader, trueRatio=0.9                          1              2           0        706.8           1.4       0.1X
+cold reader, trueRatio=1.0                            0              0           0      59098.0           0.0       9.8X
+reused reader, trueRatio=1.0                          0              0           0      57130.7           0.0       9.4X
+
+
+================================================================================================
+Integer decode
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.17.0-1010-azure
+AMD EPYC 7763 64-Core Processor
+RLE readIntegers dictionary-id decode:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PACKED cold, bitWidth=4                               2              2           0        516.5           1.9       1.0X
+PACKED reused, bitWidth=4                             2              2           0        516.8           1.9       1.0X
+RLE, bitWidth=4                                       0              0           0      18371.3           0.1      35.6X
+PACKED cold, bitWidth=8                               2              2           0        570.1           1.8       1.1X
+PACKED reused, bitWidth=8                             2              2           0        567.8           1.8       1.1X
+RLE, bitWidth=8                                       0              0           0      17893.8           0.1      34.6X
+PACKED cold, bitWidth=12                              2              2           0        454.1           2.2       0.9X
+PACKED reused, bitWidth=12                            2              2           0        453.3           2.2       0.9X
+RLE, bitWidth=12                                      0              0           0      18449.2           0.1      35.7X
+PACKED cold, bitWidth=20                              3              3           0        373.7           2.7       0.7X
+PACKED reused, bitWidth=20                            3              3           0        369.1           2.7       0.7X
+RLE, bitWidth=20                                      0              0           0      18054.3           0.1      35.0X
+
+
+================================================================================================
+Nullable batch decode with def-level materialization
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.17.0-1010-azure
+AMD EPYC 7763 64-Core Processor
+Nullable batch with def-levels:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+nullRatio=0.0, n/a                                    0              0           0       6840.2           0.1       1.0X
+nullRatio=0.1, random                                11             11           0         93.4          10.7       0.0X
+nullRatio=0.1, clustered                             10             10           0        104.9           9.5       0.0X
+nullRatio=0.3, random                                13             13           0         80.6          12.4       0.0X
+nullRatio=0.3, clustered                              9              9           0        114.2           8.8       0.0X
+nullRatio=0.5, random                                14             14           1         77.0          13.0       0.0X
+nullRatio=0.5, clustered                              8              8           1        125.9           7.9       0.0X
+nullRatio=0.9, random                                 8              8           0        130.7           7.7       0.0X
+nullRatio=0.9, clustered                              7              7           0        160.9           6.2       0.0X
+nullRatio=1.0, random                                 0              0           0       8318.9           0.1       1.2X
+
+
+================================================================================================
+Nullable batch decode without def-level materialization
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.17.0-1010-azure
+AMD EPYC 7763 64-Core Processor
+Nullable batch without def-levels:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+nullRatio=0.0, n/a                                    0              0           0      12269.8           0.1       1.0X
+nullRatio=0.1, random                                 8              8           0        125.7           8.0       0.0X
+nullRatio=0.1, clustered                              7              8           1        140.4           7.1       0.0X
+nullRatio=0.3, random                                10             10           1        104.5           9.6       0.0X
+nullRatio=0.3, clustered                              7              7           1        148.8           6.7       0.0X
+nullRatio=0.5, random                                11             11           0         97.6          10.2       0.0X
+nullRatio=0.5, clustered                              7              7           0        159.3           6.3       0.0X
+nullRatio=0.9, random                                 7              7           0        161.0           6.2       0.0X
+nullRatio=0.9, clustered                              6              6           0        188.3           5.3       0.0X
+nullRatio=1.0, random                                 0              0           0      12016.1           0.1       1.0X
+
+

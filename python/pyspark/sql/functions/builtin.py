@@ -13617,6 +13617,31 @@ def current_catalog() -> Column:
 
 
 @_try_remote_functions
+def current_path() -> Column:
+    """Returns the current SQL path as a comma-separated list of qualified schema names.
+
+    .. versionadded:: 4.2.0
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.current_catalog`
+    :meth:`pyspark.sql.functions.current_database`
+    :meth:`pyspark.sql.functions.current_schema`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.current_path()).show() # doctest: +SKIP
+    +----------------------------------------------------+
+    |                                      current_path()|
+    +----------------------------------------------------+
+    |system.builtin,system.session,spark_catalog.default |
+    +----------------------------------------------------+
+    """
+    return _invoke_function("current_path")
+
+
+@_try_remote_functions
 def current_database() -> Column:
     """Returns the current database.
 

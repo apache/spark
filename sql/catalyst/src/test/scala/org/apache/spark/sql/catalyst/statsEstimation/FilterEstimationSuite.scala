@@ -211,6 +211,36 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       expectedRowCount = 1)
   }
 
+  test("cint = 2 - missing min/max but has NDV") {
+    val attrIntNoMinMax = AttributeReference("cint_no_min_max", IntegerType)()
+    val colStatIntNoMinMax = ColumnStat(distinctCount = Some(10), min = None, max = None,
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
+    val childPlan = StatsTestPlan(
+      outputList = Seq(attrIntNoMinMax),
+      rowCount = 10L,
+      attributeStats = AttributeMap(Seq(attrIntNoMinMax -> colStatIntNoMinMax))
+    )
+    validateEstimatedStats(
+      Filter(EqualTo(attrIntNoMinMax, Literal(2)), childPlan),
+      Seq(attrIntNoMinMax -> colStatIntNoMinMax.copy(distinctCount = Some(1),
+        min = Some(2), max = Some(2), nullCount = Some(0))),
+      expectedRowCount = 1)
+  }
+
+  test("cint = 2 - missing all column stats") {
+    val attrIntNoStats = AttributeReference("cint_no_stats", IntegerType)()
+    val colStatIntNoStats = ColumnStat()
+    val childPlan = StatsTestPlan(
+      outputList = Seq(attrIntNoStats),
+      rowCount = 10L,
+      attributeStats = AttributeMap(Seq(attrIntNoStats -> colStatIntNoStats))
+    )
+    validateEstimatedStats(
+      Filter(EqualTo(attrIntNoStats, Literal(2)), childPlan),
+      Seq(attrIntNoStats -> colStatIntNoStats),
+      expectedRowCount = 10)
+  }
+
   test("cint <=> 2") {
     validateEstimatedStats(
       Filter(EqualNullSafe(attrInt, Literal(2)), childStatsTestPlan(Seq(attrInt), 10L)),
@@ -385,6 +415,21 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Seq(attrInt -> ColumnStat(distinctCount = Some(3), min = Some(3), max = Some(5),
         nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))),
       expectedRowCount = 3)
+  }
+
+  test("cint IN (3, 4, 5) - missing min/max but has NDV") {
+    val attrIntNoMinMax = AttributeReference("cint_no_min_max", IntegerType)()
+    val colStatIntNoMinMax = ColumnStat(distinctCount = Some(10), min = None, max = None,
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
+    val childPlan = StatsTestPlan(
+      outputList = Seq(attrIntNoMinMax),
+      rowCount = 10L,
+      attributeStats = AttributeMap(Seq(attrIntNoMinMax -> colStatIntNoMinMax))
+    )
+    validateEstimatedStats(
+      Filter(InSet(attrIntNoMinMax, Set(3, 4, 5)), childPlan),
+      Seq(attrIntNoMinMax -> colStatIntNoMinMax),
+      expectedRowCount = 10)
   }
 
   test("evaluateInSet with all zeros") {

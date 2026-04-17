@@ -505,6 +505,7 @@ __all__ = [  # noqa: F405
     "bitmap_count",
     "current_catalog",
     "current_database",
+    "current_path",
     "current_schema",
     "current_user",
     "input_file_block_length",

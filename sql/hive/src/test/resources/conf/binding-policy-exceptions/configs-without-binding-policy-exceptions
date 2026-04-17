@@ -319,6 +319,8 @@ spark.scheduler.numCancelledJobGroupsToTrack
 spark.scheduler.resource.profileMergeConflicts
 spark.scheduler.revive.interval
 spark.scheduler.stage.legacyAbortAfterKillTasks
+spark.scheduler.streaming.idAwareLogging.enabled
+spark.scheduler.streaming.idAwareLogging.queryIdLength
 spark.security.credentials.renewalRatio
 spark.security.credentials.retryWait
 spark.serializer
