@@ -319,6 +319,66 @@ class SqlScriptingE2eSuite extends SharedSparkSession {
     }
   }
 
+  test("loop with transactional checks - each iteration runs in its own transaction") {
+    withCatalog("cat") { catalog =>
+      withTable("cat.ns1.t") {
+        val sqlScript =
+          """
+            |BEGIN
+            |  DECLARE i INT = 1;
+            |  CREATE TABLE
+            |    cat.ns1.t (pk INT NOT NULL, salary INT, dep STRING)
+            |    PARTITIONED BY (dep);
+            |  WHILE i <= 3 DO
+            |    INSERT INTO cat.ns1.t VALUES (i, i * 100, 'hr');
+            |    SET i = i + 1;
+            |  END WHILE;
+            |  SELECT * FROM cat.ns1.t ORDER BY pk;
+            |END
+            |""".stripMargin
+
+        verifySqlScriptResult(
+          sqlScript,
+          Seq(Row(1, 100, "hr"), Row(2, 200, "hr"), Row(3, 300, "hr")))
+
+        // Each loop iteration's INSERT runs in its own independent transaction.
+        assert(catalog.seenTransactions.size === 3)
+        assert(catalog.seenTransactions.forall(t => t.currentState === Committed && t.isClosed))
+      }
+    }
+  }
+
+  test("continue handler with transactional checks - handler DML runs in its own transaction") {
+    withCatalog("cat") { catalog =>
+      withTable("cat.ns1.t") {
+        val sqlScript =
+          """
+            |BEGIN
+            |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+            |  BEGIN
+            |    INSERT INTO cat.ns1.t VALUES (-1, -1, 'error');
+            |  END;
+            |  CREATE TABLE
+            |    cat.ns1.t (pk INT NOT NULL, salary INT, dep STRING)
+            |    PARTITIONED BY (dep);
+            |  INSERT INTO cat.ns1.t VALUES (1, 100, 'hr');
+            |  SELECT 1/0;
+            |  INSERT INTO cat.ns1.t VALUES (2, 200, 'software');
+            |  SELECT * FROM cat.ns1.t ORDER BY pk;
+            |END
+            |""".stripMargin
+
+        verifySqlScriptResult(
+          sqlScript,
+          Seq(Row(-1, -1, "error"), Row(1, 100, "hr"), Row(2, 200, "software")))
+
+        // INSERT(1), handler INSERT(-1), INSERT(2) - each in its own transaction.
+        assert(catalog.seenTransactions.size === 3)
+        assert(catalog.seenTransactions.forall(t => t.currentState === Committed && t.isClosed))
+      }
+    }
+  }
+
   test("script without result statement") {
     val sqlScript =
       """
