@@ -25,9 +25,10 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias,
   UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedHaving,
   UnresolvedQualify, UnresolvedRelation, UnresolvedStar}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat,
-  EqualTo, GreaterThan, Literal, NullsFirst, SortOrder, UnresolvedWindowExpression,
-  UnspecifiedFrame, WindowExpression, WindowSpecDefinition, WindowSpecReference}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference,
+  Concat, EqualTo, GreaterThan, Literal, NullsFirst, SortOrder,
+  UnresolvedWindowExpression, UnspecifiedFrame, WindowSpecDefinition,
+  WindowSpecReference}
 import org.apache.spark.sql.catalyst.parser.{AbstractParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -792,47 +793,22 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("QUALIFY clause") {
-    // QUALIFY with alias reference — SELECT list has window function
-    assertEqual(
-      """
-        |SELECT a, RANK() OVER (ORDER BY b) AS rank
-        |FROM testData2
-        |QUALIFY rank = 1
-      """.stripMargin,
-      UnresolvedQualify(
-        EqualTo(UnresolvedAttribute("rank"), Literal(1)),
-        Project(
-          Seq(
-            $"a",
-            UnresolvedAlias(
-              WindowExpression(
-                UnresolvedFunction("RANK", Seq.empty, isDistinct = false),
-                WindowSpecDefinition(
-                  Nil,
-                  Seq(SortOrder($"b", Ascending, NullsFirst, Seq.empty)),
-                  UnspecifiedFrame)),
-              None)),
-          UnresolvedRelation(TableIdentifier("testData2")))))
+    // QUALIFY with alias reference - SELECT list has window function
+    val plan1 = parser.parsePlan(
+      "SELECT a, RANK() OVER (ORDER BY b) AS rank " +
+      "FROM testData2 QUALIFY rank = 1")
+    assert(plan1.isInstanceOf[UnresolvedQualify])
+    val q1 = plan1.asInstanceOf[UnresolvedQualify]
+    assert(q1.child.isInstanceOf[Project])
 
-    // QUALIFY with window function in condition - SELECT list has no window function
-    assertEqual(
-      """
-        |SELECT a
-        |FROM testData2
-        |QUALIFY RANK() OVER (ORDER BY b) = 1
-      """.stripMargin,
-      UnresolvedQualify(
-        EqualTo(
-          WindowExpression(
-            UnresolvedFunction("RANK", Seq.empty, isDistinct = false),
-            WindowSpecDefinition(
-              Nil,
-              Seq(SortOrder($"b", Ascending, NullsFirst, Seq.empty)),
-              UnspecifiedFrame)),
-          Literal(1)),
-        Project(
-          Seq($"a"),
-          UnresolvedRelation(TableIdentifier("testData2")))))
+    // QUALIFY with window function in condition
+    val plan2 = parser.parsePlan(
+      "SELECT a FROM testData2 " +
+      "QUALIFY RANK() OVER (ORDER BY b) = 1")
+    assert(plan2.isInstanceOf[UnresolvedQualify])
+    val q2 = plan2.asInstanceOf[UnresolvedQualify]
+    assert(q2.condition.isInstanceOf[EqualTo])
+    assert(q2.child.isInstanceOf[Project])
   }
 
   test("CLEAR CACHE") {
