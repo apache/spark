@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.internal.connector
 
+import java.util.Objects
+
 import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, IdentityColumnSpec}
 import org.apache.spark.sql.types.DataType
 
 // The standard concrete implementation of data source V2 column.
+// Column ID is excluded from equals/hashCode because it is identity metadata
+// used for tracking column lineage across schema evolution, not a structural property.
 case class ColumnImpl(
     name: String,
     dataType: DataType,
@@ -30,4 +34,23 @@ case class ColumnImpl(
     generationExpression: String,
     identityColumnSpec: IdentityColumnSpec,
     metadataInJSON: String,
-    override val id: String = null) extends Column
+    override val id: String = null) extends Column {
+
+  override def equals(other: Any): Boolean = other match {
+    case that: ColumnImpl =>
+      name == that.name &&
+        dataType == that.dataType &&
+        nullable == that.nullable &&
+        comment == that.comment &&
+        defaultValue == that.defaultValue &&
+        generationExpression == that.generationExpression &&
+        identityColumnSpec == that.identityColumnSpec &&
+        metadataInJSON == that.metadataInJSON
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    Objects.hash(name, dataType, Boolean.box(nullable), comment,
+      defaultValue, generationExpression, identityColumnSpec, metadataInJSON)
+  }
+}
