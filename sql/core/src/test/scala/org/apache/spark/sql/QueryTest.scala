@@ -688,14 +688,14 @@ trait QueryTest extends SparkFunSuite with QueryTestBase with PlanTest {
 
   protected def getCurrentClassCallSitePattern: String = {
     val stack = Thread.currentThread().getStackTrace()
-    val idx = stack.indexWhere(_.getMethodName == "getCurrentClassCallSitePattern")
+    val idx = stack.lastIndexWhere(_.getMethodName == "getCurrentClassCallSitePattern")
     val cs = stack(idx + 1)
     s"${cs.getClassName}\\..*\\(${cs.getFileName}:\\d+\\)"
   }
 
   protected def getNextLineCallSitePattern(lines: Int = 1): String = {
     val stack = Thread.currentThread().getStackTrace()
-    val idx = stack.indexWhere(_.getMethodName == "getNextLineCallSitePattern")
+    val idx = stack.lastIndexWhere(_.getMethodName == "getNextLineCallSitePattern")
     val cs = stack(idx + 1)
     Pattern.quote(
       s"${cs.getClassName}.${cs.getMethodName}(${cs.getFileName}:${cs.getLineNumber + lines})")
