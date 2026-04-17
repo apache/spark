@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.test
 
+import org.scalatest.Suite
+
 import org.apache.spark.sql.{QueryTest, QueryTestBase, Row}
 import org.apache.spark.sql.catalyst.util._
 
