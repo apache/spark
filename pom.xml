@@ -3678,8 +3678,16 @@
     <profile>
       <id>scala-2.13</id>
       <properties>
-        <scala.version>2.13.8</scala.version>
+        <scala.version>2.13.9</scala.version>
         <scala.binary.version>2.13</scala.binary.version>
+        <!--
+          SPARK-56488: Clear maven.compiler.target to prevent scala-maven-plugin
+          from auto-converting it into scalac -release 8. With Scala >= 2.13.9,
+          the plugin maps target to -release, but -release 8 uses ct.sym which hides
+          sun.* packages needed by Spark at compile time.
+        -->
+        <maven.compiler.source />
+        <maven.compiler.target />
       </properties>
       <build>
         <pluginManagement>
@@ -3693,7 +3701,6 @@
                   <arg>-deprecation</arg>
                   <arg>-feature</arg>
                   <arg>-explaintypes</arg>
-                  <arg>-target:jvm-1.8</arg>
                   <arg>-Wconf:cat=deprecation:wv,any:e</arg>
                   <arg>-Wunused:imports</arg>
                   <!--
