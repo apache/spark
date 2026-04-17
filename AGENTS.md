@@ -18,6 +18,8 @@ SQL golden file tests are managed by `SQLQueryTestSuite` and its variants. Read 
 
 Spark Connect protocol is defined in proto files under `sql/connect/common/src/main/protobuf/`. Read the README there before modifying proto definitions.
 
+Avoid introducing non-ASCII characters in code or comments. String literals may contain non-ASCII when the content requires it (error messages, test data, etc.). Identifiers are ASCII by convention. The common failure mode is typographic characters (em-dash, smart quotes, ellipsis, non-breaking space) sneaking into comments; scalastyle flags some of these. Spot-check before committing: `grep -rn -P "[^\x00-\x7F]" <files>`.
+
 ## Build and Test
 
 Build and tests can take a long time. Before running tests, ask the user if they have more changes to make.
