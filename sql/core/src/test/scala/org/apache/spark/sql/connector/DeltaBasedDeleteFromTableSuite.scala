@@ -25,6 +25,8 @@ class DeltaBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
 
   import testImplicits._
 
+  override protected def deltaDelete: Boolean = true
+
   override protected lazy val extraTableProps: java.util.Map[String, String] = {
     val props = new java.util.HashMap[String, String]()
     props.put("supports-deltas", "true")
