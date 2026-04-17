@@ -53,7 +53,6 @@ class DataSourceV2DataFrameSuite
     .set(SQLConf.ANSI_ENABLED, true)
     .set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
     .set("spark.sql.catalog.testcat.copyOnLoad", "true")
-    .set("spark.sql.catalog.testcat.supportsColumnIds", "true")
     .set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
 
   after {
@@ -112,7 +111,8 @@ class DataSourceV2DataFrameSuite
         exception = intercept[TableAlreadyExistsException] {
           df.write.saveAsTable(t1)
         },
-        condition = "TABLE_OR_VIEW_ALREADY_EXISTS")
+        condition = "TABLE_OR_VIEW_ALREADY_EXISTS",
+        parameters = Map("relationName" -> "`ns1`.`ns2`.`tbl`"))
       assert(spark.table(t1).count() === 0)
 
       // appends are by name not by position
