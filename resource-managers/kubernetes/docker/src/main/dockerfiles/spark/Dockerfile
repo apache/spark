@@ -35,7 +35,7 @@ ARG spark_uid=185
 
 RUN set -ex && \
     if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
-      printf 'Types: deb\nURIs: http://mirrors.edge.kernel.org/ubuntu\nSuites: noble noble-updates noble-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n' > /etc/apt/sources.list.d/mirror.sources; \
+      printf 'Types: deb\nURIs: https://mirrors.edge.kernel.org/ubuntu\nSuites: noble noble-updates noble-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n' > /etc/apt/sources.list.d/mirror.sources; \
     elif [ -f /etc/apt/sources.list ]; then \
       grep -q 'archive.ubuntu.com' /etc/apt/sources.list 2>/dev/null && \
       sed 's|archive.ubuntu.com|mirrors.edge.kernel.org|g;s|security.ubuntu.com|mirrors.edge.kernel.org|g' \

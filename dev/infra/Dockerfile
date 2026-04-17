@@ -29,9 +29,9 @@ ENV FULL_REFRESH_DATE=20260317
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
 
-RUN echo 'deb http://mirrors.edge.kernel.org/ubuntu jammy main restricted universe multiverse' > /etc/apt/sources.list.d/mirror.list && \
-    echo 'deb http://mirrors.edge.kernel.org/ubuntu jammy-updates main restricted universe multiverse' >> /etc/apt/sources.list.d/mirror.list && \
-    echo 'deb http://mirrors.edge.kernel.org/ubuntu jammy-security main restricted universe multiverse' >> /etc/apt/sources.list.d/mirror.list
+RUN echo 'deb https://mirrors.edge.kernel.org/ubuntu jammy main restricted universe multiverse' > /etc/apt/sources.list.d/mirror.list && \
+    echo 'deb https://mirrors.edge.kernel.org/ubuntu jammy-updates main restricted universe multiverse' >> /etc/apt/sources.list.d/mirror.list && \
+    echo 'deb https://mirrors.edge.kernel.org/ubuntu jammy-security main restricted universe multiverse' >> /etc/apt/sources.list.d/mirror.list
 
 RUN apt-get update && apt-get install -y \
     build-essential \
