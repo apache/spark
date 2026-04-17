@@ -23,9 +23,9 @@ import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkEnv, S
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, GenericInternalRow, MutableProjection, SpecificInternalRow}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{DeclarativeAggregate, Min}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{DeclarativeAggregate, Max, Min, Sum}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType}
 
 class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -102,7 +102,7 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-    test("range query matches naive baseline for random ranges") {
+    test("single-block: range query matches naive baseline for random ranges") {
     withTaskContext {
       val rnd = new Random(0xC0FFEE)
       val values = Seq.fill(100)(rnd.nextInt(1000))
@@ -208,6 +208,225 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
         for (i <- queries.indices) {
           val (lo, hi) = queries(i)
           assert(results1(i) == naiveMin(values, lo, hi))
+        }
+      } finally tree.close()
+    }
+  }
+
+    test("cross-block: range query matches naive baseline for random ranges") {
+    withTaskContext {
+      val rnd = new Random(0xBEEF)
+      val values = Seq.fill(100)(rnd.nextInt(1000))
+      val tree = buildTree(values, fanout = 4, blockSize = 8)
+      try {
+        assert(tree.peekBlockCount == (100 + 8 - 1) / 8)
+        for (_ <- 0 until 50) {
+          val a = rnd.nextInt(values.length + 1)
+          val b = rnd.nextInt(values.length + 1)
+          val (lo, hi) = (math.min(a, b), math.max(a, b))
+          assert(queryMin(tree, lo, hi) == naiveMin(values, lo, hi),
+            s"mismatch at [$lo, $hi)")
+        }
+      } finally tree.close()
+    }
+  }
+
+    test("cross-block: multi-block level-size invariant") {
+    withTaskContext {
+      val rnd = new Random(31337)
+      val fanout = 4
+      val blockSize = 8
+      val numRows = 50 // > blockSize -> multiple blocks
+      val values = Seq.fill(numRows)(rnd.nextInt(10000))
+      val tree = buildTree(values, fanout = fanout, blockSize = blockSize)
+      try {
+        val numBlocks = tree.peekBlockCount
+        assert(numBlocks > 1, s"expected >1 block, got $numBlocks")
+        for (b <- 0 until numBlocks) {
+          val blockStart = b * blockSize
+          val blockRows = math.min(blockSize, numRows - blockStart)
+          val numLevels = tree.peekLevelCount(b)
+          var prev = blockRows
+          for (l <- 1 until numLevels) {
+            val expected = math.ceil(prev.toDouble / fanout).toInt
+            val actual = tree.peekLevelSize(b, l)
+            assert(actual == expected,
+              s"block=$b level=$l: $actual vs $expected")
+            prev = expected
+          }
+        }
+        // Correctness cross-check.
+        for (lo <- 0 to numRows; hi <- lo to numRows) {
+          assert(queryMin(tree, lo, hi) == naiveMin(values, lo, hi),
+            s"cross-block MIN mismatch at [$lo, $hi)")
+        }
+      } finally tree.close()
+    }
+  }
+
+  // ---- D8 multi-aggregate ----
+  test("D8 multi-aggregate: MIN + MAX + SUM on the same tree") {
+    withTaskContext {
+      val rnd = new Random(2024)
+      val numRows = 50
+      val values = Seq.fill(numRows)(rnd.nextInt(1000))
+      val aggs: Array[DeclarativeAggregate] =
+        Array(Min(inputAttr), Max(inputAttr), Sum(inputAttr))
+      val tree = buildTree(values, aggs = aggs, fanout = 4, blockSize = 8)
+      // Output schema: MIN(int), MAX(int), SUM(long).
+      // Sum on IntegerType widens the buffer slot to LongType.
+      val outTypes: Seq[DataType] = Seq(IntegerType, IntegerType, LongType)
+      def queryAll(lo: Int, hi: Int): (Any, Any, Any) = {
+        val out = new SpecificInternalRow(outTypes)
+        tree.query(lo, hi, out)
+        val mn = if (out.isNullAt(0)) null else out.getInt(0)
+        val mx = if (out.isNullAt(1)) null else out.getInt(1)
+        val sm = if (out.isNullAt(2)) null else out.getLong(2)
+        (mn, mx, sm)
+      }
+      def naiveMax(vs: Seq[Int], lo: Int, hi: Int): Any =
+        if (lo >= hi) null else vs.slice(lo, hi).max
+      def naiveSum(vs: Seq[Int], lo: Int, hi: Int): Any =
+        if (lo >= hi) null else vs.slice(lo, hi).map(_.toLong).sum
+      try {
+        for (_ <- 0 until 20) {
+          val a = rnd.nextInt(numRows + 1)
+          val b = rnd.nextInt(numRows + 1)
+          val (lo, hi) = (math.min(a, b), math.max(a, b))
+          val (mn, mx, sm) = queryAll(lo, hi)
+          assert(mn == naiveMin(values, lo, hi), s"MIN at [$lo,$hi)")
+          assert(mx == naiveMax(values, lo, hi), s"MAX at [$lo,$hi)")
+          assert(sm == naiveSum(values, lo, hi), s"SUM at [$lo,$hi)")
+        }
+      } finally tree.close()
+    }
+  }
+
+  // ---- D9 spill coverage ----
+  test("D9 spill path: low thresholds still produce correct range aggregates") {
+    withTaskContext {
+      val rnd = new Random(909)
+      val numRows = 60
+      val values = Seq.fill(numRows)(rnd.nextInt(1000))
+      val tree = new WindowSegmentTree(
+        Array(minAgg), inputSchema, newMutableProjection,
+        fanout = 4, blockSize = 8, maxCachedBlocks = Some(2),
+        spillThreshold = 8, inMemoryThreshold = 4)
+      val rows = values.iterator.map { v =>
+        val r = new GenericInternalRow(1); r.update(0, v); r.asInstanceOf[InternalRow]
+      }
+      tree.build(rows)
+      try {
+        for (_ <- 0 until 40) {
+          val a = rnd.nextInt(numRows + 1)
+          val b = rnd.nextInt(numRows + 1)
+          val (lo, hi) = (math.min(a, b), math.max(a, b))
+          assert(queryMin(tree, lo, hi) == naiveMin(values, lo, hi),
+            s"spill-path mismatch at [$lo, $hi)")
+        }
+      } finally tree.close()
+    }
+  }
+
+    test("D10 rebuild: second build replaces state; failed build preserves prior state") {
+    withTaskContext {
+      val v1 = Seq(5, 1, 9, 3, 7, 2, 8, 4, 6, 0)
+      val v2 = Seq(100, 200, 50, 400, 25, 600, 12, 800)
+      val v3 = Seq(10, 20, 30, 40, 50, 60, 70, 80, 90, 5)
+      val tree = new WindowSegmentTree(
+        Array(minAgg), inputSchema, newMutableProjection,
+        fanout = 4, blockSize = 4)
+
+      def iterOf(vs: Seq[Int]): Iterator[InternalRow] = vs.iterator.map { v =>
+        val r = new GenericInternalRow(1); r.update(0, v); r.asInstanceOf[InternalRow]
+      }
+
+      try {
+        tree.build(iterOf(v1))
+        assert(queryMin(tree, 0, v1.length) == v1.min)
+        tree.build(iterOf(v2))
+        assert(tree.size == v2.length)
+        for (lo <- 0 to v2.length; hi <- lo to v2.length) {
+          assert(queryMin(tree, lo, hi) == naiveMin(v2, lo, hi),
+            s"post-rebuild mismatch at [$lo, $hi)")
+        }
+
+        // Now simulate a failing build midway through; prior state must remain queryable.
+        val boomIter: Iterator[InternalRow] = new Iterator[InternalRow] {
+          private var emitted = 0
+          override def hasNext: Boolean = true
+          override def next(): InternalRow = {
+            if (emitted >= 3) throw new RuntimeException("boom")
+            emitted += 1
+            val r = new GenericInternalRow(1); r.update(0, -1); r.asInstanceOf[InternalRow]
+          }
+        }
+        intercept[RuntimeException](tree.build(boomIter))
+        // Prior v2 state intact.
+        assert(tree.size == v2.length)
+        assert(queryMin(tree, 0, v2.length) == v2.min)
+
+        // Build v3 successfully after the failure.
+        tree.build(iterOf(v3))
+        assert(tree.size == v3.length)
+        for (lo <- 0 to v3.length; hi <- lo to v3.length) {
+          assert(queryMin(tree, lo, hi) == naiveMin(v3, lo, hi),
+            s"post-recovery mismatch at [$lo, $hi)")
+        }
+      } finally tree.close()
+    }
+  }
+
+    test("D11 error paths: invalid ctor args and invalid query ranges") {
+    withTaskContext {
+      // Constructor validation.
+      intercept[IllegalArgumentException] {
+        new WindowSegmentTree(Array(minAgg), inputSchema, newMutableProjection, fanout = 1)
+      }
+      intercept[IllegalArgumentException] {
+        new WindowSegmentTree(Array(minAgg), inputSchema, newMutableProjection, blockSize = 0)
+      }
+      intercept[IllegalArgumentException] {
+        new WindowSegmentTree(
+          Array(minAgg), inputSchema, newMutableProjection, maxCachedBlocks = Some(0))
+      }
+      intercept[IllegalArgumentException] {
+        new WindowSegmentTree(
+          Array(minAgg), inputSchema, newMutableProjection, maxCachedBlocks = Some(-1))
+      }
+
+      // Query range validation.
+      val values = Seq(3, 1, 4, 1, 5, 9, 2, 6, 5, 3)
+      val tree = buildTree(values, fanout = 4, blockSize = 4)
+      try {
+        // Pre-fill outBuffer with a sentinel, then assert bounds check leaves it alone.
+        def sentinelBuf(): SpecificInternalRow = {
+          val b = newOutBuffer()
+          b.setInt(0, 0x5EEDED)
+          b
+        }
+        val sz = tree.size
+        for ((lo, hi) <- Seq((-1, 5), (0, sz + 1), (5, 3))) {
+          val out = sentinelBuf()
+          intercept[IllegalArgumentException](tree.query(lo, hi, out))
+          assert(!out.isNullAt(0) && out.getInt(0) == 0x5EEDED,
+            s"outBuffer mutated by invalid query [$lo,$hi)")
+        }
+      } finally tree.close()
+    }
+  }
+
+    test("D12 block-aligned cross-block boundaries") {
+    withTaskContext {
+      val rnd = new Random(12)
+      val numRows = 50
+      val blockSize = 10
+      val values = Seq.fill(numRows)(rnd.nextInt(10000))
+      val tree = buildTree(values, fanout = 4, blockSize = blockSize)
+      try {
+        for ((lo, hi) <- Seq((0, 20), (10, 40), (20, 50), (0, 50))) {
+          assert(queryMin(tree, lo, hi) == naiveMin(values, lo, hi),
+            s"aligned mismatch at [$lo,$hi)")
         }
       } finally tree.close()
     }
