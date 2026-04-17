@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.util
 
-import java.util.{Locale, UUID}
+import java.util.UUID
 import java.util.regex.Pattern
 
 import scala.collection.mutable.ArrayBuffer
@@ -206,8 +206,9 @@ abstract class CustomOperatorParserExtension(delegate: ParserInterface)
    */
   private def rewriteInfixToFunction(
       sql: String, op: String, func: String): String = {
-    val quotedOp = Pattern.quote(op.toUpperCase(Locale.ROOT))
-    // Build pattern for case-insensitive operator match
+    // The (?i) inline flag makes the operator match case-insensitively;
+    // no need to pre-uppercase the operator string.
+    val quotedOp = Pattern.quote(op)
     // Left: identifier (with optional dots), backtick-quoted
     // Right: identifier, number, backtick-quoted, or literal placeholder
     // Negative lookbehind ensures the left operand is not preceded by an

@@ -136,7 +136,7 @@ public class V2ExpressionSQLBuilder {
         case "LTRIM" -> visitTrim("LEADING", expressionsToStringArray(e.children()));
         case "RTRIM" -> visitTrim("TRAILING", expressionsToStringArray(e.children()));
         case "OVERLAY" -> visitOverlay(expressionsToStringArray(e.children()));
-        // Custom predicates use dot-qualified canonical names (e.g. "COM.MYCO.FUNC").
+        // Custom predicates use dot-qualified canonical names (e.g. "com.myco.FUNC").
         // Render those as SQL function calls; fail on other unknown names.
         default -> name.contains(".") ?
             visitSQLFunction(name, e.children()) : visitUnexpectedExpr(expr);

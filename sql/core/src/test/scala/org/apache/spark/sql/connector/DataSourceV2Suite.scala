@@ -1064,7 +1064,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         case d: BatchScanExec =>
           d.batch.asInstanceOf[CustomPredicateBatch]
       }.head
-      assert(batch.predicates.exists(_.name() == "COM.TEST.MY_SEARCH"),
+      assert(batch.predicates.exists(_.name() == "com.test.MY_SEARCH"),
         "Custom predicate from rewritten infix operator should be pushed")
       assert(batch.predicates.exists(_.name() == ">"),
         "Standard predicate should also be pushed")
@@ -1110,7 +1110,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         case d: BatchScanExec =>
           d.batch.asInstanceOf[CustomPredicateBatch]
       }.head
-      assert(batch.predicates.exists(_.name() == "COM.TEST.MY_SEARCH"),
+      assert(batch.predicates.exists(_.name() == "com.test.MY_SEARCH"),
         "Custom predicate with CASE argument should be pushed")
       checkAnswer(df, (8 until 10).map(i => Row(i, -i)))
     }
@@ -1137,7 +1137,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         case d: BatchScanExec =>
           d.batch.asInstanceOf[CustomPredicateBatch]
       }.head
-      assert(batch.predicates.exists(_.name() == "COM.TEST.MY_SEARCH"),
+      assert(batch.predicates.exists(_.name() == "com.test.MY_SEARCH"),
         "Custom predicate from infix rewrite should be pushed")
       // CASE WHEN i > 7 filters to i = 8, 9
       checkAnswer(df, (8 until 10).map(i => Row(i, -i)))
@@ -1155,7 +1155,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         case d: BatchScanExec =>
           d.batch.asInstanceOf[CustomPredicateBatch]
       }.head
-      assert(batch.predicates.exists(_.name() == "COM.TEST.MY_SEARCH"),
+      assert(batch.predicates.exists(_.name() == "com.test.MY_SEARCH"),
         "Custom predicate 'my_search' should be pushed with canonical name")
       // The data source consumes my_search: filters out i=0
       checkAnswer(df, (1 until 10).map(i => Row(i, -i)))
@@ -1171,7 +1171,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         case d: BatchScanExec =>
           d.batch.asInstanceOf[CustomPredicateBatch]
       }.head
-      assert(batch.predicates.exists(_.name() == "COM.TEST.MY_SEARCH"),
+      assert(batch.predicates.exists(_.name() == "com.test.MY_SEARCH"),
         "Custom predicate should be pushed")
       assert(batch.predicates.exists(_.name() == ">"),
         "Standard predicate '>' should also be pushed")
@@ -1322,7 +1322,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         case d: BatchScanExec =>
           d.batch.asInstanceOf[CustomPredicateBatch]
       }.head
-      val mySearch = batch.predicates.find(_.name() == "COM.TEST.MY_SEARCH")
+      val mySearch = batch.predicates.find(_.name() == "com.test.MY_SEARCH")
       assert(mySearch.isDefined, "my_search predicate should be pushed")
       // Should have 2 arguments (i and j column references)
       val args = mySearch.get.children()
@@ -2157,7 +2157,7 @@ class CustomPredicateScanBuilder extends ScanBuilder
 
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
     val (supported, unsupported) = predicates.partition { p =>
-      p.name() == "COM.TEST.MY_SEARCH" || p.name() == ">"
+      p.name() == "com.test.MY_SEARCH" || p.name() == ">"
     }
     this.predicates = supported
     unsupported
@@ -2174,14 +2174,14 @@ class CustomPredicateScanBuilder extends ScanBuilder
 /**
  * Batch that actually consumes pushed predicates for filtering:
  * - ">" filters by lower bound (same as AdvancedBatchWithV2Filter)
- * - "COM.TEST.MY_SEARCH" filters rows where first arg (i) > 0
+ * - "com.test.MY_SEARCH" filters rows where first arg (i) > 0
  */
 class CustomPredicateBatch(
     val predicates: Array[Predicate],
     val requiredSchema: StructType) extends Batch {
 
   override def planInputPartitions(): Array[InputPartition] = {
-    val hasMySearch = predicates.exists(_.name() == "COM.TEST.MY_SEARCH")
+    val hasMySearch = predicates.exists(_.name() == "com.test.MY_SEARCH")
     val lowerBound = predicates.collectFirst {
       case p: Predicate if p.name().equals(">") =>
         p.children()(1).asInstanceOf[LiteralValue[_]].value

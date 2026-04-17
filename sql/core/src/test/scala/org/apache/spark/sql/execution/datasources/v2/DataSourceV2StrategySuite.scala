@@ -1404,7 +1404,7 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
   test("SPARK-55869: CustomPredicateDescriptor convenience constructor derives sqlName") {
     val desc = new org.apache.spark.sql.connector.catalog.CustomPredicateDescriptor(
       "com.mycompany.MY_FUNC", Array(IntegerType), true)
-    assert(desc.canonicalName() == "COM.MYCOMPANY.MY_FUNC")
+    assert(desc.canonicalName() == "com.mycompany.MY_FUNC")
     assert(desc.sqlName() == "MY_FUNC")
   }
 
@@ -1418,8 +1418,16 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     assert(d1 == d2)
     assert(d1.hashCode() == d2.hashCode())
     assert(d1 != d3)
-    assert(d1.toString.contains("COM.TEST.FUNC"))
-    assert(d1.toString.contains("FUNC"))
+    assert(d1.toString.contains("com.test.FUNC"))
+    assert(d1.toString.contains("func"))
+  }
+
+  test("SPARK-55869: CustomPredicateDescriptor rejects null parameterTypes") {
+    val e = intercept[IllegalArgumentException] {
+      new org.apache.spark.sql.connector.catalog.CustomPredicateDescriptor(
+        "com.test.FUNC", "func", null, true)
+    }
+    assert(e.getMessage.contains("parameterTypes must not be null"))
   }
 
   test("SPARK-55869: NOT(RLIKE) translates to V2 NOT(RLIKE) predicate") {

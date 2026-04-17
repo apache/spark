@@ -46,32 +46,23 @@ object ResolveCustomPredicates extends Rule[LogicalPlan] {
     // WHERE-only constructs. If a custom predicate name appears elsewhere
     // (e.g. SELECT list), it stays unresolved and ResolveFunctions reports an error.
     plan.resolveOperatorsUp {
-    case f @ Filter(condition, child) if hasUnresolvedFunctions(condition) =>
-      val descriptors = collectCustomPredicates(child)
-      if (descriptors.nonEmpty) {
-        val resolved = condition.transformUp {
-          // Match single-part function names only; multi-part names are catalog lookups
-          case u: UnresolvedFunction if u.nameParts.length == 1 =>
-            findDescriptor(descriptors, u.nameParts.head) match {
-              case Some(descriptor) =>
-                // Insert implicit casts when descriptor declares expected types
-                // and argument count matches; otherwise pass arguments as-is
-                val args = if (descriptor.parameterTypes() != null &&
-                    descriptor.parameterTypes().length > 0 &&
-                    descriptor.parameterTypes().length == u.arguments.length) {
-                  castArgumentsIfNeeded(u.arguments, descriptor)
-                } else {
-                  u.arguments
-                }
-                CustomPredicateExpression(descriptor, args)
-              case None => u
-            }
+      case f @ Filter(condition, child) if hasUnresolvedFunctions(condition) =>
+        val descriptors = collectCustomPredicates(child)
+        if (descriptors.nonEmpty) {
+          val resolved = condition.transformUp {
+            // Match single-part function names only; multi-part names are catalog lookups
+            case u: UnresolvedFunction if u.nameParts.length == 1 =>
+              findDescriptor(descriptors, u.nameParts.head) match {
+                case Some(descriptor) =>
+                  CustomPredicateExpression(descriptor, castArguments(u.arguments, descriptor))
+                case None => u
+              }
+          }
+          Filter(resolved, child)
+        } else {
+          f
         }
-        Filter(resolved, child)
-      } else {
-        f
-      }
-  }
+    }
   }
 
   private def hasUnresolvedFunctions(expr: Expression): Boolean = {
@@ -112,14 +103,20 @@ object ResolveCustomPredicates extends Rule[LogicalPlan] {
     matches.headOption
   }
 
-  private def castArgumentsIfNeeded(
+  /**
+   * Inserts implicit casts when the descriptor declares expected types and the argument
+   * count matches. Declared types are advisory: mismatches in arity or unresolved
+   * arguments are passed through unchanged and left for the data source to accept
+   * or reject.
+   */
+  private def castArguments(
       args: Seq[Expression],
       descriptor: CustomPredicateDescriptor): Seq[Expression] = {
     val paramTypes = descriptor.parameterTypes()
-    args.zipWithIndex.map { case (arg, i) =>
-      if (i < paramTypes.length && paramTypes(i) != null &&
-          arg.resolved && arg.dataType != paramTypes(i)) {
-        Cast(arg, paramTypes(i))
+    if (paramTypes.length != args.length) return args
+    args.zip(paramTypes).map { case (arg, paramType) =>
+      if (paramType != null && arg.resolved && arg.dataType != paramType) {
+        Cast(arg, paramType)
       } else {
         arg
       }

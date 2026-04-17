@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.catalog;
 
 import java.util.Arrays;
-import java.util.Locale;
 import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
@@ -27,10 +26,16 @@ import org.apache.spark.sql.types.DataType;
 /**
  * Describes a custom predicate function that a data source supports for pushdown.
  *
- * <p>The canonical name must be dot-qualified to avoid collisions with Spark's built-in
- * predicate names (e.g. "com.mycompany.INDEXQUERY", not just "INDEXQUERY"). This follows
- * the same convention as
- * {@link org.apache.spark.sql.connector.catalog.functions.BoundFunction#canonicalName()}.
+ * <p>The canonical name is the identifier used in the V2 {@code Predicate} wire format
+ * and is returned to the data source verbatim via {@code predicate.name()}. It must be
+ * dot-qualified to avoid collisions with Spark's unqualified built-in predicate names
+ * (e.g. {@code "com.mycompany.INDEXQUERY"}, not just {@code "INDEXQUERY"}). The casing
+ * is preserved exactly as provided; data sources that match on the canonical name should
+ * use an exact-string comparison.
+ *
+ * <p>The SQL name is what users write in queries. It is matched case-insensitively,
+ * so {@code "indexquery"}, {@code "IndexQuery"} and {@code "INDEXQUERY"} all resolve
+ * to the same descriptor.
  *
  * <p>Parameter types are advisory: the analyzer uses them for implicit cast hints but
  * does not reject queries when types don't match exactly. The data source can reject
@@ -41,6 +46,8 @@ import org.apache.spark.sql.types.DataType;
  */
 @Evolving
 public class CustomPredicateDescriptor {
+    private static final DataType[] NO_PARAM_TYPES = new DataType[0];
+
     private final String canonicalName;
     private final String sqlName;
     private final DataType[] parameterTypes;
@@ -49,14 +56,16 @@ public class CustomPredicateDescriptor {
     /**
      * Creates a new custom predicate descriptor.
      *
-     * @param canonicalName  Dot-qualified canonical name (e.g. "com.mycompany.INDEXQUERY").
+     * @param canonicalName  Dot-qualified canonical name (e.g. {@code "com.mycompany.INDEXQUERY"}).
      *                       Must contain at least one '.' to enforce namespace qualification.
-     *                       This is the name used in the V2 Predicate wire format.
-     * @param sqlName        The short name used in SQL syntax (e.g. "indexquery"). This is what
-     *                       users write in SQL queries. Case-insensitive.
-     * @param parameterTypes Expected parameter types for implicit cast hints.
-     *                       Null entries mean "any type" for that position.
-     *                       An empty array means any number of arguments of any type.
+     *                       Stored and returned verbatim; this is the name passed to the data
+     *                       source in the V2 Predicate wire format.
+     * @param sqlName        The short name used in SQL syntax (e.g. {@code "indexquery"}).
+     *                       Matched case-insensitively against user-written function calls.
+     * @param parameterTypes Expected parameter types for implicit cast hints. Null entries
+     *                       mean "any type" for that position. An empty array means any number
+     *                       of arguments of any type. Must not be null: pass an empty array
+     *                       to opt out of cast hints entirely.
      * @param isDeterministic Whether the function is deterministic (affects optimizer decisions)
      */
     public CustomPredicateDescriptor(
@@ -70,14 +79,18 @@ public class CustomPredicateDescriptor {
         if (sqlName == null) {
             throw new IllegalArgumentException("sqlName must not be null");
         }
+        if (parameterTypes == null) {
+            throw new IllegalArgumentException(
+                "parameterTypes must not be null; use an empty array to opt out of cast hints");
+        }
         if (!canonicalName.contains(".")) {
             throw new IllegalArgumentException(
                 "Canonical name must be dot-qualified (e.g. 'com.mycompany.FUNC'), got: "
                   + canonicalName);
         }
-        this.canonicalName = canonicalName.toUpperCase(Locale.ROOT);
-        this.sqlName = sqlName.toUpperCase(Locale.ROOT);
-        this.parameterTypes = parameterTypes != null ? parameterTypes.clone() : null;
+        this.canonicalName = canonicalName;
+        this.sqlName = sqlName;
+        this.parameterTypes = parameterTypes.length == 0 ? NO_PARAM_TYPES : parameterTypes.clone();
         this.isDeterministic = isDeterministic;
     }
 
@@ -97,9 +110,15 @@ public class CustomPredicateDescriptor {
 
     public String canonicalName() { return canonicalName; }
     public String sqlName() { return sqlName; }
+
+    /**
+     * Returns the declared parameter types, or an empty array if none were declared.
+     * Never null. The returned array is a defensive copy; callers may mutate it freely.
+     */
     public DataType[] parameterTypes() {
-        return parameterTypes != null ? parameterTypes.clone() : null;
+        return parameterTypes.length == 0 ? NO_PARAM_TYPES : parameterTypes.clone();
     }
+
     public boolean isDeterministic() { return isDeterministic; }
 
     @Override
@@ -108,8 +127,8 @@ public class CustomPredicateDescriptor {
         if (!(o instanceof CustomPredicateDescriptor)) return false;
         CustomPredicateDescriptor that = (CustomPredicateDescriptor) o;
         return isDeterministic == that.isDeterministic
-            && Objects.equals(canonicalName, that.canonicalName)
-            && Objects.equals(sqlName, that.sqlName)
+            && canonicalName.equals(that.canonicalName)
+            && sqlName.equals(that.sqlName)
             && Arrays.equals(parameterTypes, that.parameterTypes);
     }
 

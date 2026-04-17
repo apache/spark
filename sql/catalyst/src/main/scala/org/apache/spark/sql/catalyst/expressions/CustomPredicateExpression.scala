@@ -48,8 +48,9 @@ case class CustomPredicateExpression(
 
   override def eval(input: InternalRow): Any = {
     throw SparkException.internalError(
-      s"Custom predicate '${descriptor.sqlName()}' cannot be evaluated by Spark. " +
-      s"It must be pushed to the data source '${descriptor.canonicalName()}'.")
+      s"Custom predicate '${descriptor.sqlName()}' " +
+      s"(canonical name '${descriptor.canonicalName()}') cannot be evaluated by Spark; " +
+      s"it must be pushed down by the data source.")
   }
 
   override protected def withNewChildrenInternal(

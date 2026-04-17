@@ -449,8 +449,8 @@ class V2ExpressionBuilder(
         None
       }
     // Layer 2 custom predicates: translate to V2 Predicate using the descriptor's
-    // dot-qualified canonical name (e.g. "COM.MYCO.MY_SEARCH") so the data source
-    // can identify it in pushPredicates().
+    // dot-qualified canonical name verbatim (e.g. "com.myco.my_search") so the data
+    // source can identify it in pushPredicates().
     case cpe: CustomPredicateExpression =>
       val childExprs = cpe.arguments.flatMap(generateExpression(_))
       if (childExprs.length == cpe.arguments.length) {

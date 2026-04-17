@@ -2089,55 +2089,45 @@ class Analyzer(
     }
 
     /**
-     * Collects custom predicate SQL names from DSv2 tables referenced in the plan.
-     * Checks temp views (via catalog lookup) and already-resolved DataSourceV2Relations.
-     * Returns an empty set quickly when the feature is disabled or no DSv2 relations exist.
-     *
-     * Note: This is called once per LookupFunctions invocation on a partially resolved
-     * plan. If relations are resolved in later iterations, new custom predicate names
-     * will be picked up on the next LookupFunctions pass (the Resolution batch is
-     * fixed-point, so this converges).
+     * Collects custom predicate SQL names (upper-cased) from DSv2 tables reachable from
+     * the plan. LookupFunctions runs once in the "Simple Sanity Check" batch before
+     * relation resolution, so we inspect both [[UnresolvedRelation]]s (by looking up
+     * matching temp views) and any [[DataSourceV2Relation]]s that are already resolved
+     * (e.g., those produced by DataFrame APIs). Returns an empty set when the feature
+     * is disabled.
      */
     private def collectCustomPredicateNames(plan: LogicalPlan): Set[String] = {
       if (!conf.extendedPredicatePushdownEnabled) return Set.empty
-      // Quick check: skip traversal if no unresolved relations or DSv2 relations exist
-      val hasRelevantNodes = plan.exists {
-        case _: UnresolvedRelation => true
-        case _: DataSourceV2Relation => true
-        case _ => false
-      }
-      if (!hasRelevantNodes) return Set.empty
 
       val names = mutable.Set.empty[String]
       plan.foreach {
         case u: UnresolvedRelation =>
+          // Temp views are the only unresolved relations that can be resolved
+          // synchronously here; catalog-backed relations are picked up during the
+          // Resolution batch where ResolveCustomPredicates runs directly.
           relationResolution.lookupTempView(u.multipartIdentifier).foreach { tvr =>
-            tvr.plan.foreach(collectFromPlan(_, names))
+            tvr.plan.foreach(collectNamesFromPlan(_, names))
           }
         case r: DataSourceV2Relation =>
-          collectFromTable(r.table, names)
+          collectNamesFromTable(r.table, names)
         case _ =>
       }
       names.toSet
     }
 
-    private def collectFromPlan(
+    private def collectNamesFromPlan(
         plan: LogicalPlan, names: mutable.Set[String]): Unit = {
       plan.foreach {
-        case r: DataSourceV2Relation => collectFromTable(r.table, names)
+        case r: DataSourceV2Relation => collectNamesFromTable(r.table, names)
         case _ =>
       }
     }
 
-    private def collectFromTable(
-        table: Table, names: mutable.Set[String]): Unit = {
-      table match {
-        case t: SupportsCustomPredicates =>
-          t.customPredicates().foreach { d =>
-            names += d.sqlName().toUpperCase(Locale.ROOT)
-          }
-        case _ =>
-      }
+    private def collectNamesFromTable(
+        table: Table, names: mutable.Set[String]): Unit = table match {
+      case t: SupportsCustomPredicates =>
+        t.customPredicates().foreach(d => names += d.sqlName().toUpperCase(Locale.ROOT))
+      case _ =>
     }
 
     def normalizeFuncName(name: Seq[String]): Seq[String] = {
