@@ -27,7 +27,7 @@ import org.scalactic.source.Position
 import org.scalatest.{Suite, Tag}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{QueryTestBase, Row}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
@@ -203,7 +203,7 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
  * Helper trait that can be extended by all external SQL test suites.
  * Now a thin alias for [[org.apache.spark.sql.QueryTestBase]].
  */
-private[sql] trait SQLTestUtilsBase extends org.apache.spark.sql.QueryTestBase
+private[sql] trait SQLTestUtilsBase extends QueryTestBase
 
 private[sql] object SQLTestUtils {
 
