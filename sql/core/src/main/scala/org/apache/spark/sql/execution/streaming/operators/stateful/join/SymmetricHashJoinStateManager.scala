@@ -247,9 +247,9 @@ class SymmetricHashJoinStateManagerV4(
   // When there is no event time column in the value and no watermark ordinal in the key,
   // the secondary index (TsWithKey) will never be used for eviction. Skip writing to it
   // to avoid unnecessary RocksDB merge overhead.
-  // TODO: This could be further optimized by also considering whether the state watermark
-  //   predicate is defined. Even when an event time column exists, the secondary index is
-  //   unused if eviction is not possible (e.g., only one side defines a watermark in a time
+  // TODO(SPARK-56536): This could be further optimized by also considering whether the state
+  //   watermark predicate is defined. Even when an event time column exists, the secondary index
+  //   is unused if eviction is not possible (e.g., only one side defines a watermark in a time
   //   interval join). That would require propagating the predicate information here.
   private val hasEventTime: Boolean =
     eventTimeColIdxOpt.isDefined || joinKeyOrdinalForWatermark.isDefined
