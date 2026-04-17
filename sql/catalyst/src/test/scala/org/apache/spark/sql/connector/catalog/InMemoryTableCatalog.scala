@@ -21,7 +21,7 @@ import java.util
 import java.util.Collections
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.jdk.CollectionConverters._
 
@@ -48,11 +48,6 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
   private var _name: Option[String] = None
   private var copyOnLoad: Boolean = false
-  private val columnIdCounter = new AtomicLong(0)
-
-  private def assignColumnIds(columns: Array[Column]): Array[Column] = {
-    columns.map(c => Column.withId(c, columnIdCounter.incrementAndGet().toString))
-  }
 
   private def reconcileColumnIds(
       oldColumns: Array[Column],
@@ -63,7 +58,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
         case Some(oldCol) if oldCol.id() != null =>
           Column.withId(newCol, oldCol.id())
         case _ =>
-          Column.withId(newCol, columnIdCounter.incrementAndGet().toString)
+          Column.withId(newCol, InMemoryBaseTable.nextColumnId().toString)
       }
     }
   }
@@ -175,8 +170,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
 
     val tableName = s"$name.${ident.quoted}"
-    val columnsWithIds = assignColumnIds(columns)
-    val table = new InMemoryTable(tableName, columnsWithIds, partitions, properties, constraints,
+    val table = new InMemoryTable(tableName, columns, partitions, properties, constraints,
       distribution, ordering, requiredNumPartitions, advisoryPartitionSize,
       distributionStrictlyRequired, numRowsPerSplit)
     tables.put(ident, table)
