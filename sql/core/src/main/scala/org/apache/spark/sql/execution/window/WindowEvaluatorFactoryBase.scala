@@ -21,9 +21,10 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkException
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Add, AggregateWindowFunction, Ascending, Attribute, BoundReference, CurrentRow, DateAdd, DateAddYMInterval, DecimalAddNoOverflowCheck, Descending, Expression, ExtractANSIIntervalDays, FrameLessOffsetWindowFunction, FrameType, IdentityProjection, IntegerLiteral, MutableProjection, NamedExpression, OffsetWindowFunction, PythonFuncExpression, RangeFrame, RowFrame, RowOrdering, SortOrder, SpecifiedWindowFrame, TimestampAddInterval, TimestampAddYMInterval, UnaryMinus, UnboundedFollowing, UnboundedPreceding, UnsafeProjection, WindowExpression}
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{CalendarIntervalType, DateType, DayTimeIntervalType, DecimalType, IntegerType, TimestampNTZType, TimestampType, YearMonthIntervalType}
@@ -191,13 +192,13 @@ trait WindowEvaluatorFactoryBase {
         // in a single Window physical node. Therefore, we can assume no SQL aggregation
         // functions if Pandas UDF exists. In the future, we might mix Pandas UDF and SQL
         // aggregation function in a single physical node.
+        val aggFilters: Array[Option[Expression]] = expressions.map {
+          case WindowExpression(ae: AggregateExpression, _) => ae.filter
+          case _ => None
+        }.toArray
         def processor = if (functions.exists(_.isInstanceOf[PythonFuncExpression])) {
           null
         } else {
-          val aggFilters = expressions.map {
-            case WindowExpression(ae: AggregateExpression, _) => ae.filter
-            case _ => None
-          }.toArray
           AggregateProcessor(
             functions,
             ordinal,
@@ -206,6 +207,8 @@ trait WindowEvaluatorFactoryBase {
               MutableProjection.create(expressions, schema),
             aggFilters)
         }
+        val conf = SQLConf.get
+        val blockSize = conf.windowSegmentTreeBlockSize
 
         // Create the factory to produce WindowFunctionFrame.
         val factory = key match {
@@ -275,12 +278,34 @@ trait WindowEvaluatorFactoryBase {
 
           // Moving Frame.
           case ("AGGREGATE", frameType, lower, upper, _) =>
-            target: InternalRow => {
-              new SlidingWindowFunctionFrame(
-                target,
-                processor,
-                createBoundOrdering(frameType, lower, timeZone),
-                createBoundOrdering(frameType, upper, timeZone))
+            if (eligibleForSegTree(functions, aggFilters, frameType)) {
+              val segFns = functions.map(_.asInstanceOf[DeclarativeAggregate])
+              val cacheHint = estimateMaxCachedBlocks(lower, upper, frameType, blockSize)
+              target: InternalRow => {
+                val frame = new SegmentTreeWindowFunctionFrame(
+                  target,
+                  processor,
+                  segFns,
+                  childOutput,
+                  createBoundOrdering(frameType, lower, timeZone),
+                  createBoundOrdering(frameType, upper, timeZone),
+                  (e, s) => MutableProjection.create(e, s),
+                  conf,
+                  cacheHint)
+                val tc = TaskContext.get()
+                if (tc != null) {
+                  tc.addTaskCompletionListener[Unit](_ => frame.close())
+                }
+                frame
+              }
+            } else {
+              target: InternalRow => {
+                new SlidingWindowFunctionFrame(
+                  target,
+                  processor,
+                  createBoundOrdering(frameType, lower, timeZone),
+                  createBoundOrdering(frameType, upper, timeZone))
+              }
             }
 
           case _ =>
@@ -293,6 +318,36 @@ trait WindowEvaluatorFactoryBase {
         // Create the Window Expression - Frame Factory pair.
         (expressions, factory)
     }
+  }
+
+  private def eligibleForSegTree(
+      functions: Array[Expression],
+      filters: Array[Option[Expression]],
+      frameType: FrameType): Boolean = {
+    SQLConf.get.windowSegmentTreeEnabled &&
+      frameType == RowFrame &&
+      filters.forall(_.isEmpty) &&
+      functions.forall(_.isInstanceOf[DeclarativeAggregate]) &&
+      !functions.exists {
+        case ae: AggregateExpression => ae.isDistinct
+        case _ => false
+      }
+  }
+
+  private def estimateMaxCachedBlocks(
+      lower: Expression,
+      upper: Expression,
+      frameType: FrameType,
+      blockSize: Int): Option[Int] = {
+    if (frameType != RowFrame) return Some(8)
+    val w: Option[Int] = (lower, upper) match {
+      case (CurrentRow, CurrentRow) => Some(1)
+      case (IntegerLiteral(lo), IntegerLiteral(hi)) => Some(math.abs(hi - lo) + 1)
+      case (CurrentRow, IntegerLiteral(hi)) => Some(math.abs(hi) + 1)
+      case (IntegerLiteral(lo), CurrentRow) => Some(math.abs(lo) + 1)
+      case _ => None
+    }
+    w.map(ww => math.ceil(ww.toDouble / blockSize).toInt + 2).orElse(Some(8))
   }
 
 }
