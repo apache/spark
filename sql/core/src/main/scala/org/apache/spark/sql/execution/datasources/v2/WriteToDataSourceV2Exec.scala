@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{COPY_OPERATION, DELETE_
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeleteSummaryImpl, DeltaWrite, DeltaWriter, MergeSummaryImpl, PhysicalWriteInfoImpl, RowLevelOperation, UpdateSummaryImpl, Write, WriterCommitMessage, WriteSummary}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeleteSummaryImpl, DeltaWrite, DeltaWriter, MergeSummaryImpl, PhysicalWriteInfoImpl, RowLevelOperation, RowLevelOperationTable, UpdateSummaryImpl, Write, WriterCommitMessage, WriteSummary}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SQLExecution, UnaryExecNode}
@@ -334,6 +334,26 @@ case class ReplaceDataExec(
   override protected def withNewChildInternal(newChild: SparkPlan): ReplaceDataExec = {
     copy(query = newChild)
   }
+
+  override protected def getWriteSummary(query: SparkPlan): Option[WriteSummary] = {
+    if (rowLevelCommand == DELETE) {
+      // DELETE ReplaceData plans filter out the deleted rows early in the plan, and they don't
+      // reach this node. We need to calculate this value as numScannedRows - numCopiedRows.
+      val numScannedRows = collectFirst(query) {
+        case b: BatchScanExec if b.table.isInstanceOf[RowLevelOperationTable] =>
+          getMetricValue(b.metrics, "numOutputRows")
+      }
+      val numCopiedRows = getMetricValue(metrics, "numCopiedRows")
+      val numDeletedRows = if (numScannedRows.exists(_ >= 0) && numCopiedRows >= 0) {
+        numScannedRows.get - numCopiedRows
+      } else {
+        // One of the metrics couldn't be found, also mark numDeletedRows as not found.
+        -1L
+      }
+      metrics("numDeletedRows").set(numDeletedRows)
+    }
+    super.getWriteSummary(query)
+  }
 }
 
 /**
@@ -436,7 +456,7 @@ trait RowLevelWriteExec extends V2ExistingTableWriteExec {
   /**
    * Returns the value of the named metric, or -1 if the metric is not found.
    */
-  private def getMetricValue(metrics: Map[String, SQLMetric], name: String): Long = {
+  protected def getMetricValue(metrics: Map[String, SQLMetric], name: String): Long = {
     metrics.get(name).map(_.value).getOrElse(-1L)
   }
 
