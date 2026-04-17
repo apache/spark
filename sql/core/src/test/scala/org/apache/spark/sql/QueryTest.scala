@@ -23,11 +23,14 @@ import java.nio.file.Files
 import java.util.{Locale, TimeZone, UUID}
 import java.util.regex.Pattern
 
+import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
-import org.scalatest.{Assertions, BeforeAndAfterAll, Suite}
+import org.scalactic.source.Position
+import org.scalatest.{Assertions, BeforeAndAfterAll, Suite, Tag}
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.SparkFunSuite
@@ -41,11 +44,15 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestData
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.UninterruptibleThread
 import org.apache.spark.util.Utils
 
 
@@ -531,7 +538,153 @@ trait QueryTestBase
 
 }
 
-abstract class QueryTest extends SparkFunSuite with QueryTestBase {
+trait QueryTest extends SparkFunSuite with QueryTestBase with PlanTest {
+  // Whether to materialize all test data before the first test is run
+  private var loadTestDataBeforeTests = false
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    if (loadTestDataBeforeTests) {
+      loadTestData()
+    }
+  }
+
+  /**
+   * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
+   * returns.
+   */
+  protected override def withTempDir(f: File => Unit): Unit = {
+    super.withTempDir { dir =>
+      f(dir)
+      waitForTasksToFinish()
+    }
+  }
+
+  /**
+   * A helper function for turning off/on codegen.
+   */
+  protected def testWithWholeStageCodegenOnAndOff(testName: String)(f: String => Unit): Unit = {
+    Seq("false", "true").foreach { codegenEnabled =>
+      val isTurnOn = if (codegenEnabled == "true") "on" else "off"
+      test(s"$testName (whole-stage-codegen ${isTurnOn})") {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled) {
+          f(codegenEnabled)
+        }
+      }
+    }
+  }
+
+  /**
+   * Materialize the test data immediately after the `SQLContext` is set up.
+   * This is necessary if the data is accessed by name but not through direct reference.
+   */
+  protected def setupTestData(): Unit = {
+    loadTestDataBeforeTests = true
+  }
+
+  /**
+   * Disable stdout and stderr when running the test. To not output the logs to the console,
+   * ConsoleAppender's `follow` should be set to `true` so that it will honor reassignments of
+   * System.out or System.err. Otherwise, ConsoleAppender will still output to the console even if
+   * we change System.out and System.err.
+   */
+  protected def testQuietly(name: String)(f: => Unit): Unit = {
+    test(name) {
+      quietly {
+        f
+      }
+    }
+  }
+
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
+      (implicit pos: Position): Unit = {
+    if (testTags.exists(_.isInstanceOf[DisableAdaptiveExecution])) {
+      super.test(testName, testTags: _*) {
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+          testFun
+        }
+      }
+    } else {
+      super.test(testName, testTags: _*)(testFun)
+    }
+  }
+
+  /**
+   * Run a test on a separate `UninterruptibleThread`.
+   */
+  protected def testWithUninterruptibleThread(name: String, quietly: Boolean = false)
+    (body: => Unit): Unit = {
+    val timeoutMillis = 10000
+    @transient var ex: Throwable = null
+
+    def runOnThread(): Unit = {
+      val thread = new UninterruptibleThread(s"Testing thread for test $name") {
+        override def run(): Unit = {
+          try {
+            body
+          } catch {
+            case NonFatal(e) =>
+              ex = e
+          }
+        }
+      }
+      thread.setDaemon(true)
+      thread.start()
+      thread.join(timeoutMillis)
+      if (thread.isAlive) {
+        thread.interrupt()
+        fail(
+          s"Test '$name' running on o.a.s.util.UninterruptibleThread timed out after" +
+            s" $timeoutMillis ms")
+      } else if (ex != null) {
+        throw ex
+      }
+    }
+
+    if (quietly) {
+      testQuietly(name) { runOnThread() }
+    } else {
+      test(name) { runOnThread() }
+    }
+  }
+
+  /**
+   * Copy file in jar's resource to a temp file, then pass it to `f`.
+   * This function is used to make `f` can use the path of temp file(e.g. file:/), instead of
+   * path of jar's resource which starts with 'jar:file:/'
+   */
+  protected def withResourceTempPath(resourcePath: String)(f: File => Unit): Unit = {
+    val inputStream =
+      Thread.currentThread().getContextClassLoader.getResourceAsStream(resourcePath)
+    withTempDir { dir =>
+      val tmpFile = new File(dir, "tmp")
+      Files.copy(inputStream, tmpFile.toPath)
+      f(tmpFile)
+    }
+  }
+
+  /**
+   * Waits for all tasks on all executors to be finished.
+   */
+  protected def waitForTasksToFinish(): Unit = {
+    eventually(timeout(10.seconds)) {
+      assert(spark.sparkContext.statusTracker
+        .getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+    }
+  }
+
+  /**
+   * Creates the specified number of temporary directories, which is then passed to `f` and will be
+   * deleted after `f` returns.
+   */
+  protected def withTempPaths(numPaths: Int)(f: Seq[File] => Unit): Unit = {
+    val files = Array.fill[File](numPaths)(Utils.createTempDir().getCanonicalFile)
+    try f(files.toImmutableArraySeq) finally {
+      // wait for all tasks to finish before deleting files
+      waitForTasksToFinish()
+      files.foreach(Utils.deleteRecursively)
+    }
+  }
 
   protected def getCurrentClassCallSitePattern: String = {
     val cs = Thread.currentThread().getStackTrace()(2)
