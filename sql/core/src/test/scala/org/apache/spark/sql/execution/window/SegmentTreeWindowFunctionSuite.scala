@@ -1,0 +1,230 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.execution.window
+
+import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
+
+/**
+ * End-to-end tests for the block-chunked segment-tree moving window frame.
+ * Covers test-plan.md the frame integration: various cases (basic aggregates), various cases
+ * (frame-size boundaries), min-partition-rows fallback.
+ */
+class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
+
+  import testImplicits._
+
+  // Common config: force the segment-tree path regardless of partition size
+  // (we exercise the fallback explicitly below).
+  private val enableSegTree: Map[String, String] = Map(
+    SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
+    SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1")
+
+  private val disableSegTree: Map[String, String] = Map(
+    SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "false")
+
+  /** Build `f(conf)` twice (enabled / disabled) and assert equal results. */
+  private def checkEquivalence(build: () => DataFrame): Unit = {
+    val baseline: Array[Row] = withSQLConf(disableSegTree.toSeq: _*) {
+      build().collect().sortBy(_.toString)
+    }
+    withSQLConf(enableSegTree.toSeq: _*) {
+      val actual = build().collect().sortBy(_.toString)
+      assert(actual.toSeq === baseline.toSeq,
+        s"segment-tree output differs from baseline.\nExpected: ${baseline.toSeq}\n" +
+          s"Actual:   ${actual.toSeq}")
+    }
+  }
+
+  /** Standard fixture: 3 partitions, sizes 40/40/40, values = row index. */
+  private def baseDF: DataFrame = {
+    spark.range(0, 120).selectExpr(
+      "id",
+      "(id % 3) AS pk",
+      "CAST(id AS INT) AS v")
+  }
+
+  private def winSpec(lo: Int, hi: Int) =
+    Window.partitionBy($"pk").orderBy($"id").rowsBetween(lo, hi)
+
+  // ---------------- A1: basic aggregate equivalence ----------------
+
+  test("MIN over ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING") {
+    checkEquivalence(() =>
+      baseDF.select($"id", $"pk", min($"v").over(winSpec(-3, 3)).as("agg")))
+  }
+
+  test("MAX over ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING") {
+    checkEquivalence(() =>
+      baseDF.select($"id", $"pk", max($"v").over(winSpec(-3, 3)).as("agg")))
+  }
+
+  test("SUM over ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING") {
+    checkEquivalence(() =>
+      baseDF.select($"id", $"pk", sum($"v").over(winSpec(-3, 3)).as("agg")))
+  }
+
+  test("COUNT over ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING") {
+    checkEquivalence(() =>
+      baseDF.select($"id", $"pk", count($"v").over(winSpec(-3, 3)).as("agg")))
+  }
+
+  test("AVG over ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING") {
+    checkEquivalence(() =>
+      baseDF.select($"id", $"pk", avg($"v").over(winSpec(-3, 3)).as("agg")))
+  }
+
+  test("MIN + MAX + SUM share a single window frame") {
+    checkEquivalence(() =>
+      baseDF.select(
+        $"id",
+        $"pk",
+        min($"v").over(winSpec(-3, 3)).as("mn"),
+        max($"v").over(winSpec(-3, 3)).as("mx"),
+        sum($"v").over(winSpec(-3, 3)).as("sm")))
+  }
+
+  // ---------------- A2: frame-size boundaries ----------------
+
+  test("frame size = 1 (CURRENT ROW only)") {
+    checkEquivalence(() =>
+      baseDF.select($"id", $"pk", sum($"v").over(winSpec(0, 0)).as("agg")))
+  }
+
+  test("frame spans full partition") {
+    // 40 rows per partition; use a wide symmetric window covering it.
+    checkEquivalence(() =>
+      baseDF.select($"id", $"pk", sum($"v").over(winSpec(-100, 100)).as("agg")))
+  }
+
+  test("frame extends past both partition edges") {
+    checkEquivalence(() =>
+      baseDF.select($"id", $"pk",
+        sum($"v").over(winSpec(-50, 50)).as("agg"),
+        min($"v").over(winSpec(-50, 50)).as("mn"),
+        max($"v").over(winSpec(-50, 50)).as("mx")))
+  }
+
+  
+  test("partition below minPartitionRows falls back to SlidingWindowFunctionFrame") {
+    // 5-row partition, min threshold = 10 -> must fall back.
+    val df = spark.range(0, 5).selectExpr(
+      "id", "0 AS pk", "CAST(id AS INT) AS v")
+    val enabledConf = Map(
+      SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
+      SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "10")
+
+    // 1. Result correctness against baseline.
+    val baseline = withSQLConf(disableSegTree.toSeq: _*) {
+      df.select($"id", sum($"v").over(winSpec(-1, 1)).as("s"))
+        .collect().sortBy(_.toString)
+    }
+    val actual = withSQLConf(enabledConf.toSeq: _*) {
+      df.select($"id", sum($"v").over(winSpec(-1, 1)).as("s"))
+        .collect().sortBy(_.toString)
+    }
+    assert(actual.toSeq === baseline.toSeq)
+
+    // 2. Directly exercise the frame to confirm the fallback flag flips.
+    withSQLConf(enabledConf.toSeq: _*) {
+      val frame = SegmentTreeWindowFunctionSuiteHelper.buildSmallPartitionFrame(
+        SQLConf.get, rows = 5)
+      assert(frame.fallbackUsed,
+        "expected fallbackUsed=true for partition smaller than minPartitionRows")
+      frame.close()
+    }
+  }
+}
+
+/**
+ * Helper living in the same package so tests can construct a frame directly
+ * without going through Catalyst. This mirrors the `private[window]` hook
+ * described in contract Section 1.3.
+ */
+private object SegmentTreeWindowFunctionSuiteHelper {
+  import org.apache.spark.{SparkEnv, TaskContext}
+  import org.apache.spark.memory.MemoryTestingUtils
+  import org.apache.spark.sql.catalyst.InternalRow
+  import org.apache.spark.sql.catalyst.expressions._
+  import org.apache.spark.sql.catalyst.expressions.aggregate.Sum
+  import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
+  import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
+  import org.apache.spark.sql.types.IntegerType
+
+  def buildSmallPartitionFrame(
+      conf: SQLConf, rows: Int): SegmentTreeWindowFunctionFrame = {
+    val attr = AttributeReference("v", IntegerType, nullable = false)()
+    val input = Seq[Attribute](attr)
+    val fn = Sum(attr)
+    val bufAttrs = fn.aggBufferAttributes
+    val processor = AggregateProcessor(
+      Array[Expression](fn),
+      0,
+      input,
+      (es, s) => GenerateMutableProjection.generate(es, s),
+      Array[Option[Expression]](None))
+    val target = new SpecificInternalRow(Seq(bufAttrs.head.dataType))
+    val tc = {
+      val existing = TaskContext.get()
+      if (existing != null) existing
+      else {
+        val fake = MemoryTestingUtils.fakeTaskContext(SparkEnv.get)
+        TaskContext.setTaskContext(fake)
+        fake
+      }
+    }
+    val array = new ExternalAppendOnlyUnsafeRowArray(
+      tc.taskMemoryManager(),
+      SparkEnv.get.blockManager,
+      SparkEnv.get.serializerManager,
+      tc,
+      1024,
+      SparkEnv.get.memoryManager.pageSizeBytes,
+      Int.MaxValue,
+      Long.MaxValue,
+      Int.MaxValue,
+      Long.MaxValue)
+    val unsafeProj = UnsafeProjection.create(Array(attr.dataType))
+    var i = 0
+    while (i < rows) {
+      val r = new GenericInternalRow(Array[Any](i))
+      array.add(unsafeProj(r))
+      i += 1
+    }
+    val frame = new SegmentTreeWindowFunctionFrame(
+      target,
+      processor,
+      Array(fn),
+      input,
+      RowBoundOrdering(-1),
+      RowBoundOrdering(1),
+      (es, s) => GenerateMutableProjection.generate(es, s),
+      conf,
+      None)
+    frame.prepare(array)
+    var j = 0
+    while (j < rows) {
+      frame.write(j, InternalRow.empty)
+      j += 1
+    }
+    frame
+  }
+}
