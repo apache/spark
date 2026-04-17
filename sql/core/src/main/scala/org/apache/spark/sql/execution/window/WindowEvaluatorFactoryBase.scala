@@ -339,8 +339,16 @@ trait WindowEvaluatorFactoryBase {
       functions: Array[Expression],
       filters: Array[Option[Expression]],
       frameType: FrameType): Boolean = {
+    // RANGE is accepted only for single-column order specs. Multi-column
+    // RANGE with non-zero offset is already rejected by `createBoundOrdering`
+    // (see the `RangeFrame, _` internalError branch above), so gating here
+    // on `orderSpec.size == 1` matches the Sliding-path invariant exactly.
+    val frameTypeOk = frameType match {
+      case RowFrame => true
+      case RangeFrame => orderSpec.size == 1
+    }
     SQLConf.get.windowSegmentTreeEnabled &&
-      frameType == RowFrame &&
+      frameTypeOk &&
       filters.forall(_.isEmpty) &&
       functions.forall { f =>
         f.isInstanceOf[DeclarativeAggregate] && !f.isInstanceOf[AggregateWindowFunction]
@@ -356,12 +364,18 @@ trait WindowEvaluatorFactoryBase {
       upper: Expression,
       frameType: FrameType,
       blockSize: Int): Option[Int] = {
-    // Only reached via the moving-frame branch after `eligibleForSegTree`,
-    // which already requires `frameType == RowFrame`; the Frame constructor
-    // asserts the same. The former `frameType != RowFrame` shortcut was
-    // therefore dead code (the frame integration review F2).
-    assert(frameType == RowFrame,
-      s"estimateMaxCachedBlocks expects RowFrame, got $frameType")
+    // Reached via the moving-frame branch after `eligibleForSegTree`, which
+    // now accepts RowFrame or RangeFrame (single-column order). The Frame
+    // constructor asserts the same. Under RANGE the frame width is
+    // data-dependent (defined by order-key distance, not row count), so no
+    // static width inference is possible; fall back to the default cache
+    // budget and rely on the runtime LRU + TMM spiller.
+    assert(frameType == RowFrame || frameType == RangeFrame,
+      s"estimateMaxCachedBlocks expects RowFrame or RangeFrame, got $frameType")
+    if (frameType == RangeFrame) {
+      // RANGE width inferred at runtime -- use conservative default.
+      return Some(8)
+    }
     val w: Option[Int] = (lower, upper) match {
       case (CurrentRow, CurrentRow) => Some(1)
       case (IntegerLiteral(lo), IntegerLiteral(hi)) => Some(math.abs(hi - lo) + 1)

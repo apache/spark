@@ -354,4 +354,138 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
       assert(actual === expected)
     }
   }
+
+    // A5.*: RANGE frame equivalence between seg-tree path and sliding baseline.
+  //
+  // The factory (`eligibleForSegTree`) now admits RangeFrame when orderSpec
+  // has exactly one ordering expression. These tests exercise the
+  // frameType-aware admit/drop loops in SegmentTreeWindowFunctionFrame.
+  //
+  // All tests follow the same oracle pattern as NULL/NaN/collation coverage: run the same
+  // query twice (seg-tree on / off) and assert equal Row sequences.
+  // Aggregates are MIN/MAX (non-invertible) to guarantee the seg-tree
+  // code path is actually exercised rather than short-circuited.
+
+  /** Run `sql` twice (flag off / on) and checkAnswer equality. */
+  private def checkRangeEquivalence(df: DataFrame, query: String): Unit = {
+    df.createOrReplaceTempView("t")
+    try {
+      val baseline = withSQLConf(disableSegTree.toSeq: _*) {
+        spark.sql(query).collect().sortBy(_.toString)
+      }
+      withSQLConf(enableSegTree.toSeq: _*) {
+        val actual = spark.sql(query).collect().sortBy(_.toString)
+        assert(actual.toSeq === baseline.toSeq,
+          s"segment-tree output differs from baseline.\nExpected: ${baseline.toSeq}\n" +
+            s"Actual:   ${actual.toSeq}")
+      }
+    } finally {
+      spark.catalog.dropTempView("t")
+    }
+  }
+
+  test("-- RANGE INT offset basic (non-uniform gaps, MIN/MAX)") {
+    // Non-uniform k gaps (1, 3, 4, 4, 7, 10, 15, ...) so that the frame
+    // edges shift by variable amounts and admit/drop loops must consult
+    // the order-key comparator rather than just row count.
+    val df = spark.range(0, 40).selectExpr(
+      "CAST(id AS INT) AS id",
+      "(CAST(id AS INT) % 2) AS pk",
+      "CAST(CASE CAST(id AS INT) % 7 " +
+        "WHEN 0 THEN 1 WHEN 1 THEN 3 WHEN 2 THEN 4 WHEN 3 THEN 4 " +
+        "WHEN 4 THEN 7 WHEN 5 THEN 10 ELSE 15 END + (CAST(id AS INT) / 7) * 20 AS INT) AS k",
+      "CAST((id * 31) % 97 AS INT) AS v")
+    checkRangeEquivalence(df,
+      """SELECT id, pk,
+        |  MIN(v) OVER (PARTITION BY pk ORDER BY k
+        |    RANGE BETWEEN 2 PRECEDING AND 2 FOLLOWING) AS mn,
+        |  MAX(v) OVER (PARTITION BY pk ORDER BY k
+        |    RANGE BETWEEN 2 PRECEDING AND 2 FOLLOWING) AS mx
+        |FROM t""".stripMargin)
+  }
+
+  test("-- RANGE Timestamp with INTERVAL offset (MAX)") {
+    // Irregular gaps: 30min / 90min / 2h / 30min / ... so frame edges
+    // crossing the 1-hour bound must rely on the timestamp comparator.
+    val df = spark.range(0, 30).selectExpr(
+      "CAST(id AS INT) AS id",
+      "(CAST(id AS INT) % 2) AS pk",
+      "CAST(TIMESTAMP'2024-01-01 10:00:00' + " +
+        "make_interval(0, 0, 0, 0, 0, 30 * CAST(id AS INT) * " +
+        "(CASE CAST(id AS INT) % 3 WHEN 0 THEN 1 WHEN 1 THEN 3 ELSE 4 END), 0) " +
+        "AS TIMESTAMP) AS ts",
+      "CAST((id * 17) % 53 AS INT) AS v")
+    checkRangeEquivalence(df,
+      """SELECT id, pk,
+        |  MAX(v) OVER (PARTITION BY pk ORDER BY ts
+        |    RANGE BETWEEN INTERVAL '1' HOUR PRECEDING
+        |              AND INTERVAL '1' HOUR FOLLOWING) AS mx
+        |FROM t""".stripMargin)
+  }
+
+  test("-- RANGE with tie (duplicate order keys) inclusion at boundary") {
+    // k = [1, 2, 2, 2, 3, 4, 5] repeated across partitions. A frame of
+    // `0 PRECEDING AND 0 FOLLOWING` must include the FULL tie group at
+    // the current row's k, not just the current row itself. If the
+    // seg-tree path confuses RANGE with ROWS the tie group of k=2 would
+    // return a per-row MIN/MAX rather than a group-level one.
+    val rows = (0 until 40).map { i =>
+      val k = Seq(1, 2, 2, 2, 3, 4, 5)(i % 7)
+      (i, i % 2, k, (i * 13) % 41)
+    }
+    val df = rows.toDF("id", "pk", "k", "v")
+    checkRangeEquivalence(df,
+      """SELECT id, pk, k,
+        |  MIN(v) OVER (PARTITION BY pk ORDER BY k
+        |    RANGE BETWEEN 0 PRECEDING AND 0 FOLLOWING) AS mn,
+        |  MAX(v) OVER (PARTITION BY pk ORDER BY k
+        |    RANGE BETWEEN 0 PRECEDING AND 0 FOLLOWING) AS mx
+        |FROM t""".stripMargin)
+  }
+
+  test("-- RANGE frame wider than partition (C4: admit/drop loops no-op)") {
+    // Partition size 5 rows, frame covers everything. Once the first
+    // batch is admitted, the admit/drop loops in the seg-tree frame must
+    // detect the effective frame is unchanged and skip work.
+    val df = spark.range(0, 25).selectExpr(
+      "CAST(id AS INT) AS id",
+      "(CAST(id AS INT) / 5) AS pk",
+      "CAST((id * 7) % 23 AS INT) AS k",
+      "CAST((id * 19) % 101 AS INT) AS v")
+    checkRangeEquivalence(df,
+      """SELECT id, pk,
+        |  MIN(v) OVER (PARTITION BY pk ORDER BY k
+        |    RANGE BETWEEN 100 PRECEDING AND 100 FOLLOWING) AS mn,
+        |  MAX(v) OVER (PARTITION BY pk ORDER BY k
+        |    RANGE BETWEEN 100 PRECEDING AND 100 FOLLOWING) AS mx
+        |FROM t""".stripMargin)
+  }
+
+  test("-- RANGE with NULL order key (NULLS FIRST / NULLS LAST)") {
+    // k = [NULL, NULL, 1, 2, 3, NULL] repeated. Spark groups all NULLs
+    // into a single equivalence class at head (NULLS FIRST) or tail
+    // (NULLS LAST). The seg-tree admit/drop loops must treat NULL as a
+    // tie group identically to the sliding baseline.
+    val rows = (0 until 36).map { i =>
+      val kOpt: Option[Int] = (i % 6) match {
+        case 0 | 1 | 5 => None
+        case 2 => Some(1)
+        case 3 => Some(2)
+        case _ => Some(3)
+      }
+      (i, i % 2, kOpt, (i * 11) % 37)
+    }
+    val df = rows.toDF("id", "pk", "k", "v")
+    checkRangeEquivalence(df,
+      """SELECT id, pk,
+        |  MIN(v) OVER (PARTITION BY pk ORDER BY k ASC NULLS FIRST
+        |    RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS mn_nf,
+        |  MAX(v) OVER (PARTITION BY pk ORDER BY k ASC NULLS FIRST
+        |    RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS mx_nf,
+        |  MIN(v) OVER (PARTITION BY pk ORDER BY k ASC NULLS LAST
+        |    RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS mn_nl,
+        |  MAX(v) OVER (PARTITION BY pk ORDER BY k ASC NULLS LAST
+        |    RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS mx_nl
+        |FROM t""".stripMargin)
+  }
 }
