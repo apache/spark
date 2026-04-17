@@ -37,6 +37,10 @@ RUN add-apt-repository ppa:pypy/ppa
 RUN apt update
 RUN $APT_INSTALL gfortran libopenblas-dev liblapack-dev
 RUN $APT_INSTALL build-essential
+RUN $APT_INSTALL gnupg ca-certificates pandoc libcurl4-openssl-dev qpdf libssl-dev zlib1g-dev \
+                 libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev \
+                 libfontconfig1-dev libharfbuzz-dev libfribidi-dev libfreetype6-dev libpng-dev \
+                 libtiff5-dev libjpeg-dev
 
 RUN mkdir -p /usr/local/pypy/pypy3.8 && \
     curl -sqL https://downloads.python.org/pypy/pypy3.8-v7.3.11-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.8 --strip-components=1 && \
@@ -45,19 +49,15 @@ RUN mkdir -p /usr/local/pypy/pypy3.8 && \
 
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
 
-RUN $APT_INSTALL gnupg ca-certificates pandoc
 RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/' >> /etc/apt/sources.list
 RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
 RUN gpg -a --export E084DAB9 | apt-key add -
 RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/'
 RUN apt update
-RUN $APT_INSTALL r-base libcurl4-openssl-dev qpdf libssl-dev zlib1g-dev
+RUN $APT_INSTALL r-base
 RUN Rscript -e "install.packages(c('remotes', 'knitr', 'markdown', 'rmarkdown', 'testthat', 'e1071', 'survival', 'arrow', 'roxygen2', 'xml2'), repos='https://cloud.r-project.org/')"
 
 # See more in SPARK-39959, roxygen2 < 7.2.1
-RUN apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev \
-          libfontconfig1-dev libharfbuzz-dev libfribidi-dev libfreetype6-dev libpng-dev \
-          libtiff5-dev libjpeg-dev
 RUN Rscript -e "install.packages(c('remotes'), repos='https://cloud.r-project.org/')"
 RUN Rscript -e "remotes::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')"
 
