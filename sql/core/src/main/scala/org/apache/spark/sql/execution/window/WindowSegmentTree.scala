@@ -181,6 +181,20 @@ private[window] class WindowSegmentTree(
     if (oldArray != null) oldArray.clear()
   }
 
+  /**
+   * Query [lo, hi) and directly evaluate the result via `processor.evaluate`
+   * into `target`. Uses an internal pre-allocated buffer so no per-call
+   * allocation is needed. See
+   * `docs/frame-integration-contract.md` Section 2.
+   */
+  private[window] def queryInto(
+      lo: Int, hi: Int, processor: AggregateProcessor, target: InternalRow): Unit = {
+    query(lo, hi, internalQueryBuffer)
+    processor.evaluate(internalQueryBuffer, target)
+  }
+
+  private[this] val internalQueryBuffer: InternalRow = newBuffer()
+
   def query(lo: Int, hi: Int, outBuffer: InternalRow): Unit = {
     if (lo < 0 || hi > numRows || lo > hi) {
       throw new IllegalArgumentException(
