@@ -57,7 +57,8 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
       blockSize: Int = WindowSegmentTree.DefaultBlockSize,
       maxCachedBlocks: Option[Int] = None): WindowSegmentTree = {
     val tree = new WindowSegmentTree(
-      aggs, inputSchema, newMutableProjection, fanout, blockSize, maxCachedBlocks)
+      aggs, inputSchema, newMutableProjection, fanout, blockSize, maxCachedBlocks,
+      taskMemoryManager = TaskContext.get().taskMemoryManager())
     val rows = values.iterator.map { v =>
       val r = new GenericInternalRow(1)
       r.update(0, v)
@@ -311,7 +312,8 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
       val tree = new WindowSegmentTree(
         Array(minAgg), inputSchema, newMutableProjection,
         fanout = 4, blockSize = 8, maxCachedBlocks = Some(2),
-        spillThreshold = 8, inMemoryThreshold = 4)
+        spillThreshold = 8, inMemoryThreshold = 4,
+        taskMemoryManager = TaskContext.get().taskMemoryManager())
       val rows = values.iterator.map { v =>
         val r = new GenericInternalRow(1); r.update(0, v); r.asInstanceOf[InternalRow]
       }
@@ -335,7 +337,8 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
       val v3 = Seq(10, 20, 30, 40, 50, 60, 70, 80, 90, 5)
       val tree = new WindowSegmentTree(
         Array(minAgg), inputSchema, newMutableProjection,
-        fanout = 4, blockSize = 4)
+        fanout = 4, blockSize = 4,
+        taskMemoryManager = TaskContext.get().taskMemoryManager())
 
       def iterOf(vs: Seq[Int]): Iterator[InternalRow] = vs.iterator.map { v =>
         val r = new GenericInternalRow(1); r.update(0, v); r.asInstanceOf[InternalRow]

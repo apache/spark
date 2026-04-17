@@ -103,7 +103,8 @@ private[window] object SegmentTreeWindowTestHelpers {
       RowBoundOrdering(1),
       (es, s) => GenerateMutableProjection.generate(es, s),
       conf,
-      None)
+      None,
+      tc.taskMemoryManager())
     frame.prepare(array)
     var j = 0
     while (j < rows) {

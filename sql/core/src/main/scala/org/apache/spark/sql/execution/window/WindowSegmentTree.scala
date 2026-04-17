@@ -22,6 +22,7 @@ import java.util.{LinkedHashMap => JLinkedHashMap, Map => JMap}
 import scala.collection.mutable
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
+import org.apache.spark.memory.{MemoryConsumer, SparkOutOfMemoryError, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
@@ -57,7 +58,8 @@ private[window] class WindowSegmentTree(
     blockSize: Int = WindowSegmentTree.DefaultBlockSize,
     maxCachedBlocks: Option[Int] = None,
     spillThreshold: Int = Int.MaxValue,
-    inMemoryThreshold: Int = Int.MaxValue)
+    inMemoryThreshold: Int = Int.MaxValue,
+    taskMemoryManager: TaskMemoryManager = null)
   extends AutoCloseable {
 
   require(fanout >= 2, s"fanout must be >= 2, got $fanout")
@@ -66,6 +68,9 @@ private[window] class WindowSegmentTree(
   maxCachedBlocks.foreach { n =>
     require(n >= 1, s"maxCachedBlocks must be >= 1 when specified, got $n")
   }
+  require(taskMemoryManager != null,
+    "WindowSegmentTree requires a non-null TaskMemoryManager; " +
+      "in tests use `new TaskMemoryManager(new TestMemoryManager(conf), 0)`")
 
   // ---------- Schemas & projections ----------
 
@@ -98,10 +103,28 @@ private[window] class WindowSegmentTree(
   private var numRows: Int = 0
   private var numBlocks: Int = 0
   private var rowArray: ExternalAppendOnlyUnsafeRowArray = _
+  private var closed: Boolean = false
 
   /** Always-resident per-block root aggregates. `blockAggregates(i)` =
    *  merged buffer over all rows in block i. */
   private var blockAggregates: Array[InternalRow] = Array.empty
+
+  /** Rough byte width of one aggregate buffer row. Derived from buffer schema
+   *  types (defaults to 8 bytes / field, matching `SpecificInternalRow`
+   *  word-aligned slots). Used by [[blockBytes]] (contract I5). */
+  private val bufferWidthBytes: Long = {
+    // SpecificInternalRow stores each field in a MutableValue (8 bytes for
+    // most primitives, object header for complex). 8 bytes/field is the
+    // minimum lower bound; we pick 16 as a conservative heap-overhead-aware
+    // default so memory accounting is not a gross under-estimate. This is
+    // consistent with UnsafeRow's word-aligned record layout.
+    val bytesPerField = 16L
+    math.max(1L, bufferDataTypes.size.toLong * bytesPerField)
+  }
+
+  /** Bytes accounted per cached block's levels (contract Section 2.4 / I5). Covers
+   *  a factor-of-F over-estimate of the geometric series of level sizes. */
+  private[this] val blockBytes: Long = fanout.toLong * bufferWidthBytes
 
   /** `spans(L)` = number of leaves covered by a single node at level L. Depends
    *  only on fanout + blockSize, so precomputed once. */
@@ -124,17 +147,64 @@ private[window] class WindowSegmentTree(
   }
 
   /** LRU cache of per-block internal node arrays. Key = blockIdx.
-   *  Value = `Array[Array[InternalRow]]` with levels(0..h). Capacity = 0 when
-   *  `maxCachedBlocks` is `None` (rebuild-on-demand); otherwise the supplied
-   *  capacity. Callers (e.g. `SegmentTreeWindowFunctionFrame` in Batch 2)
-   *  should pass a W-aware value like `ceil(W / blockSize) + 2`. */
-  private val blockLevelsCache: JLinkedHashMap[Integer, Array[Array[InternalRow]]] = {
-    val cap = maxCachedBlocks.getOrElse(0)
+   *  Value = `Array[Array[InternalRow]]` with levels(0..h). Auto-eviction via
+   *  `removeEldestEntry` is disabled (contract I3) -- eviction is driven
+   *  explicitly from [[ensureBlockLevels]] (capacity overflow) or
+   *  [[SegTreeSpiller.spill]] (TMM pressure). Each cache entry maps 1:1 to
+   *  one [[acquireBlockMemory]] accounting. Callers (e.g.
+   *  `SegmentTreeWindowFunctionFrame`) should pass a W-aware
+   *  value like `ceil(W / blockSize) + 2`. */
+  private val blockLevelsCache: JLinkedHashMap[Integer, Array[Array[InternalRow]]] =
     new JLinkedHashMap[Integer, Array[Array[InternalRow]]](16, 0.75f, true) {
       override def removeEldestEntry(
-          eldest: JMap.Entry[Integer, Array[Array[InternalRow]]]): Boolean = {
-        cap > 0 && this.size() > cap
-      }
+          eldest: JMap.Entry[Integer, Array[Array[InternalRow]]]): Boolean = false
+    }
+
+  // ---------- Memory consumer (contract Section 2.2) ----------
+
+  /**
+   * Private MemoryConsumer tracking cached block levels under TMM.
+   *
+   * Heap accounting only (no Tungsten pages): uses
+   * [[MemoryConsumer.acquireMemory]] / [[MemoryConsumer.freeMemory]]. The
+   * [[MemoryConsumer]] base class records `used` via an `AtomicLong` when
+   * we call these -- so TMM's consumer-priority sort in
+   * `acquireExecutionMemory` sees our pressure accurately.
+   *
+   * @note `spill()` MUST NOT call `acquireMemory` (contract I1).
+   */
+  private final class SegTreeSpiller extends MemoryConsumer(
+      taskMemoryManager,
+      taskMemoryManager.pageSizeBytes(),
+      taskMemoryManager.getTungstenMemoryMode()) {
+    override def spill(size: Long, trigger: MemoryConsumer): Long = {
+      // I2: self-trigger short-circuit. Prevents re-entrant eviction when
+      // our own acquireMemory() triggers TMM to poll us.
+      if (trigger eq this) return 0L
+      // I8: rowArray spilled-to-disk detection. If the rowArray has already
+      // spilled, evicting our cache is counter-productive (rebuild would
+      // O(blockStart)-scan the spill file). Return 0L to let TMM fall
+      // through to the next consumer.
+      //
+      // TODO(SPARK-XXXXX) #segtree-spill-priority (contract Section 7 O4): current
+      // heuristic uses `spillSize > 0` as the "has spilled" signal. A more
+      // precise check would consult `UnsafeExternalSorter.getSpillWriters`
+      // state, but that API is not public. Re-evaluate after benchmark.
+      // FIXME(kentyao): upstream a public "hasSpilled" hook on the array.
+      if (rowArray != null && rowArray.spillSize > 0) return 0L
+      evictUntil(size)
+    }
+  }
+
+  private[this] val spiller: SegTreeSpiller = new SegTreeSpiller
+
+  // Task kill / completion fall-back: ensure cache is freed even if caller
+  // forgets close() (contract Section 2.5). Frame already registers a
+  // listener too; double close is idempotent (contract I4).
+  {
+    val tc = TaskContext.get()
+    if (tc != null) {
+      tc.addTaskCompletionListener[Unit](_ => close())
     }
   }
 
@@ -172,7 +242,9 @@ private[window] class WindowSegmentTree(
       numRows = n
       numBlocks = nBlocks
       blockAggregates = newBlockAggs
-      blockLevelsCache.clear()
+      // Rebuild invalidates cached block levels; release all acquired memory
+      // before dropping the cache entries (I4).
+      releaseAllCachedBlocks()
     } catch {
       case t: Throwable =>
         if (newArray != null) newArray.clear()
@@ -227,18 +299,23 @@ private[window] class WindowSegmentTree(
     }
   }
 
-  /** Terminal: releases all state. Subsequent use is undefined. */
+  /** Terminal: releases all state. Idempotent (contract I4). */
   override def close(): Unit = {
+    if (closed) return
+    // Free all cached-block accounting before dropping references.
+    releaseAllCachedBlocks()
     closeRowArray()
-    blockLevelsCache.clear()
     blockAggregates = Array.empty
     numRows = 0
     numBlocks = 0
+    closed = true
   }
 
   // ---------- Test hooks (package-private) ----------
 
   private[window] def peekBlockCount: Int = numBlocks
+
+  private[window] def testOnlySpiller(): MemoryConsumer = spiller
 
   /** NOTE: test-only; promotes block to MRU in the LRU cache as a side effect. */
   private[window] def peekLevelSize(blockIdx: Int, level: Int): Int = {
@@ -331,11 +408,43 @@ private[window] class WindowSegmentTree(
     }
   }
 
-  /** Build (or fetch from LRU) the full per-block levels array. */
+  /** Build (or fetch from LRU) the full per-block levels array. See contract
+   *  Section 3 (acquire -> build -> cache) and Section 6 pseudocode. */
   private def ensureBlockLevels(blockIdx: Int): Array[Array[InternalRow]] = {
     val cached = blockLevelsCache.get(Integer.valueOf(blockIdx))
     if (cached != null) return cached
 
+    // Enforce LRU capacity before building a new entry (I3).
+    val cap = maxCachedBlocks.getOrElse(Int.MaxValue)
+    while (blockLevelsCache.size() >= cap) {
+      if (!evictEldest()) return throwCacheEvictFailed(blockIdx)
+    }
+
+    // Acquire memory accounting for this block before building. If TMM
+    // can't grant blockBytes up-front, try one manual evict-and-retry cycle
+    // before giving up (contract Section 6).
+    if (!acquireBlockMemory(blockIdx)) {
+      if (!evictEldest() || !acquireBlockMemory(blockIdx)) {
+        // scalastyle:off throwerror
+        throw new SparkOutOfMemoryError(
+          "UNABLE_TO_ACQUIRE_MEMORY",
+          new java.util.HashMap[String, String]() {
+            put("requestedBytes", blockBytes.toString)
+            put("receivedBytes", "0")
+          })
+        // scalastyle:on throwerror
+      }
+    }
+
+    // I4: if buildBlockLevels throws, release the memory we just acquired.
+    val levels =
+      try buildBlockLevels(blockIdx)
+      catch { case t: Throwable => releaseBlockMemory(); throw t }
+    blockLevelsCache.put(Integer.valueOf(blockIdx), levels)
+    levels
+  }
+
+  private def buildBlockLevels(blockIdx: Int): Array[Array[InternalRow]] = {
     val blockStart = blockIdx * blockSize
     val blockRows = math.min(blockSize, numRows - blockStart)
 
@@ -378,10 +487,68 @@ private[window] class WindowSegmentTree(
       allLevels += parents
       prev = parents
     }
+    allLevels.toArray
+  }
 
-    val levels = allLevels.toArray
-    blockLevelsCache.put(Integer.valueOf(blockIdx), levels)
-    levels
+  private def throwCacheEvictFailed(blockIdx: Int): Nothing = {
+    throw SparkException.internalError(
+      s"LRU cache eviction failed for block $blockIdx (size=${blockLevelsCache.size})")
+  }
+
+  // ---------- Memory accounting helpers (contract Section 2.3) ----------
+
+  /** Try to acquire `blockBytes` for one cached block. Returns true on full
+   *  grant, false on partial (after rolling the partial grant back). Must
+   *  not be called from within [[SegTreeSpiller.spill]] (I1). */
+  private def acquireBlockMemory(blockIdx: Int): Boolean = {
+    val granted = spiller.acquireMemory(blockBytes)
+    if (granted < blockBytes) {
+      if (granted > 0) spiller.freeMemory(granted)
+      false
+    } else {
+      true
+    }
+  }
+
+  /** Release the accounting for one block. Caller ensures pairing with a
+   *  prior successful [[acquireBlockMemory]] (contract I4). */
+  private def releaseBlockMemory(): Unit = {
+    spiller.freeMemory(blockBytes)
+  }
+
+  /** Evict LRU blocks until `target` bytes have been freed (or cache is
+   *  empty). Returns freed bytes. Called from [[SegTreeSpiller.spill]]. */
+  private def evictUntil(target: Long): Long = {
+    var freed = 0L
+    while (freed < target && !blockLevelsCache.isEmpty) {
+      freed += evictEldestReturnBytes()
+    }
+    freed
+  }
+
+  /** Evict one LRU block. Returns true if a block was evicted. */
+  private def evictEldest(): Boolean = {
+    if (blockLevelsCache.isEmpty) return false
+    evictEldestReturnBytes()
+    true
+  }
+
+  private def evictEldestReturnBytes(): Long = {
+    val it = blockLevelsCache.entrySet().iterator()
+    if (!it.hasNext) return 0L
+    val head = it.next()
+    it.remove()
+    releaseBlockMemory()
+    blockBytes
+  }
+
+  /** Release accounting for all cached blocks and clear the cache. */
+  private def releaseAllCachedBlocks(): Unit = {
+    val n = blockLevelsCache.size()
+    if (n > 0) {
+      blockLevelsCache.clear()
+      spiller.freeMemory(n.toLong * blockBytes)
+    }
   }
 
   private def newRowArray(): ExternalAppendOnlyUnsafeRowArray = {

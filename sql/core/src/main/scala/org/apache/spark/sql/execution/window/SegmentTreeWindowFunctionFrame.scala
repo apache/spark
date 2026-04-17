@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.window
 
 import org.apache.spark.TaskContext
+import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, FrameType, MutableProjection, RowFrame, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
@@ -46,7 +47,8 @@ private[window] final class SegmentTreeWindowFunctionFrame(
     ubound: BoundOrdering,
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     conf: SQLConf,
-    maxCachedBlocks: Option[Int])
+    maxCachedBlocks: Option[Int],
+    taskMemoryManager: TaskMemoryManager)
   extends WindowFunctionFrame with AutoCloseable {
 
   require(frameType == RowFrame,
@@ -100,7 +102,8 @@ private[window] final class SegmentTreeWindowFunctionFrame(
       newMutableProjection,
       fanout = conf.windowSegmentTreeFanout,
       blockSize = conf.windowSegmentTreeBlockSize,
-      maxCachedBlocks = maxCachedBlocks)
+      maxCachedBlocks = maxCachedBlocks,
+      taskMemoryManager = taskMemoryManager)
     // Build first (drains rows into the tree's internal row array), then
     // open a fresh iterator for per-row bound advancement.
     tree.build(rows.generateIterator())

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.window
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Add, AggregateWindowFunction, Ascending, Attribute, BoundReference, CurrentRow, DateAdd, DateAddYMInterval, DecimalAddNoOverflowCheck, Descending, Expression, ExtractANSIIntervalDays, FrameLessOffsetWindowFunction, FrameType, IdentityProjection, IntegerLiteral, MutableProjection, NamedExpression, OffsetWindowFunction, PythonFuncExpression, RangeFrame, RowFrame, RowOrdering, SortOrder, SpecifiedWindowFrame, TimestampAddInterval, TimestampAddYMInterval, UnaryMinus, UnboundedFollowing, UnboundedPreceding, UnsafeProjection, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate}
@@ -288,7 +288,10 @@ trait WindowEvaluatorFactoryBase {
                 // Task-completion listener registration lives inside the
                 // frame constructor (one per frame instance) to avoid
                 // duplicate listeners when this closure fires multiple
-                // times per task.
+                // times per task. `TaskContext.get()` is only called at
+                // task-execution time (the closure runs per row-processor
+                // construction), never at driver planning.
+                val tmm = TaskContext.get().taskMemoryManager()
                 new SegmentTreeWindowFunctionFrame(
                   target,
                   processor,
@@ -299,7 +302,8 @@ trait WindowEvaluatorFactoryBase {
                   createBoundOrdering(frameType, upper, timeZone),
                   (e, s) => MutableProjection.create(e, s),
                   conf,
-                  cacheHint)
+                  cacheHint,
+                  tmm)
               }
             } else {
               target: InternalRow => {
