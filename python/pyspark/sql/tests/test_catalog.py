@@ -588,6 +588,19 @@ class CatalogTestsMixin:
             spark.sql(f"INSERT INTO {t} VALUES (1)")
             spark.catalog.analyzeTable(t, noScan=True)
 
+    def test_qualified_name_consistent_with_jvm(self):
+        # Verify that the Python qualifiedName quoting is consistent with the JVM parser:
+        # a name produced by Python must be accepted by Spark and resolve to the same table.
+        spark = self.spark
+        with self.table("qn_consistency_tab"):
+            spark.sql("CREATE TABLE qn_consistency_tab (id INT) USING parquet")
+            t = spark.catalog.getTable("spark_catalog.default.qn_consistency_tab")
+            # The Python-computed qualifiedName must be parseable by Spark as the same table.
+            self.assertEqual(
+                spark.read.table(t.qualifiedName).schema,
+                spark.read.table(t).schema,
+            )
+
     def test_table_qualified_name(self):
         from pyspark.sql.catalog import Table
 

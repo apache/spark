@@ -76,6 +76,8 @@ class Table(NamedTuple):
         '`spark_catalog`.`default`.`my_table`'
         """
 
+        # Must mirror Scala's QuotingUtils.quoteIdentifier: wrap in backticks,
+        # doubling any embedded backtick.
         def quote(part: str) -> str:
             return "`" + part.replace("`", "``") + "`"
 
