@@ -249,7 +249,7 @@ private[spark] class DAGScheduler(
    * Number of consecutive stage attempts allowed before a stage is aborted.
    * The consecutive counter is cleared when a stage succeeds, so failures from different
    * "runs" of the same stage do not accumulate against this limit.
-   * See [[canRetryStage]] for how this interacts with [[maxStageAttempts]].
+   * See [[stageAbortReason]] for how this interacts with [[maxStageAttempts]].
    */
   private[scheduler] val maxConsecutiveStageAttempts =
     sc.conf.get(config.STAGE_MAX_CONSECUTIVE_ATTEMPTS)
@@ -258,29 +258,43 @@ private[spark] class DAGScheduler(
    * Absolute ceiling on the total number of attempts ever made for a stage (consecutive or not).
    * Computed as the maximum of [[maxConsecutiveStageAttempts]] and the configured value of
    * [[config.STAGE_MAX_ATTEMPTS]], so that the total ceiling is never lower than the consecutive
-   * limit. See [[canRetryStage]] for how this interacts with [[maxConsecutiveStageAttempts]].
+   * limit. See [[stageAbortReason]] for how this interacts with [[maxConsecutiveStageAttempts]].
    */
   private[scheduler] val maxStageAttempts: Int = {
     Math.max(maxConsecutiveStageAttempts, sc.conf.get(config.STAGE_MAX_ATTEMPTS))
   }
 
   /**
-   * Returns true if the stage may be retried after a failure, false if it should be aborted.
+   * If the stage must be aborted, returns `Some(abortMessage)` describing which limit was hit.
+   * If the stage may be retried, returns `None`.
    *
    * Two independent limits are enforced; whichever triggers first causes the stage to be aborted:
    *  - [[maxConsecutiveStageAttempts]]: caps the number of *consecutive* failed attempts.
    *    This counter is reset when the stage succeeds, so transient failures in a long-running
    *    job do not permanently accumulate.
    *  - [[maxStageAttempts]]: an absolute ceiling on the *total* number of attempts ever made
-   *    for a stage. This counter is never cleared.
+   *    for a stage. The attempt counter it bounds (`nextAttemptId`) is never cleared.
    *
    * Additionally, if the test-only flag [[disallowStageRetryForTest]] is set, the stage is
    * aborted regardless of the above limits.
    */
-  private def canRetryStage(stage: Stage): Boolean = {
-    !disallowStageRetryForTest &&
-      stage.failedAttemptIds.size < maxConsecutiveStageAttempts &&
-      stage.getNextAttemptId < maxStageAttempts
+  private def stageAbortReason(
+      stage: Stage,
+      failureMessage: String): Option[String] = {
+    if (disallowStageRetryForTest) {
+      Some(s"$stage (${stage.name}) will not retry due to testing config." +
+        s" Most recent failure reason: $failureMessage")
+    } else if (stage.failedAttemptIds.size >= maxConsecutiveStageAttempts) {
+      Some(s"$stage (${stage.name}) has failed the maximum allowable" +
+        s" number of times: $maxConsecutiveStageAttempts." +
+        s" Most recent failure reason: $failureMessage")
+    } else if (stage.getNextAttemptId >= maxStageAttempts) {
+      Some(s"$stage (${stage.name}) has exceeded the maximum allowable" +
+        s" total stage attempts: $maxStageAttempts." +
+        s" Most recent failure reason: $failureMessage")
+    } else {
+      None
+    }
   }
 
   /**
@@ -2145,21 +2159,13 @@ private[spark] class DAGScheduler(
     }
 
     stage.failedAttemptIds.add(stage.latestInfo.attemptNumber())
-    val shouldAbortStage = !canRetryStage(stage)
+    val abortReason = stageAbortReason(stage, reason)
+    val shouldAbortStage = abortReason.isDefined
     markStageAsFinished(stage, Some(reason), willRetry = !shouldAbortStage)
 
     if (shouldAbortStage) {
-      val abortMessage = if (disallowStageRetryForTest) {
-        "Stage will not retry stage due to testing config. Most recent failure " +
-          s"reason: $reason"
-      } else if (stage.failedAttemptIds.size >= maxConsecutiveStageAttempts) {
-        s"$stage (${stage.name}) has failed the maximum allowable number of " +
-          s"times: $maxConsecutiveStageAttempts. Most recent failure reason: $reason"
-      } else {
-        s"$stage (${stage.name}) has exceeded the maximum allowable total stage " +
-          s"attempts: $maxStageAttempts. Most recent failure reason: $reason"
-      }
-      abortStage(stage, s"rollback failed due to: $abortMessage", None)
+      abortStage(stage,
+        s"rollback failed due to: ${abortReason.get}", None)
     } else {
       // In case multiple task failures triggered for a single stage attempt, ensure we only
       // resubmit the failed stage once.
@@ -2389,7 +2395,8 @@ private[spark] class DAGScheduler(
             failedStage.failedAttemptIds.add(task.stageAttemptId)
           }
 
-          val shouldAbortStage = !canRetryStage(failedStage)
+          val abortReason = stageAbortReason(failedStage, failureMessage)
+          val shouldAbortStage = abortReason.isDefined
 
           // It is likely that we receive multiple FetchFailed for a single stage (because we have
           // multiple tasks running concurrently on different executors). In that case, it is
@@ -2450,18 +2457,7 @@ private[spark] class DAGScheduler(
           }
 
           if (shouldAbortStage) {
-            val abortMessage = if (disallowStageRetryForTest) {
-              "Fetch failure will not retry stage due to testing config"
-            } else if (failedStage.failedAttemptIds.size >= maxConsecutiveStageAttempts) {
-              s"$failedStage (${failedStage.name}) has failed the maximum allowable number of " +
-                s"times: $maxConsecutiveStageAttempts. Most recent failure reason:\n" +
-                failureMessage
-            } else {
-              s"$failedStage (${failedStage.name}) has exceeded the maximum allowable total " +
-                s"stage attempts: $maxStageAttempts. Most recent failure reason:\n" +
-                failureMessage
-            }
-            abortStage(failedStage, abortMessage, None)
+            abortStage(failedStage, abortReason.get, None)
           } else { // update failedStages and make sure a ResubmitFailedStages event is enqueued
             // TODO: Cancel running tasks in the failed stage -- cf. SPARK-17064
             val noResubmitEnqueued = !failedStages.contains(failedStage)
@@ -2583,20 +2579,11 @@ private[spark] class DAGScheduler(
           failedStage.failedAttemptIds.add(task.stageAttemptId)
           // TODO Refactor the failure handling logic to combine similar code with that of
           // FetchFailed.
-          val shouldAbortStage = !canRetryStage(failedStage)
+          val abortReason = stageAbortReason(failedStage, message)
+          val shouldAbortStage = abortReason.isDefined
 
           if (shouldAbortStage) {
-            val abortMessage = if (disallowStageRetryForTest) {
-              "Barrier stage will not retry stage due to testing config. Most recent failure " +
-                s"reason: $message"
-            } else if (failedStage.failedAttemptIds.size >= maxConsecutiveStageAttempts) {
-              s"$failedStage (${failedStage.name}) has failed the maximum allowable number of " +
-                s"times: $maxConsecutiveStageAttempts. Most recent failure reason: $message"
-            } else {
-              s"$failedStage (${failedStage.name}) has exceeded the maximum allowable total " +
-                s"stage attempts: $maxStageAttempts. Most recent failure reason: $message"
-            }
-            abortStage(failedStage, abortMessage, None)
+            abortStage(failedStage, abortReason.get, None)
           } else {
             failedStage match {
               case failedMapStage: ShuffleMapStage =>
