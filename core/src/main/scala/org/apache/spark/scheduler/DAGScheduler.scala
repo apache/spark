@@ -720,7 +720,7 @@ private[spark] class DAGScheduler(
     true
   }
 
-  /** Find ancestor shuffle dependencies that are not registered in shuffleToMapStage yet */
+  /** Find ancestor shuffle dependencies that are not registered in shuffleIdToMapStage yet */
   private def getMissingAncestorShuffleDependencies(
       rdd: RDD[_]): ListBuffer[ShuffleDependency[_, _, _]] = {
     val ancestors = new ListBuffer[ShuffleDependency[_, _, _]]
@@ -3363,10 +3363,8 @@ private[spark] class DAGScheduler(
     if (stage == target) {
       return true
     }
-    var found = false
-    traverseRDDGraphUntil(stage.rdd) { (rdd, enqueue) =>
+    !traverseRDDGraphUntil(stage.rdd) { (rdd, enqueue) =>
       if (rdd == target.rdd) {
-        found = true
         false
       } else {
         for (dep <- rdd.dependencies) {
@@ -3383,7 +3381,6 @@ private[spark] class DAGScheduler(
         true
       }
     }
-    found
   }
 
   /**
