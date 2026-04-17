@@ -72,7 +72,16 @@ abstract class InMemoryBaseTable(
   // Stores the table version validated during the last `ALTER TABLE ... ADD CONSTRAINT` operation.
   private var validatedTableVersion: String = null
 
-  private var tableColumns: Array[Column] = initialColumns
+  // Assign column IDs to columns that don't already have one.
+  // This simulates connector behavior (like Delta/Iceberg) where each column
+  // gets a unique ID that persists across schema evolution.
+  private var tableColumns: Array[Column] = initialColumns.map { c =>
+    if (c.id() == null) {
+      Column.withId(c, InMemoryBaseTable.nextColumnId().toString)
+    } else {
+      c
+    }
+  }
 
   override def columns(): Array[Column] = tableColumns
 
@@ -778,6 +787,10 @@ abstract class InMemoryBaseTable(
 }
 
 object InMemoryBaseTable {
+  import java.util.concurrent.atomic.AtomicLong
+  private val columnIdCounter = new AtomicLong(0)
+  def nextColumnId(): Long = columnIdCounter.incrementAndGet()
+
   val SIMULATE_FAILED_WRITE_OPTION = "spark.sql.test.simulateFailedWrite"
 
   def extractValue(
