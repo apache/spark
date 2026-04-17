@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.connector.catalog.transactions.{Transaction, TransactionInfo}
 import org.apache.spark.sql.types.StructType
@@ -30,6 +32,9 @@ class InMemoryRowLevelOperationTableCatalog
   var transaction: Txn = _
   // The last completed transaction.
   var lastTransaction: Txn = _
+  // All transactions in order (committed and aborted), allowing per-statement
+  // validation in SQL scripting tests.
+  val seenTransactions: ArrayBuffer[Txn] = new ArrayBuffer[Txn]()
 
   override def beginTransaction(info: TransactionInfo): Transaction = {
     assert(transaction == null || transaction.currentState != Active)
