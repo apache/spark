@@ -2642,10 +2642,11 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
         assert num_udfs == 1, "One SCALAR_ARROW_ITER UDF expected here."
         udf_func, args_offsets, kwargs_offsets, return_type = udfs[0]
 
-        # Pre-compute target Arrow type for output coercion
+        # Pre-compute target Arrow type and schema for output coercion
         arrow_return_type = to_arrow_type(
             return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
         )
+        target_schema = pa.schema([pa.field("_0", arrow_return_type)])
 
         def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
             """Apply scalar Arrow iterator UDF"""
@@ -2664,13 +2665,18 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             # Call UDF and verify result type (iterator of pa.Array)
             verified_iter = verify_result(pa.Array)(udf_func(args_iter))
 
-            # Process results: enforce schema and assemble into RecordBatch
-            target_schema = pa.schema([pa.field("_0", arrow_return_type)])
-
+            # Process results: assemble into RecordBatch and coerce type.
+            # When result type matches target, build the batch with schema=target_schema
+            # so enforce_schema's fast path is near-free (pyarrow caches the schema
+            # fingerprint); otherwise fall back to name-based construction and let
+            # enforce_schema perform the cast.
             def process_results():
                 for result in verified_iter:
-                    batch = pa.RecordBatch.from_arrays([result], ["_0"])
-                    yield ArrowBatchTransformer.enforce_schema(batch, target_schema, safecheck=True)
+                    if result.type == arrow_return_type:
+                        batch = pa.RecordBatch.from_arrays([result], schema=target_schema)
+                    else:
+                        batch = pa.RecordBatch.from_arrays([result], ["_0"])
+                    yield ArrowBatchTransformer.enforce_schema(batch, target_schema)
 
             # Apply row limit check (fail-fast)
             limited = verify_output_row_limit(

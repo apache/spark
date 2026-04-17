@@ -137,14 +137,16 @@ class ArrowBatchTransformer:
         pa.RecordBatch
             RecordBatch with columns reordered and types coerced to match target schema.
         """
-        import pyarrow as pa
+        # Fast path (hot): schema already matches (ignoring metadata).
+        # Single C++ call; handles empty-vs-empty case too.
+        if batch.schema.equals(arrow_schema, check_metadata=False):
+            return batch
 
+        # Edge case (cold): preserve prior "empty passthrough" semantics.
         if batch.num_columns == 0 or len(arrow_schema) == 0:
             return batch
 
-        # Fast path: schema already matches (ignoring metadata), no work needed
-        if batch.schema.equals(arrow_schema, check_metadata=False):
-            return batch
+        import pyarrow as pa
 
         # Check if columns are in the same order (by name) as the target schema.
         # If so, use index-based access (faster than name lookup).
