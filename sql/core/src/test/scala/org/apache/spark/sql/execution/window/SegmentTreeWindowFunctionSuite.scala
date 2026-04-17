@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.execution.window
 
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
-import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.{DataFrame, Encoder, Encoders, QueryTest, Row}
+import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, Window}
+import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{DataType, LongType, StructType}
 
 /**
  * End-to-end tests for the block-chunked segment-tree moving window frame.
@@ -488,4 +490,373 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
         |    RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS mx_nl
         |FROM t""".stripMargin)
   }
+
+    // Decimal overflow across seg-tree block merge
+  // BinaryType MIN/MAX across seg-tree block merge
+  // UDAF (ScalaUDAF / ScalaAggregator) fallback
+  //
+  // All Decimal/Binary tests force blockSize=16 (the minimum the config
+  // allows) + window size > blockSize so the seg-tree path crosses at
+  // least one block boundary (exercises `mergeExpressions` rather than
+  // only `update`). Design doc asked for blockSize=4 but the SQLConf
+  // validator rejects anything below 16; scaling data/frame up preserves
+  // the merge-path coverage the doc intended.
+
+  private val segTreeBlock: String = "16"
+  private val segTreeFramePrec: Int = 17
+  private val segTreeRows: Int = 20
+
+  private def withSegTreeBlock(conf: (String, String)*)(body: => Unit): Unit = {
+    val extra = Seq(SQLConf.WINDOW_SEGMENT_TREE_BLOCK_SIZE.key -> segTreeBlock) ++ conf
+    withSQLConf(extra: _*)(body)
+  }
+
+  
+  /**
+   * 20 rows in a single partition, Decimal(38, 0) values near the type's
+   * upper bound. Frame of `segTreeFramePrec` PRECEDING..CURRENT ROW means
+   * any window with >= 2 such rows overflows the widened Sum buffer
+   * (Decimal(38,0) widened to Decimal(38,0); any addition above 1e38
+   * overflows). Block size 16 + frame 17 forces cross-block merge.
+   */
+  private def decimalOverflowDF: DataFrame = {
+    // 9e37 -- below Decimal(38,0) MAX (~9.99e37), but 2x overflows.
+    val big = "90000000000000000000000000000000000000"  // 38 digits
+    spark.range(0, segTreeRows.toLong).selectExpr(
+      "CAST(id AS INT) AS id",
+      "0 AS pk",
+      s"CAST('$big' AS DECIMAL(38, 0)) AS v")
+  }
+
+  private val decimalOverflowSql: String =
+    s"""SELECT id, pk,
+       |  SUM(v) OVER (PARTITION BY pk ORDER BY id
+       |    ROWS BETWEEN $segTreeFramePrec PRECEDING AND CURRENT ROW) AS s
+       |FROM t""".stripMargin
+
+  test("a -- Decimal overflow ANSI on, seg-tree matches sliding (both throw)") {
+    val df = decimalOverflowDF
+    df.createOrReplaceTempView("t")
+    try {
+      withSegTreeBlock(SQLConf.ANSI_ENABLED.key -> "true") {
+        withSQLConf(disableSegTree.toSeq: _*) {
+          val e = intercept[Exception] {
+            spark.sql(decimalOverflowSql).collect()
+          }
+          assert(rootArithmeticCause(e).isDefined,
+            s"expected ArithmeticException root cause, got: ${e.getMessage}")
+        }
+        withSQLConf(enableSegTree.toSeq: _*) {
+          val e = intercept[Exception] {
+            spark.sql(decimalOverflowSql).collect()
+          }
+          assert(rootArithmeticCause(e).isDefined,
+            s"expected ArithmeticException root cause, got: ${e.getMessage}")
+        }
+      }
+    } finally {
+      spark.catalog.dropTempView("t")
+    }
+  }
+
+  test("b -- Decimal overflow ANSI off, seg-tree matches sliding (NULL on overflow)") {
+    val df = decimalOverflowDF
+    df.createOrReplaceTempView("t")
+    try {
+      withSegTreeBlock(SQLConf.ANSI_ENABLED.key -> "false") {
+        val baseline = withSQLConf(disableSegTree.toSeq: _*) {
+          spark.sql(decimalOverflowSql).collect().sortBy(_.toString)
+        }
+        // At least one row must be NULL so we know overflow actually fired.
+        assert(baseline.exists(_.isNullAt(2)),
+          "baseline should contain NULL overflow rows; test data may be too small")
+        withSQLConf(enableSegTree.toSeq: _*) {
+          val actual = spark.sql(decimalOverflowSql).collect().sortBy(_.toString)
+          assert(actual.toSeq === baseline.toSeq)
+        }
+      }
+    } finally {
+      spark.catalog.dropTempView("t")
+    }
+  }
+
+  test("c -- mid-window Decimal overflow slides past (seg-tree == sliding)") {
+    // 24 rows, blockSize=16. Frame ROWS BETWEEN 3 PRECEDING AND CURRENT ROW
+    // (size 4). Near-MAX values at ids 14,15,16,17 so any 4-row window
+    // containing >=2 of them overflows. Windows at:
+    //   id<14 or id>20   -> safe
+    //   id in [15..20]   -> overlaps >=2 big values -> NULL
+    // The big-value band (14..17) straddles the block boundary at id=16,
+    // guaranteeing cross-block merge paths see overflowing buffers.
+    val big = "90000000000000000000000000000000000000"
+    val df = spark.range(0, 24).selectExpr(
+      "CAST(id AS INT) AS id",
+      "0 AS pk",
+      s"""CASE WHEN id IN (14, 15, 16, 17)
+              THEN CAST('$big' AS DECIMAL(38, 0))
+              ELSE CAST(id AS DECIMAL(38, 0))
+         END AS v""")
+    df.createOrReplaceTempView("t")
+    try {
+      val sqlStr =
+        """SELECT id, pk,
+          |  SUM(v) OVER (PARTITION BY pk ORDER BY id
+          |    ROWS BETWEEN 3 PRECEDING AND CURRENT ROW) AS s
+          |FROM t""".stripMargin
+      withSegTreeBlock(SQLConf.ANSI_ENABLED.key -> "false") {
+        val baseline = withSQLConf(disableSegTree.toSeq: _*) {
+          spark.sql(sqlStr).collect().sortBy(_.toString)
+        }
+        // Sanity: overflow fired on some rows AND window slides past to
+        // recover non-NULL on the tail rows.
+        assert(baseline.exists(_.isNullAt(2)),
+          "baseline should contain NULL overflow rows")
+        assert(baseline.exists(r => r.getInt(0) >= 21 && !r.isNullAt(2)),
+          "rows with id>=21 should be non-NULL (window slid past big values)")
+        withSQLConf(enableSegTree.toSeq: _*) {
+          val actual = spark.sql(sqlStr).collect().sortBy(_.toString)
+          assert(actual.toSeq === baseline.toSeq)
+        }
+      }
+    } finally {
+      spark.catalog.dropTempView("t")
+    }
+  }
+
+  /** Walk a SparkException chain for an ArithmeticException (ANSI overflow). */
+  private def rootArithmeticCause(t: Throwable): Option[Throwable] = {
+    var cur: Throwable = t
+    while (cur != null) {
+      if (cur.isInstanceOf[ArithmeticException]) return Some(cur)
+      cur = cur.getCause
+    }
+    None
+  }
+
+  
+  /** Pattern of 20 Array[Byte] values used across a. */
+  private def binaryVariedRows: Seq[(Int, Array[Byte])] = {
+    (0 until 20).map { i =>
+      val arr: Array[Byte] = (i % 8) match {
+        case 0 => Array[Byte](0x01, 0x02)
+        case 1 => Array[Byte](0x00)
+        case 2 => Array[Byte](0x7f)
+        case 3 => Array[Byte](0x7f, 0x00)
+        case 4 => Array[Byte](0x10, 0x20, 0x30)
+        case 5 => Array[Byte](0x10, 0x20)
+        case 6 => Array[Byte](0x10)
+        case _ => Array[Byte](0x05, 0x05, 0x05, 0x05)
+      }
+      (i, arr)
+    }
+  }
+
+  test("a -- BinaryType MIN/MAX cross-block merge") {
+    // 20 rows, one partition, varied lengths / content. Frame of
+    // segTreeFramePrec+1 rows against blockSize=16 guarantees the
+    // seg-tree merge path is hit.
+    val df = binaryVariedRows.toDF("id", "v").selectExpr("id", "0 AS pk", "v")
+    df.createOrReplaceTempView("t")
+    try {
+      withSegTreeBlock() {
+        val sqlStr =
+          s"""SELECT id, pk,
+             |  MIN(v) OVER (PARTITION BY pk ORDER BY id
+             |    ROWS BETWEEN $segTreeFramePrec PRECEDING AND CURRENT ROW) AS mn,
+             |  MAX(v) OVER (PARTITION BY pk ORDER BY id
+             |    ROWS BETWEEN $segTreeFramePrec PRECEDING AND CURRENT ROW) AS mx
+             |FROM t""".stripMargin
+        val baseline = withSQLConf(disableSegTree.toSeq: _*) {
+          spark.sql(sqlStr).collect().sortBy(_.toString)
+        }
+        withSQLConf(enableSegTree.toSeq: _*) {
+          val actual = spark.sql(sqlStr).collect().sortBy(_.toString)
+          assert(actual.toSeq === baseline.toSeq,
+            s"seg-tree binary MIN/MAX differs.\nExpected: ${baseline.toSeq}\n" +
+              s"Actual:   ${actual.toSeq}")
+        }
+      }
+    } finally {
+      spark.catalog.dropTempView("t")
+    }
+  }
+
+  test("b -- BinaryType empty/NULL/single-zero distinction") {
+    // 20 rows. Mix of empty array, single 0x00, NULL, and 2-byte arrays.
+    // Spark treats empty-array and NULL distinctly; seg-tree must respect
+    // that. Pattern cycles across the block boundary.
+    val rows: Seq[(Int, Array[Byte])] = (0 until 20).map { i =>
+      val arr: Array[Byte] = (i % 4) match {
+        case 0 => Array[Byte](0x00)
+        case 1 => Array[Byte]()
+        case 2 => null
+        case _ => Array[Byte](0x01, 0x02)
+      }
+      (i, arr)
+    }
+    val df = rows.toDF("id", "v").selectExpr("id", "0 AS pk", "v")
+    df.createOrReplaceTempView("t")
+    try {
+      withSegTreeBlock() {
+        val sqlStr =
+          s"""SELECT id, pk,
+             |  MIN(v) OVER (PARTITION BY pk ORDER BY id
+             |    ROWS BETWEEN $segTreeFramePrec PRECEDING AND CURRENT ROW) AS mn,
+             |  MAX(v) OVER (PARTITION BY pk ORDER BY id
+             |    ROWS BETWEEN $segTreeFramePrec PRECEDING AND CURRENT ROW) AS mx
+             |FROM t""".stripMargin
+        val baseline = withSQLConf(disableSegTree.toSeq: _*) {
+          spark.sql(sqlStr).collect().sortBy(_.toString)
+        }
+        withSQLConf(enableSegTree.toSeq: _*) {
+          val actual = spark.sql(sqlStr).collect().sortBy(_.toString)
+          assert(actual.toSeq === baseline.toSeq,
+            s"seg-tree empty/NULL binary differs.\nExpected: ${baseline.toSeq}\n" +
+              s"Actual:   ${actual.toSeq}")
+        }
+      }
+    } finally {
+      spark.catalog.dropTempView("t")
+    }
+  }
+
+  test("c -- BinaryType unsigned lexicographic ordering") {
+    // 0xFF (255 unsigned, -1 signed) must be greater than 0x01 (1); a
+    // signed-byte comparator would get this backwards. Spark's BinaryType
+    // comparator is unsigned; seg-tree must match.
+    val unsignedPattern: IndexedSeq[Array[Byte]] = IndexedSeq(
+      Array[Byte](0xff.toByte),
+      Array[Byte](0x01),
+      Array[Byte](0x80.toByte, 0x00),
+      Array[Byte](0x7f, 0xff.toByte),
+      Array[Byte](0xfe.toByte),
+      Array[Byte](0x00, 0xff.toByte),
+      Array[Byte](0x80.toByte),
+      Array[Byte](0x7f))
+    val rows: Seq[(Int, Array[Byte])] =
+      (0 until 20).map(i => (i, unsignedPattern(i % unsignedPattern.length)))
+    val df = rows.toDF("id", "v").selectExpr("id", "0 AS pk", "v")
+    df.createOrReplaceTempView("t")
+    try {
+      withSegTreeBlock() {
+        val sqlStr =
+          s"""SELECT id, pk,
+             |  MIN(v) OVER (PARTITION BY pk ORDER BY id
+             |    ROWS BETWEEN $segTreeFramePrec PRECEDING AND CURRENT ROW) AS mn,
+             |  MAX(v) OVER (PARTITION BY pk ORDER BY id
+             |    ROWS BETWEEN $segTreeFramePrec PRECEDING AND CURRENT ROW) AS mx
+             |FROM t""".stripMargin
+        val baseline = withSQLConf(disableSegTree.toSeq: _*) {
+          spark.sql(sqlStr).collect().sortBy(_.toString)
+        }
+        withSQLConf(enableSegTree.toSeq: _*) {
+          val actual = spark.sql(sqlStr).collect().sortBy(_.toString)
+          assert(actual.toSeq === baseline.toSeq,
+            s"seg-tree unsigned binary ordering differs.\nExpected: ${baseline.toSeq}\n" +
+              s"Actual:   ${actual.toSeq}")
+        }
+      }
+    } finally {
+      spark.catalog.dropTempView("t")
+    }
+  }
+
+    //
+  // ScalaUDAF extends ImperativeAggregate; ScalaAggregator extends
+  // TypedImperativeAggregate (also ImperativeAggregate). Both must be
+  // rejected by `eligibleForSegTree`'s guard (DeclarativeAggregate-only).
+  // The factory then hands off to SlidingWindowFunctionFrame.
+  //
+  // Assertions per block-boundary correctness analysis:
+  //   (a) flag ON must NOT throw (seg-tree merge on an ImperativeAggregate
+  //       would NPE / MatchError); surviving proves the guard fired.
+  //   (b) flag ON result equals flag OFF result bit-for-bit.
+
+  test("a -- legacy ScalaUDAF falls back cleanly (no seg-tree merge)") {
+    val udaf = new LegacySumUdaf
+    spark.udf.register("seg_tree_legacy_sum", udaf)
+    val df = baseDF.selectExpr("id", "pk", "CAST(v AS LONG) AS v")
+    val query =
+      """SELECT id, pk,
+        |  seg_tree_legacy_sum(v) OVER (PARTITION BY pk ORDER BY id
+        |    ROWS BETWEEN 5 PRECEDING AND CURRENT ROW) AS s
+        |FROM t""".stripMargin
+    df.createOrReplaceTempView("t")
+    try {
+      val baseline = withSQLConf(disableSegTree.toSeq: _*) {
+        spark.sql(query).collect().sortBy(_.toString)
+      }
+      withSQLConf(enableSegTree.toSeq: _*) {
+        // (a) no exception (seg-tree merge would fail on ImperativeAggregate)
+        val actual = spark.sql(query).collect().sortBy(_.toString)
+        // (b) identical to flag-off
+        assert(actual.toSeq === baseline.toSeq,
+          s"ScalaUDAF fallback result differs.\nExpected: ${baseline.toSeq}\n" +
+            s"Actual:   ${actual.toSeq}")
+      }
+    } finally {
+      spark.catalog.dropTempView("t")
+    }
+  }
+
+  test("b -- typed Aggregator falls back cleanly (no seg-tree merge)") {
+    val agg = udaf(new LongSumAggregator)
+    spark.udf.register("seg_tree_typed_sum", agg)
+    val df = baseDF.selectExpr("id", "pk", "CAST(v AS LONG) AS v")
+    val query =
+      """SELECT id, pk,
+        |  seg_tree_typed_sum(v) OVER (PARTITION BY pk ORDER BY id
+        |    ROWS BETWEEN 5 PRECEDING AND CURRENT ROW) AS s
+        |FROM t""".stripMargin
+    df.createOrReplaceTempView("t")
+    try {
+      val baseline = withSQLConf(disableSegTree.toSeq: _*) {
+        spark.sql(query).collect().sortBy(_.toString)
+      }
+      withSQLConf(enableSegTree.toSeq: _*) {
+        val actual = spark.sql(query).collect().sortBy(_.toString)
+        assert(actual.toSeq === baseline.toSeq,
+          s"typed Aggregator fallback result differs.\nExpected: ${baseline.toSeq}\n" +
+            s"Actual:   ${actual.toSeq}")
+      }
+    } finally {
+      spark.catalog.dropTempView("t")
+    }
+  }
+}
+
+/** Legacy `UserDefinedAggregateFunction` -- wrapped at analysis time as
+ *  `ScalaUDAF`, which extends `ImperativeAggregate` and must be rejected
+ *  by the seg-tree factory's guard.
+ */
+private class LegacySumUdaf extends UserDefinedAggregateFunction {
+  override def inputSchema: StructType = new StructType().add("v", LongType)
+  override def bufferSchema: StructType = new StructType().add("s", LongType)
+  override def dataType: DataType = LongType
+  override def deterministic: Boolean = true
+  override def initialize(buffer: MutableAggregationBuffer): Unit = {
+    buffer(0) = 0L
+  }
+  override def update(buffer: MutableAggregationBuffer, input: Row): Unit = {
+    if (!input.isNullAt(0)) {
+      buffer(0) = buffer.getLong(0) + input.getLong(0)
+    }
+  }
+  override def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {
+    buffer1(0) = buffer1.getLong(0) + buffer2.getLong(0)
+  }
+  override def evaluate(buffer: Row): Any = buffer.getLong(0)
+}
+
+/** Typed `Aggregator` -- wrapped as `ScalaAggregator`, which extends
+ *  `TypedImperativeAggregate` (itself an `ImperativeAggregate`) and must
+ *  likewise be rejected by the seg-tree factory.
+ */
+private class LongSumAggregator extends Aggregator[Long, Long, Long] {
+  override def zero: Long = 0L
+  override def reduce(b: Long, a: Long): Long = b + a
+  override def merge(b1: Long, b2: Long): Long = b1 + b2
+  override def finish(r: Long): Long = r
+  override def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+  override def outputEncoder: Encoder[Long] = Encoders.scalaLong
 }
