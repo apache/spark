@@ -686,22 +686,17 @@ trait QueryTest extends SparkFunSuite with QueryTestBase with PlanTest {
     }
   }
 
-  // Find the first caller frame outside of QueryTest and Thread.
-  // This is needed because QueryTest is a trait, and trait default methods may
-  // change the stack trace layout compared to abstract class methods.
-  private def callerStackFrame: StackTraceElement = {
-    Thread.currentThread().getStackTrace()
-      .find(e => e.getFileName != "QueryTest.scala" && e.getClassName != "java.lang.Thread")
-      .get
-  }
-
   protected def getCurrentClassCallSitePattern: String = {
-    val cs = callerStackFrame
+    val stack = Thread.currentThread().getStackTrace()
+    val idx = stack.indexWhere(_.getMethodName == "getCurrentClassCallSitePattern")
+    val cs = stack(idx + 1)
     s"${cs.getClassName}\\..*\\(${cs.getFileName}:\\d+\\)"
   }
 
   protected def getNextLineCallSitePattern(lines: Int = 1): String = {
-    val cs = callerStackFrame
+    val stack = Thread.currentThread().getStackTrace()
+    val idx = stack.indexWhere(_.getMethodName == "getNextLineCallSitePattern")
+    val cs = stack(idx + 1)
     Pattern.quote(
       s"${cs.getClassName}.${cs.getMethodName}(${cs.getFileName}:${cs.getLineNumber + lines})")
   }
