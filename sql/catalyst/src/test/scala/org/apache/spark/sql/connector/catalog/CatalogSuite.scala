@@ -786,7 +786,7 @@ class CatalogSuite extends SparkFunSuite {
     val newPointStruct = new StructType().add("first", DoubleType).add("second", DoubleType)
     val expectedColumns = columns :+ Column.create("point", newPointStruct)
 
-    assert(updated.columns() === expectedColumns)
+    assertColumnsEqual(updated.columns(), expectedColumns)
   }
 
   test("alterTable: delete top-level column") {
