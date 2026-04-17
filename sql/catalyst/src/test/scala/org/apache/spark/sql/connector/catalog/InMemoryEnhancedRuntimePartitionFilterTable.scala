@@ -32,6 +32,12 @@ import org.apache.spark.util.ArrayImplicits._
  * In-memory table whose batch scan implements [[SupportsRuntimeV2Filtering]] with
  * iterative filtering support, so that [[PartitionPredicate]] instances derived from
  * runtime filters are pushed via a second [[SupportsRuntimeV2Filtering#filter]] call.
+ *
+ * Table properties:
+ *  - `accept-v2-predicates` (default `false`): when true, non-PartitionPredicate
+ *    V2 predicates are reported via `pushedPredicates()` (i.e. accepted).
+ *  - `filter-attributes` (default: all partition cols): comma-separated list of
+ *    column names to expose from `filterAttributes()`.
  */
 class InMemoryEnhancedRuntimePartitionFilterTable(
     name: String,
@@ -63,6 +69,19 @@ class InMemoryEnhancedRuntimePartitionFilterTable(
 
     private val _allPushedPredicates = ArrayBuffer.empty[Predicate]
 
+    private val acceptV2Predicates =
+      InMemoryEnhancedRuntimePartitionFilterTable.this.properties
+        .getOrDefault(
+          InMemoryEnhancedRuntimePartitionFilterTable
+            .AcceptV2PredicatesKey, "false").toBoolean
+
+    private val restrictedFilterAttrs: Option[Set[String]] =
+      Option(InMemoryEnhancedRuntimePartitionFilterTable.this
+        .properties.get(
+          InMemoryEnhancedRuntimePartitionFilterTable
+            .FilterAttributesKey))
+        .map(_.split(",").map(_.trim).toSet)
+
     def pushedPartitionPredicates: Seq[PartitionPredicate] =
       _allPushedPredicates.collect {
         case pp: PartitionPredicate => pp
@@ -75,9 +94,11 @@ class InMemoryEnhancedRuntimePartitionFilterTable(
 
     override def filterAttributes(): Array[NamedReference] = {
       val scanFields = readSchema.fields.map(_.name).toSet
-      partitioning.flatMap(_.references())
-        .filter(ref => scanFields.contains(
-          ref.fieldNames.mkString(".")))
+      partitioning.flatMap(_.references()).filter { ref =>
+        val name = ref.fieldNames.mkString(".")
+        scanFields.contains(name) &&
+          restrictedFilterAttrs.forall(_.contains(name))
+      }
     }
 
     override def filter(filters: Array[Predicate]): Unit = {
@@ -85,12 +106,26 @@ class InMemoryEnhancedRuntimePartitionFilterTable(
         case pp: PartitionPredicate =>
           _allPushedPredicates += pp
           data = data.filter { partition =>
-            pp.eval(partition
-              .asInstanceOf[BufferedRows].partitionKey())
+            pp.eval(
+              partition.asInstanceOf[BufferedRows].partitionKey())
           }
         case other =>
-          _allPushedPredicates += other
+          if (acceptV2Predicates) _allPushedPredicates += other
       }
     }
   }
+}
+
+object InMemoryEnhancedRuntimePartitionFilterTable {
+  /**
+   * Table property: when "true", non-PartitionPredicate V2 predicates
+   * pushed via filter() are reported in pushedPredicates() (accepted).
+   */
+  private[catalog] val AcceptV2PredicatesKey = "accept-v2-predicates"
+
+  /**
+   * Table property: comma-separated column names to expose from
+   * filterAttributes(). Default: all partition columns.
+   */
+  private[catalog] val FilterAttributesKey = "filter-attributes"
 }

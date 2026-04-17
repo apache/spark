@@ -33,6 +33,25 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Tests that [[PartitionPredicate]] instances are pushed via iterative runtime filtering
  * (second [[SupportsRuntimeV2Filtering#filter]] call) for both DPP and scalar subquery
  * runtime filters.
+ *
+ * Pushdown cases (DPP / Scalar Subquery, Translated / Untranslatable,
+ *     Accepted / Rejected, Partition / Data Column, In filterAttributes):
+ *
+ * PartitionPredicate IS created:
+ *  1. DPP, translated, rejected in 1st pass, partition col -> PartitionPredicate
+ *  2. DPP, translated, rejected in 1st pass, non-first partition col -> PartitionPredicate
+ *  3. Scalar, translatable, rejected in 1st pass, partition col -> PartitionPredicate
+ *  4. Scalar, untranslatable, partition col -> PartitionPredicate
+ *  5. Scalar, two subqueries on two partition cols -> 2 PartitionPredicates
+ *  6. Scalar, non-first of 3 partition cols -> PartitionPredicate
+ *  7. Mixed: 1st pass accepted + untranslatable -> only untranslatable gets PartitionPredicate
+ *
+ * PartitionPredicate is NOT created:
+ *  8. DPP, translated, accepted in 1st pass -> no PartitionPredicate
+ *  9. Scalar, translatable, accepted in 1st pass -> no PartitionPredicate
+ * 10. Scalar on data column -> no PartitionPredicate
+ * 11. supportsIterativeFiltering is false -> no PartitionPredicate
+ * 12. Partition col not in filterAttributes -> no PartitionPredicate
  */
 class DataSourceV2EnhancedRuntimePartitionFilterSuite
   extends QueryTest with SharedSparkSession with BeforeAndAfter {
@@ -49,7 +68,18 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
     spark.sessionState.catalogManager.reset()
   }
 
-  test("DPP: PartitionPredicate pushed via iterative runtime filtering") {
+  private def withDPPConf(f: => Unit): Unit = {
+    withSQLConf(
+      SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10")(f)
+  }
+
+  // ---------------------------------------------------------------------------
+  // PartitionPredicate IS created
+  // ---------------------------------------------------------------------------
+
+  test("case 1: DPP translated, rejected in 1st pass -> PartitionPredicate") {
     val fact = s"$catalogName.fact"
     val dim = s"$catalogName.dim"
     withTable(fact, dim) {
@@ -60,17 +90,13 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
       sql(s"CREATE TABLE $dim (dim_id INT, dim_val STRING) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (2, 'two')")
 
-      withSQLConf(
-        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10") {
+      withDPPConf {
         val df = sql(
           s"""SELECT f.id, f.part FROM $fact f JOIN $dim d
              |ON f.part = d.dim_id WHERE d.dim_val = 'two'""".stripMargin)
         checkAnswer(df, Row(2, 2))
 
         assertDPPRuntimeFilters(df)
-
         assertPushedPartitionPredicates(df, 1)
         assertScanReturnsPartitionKeys(df, Set("2"))
         assertReferencedPartitionFieldOrdinals(df, Array(0), Array("part"))
@@ -78,7 +104,7 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
     }
   }
 
-  test("DPP: PartitionPredicate on non-first partition column") {
+  test("case 2: DPP translated, rejected, non-first partition col -> PartitionPredicate") {
     val fact = s"$catalogName.fact2"
     val dim = s"$catalogName.dim2"
     withTable(fact, dim) {
@@ -87,16 +113,10 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
       for (i <- 0 until 5; j <- 0 until 2) {
         sql(s"INSERT INTO $fact VALUES (${i * 2 + j}, $i, $j)")
       }
-      sql(s"CREATE TABLE $dim (dim_id INT, dim_val STRING) " +
-        s"USING $v2Source")
+      sql(s"CREATE TABLE $dim (dim_id INT, dim_val STRING) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (1, 'one')")
 
-      withSQLConf(
-        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key ->
-          "false",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key ->
-          "10") {
+      withDPPConf {
         val df = sql(
           s"""SELECT f.id, f.p1, f.p2 FROM $fact f JOIN $dim d
              |ON f.p2 = d.dim_id
@@ -106,15 +126,13 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
           Row(7, 3, 1), Row(9, 4, 1)))
 
         assertDPPRuntimeFilters(df)
-
         assertPushedPartitionPredicates(df, 1)
-        assertReferencedPartitionFieldOrdinals(
-          df, Array(1), Array("p1", "p2"))
+        assertReferencedPartitionFieldOrdinals(df, Array(1), Array("p1", "p2"))
       }
     }
   }
 
-  test("scalar subquery: PartitionPredicate pushed via iterative runtime filtering") {
+  test("case 3: scalar subquery translatable, rejected in 1st pass -> PartitionPredicate") {
     val tbl = s"$catalogName.tbl"
     val dim = s"$catalogName.dim"
     withTable(tbl, dim) {
@@ -129,14 +147,13 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
       checkAnswer(df, Row(3, 3))
 
       assertScalarSubqueryRuntimeFilters(df)
-
       assertPushedPartitionPredicates(df, 1)
       assertScanReturnsPartitionKeys(df, Set("3"))
       assertReferencedPartitionFieldOrdinals(df, Array(0), Array("part"))
     }
   }
 
-  test("scalar subquery: complex expression with arithmetic on subquery result") {
+  test("case 4a: scalar subquery untranslatable (complex expr) -> PartitionPredicate") {
     val tbl = s"$catalogName.tbl_complex"
     val dim = s"$catalogName.dim_complex"
     withTable(tbl, dim) {
@@ -151,14 +168,13 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
       checkAnswer(df, Row(4, 4))
 
       assertScalarSubqueryRuntimeFilters(df)
-
       assertPushedPartitionPredicates(df, 1)
       assertScanReturnsPartitionKeys(df, Set("4"))
       assertReferencedPartitionFieldOrdinals(df, Array(0), Array("part"))
     }
   }
 
-  test("scalar subquery: RLIKE (untranslatable) with subquery pattern") {
+  test("case 4b: scalar subquery untranslatable (RLIKE) -> PartitionPredicate") {
     val tbl = s"$catalogName.tbl_rlike"
     val dim = s"$catalogName.dim_rlike"
     withTable(tbl, dim) {
@@ -175,14 +191,13 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
       checkAnswer(df, Seq(Row(1, "abc"), Row(3, "abx")))
 
       assertScalarSubqueryRuntimeFilters(df)
-
       assertPushedPartitionPredicates(df, 1)
       assertScanReturnsPartitionKeys(df, Set("abc", "abx"))
       assertReferencedPartitionFieldOrdinals(df, Array(0), Array("part"))
     }
   }
 
-  test("scalar subquery: UDF on partition column with subquery value") {
+  test("case 4c: scalar subquery untranslatable (UDF) -> PartitionPredicate") {
     val tbl = s"$catalogName.tbl_udf"
     val dim = s"$catalogName.dim_udf"
     withTable(tbl, dim) {
@@ -196,21 +211,21 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
       sql(s"INSERT INTO $dim VALUES ('A')")
 
       spark.udf.register("my_upper_runtime",
-        (s: String) => if (s == null) null else s.toUpperCase(java.util.Locale.ROOT))
+        (s: String) => if (s == null) null
+          else s.toUpperCase(java.util.Locale.ROOT))
 
       val df = sql(
         s"SELECT * FROM $tbl WHERE my_upper_runtime(part) = (SELECT max(val) FROM $dim)")
       checkAnswer(df, Seq(Row(1, "a"), Row(2, "A")))
 
       assertScalarSubqueryRuntimeFilters(df)
-
       assertPushedPartitionPredicates(df, 1)
       assertScanReturnsPartitionKeys(df, Set("a", "A"))
       assertReferencedPartitionFieldOrdinals(df, Array(0), Array("part"))
     }
   }
 
-  test("scalar subquery: two PartitionPredicates for two subqueries on different partition cols") {
+  test("case 5: scalar subquery two partition cols -> 2 PartitionPredicates") {
     val fact = s"$catalogName.fact_2sub"
     val dim1 = s"$catalogName.dim_2sub1"
     val dim2 = s"$catalogName.dim_2sub2"
@@ -235,24 +250,16 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
       checkAnswer(df, Row(1, 1, "a"))
 
       assertScalarSubqueryRuntimeFilters(df, expectedCount = 2)
-
       assertPushedPartitionPredicates(df, 2)
       assertScanReturnsPartitionKeys(df, Set("1/a"))
 
-      val predicates = getPushedPartitionPredicates(df)
       val partFieldNames = Array("p1", "p2")
-      val p1Pred = predicates.find(_.references().exists(
-        _.asInstanceOf[PartitionFieldReference].ordinal() == 0))
-      val p2Pred = predicates.find(_.references().exists(
-        _.asInstanceOf[PartitionFieldReference].ordinal() == 1))
-      assert(p1Pred.isDefined, "Expected a PartitionPredicate referencing p1 (ordinal 0)")
-      assert(p2Pred.isDefined, "Expected a PartitionPredicate referencing p2 (ordinal 1)")
-      assertPartitionPredicateOrdinals(p1Pred.get, Array(0), partFieldNames)
-      assertPartitionPredicateOrdinals(p2Pred.get, Array(1), partFieldNames)
+      assertPredicateForOrdinal(df, 0, partFieldNames)
+      assertPredicateForOrdinal(df, 1, partFieldNames)
     }
   }
 
-  test("scalar subquery: PartitionPredicate on non-first column of three-partition-column table") {
+  test("case 6: scalar subquery non-first of 3 partition cols -> PartitionPredicate") {
     val tbl = s"$catalogName.tbl_3part"
     val dim = s"$catalogName.dim_3part"
     withTable(tbl, dim) {
@@ -271,14 +278,109 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
       checkAnswer(df, Seq(Row(1, 1, "a", 10), Row(3, 2, "a", 20)))
 
       assertScalarSubqueryRuntimeFilters(df)
-
       assertPushedPartitionPredicates(df, 1)
       assertScanReturnsPartitionKeys(df, Set("1/a/10", "2/a/20"))
-      assertReferencedPartitionFieldOrdinals(df, Array(1), Array("p0", "p1", "p2"))
+      assertReferencedPartitionFieldOrdinals(
+        df, Array(1), Array("p0", "p1", "p2"))
     }
   }
 
-  test("no PartitionPredicate for scalar subquery on data column") {
+  test("case 7: mixed - accepted in 1st pass + untranslatable -> " +
+    "only untranslatable gets PartitionPredicate") {
+    val tbl = s"$catalogName.tbl_mixed"
+    val dim1 = s"$catalogName.dim_mixed1"
+    val dim2 = s"$catalogName.dim_mixed2"
+    withTable(tbl, dim1, dim2) {
+      sql(s"CREATE TABLE $tbl (id INT, p1 INT, p2 STRING) " +
+        s"USING $v2Source PARTITIONED BY (p1, p2) " +
+        "TBLPROPERTIES('accept-v2-predicates' = 'true')")
+      sql(s"INSERT INTO $tbl VALUES (1, 1, 'a')")
+      sql(s"INSERT INTO $tbl VALUES (2, 1, 'b')")
+      sql(s"INSERT INTO $tbl VALUES (3, 2, 'a')")
+      sql(s"INSERT INTO $tbl VALUES (4, 2, 'b')")
+
+      sql(s"CREATE TABLE $dim1 (val INT) USING $v2Source")
+      sql(s"INSERT INTO $dim1 VALUES (1)")
+      sql(s"CREATE TABLE $dim2 (val STRING) USING $v2Source")
+      sql(s"INSERT INTO $dim2 VALUES ('A')")
+
+      spark.udf.register("my_upper_mixed",
+        (s: String) => if (s == null) null
+          else s.toUpperCase(java.util.Locale.ROOT))
+
+      // p1 = (subquery) is translatable and accepted in 1st pass.
+      // my_upper_mixed(p2) = (subquery) is untranslatable -> PartitionPredicate.
+      // Only the untranslatable filter should produce a PartitionPredicate.
+      val df = sql(
+        s"""SELECT * FROM $tbl
+           |WHERE p1 = (SELECT max(val) FROM $dim1)
+           |  AND my_upper_mixed(p2) = (SELECT max(val) FROM $dim2)
+           |""".stripMargin)
+      checkAnswer(df, Row(1, 1, "a"))
+
+      assertScalarSubqueryRuntimeFilters(df, expectedCount = 2)
+      assertPushedPartitionPredicates(df, 1)
+      // The V2 predicate for p1=1 was accepted but not evaluated by the
+      // test table, so both p2='a' partitions remain after the
+      // PartitionPredicate. Spark applies p1=1 as a post-scan filter.
+      assertScanReturnsPartitionKeys(df, Set("1/a", "2/a"))
+      assertReferencedPartitionFieldOrdinals(df, Array(1), Array("p1", "p2"))
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // PartitionPredicate is NOT created
+  // ---------------------------------------------------------------------------
+
+  test("case 8: DPP translated, accepted in 1st pass -> no PartitionPredicate") {
+    val fact = s"$catalogName.fact_acc"
+    val dim = s"$catalogName.dim_acc"
+    withTable(fact, dim) {
+      sql(s"CREATE TABLE $fact (id INT, part INT) USING $v2Source " +
+        "PARTITIONED BY (part) " +
+        "TBLPROPERTIES('accept-v2-predicates' = 'true')")
+      for (i <- 0 until 5) {
+        sql(s"INSERT INTO $fact VALUES ($i, $i)")
+      }
+      sql(s"CREATE TABLE $dim (dim_id INT, dim_val STRING) USING $v2Source")
+      sql(s"INSERT INTO $dim VALUES (2, 'two')")
+
+      withDPPConf {
+        val df = sql(
+          s"""SELECT f.id, f.part FROM $fact f JOIN $dim d
+             |ON f.part = d.dim_id WHERE d.dim_val = 'two'""".stripMargin)
+        checkAnswer(df, Row(2, 2))
+
+        assertDPPRuntimeFilters(df)
+        assertPushedPartitionPredicates(df, 0)
+      }
+    }
+  }
+
+  test("case 9: scalar subquery translatable, accepted in 1st pass -> " +
+    "no PartitionPredicate") {
+    val tbl = s"$catalogName.tbl_acc"
+    val dim = s"$catalogName.dim_acc2"
+    withTable(tbl, dim) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source " +
+        "PARTITIONED BY (part) " +
+        "TBLPROPERTIES('accept-v2-predicates' = 'true')")
+      for (i <- 0 until 5) {
+        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
+      }
+      sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
+      sql(s"INSERT INTO $dim VALUES (3)")
+
+      val df = sql(
+        s"SELECT * FROM $tbl WHERE part = (SELECT max(val) FROM $dim)")
+      checkAnswer(df, Row(3, 3))
+
+      assertScalarSubqueryRuntimeFilters(df)
+      assertPushedPartitionPredicates(df, 0)
+    }
+  }
+
+  test("case 10: scalar subquery on data column -> no PartitionPredicate") {
     val tbl = s"$catalogName.tbl_data"
     val dim = s"$catalogName.dim_data"
     withTable(tbl, dim) {
@@ -298,7 +400,7 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
     }
   }
 
-  test("no PartitionPredicate when supportsIterativeFiltering is false") {
+  test("case 11: supportsIterativeFiltering is false -> no PartitionPredicate") {
     val baseCatalog = "testv2filterNoIterative"
     spark.conf.set(s"spark.sql.catalog.$baseCatalog",
       classOf[catalog.InMemoryTableWithV2FilterCatalog].getName)
@@ -306,27 +408,52 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
     val tbl = s"$baseCatalog.tbl"
     val dim = s"$baseCatalog.dim"
     withTable(tbl, dim) {
-      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
+      sql(s"CREATE TABLE $tbl (id INT, part INT) " +
+        s"USING $v2Source PARTITIONED BY (part)")
       for (i <- 0 until 5) {
         sql(s"INSERT INTO $tbl VALUES ($i, $i)")
       }
       sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (3)")
 
-      val df = sql(s"SELECT * FROM $tbl WHERE part = (SELECT max(val) FROM $dim)")
+      val df = sql(
+        s"SELECT * FROM $tbl WHERE part = (SELECT max(val) FROM $dim)")
       checkAnswer(df, Row(3, 3))
 
-      val batchScan = collectBatchScan(df)
-      assert(batchScan.runtimeFilters.nonEmpty)
-
-      val scan = batchScan.scan
-      assert(
-        !scan.asInstanceOf[
-          catalog.InMemoryTableWithV2Filter#InMemoryV2FilterBatchScan
-        ].supportsIterativeFiltering(),
-        "Base V2 filter table should not support iterative filtering")
+      assertHasRuntimeFilters(df)
+      assertPushedPartitionPredicates(df, 0)
     }
   }
+
+  test("case 12: partition col not in filterAttributes -> no PartitionPredicate") {
+    val tbl = s"$catalogName.tbl_noattr"
+    val dim = s"$catalogName.dim_noattr"
+    withTable(tbl, dim) {
+      sql(s"CREATE TABLE $tbl (id INT, p1 INT, p2 INT) " +
+        s"USING $v2Source PARTITIONED BY (p1, p2) " +
+        "TBLPROPERTIES('filter-attributes' = 'p1')")
+      sql(s"INSERT INTO $tbl VALUES (1, 1, 10)")
+      sql(s"INSERT INTO $tbl VALUES (2, 1, 20)")
+      sql(s"INSERT INTO $tbl VALUES (3, 2, 10)")
+      sql(s"INSERT INTO $tbl VALUES (4, 2, 20)")
+
+      sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
+      sql(s"INSERT INTO $dim VALUES (10)")
+
+      // Scalar subquery on p2, which is NOT in filterAttributes.
+      // p2 is a partition column, but since it's not declared as a
+      // filterable attribute the PartitionPredicate should not be pushed.
+      val df = sql(
+        s"SELECT * FROM $tbl WHERE p2 = (SELECT max(val) FROM $dim)")
+      checkAnswer(df, Seq(Row(1, 1, 10), Row(3, 2, 10)))
+
+      assertPushedPartitionPredicates(df, 0)
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Helper methods
+  // ---------------------------------------------------------------------------
 
   private def assertDPPRuntimeFilters(
       df: DataFrame, expectedCount: Int = 1): Unit = {
@@ -337,6 +464,11 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
     assert(dppFilters.size === expectedCount,
       s"Expected $expectedCount DynamicPruningExpression(s) " +
         s"in runtimeFilters, got ${dppFilters.size}")
+  }
+
+  private def assertHasRuntimeFilters(df: DataFrame): Unit = {
+    assert(collectBatchScan(df).runtimeFilters.nonEmpty,
+      "Expected non-empty runtimeFilters on BatchScanExec")
   }
 
   private def assertScalarSubqueryRuntimeFilters(
@@ -361,7 +493,7 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
     }.getOrElse(fail("Expected BatchScanExec in plan"))
   }
 
-  private def getPushedPartitionPredicates(
+  private[connector] def getPushedPartitionPredicates(
       df: DataFrame): Seq[PartitionPredicate] = {
     val batchScan = collectBatchScan(df)
     batchScan.scan match {
@@ -386,7 +518,8 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
       expectedOrdinals: Array[Int],
       expectedPartitionFieldNames: Array[String]): Unit = {
     val refs = predicate.references()
-    val ordinals = refs.map(_.asInstanceOf[PartitionFieldReference].ordinal()).sorted
+    val ordinals =
+      refs.map(_.asInstanceOf[PartitionFieldReference].ordinal()).sorted
     assert(ordinals.sameElements(expectedOrdinals.sorted),
       s"Expected references().map(_.ordinal()) " +
         s"${expectedOrdinals.sorted.mkString("[", ", ", "]")}, " +
@@ -395,19 +528,33 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
     val names = expectedPartitionFieldNames
     refs.foreach { ref =>
       assert(ref.isInstanceOf[PartitionFieldReference],
-        s"Expected PartitionFieldReference, got ${ref.getClass.getName}")
+        s"Expected PartitionFieldReference, " +
+          s"got ${ref.getClass.getName}")
       val partRef = ref.asInstanceOf[PartitionFieldReference]
       assert(partRef.fieldNames().nonEmpty,
-        s"PartitionFieldReference.ordinal=${partRef.ordinal()} has empty fieldNames")
+        s"ordinal=${partRef.ordinal()} has empty fieldNames")
       assert(partRef.ordinal() < names.length,
-        s"PartitionFieldReference.ordinal=${partRef.ordinal()} " +
-          s"out of range for names length ${names.length}")
+        s"ordinal=${partRef.ordinal()} out of range " +
+          s"for names length ${names.length}")
       val expectedName = names(partRef.ordinal())
       val actualName = partRef.fieldNames().mkString(".")
       assert(actualName === expectedName,
-        s"PartitionFieldReference.ordinal=${partRef.ordinal()}: " +
-          s"expected fieldNames '${expectedName}', got '${actualName}'")
+        s"ordinal=${partRef.ordinal()}: expected " +
+          s"fieldNames '$expectedName', got '$actualName'")
     }
+  }
+
+  private def assertPredicateForOrdinal(
+      df: DataFrame,
+      ordinal: Int,
+      expectedPartitionFieldNames: Array[String]): Unit = {
+    val predicates = getPushedPartitionPredicates(df)
+    val pred = predicates.find(_.references().exists(
+      _.asInstanceOf[PartitionFieldReference].ordinal() == ordinal))
+    assert(pred.isDefined,
+      s"Expected a PartitionPredicate referencing ordinal $ordinal")
+    assertPartitionPredicateOrdinals(
+      pred.get, Array(ordinal), expectedPartitionFieldNames)
   }
 
   private def assertReferencedPartitionFieldOrdinals(
@@ -415,7 +562,8 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
       expectedOrdinals: Array[Int],
       expectedPartitionFieldNames: Array[String]): Unit = {
     getPushedPartitionPredicates(df).foreach { p =>
-      assertPartitionPredicateOrdinals(p, expectedOrdinals, expectedPartitionFieldNames)
+      assertPartitionPredicateOrdinals(
+        p, expectedOrdinals, expectedPartitionFieldNames)
     }
   }
 
@@ -425,9 +573,12 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
     val batchScan = collectBatchScan(df)
     val partitions = batchScan.batch.planInputPartitions()
     assert(partitions.length === expectedPartitionKeys.size,
-      s"Expected ${expectedPartitionKeys.size} partition(s), got ${partitions.length}")
-    val partKeys = partitions.map(_.asInstanceOf[BufferedRows].keyString()).toSet
+      s"Expected ${expectedPartitionKeys.size} partition(s), " +
+        s"got ${partitions.length}")
+    val partKeys =
+      partitions.map(_.asInstanceOf[BufferedRows].keyString()).toSet
     assert(partKeys === expectedPartitionKeys,
-      s"Partition keys should be $expectedPartitionKeys, got $partKeys")
+      s"Partition keys should be $expectedPartitionKeys, " +
+        s"got $partKeys")
   }
 }

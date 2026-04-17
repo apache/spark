@@ -132,12 +132,10 @@ object PushDownUtils extends Logging {
   }
 
   /**
-   * Pushes runtime filters to a [[SupportsRuntimeV2Filtering]]
-   * scan. Translatable filters are pushed first, followed by
-   * [[PartitionPredicate]] if the scan supports iterative
-   * filtering. Already-pushed predicates (reported by
-   * [[SupportsRuntimeV2Filtering#pushedPredicates]]) are excluded
-   * from subsequent passes.
+   * Pushes runtime filters to a [[SupportsRuntimeV2Filtering]] scan. Translatable filters are
+   * pushed first, followed by [[PartitionPredicate]] if the scan supports iterative filtering.
+   * Only runtime filters that were not already translated are used to derive PartitionPredicates
+   * in the second pass, avoiding duplicate pushdown.
    *
    * @return true if any filters were pushed to the data source
    */
@@ -147,35 +145,33 @@ object PushDownUtils extends Logging {
       table: Table,
       output: Seq[AttributeReference]): Boolean = {
     scan match {
-      case filterableScan: SupportsRuntimeV2Filtering
-          if runtimeFilters.nonEmpty =>
+      case filterableScan: SupportsRuntimeV2Filtering if runtimeFilters.nonEmpty =>
+        // Push down translatable runtime filters.
+        val filtersToTranslated = runtimeFilters.flatMap { f =>
+          (f match {
+            case DynamicPruningExpression(e) => DataSourceV2Strategy.translateRuntimeFilterV2(e)
+            case o => DataSourceV2Strategy.translateScalarSubqueryFilterV2(o)
+          }).map(f -> _)
+        }.toMap
 
-        // First push down translatable runtime filters.
-        val translatedFilters = runtimeFilters.flatMap {
-          case DynamicPruningExpression(e) =>
-            DataSourceV2Strategy.translateRuntimeFilterV2(e)
-          case f =>
-            DataSourceV2Strategy
-              .translateScalarSubqueryFilterV2(f)
-        }
-        if (translatedFilters.nonEmpty) {
-          filterableScan.filter(translatedFilters.toArray)
+        if (filtersToTranslated.nonEmpty) {
+          filterableScan.filter(filtersToTranslated.values.toArray)
         }
 
-        // If the scan supports iterative filtering, derive
-        // PartitionPredicates and push them in a second pass,
-        // excluding predicates already accepted by the scan.
-        // (See SPARK-55596)
+        // If the scan supports iterative filtering, derive PartitionPredicates from runtime
+        // filters whose translation was not already accepted in the first pass.  (See SPARK-55596)
+        // Only candidates whose referenced columns are declared in filterAttributes() are eligible.
         if (filterableScan.supportsIterativeFiltering()) {
-          val alreadyPushed =
-            filterableScan.pushedPredicates().toSet
-          val partPredicates =
-            getPartitionPredicateSchema(table, output).map {
-              fields =>
-                createRuntimePartitionPredicates(
-                  runtimeFilters, fields)
-            }.getOrElse(Seq.empty)
-              .filterNot(alreadyPushed.contains)
+          val filterAttrs = AttributeSet(filterableScan.filterAttributes()
+            .flatMap(r => output.find(a => SQLConf.get.resolver(a.name, r.fieldNames.head))))
+          val pushed = filterableScan.pushedPredicates().toSet
+          val candidates = runtimeFilters.filter { f =>
+            !filtersToTranslated.get(f).exists(pushed.contains) &&
+              f.references.subsetOf(filterAttrs)
+          }
+          val partPredicates = getPartitionPredicateSchema(table, output)
+            .map(createRuntimePartitionPredicates(candidates, _))
+            .getOrElse(Seq.empty)
           if (partPredicates.nonEmpty) {
             filterableScan.filter(partPredicates.toArray)
           }
