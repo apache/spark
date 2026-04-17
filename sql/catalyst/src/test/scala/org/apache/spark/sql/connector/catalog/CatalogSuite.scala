@@ -562,7 +562,7 @@ class CatalogSuite extends SparkFunSuite {
     val updated = catalog.alterTable(testIdent, TableChange.updateColumnType(Array("id"), LongType))
 
     val expectedColumns = Array(Column.create("id", LongType), Column.create("data", StringType))
-    assert(updated.columns sameElements expectedColumns)
+    assertColumnsEqual(updated.columns, expectedColumns)
   }
 
   test("alterTable: update column nullability") {
@@ -585,7 +585,7 @@ class CatalogSuite extends SparkFunSuite {
 
     val expectedColumns = Array(
       Column.create("id", IntegerType, true), Column.create("data", StringType))
-    assert(updated.columns sameElements expectedColumns)
+    assertColumnsEqual(updated.columns, expectedColumns)
   }
 
   test("alterTable: update missing column fails") {
@@ -628,7 +628,7 @@ class CatalogSuite extends SparkFunSuite {
       Column.create("id", IntegerType, true, "comment text", null),
       Column.create("data", StringType)
     )
-    assert(updated.columns sameElements expectedColumns)
+    assertColumnsEqual(updated.columns, expectedColumns)
   }
 
   test("alterTable: replace comment") {
@@ -652,7 +652,7 @@ class CatalogSuite extends SparkFunSuite {
     val updated = catalog.alterTable(testIdent,
       TableChange.updateColumnComment(Array("id"), "replacement comment"))
 
-    assert(updated.columns sameElements expectedColumns)
+    assertColumnsEqual(updated.columns, expectedColumns)
   }
 
   test("alterTable: add comment to missing column fails") {
@@ -692,7 +692,7 @@ class CatalogSuite extends SparkFunSuite {
 
     val expectedColumns = Array(
       Column.create("some_id", IntegerType), Column.create("data", StringType))
-    assert(updated.columns sameElements expectedColumns)
+    assertColumnsEqual(updated.columns, expectedColumns)
   }
 
   test("alterTable: rename nested column") {
@@ -805,7 +805,7 @@ class CatalogSuite extends SparkFunSuite {
       TableChange.deleteColumn(Array("id"), false))
 
     val expectedColumns = Array(Column.create("data", StringType))
-    assert(updated.columns sameElements expectedColumns)
+    assertColumnsEqual(updated.columns, expectedColumns)
   }
 
   test("alterTable: delete nested column") {
