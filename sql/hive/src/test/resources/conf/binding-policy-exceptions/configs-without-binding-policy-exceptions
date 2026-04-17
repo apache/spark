@@ -1189,6 +1189,7 @@ spark.ui.enabled
 spark.ui.filters
 spark.ui.groupSQLSubExecutionEnabled
 spark.ui.heapHistogramEnabled
+spark.ui.jetty.sniHostCheckEnabled
 spark.ui.jetty.stopTimeout
 spark.ui.killEnabled
 spark.ui.liveUpdate.minFlushPeriod

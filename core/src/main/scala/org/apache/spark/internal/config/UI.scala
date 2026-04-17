@@ -142,6 +142,16 @@ private[spark] object UI {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("8k")
 
+  val UI_JETTY_SNI_HOST_CHECK = ConfigBuilder("spark.ui.jetty.sniHostCheckEnabled")
+    .internal()
+    .doc("Whether to enable Jetty's SNI host check on the Spark UI HTTPS connector. " +
+      "Since SPARK-45522 (Jetty 10+), Spark has disabled SNI host check to preserve " +
+      "backward compatibility with standalone deployments. Set to true to enforce " +
+      "SNI host checking for stricter security.")
+    .version("4.2.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val UI_TIMELINE_ENABLED = ConfigBuilder("spark.ui.timelineEnabled")
     .doc("Whether to display event timeline data on UI pages.")
     .version("3.4.0")
