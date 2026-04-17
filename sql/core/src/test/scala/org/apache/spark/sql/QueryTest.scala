@@ -39,9 +39,9 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
 import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
