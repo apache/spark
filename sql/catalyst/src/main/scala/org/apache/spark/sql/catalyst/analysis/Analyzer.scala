@@ -4025,14 +4025,26 @@ class Analyzer(
      * in the plan and add the missing references to the Project/Aggregate and preserve
      * them in all intermediate operators.
      */
+    /** Resolve subqueries in the condition expression using the fake Project pattern. */
+    private def resolveConditionSubqueries(
+        cond: Expression, outer: LogicalPlan): Expression = {
+      if (SubqueryExpression.hasSubquery(cond)) {
+        val fake = Project(Alias(cond, "fake")() :: Nil, outer)
+        ResolveSubquery(fake).asInstanceOf[Project].projectList.head.asInstanceOf[Alias].child
+      } else {
+        cond
+      }
+    }
+
     private def resolveQualifyCondition(
         cond: Expression,
         candidateAttrs: AttributeSet,
         plan: LogicalPlan): (Expression, LogicalPlan) = plan match {
       case agg: Aggregate =>
         val resolved = resolveExpressionByPlanChildren(cond, agg)
+        val subqueryResolved = resolveConditionSubqueries(resolved, agg.child)
         val extraAggExprs = mutable.ArrayBuffer.empty[NamedExpression]
-        val newCond = resolved.transform {
+        val newCond = subqueryResolved.transform {
           case grouping if grouping.resolved &&
             agg.groupingExpressions.exists(grouping.semanticEquals) =>
             val allAggExprs = agg.aggregateExpressions ++ extraAggExprs.toSeq
@@ -4053,15 +4065,22 @@ class Analyzer(
                   alias.toAttribute
               }
             }
+          case a: Attribute if a.resolved && !candidateAttrs.contains(a) =>
+            a.failAnalysis(
+              errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+              messageParameters = Map(
+                "objectName" -> a.sql,
+                "proposal" -> candidateAttrs.map(_.sql).mkString(", ")))
         }
         val newAgg = agg.copy(aggregateExpressions = agg.aggregateExpressions ++ extraAggExprs)
         (newCond, newAgg)
 
       case p: Project =>
         val resolved = resolveExpressionByPlanChildren(cond, p)
-        val missingAttrs = (resolved.references -- p.outputSet).intersect(p.child.outputSet)
+        val newCond = resolveConditionSubqueries(resolved, p.child)
+        val missingAttrs = (newCond.references -- p.outputSet).intersect(p.child.outputSet)
         val newProject = p.copy(projectList = p.projectList ++ missingAttrs)
-        (resolved, newProject)
+        (newCond, newProject)
 
       case w: Window =>
         val (newCond, newChild) = resolveQualifyCondition(cond, candidateAttrs, w.child)
@@ -4071,7 +4090,8 @@ class Analyzer(
         val (newCond, newChild) = resolveQualifyCondition(cond, candidateAttrs, f.child)
         (newCond, f.copy(child = newChild))
 
-      case _ => (cond, plan)
+      case o =>
+        throw SparkException.internalError(s"Invalid QUALIFY usage with ${o.nodeName}")
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
