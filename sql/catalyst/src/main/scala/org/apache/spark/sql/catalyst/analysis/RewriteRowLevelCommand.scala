@@ -189,14 +189,6 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     Project(operationType +: plan.output, plan)
   }
 
-  private final val REPLACE_DATA_OPERATIONS_WITH_ROW = Set(
-    WRITE_WITH_METADATA_OPERATION, WRITE_OPERATION,
-    WRITE_UPDATED_OPERATION, WRITE_COPIED_OPERATION)
-
-  private final val REPLACE_DATA_OPERATIONS_WITH_METADATA = Set(
-    WRITE_WITH_METADATA_OPERATION,
-    WRITE_UPDATED_OPERATION, WRITE_COPIED_OPERATION)
-
   protected def buildReplaceDataProjections(
       plan: LogicalPlan,
       rowAttrs: Seq[Attribute],
@@ -246,7 +238,6 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
   private def extractOutputs(plan: LogicalPlan): Seq[Seq[Expression]] = {
     plan match {
       case p: Project => Seq(p.projectList)
-      case u: Union => extractOutputs(u.children.head)
       case e: Expand => e.projections
       case m: MergeRows => m.outputs
       case u: Union => u.children.flatMap(extractOutputs)

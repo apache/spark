@@ -19,6 +19,8 @@ package org.apache.spark.sql.connector
 
 class DeltaBasedNoMetadataUpdateTableSuite extends UpdateTableSuiteBase {
 
+  override protected def deltaUpdate: Boolean = true
+
   override protected def extraTableProps: java.util.Map[String, String] = {
     val props = new java.util.HashMap[String, String]()
     props.put("supports-deltas", "true")
