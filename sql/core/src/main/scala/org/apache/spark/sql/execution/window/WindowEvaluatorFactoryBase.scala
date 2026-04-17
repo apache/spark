@@ -195,7 +195,11 @@ trait WindowEvaluatorFactoryBase {
           case WindowExpression(ae: AggregateExpression, _) => ae.filter
           case _ => None
         }.toArray
-        def processor = if (functions.exists(_.isInstanceOf[PythonFuncExpression])) {
+        // Shared per (key) across the factory closure's invocations; each
+        // Frame calls `processor.initialize(...)` in `prepare`, so cross-
+        // partition reuse is safe. Previously `def`, which re-allocated on
+        // every factory application (keeping listener registration idempotent).
+        val processor = if (functions.exists(_.isInstanceOf[PythonFuncExpression])) {
           null
         } else {
           AggregateProcessor(
@@ -348,7 +352,12 @@ trait WindowEvaluatorFactoryBase {
       upper: Expression,
       frameType: FrameType,
       blockSize: Int): Option[Int] = {
-    if (frameType != RowFrame) return Some(8)
+    // Only reached via the moving-frame branch after `eligibleForSegTree`,
+    // which already requires `frameType == RowFrame`; the Frame constructor
+    // asserts the same. The former `frameType != RowFrame` shortcut was
+    // therefore dead code (the frame integration review F2).
+    assert(frameType == RowFrame,
+      s"estimateMaxCachedBlocks expects RowFrame, got $frameType")
     val w: Option[Int] = (lower, upper) match {
       case (CurrentRow, CurrentRow) => Some(1)
       case (IntegerLiteral(lo), IntegerLiteral(hi)) => Some(math.abs(hi - lo) + 1)

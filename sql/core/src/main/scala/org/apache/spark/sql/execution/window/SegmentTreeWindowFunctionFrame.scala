@@ -76,10 +76,16 @@ private[window] final class SegmentTreeWindowFunctionFrame(
   }
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+    // `prepare` is idempotent: the partition evaluator calls it once per
+    // partition, but a second call (rebuild) must not reuse stale state
+    // from the previous partition. Clear the tree and advance-loop cursor
+    // fields (boundIter / nextRow) before rebuilding.
     if (tree != null) {
       tree.close()
       tree = null
     }
+    boundIter = null
+    nextRow = null
     lowerBound = 0
     upperBound = 0
     if (rows.length < conf.windowSegmentTreeMinPartitionRows) {
