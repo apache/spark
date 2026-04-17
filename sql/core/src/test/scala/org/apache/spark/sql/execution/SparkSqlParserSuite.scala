@@ -22,8 +22,12 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.{SparkConf, SparkThrowable}
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedHaving, UnresolvedQualify, UnresolvedRelation, UnresolvedStar}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, EqualTo, GreaterThan, Literal, NullsFirst, SortOrder, UnresolvedWindowExpression, UnspecifiedFrame, WindowExpression, WindowSpecDefinition, WindowSpecReference}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias,
+  UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedHaving,
+  UnresolvedQualify, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat,
+  EqualTo, GreaterThan, Literal, NullsFirst, SortOrder, UnresolvedWindowExpression,
+  UnspecifiedFrame, WindowExpression, WindowSpecDefinition, WindowSpecReference}
 import org.apache.spark.sql.catalyst.parser.{AbstractParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -810,7 +814,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
               None)),
           UnresolvedRelation(TableIdentifier("testData2")))))
 
-    // QUALIFY with window function in condition — SELECT list has no window function
+    // QUALIFY with window function in condition - SELECT list has no window function
     assertEqual(
       """
         |SELECT a

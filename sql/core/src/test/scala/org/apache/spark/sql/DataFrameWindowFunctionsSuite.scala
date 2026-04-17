@@ -1151,6 +1151,39 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     }
   }
 
+  test("QUALIFY with correlated subquery in condition") {
+    withTempView("t1", "t2") {
+      Seq((1, 10), (2, 20), (3, 30)).toDF("k", "v").createOrReplaceTempView("t1")
+      Seq((1, 100), (2, 200)).toDF("k", "v").createOrReplaceTempView("t2")
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT k, v, ROW_NUMBER() OVER (ORDER BY k) AS rn
+            |FROM t1
+            |QUALIFY rn = 1 AND EXISTS (SELECT 1 FROM t2 WHERE t2.k = t1.k)
+          """.stripMargin),
+        Row(1, 10, 1))
+    }
+  }
+
+  test("QUALIFY rejects non-grouping column references with GROUP BY") {
+    withTempView("testData2") {
+      testData2.createOrReplaceTempView("testData2")
+
+      val e = intercept[AnalysisException] {
+        sql(
+          """
+            |SELECT a, SUM(b) AS total, ROW_NUMBER() OVER (ORDER BY a) AS rn
+            |FROM testData2
+            |GROUP BY a
+            |QUALIFY b > 1
+          """.stripMargin).queryExecution.analyzed
+      }
+      assert(e.getMessage.contains("b"))
+    }
+  }
+
   test("QUALIFY is non-reserved in non-ANSI mode") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       checkAnswer(sql("SELECT qualify FROM VALUES (1) AS t(qualify)"), Row(1))
