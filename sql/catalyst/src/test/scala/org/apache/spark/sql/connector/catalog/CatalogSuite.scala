@@ -56,7 +56,7 @@ class CatalogSuite extends SparkFunSuite {
   /** Asserts that columns match ignoring column IDs. */
   private def assertColumnsEqual(
       actual: Array[Column], expected: Array[Column]): Unit = {
-    assert(stripIds(actual) === expected,
+    assert(stripIds(actual) === stripIds(expected),
       s"Columns mismatch (ignoring IDs):\n  actual:   ${actual.mkString(", ")}\n" +
         s"  expected: ${expected.mkString(", ")}")
   }
