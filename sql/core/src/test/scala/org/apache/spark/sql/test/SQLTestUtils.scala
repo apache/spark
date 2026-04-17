@@ -24,9 +24,15 @@ import org.apache.spark.sql.catalyst.util._
 
 /**
  * Helper trait that should be extended by all SQL test suites within the Spark
- * code base. Now a thin alias for [[org.apache.spark.sql.QueryTest]].
+ * code base. Now a thin alias for [[org.apache.spark.sql.QueryTestBase]] with
+ * [[org.apache.spark.sql.catalyst.plans.PlanTest]].
+ *
+ * Note: This remains a trait (not extending the abstract class QueryTest) so that it can be
+ * mixed into classes that extend SparkFunSuite or SparkPlanTest directly.
  */
-private[sql] trait SQLTestUtils extends org.apache.spark.sql.QueryTest
+private[sql] trait SQLTestUtils
+  extends org.apache.spark.sql.QueryTestBase
+  with org.apache.spark.sql.catalyst.plans.PlanTest
 
 /**
  * Helper trait that can be extended by all external SQL test suites.
