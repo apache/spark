@@ -53,9 +53,9 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
   private def buildTree(
       values: Seq[Int],
       aggs: Array[DeclarativeAggregate] = Array(minAgg),
-      fanout: Int = WindowSegmentTree.DEFAULT_FANOUT,
-      blockSize: Int = WindowSegmentTree.DEFAULT_BLOCK_SIZE,
-      maxCachedBlocks: Int = -1): WindowSegmentTree = {
+      fanout: Int = WindowSegmentTree.DefaultFanout,
+      blockSize: Int = WindowSegmentTree.DefaultBlockSize,
+      maxCachedBlocks: Option[Int] = None): WindowSegmentTree = {
     val tree = new WindowSegmentTree(
       aggs, inputSchema, newMutableProjection, fanout, blockSize, maxCachedBlocks)
     val rows = values.iterator.map { v =>
@@ -63,7 +63,7 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
       r.update(0, v)
       r.asInstanceOf[InternalRow]
     }
-    tree.build(rows, values.length)
+    tree.build(rows)
     tree
   }
 
@@ -187,7 +187,7 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
       val rnd = new Random(777)
       val values = Seq.fill(100)(rnd.nextInt(10000))
       val tree = buildTree(
-        values, fanout = 4, blockSize = 16, maxCachedBlocks = 2)
+        values, fanout = 4, blockSize = 16, maxCachedBlocks = Some(2))
       try {
         val queries = Seq.fill(30) {
           val a = rnd.nextInt(101)

@@ -19,11 +19,14 @@ package org.apache.spark.sql.execution.window
 
 import java.util.{LinkedHashMap => JLinkedHashMap, Map => JMap}
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import scala.collection.mutable
+
+import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -41,21 +44,28 @@ import org.apache.spark.util.ArrayImplicits._
  *
  * Note: the design doc Section 3.3 specifies leaves are NOT materialized and
  * recomputed from the spillable array on demand. For initial implementation simplicity
- * we materialize leaves inside the per-block internal node arrays; this
- * is a known deviation documented in PROGRESS to be revisited post-POC.
+ * we materialize leaves inside the per-block internal node arrays.
+ * // TODO(SPARK-XXXXX) re-assess after Frame integration.
+ *
+ * @note Instances are not thread-safe.
  */
-class WindowSegmentTree(
+private[window] class WindowSegmentTree(
     functions: Array[DeclarativeAggregate],
     inputSchema: Seq[Attribute],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
-    fanout: Int = WindowSegmentTree.DEFAULT_FANOUT,
-    blockSize: Int = WindowSegmentTree.DEFAULT_BLOCK_SIZE,
-    maxCachedBlocks: Int = -1)
+    fanout: Int = WindowSegmentTree.DefaultFanout,
+    blockSize: Int = WindowSegmentTree.DefaultBlockSize,
+    maxCachedBlocks: Option[Int] = None,
+    spillThreshold: Int = Int.MaxValue,
+    inMemoryThreshold: Int = Int.MaxValue)
   extends AutoCloseable {
 
   require(fanout >= 2, s"fanout must be >= 2, got $fanout")
   require(blockSize >= 1, s"blockSize must be >= 1, got $blockSize")
   require(functions.nonEmpty, "WindowSegmentTree requires at least one aggregate function")
+  maxCachedBlocks.foreach { n =>
+    require(n >= 1, s"maxCachedBlocks must be >= 1 when specified, got $n")
+  }
 
   // ---------- Schemas & projections ----------
 
@@ -63,24 +73,25 @@ class WindowSegmentTree(
     functions.flatMap(_.aggBufferAttributes).toImmutableArraySeq
   private val rightAttrs: Seq[AttributeReference] =
     functions.flatMap(_.inputAggBufferAttributes).toImmutableArraySeq
-  private val bufferDataTypes = bufferAttrs.map(_.dataType).toArray
+  private val bufferDataTypes: IndexedSeq[DataType] =
+    bufferAttrs.map(_.dataType).toIndexedSeq
 
   private val initialValues: Seq[Expression] = functions.flatMap(_.initialValues).toIndexedSeq
   private val updateExpressions: Seq[Expression] =
     functions.flatMap(_.updateExpressions).toIndexedSeq
-  private val mergeExpressionsAll: Seq[Expression] =
+  private val mergeExpressions: Seq[Expression] =
     functions.flatMap(_.mergeExpressions).toIndexedSeq
 
-  private val initProj: MutableProjection = newMutableProjection(initialValues, Nil)
-  private val updateProj: MutableProjection =
+  private[this] val initProj: MutableProjection = newMutableProjection(initialValues, Nil)
+  private[this] val updateProj: MutableProjection =
     newMutableProjection(updateExpressions, bufferAttrs ++ inputSchema)
-  private val mergeProj: MutableProjection =
-    newMutableProjection(mergeExpressionsAll, bufferAttrs ++ rightAttrs)
+  private[this] val mergeProj: MutableProjection =
+    newMutableProjection(mergeExpressions, bufferAttrs ++ rightAttrs)
 
   private val inputUnsafeProj: UnsafeProjection =
     UnsafeProjection.create(inputSchema.map(_.dataType).toArray)
 
-  private val joinedRow = new JoinedRow()
+  private[this] val joinedRow = new JoinedRow()
 
   // ---------- State ----------
 
@@ -92,10 +103,33 @@ class WindowSegmentTree(
    *  merged buffer over all rows in block i. */
   private var blockAggregates: Array[InternalRow] = Array.empty
 
+  /** `spans(L)` = number of leaves covered by a single node at level L. Depends
+   *  only on fanout + blockSize, so precomputed once. */
+  private val spans: Array[Int] = {
+    val maxLevel = {
+      var lvl = 0
+      var span = 1L
+      while (span < blockSize) { span *= fanout; lvl += 1 }
+      lvl
+    }
+    val arr = new Array[Int](maxLevel + 1)
+    var s = 1L
+    var i = 0
+    while (i <= maxLevel) {
+      arr(i) = if (s > Int.MaxValue) Int.MaxValue else s.toInt
+      s *= fanout
+      i += 1
+    }
+    arr
+  }
+
   /** LRU cache of per-block internal node arrays. Key = blockIdx.
-   *  Value = `Array[Array[InternalRow]]` with levels(0..h). */
+   *  Value = `Array[Array[InternalRow]]` with levels(0..h). Capacity = 0 when
+   *  `maxCachedBlocks` is `None` (rebuild-on-demand); otherwise the supplied
+   *  capacity. Callers (e.g. `SegmentTreeWindowFunctionFrame` in Batch 2)
+   *  should pass a W-aware value like `ceil(W / blockSize) + 2`. */
   private val blockLevelsCache: JLinkedHashMap[Integer, Array[Array[InternalRow]]] = {
-    val cap = if (maxCachedBlocks > 0) maxCachedBlocks else 0
+    val cap = maxCachedBlocks.getOrElse(0)
     new JLinkedHashMap[Integer, Array[Array[InternalRow]]](16, 0.75f, true) {
       override def removeEldestEntry(
           eldest: JMap.Entry[Integer, Array[Array[InternalRow]]]): Boolean = {
@@ -108,52 +142,43 @@ class WindowSegmentTree(
 
   def size: Int = numRows
 
-  def build(rows: Iterator[InternalRow], numRowsHint: Int): Unit = {
-    closeRowArray()
-    blockLevelsCache.clear()
-
-    numRows = numRowsHint
-    numBlocks = if (numRows == 0) 0 else (numRows + blockSize - 1) / blockSize
-
-    if (numRows == 0) {
-      blockAggregates = Array.empty
-      return
-    }
-
-    rowArray = newRowArray()
-    var count = 0
-    while (rows.hasNext) {
-      val r = rows.next()
-      val u = inputUnsafeProj(r)
-      rowArray.add(u)
-      count += 1
-    }
-    if (count != numRows) {
-      throw new IllegalArgumentException(
-        s"numRows hint ($numRows) does not match actual row count ($count)")
-    }
-
-    // Compute per-block pre-aggregates in one streaming pass.
-    blockAggregates = new Array[InternalRow](numBlocks)
-    var b = 0
-    val iter = rowArray.generateIterator()
-    while (b < numBlocks) {
-      val buf = newBuffer()
-      initProj.target(buf)(InternalRow.empty)
-      val start = b * blockSize
-      val end = math.min(start + blockSize, numRows)
-      var i = start
-      while (i < end) {
-        if (!iter.hasNext) {
-          throw new IllegalStateException("rowArray iterator exhausted unexpectedly")
-        }
-        val row = iter.next()
-        updateProj.target(buf)(joinedRow(buf, row))
-        i += 1
+  /**
+   * Drain `rows` into this tree, replacing any previously built state.
+   * Exception-safe: if iteration or aggregation throws, the previously built
+   * state (if any) is preserved.
+   */
+  def build(rows: Iterator[InternalRow]): Unit = {
+    val oldArray = rowArray
+    var newArray: ExternalAppendOnlyUnsafeRowArray = null
+    try {
+      newArray = newRowArray()
+      while (rows.hasNext) {
+        val r = rows.next()
+        val u = inputUnsafeProj(r)
+        newArray.add(u)
       }
-      blockAggregates(b) = buf
-      b += 1
+      // newArray.length is Int (bounded by Int.MaxValue by design); keep the
+      // check for clarity against any future widening of that contract.
+      val n = newArray.length
+      if (n < 0) {
+        throw new IllegalArgumentException(
+          s"WindowSegmentTree cannot hold more than Int.MaxValue rows, got $n")
+      }
+      val nBlocks = if (n == 0) 0 else (n + blockSize - 1) / blockSize
+      val newBlockAggs = computeBlockAggregates(newArray, n, nBlocks)
+
+      // Commit.
+      rowArray = newArray
+      numRows = n
+      numBlocks = nBlocks
+      blockAggregates = newBlockAggs
+      blockLevelsCache.clear()
+    } catch {
+      case t: Throwable =>
+        if (newArray != null) newArray.clear()
+        throw t
     }
+    if (oldArray != null) oldArray.clear()
   }
 
   def query(lo: Int, hi: Int, outBuffer: InternalRow): Unit = {
@@ -161,7 +186,7 @@ class WindowSegmentTree(
       throw new IllegalArgumentException(
         s"Invalid range [lo=$lo, hi=$hi) for size=$numRows")
     }
-    // Reset outBuffer to identity.
+    // Reset outBuffer to identity only after bounds validation.
     initProj.target(outBuffer)(InternalRow.empty)
     if (lo == hi) return
 
@@ -188,6 +213,7 @@ class WindowSegmentTree(
     }
   }
 
+  /** Terminal: releases all state. Subsequent use is undefined. */
   override def close(): Unit = {
     closeRowArray()
     blockLevelsCache.clear()
@@ -200,11 +226,13 @@ class WindowSegmentTree(
 
   private[window] def peekBlockCount: Int = numBlocks
 
+  /** NOTE: test-only; promotes block to MRU in the LRU cache as a side effect. */
   private[window] def peekLevelSize(blockIdx: Int, level: Int): Int = {
     val levels = ensureBlockLevels(blockIdx)
     levels(level).length
   }
 
+  /** NOTE: test-only; promotes block to MRU in the LRU cache as a side effect. */
   private[window] def peekLevelCount(blockIdx: Int): Int = {
     val levels = ensureBlockLevels(blockIdx)
     levels.length
@@ -212,13 +240,41 @@ class WindowSegmentTree(
 
   // ---------- Internals ----------
 
+  private def computeBlockAggregates(
+      array: ExternalAppendOnlyUnsafeRowArray,
+      n: Int,
+      nBlocks: Int): Array[InternalRow] = {
+    if (n == 0) return Array.empty
+    val result = new Array[InternalRow](nBlocks)
+    val iter = array.generateIterator()
+    var b = 0
+    while (b < nBlocks) {
+      val buf = newBuffer()
+      initProj.target(buf)(InternalRow.empty)
+      val start = b * blockSize
+      val end = math.min(start + blockSize, n)
+      var i = start
+      while (i < end) {
+        if (!iter.hasNext) {
+          throw SparkException.internalError("rowArray iterator exhausted unexpectedly")
+        }
+        val row = iter.next()
+        updateProj.target(buf)(joinedRow(buf, row))
+        i += 1
+      }
+      result(b) = buf
+      b += 1
+    }
+    result
+  }
+
   /** Merge `src` buffer into `dst` buffer using mergeProj. */
   private def mergeInto(dst: InternalRow, src: InternalRow): Unit = {
     mergeProj.target(dst)(joinedRow(dst, src))
   }
 
   private def newBuffer(): InternalRow =
-    new SpecificInternalRow(bufferDataTypes.toIndexedSeq)
+    new SpecificInternalRow(bufferDataTypes)
 
   /** Merge the given leaf range [lo, hi) inside `blockIdx` into `out`. */
   private def mergeBlockRange(
@@ -241,7 +297,7 @@ class WindowSegmentTree(
       queryLo: Int,
       queryHi: Int,
       out: InternalRow): Unit = {
-    val span = spanAtLevel(level)
+    val span = spans(level)
     val nodeLo = idx * span
     val nodeHi = math.min(nodeLo + span, blockRows)
     if (queryLo >= nodeHi || queryHi <= nodeLo) return
@@ -249,7 +305,6 @@ class WindowSegmentTree(
       mergeInto(out, levels(level)(idx))
       return
     }
-    if (level == 0) return // partial overlap on a single leaf = empty intersection
     val childLevel = level - 1
     val childLevelSize = levels(childLevel).length
     var c = 0
@@ -260,14 +315,6 @@ class WindowSegmentTree(
       }
       c += 1
     }
-  }
-
-  /** Number of leaves covered by a single node at the given level. */
-  private def spanAtLevel(level: Int): Int = {
-    var s = 1L
-    var i = 0
-    while (i < level) { s *= fanout; i += 1 }
-    if (s > Int.MaxValue) Int.MaxValue else s.toInt
   }
 
   /** Build (or fetch from LRU) the full per-block levels array. */
@@ -284,7 +331,7 @@ class WindowSegmentTree(
     var i = 0
     while (i < blockRows) {
       if (!iter.hasNext) {
-        throw new IllegalStateException(
+        throw SparkException.internalError(
           s"rowArray iterator exhausted at block $blockIdx row $i")
       }
       val row = iter.next()
@@ -295,9 +342,7 @@ class WindowSegmentTree(
       i += 1
     }
 
-    val allLevels = new java.util.ArrayList[Array[InternalRow]]()
-    allLevels.add(leaves)
-
+    val allLevels = mutable.ArrayBuffer[Array[InternalRow]](leaves)
     var prev = leaves
     while (prev.length > 1) {
       val parentCount = (prev.length + fanout - 1) / fanout
@@ -316,11 +361,11 @@ class WindowSegmentTree(
         parents(p) = buf
         p += 1
       }
-      allLevels.add(parents)
+      allLevels += parents
       prev = parents
     }
 
-    val levels = allLevels.toArray(new Array[Array[InternalRow]](0))
+    val levels = allLevels.toArray
     blockLevelsCache.put(Integer.valueOf(blockIdx), levels)
     levels
   }
@@ -339,9 +384,9 @@ class WindowSegmentTree(
       taskContext,
       1024,
       env.memoryManager.pageSizeBytes,
-      Int.MaxValue,
+      inMemoryThreshold,
       Long.MaxValue,
-      Int.MaxValue,
+      spillThreshold,
       Long.MaxValue)
   }
 
@@ -353,7 +398,7 @@ class WindowSegmentTree(
   }
 }
 
-object WindowSegmentTree {
-  val DEFAULT_FANOUT: Int = 16
-  val DEFAULT_BLOCK_SIZE: Int = 65536
+private[window] object WindowSegmentTree {
+  val DefaultFanout: Int = 16
+  val DefaultBlockSize: Int = 65536
 }
