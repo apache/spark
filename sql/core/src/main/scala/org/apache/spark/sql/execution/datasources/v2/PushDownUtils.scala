@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.expressions.{IdentityTransform, SortOrder}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.execution.{ScalarSubquery => ExecScalarSubquery}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils}
 import org.apache.spark.sql.internal.SQLConf
@@ -128,6 +128,50 @@ object PushDownUtils extends Logging {
         val postScanFilters = r.pushFilters(filters)
         (Right(r.pushedFilters.toImmutableArraySeq), postScanFilters)
       case _ => (Left(Nil), filters)
+    }
+  }
+
+  /**
+   * Pushes runtime filters to a [[SupportsRuntimeV2Filtering]] scan.
+   * Translatable filters are pushed first, followed by [[PartitionPredicate]] if the scan supports
+   * iterative filtering.
+   *
+   * @return true if any filters were pushed to the data source
+   */
+  def pushRuntimeFilters(
+      scan: Scan,
+      runtimeFilters: Seq[Expression],
+      table: Table,
+      output: Seq[AttributeReference]): Boolean = {
+    scan match {
+      case filterableScan: SupportsRuntimeV2Filtering if runtimeFilters.nonEmpty =>
+
+        // First push down translatable runtime filters.
+        val translatedFilters = runtimeFilters.flatMap {
+          case DynamicPruningExpression(e) => DataSourceV2Strategy.translateRuntimeFilterV2(e)
+          case f => DataSourceV2Strategy.translateScalarSubqueryFilterV2(f)
+        }
+        if (translatedFilters.nonEmpty) {
+          filterableScan.filter(translatedFilters.toArray)
+        }
+
+        // If the scan supports iterative filtering, derive PartitionPredicates
+        // and push them in a second pass. (See SPARK-55596)
+        val partPredicates =
+          if (filterableScan.supportsIterativeFiltering()) {
+            getPartitionPredicateSchema(table, output).map {
+              fields => createRuntimePartitionPredicates(runtimeFilters, fields)
+            }.getOrElse(Seq.empty)
+          } else {
+            Seq.empty
+          }
+        if (partPredicates.nonEmpty) {
+          filterableScan.filter(partPredicates.toArray)
+        }
+
+        translatedFilters.nonEmpty || partPredicates.nonEmpty
+      case _ =>
+        false
     }
   }
 
