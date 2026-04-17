@@ -61,27 +61,35 @@ class InMemoryEnhancedRuntimePartitionFilterTable(
     extends BatchScanBaseClass(_data, readSchema, tableSchema)
     with SupportsRuntimeV2Filtering {
 
-    private val _pushedPartitionPredicates = ArrayBuffer.empty[PartitionPredicate]
+    private val _allPushedPredicates = ArrayBuffer.empty[Predicate]
 
     def pushedPartitionPredicates: Seq[PartitionPredicate] =
-      _pushedPartitionPredicates.toSeq
+      _allPushedPredicates.collect {
+        case pp: PartitionPredicate => pp
+      }.toSeq
+
+    override def pushedPredicates(): Array[Predicate] =
+      _allPushedPredicates.toArray
 
     override def supportsIterativeFiltering(): Boolean = true
 
     override def filterAttributes(): Array[NamedReference] = {
       val scanFields = readSchema.fields.map(_.name).toSet
       partitioning.flatMap(_.references())
-        .filter(ref => scanFields.contains(ref.fieldNames.mkString(".")))
+        .filter(ref => scanFields.contains(
+          ref.fieldNames.mkString(".")))
     }
 
     override def filter(filters: Array[Predicate]): Unit = {
       filters.foreach {
         case pp: PartitionPredicate =>
-          _pushedPartitionPredicates += pp
+          _allPushedPredicates += pp
           data = data.filter { partition =>
-            pp.eval(partition.asInstanceOf[BufferedRows].partitionKey())
+            pp.eval(partition
+              .asInstanceOf[BufferedRows].partitionKey())
           }
-        case _ =>
+        case other =>
+          _allPushedPredicates += other
       }
     }
   }
