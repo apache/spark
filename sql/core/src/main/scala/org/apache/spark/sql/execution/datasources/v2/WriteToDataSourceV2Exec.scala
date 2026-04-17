@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, TableSpec, UnaryNode}
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils, ReplaceDataProjections, WriteDeltaProjections}
-import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSERT_OPERATION, REINSERT_OPERATION, UPDATE_OPERATION, WRITE_COPIED_OPERATION, WRITE_OPERATION, WRITE_UPDATED_OPERATION, WRITE_WITH_METADATA_OPERATION}
+import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{COPY_OPERATION, DELETE_OPERATION, INSERT_OPERATION, REINSERT_OPERATION, UPDATE_OPERATION}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
@@ -313,15 +313,14 @@ case class ReplaceDataExec(
     refreshCache: () => Unit,
     projections: ReplaceDataProjections,
     write: Write,
-    rowLevelCommand: RowLevelOperation.Command)
-  extends RowLevelWriteExec {
+    rowLevelCommand: RowLevelOperation.Command) extends RowLevelWriteExec {
 
   override def writingTask: WritingSparkTask[_] = {
-    projections match {
-      case ReplaceDataProjections(dataProj, Some(metadataProj)) =>
-        DataAndMetadataWritingSparkTask(dataProj, metadataProj, operationMetrics)
-      case ReplaceDataProjections(dataProj, None) =>
-        DataWithProjectionWritingSparkTask(dataProj, operationMetrics)
+    projections.metadataProjection match {
+      case Some(metadataProj) =>
+        DataAndMetadataWritingSparkTask(projections.rowProjection, metadataProj, operationMetrics)
+      case None =>
+        DataWithProjectionWritingSparkTask(projections.rowProjection, operationMetrics)
     }
   }
 
@@ -338,8 +337,7 @@ case class WriteDeltaExec(
     refreshCache: () => Unit,
     projections: WriteDeltaProjections,
     write: DeltaWrite,
-    rowLevelCommand: RowLevelOperation.Command)
-  extends RowLevelWriteExec {
+    rowLevelCommand: RowLevelOperation.Command) extends RowLevelWriteExec {
 
   override lazy val writingTask: WritingSparkTask[_] = {
     if (projections.metadataProjection.isDefined) {
@@ -656,24 +654,19 @@ case class DataAndMetadataWritingSparkTask(
       val operation = row.getInt(0)
 
       operation match {
-        case WRITE_UPDATED_OPERATION =>
+        case UPDATE_OPERATION =>
           numUpdatedRows.foreach(_.add(1L))
           dataProj.project(row)
           metadataProj.project(row)
           writer.write(metadataProj, dataProj)
 
-        case WRITE_COPIED_OPERATION =>
+        case COPY_OPERATION =>
           numCopiedRows.foreach(_.add(1L))
           dataProj.project(row)
           metadataProj.project(row)
           writer.write(metadataProj, dataProj)
 
-        case WRITE_WITH_METADATA_OPERATION =>
-          dataProj.project(row)
-          metadataProj.project(row)
-          writer.write(metadataProj, dataProj)
-
-        case WRITE_OPERATION =>
+        case INSERT_OPERATION =>
           dataProj.project(row)
           writer.write(dataProj)
 
@@ -699,17 +692,17 @@ case class DataWithProjectionWritingSparkTask(
       val operation = row.getInt(0)
 
       operation match {
-        case WRITE_UPDATED_OPERATION =>
+        case UPDATE_OPERATION =>
           numUpdatedRows.foreach(_.add(1L))
           dataProj.project(row)
           writer.write(dataProj)
 
-        case WRITE_COPIED_OPERATION =>
+        case COPY_OPERATION =>
           numCopiedRows.foreach(_.add(1L))
           dataProj.project(row)
           writer.write(dataProj)
 
-        case WRITE_WITH_METADATA_OPERATION | WRITE_OPERATION =>
+        case INSERT_OPERATION =>
           dataProj.project(row)
           writer.write(dataProj)
 

@@ -15,17 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.util
+package org.apache.spark.sql.connector
 
-/**
- * A utility that holds constants for handling deltas of rows.
- */
-object RowDeltaUtils {
-  final val OPERATION_COLUMN: String = "__row_operation"
-  final val DELETE_OPERATION: Int = 1
-  final val UPDATE_OPERATION: Int = 2
-  final val INSERT_OPERATION: Int = 3
-  final val REINSERT_OPERATION: Int = 4
-  final val COPY_OPERATION: Int = 5
-  final val ORIGINAL_ROW_ID_VALUE_PREFIX: String = "__original_row_id_"
+class GroupBasedNoMetadataMergeIntoTableSuite extends MergeIntoTableSuiteBase {
+
+  override protected def extraTableProps: java.util.Map[String, String] = {
+    val props = new java.util.HashMap[String, String]()
+    props.put("no-metadata", "true")
+    props
+  }
 }

@@ -21,8 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ProjectingInternalRow
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, ExprId, Literal, MetadataAttribute, NamedExpression, V2ExpressionUtils}
-import org.apache.spark.sql.catalyst.expressions.If
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, Expression, ExprId, If, Literal, MetadataAttribute, NamedExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, Expand, LogicalPlan, MergeRows, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{ReplaceDataProjections, WriteDeltaProjections}
@@ -39,11 +38,11 @@ import org.apache.spark.util.ArrayImplicits._
 
 trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
 
-  private final val DELTA_OPERATIONS_WITH_ROW =
-    Set(UPDATE_OPERATION, REINSERT_OPERATION, INSERT_OPERATION)
-  private final val DELTA_OPERATIONS_WITH_METADATA =
-    Set(DELETE_OPERATION, UPDATE_OPERATION, REINSERT_OPERATION)
-  private final val DELTA_OPERATIONS_WITH_ROW_ID =
+  private final val OPERATIONS_WITH_ROW =
+    Set(UPDATE_OPERATION, REINSERT_OPERATION, INSERT_OPERATION, COPY_OPERATION)
+  private final val OPERATIONS_WITH_METADATA =
+    Set(DELETE_OPERATION, UPDATE_OPERATION, REINSERT_OPERATION, COPY_OPERATION)
+  private final val OPERATIONS_WITH_ROW_ID =
     Set(DELETE_OPERATION, UPDATE_OPERATION)
 
   protected def groupFilterEnabled: Boolean = conf.runtimeRowLevelOperationGroupFilterEnabled
@@ -185,8 +184,8 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     addOperationColumn(Literal(operation, IntegerType), plan)
   }
 
-  protected def addOperationColumn(operationExpr: Expression, plan: LogicalPlan): LogicalPlan = {
-    val operationType = Alias(operationExpr, OPERATION_COLUMN)()
+  protected def addOperationColumn(operation: Expression, plan: LogicalPlan): LogicalPlan = {
+    val operationType = Alias(operation, OPERATION_COLUMN)()
     Project(operationType +: plan.output, plan)
   }
 
@@ -204,11 +203,11 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       metadataAttrs: Seq[Attribute]): ReplaceDataProjections = {
     val outputs = extractOutputs(plan)
 
-    val outputsWithRow = filterOutputs(outputs, REPLACE_DATA_OPERATIONS_WITH_ROW)
+    val outputsWithRow = filterOutputs(outputs, OPERATIONS_WITH_ROW)
     val rowProjection = newLazyProjection(plan, outputsWithRow, rowAttrs)
 
     val metadataProjection = if (metadataAttrs.nonEmpty) {
-      val outputsWithMetadata = filterOutputs(outputs, REPLACE_DATA_OPERATIONS_WITH_METADATA)
+      val outputsWithMetadata = filterOutputs(outputs, OPERATIONS_WITH_METADATA)
       Some(newLazyProjection(plan, outputsWithMetadata, metadataAttrs))
     } else {
       None
@@ -225,17 +224,17 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     val outputs = extractOutputs(plan)
 
     val rowProjection = if (rowAttrs.nonEmpty) {
-      val outputsWithRow = filterOutputs(outputs, DELTA_OPERATIONS_WITH_ROW)
+      val outputsWithRow = filterOutputs(outputs, OPERATIONS_WITH_ROW)
       Some(newLazyProjection(plan, outputsWithRow, rowAttrs))
     } else {
       None
     }
 
-    val outputsWithRowId = filterOutputs(outputs, DELTA_OPERATIONS_WITH_ROW_ID)
+    val outputsWithRowId = filterOutputs(outputs, OPERATIONS_WITH_ROW_ID)
     val rowIdProjection = newLazyRowIdProjection(plan, outputsWithRowId, rowIdAttrs)
 
     val metadataProjection = if (metadataAttrs.nonEmpty) {
-      val outputsWithMetadata = filterOutputs(outputs, DELTA_OPERATIONS_WITH_METADATA)
+      val outputsWithMetadata = filterOutputs(outputs, OPERATIONS_WITH_METADATA)
       Some(newLazyProjection(plan, outputsWithMetadata, metadataAttrs))
     } else {
       None
@@ -250,6 +249,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       case u: Union => extractOutputs(u.children.head)
       case e: Expand => e.projections
       case m: MergeRows => m.outputs
+      case u: Union => u.children.flatMap(extractOutputs)
       case _ => throw SparkException.internalError("Can't extract outputs from plan: " + plan)
     }
   }
@@ -257,14 +257,13 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
   private def filterOutputs(
       outputs: Seq[Seq[Expression]],
       operations: Set[Int]): Seq[Seq[Expression]] = {
-    outputs.filter {
-      case Literal(operation: Integer, _) +: _ => operations.contains(operation)
-      case Alias(Literal(operation: Integer, _), _) +: _ => operations.contains(operation)
-      // handle conditional operation column (e.g., If-based for UPDATE)
-      case Alias(If(_, Literal(op1: Integer, _), Literal(op2: Integer, _)), _) +: _ =>
-        operations.contains(op1) || operations.contains(op2)
+    def matches(expr: Expression): Boolean = expr match {
+      case Literal(operation: Integer, _) => operations.contains(operation)
+      case Alias(child, _) => matches(child)
+      case If(_, trueValue, falseValue) => matches(trueValue) && matches(falseValue)
       case other => throw SparkException.internalError("Can't determine operation: " + other)
     }
+    outputs.filter(output => matches(output.head))
   }
 
   private def newLazyProjection(
