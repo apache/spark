@@ -107,6 +107,10 @@ case class MergeRowsExec(
       child.asInstanceOf[CodegenSupport].needCopyResult
   }
 
+  override def supportCodegen: Boolean = {
+    CodeGenerator.isValidParamLength(CodeGenerator.calculateParamLength(child.output))
+  }
+
   protected override def doProduce(ctx: CodegenContext): String = {
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
@@ -174,6 +178,7 @@ case class MergeRowsExec(
     val queryExecutionErrorsClass = QueryExecutionErrors.getClass.getName + ".MODULE$"
     val code =
       code"""
+            |${ctx.registerComment("cardinality validation")}
             |${currentRowId.code}
             |if ($rowIdBitmap.contains(${currentRowId.value})) {
             |  throw $queryExecutionErrorsClass.mergeCardinalityViolationError();
@@ -211,9 +216,11 @@ case class MergeRowsExec(
     }
 
     s"""
+       |${ctx.registerComment("evaluate source/target row presence")}
        |${sourcePresentExpr.code}
        |${targetPresentExpr.code}
        |
+       |${ctx.registerComment("routing to matched/notMatched/notMatchedBySource instructions")}
        |if (${targetPresentExpr.value} && ${sourcePresentExpr.value}) {
        |  $cardinalityValidationCode
        |  $matchedInstructionsCode
@@ -222,6 +229,8 @@ case class MergeRowsExec(
        |} else if (${targetPresentExpr.value}) {
        |  $notMatchedBySourceInstructionsCode
        |}
+       |${ctx.registerComment(
+         "no else needed: rows where both source and target are absent are discarded")}
      """.stripMargin
   }
 
@@ -241,7 +250,7 @@ case class MergeRowsExec(
 
       s"""
          |${instructionCodes.mkString("\n")}
-         |return;
+         |return; ${ctx.registerComment("no instruction matched, discard row")}
        """.stripMargin
     }
   }
@@ -297,7 +306,7 @@ case class MergeRowsExec(
       case _ =>
         throw new SparkUnsupportedOperationException(
           errorClass = "_LEGACY_ERROR_TEMP_3073",
-          messageParameters = Map("instruction" -> instruction.toString))
+          messageParameters = Map("other" -> instruction.toString))
     }
   }
 
