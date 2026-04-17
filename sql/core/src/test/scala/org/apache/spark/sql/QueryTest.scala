@@ -41,16 +41,16 @@ import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, SQLExecution}
-import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
+import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestData
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.UninterruptibleThread
 import org.apache.spark.util.Utils

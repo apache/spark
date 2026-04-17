@@ -30,7 +30,7 @@ private[sql] trait SQLTestUtils extends QueryTest
  * Helper trait that can be extended by all external SQL test suites.
  * Now a thin alias for [[QueryTestBase]].
  */
-private[sql] trait SQLTestUtilsBase extends QueryTestBase
+private[sql] trait SQLTestUtilsBase extends QueryTestBase { self: Suite => }
 
 private[sql] object SQLTestUtils {
 
