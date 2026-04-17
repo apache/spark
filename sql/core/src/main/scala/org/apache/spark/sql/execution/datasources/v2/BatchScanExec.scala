@@ -67,11 +67,29 @@ case class BatchScanExec(
     }
 
     val originalPartitioning = outputPartitioning
-    if (dataSourceFilters.nonEmpty) {
-      // the cast is safe as runtime filters are only assigned if the scan can be filtered
-      val filterableScan = scan.asInstanceOf[SupportsRuntimeV2Filtering]
-      filterableScan.filter(dataSourceFilters.toArray)
+    // the cast is safe as runtime filters are only assigned if the scan can be filtered
+    val filterableScan = scan.asInstanceOf[SupportsRuntimeV2Filtering]
+    var filtered = false
 
+    if (dataSourceFilters.nonEmpty) {
+      filterableScan.filter(dataSourceFilters.toArray)
+      filtered = true
+    }
+
+    // If the scan supports iterative filtering, derive PartitionPredicates from the
+    // runtime filters and push them in a second pass. (See SPARK-55596)
+    if (filterableScan.supportsIterativeFiltering()) {
+      PushDownUtils.getPartitionPredicateSchema(table, output).foreach { partitionFields =>
+        val partPredicates =
+          PushDownUtils.createRuntimePartitionPredicates(runtimeFilters, partitionFields)
+        if (partPredicates.nonEmpty) {
+          filterableScan.filter(partPredicates.toArray)
+          filtered = true
+        }
+      }
+    }
+
+    if (filtered) {
       // call toBatch again to get filtered partitions
       val newPartitions = scan.toBatch.planInputPartitions()
 

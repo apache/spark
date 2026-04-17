@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.sources.Filter;
 
@@ -64,4 +65,18 @@ public interface SupportsRuntimeV2Filtering extends Scan {
    * @param predicates data source V2 predicates used to filter the scan at runtime
    */
   void filter(Predicate[] predicates);
+
+  /**
+   * Returns true if this scan supports iterative runtime filtering. When true,
+   * {@link #filter(Predicate[])} may be called multiple times with additional predicates.
+   * <p>
+   * When enabled, Spark will derive {@link PartitionPredicate} instances from the runtime
+   * filters and push them via a subsequent {@link #filter(Predicate[])} call.
+   * <p>
+   *
+   * @since 4.2.0
+   */
+  default boolean supportsIterativeFiltering() {
+    return false;
+  }
 }
