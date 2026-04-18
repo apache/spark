@@ -1338,7 +1338,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     }
   }
 
-  test("[edge] nested struct column addition") {
+  test("[edge] top-level column addition on table with nested struct") {
     assumeCanRun()
     withTable(T) {
       spark.sql(s"""CREATE TABLE $T
@@ -1347,9 +1347,69 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         (1, named_struct('salary', 100))""")
       val df = spark.sql(s"SELECT * FROM $T")
       df.collect()
+      // Top-level addition succeeds (Connect re-analyzes)
       spark.sql(s"ALTER TABLE $T ADD COLUMN bonus INT")
       val r = df.collect()
       assert(r.length == 1)
+    }
+  }
+
+  // Design doc Section 1: "New top level fields are ignored while new
+  // nested fields trigger an exception."
+  // Classic: [Gap.1] nested struct field addition breaks temp view
+  test("[edge] nested struct field addition breaks DF temp view") {
+    assumeCanRun()
+    withTable(T) {
+      withTempView("tmp") {
+        spark.sql(
+          s"CREATE TABLE $T (id INT, addr STRUCT<city: STRING>) USING foo")
+        spark.sql(s"INSERT INTO $T VALUES (1, struct('NYC'))")
+
+        spark.read.table(T).createOrReplaceTempView("tmp")
+        checkAnswer(
+          spark.sql("SELECT id, addr.city FROM tmp"),
+          Seq(Row(1, "NYC")))
+
+        // Nested field addition changes the struct type
+        spark.sql(s"ALTER TABLE $T ADD COLUMN addr.zip STRING")
+
+        // DF view: nested field addition is incompatible
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql("SELECT * FROM tmp").collect()
+          },
+          condition = VIEW_PLAN_CHANGED)
+      }
+    }
+  }
+
+  // Design doc Section 1: top-level addition OK then nested addition fails.
+  // Classic: [Gap.2] top-level addition OK but nested addition fails
+  test("[edge] top-level addition OK but nested addition breaks view") {
+    assumeCanRun()
+    withTable(T) {
+      withTempView("tmp") {
+        spark.sql(
+          s"CREATE TABLE $T (id INT, info STRUCT<name: STRING>) USING foo")
+        spark.sql(s"INSERT INTO $T VALUES (1, struct('Alice'))")
+
+        spark.read.table(T).createOrReplaceTempView("tmp")
+
+        // Top-level addition: OK (view preserves original schema)
+        spark.sql(s"ALTER TABLE $T ADD COLUMN age INT")
+        spark.sql(s"INSERT INTO $T VALUES (2, struct('Bob'), 30)")
+        checkAnswer(
+          spark.sql("SELECT id FROM tmp"),
+          Seq(Row(1), Row(2)))
+
+        // Nested addition: fails (struct type changed)
+        spark.sql(s"ALTER TABLE $T ADD COLUMN info.email STRING")
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql("SELECT * FROM tmp").collect()
+          },
+          condition = VIEW_PLAN_CHANGED)
+      }
     }
   }
 
