@@ -1744,6 +1744,139 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     }
   }
 
+  // Design doc Section 1 Scenario 5.2: external drop+add column same type.
+  test("[ext-session] temp view after external drop+add column same type") {
+    assumeCanRun()
+    withTable(T) {
+      withTempView("tmp") {
+        setupTable()
+        spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
+        checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
+
+        val ext = spark.newSession()
+        ext.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+        ext.sql(s"ALTER TABLE $T ADD COLUMN salary INT").collect()
+
+        // InMemoryTable returns null for drop+re-add (dropped column data is discarded)
+        checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, null)))
+      }
+    }
+  }
+
+  // Design doc Section 1 Scenario 6.2: external drop+add column different type.
+  test("[ext-session] temp view after external drop+add column different type fails") {
+    assumeCanRun()
+    withTable(T) {
+      withTempView("tmp") {
+        setupTable()
+        spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
+        checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
+
+        val ext = spark.newSession()
+        ext.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+        ext.sql(s"ALTER TABLE $T ADD COLUMN salary STRING").collect()
+
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql("SELECT * FROM tmp").collect()
+          },
+          condition = UPCAST)
+      }
+    }
+  }
+
+  // Design doc Section 3 Scenario 2: join after external ADD COLUMN.
+  // In Connect, both sides re-analyze to the new 3-col schema.
+  test("[ext-session] join after external ADD COLUMN succeeds in Connect") {
+    assumeCanRun()
+    withTable(T) {
+      setupTable()
+      val df1 = spark.read.table(T) // analyzed with 2-col schema
+
+      val ext = spark.newSession()
+      ext.sql(s"ALTER TABLE $T ADD COLUMN bonus INT").collect()
+      ext.sql(s"INSERT INTO $T VALUES (2, 200, 50)").collect()
+
+      val df2 = spark.read.table(T) // analyzed with 3-col schema
+
+      // In Connect, both re-analyze: both see latest 3-col schema.
+      // In classic, df1 pins 2-col schema and df2 has 3-col schema.
+      val joined = df1.join(df2, df1("id") === df2("id"))
+      assert(joined.collect().length == 2)
+    }
+  }
+
+  // Design doc Section 3 Scenario 3: join after external DROP COLUMN.
+  // In classic, this throws AnalysisException (COLUMNS_MISMATCH).
+  // In Connect, both re-analyze to the new schema, so it succeeds.
+  test("[ext-session] join after external DROP COLUMN succeeds in Connect") {
+    assumeCanRun()
+    withTable(T) {
+      setupTable()
+      val df1 = spark.sql(s"SELECT id AS id1 FROM $T")
+
+      val ext = spark.newSession()
+      ext.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+
+      val df2 = spark.sql(s"SELECT id AS id2 FROM $T")
+
+      // Connect re-analyzes both sides: join succeeds
+      val joined = df1.join(df2, df1("id1") === df2("id2"))
+      assert(joined.collect().length == 1)
+    }
+  }
+
+  // Concurrent test with ext-session writer: verify the shared catalog
+  // handles concurrent reads from main session and writes from ext-session.
+  test("[concurrent-ext] reader on main session + writer on ext session") {
+    assumeCanRun()
+    withTable(T) {
+      setupTable()
+      withExecutor() { exec =>
+        val barrier = new CyclicBarrier(2)
+        val errors = new ConcurrentLinkedQueue[Throwable]()
+        val ext = spark.newSession()
+
+        val reader = exec.submit(new Runnable {
+          override def run(): Unit = try {
+            barrier.await(30, TimeUnit.SECONDS)
+            for (_ <- 1 to 10) {
+              try spark.sql(s"SELECT * FROM $T").collect()
+              catch {
+                case e: Throwable if isExpectedError(e) =>
+              }
+            }
+          } catch {
+            case e: Throwable => errors.add(e)
+          }
+        })
+
+        val writer = exec.submit(new Runnable {
+          override def run(): Unit = try {
+            barrier.await(30, TimeUnit.SECONDS)
+            for (i <- 2 to 5) {
+              try ext.sql(s"INSERT INTO $T VALUES ($i, ${i * 100})").collect()
+              catch {
+                case _: Exception =>
+              }
+            }
+          } catch {
+            case e: Throwable => errors.add(e)
+          }
+        })
+
+        reader.get(60, TimeUnit.SECONDS)
+        writer.get(60, TimeUnit.SECONDS)
+        assert(
+          errors.isEmpty,
+          s"Unexpected errors: ${errors
+              .toArray(Array.empty[Throwable])
+              .map(_.getMessage)
+              .mkString("; ")}")
+      }
+    }
+  }
+
   // =====================================================================
   // TODO: The following test categories exist in the classic suite
   // (DataSourceV2ConcurrencyRefreshSuite) but are not covered here.
