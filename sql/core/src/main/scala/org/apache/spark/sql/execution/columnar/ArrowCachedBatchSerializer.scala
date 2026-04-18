@@ -260,6 +260,9 @@ private object ArrowCachedBatchSerializer {
       case BinaryType => new BinaryColumnStats
       case dt: DecimalType => new DecimalColumnStats(dt)
       case CalendarIntervalType => new IntervalColumnStats
+      case _: YearMonthIntervalType => new IntColumnStats   // stored as Int
+      case _: DayTimeIntervalType => new LongColumnStats  // stored as Long
+      case _: TimeType => new LongColumnStats  // Time is stored as Long (nanoseconds)
       case VariantType => new VariantColumnStats
       case _ => new ObjectColumnStats(dataType)
     }
@@ -300,6 +303,9 @@ private object ArrowCachedBatchSerializer {
         case DoubleType => calculateMinMaxDouble(vector, rowCount)
         case st: StringType => calculateMinMaxString(vector, rowCount, st.collationId)
         case _: DecimalType => calculateMinMaxDecimal(vector, rowCount, attr.dataType)
+        case _: YearMonthIntervalType => calculateMinMaxYearMonthInterval(vector, rowCount)
+        case _: DayTimeIntervalType => calculateMinMaxDayTimeInterval(vector, rowCount)
+        case _: TimeType => calculateMinMaxTime(vector, rowCount)
         case _ => (null, null) // Skip for binary, complex, and other unsupported types
       }
 
@@ -613,6 +619,79 @@ private object ArrowCachedBatchSerializer {
 
     if (hasValue) (min, max) else (null, null)
   }
+
+  def calculateMinMaxYearMonthInterval(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Int.MaxValue
+    var max = Int.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.IntervalYearVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  def calculateMinMaxDayTimeInterval(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Long.MaxValue
+    var max = Long.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = org.apache.arrow.vector.DurationVector.get(
+          vector.asInstanceOf[org.apache.arrow.vector.DurationVector].getDataBuffer, i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  def calculateMinMaxTime(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Long.MaxValue
+    var max = Long.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.TimeNanoVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
 }
 
 /**
@@ -662,10 +741,10 @@ private class InternalRowToArrowCachedBatchIterator(
     var rowCount = 0
 
     // Reset statistics collectors for new batch
-    statsCollectors.foreach { stats =>
-      // Create new instance to reset state
-      val index = statsCollectors.indexOf(stats)
-      statsCollectors(index) = ArrowCachedBatchSerializer.createColumnStats(schema(index).dataType)
+    var idx = 0
+    while (idx < statsCollectors.length) {
+      statsCollectors(idx) = ArrowCachedBatchSerializer.createColumnStats(schema(idx).dataType)
+      idx += 1
     }
 
     Utils.tryWithSafeFinally {
@@ -943,32 +1022,38 @@ private object ArrowColumnReader {
     }
     case IntegerType | DateType | _: YearMonthIntervalType => new ArrowColumnReader {
       private var _vector: FieldVector = _
+      // Pre-bind accessor at setVector time to avoid per-row pattern match
+      private var _accessor: Int => Int = _
       def vector: FieldVector = _vector
-      def setVector(v: FieldVector): Unit = _vector = v
-      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit = {
-        val value = _vector match {
-          case iv: IntVector => iv.get(rowIndex)
-          case dv: DateDayVector => dv.get(rowIndex)
-          case iv: org.apache.arrow.vector.IntervalYearVector => iv.get(rowIndex)
+      def setVector(v: FieldVector): Unit = {
+        _vector = v
+        _accessor = v match {
+          case iv: IntVector => iv.get
+          case dv: DateDayVector => dv.get
+          case iv: org.apache.arrow.vector.IntervalYearVector => iv.get
         }
-        writer.write(ordinal, value)
       }
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit =
+        writer.write(ordinal, _accessor(rowIndex))
     }
-    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
+    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
       new ArrowColumnReader {
       private var _vector: FieldVector = _
+      private var _accessor: Int => Long = _
       def vector: FieldVector = _vector
-      def setVector(v: FieldVector): Unit = _vector = v
-      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit = {
-        val value = _vector match {
-          case bv: BigIntVector => bv.get(rowIndex)
-          case tv: TimeStampMicroTZVector => tv.get(rowIndex)
-          case tv: TimeStampMicroVector => tv.get(rowIndex)
+      def setVector(v: FieldVector): Unit = {
+        _vector = v
+        _accessor = v match {
+          case bv: BigIntVector => bv.get(_)
+          case tv: TimeStampMicroTZVector => tv.get(_)
+          case tv: TimeStampMicroVector => tv.get(_)
           case dv: org.apache.arrow.vector.DurationVector =>
-            org.apache.arrow.vector.DurationVector.get(dv.getDataBuffer, rowIndex)
+            i => org.apache.arrow.vector.DurationVector.get(dv.getDataBuffer, i)
+          case tv: org.apache.arrow.vector.TimeNanoVector => tv.get(_)
         }
-        writer.write(ordinal, value)
       }
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit =
+        writer.write(ordinal, _accessor(rowIndex))
     }
     case FloatType => new ArrowColumnReader {
       private var _vector: Float4Vector = _

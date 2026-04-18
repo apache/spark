@@ -18,12 +18,12 @@
 package org.apache.spark.sql.execution.columnar
 
 import java.sql.{Date, Timestamp}
-import java.time.LocalDateTime
+import java.time.{Duration, LocalDateTime, LocalTime, Period}
 
 import org.apache.arrow.vector.{
   BigIntVector, BitVector, DateDayVector, DecimalVector,
   Float4Vector, Float8Vector, IntVector, SmallIntVector,
-  TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector,
+  TimeNanoVector, TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector,
   VarBinaryVector, VarCharVector, VectorSchemaRoot}
 
 import org.apache.spark.SparkConf
@@ -937,11 +937,36 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     assert(binaryResult(1).getAs[Array[Byte]](0) sameElements bytes2)
     binaryDf.unpersist()
 
-    // DecimalType: DecimalVector.getObject(i)
+    // DecimalType (compact, precision <= 18): fast path reads unscaled long from Arrow buffer
     val decDf = Seq(Some(BigDecimal("123.45")), None, Some(BigDecimal("678.90"))).toDF("v")
     decDf.cache()
     checkAnswer(decDf, Seq(Row(BigDecimal("123.45")), Row(null), Row(BigDecimal("678.90"))))
     decDf.unpersist()
+
+    // DecimalType (compact, negative values): verifies sign-bit correctness when reading
+    // lower 8 bytes of Arrow's 128-bit little-endian two's-complement buffer as signed Long
+    val negDecData = Seq(
+      new java.math.BigDecimal("-123.45"),
+      new java.math.BigDecimal("0.00"),
+      new java.math.BigDecimal("-999999.99"))
+    val negDecDf = spark.createDataFrame(
+      spark.sparkContext.parallelize(negDecData.map(Row(_))),
+      StructType(Seq(StructField("v", DecimalType(10, 2)))))
+    negDecDf.cache()
+    checkAnswer(negDecDf, negDecData.map(d => Row(d)))
+    negDecDf.unpersist()
+
+    // DecimalType (wide, precision > 18): slow path via DecimalVector.getObject -> BigDecimal
+    val wideDecData = Seq(
+      new java.math.BigDecimal("12345678901234567890.1234567890"),
+      new java.math.BigDecimal("-99999999999999999999.9999999999"),
+      new java.math.BigDecimal("0.0000000001"))
+    val wideDecDf = spark.createDataFrame(
+      spark.sparkContext.parallelize(wideDecData.map(Row(_))),
+      StructType(Seq(StructField("v", DecimalType(30, 10)))))
+    wideDecDf.cache()
+    checkAnswer(wideDecDf, wideDecData.map(d => Row(d)))
+    wideDecDf.unpersist()
 
     // --- Date and time types ---
 
@@ -984,6 +1009,12 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     dtiDf.cache()
     checkAnswer(dtiDf, spark.sql(dtiSql))
     dtiDf.unpersist()
+
+    // TimeType: TimeNanoVector.get(i) (nanoseconds since midnight)
+    val timeDf = Seq(LocalTime.of(12, 30, 45), LocalTime.of(0, 0, 0)).toDF("t")
+    timeDf.cache()
+    checkAnswer(timeDf, Seq(Row(LocalTime.of(12, 30, 45)), Row(LocalTime.of(0, 0, 0))))
+    timeDf.unpersist()
 
     // CalendarIntervalType: ArrowColumnVector.getInterval(i) (IntervalMonthDayNanoVector)
     val interval = new CalendarInterval(1, 2, 3000000L)  // 1 month, 2 days, 3 ms
@@ -1035,6 +1066,12 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     udtDf.cache()
     checkAnswer(udtDf, Seq(Row(point), Row(null)))
     udtDf.unpersist()
+
+    // VariantType: ArrowColumnVector.getVariant(i) (StructVector)
+    val variantDf = spark.sql("SELECT parse_json('{\"a\":1}') AS v")
+    variantDf.cache()
+    checkAnswer(variantDf.selectExpr("to_json(v)"), Seq(Row("{\"a\":1}")))
+    variantDf.unpersist()
   }
 
   // Helper: cache a single-column DataFrame (row path) and return its ArrowCachedBatch stats.
@@ -1084,6 +1121,14 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
       StringType("UNICODE")).isInstanceOf[StringColumnStats])
     assert(ArrowCachedBatchSerializer.createColumnStats(DecimalType(10, 2))
       .isInstanceOf[DecimalColumnStats])
+    // YearMonthIntervalType stored as Int (months) -> IntColumnStats
+    assert(ArrowCachedBatchSerializer.createColumnStats(
+      YearMonthIntervalType()).isInstanceOf[IntColumnStats])
+    // DayTimeIntervalType stored as Long (microseconds) -> LongColumnStats
+    assert(ArrowCachedBatchSerializer.createColumnStats(
+      DayTimeIntervalType()).isInstanceOf[LongColumnStats])
+    // TimeType stored as Long (nanoseconds) -> LongColumnStats
+    assert(ArrowCachedBatchSerializer.createColumnStats(TimeType(6)).isInstanceOf[LongColumnStats])
 
     // Non-orderable types: createColumnStats returns a stats class with null bounds.
     assert(ArrowCachedBatchSerializer.createColumnStats(BinaryType).isInstanceOf[BinaryColumnStats])
@@ -1215,6 +1260,30 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     assert(!decimalStats.isNullAt(0) && !decimalStats.isNullAt(1))
     assert(decimalStats.getDecimal(0, 10, 2).compareTo(decimalStats.getDecimal(1, 10, 2)) < 0)
     decimalDf.unpersist()
+
+    // YearMonthIntervalType: stored as Int (months); Period.of(1,0,0)=12mo < Period.of(2,0,0)=24mo
+    val ymiDf = singlePartDf(
+      Seq(Period.of(1, 0, 0), Period.of(2, 0, 0)), YearMonthIntervalType()).cache()
+    val ymiStats = cachedStats(ymiDf)
+    assert(!ymiStats.isNullAt(0) && !ymiStats.isNullAt(1))
+    assert(ymiStats.getInt(0) < ymiStats.getInt(1))
+    ymiDf.unpersist()
+
+    // DayTimeIntervalType: stored as Long (microseconds); 1 day < 2 days
+    val dtiDf = singlePartDf(
+      Seq(Duration.ofDays(1), Duration.ofDays(2)), DayTimeIntervalType()).cache()
+    val dtiStats = cachedStats(dtiDf)
+    assert(!dtiStats.isNullAt(0) && !dtiStats.isNullAt(1))
+    assert(dtiStats.getLong(0) < dtiStats.getLong(1))
+    dtiDf.unpersist()
+
+    // TimeType: stored as Long (nanoseconds); 08:00 < 20:00
+    val timeDf = singlePartDf(
+      Seq(LocalTime.of(8, 0, 0), LocalTime.of(20, 0, 0)), TimeType(6)).cache()
+    val timeStats = cachedStats(timeDf)
+    assert(!timeStats.isNullAt(0) && !timeStats.isNullAt(1))
+    assert(timeStats.getLong(0) < timeStats.getLong(1))
+    timeDf.unpersist()
   }
 
   test("row path stats: non-orderable types produce null lower and upper bounds") {
@@ -1265,6 +1334,9 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     assertNullBounds(spark.createDataFrame(
       spark.sparkContext.parallelize(Seq(Row(null), Row(null))),
       nullSchema).cache())
+
+    // VariantType: no natural ordering
+    assertNullBounds(spark.sql("SELECT parse_json('{\"k\":1}') AS v").cache())
   }
 
   test("row path stats: all-NaN Float/Double column produces inverted sentinel bounds") {
@@ -1317,7 +1389,10 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
       AttributeReference("ts_ntz_col", TimestampNTZType)(),// TimeStampMicroVector (microseconds)
       AttributeReference("int_col", IntegerType)(),          // IntVector (standalone)
       AttributeReference("long_col", LongType)(),            // BigIntVector (standalone)
-      AttributeReference("decimal_col", DecimalType(10, 2))() // DecimalVector
+      AttributeReference("decimal_col", DecimalType(10, 2))(), // DecimalVector
+      AttributeReference("ymi_col", YearMonthIntervalType())(),  // IntervalYearVector (months)
+      AttributeReference("dti_col", DayTimeIntervalType())(),    // DurationVector (microseconds)
+      AttributeReference("time_col", TimeType(6))()              // TimeNanoVector (nanoseconds)
     )
     val sparkSchema = StructType(schema.map(a => StructField(a.name, a.dataType)))
     val arrowSchema = ArrowUtils.toArrowSchema(sparkSchema, "UTC", false, false)
@@ -1336,6 +1411,11 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
       val intVector = root.getVector("int_col").asInstanceOf[IntVector]
       val longVector = root.getVector("long_col").asInstanceOf[BigIntVector]
       val decimalVector = root.getVector("decimal_col").asInstanceOf[DecimalVector]
+      val ymiVector = root.getVector("ymi_col")
+        .asInstanceOf[org.apache.arrow.vector.IntervalYearVector]
+      val dtiVector = root.getVector("dti_col")
+        .asInstanceOf[org.apache.arrow.vector.DurationVector]
+      val timeVector = root.getVector("time_col").asInstanceOf[TimeNanoVector]
 
       // Row 0: low values
       boolVector.setSafe(0, 0)               // false
@@ -1349,6 +1429,9 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
       intVector.setSafe(0, 1)
       longVector.setSafe(0, 1L)
       decimalVector.setSafe(0, new java.math.BigDecimal("1.23"))
+      ymiVector.setSafe(0, 12)                 // 1 year = 12 months
+      dtiVector.setSafe(0, 86400000000L)       // 1 day in microseconds
+      timeVector.setSafe(0, 28800000000000L)   // 08:00:00 in nanoseconds
 
       // Row 1: mid values -- Float/Double use NaN to verify NaN is excluded from min/max
       boolVector.setSafe(1, 1)               // true -- becomes the max
@@ -1362,6 +1445,9 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
       intVector.setSafe(1, 5)
       longVector.setSafe(1, 5L)
       decimalVector.setSafe(1, new java.math.BigDecimal("5.55"))
+      ymiVector.setSafe(1, 18)                 // 1.5 years = 18 months
+      dtiVector.setSafe(1, 172800000000L)      // 2 days in microseconds
+      timeVector.setSafe(1, 43200000000000L)   // 12:00:00 in nanoseconds
 
       // Row 2: high values
       boolVector.setSafe(2, 0)               // false again (3 rows; bool max stays true from row 1)
@@ -1375,6 +1461,9 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
       intVector.setSafe(2, 10)
       longVector.setSafe(2, 10L)
       decimalVector.setSafe(2, new java.math.BigDecimal("9.87"))
+      ymiVector.setSafe(2, 24)                 // 2 years = 24 months
+      dtiVector.setSafe(2, 259200000000L)      // 3 days in microseconds
+      timeVector.setSafe(2, 72000000000000L)   // 20:00:00 in nanoseconds
 
       root.setRowCount(3)
 
@@ -1433,8 +1522,25 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
         new java.math.BigDecimal("9.87")) == 0,
         s"DecimalType upper=${stats.getDecimal(51, 10, 2)}")
 
+      // col11 YearMonthIntervalType (offset 55): lower=12 months (1yr), upper=24 months (2yr)
+      assert(stats.getInt(55) == 12, s"YearMonthIntervalType lower=${stats.getInt(55)}")
+      assert(stats.getInt(56) == 24, s"YearMonthIntervalType upper=${stats.getInt(56)}")
+
+      // col12 DayTimeIntervalType (offset 60): lower=1 day, upper=3 days (in microseconds)
+      assert(stats.getLong(60) == 86400000000L,
+        s"DayTimeIntervalType lower=${stats.getLong(60)}")
+      assert(stats.getLong(61) == 259200000000L,
+        s"DayTimeIntervalType upper=${stats.getLong(61)}")
+
+      // col13 TimeType (offset 65): lower=08:00:00 (28800000000000ns),
+      // upper=20:00:00 (72000000000000ns)
+      assert(stats.getLong(65) == 28800000000000L,
+        s"TimeType lower=${stats.getLong(65)}")
+      assert(stats.getLong(66) == 72000000000000L,
+        s"TimeType upper=${stats.getLong(66)}")
+
       // All null counts should be 0
-      (0 until 11).foreach { col =>
+      (0 until 14).foreach { col =>
         assert(stats.getInt(col * 5 + 2) == 0, s"nullCount for col$col should be 0")
       }
 
