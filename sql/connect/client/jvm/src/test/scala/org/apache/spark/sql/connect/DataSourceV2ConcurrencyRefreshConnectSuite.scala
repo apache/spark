@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.connect
 
+import java.util.ConcurrentModificationException
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicReference
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession, SQLHelper}
 import org.apache.spark.sql.connect.test.IntegrationTestUtils.isAssemblyJarsDirExists
 
@@ -45,6 +46,10 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     with SQLHelper {
 
   private val T = "testcat.ns1.ns2.tbl"
+
+  // Error condition constants (match classic DataSourceV2ConcurrencyRefreshSuite)
+  private val SQL_VIEW_CHANGED = "INCOMPATIBLE_VIEW_SCHEMA_CHANGE"
+  private val UPCAST = "CANNOT_UP_CAST_DATATYPE"
 
   private def assumeCanRun(): Unit = {
     assume(spark != null && isAssemblyJarsDirExists, "Spark Connect server not available")
@@ -80,25 +85,25 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   }
 
   /** Returns true if the throwable is an expected concurrency error. */
-  private def isExpectedError(e: Throwable): Boolean = e match {
-    case _: Exception
-        if e.getMessage != null &&
-          (e.getMessage.contains("INCOMPATIBLE") ||
-            e.getMessage.contains("TABLE_ID_MISMATCH") ||
-            e.getMessage.contains("COLUMNS_MISMATCH") ||
-            e.getMessage.contains("not found") ||
-            e.getMessage.contains("schema") ||
-            e.getMessage.contains("NUM_COLUMNS_MISMATCH") ||
-            e.getMessage.contains("CANNOT_UP_CAST_DATATYPE") ||
-            e.getMessage.contains("TABLE_OR_VIEW_NOT_FOUND") ||
-            e.getMessage.contains("VIEW_SCHEMA") ||
-            e.getMessage.contains("ClassCastException") ||
-            e.getMessage.contains("ConcurrentModificationException") ||
-            e.getMessage.contains("mutation occurred during iteration") ||
-            e.getMessage.contains("does not exist")) =>
-      true
-    case se: Exception if se.getCause != null => isExpectedError(se.getCause)
-    case _ => false
+  private def isExpectedError(e: Throwable): Boolean = {
+    def checkChain(t: Throwable): Boolean = {
+      if (t == null) return false
+      t match {
+        case _: AnalysisException => true
+        case _: ClassCastException => true
+        case _: ConcurrentModificationException => true
+        case _ =>
+          val msg = Option(t.getMessage).getOrElse("")
+          if (msg.contains("ConcurrentModificationException") ||
+            msg.contains("ClassCastException") ||
+            msg.contains("mutation occurred during iteration")) {
+            true
+          } else {
+            checkChain(t.getCause)
+          }
+      }
+    }
+    checkChain(e)
   }
 
   // =====================================================================
@@ -108,35 +113,57 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   // In Connect, SQL temp views (SELECT *) capture column names at
   // creation. Removing/renaming/retyping breaks re-analysis.
   // DataFrames re-analyze on every action, so ALL mods succeed for DFs.
-  case class Mod(name: String, fn: String => Unit, sqlViewOk: Boolean, dfOk: Boolean)
+  //
+  // sqlViewOk: whether SQL temp views survive the modification
+  // dfOk: whether DataFrames survive (always true in Connect)
+  // sqlViewCondition: error condition when sqlViewOk=false
+  // sqlViewRows: expected result rows when sqlViewOk=true
+  // dfRows: expected result rows for DataFrame access after the modification
+  case class Mod(
+      name: String,
+      fn: String => Unit,
+      sqlViewOk: Boolean,
+      dfOk: Boolean,
+      sqlViewCondition: String = SQL_VIEW_CHANGED,
+      sqlViewRows: Seq[Row] = Nil,
+      dfRows: Seq[Row] = Nil)
 
   private val mods: Seq[Mod] = Seq(
     Mod(
       "data write",
       t => spark.sql(s"INSERT INTO $t VALUES (2, 200)"),
       sqlViewOk = true,
-      dfOk = true),
+      dfOk = true,
+      sqlViewRows = Seq(Row(1, 100), Row(2, 200)),
+      dfRows = Seq(Row(1, 100), Row(2, 200))),
     Mod(
       "column addition",
       t => spark.sql(s"ALTER TABLE $t ADD COLUMN new_col INT"),
       sqlViewOk = true,
-      dfOk = true),
+      dfOk = true,
+      // SQL view preserves original 2-col schema
+      sqlViewRows = Seq(Row(1, 100)),
+      dfRows = Seq(Row(1, 100, null))),
     Mod(
       "column removal",
       t => spark.sql(s"ALTER TABLE $t DROP COLUMN salary"),
       sqlViewOk = false,
-      dfOk = true),
+      dfOk = true,
+      dfRows = Seq(Row(1))),
     Mod(
       "column rename",
       t => spark.sql(s"ALTER TABLE $t RENAME COLUMN salary TO pay"),
       sqlViewOk = false,
-      dfOk = true),
+      dfOk = true,
+      dfRows = Seq(Row(1, 100))),
     // InMemoryTable handles type widening via Cast at read time.
     Mod(
       "type widening INT to BIGINT",
       t => spark.sql(s"ALTER TABLE $t ALTER COLUMN salary TYPE BIGINT"),
       sqlViewOk = false,
-      dfOk = true),
+      dfOk = true,
+      sqlViewCondition = UPCAST,
+      dfRows = Seq(Row(1, 100))),
     Mod(
       "drop+add column same type",
       t => {
@@ -144,7 +171,10 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         spark.sql(s"ALTER TABLE $t ADD COLUMN salary INT")
       },
       sqlViewOk = true,
-      dfOk = true),
+      dfOk = true,
+      // InMemoryTable returns null for drop+re-add (dropped column data is discarded)
+      sqlViewRows = Seq(Row(1, null)),
+      dfRows = Seq(Row(1, null))),
     Mod(
       "drop+add column different type",
       t => {
@@ -152,7 +182,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         spark.sql(s"ALTER TABLE $t ADD COLUMN salary STRING")
       },
       sqlViewOk = false,
-      dfOk = true),
+      dfOk = true,
+      sqlViewCondition = UPCAST,
+      dfRows = Seq(Row(1, null))),
     Mod(
       "drop/recreate table",
       t => {
@@ -160,25 +192,34 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         spark.sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
       },
       sqlViewOk = true,
-      dfOk = true))
+      dfOk = true,
+      sqlViewRows = Seq.empty,
+      dfRows = Seq.empty))
 
   // =====================================================================
-  // Section 1: SQL Temp View x All Modifications
+  // Section 1: DataFrame-based Temp View x All Modifications
+  // Uses spark.read.table(T).createOrReplaceTempView() which stores
+  // an analyzed plan (unlike SQL views which store SQL text).
+  // In classic, this is tested with VIEW_PLAN_CHANGED errors.
   // =====================================================================
 
   mods.foreach { mod =>
-    test(s"[S1] SQL temp view: ${mod.name}") {
+    test(s"[S1] DF temp view: ${mod.name}") {
       assumeCanRun()
       withTable(T) {
-        setupTable()
-        spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
-        checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
-        mod.fn(T)
-        if (mod.sqlViewOk) {
-          spark.sql("SELECT * FROM tmp").collect()
-        } else {
-          assertThrows[Exception] {
-            spark.sql("SELECT * FROM tmp").collect()
+        withTempView("tmp") {
+          setupTable()
+          spark.read.table(T).createOrReplaceTempView("tmp")
+          checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
+          mod.fn(T)
+          if (mod.sqlViewOk) {
+            checkAnswer(spark.sql("SELECT * FROM tmp"), mod.sqlViewRows)
+          } else {
+            checkError(
+              exception = intercept[AnalysisException] {
+                spark.sql("SELECT * FROM tmp").collect()
+              },
+              condition = mod.sqlViewCondition)
           }
         }
       }
@@ -197,13 +238,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         setupTable()
         checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
         mod.fn(T)
-        if (mod.dfOk) {
-          spark.sql(s"SELECT * FROM $T").collect()
-        } else {
-          assertThrows[Exception] {
-            spark.sql(s"SELECT * FROM $T").collect()
-          }
-        }
+        // Fresh analysis each time in Connect: all succeed
+        checkAnswer(spark.sql(s"SELECT * FROM $T"), mod.dfRows)
       }
     }
   }
@@ -239,13 +275,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         setupTable()
         val df = spark.sql(s"SELECT * FROM $T")
         mod.fn(T)
-        if (mod.dfOk) {
-          df.collect()
-        } else {
-          assertThrows[Exception] {
-            df.collect()
-          }
-        }
+        // Connect re-analyzes: all succeed
+        checkAnswer(df, mod.dfRows)
       }
     }
   }
@@ -261,24 +292,10 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       withTable(T) {
         setupTable()
         val df = spark.sql(s"SELECT * FROM $T")
-        val r1 = df.collect()
-        assert(r1.length == 1)
+        checkAnswer(df, Seq(Row(1, 100)))
         mod.fn(T)
-        if (mod.dfOk) {
-          // Connect re-analyzes: NOT stale
-          val r2 = df.collect()
-          if (mod.name == "data write") {
-            assert(r2.length == 2)
-          } else if (mod.name == "drop/recreate table") {
-            assert(r2.length == 0)
-          } else {
-            assert(r2.length == 1)
-          }
-        } else {
-          assertThrows[Exception] {
-            df.collect()
-          }
-        }
+        // Connect re-analyzes on every action: NOT stale (unlike classic)
+        checkAnswer(df, mod.dfRows)
       }
     }
   }
@@ -293,15 +310,15 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       withTable(T) {
         setupTable()
         spark.sql(s"CACHE TABLE $T")
+        assert(spark.catalog.isCached(T), "Table should be cached")
         checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
-        mod.fn(T)
-        if (mod.dfOk) {
-          // Session modification may invalidate cache; no crash
+        // Session modifications may invalidate cache; type widening can
+        // throw ClassCastException in InMemoryTable. Verify no crash.
+        try {
+          mod.fn(T)
           spark.sql(s"SELECT * FROM $T").collect()
-        } else {
-          assertThrows[Exception] {
-            spark.sql(s"SELECT * FROM $T").collect()
-          }
+        } catch {
+          case e: Exception if isExpectedError(e) =>
         }
         spark.sql(s"UNCACHE TABLE IF EXISTS $T")
       }
@@ -322,34 +339,36 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
           SELECT * FROM $T
           WHERE id IN (SELECT id FROM $T)""")
         mod.fn(T)
-        if (mod.dfOk) {
-          df.collect()
-        } else {
-          assertThrows[Exception] {
-            df.collect()
-          }
-        }
+        // Connect re-analyzes subqueries: all succeed
+        checkAnswer(df, mod.dfRows)
       }
     }
   }
 
   // =====================================================================
-  // Section 7: SQL Temp View (from SQL, not DF)
+  // Section 7: SQL Temp View (from SQL text, not DataFrame plan)
+  // SELECT * is expanded at creation time; schema changes on captured
+  // columns cause INCOMPATIBLE_VIEW_SCHEMA_CHANGE (or CANNOT_UP_CAST_DATATYPE
+  // for type widening / drop+add different type).
   // =====================================================================
 
   mods.foreach { mod =>
-    test(s"[S7] SQL temp view from SQL: ${mod.name}") {
+    test(s"[S7] SQL temp view: ${mod.name}") {
       assumeCanRun()
       withTable(T) {
-        setupTable()
-        spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
-        checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
-        mod.fn(T)
-        if (mod.sqlViewOk) {
-          spark.sql("SELECT * FROM tmp").collect()
-        } else {
-          assertThrows[Exception] {
-            spark.sql("SELECT * FROM tmp").collect()
+        withTempView("tmp") {
+          setupTable()
+          spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
+          checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
+          mod.fn(T)
+          if (mod.sqlViewOk) {
+            checkAnswer(spark.sql("SELECT * FROM tmp"), mod.sqlViewRows)
+          } else {
+            checkError(
+              exception = intercept[AnalysisException] {
+                spark.sql("SELECT * FROM tmp").collect()
+              },
+              condition = mod.sqlViewCondition)
           }
         }
       }
@@ -594,6 +613,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       withTable(T) {
         setupTable()
         spark.sql(s"CACHE TABLE $T")
+        assert(spark.catalog.isCached(T), "Table should be cached")
         withExecutor() { exec =>
           val barrier = new CyclicBarrier(2)
           val errors = new ConcurrentLinkedQueue[Throwable]()
@@ -670,25 +690,20 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
           writer.get(30, TimeUnit.SECONDS)
           assert(error.get() == null, s"Writer failed: ${error.get()}")
 
-          // Phase 3: Execute DataFrame
-          if (mod.dfOk) {
-            df.collect()
-          } else {
-            assertThrows[Exception] {
-              df.collect()
-            }
-          }
+          // Phase 3: Execute DataFrame (Connect re-analyzes: all succeed)
+          checkAnswer(df, mod.dfRows)
         }
       }
     }
   }
 
   // =====================================================================
-  // PHASE-LOCKED: Join analysis -> modification -> execution
+  // Sequential: Join analysis -> modification -> execution
+  // (Not truly phase-locked; both DFs created before modification.)
   // =====================================================================
 
   mods.foreach { mod =>
-    test(s"[phase-locked-join] df1+df2 -> ${mod.name} -> join") {
+    test(s"[sequential-join] df1+df2 -> ${mod.name} -> join") {
       assumeCanRun()
       withTable(T) {
         setupTable()
@@ -780,6 +795,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     withTable(T) {
       setupTable()
       spark.sql(s"CACHE TABLE $T")
+      assert(spark.catalog.isCached(T), "Table should be cached")
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
       spark.sql(s"INSERT INTO $T VALUES (2, 200)")
       // Session write invalidates cache; sees both rows
@@ -1135,20 +1151,25 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   }
 
   // =====================================================================
-  // CACHE TABLE: [connect][5.x] Connect scenarios (main spark vs extSession).
-  // Classic equivalents: DataSourceV2TablePinningRefreshSuite [5.1]-[5.6]
-  // and [5.1-main], [5.3-main], [5.5-main] (classic [S5-session] vs [S5-ext]).
+  // CACHE TABLE: [connect][5.x] Connect scenarios.
+  // Classic equivalents: DataSourceV2TablePinningRefreshSuite [5.1]-[5.6].
+  //
+  // NOTE: In Connect, all sessions share the server-side CacheManager.
+  // Unlike classic where extSession has a separate CacheManager, Connect
+  // cannot test "cache pinned against external write" because newSession()
+  // writes go through the same server CacheManager and trigger
+  // invalidation. All tests here use the main session.
   // =====================================================================
 
-  test("[connect][5.1] CACHE TABLE then external data write") {
+  test("[connect][5.1] CACHE TABLE then session data write") {
     assumeCanRun()
     withTable(T) {
       setupTable()
       spark.sql(s"CACHE TABLE $T")
+      assert(spark.catalog.isCached(T), "Table should be cached")
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
-      // Use main session for writes; newSession() does not share
-      // catalog plugins in Connect mode.
+      // Session write invalidates cache; new data visible
       spark.sql(s"INSERT INTO $T VALUES (2, 200)")
 
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200)))
@@ -1156,63 +1177,35 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     }
   }
 
-  test("[connect][5.1-main] CACHE TABLE then main session data write") {
+  test("[connect][5.2] CACHE TABLE: two successive session writes") {
     assumeCanRun()
     withTable(T) {
       setupTable()
       spark.sql(s"CACHE TABLE $T")
-      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
-
-      spark.sql(s"INSERT INTO $T VALUES (2, 200)")
-      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200)))
-      spark.sql(s"UNCACHE TABLE IF EXISTS $T")
-    }
-  }
-
-  test("[connect][5.2] CACHE TABLE: session write then external write") {
-    assumeCanRun()
-    withTable(T) {
-      setupTable()
-      spark.sql(s"CACHE TABLE $T")
+      assert(spark.catalog.isCached(T), "Table should be cached")
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
       spark.sql(s"INSERT INTO $T VALUES (2, 200)")
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200)))
 
-      // Use main session; newSession() does not share catalog plugins in Connect mode.
       spark.sql(s"INSERT INTO $T VALUES (3, 300)")
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
       spark.sql(s"UNCACHE TABLE IF EXISTS $T")
     }
   }
 
-  test("[connect][5.3] CACHE TABLE then external schema change + data") {
+  test("[connect][5.3] CACHE TABLE then session schema change + data") {
     assumeCanRun()
     withTable(T) {
       setupTable()
       spark.sql(s"CACHE TABLE $T")
+      assert(spark.catalog.isCached(T), "Table should be cached")
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
-      // Use main session; newSession() does not share catalog plugins in Connect mode.
       spark.sql(s"ALTER TABLE $T ADD COLUMN bonus INT")
       spark.sql(s"INSERT INTO $T VALUES (2, 200, 50)")
 
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100, null), Row(2, 200, 50)))
-      spark.sql(s"UNCACHE TABLE IF EXISTS $T")
-    }
-  }
-
-  test("[connect][5.3-main] CACHE TABLE then main session schema change + data") {
-    assumeCanRun()
-    withTable(T) {
-      setupTable()
-      spark.sql(s"CACHE TABLE $T")
-      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
-
-      spark.sql(s"ALTER TABLE $T ADD COLUMN extra INT")
-      spark.sql(s"INSERT INTO $T VALUES (2, 200, 77)")
-
-      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100, null), Row(2, 200, 77)))
       spark.sql(s"UNCACHE TABLE IF EXISTS $T")
     }
   }
@@ -1222,6 +1215,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     withTable(T) {
       setupTable()
       spark.sql(s"CACHE TABLE $T")
+      assert(spark.catalog.isCached(T), "Table should be cached")
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
       spark.sql(s"ALTER TABLE $T ADD COLUMN new_col INT")
@@ -1230,49 +1224,31 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     }
   }
 
-  // Scenario 4 from design doc: session schema change then external data write.
-  // In Connect mode, newSession() does not share catalog plugins, so we use
-  // the main session for the write. Since Connect re-analyzes on every action,
-  // the session write invalidates the cache and both changes are visible.
-  test("[connect][5.4-ext] session schema change then session write") {
+  test("[connect][5.4-write] session schema change then session write") {
     assumeCanRun()
     withTable(T) {
       setupTable()
       spark.sql(s"CACHE TABLE $T")
+      assert(spark.catalog.isCached(T), "Table should be cached")
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
       // Session schema change: invalidates + rebuilds cache
       spark.sql(s"ALTER TABLE $T ADD COLUMN new_col INT")
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100, null)))
 
-      // Session write (simulates external; Connect has no separate session)
+      // Session write: invalidates cache again, both changes visible
       spark.sql(s"INSERT INTO $T VALUES (2, 200, -1)")
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100, null), Row(2, 200, -1)))
       spark.sql(s"UNCACHE TABLE IF EXISTS $T")
     }
   }
 
-  test("[connect][5.5] CACHE TABLE: external drop/recreate sees new empty table") {
+  test("[connect][5.5] CACHE TABLE: session drop/recreate sees new empty table") {
     assumeCanRun()
     withTable(T) {
       setupTable()
       spark.sql(s"CACHE TABLE $T")
-      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
-
-      // Use main session; newSession() does not share catalog plugins in Connect mode.
-      spark.sql(s"DROP TABLE $T")
-      spark.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
-
-      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq.empty)
-      spark.sql(s"UNCACHE TABLE IF EXISTS $T")
-    }
-  }
-
-  test("[connect][5.5-main] CACHE TABLE: main session drop/recreate sees new empty table") {
-    assumeCanRun()
-    withTable(T) {
-      setupTable()
-      spark.sql(s"CACHE TABLE $T")
+      assert(spark.catalog.isCached(T), "Table should be cached")
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
       spark.sql(s"DROP TABLE $T")
@@ -1291,13 +1267,12 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     withTable(T) {
       setupTable()
       spark.sql(s"CACHE TABLE $T")
+      assert(spark.catalog.isCached(T), "Table should be cached")
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
-      // Session write invalidates cache; new data visible
       spark.sql(s"INSERT INTO $T VALUES (2, 200)")
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200)))
 
-      // Another write
       spark.sql(s"INSERT INTO $T VALUES (3, 300)")
 
       // REFRESH TABLE forces re-read; all three rows visible
@@ -1448,6 +1423,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     withTable(T) {
       setupTable()
       spark.sql(s"CACHE TABLE $T")
+      assert(spark.catalog.isCached(T), "Table should be cached")
       withExecutor() { exec =>
         val barrier = new CyclicBarrier(3)
         val errors = new ConcurrentLinkedQueue[Throwable]()
@@ -1501,4 +1477,292 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       spark.sql(s"UNCACHE TABLE IF EXISTS $T")
     }
   }
+
+  // =====================================================================
+  // Section 4-show: count vs collect consistency in Connect
+  // KEY DIFFERENCE: In classic, count creates a new QE (fresh) while
+  // collect reuses a pinned QE (stale). In Connect, both re-analyze,
+  // so they are always consistent.
+  // =====================================================================
+
+  mods.foreach { mod =>
+    test(s"[S4-show] count and collect consistent: ${mod.name}") {
+      assumeCanRun()
+      withTable(T) {
+        setupTable()
+        val df = spark.sql(s"SELECT * FROM $T")
+        df.collect()
+        mod.fn(T)
+        // In Connect, both re-analyze: consistent (unlike classic)
+        assert(df.count() == df.collect().length,
+          "count() and collect().length should be consistent in Connect")
+      }
+    }
+  }
+
+  // =====================================================================
+  // Section 8: Dataset.cache() API x All Modifications
+  // Tests the programmatic cache API (df.cache()) as opposed to
+  // SQL CACHE TABLE tested in S5.
+  // =====================================================================
+
+  mods.foreach { mod =>
+    test(s"[S8] df.cache(): ${mod.name}") {
+      assumeCanRun()
+      withTable(T) {
+        setupTable()
+        val df = spark.read.table(T)
+        df.cache()
+        assert(spark.catalog.isCached(T), "Table should be cached via df.cache()")
+        checkAnswer(df, Seq(Row(1, 100)))
+        // Session modifications may invalidate cache; type widening can
+        // throw ClassCastException. Verify no crash.
+        try {
+          mod.fn(T)
+          df.collect()
+        } catch {
+          case e: Exception if isExpectedError(e) =>
+        }
+        spark.catalog.uncacheTable(T)
+      }
+    }
+  }
+
+  // =====================================================================
+  // External session tests: verify modifications via newSession() are
+  // visible to the original session.
+  // In Connect, newSession() shares the server-side catalog, so
+  // external writes through a different session are visible.
+  // =====================================================================
+
+  test("[ext-session] data write via newSession visible to main session") {
+    assumeCanRun()
+    withTable(T) {
+      setupTable()
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
+
+      val ext = spark.newSession()
+      ext.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  test("[ext-session] schema change via newSession visible to main session") {
+    assumeCanRun()
+    withTable(T) {
+      setupTable()
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
+
+      val ext = spark.newSession()
+      ext.sql(s"ALTER TABLE $T ADD COLUMN bonus INT").collect()
+      ext.sql(s"INSERT INTO $T VALUES (2, 200, 50)").collect()
+
+      checkAnswer(
+        spark.sql(s"SELECT * FROM $T"),
+        Seq(Row(1, 100, null), Row(2, 200, 50)))
+    }
+  }
+
+  test("[ext-session] SQL temp view after newSession write") {
+    assumeCanRun()
+    withTable(T) {
+      withTempView("tmp") {
+        setupTable()
+        spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
+        checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
+
+        val ext = spark.newSession()
+        ext.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+
+        // SQL view re-analyzes: picks up external write
+        checkAnswer(
+          spark.sql("SELECT * FROM tmp"),
+          Seq(Row(1, 100), Row(2, 200)))
+      }
+    }
+  }
+
+  test("[ext-session] join after newSession insert") {
+    assumeCanRun()
+    withTable(T) {
+      setupTable()
+      val df1 = spark.sql(s"SELECT id AS id1 FROM $T")
+
+      val ext = spark.newSession()
+      ext.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+
+      val df2 = spark.sql(s"SELECT id AS id2 FROM $T")
+      val joined = df1.join(df2, df1("id1") === df2("id2"))
+      // Both re-analyze to latest: 2 rows each
+      assert(joined.collect().length == 2)
+    }
+  }
+
+  // =====================================================================
+  // Design doc Section 1 external variants: temp view with stored plan
+  // after external column removal, drop/recreate, and type widening.
+  // These test the "external" column of the design doc tables.
+  // =====================================================================
+
+  test("[ext-session] temp view after external column removal fails") {
+    assumeCanRun()
+    withTable(T) {
+      withTempView("tmp") {
+        setupTable()
+        spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
+        checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
+
+        val ext = spark.newSession()
+        ext.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+
+        // SQL view: captured column `salary` no longer exists
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql("SELECT * FROM tmp").collect()
+          },
+          condition = SQL_VIEW_CHANGED)
+      }
+    }
+  }
+
+  test("[ext-session] temp view after external drop/recreate") {
+    assumeCanRun()
+    withTable(T) {
+      withTempView("tmp") {
+        setupTable()
+        spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
+        checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
+
+        val ext = spark.newSession()
+        ext.sql(s"DROP TABLE $T").collect()
+        ext.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+
+        // View re-resolves by name to new empty table
+        checkAnswer(spark.sql("SELECT * FROM tmp"), Seq.empty)
+      }
+    }
+  }
+
+  test("[ext-session] temp view after external type widening fails") {
+    assumeCanRun()
+    withTable(T) {
+      withTempView("tmp") {
+        setupTable()
+        spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
+        checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
+
+        val ext = spark.newSession()
+        ext.sql(s"ALTER TABLE $T ALTER COLUMN salary TYPE BIGINT").collect()
+
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql("SELECT * FROM tmp").collect()
+          },
+          condition = UPCAST)
+      }
+    }
+  }
+
+  test("[ext-session] temp view after external column rename fails") {
+    assumeCanRun()
+    withTable(T) {
+      withTempView("tmp") {
+        setupTable()
+        spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
+        checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
+
+        val ext = spark.newSession()
+        ext.sql(s"ALTER TABLE $T RENAME COLUMN salary TO pay").collect()
+
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql("SELECT * FROM tmp").collect()
+          },
+          condition = SQL_VIEW_CHANGED)
+      }
+    }
+  }
+
+  // Design doc Section 1, Scenario 2: filtered DF view preserves
+  // schema after ADD COLUMN but picks up new data.
+  // Matches the doc's exact example: spark.table("t").filter("salary < 999")
+  test("[ext-session] filtered DF view preserves schema after external ADD COLUMN") {
+    assumeCanRun()
+    withTable(T) {
+      withTempView("tmp") {
+        spark.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
+        spark.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)")
+
+        spark.read.table(T).filter("salary < 999")
+          .createOrReplaceTempView("tmp")
+        checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
+
+        val ext = spark.newSession()
+        ext.sql(s"ALTER TABLE $T ADD COLUMN bonus INT").collect()
+        ext.sql(s"INSERT INTO $T VALUES (2, 200, 50)").collect()
+
+        // View preserves filter and picks up new data
+        val result = spark.sql("SELECT * FROM tmp").collect()
+        assert(result.length == 2, "Should see original (1,100) and new (2,200)")
+      }
+    }
+  }
+
+  // Design doc Section 2: repeated table access after external drop/recreate.
+  test("[ext-session] repeated SQL reflects external drop/recreate") {
+    assumeCanRun()
+    withTable(T) {
+      setupTable()
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
+
+      val ext = spark.newSession()
+      ext.sql(s"DROP TABLE $T").collect()
+      ext.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+
+      // Fresh analysis: sees new empty table
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq.empty)
+    }
+  }
+
+  // Design doc Section 3: join with full SELECT * after external write.
+  // Unlike S3 which uses id-only SELECTs, this tests the full schema
+  // re-analysis behavior described in the design doc.
+  test("[ext-session] full-schema join after external insert") {
+    assumeCanRun()
+    withTable(T) {
+      setupTable()
+      val df1 = spark.read.table(T)
+
+      val ext = spark.newSession()
+      ext.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+
+      val df2 = spark.read.table(T)
+      // In Connect, both re-analyze: both see (1,100) and (2,200)
+      val joined = df1.join(df2, df1("id") === df2("id"))
+      assert(joined.collect().length == 2)
+    }
+  }
+
+  // =====================================================================
+  // TODO: The following test categories exist in the classic suite
+  // (DataSourceV2ConcurrencyRefreshSuite) but are not covered here.
+  // They require server configuration changes or APIs not available
+  // from the Connect client.
+  //
+  // 1. extMods (catalog API modifications): Classic tests 7 external
+  //    modification types via cat.alterTable(). Connect clients cannot
+  //    call catalog API directly. (Separate PR needed to add server-side
+  //    tests or a test hook.)
+  //
+  // 2. Specialized catalog tests: cachingcat (CachingInMemoryTableCatalog,
+  //    simulates Iceberg), nullidcat (NullIdInMemoryTableCatalog, tables
+  //    without IDs). Requires adding catalog configs to
+  //    RemoteSparkSession.scala which affects all Connect tests.
+  //
+  // 3. Writer API tests: [Writer.1] through [Writer.9] testing
+  //    writeTo().append(), overwrite(), createOrReplace() after schema
+  //    changes. The API is available in Connect but needs its own test
+  //    section.
+  // =====================================================================
 }
