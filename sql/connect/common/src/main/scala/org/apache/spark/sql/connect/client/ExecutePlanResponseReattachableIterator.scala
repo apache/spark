@@ -17,11 +17,13 @@
 package org.apache.spark.sql.connect.client
 
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
+import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import io.grpc.{ManagedChannel, StatusRuntimeException}
+import io.grpc.{Deadline, ManagedChannel, Status, StatusRuntimeException}
 import io.grpc.protobuf.StatusProto
 import io.grpc.stub.StreamObserver
 
@@ -53,7 +55,9 @@ import org.apache.spark.sql.util.WrappedCloseableIterator
 class ExecutePlanResponseReattachableIterator(
     request: proto.ExecutePlanRequest,
     channel: ManagedChannel,
-    retryHandler: GrpcRetryHandler)
+    retryHandler: GrpcRetryHandler,
+    reattachableExecutePlanDeadline: Option[FiniteDuration] = None,
+    reattachExecuteDeadline: Option[FiniteDuration] = None)
     extends WrappedCloseableIterator[proto.ExecutePlanResponse]
     with Logging {
 
@@ -80,6 +84,12 @@ class ExecutePlanResponseReattachableIterator(
   private val rawBlockingStub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
   private val rawAsyncStub = proto.SparkConnectServiceGrpc.newStub(channel)
 
+  private def stubWithDeadline(deadline: Option[FiniteDuration])
+      : proto.SparkConnectServiceGrpc.SparkConnectServiceBlockingStub =
+    deadline
+      .map(d => rawBlockingStub.withDeadline(Deadline.after(d.toMillis, TimeUnit.MILLISECONDS)))
+      .getOrElse(rawBlockingStub)
+
   private val initialRequest: proto.ExecutePlanRequest = request
     .toBuilder()
     .addRequestOptions(
@@ -104,7 +114,10 @@ class ExecutePlanResponseReattachableIterator(
   // throw error on first iter.hasNext() or iter.next()
   // Visible for testing.
   private[connect] var iter: Option[java.util.Iterator[proto.ExecutePlanResponse]] =
-    Some(rawBlockingStub.executePlan(initialRequest))
+    Some(stubWithDeadline(reattachableExecutePlanDeadline).executePlan(initialRequest))
+
+  // When true, an empty iterator triggers a fresh ExecutePlan instead of ReattachExecute.
+  private var restartExecutionOnNextRetry: Boolean = false
 
   // Server side session ID, used to detect if the server side session changed. This is set upon
   // receiving the first response from the server.
@@ -230,8 +243,13 @@ class ExecutePlanResponseReattachableIterator(
    */
   private def callIter[V](iterFun: java.util.Iterator[proto.ExecutePlanResponse] => V) = {
     try {
-      if (iter.isEmpty) {
-        iter = Some(rawBlockingStub.reattachExecute(createReattachExecuteRequest()))
+      if (iter.isEmpty && restartExecutionOnNextRetry) {
+        iter = Some(stubWithDeadline(reattachableExecutePlanDeadline).executePlan(initialRequest))
+        restartExecutionOnNextRetry = false
+      } else if (iter.isEmpty) {
+        iter = Some(
+          stubWithDeadline(reattachExecuteDeadline)
+            .reattachExecute(createReattachExecuteRequest()))
       }
       iterFun(iter.get)
     } catch {
@@ -248,7 +266,20 @@ class ExecutePlanResponseReattachableIterator(
             ex)
         }
         // Try a new ExecutePlan, and throw upstream for retry.
-        iter = Some(rawBlockingStub.executePlan(initialRequest))
+        iter = None
+        restartExecutionOnNextRetry = true
+        val error = new RetryException()
+        error.addSuppressed(ex)
+        throw error
+      case ex: StatusRuntimeException if ex.getStatus.getCode == Status.Code.DEADLINE_EXCEEDED =>
+        // The per-RPC deadline fired. The server-side operation is still alive; we clear the
+        // iterator and raise RetryException so the outer retry loop opens a fresh
+        // ReattachExecute stream (a new per-RPC deadline countdown) to resume receiving results.
+        logDebug(
+          s"Deadline exceeded on stream for operation $operationId; will reattach. " +
+            s"(last response: $lastReturnedResponseId)")
+        iter = None
+        restartExecutionOnNextRetry = false // defensive: deadline != operation lost
         val error = new RetryException()
         error.addSuppressed(ex)
         throw error
