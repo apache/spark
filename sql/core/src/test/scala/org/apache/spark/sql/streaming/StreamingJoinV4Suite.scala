@@ -249,11 +249,13 @@ class StreamingInnerJoinV4Suite
 
       testStream(joined)(
         StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-        // Use ts=20 for the row we expect to join against in the next batch.
-        // With withWatermark("ts", "10 seconds"), batch 0 advances the watermark to
-        // max(ts) - 10s = 10s, and the state cleanup predicate `ts <= watermark` is
-        // inclusive. Keeping ts=20 > 10 ensures the row survives eviction so the
-        // right-side row in batch 1 can match it.
+        // Use ts=20 for the row we expect to join against input2.
+        // withWatermark("ts", "10 seconds") causes batch 0 to advance the watermark to
+        // max(ts) - 10s = 10s. Because watermark-based cleanup is enabled,
+        // MicroBatchExecution fires a no-data batch (shouldRunAnotherBatch) after
+        // batch 0 that evicts any state rows with ts <= 10 (inclusive). Keeping
+        // ts=20 > 10 ensures the row survives that eviction so the input2 row in
+        // the following batch can match it.
         AddData(input1, (1, 20), (2, 10)),
         CheckAnswer(),
         AddData(input2, (1, 20)),
