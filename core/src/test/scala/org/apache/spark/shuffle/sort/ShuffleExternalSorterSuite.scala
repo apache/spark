@@ -114,4 +114,93 @@ class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext wi
       condition = "UNABLE_TO_ACQUIRE_MEMORY",
       parameters = Map("requestedBytes" -> "800", "receivedBytes" -> "400"))
   }
+
+  test("cleanupResources should not NPE when reset fails to reallocate array") {
+    // Reproduces a bug where:
+    //   1. insertRecord() triggers spill -> reset() -> array = null -> allocateArray() throws OOM
+    //   2. OOM propagates out of insertRecord()
+    //   3. UnsafeShuffleWriter's finally block calls cleanupResources()
+    //   4. cleanupResources() -> freeMemory() -> updatePeakMemoryUsed() -> getMemoryUsage()
+    //      -> inMemSorter.getMemoryUsage() -> NPE because inMemSorter.array is still null
+    //
+    // The root cause: reset() sets array = null, then allocateArray() fails. The sorter is left
+    // with inMemSorter != null but inMemSorter.array == null. cleanupResources() calls
+    // freeMemory() which calls getMemoryUsage() before reaching inMemSorter.free().
+    val conf = new SparkConf()
+      .setMaster("local[1]")
+      .setAppName("ShuffleExternalSorterSuite")
+      .set(IS_TESTING, true)
+      .set(TEST_MEMORY, 1600L)
+      .set(MEMORY_FRACTION, 0.9999)
+
+    sc = new SparkContext(conf)
+    val memoryManager = UnifiedMemoryManager(conf, 1)
+
+    var shouldStealMemory = false
+
+    // Override acquireExecutionMemory to steal freed memory during reset()'s allocateArray(),
+    // forcing the allocation to fail with OOM.
+    val taskMemoryManager = new TaskMemoryManager(memoryManager, 0) {
+      override def acquireExecutionMemory(required: Long, consumer: MemoryConsumer): Long = {
+        if (shouldStealMemory &&
+          memoryManager.maxHeapMemory - memoryManager.executionMemoryUsed > 400) {
+          val acquireExecutionMemoryMethod =
+            memoryManager.getClass.getMethods.filter(_.getName == "acquireExecutionMemory").head
+          acquireExecutionMemoryMethod.invoke(
+            memoryManager,
+            JLong.valueOf(
+              memoryManager.maxHeapMemory - memoryManager.executionMemoryUsed - 400),
+            JLong.valueOf(1L),
+            MemoryMode.ON_HEAP
+          ).asInstanceOf[java.lang.Long]
+        }
+        super.acquireExecutionMemory(required, consumer)
+      }
+    }
+    val taskContext = mock[TaskContext]
+    val taskMetrics = new TaskMetrics
+    when(taskContext.taskMetrics()).thenReturn(taskMetrics)
+    val sorter = new ShuffleExternalSorter(
+      taskMemoryManager,
+      sc.env.blockManager,
+      taskContext,
+      100, // initialSize: ShuffleInMemorySorter needs 800 bytes (100 * 8)
+      1,
+      conf,
+      new ShuffleWriteMetrics)
+    val inMemSorter = {
+      val field = sorter.getClass.getDeclaredField("inMemSorter")
+      field.setAccessible(true)
+      field.get(sorter).asInstanceOf[ShuffleInMemorySorter]
+    }
+
+    // Fill the pointer array until there's no space for another record.
+    val bytes = new Array[Byte](1)
+    while (inMemSorter.hasSpaceForAnotherRecord) {
+      sorter.insertRecord(bytes, Platform.BYTE_ARRAY_OFFSET, 1, 0)
+    }
+
+    // Enable memory stealing so that when spill -> reset() -> allocateArray() runs, the freed
+    // memory is consumed before allocateArray can use it, causing OOM.
+    shouldStealMemory = true
+
+    // insertRecord triggers spill -> reset() -> array = null -> allocateArray fails -> OOM
+    intercept[SparkOutOfMemoryError] {
+      sorter.insertRecord(bytes, Platform.BYTE_ARRAY_OFFSET, 1, 0)
+    }
+
+    // Verify the broken state: inMemSorter != null but inMemSorter.array == null
+    val inMemSorterField = sorter.getClass.getDeclaredField("inMemSorter")
+    inMemSorterField.setAccessible(true)
+    assert(inMemSorterField.get(sorter) != null, "inMemSorter should still be non-null")
+    val arrayField = classOf[ShuffleInMemorySorter].getDeclaredField("array")
+    arrayField.setAccessible(true)
+    assert(arrayField.get(inMemSorterField.get(sorter)) == null,
+      "inMemSorter.array should be null (reset freed it, allocateArray failed)")
+
+    // Without the fix, this NPEs in:
+    //   cleanupResources -> freeMemory -> updatePeakMemoryUsed -> getMemoryUsage
+    //     -> inMemSorter.getMemoryUsage -> array.size() -> NPE
+    sorter.cleanupResources()
+  }
 }

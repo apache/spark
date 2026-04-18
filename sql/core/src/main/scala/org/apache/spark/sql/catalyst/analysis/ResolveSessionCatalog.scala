@@ -196,8 +196,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
     case DescribeRelation(
-        ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended, output) =>
-      DescribeTableCommand(ident, partitionSpec, isExtended, output)
+        resolvedChild @ ResolvedV1TableOrViewIdentifier(ident),
+        partitionSpec,
+        isExtended,
+        output) =>
+      DescribeTableCommand(resolvedChild, ident, partitionSpec, isExtended, output)
 
     case DescribeColumn(
         ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended, output) =>
@@ -431,7 +434,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         output,
         pattern.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
 
-    case ShowColumns(ResolvedViewIdentifier(ident), ns, output) =>
+    case ShowColumns(resolvedChild @ ResolvedViewIdentifier(ident), ns, output) =>
       val resolver = conf.resolver
       val db = ns match {
         case Some(nsSeq) if ident.database.exists(!resolver(_, nsSeq.head)) =>
@@ -443,9 +446,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       // matches expected format (e.g. "SHOW COLUMNS IN showcolumn4 FROM global_temp").
       val tableNameForCommand =
         if (db.isDefined && ident.database == db) TableIdentifier(ident.table, None) else ident
-      ShowColumnsCommand(db, tableNameForCommand, output)
+      ShowColumnsCommand(resolvedChild, db, tableNameForCommand, output)
 
-    case ShowColumns(ResolvedV1TableIdentifier(ident), ns, output) =>
+    case ShowColumns(
+        resolvedChild @ ResolvedV1TableIdentifier(ident), ns, output) =>
       val v1TableName = ident
       val resolver = conf.resolver
       val db = ns match {
@@ -454,7 +458,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
             Seq(db.head), Seq(v1TableName.database.get))
         case _ => ns.map(_.head)
       }
-      ShowColumnsCommand(db, v1TableName, output)
+      ShowColumnsCommand(resolvedChild, db, v1TableName, output)
 
     // V2 catalog doesn't support RECOVER PARTITIONS yet, we must use v1 command here.
     case RecoverPartitions(ResolvedV1TableIdentifierInSessionCatalog(ident)) =>

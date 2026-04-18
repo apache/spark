@@ -4413,6 +4413,14 @@ object functions {
   def current_schema(): Column = Column.fn("current_schema")
 
   /**
+   * Returns the current SQL path as a comma-separated list of qualified schema names.
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def current_path(): Column = Column.fn("current_path")
+
+  /**
    * Returns the user name of current execution context.
    *
    * @group misc_funcs

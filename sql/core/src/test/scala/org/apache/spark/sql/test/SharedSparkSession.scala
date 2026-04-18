@@ -54,7 +54,9 @@ trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
     }
   }
 
-  def runAndFetchMetrics(func: => Unit): Map[String, String] = {
+  // Runs func (which must trigger exactly one SQL execution) and returns the SQL metrics of that
+  // execution as a map keyed by (planNodeId, planNodeName, metricName) -> metricValue.
+  def runAndFetchMetrics(func: => Unit): Map[(Long, String, String), String] = {
     val statusStore = spark.sharedState.statusStore
     val oldCount = statusStore.executionsList().size
 
@@ -73,7 +75,9 @@ trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
 
     val exec = statusStore.executionsList().last
     val execId = exec.executionId
-    val sqlMetrics = exec.metrics.map { metric => metric.accumulatorId -> metric.name }.toMap
+    val sqlMetrics = statusStore.planGraph(execId).allNodes
+      .flatMap(n => n.metrics.map(m => (m.accumulatorId, (n.id, n.name, m.name))))
+      .toMap
     statusStore.executionMetrics(execId).map { case (k, v) => sqlMetrics(k) -> v }
   }
 }

@@ -899,7 +899,7 @@ CROSS JOIN (VALUES (1), (2), (4) recent_visitors(recent_visitor_id));
 
 ## KLL Quantile Sketch Functions
 
-KLL (K-Linear-Logarithmic) sketches provide approximate quantile estimation. They are useful for computing percentiles, medians, and other order statistics on large datasets without sorting.
+KLL (Karnin-Lang-Liberty) sketches provide approximate quantile estimation. They are useful for computing percentiles, medians, and other order statistics on large datasets without sorting.
 
 See the [Apache DataSketches KLL documentation](https://datasketches.apache.org/docs/KLL/KLLSketch.html) for more information.
 

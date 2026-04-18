@@ -596,7 +596,7 @@ class SparseVector(Vector):
         assert 1 <= len(args) <= 2, "must pass either 2 or 3 arguments"
         if len(args) == 1:
             pairs = args[0]
-            if type(pairs) == dict:
+            if isinstance(pairs, dict):
                 pairs = pairs.items()
             pairs = cast(Iterable[Tuple[int, float]], sorted(pairs))
             self.indices = np.array([p[0] for p in pairs], dtype=np.int32)

@@ -502,6 +502,13 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * Create a [[ShowCollationsCommand]] logical command.
+   */
+  override def visitShowCollations(ctx: ShowCollationsContext): LogicalPlan = withOrigin(ctx) {
+    ShowCollationsCommand(Option(ctx.pattern).map(x => string(visitStringLit(x))))
+  }
+
+  /**
    * Converts a multi-part identifier to a TableIdentifier.
    *
    * If the multi-part identifier has too many parts, this will throw a ParseException.
@@ -1480,7 +1487,8 @@ class SparkSqlAstBuilder extends AstBuilder {
     val createPipelineFlowHeaderCtx = ctx.createPipelineFlowHeader()
     val ident = withIdentClause(createPipelineFlowHeaderCtx.flowName, UnresolvedIdentifier(_))
     val commentOpt = Option(createPipelineFlowHeaderCtx.commentSpec()).map(visitCommentSpec)
-    val flowOperation = withInsertInto(ctx.insertInto(), visitQuery(ctx.query()))
+    val flowOperation = withInsertInto(ctx.insertInto(), visitQuery(ctx.query()),
+      queryAliasCtx = null)
     CreateFlowCommand(
       name = ident,
       flowOperation = flowOperation,

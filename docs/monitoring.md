@@ -208,6 +208,21 @@ Security options for the Spark History Server are covered more detail in the
     <td>1.4.0</td>
   </tr>
   <tr>
+    <td>spark.history.fs.update.scanDisabledPathPatterns</td>
+    <td>(none)</td>
+    <td>
+      Comma-separated list of regular expressions matched against log directory paths.
+      Directories whose full path matches any pattern will not be scanned periodically
+      (e.g., <code>s3a://.*,gs://.*</code> disables scanning for all S3 and GCS directories).
+      Applications in these directories rely on on-demand loading instead of scanning and
+      will not appear in the listing until accessed by appId. When accessed, accurate metadata
+      is populated immediately. Logs that are never accessed are not subject to the cleaner;
+      use external lifecycle management (e.g., S3 Lifecycle Policies, GCS Object Lifecycle
+      Management) for those.
+    </td>
+    <td>4.2.0</td>
+  </tr>
+  <tr>
     <td>spark.history.retainedApplications</td>
     <td>50</td>
     <td>

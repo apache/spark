@@ -48,12 +48,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       ShowCurrentNamespaceCommand())
   }
 
-  test("SHOW CACHED TABLES") {
-    comparePlans(
-      parser.parsePlan("SHOW CACHED TABLES"),
-      ShowCachedTables)
-  }
-
   test("insert overwrite directory") {
     val v1 = "INSERT OVERWRITE DIRECTORY '/tmp/file' USING parquet SELECT 1 as a"
     parser.parsePlan(v1) match {
@@ -819,5 +813,17 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     comparePlans(
       parser.parsePlan("SHOW CATALOGS LIKE 'defau*'"),
       ShowCatalogsCommand(Some("defau*")))
+  }
+
+  test("SHOW COLLATIONS") {
+    comparePlans(
+      parser.parsePlan("SHOW COLLATIONS"),
+      ShowCollationsCommand(None))
+    comparePlans(
+      parser.parsePlan("SHOW COLLATIONS LIKE 'UNICODE*'"),
+      ShowCollationsCommand(Some("UNICODE*")))
+    comparePlans(
+      parser.parsePlan("SHOW COLLATIONS LIKE 'UTF8_BINARY'"),
+      ShowCollationsCommand(Some("UTF8_BINARY")))
   }
 }

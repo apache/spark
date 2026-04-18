@@ -86,20 +86,21 @@ case class PivotFirst(
 
   override val dataType: DataType = ArrayType(valueDataType)
 
-  val pivotIndex: Map[Any, Int] = if (pivotColumn.dataType.isInstanceOf[AtomicType]) {
-    HashMap(pivotColumnValues.zipWithIndex: _*)
-  } else {
+  private val usesTreeMap: Boolean = !TypeUtils.typeWithProperEquals(pivotColumn.dataType)
+
+  val pivotIndex: Map[Any, Int] = if (usesTreeMap) {
     TreeMap(pivotColumnValues.zipWithIndex: _*)(
       TypeUtils.getInterpretedOrdering(pivotColumn.dataType))
+  } else {
+    HashMap(pivotColumnValues.zipWithIndex: _*)
   }
 
-  // Null-safe lookup into pivotIndex. For atomic types, pivotIndex is a HashMap which
-  // handles null keys safely via hash-based lookup. For non-atomic types, pivotIndex is a TreeMap
-  // whose comparison-based lookup throws NPE on null keys. Returning -1 for null is safe on the
-  // TreeMap path because null can never be a TreeMap key (insertion would also NPE), so it can
-  // never match any pivot value.
+  // Null-safe lookup into pivotIndex. When pivotIndex is a TreeMap, its comparison-based lookup
+  // throws NPE on null keys. Returning -1 for null is safe on the TreeMap path because null can
+  // never be a TreeMap key (insertion would also NPE), so it can never match any pivot value.
+  // Otherwise, pivotIndex is a HashMap that handles null keys safely via hash-based lookup.
   private def findPivotIndex(key: Any): Int = key match {
-    case null if !pivotColumn.dataType.isInstanceOf[AtomicType] => -1
+    case null if usesTreeMap => -1
     case _ => pivotIndex.getOrElse(key, -1)
   }
 

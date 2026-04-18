@@ -38,11 +38,14 @@ import org.apache.spark.tags.DockerTest
 class MySQLNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespaceTest {
   override val db = new MySQLDatabaseOnDocker
 
-  val map = new CaseInsensitiveStringMap(
+  lazy val map = new CaseInsensitiveStringMap(
     Map("url" -> db.getJdbcUrl(dockerIp, externalPort),
       "driver" -> "com.mysql.cj.jdbc.Driver").asJava)
 
-  catalog.initialize("mysql", map)
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    catalog.initialize("mysql", map)
+  }
 
   override def dataPreparation(conn: Connection): Unit = {}
 

@@ -57,11 +57,11 @@ trait KeepAnalyzedQuery extends Command {
 /**
  * Trait that gathers schema evolution logic shared by V2 write commands and MERGE INTO.
  */
-trait SupportsSchemaEvolution extends LogicalPlan {
+trait WriteWithSchemaEvolution extends LogicalPlan {
   /** The target of the write operation. */
   def table: LogicalPlan
 
-  def withNewTable(newTable: NamedRelation): SupportsSchemaEvolution
+  def withNewTable(newTable: NamedRelation): WriteWithSchemaEvolution
 
   /** Whether schema evolution is enabled for the write operation. */
   def withSchemaEvolution: Boolean
@@ -98,7 +98,7 @@ trait V2WriteCommand
     extends UnaryCommand
     with KeepAnalyzedQuery
     with CTEInChildren
-    with SupportsSchemaEvolution {
+    with WriteWithSchemaEvolution {
   def table: NamedRelation
   def query: LogicalPlan
   def isByName: Boolean
@@ -130,7 +130,7 @@ trait V2WriteCommand
 
   override lazy val pendingSchemaChanges: Seq[TableChange] = {
     if (schemaEvolutionEnabled && schemaEvolutionReady) {
-      ResolveSchemaEvolution.computeSchemaChanges(table.schema, query.schema, isByName).toSeq
+      ResolveSchemaEvolution.computeSupportedSchemaChanges(table, query.schema, isByName).toSeq
     } else {
       Seq.empty
     }
@@ -998,7 +998,7 @@ case class MergeIntoTable(
     notMatchedActions: Seq[MergeAction],
     notMatchedBySourceActions: Seq[MergeAction],
     withSchemaEvolution: Boolean)
-    extends BinaryCommand with SupportsSchemaEvolution with SupportsSubquery {
+    extends BinaryCommand with WriteWithSchemaEvolution with SupportsSubquery {
 
   override val table: LogicalPlan = EliminateSubqueryAliases(targetTable)
 
@@ -1042,8 +1042,8 @@ case class MergeIntoTable(
   override lazy val pendingSchemaChanges: Seq[TableChange] = {
     if (schemaEvolutionEnabled && schemaEvolutionReady) {
       val referencedSourceSchema = MergeIntoTable.sourceSchemaForSchemaEvolution(this)
-      ResolveSchemaEvolution.computeSchemaChanges(
-        targetTable.schema, referencedSourceSchema, isByName = true).toSeq
+      ResolveSchemaEvolution.computeSupportedSchemaChanges(
+        table, referencedSourceSchema, isByName = true).toSeq
     } else {
       Seq.empty
     }
@@ -1150,6 +1150,7 @@ object MergeIntoTable {
     expr match {
       case UnresolvedAttribute(nameParts) if allowUnresolved => nameParts
       case a: AttributeReference => Seq(a.name)
+      case Alias(child, _) => extractFieldPath(child, allowUnresolved)
       case GetStructField(child, ordinal, nameOpt) =>
         extractFieldPath(child, allowUnresolved) :+ nameOpt.getOrElse(s"col$ordinal")
       case _ => Seq.empty
@@ -1686,18 +1687,6 @@ object ShowPartitions {
   def getOutputAttrs: Seq[Attribute] = {
     Seq(AttributeReference("partition", StringType, nullable = false)())
   }
-}
-
-/**
- * The logical plan of the SHOW CACHED TABLES command.
- *
- * Lists in-memory cache entries that were registered with an explicit table or view name
- * (for example via `CACHE TABLE` or `Catalog.cacheTable`).
- */
-case object ShowCachedTables extends LeafCommand {
-  override val output: Seq[Attribute] = Seq(
-    AttributeReference("tableName", StringType, nullable = false)(),
-    AttributeReference("storageLevel", StringType, nullable = false)())
 }
 
 /**

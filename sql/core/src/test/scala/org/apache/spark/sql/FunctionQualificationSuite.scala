@@ -813,6 +813,32 @@ class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
     sql("DROP TEMPORARY FUNCTION current_user")
   }
 
+  test("SECTION 11e: current_path() is a builtin and returns path string") {
+    val pathStr = sql("SELECT current_path()").collect().head.getString(0)
+    assert(pathStr.nonEmpty && pathStr.contains("."),
+      s"current_path() should return a non-empty path with qualified schemas, got: $pathStr")
+
+    // Without-parens syntax works in ANSI mode
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val ansiPath = sql("SELECT CURRENT_PATH").collect().head.getString(0)
+      assert(ansiPath == pathStr,
+        s"CURRENT_PATH (no parens) should match current_path(), got: $ansiPath")
+    }
+
+    // Path reflects the current schema context
+    withDatabase("current_path_test_db") {
+      sql("CREATE DATABASE current_path_test_db")
+      sql("USE current_path_test_db")
+      try {
+        val newPath = sql("SELECT current_path()").collect().head.getString(0)
+        assert(newPath.contains("current_path_test_db"),
+          s"current_path() should reflect USE SCHEMA, got: $newPath")
+      } finally {
+        sql("USE default")
+      }
+    }
+  }
+
   test("SECTION 12d: Extension - SHOW FUNCTIONS includes extension functions") {
     val functions = sql("SHOW FUNCTIONS").collect().map(_.getString(0))
     assert(functions.contains("test_ext_func"),

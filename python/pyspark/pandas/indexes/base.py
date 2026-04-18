@@ -434,7 +434,7 @@ class Index(IndexOpsMixin):
         """
         if same_anchor(self, other):
             return True
-        elif type(self) == type(other):
+        elif type(self) is type(other):
             if get_option("compute.ops_on_diff_frames"):
                 # TODO: avoid using default index?
                 with option_context("compute.default_index_type", "distributed-sequence"):
@@ -1467,7 +1467,7 @@ class Index(IndexOpsMixin):
         >>> (s1.index ^ s2.index)
         Index([1, 5], dtype='int64')
         """
-        if type(self) != type(other):
+        if type(self) is not type(other):
             raise NotImplementedError(
                 "Doesn't support symmetric_difference between Index & MultiIndex for now"
             )
@@ -2068,7 +2068,7 @@ class Index(IndexOpsMixin):
         # Check if the `self` and `other` have different index types.
         # 1. `self` is Index, `other` is MultiIndex
         # 2. `self` is MultiIndex, `other` is Index
-        is_index_types_different = isinstance(other, Index) and (type(self) != type(other))
+        is_index_types_different = isinstance(other, Index) and (type(self) is not type(other))
         if is_index_types_different:
             if isinstance(self, MultiIndex):
                 # In case `self` is MultiIndex and `other` is Index,

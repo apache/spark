@@ -5827,6 +5827,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       // Map stage completes successfully,
       completeShuffleMapStageSuccessfully(0, 0, 3, Seq("hostA", "hostB"))
       taskIdCount += 2
+      sc.listenerBus.waitUntilEmpty()
       assert(completedStage === List(0))
 
       // Now submit the first reducer stage

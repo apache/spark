@@ -132,6 +132,18 @@
     ],
     "sqlState" : "22003"
   },
+  "ARROW_SCHEMA_FIELD_COUNT_MISMATCH" : {
+    "message" : [
+      "Arrow schema mismatch: encoder has <encoderFieldCount> fields but Arrow data only has <arrowColumnCount> columns."
+    ],
+    "sqlState" : "42000"
+  },
+  "ARROW_SCHEMA_FIELD_NAME_MISMATCH" : {
+    "message" : [
+      "Arrow schema mismatch: encoder field '<encoderFieldName>' does not match Arrow column '<arrowColumnName>' at the same position."
+    ],
+    "sqlState" : "42000"
+  },
   "ARROW_TYPE_MISMATCH" : {
     "message" : [
       "Invalid schema from <operation>: expected <outputTypes>, got <actualDataTypes>."
@@ -1445,6 +1457,18 @@
     ],
     "sqlState" : "KD011"
   },
+  "DATAFRAME_INPUT_NOT_SINGLE_COLUMN" : {
+    "message" : [
+      "Input DataFrame must have exactly one column, but got <numColumns>."
+    ],
+    "sqlState" : "42K09"
+  },
+  "DATAFRAME_INPUT_NOT_STRING_TYPE" : {
+    "message" : [
+      "Input DataFrame column must be StringType, but got <dataType>."
+    ],
+    "sqlState" : "42K09"
+  },
   "DATATYPE_CANNOT_ORDER" : {
     "message" : [
       "Type <dataType> does not support ordered operations."
@@ -1761,11 +1785,65 @@
     ],
     "sqlState" : "42710"
   },
+  "DATA_SOURCE_BATCH_SCAN_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: Batch scan is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_BATCH_WRITE_BUILDER_NOT_SUPPORTED" : {
+    "message" : [
+      "<class> does not support batch write."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_BATCH_WRITE_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: Batch write is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_COLUMNAR_READER_NOT_SUPPORTED" : {
+    "message" : [
+      "<class> cannot create columnar reader."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_CONTINUOUS_SCAN_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: Continuous scan is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_DELTA_BATCH_WRITE_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: Delta batch write is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_DELTA_WRITE_BUILD_NOT_IMPLEMENTED" : {
+    "message" : [
+      "<class> does not implement build."
+    ],
+    "sqlState" : "0A000"
+  },
   "DATA_SOURCE_EXTERNAL_ERROR" : {
     "message" : [
       "Encountered error when saving to external data source."
     ],
     "sqlState" : "KD010"
+  },
+  "DATA_SOURCE_METADATA_SCHEMA_NOT_IMPLEMENTED" : {
+    "message" : [
+      "<class> does not implement metadataSchema."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_MICRO_BATCH_SCAN_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: Micro-batch scan is not supported."
+    ],
+    "sqlState" : "0A000"
   },
   "DATA_SOURCE_NOT_EXIST" : {
     "message" : [
@@ -1778,6 +1856,24 @@
       "Failed to find the data source: <provider>. Make sure the provider name is correct and the package is properly registered and compatible with your Spark version."
     ],
     "sqlState" : "42K02"
+  },
+  "DATA_SOURCE_ROW_ID_SCHEMA_NOT_IMPLEMENTED" : {
+    "message" : [
+      "<class> does not implement rowIdSchema."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_STREAMING_WRITE_BUILD_NOT_SUPPORTED" : {
+    "message" : [
+      "<class> does not support streaming write."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_STREAMING_WRITE_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: Streaming write is not supported."
+    ],
+    "sqlState" : "0A000"
   },
   "DATA_SOURCE_TABLE_SCHEMA_MISMATCH" : {
     "message" : [
@@ -2841,6 +2937,30 @@
       "Data columns: <dataColumns>."
     ],
     "sqlState" : "21S01"
+  },
+  "INSERT_REPLACE_ON_BY_NAME_NOT_ENABLED" : {
+    "message" : [
+      "INSERT INTO ... BY NAME REPLACE ON is not enabled. Set 'spark.sql.insertIntoReplaceOnByName.enabled' to true to enable it."
+    ],
+    "sqlState" : "0A000"
+  },
+  "INSERT_REPLACE_ON_NOT_ENABLED" : {
+    "message" : [
+      "INSERT INTO ... REPLACE ON is not enabled. Set 'spark.sql.insertIntoReplaceOn.enabled' to true to enable it."
+    ],
+    "sqlState" : "0A000"
+  },
+  "INSERT_REPLACE_USING_BY_NAME_NOT_ENABLED" : {
+    "message" : [
+      "INSERT INTO ... BY NAME REPLACE USING is not enabled. Set 'spark.sql.insertIntoReplaceUsingByName.enabled' to true to enable it."
+    ],
+    "sqlState" : "0A000"
+  },
+  "INSERT_REPLACE_USING_NOT_ENABLED" : {
+    "message" : [
+      "INSERT INTO ... REPLACE USING is not enabled. Set 'spark.sql.insertIntoReplaceUsing.enabled' to true to enable it."
+    ],
+    "sqlState" : "0A000"
   },
   "INSUFFICIENT_TABLE_PROPERTY" : {
     "message" : [
@@ -5583,6 +5703,12 @@
     ],
     "sqlState" : "42000"
   },
+  "PARTITION_RENAME_NOT_SUPPORTED" : {
+    "message" : [
+      "Partition renaming is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY" : {
     "message" : [
       "The expression <expression> must be inside 'partitionedBy'."
@@ -6733,6 +6859,21 @@
     ],
     "sqlState" : "XXKST"
   },
+  "STREAM_STREAM_JOIN_INCONSISTENT_STATE" : {
+    "message" : [
+      "Detected inconsistency in stream-stream join state."
+    ],
+    "subClass" : {
+      "NULL_VALUE" : {
+        "message" : [
+          "Value at index <valueIndex> is null while numValues is <numValues>.",
+          "joinSide=<joinSide>, storeVersion=<storeVersion>, partitionId=<partitionId>.",
+          "Enable <configKey> as a workaround to skip null values."
+        ]
+      }
+    },
+    "sqlState" : "XXKST"
+  },
   "STRUCT_ARRAY_LENGTH_MISMATCH" : {
     "message" : [
       "Input row doesn't have expected number of values required by the schema. <expected> fields are required while <actual> values are provided."
@@ -6901,6 +7042,18 @@
     ],
     "sqlState" : "42K09"
   },
+  "TRUNCATE_PARTITIONS_NOT_SUPPORTED" : {
+    "message" : [
+      "Truncating partitions is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
+  "TRUNCATE_PARTITION_NOT_SUPPORTED" : {
+    "message" : [
+      "Truncating partition is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "TUPLE_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
       "Invalid call to <function>; only valid Tuple sketch buffers are supported as inputs (such as those produced by the corresponding `tuple_sketch_agg_*` function)."
@@ -7028,6 +7181,12 @@
     "message" : [
       "Internal error: Unexpected parameter marker <parameterMarker> found during AST building.",
       "This should have been blocked at the grammar level. Report this as a bug."
+    ],
+    "sqlState" : "XX000"
+  },
+  "UNEXPECTED_V2_EXPRESSION" : {
+    "message" : [
+      "Unexpected V2 expression: <expr>."
     ],
     "sqlState" : "XX000"
   },
@@ -8262,6 +8421,18 @@
       "<inferredDataSchema>"
     ],
     "sqlState" : "42000"
+  },
+  "V2_EXPRESSION_SQL_BUILDER_UDAF_NOT_SUPPORTED" : {
+    "message" : [
+      "<class> does not support user defined aggregate function: <funcName>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "V2_EXPRESSION_SQL_BUILDER_UDF_NOT_SUPPORTED" : {
+    "message" : [
+      "<class> does not support user defined function: <funcName>."
+    ],
+    "sqlState" : "0A000"
   },
   "VARIABLE_ALREADY_EXISTS" : {
     "message" : [
@@ -10736,91 +10907,6 @@
       "CaseInsensitiveStringMap is read-only."
     ]
   },
-  "_LEGACY_ERROR_TEMP_3133" : {
-    "message" : [
-      "<class> does not implement rowIdSchema"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3134" : {
-    "message" : [
-      "<class> does not implement metadataSchema"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3135" : {
-    "message" : [
-      "<class> does not support batch write"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3136" : {
-    "message" : [
-      "<class> does not support streaming write"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3137" : {
-    "message" : [
-      "<description>: Batch write is not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3138" : {
-    "message" : [
-      "<description>: Streaming write is not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3139" : {
-    "message" : [
-      "<description>: Delta batch write is not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3140" : {
-    "message" : [
-      "<class> does not implement build"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3141" : {
-    "message" : [
-      "<class> does not support user defined function: <funcName>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3142" : {
-    "message" : [
-      "<class> does not support user defined aggregate function: <funcName>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3143" : {
-    "message" : [
-      "Partition renaming is not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3144" : {
-    "message" : [
-      "Partition truncate is not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3145" : {
-    "message" : [
-      "Partitions truncate is not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3147" : {
-    "message" : [
-      "<description>: Batch scan are not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3148" : {
-    "message" : [
-      "<description>: Micro-batch scan are not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3149" : {
-    "message" : [
-      "<description>: Continuous scan are not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3150" : {
-    "message" : [
-      "Cannot create columnar reader."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3152" : {
     "message" : [
       "Datatype not supported <dataType>"
@@ -11024,11 +11110,6 @@
   "_LEGACY_ERROR_TEMP_3206" : {
     "message" : [
       "<value> is not a boolean string."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3207" : {
-    "message" : [
-      "Unexpected V2 expression: <expr>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3208" : {

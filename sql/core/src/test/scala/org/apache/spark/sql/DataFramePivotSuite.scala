@@ -397,4 +397,83 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
         Row(500, 200))
     }
   }
+
+  test("pivot with explicit values under UTF8_LCASE collation") {
+    withTable("lcase_pivot") {
+      sql(
+        """CREATE TABLE lcase_pivot (
+          |  quarter STRING COLLATE UTF8_LCASE,
+          |  course STRING,
+          |  earnings INT
+          |) USING PARQUET""".stripMargin)
+      sql(
+        """INSERT INTO lcase_pivot VALUES
+          |  ('q1', 'dotNET', 10000),
+          |  ('q2', 'dotNET', 15000),
+          |  ('q1', 'Java',   20000),
+          |  ('q2', 'Java',   30000)""".stripMargin)
+
+      checkAnswer(
+        sql(
+          """SELECT * FROM lcase_pivot
+            |PIVOT (
+            |  SUM(earnings)
+            |  FOR quarter IN ('Q1' AS Q1, 'Q2' AS Q2)
+            |)""".stripMargin),
+        Row("dotNET", 10000, 15000) ::
+          Row("Java", 20000, 30000) :: Nil)
+    }
+  }
+
+  test("pivot with explicit values under UNICODE_CI collation") {
+    // scalastyle:off nonascii
+    val precomposed = "\u00FCber"  // über (precomposed)
+    val decomposed = "u\u0308ber" // über (decomposed)
+    // scalastyle:on nonascii
+    withTable("uci_pivot") {
+      sql(
+        """CREATE TABLE uci_pivot (
+          |  key STRING COLLATE UNICODE_CI,
+          |  amount INT
+          |) USING PARQUET""".stripMargin)
+      sql(s"INSERT INTO uci_pivot VALUES ('$precomposed', 100)")
+      sql(s"INSERT INTO uci_pivot VALUES ('$decomposed', 200)")
+      sql("INSERT INTO uci_pivot VALUES ('other', 50)")
+
+      checkAnswer(
+        sql(
+          s"""SELECT * FROM uci_pivot
+             |PIVOT (
+             |  SUM(amount) FOR key IN (
+             |    '$precomposed' AS uber,
+             |    'other' AS other
+             |  )
+             |)""".stripMargin),
+        Row(300, 50))
+    }
+  }
+
+  test("pivot with null collated string column should not NPE") {
+    withTable("lcase_null_pivot") {
+      sql(
+        """CREATE TABLE lcase_null_pivot (
+          |  key STRING COLLATE UTF8_LCASE,
+          |  amount INT
+          |) USING PARQUET""".stripMargin)
+      sql(
+        """INSERT INTO lcase_null_pivot VALUES
+          |  ('a', 10),
+          |  (NULL, 20),
+          |  ('b', 30)""".stripMargin)
+
+      checkAnswer(
+        sql(
+          """SELECT * FROM lcase_null_pivot
+            |PIVOT (
+            |  SUM(amount)
+            |  FOR key IN ('a' AS a, 'b' AS b)
+            |)""".stripMargin),
+        Row(10, 30))
+    }
+  }
 }

@@ -22,7 +22,7 @@ import java.sql.Date
 import java.util.Collections
 
 import org.apache.spark.sql.{catalyst, AnalysisException, DataFrame, Row}
-import org.apache.spark.sql.catalyst.expressions.{ApplyFunctionExpression, Cast, Literal}
+import org.apache.spark.sql.catalyst.expressions.{ApplyFunctionExpression, Cast, Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.{CoalescedBoundary, CoalescedHashPartitioning, HashPartitioning, RangePartitioning, UnknownPartitioning}
@@ -30,9 +30,10 @@ import org.apache.spark.sql.connector.catalog.{Column, Identifier}
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
-import org.apache.spark.sql.connector.expressions.LogicalExpressions._
+import org.apache.spark.sql.connector.expressions.Expressions._
 import org.apache.spark.sql.execution.{QueryExecution, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AQEShuffleReadExec
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
@@ -1531,5 +1532,23 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     } else {
       Seq(None)
     }
+  }
+
+  test("SPARK-56321: Scan with SupportsReportOrdering and function-based sort order") {
+    val bucketById = bucket(4, "id")
+    val tableOrdering = Array(sort(bucketById, SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    catalog.createTable(ident, columns, Array(bucketById), emptyProps,
+      Distributions.unspecified(), tableOrdering, None, None)
+
+    sql(s"INSERT INTO testcat.ns1.test_table VALUES (1, 'a', date '2021-01-01')")
+
+    val df = sql("SELECT id, data FROM testcat.ns1.test_table")
+    val scans = collect(df.queryExecution.executedPlan) { case s: BatchScanExec => s }
+    assert(scans.size === 1)
+    val ordering = scans.head.outputOrdering
+    assert(ordering.nonEmpty,
+      "scan should report non-empty outputOrdering via SupportsReportOrdering")
+    assert(ordering.head.child.isInstanceOf[TransformExpression],
+      "bucket-based sort order should resolve to a TransformExpression")
   }
 }

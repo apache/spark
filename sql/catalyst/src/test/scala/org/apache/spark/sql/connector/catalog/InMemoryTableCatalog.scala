@@ -24,9 +24,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.{CurrentUserContext, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NonEmptyNamespaceException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
@@ -199,6 +198,9 @@ class BasicInMemoryTableCatalog extends TableCatalog {
           partitioning = finalPartitioning,
           properties = properties)
           .alterTableWithData(table.data, schema)
+      case other =>
+        throw new UnsupportedOperationException(
+          s"Unsupported InMemoryBaseTable subclass: ${other.getClass.getName}")
     }
     newTable.setVersion(currentVersion)
     changes.foreach {
@@ -241,24 +243,15 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
 
   override def createTableLike(
       ident: Identifier,
-      sourceTable: Table,
-      userSpecifiedOverrides: TableInfo): Table = {
-    // Read schema from source. For V1Table sources, apply CharVarcharUtils to preserve
-    // CHAR/VARCHAR types as declared rather than collapsed to StringType.
-    val columns = sourceTable match {
-      case v1: V1Table =>
-        CatalogV2Util.structTypeToV2Columns(CharVarcharUtils.getRawSchema(v1.catalogTable.schema))
-      case _ =>
-        sourceTable.columns()
-    }
-    // Merge source properties with user overrides (user overrides win), then set current user
-    // as owner (overrides source owner). Connectors are responsible for setting the owner.
+      tableInfo: TableInfo,
+      sourceTable: Table): Table = {
+    // columns, partitioning, constraints, explicit properties, and owner are all provided in
+    // tableInfo by Spark. Merge source properties so that connector-specific custom state
+    // (e.g. format.version, format.feature) is cloned; tableInfo properties win on conflict.
     val mergedProps =
-      (sourceTable.properties().asScala ++
-        userSpecifiedOverrides.properties().asScala ++
-        Map(TableCatalog.PROP_OWNER -> CurrentUserContext.getCurrentUser)).asJava
-    createTable(ident, columns, sourceTable.partitioning(), mergedProps,
-      Distributions.unspecified(), Array.empty, None, None, sourceTable.constraints())
+      (sourceTable.properties().asScala ++ tableInfo.properties().asScala).asJava
+    createTable(ident, tableInfo.columns(), tableInfo.partitions(), mergedProps,
+      Distributions.unspecified(), Array.empty, None, None, tableInfo.constraints())
   }
 
   override def capabilities: java.util.Set[TableCatalogCapability] = {

@@ -37,6 +37,7 @@ Project [c1#x]
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
 
 
 -- !query
@@ -72,6 +73,7 @@ org.apache.spark.sql.AnalysisException
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
 
 
 -- !query
@@ -112,6 +114,7 @@ Project [c1#x, c2#x]
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
 
 
 -- !query
@@ -148,6 +151,7 @@ org.apache.spark.sql.AnalysisException
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
 
 
 -- !query
@@ -194,6 +198,7 @@ Project [c1#x]
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
 
 
 -- !query
@@ -206,6 +211,7 @@ AlterViewSchemaBindingCommand `spark_catalog`.`default`.`v`, BINDING
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
 
 
 -- !query
@@ -241,6 +247,7 @@ org.apache.spark.sql.AnalysisException
 DESCRIBE EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
 
 
 -- !query

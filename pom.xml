@@ -111,6 +111,8 @@
     <module>connector/kafka-0-10-sql</module>
     <module>connector/avro</module>
     <module>connector/protobuf</module>
+    <module>udf/worker/proto</module>
+    <module>udf/worker/core</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 
@@ -125,9 +127,9 @@
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.9.1</asm.version>
     <slf4j.version>2.0.17</slf4j.version>
-    <log4j.version>2.25.3</log4j.version>
+    <log4j.version>2.25.4</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
-    <hadoop.version>3.4.3</hadoop.version>
+    <hadoop.version>3.5.0</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
     <protobuf.version>4.33.5</protobuf.version>
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
@@ -144,7 +146,7 @@
     <parquet.version>1.17.0</parquet.version>
     <orc.version>2.3.0</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>12.1.7</jetty.version>
+    <jetty.version>12.1.8</jetty.version>
     <jakartaservlet.version>6.0.0</jakartaservlet.version>
     <!-- SPARK-46938: Required by Hive / LibThrift libs -->
     <javaxservlet.version>4.0.1</javaxservlet.version>
@@ -164,8 +166,6 @@
     <aws.java.sdk.v2.version>2.35.4</aws.java.sdk.v2.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>1.0.6</aws.kinesis.producer.version>
-    <!-- Do not use 3.0.0: https://github.com/GoogleCloudDataproc/hadoop-connectors/issues/1114 -->
-    <gcs-connector.version>hadoop3-2.2.31</gcs-connector.version>
     <analyticsaccelerator-s3.version>1.3.1</analyticsaccelerator-s3.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
@@ -202,7 +202,7 @@
     <gson.version>2.13.2</gson.version>
     <janino.version>3.1.9</janino.version>
     <jersey.version>3.1.11</jersey.version>
-    <joda.version>2.14.0</joda.version>
+    <joda.version>2.14.1</joda.version>
     <jsr305.version>3.0.0</jsr305.version>
     <jaxb.version>2.2.11</jaxb.version>
     <libthrift.version>0.16.0</libthrift.version>
@@ -218,7 +218,7 @@
     <datasketches.version>6.2.0</datasketches.version>
     <netty.version>4.2.12.Final</netty.version>
     <netty-tcnative.version>2.0.75.Final</netty-tcnative.version>
-    <icu4j.version>78.2</icu4j.version>
+    <icu4j.version>78.3</icu4j.version>
     <junit.version>6.0.3</junit.version>
     <jline.version>2.14.6</jline.version>
     <!--
@@ -239,6 +239,7 @@
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
     <kubernetes-client.version>7.6.1</kubernetes-client.version>
     <vertx.version>4.5.26</vertx.version>
+    <xz.version>1.12</xz.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -344,7 +345,7 @@
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
     <mssql.jdbc.version>13.2.1.jre11</mssql.jdbc.version>
     <ojdbc17.version>23.26.1.0.0</ojdbc17.version>
-    <databricks.jdbc.version>2.7.1</databricks.jdbc.version>
+    <databricks.jdbc.version>3.3.1</databricks.jdbc.version>
     <snowflake.jdbc.version>4.0.2</snowflake.jdbc.version>
     <terajdbc.version>20.00.00.39</terajdbc.version>
     <!-- Used for SBT build to retrieve the Spark version -->
@@ -888,7 +889,7 @@
       <dependency>
         <groupId>at.yawk.lz4</groupId>
         <artifactId>lz4-java</artifactId>
-        <version>1.10.4</version>
+        <version>1.11.0</version>
       </dependency>
       <dependency>
         <groupId>com.github.luben</groupId>
@@ -1602,7 +1603,7 @@
       <dependency>
         <groupId>org.tukaani</groupId>
         <artifactId>xz</artifactId>
-        <version>1.12</version>
+        <version>${xz.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.zookeeper</groupId>
@@ -3501,6 +3502,19 @@
       <properties>
         <test.java.home>${env.JAVA_HOME}</test.java.home>
       </properties>
+    </profile>
+
+    <profile>
+      <id>maven-mirror</id>
+      <activation>
+        <property><name>env.MAVEN_MIRROR_URL</name></property>
+      </activation>
+      <repositories>
+        <repository>
+          <id>maven-mirror</id>
+          <url>${env.MAVEN_MIRROR_URL}</url>
+        </repository>
+      </repositories>
     </profile>
 
     <!--

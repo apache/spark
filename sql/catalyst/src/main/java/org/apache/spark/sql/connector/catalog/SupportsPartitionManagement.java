@@ -157,7 +157,7 @@ public interface SupportsPartitionManagement extends Table {
         throws SparkUnsupportedOperationException,
                PartitionsAlreadyExistException,
                NoSuchPartitionException {
-      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3143");
+      throw new SparkUnsupportedOperationException("PARTITION_RENAME_NOT_SUPPORTED");
     }
 
     /**
@@ -172,6 +172,6 @@ public interface SupportsPartitionManagement extends Table {
      */
     default boolean truncatePartition(InternalRow ident)
         throws NoSuchPartitionException, SparkUnsupportedOperationException {
-      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3144");
+      throw new SparkUnsupportedOperationException("TRUNCATE_PARTITION_NOT_SUPPORTED");
     }
 }

@@ -27,7 +27,7 @@
   },
   "AXIS_LENGTH_MISMATCH": {
     "message": [
-      "Length mismatch: Expected axis has <expected_length> element, new values have <actual_length> elements."
+      "Length mismatch: Expected axis has <expected_length> elements, new values have <actual_length> elements."
     ]
   },
   "BROADCAST_VARIABLE_NOT_LOADED": {
@@ -37,7 +37,7 @@
   },
   "CALL_BEFORE_INITIALIZE": {
     "message": [
-      "Not supported to call `<func_name>` before initialize <object>."
+      "Not supported to call `<func_name>` before initializing <object>."
     ]
   },
   "CANNOT_ACCESS_TO_DUNDER": {
@@ -92,7 +92,7 @@
   },
   "CANNOT_INFER_ARRAY_ELEMENT_TYPE": {
     "message": [
-      "Can not infer the element data type, an non-empty list starting with an non-None value is required."
+      "Can not infer the element data type, a non-empty list starting with a non-None value is required."
     ]
   },
   "CANNOT_INFER_EMPTY_SCHEMA": {
@@ -184,7 +184,7 @@
   },
   "CONTEXT_ONLY_VALID_ON_DRIVER": {
     "message": [
-      "It appears that you are attempting to reference SparkContext from a broadcast variable, action, or transformation. SparkContext can only be used on the driver, not in code that it run on workers. For more information, see SPARK-5063."
+      "It appears that you are attempting to reference SparkContext from a broadcast variable, action, or transformation. SparkContext can only be used on the driver, not in code that runs on workers. For more information, see SPARK-5063."
     ]
   },
   "CONTEXT_UNAVAILABLE_FOR_REMOTE_CLIENT": {
@@ -533,7 +533,7 @@
   },
   "KEY_NOT_EXISTS": {
     "message": [
-      "Key `<key>` is not exists."
+      "Key `<key>` does not exist."
     ]
   },
   "KEY_VALUE_PAIR_REQUIRED": {
@@ -1186,7 +1186,7 @@
   },
   "VALUE_NOT_PEARSON": {
     "message": [
-      "Value for `<arg_name>` only supports the 'pearson', got '<arg_value>'."
+      "Value for `<arg_name>` only supports 'pearson', got '<arg_value>'."
     ]
   },
   "VALUE_NOT_PLAIN_COLUMN_REFERENCE": {

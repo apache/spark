@@ -54,7 +54,7 @@ case class BatchScanExec(
       false
   }
 
-  override def hashCode(): Int = Objects.hash(batch, runtimeFilters)
+  override def hashCode(): Int = Objects.hash(batch, runtimeFilters, keyGroupedPartitioning)
 
   @transient override lazy val inputPartitions: Seq[InputPartition] =
     batch.planInputPartitions().toImmutableArraySeq
@@ -63,7 +63,7 @@ case class BatchScanExec(
   @transient private[sql] lazy val filteredPartitions: Seq[Option[InputPartition]] = {
     val dataSourceFilters = runtimeFilters.flatMap {
       case DynamicPruningExpression(e) => DataSourceV2Strategy.translateRuntimeFilterV2(e)
-      case _ => None
+      case f => DataSourceV2Strategy.translateScalarSubqueryFilterV2(f)
     }
 
     val originalPartitioning = outputPartitioning

@@ -44,6 +44,34 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     SparkException.internalError("INSERT OVERWRITE DIRECTORY is not supported.")
   }
 
+  def insertReplaceOnNotEnabled(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INSERT_REPLACE_ON_NOT_ENABLED",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
+  def insertReplaceOnByNameNotEnabled(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INSERT_REPLACE_ON_BY_NAME_NOT_ENABLED",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
+  def insertReplaceUsingNotEnabled(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INSERT_REPLACE_USING_NOT_ENABLED",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
+  def insertReplaceUsingByNameNotEnabled(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INSERT_REPLACE_USING_BY_NAME_NOT_ENABLED",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
   def columnAliasInOperationNotAllowedError(op: String, ctx: TableAliasContext): Throwable = {
     new ParseException(
       errorClass = "COLUMN_ALIASES_NOT_ALLOWED",

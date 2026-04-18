@@ -498,22 +498,6 @@ class CatalogTestsMixin:
                 spark.catalog.refreshTable("spark_catalog.default.my_tab")
                 self.assertEqual(spark.table("my_tab").count(), 0)
 
-    def test_catalog_list_cached_tables(self):
-        spark = self.spark
-        t = "py_catalog_api_cached_t"
-        with self.table(t):
-            spark.sql(f"CREATE TABLE {t} (id INT) USING parquet")
-            spark.catalog.clearCache()
-            self.assertEqual(spark.catalog.listCachedTables(), [])
-            self.assertEqual(len(spark.sql("SHOW CACHED TABLES").collect()), 0)
-            spark.catalog.cacheTable(t)
-            cached = spark.catalog.listCachedTables()
-            self.assertTrue(any(t in ct.name for ct in cached))
-            sql_set = {(r[0], r[1]) for r in spark.sql("SHOW CACHED TABLES").collect()}
-            api_set = {(ct.name, ct.storageLevel) for ct in cached}
-            self.assertEqual(sql_set, api_set)
-            spark.catalog.uncacheTable(t)
-
     def test_catalog_drop_table(self):
         spark = self.spark
         t = "py_catalog_api_drop_t"

@@ -1252,7 +1252,7 @@ abstract class JsonSuite
         StructField("f4", ArrayType(StringType), nullable = true) ::
         StructField("f5", IntegerType, true) :: Nil)
 
-      val rowRDD1 = unparsedStrings.map { r =>
+      val rowRDD1 = unparsedStrings.as[String].rdd.map { r =>
         val values = r.split(",").map(_.trim)
         val v5 = try values(3).toInt catch {
           case _: NumberFormatException => null
@@ -1275,7 +1275,7 @@ abstract class JsonSuite
           StructField("f12", BooleanType, false) :: Nil), false) ::
         StructField("f2", MapType(StringType, IntegerType, true), false) :: Nil)
 
-      val rowRDD2 = unparsedStrings.map { r =>
+      val rowRDD2 = unparsedStrings.as[String].rdd.map { r =>
         val values = r.split(",").map(_.trim)
         val v4 = try values(3).toInt catch {
           case _: NumberFormatException => null

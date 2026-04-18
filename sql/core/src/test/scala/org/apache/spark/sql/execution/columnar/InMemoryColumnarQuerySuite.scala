@@ -185,25 +185,25 @@ class InMemoryColumnarQuerySuite extends QueryTest
   test("SPARK-1678 regression: compression must not lose repeated values") {
     checkAnswer(
       sql("SELECT * FROM repeatedData"),
-      repeatedData.collect().toSeq.map(Row.fromTuple))
+      repeatedData.collect().toSeq)
 
     spark.catalog.cacheTable("repeatedData")
 
     checkAnswer(
       sql("SELECT * FROM repeatedData"),
-      repeatedData.collect().toSeq.map(Row.fromTuple))
+      repeatedData.collect().toSeq)
   }
 
   test("with null values") {
     checkAnswer(
       sql("SELECT * FROM nullableRepeatedData"),
-      nullableRepeatedData.collect().toSeq.map(Row.fromTuple))
+      nullableRepeatedData.collect().toSeq)
 
     spark.catalog.cacheTable("nullableRepeatedData")
 
     checkAnswer(
       sql("SELECT * FROM nullableRepeatedData"),
-      nullableRepeatedData.collect().toSeq.map(Row.fromTuple))
+      nullableRepeatedData.collect().toSeq)
   }
 
   test("SPARK-2729 regression: timestamp data type") {
@@ -226,13 +226,13 @@ class InMemoryColumnarQuerySuite extends QueryTest
   test("SPARK-3320 regression: batched column buffer building should work with empty partitions") {
     checkAnswer(
       sql("SELECT * FROM withEmptyParts"),
-      withEmptyParts.collect().toSeq.map(Row.fromTuple))
+      withEmptyParts.collect().toSeq)
 
     spark.catalog.cacheTable("withEmptyParts")
 
     checkAnswer(
       sql("SELECT * FROM withEmptyParts"),
-      withEmptyParts.collect().toSeq.map(Row.fromTuple))
+      withEmptyParts.collect().toSeq)
   }
 
   test("SPARK-4182 Caching complex types") {

@@ -314,8 +314,6 @@ class SparkConnectPlanner(
         transformSetCurrentCatalog(catalog.getSetCurrentCatalog)
       case proto.Catalog.CatTypeCase.LIST_CATALOGS =>
         transformListCatalogs(catalog.getListCatalogs)
-      case proto.Catalog.CatTypeCase.LIST_CACHED_TABLES =>
-        transformListCachedTables()
       case proto.Catalog.CatTypeCase.DROP_TABLE => transformDropTable(catalog.getDropTable)
       case proto.Catalog.CatTypeCase.DROP_VIEW => transformDropView(catalog.getDropView)
       case proto.Catalog.CatTypeCase.CREATE_DATABASE =>
@@ -454,7 +452,7 @@ class SparkConnectPlanner(
       rel.getLowerBound,
       rel.getUpperBound,
       rel.getWithReplacement,
-      if (rel.hasSeed) rel.getSeed else Utils.random.nextLong,
+      if (rel.hasSeed) Some(rel.getSeed) else None,
       plan)
   }
 
@@ -1760,13 +1758,26 @@ class SparkConnectPlanner(
       localMap.foreach { case (key, value) => reader.option(key, value) }
       reader
     }
-    def ds: Dataset[String] = Dataset(session, transformRelation(rel.getInput))(Encoders.STRING)
+    def ds: Dataset[String] = {
+      val input = transformRelation(rel.getInput)
+      val df = Dataset.ofRows(session, input)
+      val fields = df.schema.fields
+      if (fields.length != 1) {
+        throw QueryCompilationErrors.dataframeInputNotSingleColumnError(fields.length)
+      }
+      if (fields.head.dataType != org.apache.spark.sql.types.StringType) {
+        throw QueryCompilationErrors.dataframeInputNotStringTypeError(fields.head.dataType)
+      }
+      df.as(Encoders.STRING)
+    }
 
     rel.getFormat match {
       case ParseFormat.PARSE_FORMAT_CSV =>
         dataFrameReader.csv(ds).queryExecution.analyzed
       case ParseFormat.PARSE_FORMAT_JSON =>
         dataFrameReader.json(ds).queryExecution.analyzed
+      case ParseFormat.PARSE_FORMAT_XML =>
+        dataFrameReader.xml(ds).queryExecution.analyzed
       case other => throw InvalidInputErrors.invalidEnum(other)
     }
   }
@@ -4272,10 +4283,6 @@ class SparkConnectPlanner(
     } else {
       session.catalog.listCatalogs().logicalPlan
     }
-  }
-
-  private def transformListCachedTables(): LogicalPlan = {
-    session.catalog.listCachedTables().logicalPlan
   }
 
   private def transformDropTable(p: proto.DropTable): LogicalPlan = {

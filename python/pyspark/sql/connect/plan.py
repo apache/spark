@@ -43,7 +43,7 @@ import pyarrow as pa
 
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.storagelevel import StorageLevel
-from pyspark.sql.types import DataType
+from pyspark.sql.types import DataType, StructType
 
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.column import Column
@@ -380,6 +380,40 @@ class DataSource(LogicalPlan):
             plan.read.data_source.source_name = self._source_name
         if self._is_streaming is not None:
             plan.read.is_streaming = self._is_streaming
+        return plan
+
+
+class Parse(LogicalPlan):
+    """Parse a DataFrame with a single string column into a structured DataFrame."""
+
+    def __init__(
+        self,
+        child: "LogicalPlan",
+        format: "proto.Parse.ParseFormat.ValueType",
+        schema: Optional[str] = None,
+        options: Optional[Mapping[str, str]] = None,
+    ) -> None:
+        super().__init__(child)
+        self._format = format
+        self._schema = schema
+        self._options = options
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.parse.input.CopyFrom(self._child.plan(session))
+        plan.parse.format = self._format
+        if self._schema is not None and len(self._schema) > 0:
+            plan.parse.schema.CopyFrom(
+                pyspark_types_to_proto_types(
+                    StructType.fromDDL(self._schema)
+                    if not self._schema.startswith("{")
+                    else StructType.fromJson(json.loads(self._schema))
+                )
+            )
+        if self._options is not None:
+            for k, v in self._options.items():
+                plan.parse.options[k] = v
         return plan
 
 
@@ -1120,7 +1154,7 @@ class Join(LogicalPlan):
 
     @property
     def observations(self) -> Dict[str, "Observation"]:
-        return dict(**super().observations, **self.right.observations)
+        return {**super().observations, **self.right.observations}
 
     def print(self, indent: int = 0) -> str:
         i = " " * indent
@@ -1213,7 +1247,7 @@ class AsOfJoin(LogicalPlan):
 
     @property
     def observations(self) -> Dict[str, "Observation"]:
-        return dict(**super().observations, **self.right.observations)
+        return {**super().observations, **self.right.observations}
 
     def print(self, indent: int = 0) -> str:
         assert self.left is not None
@@ -1288,7 +1322,7 @@ class LateralJoin(LogicalPlan):
 
     @property
     def observations(self) -> Dict[str, "Observation"]:
-        return dict(**super().observations, **self.right.observations)
+        return {**super().observations, **self.right.observations}
 
     def print(self, indent: int = 0) -> str:
         i = " " * indent
@@ -1354,10 +1388,10 @@ class SetOperation(LogicalPlan):
 
     @property
     def observations(self) -> Dict[str, "Observation"]:
-        return dict(
+        return {
             **super().observations,
             **(self.other.observations if self.other is not None else {}),
-        )
+        }
 
     def print(self, indent: int = 0) -> str:
         assert self._child is not None
@@ -1664,7 +1698,7 @@ class CollectMetrics(LogicalPlan):
             observations = {str(self._observation._name): self._observation}
         else:
             observations = {}
-        return dict(**super().observations, **observations)
+        return {**super().observations, **observations}
 
 
 class NAFill(LogicalPlan):
@@ -2504,16 +2538,6 @@ class ListCatalogs(LogicalPlan):
         plan.catalog.list_catalogs.SetInParent()
         if self._pattern is not None:
             plan.catalog.list_catalogs.pattern = self._pattern
-        return plan
-
-
-class ListCachedTables(LogicalPlan):
-    def __init__(self) -> None:
-        super().__init__(None)
-
-    def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = self._create_proto_relation()
-        plan.catalog.list_cached_tables.SetInParent()
         return plan
 
 

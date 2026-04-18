@@ -27,11 +27,12 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{Identifier, SupportsSchemaEvolution, Table, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.TableChange.ColumnChange
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2CatalogAndIdentifier}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, NullType, StructField, StructType}
 
 
 /**
@@ -45,7 +46,7 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
     _.containsPattern(COMMAND)) {
     // This rule should run only if all assignments are resolved, except those
     // that will be satisfied by schema evolution
-    case write: SupportsSchemaEvolution if write.pendingSchemaChanges.nonEmpty =>
+    case write: WriteWithSchemaEvolution if write.pendingSchemaChanges.nonEmpty =>
       write.table match {
         case relation @ ExtractV2CatalogAndIdentifier(catalog, ident) =>
           evolveSchema(catalog, ident, write.pendingSchemaChanges)
@@ -79,9 +80,9 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
   }
 
   private def replaceWriteTarget(
-      write: SupportsSchemaEvolution,
+      write: WriteWithSchemaEvolution,
       relation: DataSourceV2Relation,
-      newTable: Table): SupportsSchemaEvolution = {
+      newTable: Table): WriteWithSchemaEvolution = {
     val oldOutput = write.table.output
     val newOutput = DataTypeUtils.toAttributes(newTable.columns)
     val newRelation = relation.copy(table = newTable, output = newOutput)
@@ -98,21 +99,37 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
   }
 
   /**
-   * Computes the set of table changes needed to evolve `originalTarget` schema
-   * to accommodate `originalSource` schema. When `isByName` is true, fields are matched
-   * by name. When false, fields are matched by position.
+   * Computes the set of table changes needed to evolve `targetTable`'s schema
+   * to accommodate the `originalSource` schema. Only returns schema changes that are supported by
+   * `targetTable`. When `isByName` is true, fields are matched by name. When false, fields are
+   * matched by position.
    */
-  def computeSchemaChanges(
-      originalTarget: StructType,
+  def computeSupportedSchemaChanges(
+      targetTable: LogicalPlan,
       originalSource: StructType,
-      isByName: Boolean): Array[TableChange] =
-    computeSchemaChanges(
-      originalTarget,
+      isByName: Boolean): Array[TableChange] = {
+    val candidateChanges = computeSchemaChanges(
+      targetTable.schema,
       originalSource,
-      originalTarget,
+      targetTable.schema,
       originalSource,
       fieldPath = Nil,
       isByName)
+    targetTable match {
+      case ExtractV2Table(t: SupportsSchemaEvolution) =>
+        candidateChanges.filter {
+          case change: ColumnChange => t.supportsColumnChange(change)
+          // Reject other table changes.
+          case _ => false
+        }
+      case r: DataSourceV2Relation if r.autoSchemaEvolution =>
+        // If a table reports capability [[TableCapability.AUTOMATIC_SCHEMA_EVOLUTION]] but
+        // doesn't implement [[SupportsSchemaEvolution]], attempt to apply all changes.
+        candidateChanges
+      case _ =>
+        Array.empty
+    }
+  }
 
   private def computeSchemaChanges(
       currentType: DataType,
@@ -165,6 +182,13 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
         // No change needed
         Array.empty[TableChange]
 
+      case (_, NullType) =>
+        // Don't try to change to NullType.
+        Array.empty[TableChange]
+
+      case (_: AtomicType | NullType, newType: AtomicType) =>
+        Array(TableChange.updateColumnType(fieldPath.toArray, newType))
+
       case _ =>
         // Do not support change between atomic and complex types for now
         throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
@@ -201,7 +225,10 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
     // Collect newly added fields
     val adds = newFields
       .filterNot(f => currentFieldMap.contains(f.name))
-      .map(f => TableChange.addColumn((fieldPath :+ f.name).toArray, f.dataType.asNullable))
+      .map { f =>
+        // Make the type nullable, since existing rows in the table will have NULLs for this column.
+        TableChange.addColumn((fieldPath :+ f.name).toArray, f.dataType.asNullable)
+      }
 
     updates ++ adds
   }
@@ -229,8 +256,10 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
 
     // Extra source fields beyond the target's field count are new additions.
     val adds = newFields.drop(currentFields.length)
-      // Make the type nullable, since existing rows in the table will have NULLs for this column.
-      .map(f => TableChange.addColumn((fieldPath :+ f.name).toArray, f.dataType.asNullable))
+      .map { f =>
+        // Make the type nullable, since existing rows in the table will have NULLs for this column.
+        TableChange.addColumn((fieldPath :+ f.name).toArray, f.dataType.asNullable)
+      }
 
     updates ++ adds
   }

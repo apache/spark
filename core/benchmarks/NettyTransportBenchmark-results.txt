@@ -6,7 +6,7 @@ OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1008-azure
 AMD EPYC 7763 64-Core Processor
 RPC Latency (1 KB):                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-1 KB payload                                        463            477          13          0.0       92568.3       1.0X
+1 KB payload                                        444            472          20          0.0       88867.8       1.0X
 
 
 ================================================================================================
@@ -17,7 +17,7 @@ OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1008-azure
 AMD EPYC 7763 64-Core Processor
 RPC Latency (64 KB):                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-64 KB payload                                       680            695          12          0.0      136004.3       1.0X
+64 KB payload                                       715            742          25          0.0      143088.4       1.0X
 
 
 ================================================================================================
@@ -28,7 +28,7 @@ OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1008-azure
 AMD EPYC 7763 64-Core Processor
 RPC Latency (1 MB):                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-1 MB payload                                        822            895          52          0.0      822087.0       1.0X
+1 MB payload                                        875            902          23          0.0      874524.5       1.0X
 
 
 ================================================================================================
@@ -39,7 +39,7 @@ OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1008-azure
 AMD EPYC 7763 64-Core Processor
 RPC Latency (16 MB):                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-16 MB payload                                      1230           1306          58          0.0    12295430.0       1.0X
+16 MB payload                                      1327           1390          61          0.0    13268791.8       1.0X
 
 
 ================================================================================================
@@ -50,10 +50,10 @@ OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1008-azure
 AMD EPYC 7763 64-Core Processor
 Concurrent RPC Throughput:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-1 client(s)                                        1830           1881          49          0.0       91498.8       1.0X
-4 client(s)                                         717            730          11          0.0       35831.2       2.6X
-8 client(s)                                         502            514          13          0.0       25122.4       3.6X
-16 client(s)                                        442            453          10          0.0       22114.2       4.1X
+1 client(s)                                        1823           1969         127          0.0       91128.9       1.0X
+4 client(s)                                         768            783          20          0.0       38389.3       2.4X
+8 client(s)                                         512            536          23          0.0       25603.3       3.6X
+16 client(s)                                        459            464           5          0.0       22970.0       4.0X
 
 
 ================================================================================================
@@ -64,8 +64,8 @@ OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1008-azure
 AMD EPYC 7763 64-Core Processor
 IOMode Comparison:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-NIO (8 clients)                                     772            837          75          0.0       38575.1       1.0X
-AUTO (8 clients)                                    862            896          30          0.0       43107.0       0.9X
+NIO (8 clients)                                     792            840          41          0.0       39614.4       1.0X
+AUTO (8 clients)                                    867            885          19          0.0       43371.9       0.9X
 
 
 ================================================================================================
@@ -76,11 +76,11 @@ OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1008-azure
 AMD EPYC 7763 64-Core Processor
 Server Thread Scaling:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-2 server threads                                    448            460          14          0.0       22384.7       1.0X
-4 server threads                                    396            398           2          0.1       19794.4       1.1X
-8 server threads                                    411            422          11          0.0       20525.4       1.1X
-16 server threads                                   470            478           9          0.0       23488.2       1.0X
-32 server threads                                   461            498          34          0.0       23049.9       1.0X
+2 server threads                                    496            502          10          0.0       24789.3       1.0X
+4 server threads                                    405            424          32          0.0       20234.7       1.2X
+8 server threads                                    421            450          27          0.0       21025.0       1.2X
+16 server threads                                   443            458          26          0.0       22142.6       1.1X
+32 server threads                                   455            515          52          0.0       22727.6       1.1X
 
 
 ================================================================================================
@@ -91,9 +91,9 @@ OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1008-azure
 AMD EPYC 7763 64-Core Processor
 Multi-Connection Throughput:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-1 conn(s), 4 threads                               1642           1740          96          0.0      328480.9       1.0X
-2 conn(s), 4 threads                               1390           1588         172          0.0      278078.4       1.2X
-4 conn(s), 4 threads                               1667           1724          50          0.0      333315.0       1.0X
+1 conn(s), 4 threads                               1702           1871         152          0.0      340467.9       1.0X
+2 conn(s), 4 threads                               1278           1540         227          0.0      255638.3       1.3X
+4 conn(s), 4 threads                               1736           1768          36          0.0      347180.2       1.0X
 
 
 ================================================================================================
@@ -104,9 +104,9 @@ OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1008-azure
 AMD EPYC 7763 64-Core Processor
 Async Write Throughput:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-1 KB async burst                                     59             66           6          0.1       11860.0       1.0X
-64 KB async burst                                   147            167          23          0.0       29498.4       0.4X
-1 MB async burst                                   1375           1555         166          0.0      275081.9       0.0X
+1 KB async burst                                     72            137         112          0.1       14336.3       1.0X
+64 KB async burst                                   147            161          13          0.0       29489.6       0.5X
+1 MB async burst                                   1412           1479          59          0.0      282361.9       0.1X
 
 
 ================================================================================================
@@ -117,8 +117,8 @@ OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1008-azure
 AMD EPYC 7763 64-Core Processor
 16 MB Block Transfer:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sequential sends                                    662            891         330          0.0     6616920.9       1.0X
-4-thread parallel sends                             438            497          88          0.0     4380966.0       1.5X
+Sequential sends                                    670            895         358          0.0     6695791.0       1.0X
+4-thread parallel sends                             436            451          17          0.0     4358412.5       1.5X
 
 
 ================================================================================================
@@ -129,9 +129,9 @@ OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1008-azure
 AMD EPYC 7763 64-Core Processor
 File-Backed Shuffle Fetch:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-NIO, sequential fetch                               380            385           5          0.0     3802737.0       1.0X
-NIO, parallel fetch (4 clients)                     212            214           3          0.0     2118790.3       1.8X
-AUTO, sequential fetch                             2075           2093          16          0.0    20751127.3       0.2X
-AUTO, parallel fetch (4 clients)                    676            814         129          0.0     6757222.9       0.6X
+NIO, sequential fetch                               384            386           3          0.0     3844405.1       1.0X
+NIO, parallel fetch (4 clients)                     209            217           9          0.0     2091358.0       1.8X
+AUTO, sequential fetch                              362            372          14          0.0     3615964.2       1.1X
+AUTO, parallel fetch (4 clients)                    202            209           6          0.0     2022433.8       1.9X
 
 

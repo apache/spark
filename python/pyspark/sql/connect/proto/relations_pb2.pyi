@@ -4416,11 +4416,13 @@ class Parse(google.protobuf.message.Message):
         PARSE_FORMAT_UNSPECIFIED: Parse._ParseFormat.ValueType  # 0
         PARSE_FORMAT_CSV: Parse._ParseFormat.ValueType  # 1
         PARSE_FORMAT_JSON: Parse._ParseFormat.ValueType  # 2
+        PARSE_FORMAT_XML: Parse._ParseFormat.ValueType  # 3
 
     class ParseFormat(_ParseFormat, metaclass=_ParseFormatEnumTypeWrapper): ...
     PARSE_FORMAT_UNSPECIFIED: Parse.ParseFormat.ValueType  # 0
     PARSE_FORMAT_CSV: Parse.ParseFormat.ValueType  # 1
     PARSE_FORMAT_JSON: Parse.ParseFormat.ValueType  # 2
+    PARSE_FORMAT_XML: Parse.ParseFormat.ValueType  # 3
 
     class OptionsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -4453,7 +4455,7 @@ class Parse(google.protobuf.message.Message):
         """(Optional) DataType representing the schema. If not set, Spark will infer the schema."""
     @property
     def options(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
-        """Options for the csv/json parser. The map key is case insensitive."""
+        """Options for the csv/json/xml parser. The map key is case insensitive."""
     def __init__(
         self,
         *,

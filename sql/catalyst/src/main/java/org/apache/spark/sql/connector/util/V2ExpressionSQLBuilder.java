@@ -324,15 +324,15 @@ public class V2ExpressionSQLBuilder {
   protected String visitUserDefinedScalarFunction(
       String funcName, String canonicalName, String[] inputs) {
     throw new SparkUnsupportedOperationException(
-      "_LEGACY_ERROR_TEMP_3141",
-      Map.of("class", this.getClass().getSimpleName(), "funcName", funcName));
+      "V2_EXPRESSION_SQL_BUILDER_UDF_NOT_SUPPORTED",
+      Map.of("class", this.getClass().getName(), "funcName", funcName));
   }
 
   protected String visitUserDefinedAggregateFunction(
       String funcName, String canonicalName, boolean isDistinct, String[] inputs) {
     throw new SparkUnsupportedOperationException(
-      "_LEGACY_ERROR_TEMP_3142",
-      Map.of("class", this.getClass().getSimpleName(), "funcName", funcName));
+      "V2_EXPRESSION_SQL_BUILDER_UDAF_NOT_SUPPORTED",
+      Map.of("class", this.getClass().getName(), "funcName", funcName));
   }
 
   // Use expr.getClass().getSimpleName() instead of String.valueOf(expr) to avoid
@@ -340,7 +340,7 @@ public class V2ExpressionSQLBuilder {
   // reach visitUnexpectedExpr again for unknown expressions.
   protected String visitUnexpectedExpr(Expression expr) throws IllegalArgumentException {
     throw new SparkIllegalArgumentException(
-      "_LEGACY_ERROR_TEMP_3207",
+      "UNEXPECTED_V2_EXPRESSION",
       Map.of("expr", expr.getClass().getSimpleName()));
   }
 
