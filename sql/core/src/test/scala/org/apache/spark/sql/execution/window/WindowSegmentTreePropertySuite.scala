@@ -24,9 +24,9 @@ import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkEnv, S
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, GenericInternalRow, MutableProjection, SpecificInternalRow}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{DeclarativeAggregate, Max, Min}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, Count, DeclarativeAggregate, Max, Min, StddevPop, StddevSamp, Sum}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType}
+import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType}
 
 /**
  * Property-based tests for [[WindowSegmentTree]] using ScalaCheck.
@@ -47,7 +47,7 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
 
   // ---- ScalaCheck config: fixed seed for CI reproducibility ----
 
-  // Quick tier: 100 cases for P1, 10 cases for P2 (see pbt-design.md §6).
+  // Quick tier: 100 cases for P1, 10 cases for P2 (see class doc).
   // ScalaCheck 1.14+ uses a deterministic RNG seed by default, so CI
   // failures are reproducible without any explicit seed pinning.
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
@@ -78,35 +78,62 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
   sealed trait AggKind
   case object AggMin extends AggKind
   case object AggMax extends AggKind
+  case object AggSum extends AggKind
+  case object AggCount extends AggKind
 
   /**
-   * Naive oracle over [lo, hi). Empty frame =&gt; None. null inputs are skipped
-   * (Spark Min/Max semantics).
+   * Naive oracle over [lo, hi). Empty frame =&gt; None for Min/Max/Sum
+   * (Spark returns NULL); for Count returns Some(0). null inputs are
+   * skipped (Spark Min/Max/Sum/Count semantics).
    */
-  private def naiveAgg[T](
-      values: IndexedSeq[Option[T]],
+  private def naiveAgg(
+      values: IndexedSeq[Option[Long]],
       lo: Int, hi: Int,
-      kind: AggKind)(implicit ord: Ordering[T]): Option[T] = {
-    if (lo >= hi) None
-    else {
-      var result: Option[T] = None
+      kind: AggKind): Option[Long] = kind match {
+    case AggMin | AggMax =>
+      if (lo >= hi) None
+      else {
+        var result: Option[Long] = None
+        var i = lo
+        while (i < hi) {
+          values(i) match {
+            case Some(v) =>
+              result = result match {
+                case None => Some(v)
+                case Some(cur) => kind match {
+                  case AggMin => if (v < cur) Some(v) else result
+                  case AggMax => if (v > cur) Some(v) else result
+                  case _ => result
+                }
+              }
+            case None =>
+          }
+          i += 1
+        }
+        result
+      }
+    case AggSum =>
+      // Spark Sum returns NULL when all inputs are null OR frame empty.
+      var sawNonNull = false
+      var s = 0L
       var i = lo
       while (i < hi) {
         values(i) match {
-          case Some(v) =>
-            result = result match {
-              case None => Some(v)
-              case Some(cur) => kind match {
-                case AggMin => if (ord.lt(v, cur)) Some(v) else result
-                case AggMax => if (ord.gt(v, cur)) Some(v) else result
-              }
-            }
-          case None => // skip null
+          case Some(v) => sawNonNull = true; s += v
+          case None =>
         }
         i += 1
       }
-      result
-    }
+      if (sawNonNull) Some(s) else None
+    case AggCount =>
+      // Spark COUNT(col) over empty frame returns 0 (never null).
+      var c = 0L
+      var i = lo
+      while (i < hi) {
+        if (values(i).isDefined) c += 1
+        i += 1
+      }
+      Some(c)
   }
 
   // ---- Input case ADT ----
@@ -129,11 +156,21 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
     (4, Gen.choose(129, 5000))
   )
 
-  /** 20% null, 80% bounded long value (safe for Int cast too). */
-  private def genValue(dt: DataType): Gen[Option[Long]] = {
-    val bounded: Gen[Long] = dt match {
-      case IntegerType => Gen.choose(Int.MinValue.toLong, Int.MaxValue.toLong)
-      case LongType => Gen.choose(Long.MinValue, Long.MaxValue)
+  /**
+   * 20% null, 80% bounded value. For (AggSum, LongType) we shrink the
+   * range to keep the worst-case sum within Long bounds: max |v|=1e12
+   * x max n=5000 = 5e15 << Long.MaxValue (~9.2e18). For other (agg, dt)
+   * pairs we keep the full type range to preserve Min/Max edge-case
+   * coverage that the original property-based tests exercised.
+   */
+  private def genValue(dt: DataType, agg: AggKind): Gen[Option[Long]] = {
+    val bounded: Gen[Long] = (dt, agg) match {
+      case (IntegerType, _) =>
+        Gen.choose(Int.MinValue.toLong, Int.MaxValue.toLong)
+      case (LongType, AggSum) =>
+        Gen.choose(-1000000000000L, 1000000000000L) // +/-1e12
+      case (LongType, _) =>
+        Gen.choose(Long.MinValue, Long.MaxValue)
       case _ => throw new IllegalArgumentException(s"unsupported: $dt")
     }
     Gen.frequency(
@@ -147,15 +184,16 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
 
   private val genFanout: Gen[Int] = Gen.oneOf(2, 3, 4, 8, 16)
 
-  private val genAgg: Gen[AggKind] = Gen.oneOf(AggMin, AggMax)
+  private val genAgg: Gen[AggKind] =
+    Gen.oneOf(AggMin, AggMax, AggSum, AggCount)
 
   private val genType: Gen[DataType] = Gen.oneOf(IntegerType, LongType)
 
   private val genCase: Gen[PbtCase] = for {
     dt <- genType
-    n <- genN
-    values <- Gen.listOfN(n, genValue(dt)).map(_.toIndexedSeq)
     agg <- genAgg
+    n <- genN
+    values <- Gen.listOfN(n, genValue(dt, agg)).map(_.toIndexedSeq)
     blockSize <- genBlockSize
     fanout <- genFanout
   } yield PbtCase(values, dt, agg, blockSize, fanout)
@@ -174,12 +212,20 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
   private def buildAttr(dt: DataType): AttributeReference =
     AttributeReference("v", dt, nullable = true)()
 
+  /** Output type of the aggregate (segtree's queryInto materializes this). */
+  private def aggOutputType(c: PbtCase): DataType = c.agg match {
+    case AggMin | AggMax => c.dataType        // same as input
+    case AggSum | AggCount => LongType        // Sum(Int|Long)->Long; Count->Long
+  }
+
   private def buildTreeFor(c: PbtCase): (WindowSegmentTree, AttributeReference) = {
     val attr = buildAttr(c.dataType)
     val schema: Seq[Attribute] = Seq(attr)
     val agg: DeclarativeAggregate = c.agg match {
       case AggMin => Min(attr)
       case AggMax => Max(attr)
+      case AggSum => Sum(attr)
+      case AggCount => Count(Seq(attr))
     }
     val tree = new WindowSegmentTree(
       Array(agg), schema, newMutableProjection,
@@ -202,11 +248,11 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
   }
 
   private def queryResult(
-      tree: WindowSegmentTree, dt: DataType, lo: Int, hi: Int): Option[Long] = {
-    val out = new SpecificInternalRow(Seq[DataType](dt))
+      tree: WindowSegmentTree, outDt: DataType, lo: Int, hi: Int): Option[Long] = {
+    val out = new SpecificInternalRow(Seq[DataType](outDt))
     tree.query(lo, hi, out)
     if (out.isNullAt(0)) None
-    else dt match {
+    else outDt match {
       case IntegerType => Some(out.getInt(0).toLong)
       case LongType => Some(out.getLong(0))
       case _ => throw new IllegalStateException
@@ -228,11 +274,12 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
     withTaskContext {
       forAll(genCase) { c =>
         val (tree, _) = buildTreeFor(c)
+        val outDt = aggOutputType(c)
         try {
           val frames = boundaryFrames(c.n) ++ randomFrames(c.n, k = 8, seed = c.n.toLong)
           frames.foreach { case (lo, hi) =>
-            val expected = naiveAgg(c.values, lo, hi, c.agg)(longOrdering)
-            val actual = queryResult(tree, c.dataType, lo, hi)
+            val expected = naiveAgg(c.values, lo, hi, c.agg)
+            val actual = queryResult(tree, outDt, lo, hi)
             assert(actual == expected,
               s"P1 mismatch: n=${c.n} agg=${c.agg} blockSize=${c.blockSize} " +
                 s"fanout=${c.fanout} dt=${c.dataType} frame=[$lo,$hi) " +
@@ -269,8 +316,6 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
     }
   }
 
-  private val longOrdering: Ordering[Long] = Ordering.Long
-
   /**
    * P2 Determinism (10-case smoke): building the tree twice from the same
    * input and querying the same frame returns identical results.
@@ -294,8 +339,166 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
 
   private def runFrames(c: PbtCase, frames: Seq[(Int, Int)]): Seq[Option[Long]] = {
     val (tree, _) = buildTreeFor(c)
+    val outDt = aggOutputType(c)
     try {
-      frames.map { case (lo, hi) => queryResult(tree, c.dataType, lo, hi) }
+      frames.map { case (lo, hi) => queryResult(tree, outDt, lo, hi) }
     } finally tree.close()
+  }
+
+  // ---- Floating-point family (Avg / StddevSamp / StddevPop) ----
+  //
+  // Welford merge order in the segtree differs from row-by-row updates in
+  // SlidingWindowFunctionFrame, so equality is *not* bit-exact for these
+  // aggregates. We compare with a relative tolerance (1e-9) plus a small
+  // absolute floor to handle near-zero results (e.g. constant-input frames
+  // where stddev = 0 +/- rounding).
+  //
+  // Kept as a separate property to avoid muddying the integer-family
+  // exact-equality contract (Min/Max/Sum/Count) with FP fuzziness.
+
+  sealed trait FpAggKind
+  case object FpAvg extends FpAggKind
+  case object FpStddevSamp extends FpAggKind
+  case object FpStddevPop extends FpAggKind
+
+  private case class FpCase(
+      values: IndexedSeq[Option[Double]],
+      agg: FpAggKind,
+      blockSize: Int,
+      fanout: Int) {
+    def n: Int = values.length
+  }
+
+  /**
+   * 20% null, 80% bounded gaussian-ish double. Range chosen so partial
+   * sums stay well within Double precision over n <= 5000.
+   */
+  private val genFpValue: Gen[Option[Double]] = {
+    val bounded: Gen[Double] = Gen.choose(-1e6, 1e6)
+    Gen.frequency(
+      (1, Gen.const(None: Option[Double])),
+      (4, bounded.map(Some(_)))
+    )
+  }
+
+  private val genFpAgg: Gen[FpAggKind] =
+    Gen.oneOf(FpAvg, FpStddevSamp, FpStddevPop)
+
+  private val genFpCase: Gen[FpCase] = for {
+    agg <- genFpAgg
+    n <- genN
+    values <- Gen.listOfN(n, genFpValue).map(_.toIndexedSeq)
+    blockSize <- genBlockSize
+    fanout <- genFanout
+  } yield FpCase(values, agg, blockSize, fanout)
+
+  /**
+   * Naive oracle for FP aggregates over [lo, hi). Returns None when Spark
+   * would emit NULL: empty frame, all-null frame, and (for StddevSamp)
+   * count &lt; 2.
+   */
+  private def naiveFpAgg(
+      values: IndexedSeq[Option[Double]],
+      lo: Int, hi: Int,
+      kind: FpAggKind): Option[Double] = {
+    val nonNull = (lo until hi).flatMap(values).toArray
+    val n = nonNull.length
+    if (n == 0) return None
+    val mean = nonNull.sum / n
+    kind match {
+      case FpAvg => Some(mean)
+      case FpStddevSamp =>
+        if (n < 2) None
+        else {
+          var sq = 0.0
+          var i = 0
+          while (i < n) { val d = nonNull(i) - mean; sq += d * d; i += 1 }
+          Some(math.sqrt(sq / (n - 1)))
+        }
+      case FpStddevPop =>
+        var sq = 0.0
+        var i = 0
+        while (i < n) { val d = nonNull(i) - mean; sq += d * d; i += 1 }
+        Some(math.sqrt(sq / n))
+    }
+  }
+
+  /** Build tree + matching AggregateProcessor so we can `queryInto` to evaluate. */
+  private def buildFpTreeFor(
+      c: FpCase): (WindowSegmentTree, AggregateProcessor) = {
+    val attr = AttributeReference("v", DoubleType, nullable = true)()
+    val schema: Seq[Attribute] = Seq(attr)
+    val agg: DeclarativeAggregate = c.agg match {
+      case FpAvg => Average(attr)
+      case FpStddevSamp => StddevSamp(attr)
+      case FpStddevPop => StddevPop(attr)
+    }
+    val tree = new WindowSegmentTree(
+      Array(agg), schema, newMutableProjection,
+      c.fanout, c.blockSize, maxCachedBlocks = None,
+      taskMemoryManager = TaskContext.get().taskMemoryManager())
+    val rows = c.values.iterator.map { opt =>
+      val r = new GenericInternalRow(1)
+      opt match {
+        case Some(v) => r.update(0, v)
+        case None => r.setNullAt(0)
+      }
+      r.asInstanceOf[InternalRow]
+    }
+    tree.build(rows)
+    val processor = AggregateProcessor(
+      Array[Expression](agg),
+      ordinal = 0,
+      inputAttributes = schema,
+      newMutableProjection = newMutableProjection,
+      filters = Array[Option[Expression]](None))
+    (tree, processor)
+  }
+
+  private def queryFpResult(
+      tree: WindowSegmentTree,
+      processor: AggregateProcessor,
+      lo: Int, hi: Int): Option[Double] = {
+    val out = new SpecificInternalRow(Seq[DataType](DoubleType))
+    tree.queryInto(lo, hi, processor, out)
+    if (out.isNullAt(0)) None else Some(out.getDouble(0))
+  }
+
+  private def fpClose(actual: Option[Double], expected: Option[Double]): Boolean =
+    (actual, expected) match {
+      case (None, None) => true
+      case (Some(a), Some(e)) =>
+        if (java.lang.Double.isNaN(a) && java.lang.Double.isNaN(e)) true
+        else {
+          val absDiff = math.abs(a - e)
+          val denom = math.max(math.abs(e), 1.0)  // absolute floor for near-zero
+          absDiff / denom < 1e-9
+        }
+      case _ => false
+    }
+
+  /**
+   * P4 Equivalence (FP family): for every generated (input, config, frame),
+   * segtree query result is within 1e-9 relative tolerance of the naive
+   * aggregate. Smaller minSuccessful (50) than P1 because Welford-merge
+   * is heavier than Min/Max/Sum/Count.
+   */
+  test("P4 fp equivalence: segtree avg/stddev within 1e-9 of naive oracle") {
+    withTaskContext {
+      forAll(genFpCase, minSuccessful(50)) { c =>
+        val (tree, processor) = buildFpTreeFor(c)
+        try {
+          val frames = boundaryFrames(c.n) ++ randomFrames(c.n, k = 6, seed = c.n.toLong)
+          frames.foreach { case (lo, hi) =>
+            val expected = naiveFpAgg(c.values, lo, hi, c.agg)
+            val actual = queryFpResult(tree, processor, lo, hi)
+            assert(fpClose(actual, expected),
+              s"P4 fp mismatch: n=${c.n} agg=${c.agg} blockSize=${c.blockSize} " +
+                s"fanout=${c.fanout} frame=[$lo,$hi) " +
+                s"expected=$expected actual=$actual")
+          }
+        } finally tree.close()
+      }
+    }
   }
 }
