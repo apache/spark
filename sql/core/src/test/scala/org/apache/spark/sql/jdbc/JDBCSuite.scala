@@ -2365,6 +2365,25 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       )
     }
   }
+
+  test("SPARK-55830: predicate path should preserve custom driver properties") {
+    val props = new Properties()
+    props.setProperty("socketFactory", "com.example.MyFactory")
+    props.setProperty("cloudSqlInstance", "project:region:instance")
+    props.setProperty("user", "testuser")
+
+    // Simulate the predicate path from classic/DataFrameReader.scala:
+    // val params = extraOptions ++ connectionProperties.asScala
+    val extraOptions = CaseInsensitiveMap[String](Map.empty)
+    val params = extraOptions ++ props.asScala
+    val options = new JDBCOptions(url, "TEST.PEOPLE", params)
+
+    val connProps = options.asConnectionProperties
+    // Custom driver properties must preserve original case
+    assert(connProps.getProperty("socketFactory") === "com.example.MyFactory")
+    assert(connProps.getProperty("cloudSqlInstance") === "project:region:instance")
+    assert(connProps.getProperty("user") === "testuser")
+  }
 }
 
 object JDBCSuite {

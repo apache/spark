@@ -42,9 +42,12 @@ class JDBCOptions(
   def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
 
   def this(url: String, table: String, parameters: Map[String, String]) = {
-    this(CaseInsensitiveMap(parameters ++ Map(
+    // SPARK-55830: Use CaseInsensitiveMap.++ to preserve original key case.
+    // The inherited Map.++ iterates via CaseInsensitiveMap.iterator which returns
+    // lowercased keys, causing custom JDBC driver properties to lose their original case.
+    this(CaseInsensitiveMap(parameters) ++ Map(
       JDBCOptions.JDBC_URL -> url,
-      JDBCOptions.JDBC_TABLE_NAME -> table)))
+      JDBCOptions.JDBC_TABLE_NAME -> table))
   }
 
   /**
@@ -280,9 +283,10 @@ class JdbcOptionsInWrite(
   def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
 
   def this(url: String, table: String, parameters: Map[String, String]) = {
-    this(CaseInsensitiveMap(parameters ++ Map(
+    // SPARK-55830: Use CaseInsensitiveMap.++ to preserve original key case.
+    this(CaseInsensitiveMap(parameters) ++ Map(
       JDBCOptions.JDBC_URL -> url,
-      JDBCOptions.JDBC_TABLE_NAME -> table)))
+      JDBCOptions.JDBC_TABLE_NAME -> table))
   }
 
   require(
