@@ -48,6 +48,8 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
   // ---- ScalaCheck config: fixed seed for CI reproducibility ----
 
   // Quick tier: 100 cases for P1, 10 cases for P2 (see pbt-design.md §6).
+  // ScalaCheck 1.14+ uses a deterministic RNG seed by default, so CI
+  // failures are reproducible without any explicit seed pinning.
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfiguration(minSuccessful = 100, minSize = 0, sizeRange = 100)
 
@@ -268,4 +270,32 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
   }
 
   private val longOrdering: Ordering[Long] = Ordering.Long
+
+  /**
+   * P2 Determinism (10-case smoke): building the tree twice from the same
+   * input and querying the same frame returns identical results.
+   *
+   * The implementation has no RNG or hash iteration, so this property is
+   * unlikely to trip; it acts as a low-cost regression sentinel (10 cases,
+   * not 100) guarding against future non-deterministic refactors.
+   */
+  test("P2 determinism: rebuild + requery yields identical results") {
+    withTaskContext {
+      forAll(genCase, minSuccessful(10)) { c =>
+        val frames = boundaryFrames(c.n) ++ randomFrames(c.n, k = 2, seed = 0xD2L)
+        val run1 = runFrames(c, frames)
+        val run2 = runFrames(c, frames)
+        assert(run1 == run2,
+          s"P2 mismatch: n=${c.n} agg=${c.agg} blockSize=${c.blockSize} " +
+            s"fanout=${c.fanout} dt=${c.dataType} run1=$run1 run2=$run2")
+      }
+    }
+  }
+
+  private def runFrames(c: PbtCase, frames: Seq[(Int, Int)]): Seq[Option[Long]] = {
+    val (tree, _) = buildTreeFor(c)
+    try {
+      frames.map { case (lo, hi) => queryResult(tree, c.dataType, lo, hi) }
+    } finally tree.close()
+  }
 }
