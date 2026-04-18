@@ -263,8 +263,15 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         val df1 = spark.sql(s"SELECT id AS id1 FROM $T")
         mod.fn(T)
         val df2 = spark.sql(s"SELECT id AS id2 FROM $T")
+        // In Connect, both re-analyze: join always works.
+        // id-only SELECTs ensure column consistency after schema changes.
         val joined = df1.join(df2, df1("id1") === df2("id2"))
-        joined.collect()
+        val result = joined.collect()
+        // After data write: 2 rows. After drop/recreate: 0 rows.
+        // All other mods: 1 row (id=1 always exists).
+        val expectedCount = mod.dfRows.length
+        assert(result.length == expectedCount,
+          s"Expected $expectedCount rows in join, got ${result.length}")
       }
     }
   }
@@ -769,17 +776,16 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   test("[compound] multiple column additions + SQL temp view") {
     assumeCanRun()
     withTable(T) {
-      setupTable()
-      spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
-      for (i <- 1 to 5) {
-        spark.sql(s"ALTER TABLE $T ADD COLUMN col_$i INT")
+      withTempView("tmp") {
+        setupTable()
+        spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
+        for (i <- 1 to 5) {
+          spark.sql(s"ALTER TABLE $T ADD COLUMN col_$i INT")
+        }
+        // SQL view preserves original 2-col schema (design doc Section 1 Scenario 2).
+        // New top-level columns are ignored; the view shows (id, salary) only.
+        checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
       }
-      // SQL view re-analyzes: SELECT * picks up new columns.
-      // The number of visible columns depends on whether the
-      // Connect server's catalog reflects all ALTERs.
-      val r = spark.sql("SELECT * FROM tmp").collect()
-      assert(r.length == 1)
-      assert(r(0).length >= 2, "Should have at least original columns")
     }
   }
 
@@ -1351,14 +1357,18 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   test("[edge] createOrReplaceTempView + schema change") {
     assumeCanRun()
     withTable(T) {
-      setupTable()
-      spark.sql(s"CREATE OR REPLACE TEMP VIEW tv AS SELECT * FROM $T")
-      checkAnswer(spark.sql("SELECT * FROM tv"), Seq(Row(1, 100)))
-      spark.sql(s"ALTER TABLE $T ADD COLUMN bonus INT")
-      spark.sql(s"INSERT INTO $T VALUES (2, 200, 50)")
-      // SQL view re-analyzes: SELECT * picks up new column
-      val r = spark.sql("SELECT * FROM tv").collect()
-      assert(r.length == 2)
+      withTempView("tv") {
+        setupTable()
+        spark.sql(s"CREATE OR REPLACE TEMP VIEW tv AS SELECT * FROM $T")
+        checkAnswer(spark.sql("SELECT * FROM tv"), Seq(Row(1, 100)))
+        spark.sql(s"ALTER TABLE $T ADD COLUMN bonus INT")
+        spark.sql(s"INSERT INTO $T VALUES (2, 200, 50)")
+        // SQL view preserves original 2-col schema but picks up new data
+        // (design doc Section 1 Scenario 2: original schema, new snapshot)
+        checkAnswer(
+          spark.sql("SELECT * FROM tv"),
+          Seq(Row(1, 100), Row(2, 200)))
+      }
     }
   }
 
@@ -1687,6 +1697,30 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
             spark.sql("SELECT * FROM tmp").collect()
           },
           condition = SQL_VIEW_CHANGED)
+      }
+    }
+  }
+
+  // Design doc Section 1 Scenario 3 via DF view: external column removal
+  // breaks a DF-based temp view with VIEW_PLAN_CHANGED (different from
+  // SQL view which throws SQL_VIEW_CHANGED).
+  test("[ext-session] DF temp view after external column removal fails") {
+    assumeCanRun()
+    withTable(T) {
+      withTempView("tmp") {
+        setupTable()
+        spark.read.table(T).createOrReplaceTempView("tmp")
+        checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
+
+        val ext = spark.newSession()
+        ext.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+
+        // DF-based view uses plan-based validation: VIEW_PLAN_CHANGED
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql("SELECT * FROM tmp").collect()
+          },
+          condition = VIEW_PLAN_CHANGED)
       }
     }
   }
