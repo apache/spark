@@ -12,7 +12,7 @@ with an Iterator-to-Iterator `process` API that streams input batches
 through the worker and returns result batches.
 
 ```
-WorkerSpecification   -- how to create and configure workers
+UDFWorkerSpecification   -- how to create and configure workers
     |
     v
 WorkerDispatcher      -- manages workers, creates sessions
@@ -59,7 +59,7 @@ obtaining workers from a provisioning service or daemon.
 
 `DirectWorkerDispatcher` spawns worker processes locally. On the first
 session, it runs the optional environment lifecycle callables from the
-`WorkerSpecification`:
+`UDFWorkerSpecification`:
 
 - **`environmentVerification`** -- checks if the environment is ready
   (exit 0 = ready). When it succeeds, installation is skipped.

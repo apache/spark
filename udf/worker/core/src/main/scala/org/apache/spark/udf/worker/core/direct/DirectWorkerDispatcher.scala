@@ -16,13 +16,13 @@
  */
 package org.apache.spark.udf.worker.core.direct
 
-import java.io.File
+import java.io.{BufferedReader, File, FileInputStream, InputStreamReader}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, Queue => MQueue}
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
@@ -31,7 +31,9 @@ import org.apache.spark.udf.worker.{ProcessCallable, UDFWorkerSpecification}
 import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerDispatcher,
   WorkerLogger, WorkerSecurityScope, WorkerSession}
 import org.apache.spark.udf.worker.core.direct.DirectWorkerDispatcher.{CallableResult,
-  EnvironmentState}
+  DEFAULT_CALLABLE_TIMEOUT_MS, DEFAULT_GRACEFUL_TIMEOUT_MS, DEFAULT_INIT_TIMEOUT_MS,
+  EnvironmentState, MAX_OUTPUT_SCAN_BYTES, PROCESS_OUTPUT_TAIL_LINES,
+  SOCKET_POLL_INTERVAL_MS}
 
 /**
  * :: Experimental ::
@@ -64,38 +66,8 @@ abstract class DirectWorkerDispatcher(
   // TODO: Connection pooling -- reuse idle workers across sessions.
   // TODO: Security scope isolation -- partition pool by WorkerSecurityScope.
 
-  // Multi-connection workers (e.g., a separate control channel) are a future
-  // extension; today the proto field is `repeated` but the engine requires
-  // exactly one. TCP transport is declared in the proto but not yet
-  // implemented; the engine currently only supports UDS.
-  {
-    val props = workerSpec.getDirect.getProperties
-    val n = props.getConnectionsCount
-    require(n == 1,
-      s"DirectWorker.properties.connections must have exactly one entry, got $n")
-    val conn = props.getConnections(0)
-    require(conn.hasUnixDomainSocket,
-      "DirectWorker currently only supports UNIX domain socket transport, " +
-        s"got ${conn.getTransportCase}")
-  }
-
-  // worker_spec.proto documents that verification is only meaningful together
-  // with installation -- verification exists so the engine can skip running
-  // installation when the environment is already prepared. A verification
-  // callable with no installation callable would either always succeed (no-op)
-  // or always fail (worker spawn then fails) -- both user errors worth
-  // catching at spec-validation time.
-  {
-    val env = workerSpec.getEnvironment
-    require(!env.hasEnvironmentVerification || env.hasInstallation,
-      "WorkerEnvironment.environment_verification requires installation to be set")
-  }
-
-  private val SOCKET_POLL_INTERVAL_MS = 100L
-  private val DEFAULT_INIT_TIMEOUT_MS = 10000L
-  private val DEFAULT_CALLABLE_TIMEOUT_MS = 120000L
-  private val DEFAULT_GRACEFUL_TIMEOUT_MS = 5000L
-  private val PROCESS_OUTPUT_TAIL_LINES = 50
+  validateTransportSupport()
+  validateEnvironmentCallables()
 
   /**
    * Maximum time to wait for a setup/verify/cleanup callable to finish.
@@ -155,16 +127,24 @@ abstract class DirectWorkerDispatcher(
     try {
       createSessionForWorker(worker)
     } catch {
-      case e: Exception =>
-        worker.releaseSession()
-        workersLock.synchronized { workers -= worker }
-        try {
-          worker.close()
-        } catch {
-          case NonFatal(closeEx) =>
-            logger.warn("Error closing worker after session creation failed", closeEx)
-        }
+      case e: InterruptedException =>
+        Thread.currentThread().interrupt()
+        cleanupFailedSession(worker)
         throw e
+      case NonFatal(e) =>
+        cleanupFailedSession(worker)
+        throw e
+    }
+  }
+
+  private def cleanupFailedSession(worker: DirectWorkerProcess): Unit = {
+    worker.releaseSession()
+    workersLock.synchronized { workers -= worker }
+    try {
+      worker.close()
+    } catch {
+      case NonFatal(closeEx) =>
+        logger.warn("Error closing worker after session creation failed", closeEx)
     }
   }
 
@@ -209,27 +189,25 @@ abstract class DirectWorkerDispatcher(
     environmentLock.synchronized {
       environmentState match {
         case EnvironmentState.Ready | EnvironmentState.CleanedUp =>
-          return
+          // Already set up (or torn down); nothing to do.
         case EnvironmentState.Failed(msg) =>
           throw new RuntimeException(s"Environment setup previously failed: $msg")
         case EnvironmentState.Pending =>
+          val env = workerSpec.getEnvironment
+          val verified = env.hasEnvironmentVerification &&
+            runCallable(env.getEnvironmentVerification).exitCode == 0
+          if (!verified && env.hasInstallation) {
+            val result = runCallable(env.getInstallation)
+            if (result.exitCode != 0) {
+              val detail = s"exit code ${result.exitCode}\n${result.outputTail}"
+              environmentState = EnvironmentState.Failed(detail)
+              throw new RuntimeException(
+                s"Environment installation failed with $detail")
+            }
+          }
+          registerEnvironmentCleanupHook()
+          environmentState = EnvironmentState.Ready
       }
-
-      val env = workerSpec.getEnvironment
-      val verified = env.hasEnvironmentVerification &&
-        runCallable(env.getEnvironmentVerification).exitCode == 0
-      if (!verified && env.hasInstallation) {
-        val result = runCallable(env.getInstallation)
-        if (result.exitCode != 0) {
-          val detail = s"exit code ${result.exitCode}\n${result.outputTail}"
-          environmentState = EnvironmentState.Failed(detail)
-          throw new RuntimeException(
-            s"Environment installation failed with $detail")
-        }
-      }
-
-      registerEnvironmentCleanupHook()
-      environmentState = EnvironmentState.Ready
     }
   }
 
@@ -267,21 +245,22 @@ abstract class DirectWorkerDispatcher(
   private def runEnvironmentCleanup(): Unit = {
     environmentLock.synchronized {
       environmentState match {
-        case EnvironmentState.CleanedUp => return
+        case EnvironmentState.CleanedUp =>
+          // Already cleaned up; nothing to do.
         case _ =>
-      }
-      if (workerSpec.getEnvironment.hasEnvironmentCleanup) {
-        try {
-          val result = runCallable(workerSpec.getEnvironment.getEnvironmentCleanup)
-          if (result.exitCode != 0) {
-            logger.warn(s"Environment cleanup exited with code ${result.exitCode}" +
-              s"\n${result.outputTail}")
+          if (workerSpec.getEnvironment.hasEnvironmentCleanup) {
+            try {
+              val result = runCallable(workerSpec.getEnvironment.getEnvironmentCleanup)
+              if (result.exitCode != 0) {
+                logger.warn(s"Environment cleanup exited with code ${result.exitCode}" +
+                  s"\n${result.outputTail}")
+              }
+            } catch {
+              case NonFatal(e) => logger.warn("Environment cleanup failed", e)
+            }
           }
-        } catch {
-          case NonFatal(e) => logger.warn("Environment cleanup failed", e)
-        }
+          environmentState = EnvironmentState.CleanedUp
       }
-      environmentState = EnvironmentState.CleanedUp
     }
   }
 
@@ -338,17 +317,28 @@ abstract class DirectWorkerDispatcher(
       new DirectWorkerProcess(
         process, connection, socketPath, outputFile, gracefulTimeoutMs, logger)
     } catch {
-      case e: Exception =>
-        if (process.isAlive) process.destroyForcibly()
-        // If the worker (or createConnection) had already created the socket
-        // file, remove it so it doesn't linger until dispatcher.close().
-        try Files.deleteIfExists(new File(socketPath).toPath) catch {
-          case NonFatal(cleanupEx) =>
-            logger.debug(s"Failed to clean up socket file $socketPath", cleanupEx)
-        }
-        Files.deleteIfExists(outputFile)
+      case e: InterruptedException =>
+        Thread.currentThread().interrupt()
+        cleanupFailedSpawn(process, socketPath, outputFile)
+        throw e
+      case NonFatal(e) =>
+        cleanupFailedSpawn(process, socketPath, outputFile)
         throw e
     }
+  }
+
+  private def cleanupFailedSpawn(
+      process: Process,
+      socketPath: String,
+      outputFile: java.nio.file.Path): Unit = {
+    if (process.isAlive) process.destroyForcibly()
+    // If the worker (or createConnection) had already created the socket
+    // file, remove it so it doesn't linger until dispatcher.close().
+    try Files.deleteIfExists(new File(socketPath).toPath) catch {
+      case NonFatal(cleanupEx) =>
+        logger.debug(s"Failed to clean up socket file $socketPath", cleanupEx)
+    }
+    Files.deleteIfExists(outputFile)
   }
 
   /**
@@ -394,25 +384,85 @@ abstract class DirectWorkerDispatcher(
     }
   }
 
+  // Reads at most the final MAX_OUTPUT_SCAN_BYTES of `file` and returns the
+  // last PROCESS_OUTPUT_TAIL_LINES lines via a fixed-size ring buffer, so a
+  // runaway worker that writes gigabytes of output does not OOM the caller
+  // during error reporting.
   private def readOutputTail(file: File): String = {
     if (!file.exists() || file.length() == 0) return ""
-    val src = scala.io.Source.fromFile(file, StandardCharsets.UTF_8.name())
+    val fileLen = file.length()
+    val startPos = math.max(0L, fileLen - MAX_OUTPUT_SCAN_BYTES)
+    val fis = new FileInputStream(file)
     try {
-      val lines = src.getLines().toVector
-      val tail = lines.takeRight(PROCESS_OUTPUT_TAIL_LINES)
-      if (tail.isEmpty) ""
-      else "Process output (last lines):\n" + tail.mkString("\n")
+      var remaining = startPos
+      while (remaining > 0) {
+        val n = fis.skip(remaining)
+        if (n <= 0) remaining = 0 else remaining -= n
+      }
+      val reader = new BufferedReader(
+        new InputStreamReader(fis, StandardCharsets.UTF_8))
+      // If we started mid-line, the first line is partial -- discard it so
+      // the tail never shows a line fragment.
+      if (startPos > 0) reader.readLine()
+      val buffer = new MQueue[String]()
+      var line = reader.readLine()
+      while (line != null) {
+        if (buffer.size >= PROCESS_OUTPUT_TAIL_LINES) buffer.dequeue()
+        buffer.enqueue(line)
+        line = reader.readLine()
+      }
+      if (buffer.isEmpty) ""
+      else "Process output (last lines):\n" + buffer.mkString("\n")
     } catch {
       case NonFatal(e) =>
         logger.debug(s"Failed to read process output from $file", e)
         ""
     } finally {
-      src.close()
+      fis.close()
     }
+  }
+
+  // -- Spec validation -------------------------------------------------------
+
+  // Multi-connection workers (e.g., a separate control channel) are a future
+  // extension; today the proto field is `repeated` but the engine requires
+  // exactly one. TCP transport is declared in the proto but not yet
+  // implemented; the engine currently only supports UDS.
+  private def validateTransportSupport(): Unit = {
+    val props = workerSpec.getDirect.getProperties
+    val n = props.getConnectionsCount
+    require(n == 1,
+      s"DirectWorker.properties.connections must have exactly one entry, got $n")
+    val conn = props.getConnections(0)
+    require(conn.hasUnixDomainSocket,
+      "DirectWorker currently only supports UNIX domain socket transport, " +
+        s"got ${conn.getTransportCase}")
+  }
+
+  // worker_spec.proto documents that verification is only meaningful together
+  // with installation -- verification exists so the engine can skip running
+  // installation when the environment is already prepared. A verification
+  // callable with no installation callable would either always succeed (no-op)
+  // or always fail (worker spawn then fails) -- both user errors worth
+  // catching at spec-validation time.
+  private def validateEnvironmentCallables(): Unit = {
+    val env = workerSpec.getEnvironment
+    require(!env.hasEnvironmentVerification || env.hasInstallation,
+      "WorkerEnvironment.environment_verification requires installation to be set")
   }
 }
 
 private[direct] object DirectWorkerDispatcher {
+  private[direct] val SOCKET_POLL_INTERVAL_MS = 100L
+  private[direct] val DEFAULT_INIT_TIMEOUT_MS = 10000L
+  private[direct] val DEFAULT_CALLABLE_TIMEOUT_MS = 120000L
+  private[direct] val DEFAULT_GRACEFUL_TIMEOUT_MS = 5000L
+  private[direct] val PROCESS_OUTPUT_TAIL_LINES = 50
+  // Cap the amount of log file scanned by readOutputTail so a runaway worker
+  // producing gigabytes of output cannot OOM the caller during error
+  // reporting. The tail is still limited to PROCESS_OUTPUT_TAIL_LINES.
+  private[direct] val MAX_OUTPUT_SCAN_BYTES = 1024L * 1024L // 1 MiB
+
   /** Result of running a [[ProcessCallable]]. */
   private[core] case class CallableResult(exitCode: Int, outputTail: String)
 

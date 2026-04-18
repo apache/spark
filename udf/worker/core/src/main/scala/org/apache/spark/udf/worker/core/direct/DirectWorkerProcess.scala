@@ -19,7 +19,7 @@ package org.apache.spark.udf.worker.core.direct
 import java.io.File
 import java.nio.file.{Files, Path}
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import scala.util.control.NonFatal
 
@@ -77,6 +77,7 @@ class DirectWorkerProcess(
   // tears it down at dispatcher close; the ref-count is informational only.
 
   private val activeSessionCount = new AtomicInteger(0)
+  private val closed = new AtomicBoolean(false)
 
   /** Number of sessions currently using this worker. */
   def activeSessions: Int = activeSessionCount.get()
@@ -84,8 +85,20 @@ class DirectWorkerProcess(
   /** Increments the active session count. */
   def acquireSession(): Unit = activeSessionCount.incrementAndGet()
 
-  /** Decrements the active session count. */
-  def releaseSession(): Unit = activeSessionCount.updateAndGet(c => math.max(0, c - 1))
+  /**
+   * Decrements the active session count. Logs a warning and resets to zero
+   * if the count goes negative, which would indicate an unbalanced
+   * acquire/release (a bug we want to surface rather than paper over,
+   * especially once pooling consumes this count).
+   */
+  def releaseSession(): Unit = {
+    val c = activeSessionCount.decrementAndGet()
+    if (c < 0) {
+      logger.warn(
+        s"releaseSession called without a matching acquireSession (count=$c)")
+      activeSessionCount.set(0)
+    }
+  }
 
   /** Returns true if the OS process is running and the connection is usable. */
   def isAlive: Boolean = process.isAlive && connection.isActive
@@ -93,8 +106,13 @@ class DirectWorkerProcess(
   /**
    * Shuts down the connection, then terminates the OS process.
    * Sends SIGTERM first; escalates to SIGKILL after [[gracefulTimeoutMs]].
+   * Idempotent: only the first call performs teardown; subsequent calls
+   * are no-ops so the dispatcher's close path and the createSession error
+   * path can both invoke close without double-releasing resources.
    */
   override def close(): Unit = {
+    if (!closed.compareAndSet(false, true)) return
+
     try {
       connection.close()
     } catch {

@@ -48,6 +48,13 @@ abstract class DirectWorkerSession(
   /** The connection to the worker for this session. */
   def connection: WorkerConnection = workerProcess.connection
 
+  // TODO: Introduce an idle timeout so the dispatcher tears down a worker
+  //   whose ref-count has dropped to zero and stayed there for some interval.
+  //   Without that, sessions release back to a worker that is never reaped
+  //   until dispatcher.close(), which leaks one process + UDS + FDs per
+  //   session over the dispatcher's lifetime. The timeout should live on
+  //   the dispatcher (it owns the worker pool) and be pluggable from the
+  //   worker spec.
   override def close(): Unit = {
     if (released.compareAndSet(false, true)) {
       workerProcess.releaseSession()

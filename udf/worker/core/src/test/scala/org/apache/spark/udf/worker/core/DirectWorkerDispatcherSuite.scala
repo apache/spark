@@ -19,6 +19,8 @@ package org.apache.spark.udf.worker.core
 import java.io.File
 import java.nio.file.Files
 
+import scala.jdk.CollectionConverters._
+
 // scalastyle:off funsuite
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.funsuite.AnyFunSuite
@@ -134,10 +136,21 @@ class DirectWorkerDispatcherSuite
     super.afterEach()
   }
 
+  // Narrow the publicly-typed WorkerSession returned by `createSession` back
+  // down to StubWorkerSession in one place, with a descriptive failure if
+  // the cast is ever wrong, so individual tests don't scatter `asInstanceOf`
+  // (which would throw ClassCastException rather than a useful message).
+  private def createStubSession(): StubWorkerSession =
+    dispatcher.createSession(None) match {
+      case stub: StubWorkerSession => stub
+      case other => fail(
+        s"Expected StubWorkerSession, got ${other.getClass.getSimpleName}")
+    }
+
   test("creates a worker and session") {
     dispatcher = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner))
 
-    val session = dispatcher.createSession(None).asInstanceOf[StubWorkerSession]
+    val session = createStubSession()
     val worker = session.workerProcess
 
     assert(worker.isAlive, "worker should be alive after creation")
@@ -161,8 +174,7 @@ class DirectWorkerDispatcherSuite
       new Thread(() => {
         try {
           startGate.await()
-          sessions.add(
-            dispatcher.createSession(None).asInstanceOf[StubWorkerSession])
+          sessions.add(createStubSession())
         } catch {
           case t: Throwable => errors.add(t)
         } finally {
@@ -178,18 +190,19 @@ class DirectWorkerDispatcherSuite
       s"unexpected errors during concurrent createSession: ${errors.toArray.mkString(", ")}")
     assert(sessions.size == threads, "expected one session per thread")
 
-    val workerObjects = sessions.toArray.map(_.asInstanceOf[StubWorkerSession].workerProcess)
+    val sessionList = sessions.asScala.toList
+    val workerObjects = sessionList.map(_.workerProcess)
     assert(workerObjects.distinct.length == threads,
       "each session should have its own DirectWorkerProcess")
 
-    sessions.toArray.foreach(_.asInstanceOf[StubWorkerSession].close())
+    sessionList.foreach(_.close())
   }
 
   test("close shuts down all workers via SIGTERM") {
     dispatcher = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner))
 
-    val session1 = dispatcher.createSession(None).asInstanceOf[StubWorkerSession]
-    val session2 = dispatcher.createSession(None).asInstanceOf[StubWorkerSession]
+    val session1 = createStubSession()
+    val session2 = createStubSession()
 
     val worker1 = session1.workerProcess
     val worker2 = session2.workerProcess
