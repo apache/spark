@@ -590,7 +590,7 @@ private[sql] class RocksDBStateStoreProvider
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       require(kvEncoder._1.supportsRangeScan,
-        "Range scan requires an encoder that supports range scanning!")
+        "Range scan with multiple values requires an encoder that supports range scanning!")
       verify(
         kvEncoder._2.supportsMultipleValuesPerKey,
         "Multi-value iterator operation requires an encoder" +

@@ -698,7 +698,6 @@ class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
         }
       }
     }
-
   }
 
   // Helper methods to create test data
