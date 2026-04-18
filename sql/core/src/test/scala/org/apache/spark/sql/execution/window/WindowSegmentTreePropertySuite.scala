@@ -211,23 +211,59 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
     }
   }
 
-  // ---- Properties (placeholder, filled in Commit 2/3) ----
+  // ---- Properties ----
 
-  test("skeleton: generator produces buildable input") {
+  /**
+   * P1 Equivalence: for every generated (input, config, frame),
+   * segtree query result equals naive aggregate over the same frame.
+   *
+   * For each generated case we probe multiple random frames (including
+   * degenerate boundaries: lo=hi, lo=0, hi=n) rather than only the full
+   * range. This keeps the per-case cost bounded while amplifying
+   * coverage of block/fanout edge conditions.
+   */
+  test("P1 equivalence: segtree query equals naive aggregate over random frames") {
     withTaskContext {
-      // Smoke: 5 random cases build + trivial full-range query matches oracle.
       forAll(genCase) { c =>
-        whenever(c.n > 0) {
-          val (tree, _) = buildTreeFor(c)
-          try {
-            val expected = naiveAgg(c.values, 0, c.n, c.agg)(longOrdering)
-            val actual = queryResult(tree, c.dataType, 0, c.n)
+        val (tree, _) = buildTreeFor(c)
+        try {
+          val frames = boundaryFrames(c.n) ++ randomFrames(c.n, k = 8, seed = c.n.toLong)
+          frames.foreach { case (lo, hi) =>
+            val expected = naiveAgg(c.values, lo, hi, c.agg)(longOrdering)
+            val actual = queryResult(tree, c.dataType, lo, hi)
             assert(actual == expected,
-              s"smoke mismatch: n=${c.n} agg=${c.agg} blockSize=${c.blockSize} " +
-                s"fanout=${c.fanout} dt=${c.dataType}")
-          } finally tree.close()
-        }
+              s"P1 mismatch: n=${c.n} agg=${c.agg} blockSize=${c.blockSize} " +
+                s"fanout=${c.fanout} dt=${c.dataType} frame=[$lo,$hi) " +
+                s"expected=$expected actual=$actual")
+          }
+        } finally tree.close()
       }
+    }
+  }
+
+  /** Boundary frames: empty, full, head, tail, single-element. */
+  private def boundaryFrames(n: Int): Seq[(Int, Int)] = {
+    if (n == 0) Seq((0, 0))
+    else Seq(
+      (0, 0),            // empty at start
+      (n, n),            // empty at end
+      (0, n),            // full
+      (0, 1),            // single head
+      (n - 1, n),        // single tail
+      (n / 2, n / 2),    // empty middle
+      (0, n / 2),        // prefix
+      (n / 2, n)         // suffix
+    ).distinct
+  }
+
+  /** Deterministic random frames; seed tied to case to aid shrink repro. */
+  private def randomFrames(n: Int, k: Int, seed: Long): Seq[(Int, Int)] = {
+    if (n == 0) return Nil
+    val rnd = new scala.util.Random(seed)
+    Seq.fill(k) {
+      val a = rnd.nextInt(n + 1)
+      val b = rnd.nextInt(n + 1)
+      if (a <= b) (a, b) else (b, a)
     }
   }
 
