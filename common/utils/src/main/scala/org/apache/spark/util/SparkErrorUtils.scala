@@ -105,6 +105,17 @@ private[spark] trait SparkErrorUtils extends Logging {
     }
     new String(out.toByteArray, UTF_8)
   }
+
+  /** Try to close by ignoring all exceptions. */
+  def closeQuietly(closeable: AutoCloseable): Unit = {
+    if (closeable != null) {
+      try {
+        closeable.close()
+      } catch {
+        case _: Exception =>
+      }
+    }
+  }
 }
 
 private[spark] object SparkErrorUtils extends SparkErrorUtils
