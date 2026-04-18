@@ -707,8 +707,21 @@ abstract class InMemoryBaseTable(
 
       override def toBatch: BatchWrite = {
         val newSchema = info.schema()
-        tableColumns = CatalogV2Util.structTypeToV2Columns(
-          mergeSchema(CatalogV2Util.v2ColumnsToStructType(columns()), newSchema))
+        val mergedSchema = mergeSchema(CatalogV2Util.v2ColumnsToStructType(columns()), newSchema)
+        val newColumns = CatalogV2Util.structTypeToV2Columns(mergedSchema)
+        // Preserve column IDs for existing columns, assign new IDs only for new columns
+        val oldColumns = columns()
+        tableColumns = newColumns.map { newCol =>
+          val normalizedName = newCol.name().toLowerCase(java.util.Locale.ROOT)
+          oldColumns.find(_.name().toLowerCase(java.util.Locale.ROOT) == normalizedName) match {
+            case Some(oldCol) if oldCol.id() != null =>
+              Column.withId(newCol, oldCol.id())
+            case _ if newCol.id() == null =>
+              Column.withId(newCol, InMemoryBaseTable.nextColumnId().toString)
+            case _ =>
+              newCol
+          }
+        }
         writer
       }
 
