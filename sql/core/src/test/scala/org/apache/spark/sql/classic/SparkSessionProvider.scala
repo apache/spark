@@ -22,6 +22,6 @@ import org.apache.spark.sql
 /**
  * A common trait for test suites that require a classic [[SparkSession]].
  */
-trait SparkSessionProvider {
-  protected def spark: SparkSession
+trait SparkSessionProvider extends sql.SparkSessionProvider {
+  override protected def spark: SparkSession
 }
