@@ -141,13 +141,13 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>nullValue</code></td>
     <td></td>
-    <td>Sets the string representation of a null value. Since 2.0.1, this <code>nullValue</code> param applies to all supported types including the string type.</td>
+    <td>Sets the string that, when encountered in the CSV input, is treated as a SQL NULL. For example, if set to <code>"NA"</code>, any field containing <code>NA</code> will be read as null. This also applies when the value is enclosed by the <code>quote</code> character (e.g., <code>"NA"</code> with the default double-quote). Since 2.0.1, this applies to all supported types including the string type.</td>
     <td>read/write</td>
   </tr>
   <tr>
     <td><code>nanValue</code></td>
     <td>NaN</td>
-    <td>Sets the string representation of a non-number value.</td>
+    <td>Sets the string that, when encountered in the CSV input, is treated as NaN (Not a Number) for float and double type columns.</td>
     <td>read</td>
   </tr>
   <tr>
@@ -237,7 +237,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>emptyValue</code></td>
     <td><code></code> (for reading), <code>""</code> (for writing)</td>
-    <td>Sets the string representation of an empty value.</td>
+    <td>Sets the value to substitute when a quoted empty string (<code>""</code>) is encountered in the CSV input. Only applies to string type columns. Unlike <code>nullValue</code> (which matches input to produce null), this specifies the value to produce in the DataFrame.</td>
     <td>read/write</td>
   </tr>
   <tr>
