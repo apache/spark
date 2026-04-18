@@ -72,10 +72,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs)
 
     // build a plan with updated and copied over records
-    // the conditional operation column needs to be added in the same Projection as cond is
-    // referencing attributes before the update
-    val writeOp = If(cond, Literal(UPDATE_OPERATION), Literal(COPY_OPERATION))
-    val query = buildReplaceDataUpdateProjection(readRelation, assignments, writeOp, cond)
+    val query = buildReplaceDataUpdateProjection(readRelation, assignments, cond)
 
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
@@ -102,8 +99,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // build a plan for updated records that match the condition
     val matchedRowsPlan = Filter(cond, readRelation)
-    val updatedRowsPlan = buildReplaceDataUpdateProjection(
-      matchedRowsPlan, assignments, Literal(UPDATE_OPERATION))
+    val updatedRowsPlan = buildReplaceDataUpdateProjection(matchedRowsPlan, assignments)
 
     // build a plan that contains unmatched rows in matched groups that must be copied over
     val remainingRowFilter = Not(EqualNullSafe(cond, Literal.TrueLiteral))
@@ -124,7 +120,6 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
   private def buildReplaceDataUpdateProjection(
       plan: LogicalPlan,
       assignments: Seq[Assignment],
-      operation: Expression,
       cond: Expression = TrueLiteral): LogicalPlan = {
 
     // the plan output may include metadata columns at the end
@@ -146,7 +141,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       }
     }
 
-    val operationCol = Alias(operation, OPERATION_COLUMN)()
+    val writeOp = If(cond, Literal(UPDATE_OPERATION), Literal(COPY_OPERATION))
+    val operationCol = Alias(writeOp, OPERATION_COLUMN)()
     Project(operationCol +: updatedValues, plan)
   }
 
