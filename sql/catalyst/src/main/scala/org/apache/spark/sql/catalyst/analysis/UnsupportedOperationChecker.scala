@@ -457,7 +457,7 @@ object UnsupportedOperationChecker extends Logging {
                     s" is not supported in ${outputMode} output mode, only in Append and Update " +
                     "output modes")
                 }
-              case _ => // we will throw an error in the next pattern match
+              case _ => // further unsupported cases will be checked in the next pattern match
             }
           }
 

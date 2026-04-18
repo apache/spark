@@ -418,16 +418,25 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       condition = Some(attributeWithWatermark === attribute)),
     OutputMode.Update())
 
-  // Left outer, right outer, full outer, left semi joins
-  Seq(LeftOuter, RightOuter, FullOuter, LeftSemi).foreach { joinType =>
-    // Complete mode not allowed
+  // Complete mode not allowed for stream-stream joins. The error message also indicates
+  // which output modes are actually supported for the given join type.
+  Seq(
+    (Inner, "only in Append and Update output modes"),
+    (LeftSemi, "only in Append and Update output modes"),
+    (LeftOuter, "only in Append output mode"),
+    (RightOuter, "only in Append output mode"),
+    (FullOuter, "only in Append output mode")
+  ).foreach { case (joinType, allowedModesMsg) =>
     assertNotSupportedInStreamingPlan(
       s"$joinType join with stream-stream relations and complete mode",
       Aggregate(Nil, aggExprs("d"), streamRelation.join(streamRelation, joinType = joinType,
-        condition = Some(attribute === attribute))),
+        condition = Some(attributeWithWatermark === attribute))),
       OutputMode.Complete(),
-      Seq("is not supported in Complete output mode"))
+      Seq("is not supported in Complete output mode", allowedModesMsg))
+  }
 
+  // Left outer, right outer, full outer, left semi joins
+  Seq(LeftOuter, RightOuter, FullOuter, LeftSemi).foreach { joinType =>
     // Stream-stream allowed with join on watermark attribute
     // Note that the attribute need not be watermarked on both sides.
     assertSupportedInStreamingPlan(
