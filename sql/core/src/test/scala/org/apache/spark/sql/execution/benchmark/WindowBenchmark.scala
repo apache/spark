@@ -99,9 +99,28 @@ object WindowBenchmark extends SqlBasedBenchmark {
     def frameFor(halfW: Int): String =
       s"OVER (ORDER BY id ROWS BETWEEN $halfW PRECEDING AND $halfW FOLLOWING)"
 
+    // Aggregates that produce Double (AVG/STDDEV/VAR) accumulate in
+    // floating-point. The segtree merge order differs from the row-by-row
+    // order used by SlidingWindowFunctionFrame, so the result differs at
+    // the bit (ULP) level even though it is mathematically equivalent.
+    // HASH(double) is bit-sensitive, so we round to 6 decimals before
+    // hashing for these aggregates. Integer aggregates (MIN/MAX/SUM/COUNT
+    // over INT inputs) remain bit-exact and are hashed directly.
+    // All callers pass uppercase literals (AVG, STDDEV_SAMP, etc.), so no
+    // case folding is needed (and avoids the toUpperCase locale lint).
+    def hashExprFor(aggFn: String): String = {
+      if (aggFn.startsWith("AVG") || aggFn.startsWith("STDDEV") ||
+          aggFn.startsWith("VAR")) {
+        "HASH(ROUND(m, 6))"
+      } else {
+        "HASH(m)"
+      }
+    }
+
     def digest(aggFn: String, frame: String, sqlConfs: (String, String)*): Long = {
+      val hashExpr = hashExprFor(aggFn)
       withSQLConf(sqlConfs: _*) {
-        spark.sql(s"SELECT SUM(HASH(m)) FROM (SELECT $aggFn(v) $frame AS m FROM t)")
+        spark.sql(s"SELECT SUM($hashExpr) FROM (SELECT $aggFn(v) $frame AS m FROM t)")
           .head().getLong(0)
       }
     }
