@@ -48,6 +48,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   private val T = "testcat.ns1.ns2.tbl"
 
   // Error condition constants (match classic DataSourceV2ConcurrencyRefreshSuite)
+  private val VIEW_PLAN_CHANGED =
+    "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION"
   private val SQL_VIEW_CHANGED = "INCOMPATIBLE_VIEW_SCHEMA_CHANGE"
   private val UPCAST = "CANNOT_UP_CAST_DATATYPE"
 
@@ -59,9 +61,6 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     spark.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
     spark.sql(s"INSERT INTO $T VALUES (1, 100)")
   }
-
-  /** Second client session on the same Connect server (shared DSv2 catalog). */
-  private def extSession: SparkSession = spark.newSession()
 
   // =====================================================================
   // Infrastructure
@@ -114,54 +113,58 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   // creation. Removing/renaming/retyping breaks re-analysis.
   // DataFrames re-analyze on every action, so ALL mods succeed for DFs.
   //
-  // sqlViewOk: whether SQL temp views survive the modification
+  // viewOk: whether temp views survive the modification (same boolean for
+  //   both DF-based and SQL-based views, but error conditions differ)
   // dfOk: whether DataFrames survive (always true in Connect)
-  // sqlViewCondition: error condition when sqlViewOk=false
-  // sqlViewRows: expected result rows when sqlViewOk=true
+  // dfViewCondition: error condition for DF-based view (S1) when viewOk=false
+  // sqlViewCondition: error condition for SQL-based view (S7) when viewOk=false
+  // viewRows: expected result rows when viewOk=true
   // dfRows: expected result rows for DataFrame access after the modification
   case class Mod(
       name: String,
       fn: String => Unit,
-      sqlViewOk: Boolean,
+      viewOk: Boolean,
       dfOk: Boolean,
+      dfViewCondition: String = VIEW_PLAN_CHANGED,
       sqlViewCondition: String = SQL_VIEW_CHANGED,
-      sqlViewRows: Seq[Row] = Nil,
+      viewRows: Seq[Row] = Nil,
       dfRows: Seq[Row] = Nil)
 
   private val mods: Seq[Mod] = Seq(
     Mod(
       "data write",
       t => spark.sql(s"INSERT INTO $t VALUES (2, 200)"),
-      sqlViewOk = true,
+      viewOk = true,
       dfOk = true,
-      sqlViewRows = Seq(Row(1, 100), Row(2, 200)),
+      viewRows = Seq(Row(1, 100), Row(2, 200)),
       dfRows = Seq(Row(1, 100), Row(2, 200))),
     Mod(
       "column addition",
       t => spark.sql(s"ALTER TABLE $t ADD COLUMN new_col INT"),
-      sqlViewOk = true,
+      viewOk = true,
       dfOk = true,
-      // SQL view preserves original 2-col schema
-      sqlViewRows = Seq(Row(1, 100)),
+      // Temp views preserve original 2-col schema
+      viewRows = Seq(Row(1, 100)),
       dfRows = Seq(Row(1, 100, null))),
     Mod(
       "column removal",
       t => spark.sql(s"ALTER TABLE $t DROP COLUMN salary"),
-      sqlViewOk = false,
+      viewOk = false,
       dfOk = true,
       dfRows = Seq(Row(1))),
     Mod(
       "column rename",
       t => spark.sql(s"ALTER TABLE $t RENAME COLUMN salary TO pay"),
-      sqlViewOk = false,
+      viewOk = false,
       dfOk = true,
       dfRows = Seq(Row(1, 100))),
     // InMemoryTable handles type widening via Cast at read time.
     Mod(
       "type widening INT to BIGINT",
       t => spark.sql(s"ALTER TABLE $t ALTER COLUMN salary TYPE BIGINT"),
-      sqlViewOk = false,
+      viewOk = false,
       dfOk = true,
+      // DF view: VIEW_PLAN_CHANGED (default). SQL view: CANNOT_UP_CAST_DATATYPE.
       sqlViewCondition = UPCAST,
       dfRows = Seq(Row(1, 100))),
     Mod(
@@ -170,10 +173,10 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         spark.sql(s"ALTER TABLE $t DROP COLUMN salary")
         spark.sql(s"ALTER TABLE $t ADD COLUMN salary INT")
       },
-      sqlViewOk = true,
+      viewOk = true,
       dfOk = true,
       // InMemoryTable returns null for drop+re-add (dropped column data is discarded)
-      sqlViewRows = Seq(Row(1, null)),
+      viewRows = Seq(Row(1, null)),
       dfRows = Seq(Row(1, null))),
     Mod(
       "drop+add column different type",
@@ -181,8 +184,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         spark.sql(s"ALTER TABLE $t DROP COLUMN salary")
         spark.sql(s"ALTER TABLE $t ADD COLUMN salary STRING")
       },
-      sqlViewOk = false,
+      viewOk = false,
       dfOk = true,
+      // DF view: VIEW_PLAN_CHANGED (default). SQL view: CANNOT_UP_CAST_DATATYPE.
       sqlViewCondition = UPCAST,
       dfRows = Seq(Row(1, null))),
     Mod(
@@ -191,9 +195,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         spark.sql(s"DROP TABLE $t")
         spark.sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
       },
-      sqlViewOk = true,
+      viewOk = true,
       dfOk = true,
-      sqlViewRows = Seq.empty,
+      viewRows = Seq.empty,
       dfRows = Seq.empty))
 
   // =====================================================================
@@ -212,14 +216,16 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
           spark.read.table(T).createOrReplaceTempView("tmp")
           checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
           mod.fn(T)
-          if (mod.sqlViewOk) {
-            checkAnswer(spark.sql("SELECT * FROM tmp"), mod.sqlViewRows)
+          if (mod.viewOk) {
+            checkAnswer(spark.sql("SELECT * FROM tmp"), mod.viewRows)
           } else {
+            // DF-based views use VIEW_PLAN_CHANGED (plan-based validation),
+            // unlike SQL views which use SQL_VIEW_CHANGED or UPCAST.
             checkError(
               exception = intercept[AnalysisException] {
                 spark.sql("SELECT * FROM tmp").collect()
               },
-              condition = mod.sqlViewCondition)
+              condition = mod.dfViewCondition)
           }
         }
       }
@@ -361,9 +367,10 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
           spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
           checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
           mod.fn(T)
-          if (mod.sqlViewOk) {
-            checkAnswer(spark.sql("SELECT * FROM tmp"), mod.sqlViewRows)
+          if (mod.viewOk) {
+            checkAnswer(spark.sql("SELECT * FROM tmp"), mod.viewRows)
           } else {
+            // SQL views use SQL_VIEW_CHANGED or UPCAST (type widening / drop+add diff type)
             checkError(
               exception = intercept[AnalysisException] {
                 spark.sql("SELECT * FROM tmp").collect()
