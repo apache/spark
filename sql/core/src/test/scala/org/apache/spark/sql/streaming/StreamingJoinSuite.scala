@@ -931,13 +931,16 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
         AddData(input2, 1, 10),
         CheckNewAnswer((1, 2, 3)),
         Execute { query =>
-          val numInternalKeys =
+          val numInternalCfs =
             query.lastProgress
               .stateOperators(0)
               .customMetrics
-              .get("rocksdbNumInternalColFamiliesKeys")
-          // Number of internal column family keys should be nonzero for this join implementation
-          assert(numInternalKeys.longValue() > 0)
+              .get("rocksdbNumInternalColumnFamilies")
+          // The V4 virtual-column-family join uses internal column families for the
+          // secondary index, so the CF count should be nonzero for this join implementation.
+          // Note: we intentionally check the CF count (not the key count), because for joins
+          // without event time the secondary index is created but never populated.
+          assert(numInternalCfs.longValue() > 0)
         },
         StopStream,
         // Restart the query from the same checkpoint
@@ -948,13 +951,13 @@ abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
         CheckNewAnswer((2, 4, 6), (2, 4, 6)),
         Execute { query =>
           // The join implementation should not have changed between runs
-          val numInternalKeys =
+          val numInternalCfs =
             query.lastProgress
               .stateOperators(0)
               .customMetrics
-              .get("rocksdbNumInternalColFamiliesKeys")
-          // Number of internal column family keys should still be nonzero for this join
-          assert(numInternalKeys.longValue() > 0)
+              .get("rocksdbNumInternalColumnFamilies")
+          // Number of internal column families should still be nonzero for this join
+          assert(numInternalCfs.longValue() > 0)
         },
         StopStream
       )

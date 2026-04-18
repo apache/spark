@@ -242,17 +242,22 @@ class StreamingInnerJoinV4Suite
       val df2 = input2.toDF().toDF("key", "time")
         .select($"key", timestamp_seconds($"time") as "ts", ($"key" * 3) as "rightValue")
       // Only left side has watermark; ts is part of the join key, so
-      // joinKeyOrdinalForWatermark is defined → hasEventTime = true for both sides.
+      // joinKeyOrdinalForWatermark is defined -> hasEventTime = true for both sides.
 
       val joined = df1.join(df2, Seq("key", "ts"))
         .select($"key", $"ts".cast("long"), $"leftValue", $"rightValue")
 
       testStream(joined)(
         StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-        AddData(input1, (1, 10), (2, 20)),
+        // Use ts=20 for the row we expect to join against in the next batch.
+        // With withWatermark("ts", "10 seconds"), batch 0 advances the watermark to
+        // max(ts) - 10s = 10s, and the state cleanup predicate `ts <= watermark` is
+        // inclusive. Keeping ts=20 > 10 ensures the row survives eviction so the
+        // right-side row in batch 1 can match it.
+        AddData(input1, (1, 20), (2, 10)),
         CheckAnswer(),
-        AddData(input2, (1, 10)),
-        CheckNewAnswer((1, 10, 2, 3)),
+        AddData(input2, (1, 20)),
+        CheckNewAnswer((1, 20, 2, 3)),
         Execute { _ =>
           val checkpointLoc = checkpointDir.getCanonicalPath
 
@@ -287,7 +292,7 @@ class StreamingInnerJoinV4Suite
         .select($"rightKey", timestamp_seconds($"time") as "rightTime",
           ($"rightKey" * 3) as "rightValue")
       // Only left side has watermark; watermark is on a value column, not the join key.
-      // joinKeyOrdinalForWatermark is None → only left has hasEventTime = true.
+      // joinKeyOrdinalForWatermark is None -> only left has hasEventTime = true.
       // Neither side can actually evict: the left state watermark is derived from the right
       // side's watermark via the join condition, which is absent here. The left secondary
       // index is populated but never used for eviction.
@@ -311,10 +316,10 @@ class StreamingInnerJoinV4Suite
           assert(readStateStore(checkpointLoc, "right-keyWithTsToValues") > 0,
             "right primary store should have rows")
 
-          // Left has watermark on a value column → hasEventTime = true, secondary index populated.
+          // Left has watermark on a value column -> hasEventTime = true, secondary index populated.
           assert(readStateStore(checkpointLoc, "left-tsWithKey") > 0,
             "left secondary index should be populated (watermark on left value column)")
-          // Right has no watermark → hasEventTime = false, secondary index empty.
+          // Right has no watermark -> hasEventTime = false, secondary index empty.
           assert(readStateStore(checkpointLoc, "right-tsWithKey") === 0,
             "right secondary index should be empty (no watermark on right side)")
         },
