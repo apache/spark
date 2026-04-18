@@ -181,11 +181,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
   }
 
   protected def addOperationColumn(operation: Int, plan: LogicalPlan): LogicalPlan = {
-    addOperationColumn(Literal(operation, IntegerType), plan)
-  }
-
-  protected def addOperationColumn(operation: Expression, plan: LogicalPlan): LogicalPlan = {
-    val operationType = Alias(operation, OPERATION_COLUMN)()
+    val operationType = Alias(Literal(operation, IntegerType), OPERATION_COLUMN)()
     Project(operationType +: plan.output, plan)
   }
 
