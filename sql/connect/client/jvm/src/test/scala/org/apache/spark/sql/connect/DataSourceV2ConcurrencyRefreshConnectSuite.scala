@@ -394,6 +394,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   // Both sides re-analyze in Connect. Use id-only SELECTs.
   // =====================================================================
 
+  // In Connect, both sides re-analyze to latest. With id-only SELECTs,
+  // each side returns mod.dfRows.length rows of (id).
   mods.foreach { mod =>
     test(s"[union] df1.union(df2): ${mod.name}") {
       assumeCanRun()
@@ -402,7 +404,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         val df1 = spark.sql(s"SELECT id FROM $T")
         mod.fn(T)
         val df2 = spark.sql(s"SELECT id FROM $T")
-        df1.union(df2).collect()
+        // Union (all): both sides have N rows -> 2N total
+        val result = df1.union(df2).collect()
+        assert(result.length == mod.dfRows.length * 2)
       }
     }
   }
@@ -415,7 +419,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         val df1 = spark.sql(s"SELECT id FROM $T")
         mod.fn(T)
         val df2 = spark.sql(s"SELECT id FROM $T")
-        df1.except(df2).collect()
+        // Both sides identical after re-analysis: except is empty
+        val result = df1.except(df2).collect()
+        assert(result.isEmpty)
       }
     }
   }
@@ -428,7 +434,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         val df1 = spark.sql(s"SELECT id FROM $T")
         mod.fn(T)
         val df2 = spark.sql(s"SELECT id FROM $T")
-        df1.intersect(df2).collect()
+        // Both sides identical: intersect returns distinct rows
+        val result = df1.intersect(df2).collect()
+        assert(result.length == mod.dfRows.length)
       }
     }
   }
@@ -445,7 +453,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         val df = spark.sql(s"SELECT * FROM $T")
         val filtered = df.filter(df("id") > 0)
         mod.fn(T)
-        filtered.count()
+        // Connect re-analyzes: count reflects current state.
+        // All rows have id > 0 so filter passes all.
+        assert(filtered.count() == mod.dfRows.length)
       }
     }
   }
@@ -461,7 +471,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         setupTable()
         val df = spark.sql(s"SELECT id FROM $T")
         mod.fn(T)
-        df.union(df).collect()
+        // Self-union: N + N = 2N rows
+        val result = df.union(df).collect()
+        assert(result.length == mod.dfRows.length * 2)
       }
     }
   }
@@ -726,7 +738,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         mod.fn(T)
         // In Connect, both re-analyze: join always works
         val joined = df1.join(df2, df1("id1") === df2("id2"))
-        joined.collect()
+        val result = joined.collect()
+        assert(result.length == mod.dfRows.length,
+          s"Expected ${mod.dfRows.length} rows in join, got ${result.length}")
       }
     }
   }
