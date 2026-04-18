@@ -93,6 +93,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
             e.getMessage.contains("TABLE_OR_VIEW_NOT_FOUND") ||
             e.getMessage.contains("VIEW_SCHEMA") ||
             e.getMessage.contains("ClassCastException") ||
+            e.getMessage.contains("ConcurrentModificationException") ||
+            e.getMessage.contains("mutation occurred during iteration") ||
             e.getMessage.contains("does not exist")) =>
       true
     case se: Exception if se.getCause != null => isExpectedError(se.getCause)

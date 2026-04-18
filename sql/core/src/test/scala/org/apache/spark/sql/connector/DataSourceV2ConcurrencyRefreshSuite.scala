@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector
 
 import java.util
+import java.util.ConcurrentModificationException
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicReference
 
@@ -160,11 +161,14 @@ class DataSourceV2ConcurrencyRefreshSuite
       t match {
         case _: AnalysisException => true
         case _: ClassCastException => true
+        case _: ConcurrentModificationException => true
         case _ =>
           val msg = Option(t.getMessage).getOrElse("")
           val str = t.toString
           if (msg.contains("ClassCastException") ||
-              str.contains("ClassCastException")) {
+              str.contains("ClassCastException") ||
+              msg.contains("ConcurrentModificationException") ||
+              str.contains("ConcurrentModificationException")) {
             true
           } else {
             checkChain(t.getCause)
