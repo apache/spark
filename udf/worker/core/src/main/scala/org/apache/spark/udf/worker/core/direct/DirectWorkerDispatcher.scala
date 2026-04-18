@@ -26,12 +26,10 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import org.slf4j.{Logger, LoggerFactory}
-
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.udf.worker.{ProcessCallable, UDFWorkerSpecification}
 import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerDispatcher,
-  WorkerSecurityScope, WorkerSession}
+  WorkerLogger, WorkerSecurityScope, WorkerSession}
 import org.apache.spark.udf.worker.core.direct.DirectWorkerDispatcher.{CallableResult,
   EnvironmentState}
 
@@ -51,17 +49,16 @@ import org.apache.spark.udf.worker.core.direct.DirectWorkerDispatcher.{CallableR
  * creation), see the `indirect` package (TODO).
  *
  * @param workerSpec worker specification (proto)
- * @param logger SLF4J logger for dispatcher-internal messages. Callers may
- *               inject their own logger (e.g., backed by Spark's `Logging`
- *               trait in an engine context) to route messages through their
- *               own logging configuration. Defaults to an SLF4J logger for
- *               this class.
+ * @param logger [[WorkerLogger]] used for dispatcher-internal messages.
+ *               The framework does not depend on any concrete logging
+ *               backend; callers should pass an adapter that forwards
+ *               to their preferred logger (Spark's `Logging` trait,
+ *               SLF4J, etc.). Defaults to [[WorkerLogger.NoOp]].
  */
 @Experimental
 abstract class DirectWorkerDispatcher(
     override val workerSpec: UDFWorkerSpecification,
-    protected val logger: Logger =
-      LoggerFactory.getLogger(classOf[DirectWorkerDispatcher]))
+    protected val logger: WorkerLogger = WorkerLogger.NoOp)
   extends WorkerDispatcher {
 
   // TODO: Connection pooling -- reuse idle workers across sessions.

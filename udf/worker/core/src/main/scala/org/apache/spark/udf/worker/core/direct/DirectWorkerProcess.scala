@@ -23,10 +23,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.util.control.NonFatal
 
-import org.slf4j.{Logger, LoggerFactory}
-
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.udf.worker.core.WorkerConnection
+import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerLogger}
 
 /**
  * :: Experimental ::
@@ -55,10 +53,10 @@ import org.apache.spark.udf.worker.core.WorkerConnection
  *                          while the worker runs) and deleted in [[close]].
  * @param gracefulTimeoutMs milliseconds to wait after SIGTERM before
  *                          escalating to SIGKILL.
- * @param logger            SLF4J logger for process-level messages. Defaults
- *                          to an SLF4J logger for this class; the dispatcher
- *                          passes its own logger so all messages share a
- *                          category.
+ * @param logger            [[WorkerLogger]] used for process-level
+ *                          messages. Defaults to [[WorkerLogger.NoOp]];
+ *                          the dispatcher normally passes its own
+ *                          logger so all messages share a category.
  */
 @Experimental
 class DirectWorkerProcess(
@@ -67,8 +65,7 @@ class DirectWorkerProcess(
     val socketPath: String,
     val outputFile: Path,
     val gracefulTimeoutMs: Long,
-    protected val logger: Logger =
-      LoggerFactory.getLogger(classOf[DirectWorkerProcess]))
+    protected val logger: WorkerLogger = WorkerLogger.NoOp)
   extends AutoCloseable {
 
   // The active-session ref-count below is scaffolding for future connection
