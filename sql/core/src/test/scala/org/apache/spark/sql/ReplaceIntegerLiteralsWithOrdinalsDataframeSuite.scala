@@ -26,7 +26,6 @@ import org.apache.spark.sql.test.SharedClassicSparkSession
 class ReplaceIntegerLiteralsWithOrdinalsDataframeSuite
   extends QueryTest
     with SharedClassicSparkSession {
-  import classicTestImplicits._
 
   test("Group by ordinal - Dataframe") {
     val query = "SELECT * FROM VALUES(1,2),(1,3),(2,4)"

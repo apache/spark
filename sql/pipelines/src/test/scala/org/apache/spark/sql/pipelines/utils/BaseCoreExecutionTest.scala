@@ -21,7 +21,6 @@ import org.apache.spark.sql.pipelines.graph.{DataflowGraph, DatasetManager, Pipe
 import org.apache.spark.sql.test.ClassicSQLTestUtils
 
 trait BaseCoreExecutionTest extends ExecutionTest with ClassicSQLTestUtils {
-  import classicTestImplicits._
 
   /**
    * Materializes the given graph using the provided context.

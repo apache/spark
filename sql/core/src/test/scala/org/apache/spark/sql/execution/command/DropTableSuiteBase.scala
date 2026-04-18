@@ -31,7 +31,6 @@ import org.apache.spark.sql.test.ClassicSQLTestUtils
  *     - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.DropTableSuite`
  */
 trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils with ClassicSQLTestUtils {
-  import classicTestImplicits._
   override val command = "DROP TABLE"
 
   protected def createTable(tableName: String): Unit = {

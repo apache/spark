@@ -36,7 +36,6 @@ trait AlterTableRenameSuiteBase
   extends QueryTest
     with DDLCommandTestUtils
     with ClassicSQLTestUtils {
-  import classicTestImplicits._
   override val command = "ALTER TABLE .. RENAME"
 
   test("rename a table in a database/namespace") {
