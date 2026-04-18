@@ -23,9 +23,9 @@ import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkEnv, S
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, GenericInternalRow, MutableProjection, SpecificInternalRow}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{DeclarativeAggregate, Max, Min, Sum}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{DeclarativeAggregate, Max, Min, StddevSamp, Sum}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType}
+import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType}
 
 class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -417,6 +417,90 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
         }
       } finally tree.close()
     }
+  }
+
+  // ---- STDDEV_SAMP regression ----
+  // Minimal repro for the STDDEV_SAMP digest mismatch seen in GHA run
+  // 24599916378 (WindowBenchmark Section A). MIN/MAX/SUM/COUNT/AVG all pass
+  // digest parity; STDDEV_SAMP is the first multi-buffer agg that uses
+  // CentralMomentAgg's Welford merge (n, avg, m2) *and* a non-trivial
+  // `evaluateExpression`. We exercise both the merge path (via `query`)
+  // and the evaluate path (via `queryInto` + `AggregateProcessor`).
+  test("STDDEV_SAMP: segtree matches naive oracle on random doubles, W=21") {
+    withTaskContext {
+      val rnd = new Random(0x57DDEFL) // fixed seed
+      val n = 100
+      val values: Array[Double] = Array.fill(n)(rnd.nextGaussian() * 1000.0 + 50.0)
+      val doubleAttr = AttributeReference("v", DoubleType, nullable = true)()
+      val schema: Seq[Attribute] = Seq(doubleAttr)
+      val agg: DeclarativeAggregate = StddevSamp(doubleAttr)
+
+      // Use a block size that forces cross-block merges at W=21: blockSize=8.
+      val tree = new WindowSegmentTree(
+        Array(agg), schema, newMutableProjection,
+        fanout = 4, blockSize = 8, maxCachedBlocks = None,
+        taskMemoryManager = TaskContext.get().taskMemoryManager())
+      try {
+        val rows = values.iterator.map { v =>
+          val r = new GenericInternalRow(1)
+          r.update(0, v)
+          r.asInstanceOf[InternalRow]
+        }
+        tree.build(rows)
+
+        // Build an AggregateProcessor identical to what the Frame uses so
+        // `queryInto` exercises evaluateExpression (sqrt(m2/(n-1)) with
+        // the div-by-zero / n=1 guards in StddevSamp).
+        val processor = AggregateProcessor(
+          Array[Expression](agg),
+          ordinal = 0,
+          inputAttributes = schema,
+          newMutableProjection = newMutableProjection,
+          filters = Array[Option[Expression]](None))
+
+        val out = new SpecificInternalRow(Seq[DataType](DoubleType))
+
+        val halfW = 10 // W=21
+        var i = 0
+        var maxRelErr = 0.0
+        while (i < n) {
+          val lo = math.max(0, i - halfW)
+          val hi = math.min(n, i + halfW + 1)
+          tree.queryInto(lo, hi, processor, out)
+          val actual = if (out.isNullAt(0)) Double.NaN else out.getDouble(0)
+          val expected = naiveStddevSamp(values, lo, hi)
+          // NaN handling: legacy `nullOnDivideByZero=true` -> null when n<=1.
+          if (java.lang.Double.isNaN(expected)) {
+            assert(out.isNullAt(0),
+              s"expected null at i=$i [$lo,$hi), got $actual")
+          } else {
+            assert(!out.isNullAt(0),
+              s"expected $expected at i=$i [$lo,$hi), got null")
+            val denom = math.max(math.abs(expected), 1e-12)
+            val rel = math.abs(actual - expected) / denom
+            if (rel > maxRelErr) maxRelErr = rel
+            assert(rel < 1e-9,
+              s"STDDEV_SAMP mismatch at i=$i [$lo,$hi): " +
+                s"expected=$expected actual=$actual relErr=$rel")
+          }
+          i += 1
+        }
+      } finally tree.close()
+    }
+  }
+
+  /** Naive STDDEV_SAMP over [lo, hi); returns NaN for n < 2 to signal null. */
+  private def naiveStddevSamp(values: Array[Double], lo: Int, hi: Int): Double = {
+    val n = hi - lo
+    if (n < 2) return Double.NaN
+    var sum = 0.0
+    var i = lo
+    while (i < hi) { sum += values(i); i += 1 }
+    val mean = sum / n
+    var sq = 0.0
+    i = lo
+    while (i < hi) { val d = values(i) - mean; sq += d * d; i += 1 }
+    math.sqrt(sq / (n - 1))
   }
 
     test("D12 block-aligned cross-block boundaries") {
