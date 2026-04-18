@@ -140,12 +140,16 @@ message WorkerCapabilities {
     // Whether multiple, concurrent UDF
     // connections are supported by this worker
     // (for example via multi-threading).
-    // 
+    //
     // In the first implementation of the engine-side
     // worker specification, this property will not be used.
-    // 
+    //
     // Usage of this property can be enabled in the future if the
     // engine implements more advanced resource management (TBD).
+    //
+    // TODO: wire this into planning/scheduling -- SPIP worker-spec §2.4
+    // "Parallelism" describes the intended use (e.g., multiplex tasks onto
+    // a single worker vs. spawn multiple workers per executor).
     //
     // (Optional)
     optional bool supports_concurrent_udfs = 3;
@@ -190,22 +194,27 @@ message UDFWorkerProperties {
     // (Optional)
     optional int32 graceful_termination_timeout_ms = 2;
 
-    // The connection this [[DirectWorker]] supports. Note that a single
-    // connection is sufficient to run multiple UDFs and (gRPC) services.
+    // The connections this [[DirectWorker]] supports. A single connection is
+    // sufficient to run multiple UDFs and (gRPC) services; multi-connection
+    // workers (e.g., a separate control channel for stateful streaming) are
+    // a future extension and are not yet supported by the engine -- today
+    // exactly one connection must be specified.
     //
-    // On [[DirectWorker]] creation, connection information 
-    // is passed to the callable as a string parameter. 
+    // On [[DirectWorker]] creation, connection information
+    // is passed to the callable as a string parameter.
     // The string format depends on the [[WorkerConnection]]:
-    // 
+    //
     // For example, when using TCP, the callable argument will be:
     // --connection PORT
     // Here is a concrete example
     // --connection 8080
-    // 
+    //
     // For the format of each specific transport type, see the comments below.
     //
-    // (Required)
-    WorkerConnection connection = 3;
+    // (Required) Exactly one entry today; the field is repeated to allow
+    // additional connections (e.g., data + control) to be added without a
+    // schema-breaking migration.
+    repeated WorkerConnection connections = 3;
 }
 
 message WorkerConnection {
