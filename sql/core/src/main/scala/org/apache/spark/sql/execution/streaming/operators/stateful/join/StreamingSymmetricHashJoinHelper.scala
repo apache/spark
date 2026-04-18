@@ -45,7 +45,22 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     def desc: String
     override def toString: String = s"$desc: $expr"
   }
-  /** Predicate for watermark on state keys */
+  /**
+   * Predicate for watermark on state keys.
+   *
+   * @param stateWatermark Current batch's eviction watermark. Entries with timestamp
+   *                       at or below this value are eligible for eviction in this batch.
+   * @param prevStateWatermark Previous batch's eviction watermark, i.e. the watermark
+   *                           used for filtering late events in the current batch.
+   *                           Entries with timestamp at or below this value were already
+   *                           evicted in prior batches, so the effective range of entries
+   *                           to evict in this batch is `(prevStateWatermark, stateWatermark]`.
+   *                           State manager implementations can leverage this lower bound
+   *                           to optimize eviction (e.g. narrowing the scan range to skip
+   *                           already-evicted entries). `None` means we do not have a known
+   *                           lower bound (e.g. the first batch after restart), in which
+   *                           case eviction must consider all entries up to `stateWatermark`.
+   */
   case class JoinStateKeyWatermarkPredicate(
       expr: Expression,
       stateWatermark: Long,
@@ -53,7 +68,10 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     extends JoinStateWatermarkPredicate {
     def desc: String = "key predicate"
   }
-  /** Predicate for watermark on state values */
+  /**
+   * Predicate for watermark on state values. See [[JoinStateKeyWatermarkPredicate]] for
+   * the semantics of `stateWatermark` and `prevStateWatermark`.
+   */
   case class JoinStateValueWatermarkPredicate(
       expr: Expression,
       stateWatermark: Long,

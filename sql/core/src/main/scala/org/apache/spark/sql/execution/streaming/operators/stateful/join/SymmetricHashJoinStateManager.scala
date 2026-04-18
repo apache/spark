@@ -725,9 +725,9 @@ class SymmetricHashJoinStateManagerV4(
             val unsafeRowPair = iter.next()
             val ts = TimestampKeyStateEncoder.extractTimestamp(unsafeRowPair.key)
 
-            if (useRangeScan) {
-              assert(ts >= minTs && ts <= maxTs,
-                s"rangeScan returned unexpected timestamp $ts outside [$minTs, $maxTs]")
+            if (useRangeScan && (ts < minTs || ts > maxTs)) {
+              throw StateStoreErrors.streamStreamJoinRangeScanTimestampOutOfRange(
+                ts, minTs, maxTs)
             }
 
             if (ts > maxTs) {

@@ -6870,6 +6870,11 @@
           "joinSide=<joinSide>, storeVersion=<storeVersion>, partitionId=<partitionId>.",
           "Enable <configKey> as a workaround to skip null values."
         ]
+      },
+      "RANGE_SCAN_TIMESTAMP_OUT_OF_RANGE" : {
+        "message" : [
+          "Range scan returned a row with timestamp <timestamp> outside the expected range [<minTimestamp>, <maxTimestamp>]."
+        ]
       }
     },
     "sqlState" : "XXKST"
