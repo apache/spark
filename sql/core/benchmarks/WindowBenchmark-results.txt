@@ -1,26 +1,69 @@
 ================================================================================================
-Window Sliding Frame - MIN (non-invertible)
+Section A - MIN (non-invertible)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1010-azure
 AMD EPYC 7763 64-Core Processor
-MIN sliding window, W=1001, 16M rows:     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+MIN sliding window, W=1001, 2M rows:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-MIN naive (current, baseline)                    254155         255171        1195          0.1       15148.8       1.0X
-MIN segtree (default)                             25655          25880         212          0.7        1529.2       9.9X
-MIN segtree (blockSize=256)                       28255          28742         500          0.6        1684.1       9.0X
+MIN naive (current, baseline)                     31854          31959         124          0.1       15188.9       1.0X
+MIN segtree (default)                              3289           3335          80          0.6        1568.2       9.7X
+MIN segtree (blockSize=256)                        3625           3641          28          0.6        1728.3       8.8X
 
 
 ================================================================================================
-Window Sliding Frame - MAX (non-invertible)
+Section A - MAX (non-invertible, noisy -> iters=5)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1010-azure
 AMD EPYC 7763 64-Core Processor
-MAX sliding window, W=1001, 16M rows:     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+MAX sliding window, W=1001, 2M rows:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-MAX naive (current, baseline)                    270463         270869         362          0.1       16120.9       1.0X
-MAX segtree (default)                             26685          26829         138          0.6        1590.5      10.1X
-MAX segtree (blockSize=256)                       28730          29485         678          0.6        1712.4       9.4X
+MAX naive (current, baseline)                     33657          33704          83          0.1       16049.1       1.0X
+MAX segtree (default)                              3218           3370         179          0.7        1534.2      10.5X
+MAX segtree (blockSize=256)                        3619           3701          63          0.6        1725.8       9.3X
 
+
+================================================================================================
+Section A - SUM (Spark has no inverse; full recompute)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1010-azure
+AMD EPYC 7763 64-Core Processor
+SUM sliding window, W=1001, 2M rows:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+SUM naive (current, baseline)                     33770          33817          56          0.1       16102.9       1.0X
+SUM segtree (default)                              3339           3363          22          0.6        1592.1      10.1X
+SUM segtree (blockSize=256)                        3562           3734         153          0.6        1698.4       9.5X
+
+
+================================================================================================
+Section A - COUNT
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1010-azure
+AMD EPYC 7763 64-Core Processor
+COUNT sliding window, W=1001, 2M rows:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+COUNT naive (current, baseline)                   27951          27952           2          0.1       13328.1       1.0X
+COUNT segtree (default)                            3121           3170          46          0.7        1488.1       9.0X
+COUNT segtree (blockSize=256)                      3293           3334          44          0.6        1570.2       8.5X
+
+
+================================================================================================
+Section A - AVG (multi-buffer)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1010-azure
+AMD EPYC 7763 64-Core Processor
+AVG sliding window, W=1001, 2M rows:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+AVG naive (current, baseline)                     46389          46453          56          0.0       22120.0       1.0X
+AVG segtree (default)                              4514           4567          49          0.5        2152.6      10.3X
+AVG segtree (blockSize=256)                        4972           5080         166          0.4        2370.8       9.3X
+
+
+================================================================================================
+Section A - STDDEV_SAMP (multi-buffer, noisy -> iters=5)
+================================================================================================
 

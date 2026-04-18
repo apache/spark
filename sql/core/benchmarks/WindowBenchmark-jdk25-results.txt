@@ -1,26 +1,69 @@
 ================================================================================================
-Window Sliding Frame - MIN (non-invertible)
+Section A - MIN (non-invertible)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
-MIN sliding window, W=1001, 16M rows:     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+AMD EPYC 9V74 80-Core Processor
+MIN sliding window, W=1001, 2M rows:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-MIN naive (current, baseline)                    229082         230146         927          0.1       13654.3       1.0X
-MIN segtree (default)                             25494          26023         529          0.7        1519.6       9.0X
-MIN segtree (blockSize=256)                       26827          27245         408          0.6        1599.0       8.5X
+MIN naive (current, baseline)                     21945          21990          69          0.1       10464.4       1.0X
+MIN segtree (default)                              2821           2854          31          0.7        1345.4       7.8X
+MIN segtree (blockSize=256)                        2714           2752          33          0.8        1294.2       8.1X
 
 
 ================================================================================================
-Window Sliding Frame - MAX (non-invertible)
+Section A - MAX (non-invertible, noisy -> iters=5)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
-MAX sliding window, W=1001, 16M rows:     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+AMD EPYC 9V74 80-Core Processor
+MAX sliding window, W=1001, 2M rows:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-MAX naive (current, baseline)                    258481         263813        7143          0.1       15406.7       1.0X
-MAX segtree (default)                             27172          27401         214          0.6        1619.6       9.5X
-MAX segtree (blockSize=256)                       27915          28270         417          0.6        1663.8       9.3X
+MAX naive (current, baseline)                     23210          23252          25          0.1       11067.5       1.0X
+MAX segtree (default)                              2661           2700          40          0.8        1268.8       8.7X
+MAX segtree (blockSize=256)                        2739           2774          25          0.8        1305.9       8.5X
 
+
+================================================================================================
+Section A - SUM (Spark has no inverse; full recompute)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.17.0-1010-azure
+AMD EPYC 9V74 80-Core Processor
+SUM sliding window, W=1001, 2M rows:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+SUM naive (current, baseline)                     25445          25461          14          0.1       12133.1       1.0X
+SUM segtree (default)                              2664           2686          23          0.8        1270.4       9.6X
+SUM segtree (blockSize=256)                        2749           2786          33          0.8        1310.6       9.3X
+
+
+================================================================================================
+Section A - COUNT
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.17.0-1010-azure
+AMD EPYC 9V74 80-Core Processor
+COUNT sliding window, W=1001, 2M rows:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+COUNT naive (current, baseline)                   22468          22492          21          0.1       10713.6       1.0X
+COUNT segtree (default)                            2462           2498          31          0.9        1173.9       9.1X
+COUNT segtree (blockSize=256)                      2576           2623          45          0.8        1228.3       8.7X
+
+
+================================================================================================
+Section A - AVG (multi-buffer)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.17.0-1010-azure
+AMD EPYC 9V74 80-Core Processor
+AVG sliding window, W=1001, 2M rows:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+AVG naive (current, baseline)                     37060          37081          23          0.1       17671.6       1.0X
+AVG segtree (default)                              3630           3663          31          0.6        1730.9      10.2X
+AVG segtree (blockSize=256)                        3850           3931          76          0.5        1835.9       9.6X
+
+
+================================================================================================
+Section A - STDDEV_SAMP (multi-buffer, noisy -> iters=5)
+================================================================================================
 
