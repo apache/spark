@@ -2681,6 +2681,53 @@ class CachedTableSuite extends QueryTest
     }
   }
 
+  test("SPARK-54216: refreshTable should return fresh data for V2 tables with immutable Table") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // Cache the table and verify initial data
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, "a"), Row(2, "b")))
+
+      // Insert new data
+      sql(s"INSERT INTO $t VALUES (3, 'c')")
+
+      // Refresh the table cache
+      spark.catalog.refreshTable(t)
+
+      // After refresh, the cache should return fresh data including the new row
+      assertCached(sql(s"SELECT * FROM $t"))
+      checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, "a"), Row(2, "b"), Row(3, "c")))
+    }
+  }
+
+  test("SPARK-54216: recacheByPlan should return fresh data for V2 tables") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // Cache via DataFrame API
+      spark.table(t).cache().count()
+      assertCached(sql(s"SELECT * FROM $t"))
+      checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, "a"), Row(2, "b")))
+
+      // Insert new data
+      sql(s"INSERT INTO $t VALUES (3, 'c')")
+
+      // Recache by plan
+      val plan = spark.table(t).queryExecution.analyzed
+      cacheManager.recacheByPlan(spark, plan)
+
+      // After recache, should return fresh data
+      assertCached(sql(s"SELECT * FROM $t"))
+      checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, "a"), Row(2, "b"), Row(3, "c")))
+    }
+  }
+
   private def cacheManager = spark.sharedState.cacheManager
 
   private def pinTable(
