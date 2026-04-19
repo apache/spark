@@ -106,13 +106,6 @@ private[window] final class SegmentTreeWindowFunctionFrame(
    */
   private[window] var fallbackUsed: Boolean = false
 
-  // Idempotency guard for the metric counters. `prepare()` is allowed to be
-  // called more than once on the same partition (see comment in prepare()),
-  // so we key on (identityHashCode(rows), rows.length) to dedupe repeat
-  // invocations without requiring an explicit reset hook. See
-  // `the PR description (SQLMetrics exposure)` section 2.5.
-  private[this] var lastPreparedKey: Long = -1L
-
   // Register close() once per frame instance so the tree's block cache and
   // any open row-array iterators are released when the task completes.
   // Keeping the registration here (vs. inside the factory closure) avoids
@@ -125,10 +118,11 @@ private[window] final class SegmentTreeWindowFunctionFrame(
   }
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
-    // `prepare` is idempotent: the partition evaluator calls it once per
-    // partition, but a second call (rebuild) must not reuse stale state
-    // from the previous partition. Clear the tree and advance-loop cursor
-    // fields before rebuilding.
+    // First-call hygiene: release prior tree/iterators/cursors before building
+    // the new tree. `prepare` is called exactly once per (partition, frame) by
+    // `WindowPartitionEvaluator.fetchNextPartition` (the sole call site); this
+    // mirrors `SlidingWindowFunctionFrame`, which has no guard. Counters bump
+    // unconditionally on the successful branch.
     if (tree != null) {
       tree.close()
       tree = null
@@ -139,13 +133,12 @@ private[window] final class SegmentTreeWindowFunctionFrame(
     upperRow = null
     lowerBound = 0
     upperBound = 0
-    val key = (System.identityHashCode(rows).toLong << 32) | (rows.length & 0xffffffffL)
-    val alreadyCounted = key == lastPreparedKey
     if (rows.length < conf.windowSegmentTreeMinPartitionRows) {
       fallbackUsed = true
       fallback.prepare(rows)
-      if (!alreadyCounted) numSegmentTreeFallbackFrames.foreach(_ += 1)
-      lastPreparedKey = key
+      // Count only on the successful fallback path: if `fallback.prepare`
+      // throws, the counter is not bumped.
+      numSegmentTreeFallbackFrames.foreach(_ += 1)
       return
     }
     fallbackUsed = false
@@ -162,8 +155,7 @@ private[window] final class SegmentTreeWindowFunctionFrame(
     tree.build(rows.generateIterator())
     // Count only on the successful segtree path: if `tree.build` throws
     // (e.g. OOM during block allocation), the counter is not bumped.
-    if (!alreadyCounted) numSegmentTreeFrames.foreach(_ += 1)
-    lastPreparedKey = key
+    numSegmentTreeFrames.foreach(_ += 1)
     frameType match {
       case RowFrame =>
         boundIter = rows.generateIterator()
