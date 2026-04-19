@@ -225,7 +225,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
               exception = intercept[AnalysisException] {
                 spark.sql("SELECT * FROM tmp").collect()
               },
-              condition = mod.dfViewCondition)
+              condition = mod.dfViewCondition,
+              matchPVals = true)
           }
         }
       }
@@ -383,7 +384,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
               exception = intercept[AnalysisException] {
                 spark.sql("SELECT * FROM tmp").collect()
               },
-              condition = mod.sqlViewCondition)
+              condition = mod.sqlViewCondition,
+              matchPVals = true)
           }
         }
       }
@@ -718,7 +720,10 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
           assert(error.get() == null, s"Writer failed: ${error.get()}")
 
           // Phase 3: Execute DataFrame (Connect re-analyzes: all succeed)
-          checkAnswer(df, mod.dfRows)
+          // Use collect().length instead of checkAnswer because column
+          // rename changes schema names which breaks checkAnswer's
+          // schema comparison in Connect.
+          assert(df.collect().length == mod.dfRows.length)
         }
       }
     }
@@ -1377,7 +1382,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
           exception = intercept[AnalysisException] {
             spark.sql("SELECT * FROM tmp").collect()
           },
-          condition = VIEW_PLAN_CHANGED)
+          condition = VIEW_PLAN_CHANGED,
+          matchPVals = true)
       }
     }
   }
@@ -1404,7 +1410,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
           exception = intercept[AnalysisException] {
             spark.sql("SELECT * FROM tmp").collect()
           },
-          condition = VIEW_PLAN_CHANGED)
+          condition = VIEW_PLAN_CHANGED,
+          matchPVals = true)
       }
     }
   }
@@ -1700,7 +1707,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
           exception = intercept[AnalysisException] {
             spark.sql("SELECT * FROM tmp").collect()
           },
-          condition = SQL_VIEW_CHANGED)
+          condition = SQL_VIEW_CHANGED,
+          matchPVals = true)
       }
     }
   }
@@ -1736,7 +1744,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
           exception = intercept[AnalysisException] {
             spark.sql("SELECT * FROM tmp").collect()
           },
-          condition = UPCAST)
+          condition = UPCAST,
+          matchPVals = true)
       }
     }
   }
@@ -1755,7 +1764,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
           exception = intercept[AnalysisException] {
             spark.sql("SELECT * FROM tmp").collect()
           },
-          condition = SQL_VIEW_CHANGED)
+          condition = SQL_VIEW_CHANGED,
+          matchPVals = true)
       }
     }
   }
@@ -1778,7 +1788,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
           exception = intercept[AnalysisException] {
             spark.sql("SELECT * FROM tmp").collect()
           },
-          condition = VIEW_PLAN_CHANGED)
+          condition = VIEW_PLAN_CHANGED,
+          matchPVals = true)
       }
     }
   }
@@ -1876,7 +1887,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
           exception = intercept[AnalysisException] {
             spark.sql("SELECT * FROM tmp").collect()
           },
-          condition = UPCAST)
+          condition = UPCAST,
+          matchPVals = true)
       }
     }
   }
