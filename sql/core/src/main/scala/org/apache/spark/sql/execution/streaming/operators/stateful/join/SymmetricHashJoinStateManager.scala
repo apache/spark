@@ -692,6 +692,11 @@ class SymmetricHashJoinStateManagerV4(
 
       new NextIterator[GetValuesResult] {
         private val iter = if (useRangeScan) {
+          // startKey must be copied because the second createKeyRow call below reuses
+          // the same projection buffer and would otherwise overwrite its contents.
+          // endKey does not need a copy: rangeScanWithMultiValues encodes both bounds
+          // to independent byte arrays eagerly at call time, and the scope of endKey
+          // ends with the call of rangeScanWithMultiValues.
           val startKey = createKeyRow(key, minTs).copy()
           // rangeScanWithMultiValues endKey is exclusive, so use maxTs + 1
           val endKey = Some(createKeyRow(key, maxTs + 1))
