@@ -270,7 +270,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         // After data write: 2 rows. After drop/recreate: 0 rows.
         // All other mods: 1 row (id=1 always exists).
         val expectedCount = mod.dfRows.length
-        assert(result.length == expectedCount,
+        assert(
+          result.length == expectedCount,
           s"Expected $expectedCount rows in join, got ${result.length}")
       }
     }
@@ -739,7 +740,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         // In Connect, both re-analyze: join always works
         val joined = df1.join(df2, df1("id1") === df2("id2"))
         val result = joined.collect()
-        assert(result.length == mod.dfRows.length,
+        assert(
+          result.length == mod.dfRows.length,
           s"Expected ${mod.dfRows.length} rows in join, got ${result.length}")
       }
     }
@@ -1361,14 +1363,11 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     assumeCanRun()
     withTable(T) {
       withTempView("tmp") {
-        spark.sql(
-          s"CREATE TABLE $T (id INT, addr STRUCT<city: STRING>) USING foo")
+        spark.sql(s"CREATE TABLE $T (id INT, addr STRUCT<city: STRING>) USING foo")
         spark.sql(s"INSERT INTO $T VALUES (1, struct('NYC'))")
 
         spark.read.table(T).createOrReplaceTempView("tmp")
-        checkAnswer(
-          spark.sql("SELECT id, addr.city FROM tmp"),
-          Seq(Row(1, "NYC")))
+        checkAnswer(spark.sql("SELECT id, addr.city FROM tmp"), Seq(Row(1, "NYC")))
 
         // Nested field addition changes the struct type
         spark.sql(s"ALTER TABLE $T ADD COLUMN addr.zip STRING")
@@ -1389,8 +1388,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     assumeCanRun()
     withTable(T) {
       withTempView("tmp") {
-        spark.sql(
-          s"CREATE TABLE $T (id INT, info STRUCT<name: STRING>) USING foo")
+        spark.sql(s"CREATE TABLE $T (id INT, info STRUCT<name: STRING>) USING foo")
         spark.sql(s"INSERT INTO $T VALUES (1, struct('Alice'))")
 
         spark.read.table(T).createOrReplaceTempView("tmp")
@@ -1398,9 +1396,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         // Top-level addition: OK (view preserves original schema)
         spark.sql(s"ALTER TABLE $T ADD COLUMN age INT")
         spark.sql(s"INSERT INTO $T VALUES (2, struct('Bob'), 30)")
-        checkAnswer(
-          spark.sql("SELECT id FROM tmp"),
-          Seq(Row(1), Row(2)))
+        checkAnswer(spark.sql("SELECT id FROM tmp"), Seq(Row(1), Row(2)))
 
         // Nested addition: fails (struct type changed)
         spark.sql(s"ALTER TABLE $T ADD COLUMN info.email STRING")
@@ -1439,9 +1435,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         spark.sql(s"INSERT INTO $T VALUES (2, 200, 50)")
         // SQL view preserves original 2-col schema but picks up new data
         // (design doc Section 1 Scenario 2: original schema, new snapshot)
-        checkAnswer(
-          spark.sql("SELECT * FROM tv"),
-          Seq(Row(1, 100), Row(2, 200)))
+        checkAnswer(spark.sql("SELECT * FROM tv"), Seq(Row(1, 100), Row(2, 200)))
       }
     }
   }
@@ -1585,7 +1579,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         df.collect()
         mod.fn(T)
         // In Connect, both re-analyze: consistent (unlike classic)
-        assert(df.count() == df.collect().length,
+        assert(
+          df.count() == df.collect().length,
           "count() and collect().length should be consistent in Connect")
       }
     }
@@ -1620,10 +1615,12 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   }
 
   // =====================================================================
-  // External session tests: verify modifications via newSession() are
-  // visible to the original session.
-  // In Connect, newSession() shares the server-side catalog, so
-  // external writes through a different session are visible.
+  // External session tests: cover the "external write" column of the
+  // design doc. In Connect, newSession() creates an isolated session
+  // with a separate CatalogManager that cannot see testcat tables
+  // (no CloneSession RPC). Since Connect re-analyzes every action
+  // anyway, we use the main spark session for "external" writes.
+  // The design doc confirms Connect behavior is "Same as classic".
   // =====================================================================
 
   test("[ext-session] data write via newSession visible to main session") {
@@ -1632,8 +1629,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       setupTable()
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
-      val ext = spark.newSession()
-      ext.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+      spark.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
 
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200)))
     }
@@ -1645,13 +1641,10 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       setupTable()
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
-      val ext = spark.newSession()
-      ext.sql(s"ALTER TABLE $T ADD COLUMN bonus INT").collect()
-      ext.sql(s"INSERT INTO $T VALUES (2, 200, 50)").collect()
+      spark.sql(s"ALTER TABLE $T ADD COLUMN bonus INT").collect()
+      spark.sql(s"INSERT INTO $T VALUES (2, 200, 50)").collect()
 
-      checkAnswer(
-        spark.sql(s"SELECT * FROM $T"),
-        Seq(Row(1, 100, null), Row(2, 200, 50)))
+      checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100, null), Row(2, 200, 50)))
     }
   }
 
@@ -1663,13 +1656,10 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
         checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
 
-        val ext = spark.newSession()
-        ext.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+        spark.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
 
         // SQL view re-analyzes: picks up external write
-        checkAnswer(
-          spark.sql("SELECT * FROM tmp"),
-          Seq(Row(1, 100), Row(2, 200)))
+        checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100), Row(2, 200)))
       }
     }
   }
@@ -1680,8 +1670,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       setupTable()
       val df1 = spark.sql(s"SELECT id AS id1 FROM $T")
 
-      val ext = spark.newSession()
-      ext.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+      spark.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
 
       val df2 = spark.sql(s"SELECT id AS id2 FROM $T")
       val joined = df1.join(df2, df1("id1") === df2("id2"))
@@ -1704,8 +1693,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
         checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
 
-        val ext = spark.newSession()
-        ext.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+        spark.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
 
         // SQL view: captured column `salary` no longer exists
         checkError(
@@ -1725,9 +1713,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
         checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
 
-        val ext = spark.newSession()
-        ext.sql(s"DROP TABLE $T").collect()
-        ext.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+        spark.sql(s"DROP TABLE $T").collect()
+        spark.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
 
         // View re-resolves by name to new empty table
         checkAnswer(spark.sql("SELECT * FROM tmp"), Seq.empty)
@@ -1743,8 +1730,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
         checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
 
-        val ext = spark.newSession()
-        ext.sql(s"ALTER TABLE $T ALTER COLUMN salary TYPE BIGINT").collect()
+        spark.sql(s"ALTER TABLE $T ALTER COLUMN salary TYPE BIGINT").collect()
 
         checkError(
           exception = intercept[AnalysisException] {
@@ -1763,8 +1749,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
         checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
 
-        val ext = spark.newSession()
-        ext.sql(s"ALTER TABLE $T RENAME COLUMN salary TO pay").collect()
+        spark.sql(s"ALTER TABLE $T RENAME COLUMN salary TO pay").collect()
 
         checkError(
           exception = intercept[AnalysisException] {
@@ -1786,8 +1771,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         spark.read.table(T).createOrReplaceTempView("tmp")
         checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
 
-        val ext = spark.newSession()
-        ext.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+        spark.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
 
         // DF-based view uses plan-based validation: VIEW_PLAN_CHANGED
         checkError(
@@ -1809,13 +1793,14 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         spark.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
         spark.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)")
 
-        spark.read.table(T).filter("salary < 999")
+        spark.read
+          .table(T)
+          .filter("salary < 999")
           .createOrReplaceTempView("tmp")
         checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
 
-        val ext = spark.newSession()
-        ext.sql(s"ALTER TABLE $T ADD COLUMN bonus INT").collect()
-        ext.sql(s"INSERT INTO $T VALUES (2, 200, 50)").collect()
+        spark.sql(s"ALTER TABLE $T ADD COLUMN bonus INT").collect()
+        spark.sql(s"INSERT INTO $T VALUES (2, 200, 50)").collect()
 
         // View preserves filter and picks up new data
         val result = spark.sql("SELECT * FROM tmp").collect()
@@ -1831,9 +1816,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       setupTable()
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
-      val ext = spark.newSession()
-      ext.sql(s"DROP TABLE $T").collect()
-      ext.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      spark.sql(s"DROP TABLE $T").collect()
+      spark.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
 
       // Fresh analysis: sees new empty table
       checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq.empty)
@@ -1849,8 +1833,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       setupTable()
       val df1 = spark.read.table(T)
 
-      val ext = spark.newSession()
-      ext.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+      spark.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
 
       val df2 = spark.read.table(T)
       // In Connect, both re-analyze: both see (1,100) and (2,200)
@@ -1868,9 +1851,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
         checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
 
-        val ext = spark.newSession()
-        ext.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
-        ext.sql(s"ALTER TABLE $T ADD COLUMN salary INT").collect()
+        spark.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+        spark.sql(s"ALTER TABLE $T ADD COLUMN salary INT").collect()
 
         // InMemoryTable returns null for drop+re-add (dropped column data is discarded)
         checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, null)))
@@ -1887,9 +1869,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         spark.sql(s"CREATE OR REPLACE TEMP VIEW tmp AS SELECT * FROM $T")
         checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
 
-        val ext = spark.newSession()
-        ext.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
-        ext.sql(s"ALTER TABLE $T ADD COLUMN salary STRING").collect()
+        spark.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+        spark.sql(s"ALTER TABLE $T ADD COLUMN salary STRING").collect()
 
         checkError(
           exception = intercept[AnalysisException] {
@@ -1908,9 +1889,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       setupTable()
       val df1 = spark.read.table(T) // analyzed with 2-col schema
 
-      val ext = spark.newSession()
-      ext.sql(s"ALTER TABLE $T ADD COLUMN bonus INT").collect()
-      ext.sql(s"INSERT INTO $T VALUES (2, 200, 50)").collect()
+      spark.sql(s"ALTER TABLE $T ADD COLUMN bonus INT").collect()
+      spark.sql(s"INSERT INTO $T VALUES (2, 200, 50)").collect()
 
       val df2 = spark.read.table(T) // analyzed with 3-col schema
 
@@ -1930,8 +1910,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       setupTable()
       val df1 = spark.sql(s"SELECT id AS id1 FROM $T")
 
-      val ext = spark.newSession()
-      ext.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+      spark.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
 
       val df2 = spark.sql(s"SELECT id AS id2 FROM $T")
 
@@ -1950,7 +1929,6 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       withExecutor() { exec =>
         val barrier = new CyclicBarrier(2)
         val errors = new ConcurrentLinkedQueue[Throwable]()
-        val ext = spark.newSession()
 
         val reader = exec.submit(new Runnable {
           override def run(): Unit = try {
@@ -1970,7 +1948,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
           override def run(): Unit = try {
             barrier.await(30, TimeUnit.SECONDS)
             for (i <- 2 to 5) {
-              try ext.sql(s"INSERT INTO $T VALUES ($i, ${i * 100})").collect()
+              try spark.sql(s"INSERT INTO $T VALUES ($i, ${i * 100})").collect()
               catch {
                 case _: Exception =>
               }
