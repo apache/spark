@@ -22,10 +22,11 @@ import java.util.{LinkedHashMap => JLinkedHashMap, Map => JMap}
 import scala.collection.mutable
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
-import org.apache.spark.memory.{MemoryConsumer, SparkOutOfMemoryError, TaskMemoryManager}
+import org.apache.spark.memory.{MemoryConsumer, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.ArrayImplicits._
@@ -256,7 +257,7 @@ private[window] class WindowSegmentTree(
       // check for clarity against any future widening of that contract.
       val n = newArray.length
       if (n < 0) {
-        throw new IllegalArgumentException(
+        throw SparkException.internalError(
           s"WindowSegmentTree cannot hold more than Int.MaxValue rows, got $n")
       }
       val nBlocks = if (n == 0) 0 else (n + blockSize - 1) / blockSize
@@ -294,7 +295,7 @@ private[window] class WindowSegmentTree(
 
   def query(lo: Int, hi: Int, outBuffer: InternalRow): Unit = {
     if (lo < 0 || hi > numRows || lo > hi) {
-      throw new IllegalArgumentException(
+      throw SparkException.internalError(
         s"Invalid range [lo=$lo, hi=$hi) for size=$numRows")
     }
     // Reset outBuffer to identity only after bounds validation.
@@ -454,12 +455,8 @@ private[window] class WindowSegmentTree(
     if (!acquireBlockMemory(blockIdx)) {
       if (!evictEldest() || !acquireBlockMemory(blockIdx)) {
         // scalastyle:off throwerror
-        throw new SparkOutOfMemoryError(
-          "UNABLE_TO_ACQUIRE_MEMORY",
-          new java.util.HashMap[String, String]() {
-            put("requestedBytes", blockBytes.toString)
-            put("receivedBytes", "0")
-          })
+        throw QueryExecutionErrors.cannotAcquireMemoryForWindowAggregateError(
+          blockBytes, 0L)
         // scalastyle:on throwerror
       }
     }
@@ -582,7 +579,7 @@ private[window] class WindowSegmentTree(
   private def newRowArray(): ExternalAppendOnlyUnsafeRowArray = {
     val taskContext = TaskContext.get()
     if (taskContext == null) {
-      throw new IllegalStateException(
+      throw SparkException.internalError(
         "WindowSegmentTree.build requires an active TaskContext")
     }
     val env = SparkEnv.get

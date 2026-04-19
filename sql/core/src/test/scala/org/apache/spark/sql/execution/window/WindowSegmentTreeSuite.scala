@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.window
 
 import scala.util.Random
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkEnv, SparkFunSuite, TaskContext}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkEnv, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, GenericInternalRow, MutableProjection, SpecificInternalRow}
@@ -411,7 +411,8 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
         val sz = tree.size
         for ((lo, hi) <- Seq((-1, 5), (0, sz + 1), (5, 3))) {
           val out = sentinelBuf()
-          intercept[IllegalArgumentException](tree.query(lo, hi, out))
+          val ex = intercept[SparkException](tree.query(lo, hi, out))
+          assert(ex.getCondition == "INTERNAL_ERROR")
           assert(!out.isNullAt(0) && out.getInt(0) == 0x5EEDED,
             s"outBuffer mutated by invalid query [$lo,$hi)")
         }
