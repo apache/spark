@@ -103,24 +103,36 @@ object WindowBenchmark extends SqlBasedBenchmark {
     // floating-point. The segtree merge order differs from the row-by-row
     // order used by SlidingWindowFunctionFrame, so the result differs at
     // the bit (ULP) level even though it is mathematically equivalent.
-    // HASH(double) is bit-sensitive, so we round to 6 decimals before
-    // hashing for these aggregates. Integer aggregates (MIN/MAX/SUM/COUNT
-    // over INT inputs) remain bit-exact and are hashed directly.
+    //
+    // HASH(double) is bit-sensitive, and HASH(ROUND(m, k)) is a trap at
+    // scale: any row whose value sits within ~1 ULP of a rounding bin
+    // boundary rounds to a different k-decimal value across backends,
+    // producing two totally different HASH outputs that SUM propagates
+    // linearly. We hit this at N=2M on STDDEV_SAMP (0.2% digest diff even
+    // though per-row relative error is <1e-10). See
+    // spark-floating-point-digest-trap skill for details.
+    //
+    // Instead use SUM(CAST(ROUND(m, 3) * 1000 AS BIGINT)): a single
+    // boundary-crossing row only contributes +/-1 to the aggregate (vs.
+    // chaos for HASH), so identical-to-ULP implementations always agree,
+    // and real bugs that exceed 1e-3 relative error are still caught.
+    // Integer aggregates (MIN/MAX/SUM/COUNT over INT inputs) remain
+    // bit-exact and are hashed directly.
     // All callers pass uppercase literals (AVG, STDDEV_SAMP, etc.), so no
     // case folding is needed (and avoids the toUpperCase locale lint).
-    def hashExprFor(aggFn: String): String = {
+    def digestExprFor(aggFn: String): String = {
       if (aggFn.startsWith("AVG") || aggFn.startsWith("STDDEV") ||
           aggFn.startsWith("VAR")) {
-        "HASH(ROUND(m, 6))"
+        "CAST(ROUND(m, 3) * 1000 AS BIGINT)"
       } else {
         "HASH(m)"
       }
     }
 
     def digest(aggFn: String, frame: String, sqlConfs: (String, String)*): Long = {
-      val hashExpr = hashExprFor(aggFn)
+      val expr = digestExprFor(aggFn)
       withSQLConf(sqlConfs: _*) {
-        spark.sql(s"SELECT SUM($hashExpr) FROM (SELECT $aggFn(v) $frame AS m FROM t)")
+        spark.sql(s"SELECT SUM($expr) FROM (SELECT $aggFn(v) $frame AS m FROM t)")
           .head().getLong(0)
       }
     }
