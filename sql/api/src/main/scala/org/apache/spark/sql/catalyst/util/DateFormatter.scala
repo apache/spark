@@ -31,6 +31,14 @@ import org.apache.spark.unsafe.types.UTF8String
 sealed trait DateFormatter extends Serializable {
   def parse(s: String): Int // returns days since epoch
 
+  def parseOptional(s: String): Option[Int] = {
+    try {
+      Some(parse(s))
+    } catch {
+      case _: Exception => None
+    }
+  }
+
   def format(days: Int): String
   def format(date: Date): String
   def format(localDate: LocalDate): String
@@ -58,6 +66,22 @@ class Iso8601DateFormatter(
       val localDate = toLocalDate(formatter.parse(s))
       localDateToDays(localDate)
     } catch checkParsedDiff(s, legacyFormatter.parse)
+  }
+
+  override def parseOptional(s: String): Option[Int] = {
+    val pp = new java.text.ParsePosition(0)
+    val parsed = formatter.parseUnresolved(s, pp)
+    // pp.getIndex == s.length ensures the entire string was consumed,
+    // not just a prefix like "2024-07-02" matching "yyyy-MM-dd" in "2024-07-02 extra"
+    if (pp.getErrorIndex == -1 && pp.getIndex == s.length) {
+      try {
+        Some(localDateToDays(toLocalDate(parsed)))
+      } catch {
+        case _: Exception => None
+      }
+    } else {
+      None
+    }
   }
 
   override def format(localDate: LocalDate): String = {

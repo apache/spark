@@ -55,6 +55,12 @@ class JsonInferSchema(private val options: JSONOptions) extends Serializable wit
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true,
     forTimestampNTZ = true)
+  private lazy val dateFormatter = DateFormatter(
+    options.dateFormatInRead,
+    options.locale,
+    FAST_DATE_FORMAT,
+    isParsing = true)
+  private val inferDate = options.dateFormatInRead.isDefined
 
   private val ignoreCorruptFiles = options.ignoreCorruptFiles
   private val ignoreMissingFiles = options.ignoreMissingFiles
@@ -192,9 +198,13 @@ class JsonInferSchema(private val options: JSONOptions) extends Serializable wit
             // this behavior now. See SPARK-46769 for more details.
             if (SparkDateTimeUtils.stringToTimestampWithoutTimeZone(utf8Value, false).isDefined) {
               TimestampType
+            } else if (inferDate && dateFormatter.parseOptional(field).isDefined) {
+              DateType
             } else {
               StringType
             }
+          } else if (inferDate && dateFormatter.parseOptional(field).isDefined) {
+            DateType
           } else {
             StringType
           }
@@ -455,6 +465,12 @@ object JsonInferSchema {
           compatibleType(t1, DecimalType.forType(t2), defaultDataType)
 
         case (TimestampNTZType, TimestampType) | (TimestampType, TimestampNTZType) =>
+          TimestampType
+
+        case (DateType, TimestampNTZType) | (TimestampNTZType, DateType) =>
+          TimestampNTZType
+
+        case (DateType, TimestampType) | (TimestampType, DateType) =>
           TimestampType
 
         case (_, _) => defaultDataType

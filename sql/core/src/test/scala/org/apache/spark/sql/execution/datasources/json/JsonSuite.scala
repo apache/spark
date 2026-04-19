@@ -2894,6 +2894,78 @@ abstract class JsonSuite
       Date.valueOf("2020-1-12")))
   }
 
+  test("SPARK-54908: dateFormat option should be used during schema inference") {
+    // Date-only strings should be inferred as DateType when dateFormat is specified
+    val ds = Seq("""{"created_at": "02JUL14", "updated_at": "02JUL14 12:17:43"}""").toDS()
+    val schema = spark.read
+      .option("dateFormat", "ddMMMyy")
+      .option("timestampFormat", "ddMMMyy HH:mm:ss")
+      .option("inferTimestamp", true)
+      .json(ds)
+      .schema
+    assert(schema("created_at").dataType === DateType)
+    assert(schema("updated_at").dataType === TimestampType)
+  }
+
+  test("SPARK-54908: timestamp takes precedence over date when both formats match") {
+    // When a string matches both timestampFormat and dateFormat, timestamp wins
+    val ds = Seq(
+      """{"v": "2024"}""",
+      """{"v": "2025"}""",
+      """{"v": "2026"}"""
+    ).toDS().repartition(3)
+    val schema = spark.read
+      .option("timestampFormat", "yyyy")
+      .option("dateFormat", "yyyy")
+      .option("inferTimestamp", true)
+      .json(ds)
+      .schema
+    assert(schema("v").dataType === TimestampType)
+  }
+
+  test("SPARK-54908: date inferred when timestamp format does not match") {
+    // timestampFormat=yyyy-MM-dd HH:mm:ss won't match "2024-07-02", but dateFormat will
+    val ds = Seq("""{"v": "2024-07-02"}""").toDS()
+    val schema = spark.read
+      .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
+      .option("dateFormat", "yyyy-MM-dd")
+      .option("inferTimestamp", true)
+      .json(ds)
+      .schema
+    assert(schema("v").dataType === DateType)
+  }
+
+  test("SPARK-54908: no date inference without explicit dateFormat") {
+    // "02/Jul/2024" looks like a date but won't match any default timestamp parser,
+    // and without dateFormat set, date inference is skipped -> StringType
+    val ds = Seq("""{"v": "02/Jul/2024"}""").toDS()
+    val schema = spark.read
+      .option("inferTimestamp", true)
+      .json(ds)
+      .schema
+    assert(schema("v").dataType === StringType)
+  }
+
+  test("SPARK-54908: type coercion merges DateType and TimestampType across rows") {
+    val ds = Seq(
+      """{"v": "2024-07-02"}""",
+      """{"v": "2024-07-02 10:30:00"}""",
+      """{"v": "2024-08-15"}""",
+      """{"v": "2024-08-15 14:00:00"}""",
+      """{"v": "2024-08-15 14:00:00"}""",
+      """{"v": "2024-08-15"}"""
+    ).toDS().repartition(4)
+    withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_LTZ") {
+      val schema = spark.read
+        .option("dateFormat", "yyyy-MM-dd")
+        .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
+        .option("inferTimestamp", true)
+        .json(ds)
+        .schema
+      assert(schema("v").dataType === TimestampType)
+    }
+  }
+
   test("exception mode for parsing date/timestamp string") {
     val ds = Seq("{'t': '2020-01-27T20:06:11.847-08000'}").toDS()
     val json = spark.read
