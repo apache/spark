@@ -776,4 +776,24 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(!ex.isInstanceOf[NullPointerException],
       s"Should not throw NPE, but got: ${ex.getClass.getName}: ${ex.getMessage}")
   }
+
+  test("SPARK-51961: roundtrip in to_avro and from_avro with union schema of record and null") {
+    val unionSchema =
+      """
+        |[{
+        |  "type": "record",
+        |  "name": "value",
+        |  "fields": [
+        |    {"name": "age", "type": ["long", "null"]},
+        |    {"name": "name", "type": ["string", "null"]}
+        |  ]
+        |}, "null"]
+      """.stripMargin
+
+    val df = spark.range(1).select(
+      struct(lit(2L).as("age"), lit("Alice").as("name")).as("value"))
+    val avroDF = df.select(to_avro($"value", unionSchema).as("avro"))
+    val result = avroDF.select(from_avro($"avro", unionSchema).as("value"))
+    checkAnswer(result, df)
+  }
 }
