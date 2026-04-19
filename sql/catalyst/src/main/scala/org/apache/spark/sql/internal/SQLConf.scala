@@ -4100,7 +4100,7 @@ object SQLConf {
     buildConf("spark.sql.window.segmentTree.enabled")
       .doc("Use block-chunked segment tree for moving aggregate window frames " +
         "whose functions are all DeclarativeAggregate without FILTER/DISTINCT.")
-      .version("4.1.0")
+      .version("4.2.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -4108,7 +4108,7 @@ object SQLConf {
     buildConf("spark.sql.window.segmentTree.minPartitionRows")
       .doc("Minimum partition row count to activate the segment-tree moving frame. " +
         "Partitions smaller than this fall back to the default sliding implementation.")
-      .version("4.1.0")
+      .version("4.2.0")
       .internal()
       .intConf
       .checkValue(_ > 0, "minPartitionRows must be > 0")
@@ -4117,7 +4117,7 @@ object SQLConf {
   val WINDOW_SEGMENT_TREE_BLOCK_SIZE =
     buildConf("spark.sql.window.segmentTree.blockSize")
       .doc("Block size for the block-chunked segment tree used by moving window frames.")
-      .version("4.1.0")
+      .version("4.2.0")
       .intConf
       .checkValue(_ >= 16, "blockSize must be >= 16")
       .createWithDefault(65536)
@@ -4125,7 +4125,7 @@ object SQLConf {
   val WINDOW_SEGMENT_TREE_FANOUT =
     buildConf("spark.sql.window.segmentTree.fanout")
       .doc("Fanout of internal nodes for the block-chunked segment tree.")
-      .version("4.1.0")
+      .version("4.2.0")
       .internal()
       .intConf
       .checkValue(_ >= 2, "fanout must be >= 2")

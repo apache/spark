@@ -291,7 +291,13 @@ trait WindowEvaluatorFactoryBase {
                 // times per task. `TaskContext.get()` is only called at
                 // task-execution time (the closure runs per row-processor
                 // construction), never at driver planning.
-                val tmm = TaskContext.get().taskMemoryManager()
+                val tc = TaskContext.get()
+                if (tc == null) {
+                  throw SparkException.internalError(
+                    "WindowEvaluatorFactoryBase.segTreeFrameFactory requires " +
+                      "an active TaskContext")
+                }
+                val tmm = tc.taskMemoryManager()
                 new SegmentTreeWindowFunctionFrame(
                   target,
                   processor,
