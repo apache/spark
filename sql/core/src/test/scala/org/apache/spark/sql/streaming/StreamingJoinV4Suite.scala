@@ -396,6 +396,70 @@ class StreamingInnerJoinV4Suite
       StopStream
     )
   }
+
+  test("SPARK-56402: prevStateWatermark must be None under legacy single-watermark propagator " +
+    "(STATEFUL_OPERATOR_ALLOW_MULTIPLE = false)") {
+    // Guards against the propagator-type bug: in legacy single-watermark mode
+    // (STATEFUL_OPERATOR_ALLOW_MULTIPLE = false), lateEvents == eviction for the
+    // same batch. If we naively thread `eventTimeWatermarkForLateEvents` as
+    // `prevStateWatermark`, the eviction scan range collapses to (wm, wm] = empty
+    // from batch 2 onward, silently skipping every eligible eviction.
+    // IncrementalExecution must fall back to None in legacy mode.
+    withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+      val input1 = MemoryStream[(Int, Int)]
+      val input2 = MemoryStream[(Int, Int)]
+
+      val df1 = input1.toDF().toDF("key", "time")
+        .select($"key", timestamp_seconds($"time") as "leftTime",
+          ($"key" * 2) as "leftValue")
+        .withWatermark("leftTime", "10 seconds")
+      val df2 = input2.toDF().toDF("key", "time")
+        .select($"key", timestamp_seconds($"time") as "rightTime",
+          ($"key" * 3) as "rightValue")
+        .withWatermark("rightTime", "10 seconds")
+
+      val joined = df1.join(df2,
+        df1("key") === df2("key") &&
+          expr("leftTime >= rightTime - interval 5 seconds " +
+            "AND leftTime <= rightTime + interval 5 seconds"),
+        "inner")
+        .select(df1("key"), $"leftTime".cast("long"), $"leftValue", $"rightValue")
+
+      def extractPrevWatermarks(q: StreamExecution): (Option[Long], Option[Long]) = {
+        val joinExec = q.lastExecution.executedPlan.collect {
+          case j: StreamingSymmetricHashJoinExec => j
+        }.head
+        val leftPrev = joinExec.stateWatermarkPredicates.left.flatMap {
+          case p: JoinStateKeyWatermarkPredicate => p.prevStateWatermark
+          case p: JoinStateValueWatermarkPredicate => p.prevStateWatermark
+        }
+        val rightPrev = joinExec.stateWatermarkPredicates.right.flatMap {
+          case p: JoinStateKeyWatermarkPredicate => p.prevStateWatermark
+          case p: JoinStateValueWatermarkPredicate => p.prevStateWatermark
+        }
+        (leftPrev, rightPrev)
+      }
+
+      testStream(joined)(
+        MultiAddData(input1, (1, 5))(input2, (1, 5)),
+        CheckNewAnswer((1, 5, 2, 3)),
+
+        // Batch 2+: even though prevOffsetSeqMetadata is now defined, legacy mode
+        // must keep prevStateWatermark = None to avoid collapsing the eviction scan
+        // range.
+        MultiAddData(input1, (2, 30))(input2, (2, 30)),
+        CheckNewAnswer((2, 30, 4, 6)),
+        Execute { q =>
+          val (leftPrev, rightPrev) = extractPrevWatermarks(q)
+          assert(leftPrev.isEmpty,
+            s"Left prevStateWatermark must be None under legacy propagator, got $leftPrev")
+          assert(rightPrev.isEmpty,
+            s"Right prevStateWatermark must be None under legacy propagator, got $rightPrev")
+        },
+        StopStream
+      )
+    }
+  }
 }
 
 @SlowSQLTest

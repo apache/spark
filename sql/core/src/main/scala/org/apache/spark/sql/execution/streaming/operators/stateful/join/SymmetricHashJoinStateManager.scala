@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, WatermarkSupport}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper._
-import org.apache.spark.sql.execution.streaming.state.{DropLastNFieldsStatePartitionKeyExtractor, KeyStateEncoderSpec, NoopStatePartitionKeyExtractor, NoPrefixKeyStateEncoderSpec, StatePartitionKeyExtractor, StateSchemaBroadcast, StateStore, StateStoreCheckpointInfo, StateStoreColFamilySchema, StateStoreConf, StateStoreErrors, StateStoreId, StateStoreMetrics, StateStoreProvider, StateStoreProviderId, SupportsFineGrainedReplay, TimestampAsPostfixKeyStateEncoderSpec, TimestampAsPrefixKeyStateEncoderSpec, TimestampKeyStateEncoder}
+import org.apache.spark.sql.execution.streaming.state.{DropLastNFieldsStatePartitionKeyExtractor, KeyStateEncoderSpec, NoopStatePartitionKeyExtractor, NoPrefixKeyStateEncoderSpec, RangeScanBoundaryUtils, StatePartitionKeyExtractor, StateSchemaBroadcast, StateStore, StateStoreCheckpointInfo, StateStoreColFamilySchema, StateStoreConf, StateStoreErrors, StateStoreId, StateStoreMetrics, StateStoreProvider, StateStoreProviderId, SupportsFineGrainedReplay, TimestampAsPostfixKeyStateEncoderSpec, TimestampAsPrefixKeyStateEncoderSpec, TimestampKeyStateEncoder}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, LongType, NullType, StructField, StructType}
 import org.apache.spark.util.NextIterator
@@ -823,17 +823,14 @@ class SymmetricHashJoinStateManagerV4(
 
     case class EvictedKeysResult(key: UnsafeRow, timestamp: Long, numValues: Int)
 
-    private def defaultInternalRow(schema: StructType): InternalRow = {
-      InternalRow.fromSeq(schema.map(f => Literal.default(f.dataType).value))
-    }
-
-    /**
-     * Reusable default key row for scan boundary construction. Safe to reuse because
-     * createKeyRow only reads this row (via BoundReference evaluations) and writes to
-     * the projection's own internal buffer.
-     */
-    private lazy val defaultKey: UnsafeRow = UnsafeProjection.create(keySchema)
-      .apply(defaultInternalRow(keySchema))
+    // Reusable default key row for scan boundary construction; see
+    // [[RangeScanBoundaryUtils]] for rationale. Safe to reuse because createKeyRow
+    // only reads this row (via BoundReference evaluations) and writes to the
+    // projection's own internal buffer. Correctness relies on real stored entries
+    // never having internally-null key fields, which is preserved by join-key
+    // expressions being evaluated via the user's expression encoder. Preserve this
+    // invariant if you change how entries are written.
+    private lazy val defaultKey: UnsafeRow = RangeScanBoundaryUtils.defaultUnsafeRow(keySchema)
 
     /**
      * Build a scan boundary row for rangeScan. The TsWithKeyTypeStore uses
