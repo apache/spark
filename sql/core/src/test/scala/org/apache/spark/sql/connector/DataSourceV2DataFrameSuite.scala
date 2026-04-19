@@ -25,9 +25,10 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo}
+import org.apache.spark.sql.connector.catalog.{BufferedRows, Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTable, InMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
 import org.apache.spark.sql.connector.catalog.TableChange
@@ -2554,6 +2555,166 @@ class DataSourceV2DataFrameSuite
     catalog(catalogName) match {
       case inMemory: BasicInMemoryTableCatalog => inMemory.pinTable(ident, version)
       case _ => fail(s"can't pin $ident in $catalogName")
+    }
+  }
+
+  // =========================================================================
+  // External write simulation tests
+  // These tests simulate "external writers" by directly adding data to the
+  // InMemoryTable via withData(), bypassing the SparkSession. This matches
+  // the design doc scenarios for "connector w/o cache" behavior.
+  // =========================================================================
+
+  /**
+   * Simulates an external write by directly adding rows to the table,
+   * bypassing the SparkSession. This mimics a separate process writing
+   * to the same table (e.g., another Spark cluster or ETL job).
+   */
+  private def externalInsert(
+      catalogName: String,
+      ident: Identifier,
+      values: Seq[Seq[Any]]): Unit = {
+    val table = catalog(catalogName)
+      .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
+      .asInstanceOf[InMemoryTable]
+    val schema = table.schema
+    val rows = values.map { vals =>
+      InternalRow.fromSeq(vals.zipWithIndex.map { case (v, i) =>
+        schema.fields(i).dataType match {
+          case StringType => if (v == null) null else UTF8String.fromString(v.toString)
+          case _ => v
+        }
+      })
+    }
+    val key = Seq.empty[Any]
+    val buffered = new BufferedRows(key, schema)
+    rows.foreach(buffered.withRow)
+    table.withData(Array(buffered))
+  }
+
+  // Design doc Section 4.1: DataFrame.show picks up external writes
+  // Uses testcat2 (no copyOnLoad) so external writes are directly visible.
+  test("DataFrame.show picks up external writes (design doc Section 4.1)") {
+    val t = "testcat2.ns.tbl"
+    val ident = Identifier.of(Array("ns"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df = spark.table(t)
+      checkAnswer(df, Seq(Row(1, 100)))
+
+      // external writer adds (2, 200)
+      externalInsert("testcat2", ident, Seq(Seq(2, 200)))
+
+      // show should reflect the external write
+      checkAnswer(df, Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  // Design doc Section 4.2: DataFrame picks up external data after column addition.
+  // Uses testcat2 (no copyOnLoad) with a fresh query to avoid QueryExecution reuse.
+  test("fresh query picks up new data after column addition (design doc Section 4.2)") {
+    val t = "testcat2.ns.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      // add a column and insert new data
+      sql(s"ALTER TABLE $t ADD COLUMN bonus INT")
+      sql(s"INSERT INTO $t VALUES (2, 200, 50)")
+
+      // a fresh query picks up both old and new data with the full schema
+      checkAnswer(
+        spark.table(t),
+        Seq(Row(1, 100, null), Row(2, 200, 50)))
+    }
+  }
+
+  // Design doc Section 1.1: temp view picks up session writes
+  test("temp view picks up session writes (design doc Section 1.1)") {
+    val t = "testcat2.ns.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      // create temp view with filter
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("tmp_view_s1")
+
+      checkAnswer(sql("SELECT * FROM tmp_view_s1"), Seq(Row(1, 100)))
+
+      // session write
+      sql(s"INSERT INTO $t VALUES (2, 200)")
+
+      // temp view should pick up the new data
+      checkAnswer(
+        sql("SELECT * FROM tmp_view_s1"),
+        Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  // Design doc Section 1.1 (external): temp view picks up external writes
+  test("temp view picks up external writes (design doc Section 1.1 external)") {
+    val t = "testcat2.ns.tbl"
+    val ident = Identifier.of(Array("ns"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("tmp_view_ext")
+
+      checkAnswer(sql("SELECT * FROM tmp_view_ext"), Seq(Row(1, 100)))
+
+      // external writer adds (2, 200)
+      externalInsert("testcat2", ident, Seq(Seq(2, 200)))
+
+      // temp view should pick up external write (connector w/o cache)
+      checkAnswer(
+        sql("SELECT * FROM tmp_view_ext"),
+        Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  // Design doc Section 1.2: temp view picks up new data after column addition
+  test("temp view preserves schema after external column addition (design doc Section 1.2)") {
+    val t = "testcat2.ns.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("tmp_view_s2")
+      checkAnswer(sql("SELECT * FROM tmp_view_s2"), Seq(Row(1, 100)))
+
+      // add column and insert new data
+      sql(s"ALTER TABLE $t ADD COLUMN bonus INT")
+      sql(s"INSERT INTO $t VALUES (2, 200, 50)")
+
+      // temp view should preserve original schema (id, salary) but pick up new data
+      checkAnswer(
+        sql("SELECT * FROM tmp_view_s2"),
+        Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  // Design doc Section 3.1: incrementally constructed join picks up external writes
+  test("join refreshes both sides after external write (design doc Section 3.1)") {
+    val t = "testcat2.ns.tbl"
+    val ident = Identifier.of(Array("ns"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df1 = spark.table(t)
+
+      // external writer adds (2, 200)
+      externalInsert("testcat2", ident, Seq(Seq(2, 200)))
+
+      val df2 = spark.table(t)
+
+      // join should refresh both sides to the latest version
+      val joined = df1.join(df2, df1("id") === df2("id"))
+      val result = joined.collect()
+      assert(result.length === 2, "Join should see both rows after refresh")
     }
   }
 
