@@ -24,7 +24,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TTLEncoder
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.TWSMetricsUtils
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, RangeKeyScanStateEncoderSpec, StateStore}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, RangeKeyScanStateEncoderSpec, RangeScanBoundaryUtils, StateStore}
 import org.apache.spark.sql.streaming.TTLConfig
 import org.apache.spark.sql.types._
 
@@ -112,6 +112,14 @@ trait TTLState {
 
   private final val ELEMENT_KEY_PROJECTION = UnsafeProjection.create(elementKeySchema)
 
+  // Placeholder element-key row used in range-scan boundary rows; see
+  // [[RangeScanBoundaryUtils]] for rationale. Correctness relies on real stored
+  // entries never having internally-null element keys, which is preserved by
+  // insertIntoTTLIndex going through the user's expression encoder. Preserve this
+  // invariant if you change how entries are written.
+  private final val DEFAULT_ELEMENT_KEY: UnsafeRow =
+    RangeScanBoundaryUtils.defaultUnsafeRow(elementKeySchema)
+
   // Empty row used for values
   private final val TTL_EMPTY_VALUE_ROW =
     UnsafeProjection.create(Array[DataType](NullType)).apply(InternalRow.apply(null))
@@ -171,17 +179,15 @@ trait TTLState {
   //
   // The schema of the UnsafeRow returned by this iterator is (expirationMs, elementKey).
   private[sql] def ttlEvictionIterator(): Iterator[UnsafeRow] = {
-    val dummyElementKey = ELEMENT_KEY_PROJECTION
-      .apply(new GenericInternalRow(elementKeySchema.length))
     val startKey = prevBatchTimestampMs.flatMap { prevTs =>
       if (prevTs < Long.MaxValue) {
-        Some(TTL_ENCODER.encodeTTLRow(prevTs + 1, dummyElementKey).copy())
+        Some(TTL_ENCODER.encodeTTLRow(prevTs + 1, DEFAULT_ELEMENT_KEY).copy())
       } else {
         None
       }
     }
     val endKey = if (batchTimestampMs < Long.MaxValue) {
-      Some(TTL_ENCODER.encodeTTLRow(batchTimestampMs + 1, dummyElementKey).copy())
+      Some(TTL_ENCODER.encodeTTLRow(batchTimestampMs + 1, DEFAULT_ELEMENT_KEY).copy())
     } else {
       None
     }

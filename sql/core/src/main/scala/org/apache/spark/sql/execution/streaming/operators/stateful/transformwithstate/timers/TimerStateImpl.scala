@@ -114,6 +114,14 @@ class TimerStateImpl(
 
   private val secIndexProjection = UnsafeProjection.create(keySchemaForSecIndex)
 
+  // Placeholder grouping-key struct used in range-scan boundary rows; see
+  // [[RangeScanBoundaryUtils]] for rationale. Correctness relies on real stored
+  // entries never having a null grouping-key struct, which is preserved by
+  // registerTimer going through the user's expression encoder. Preserve this
+  // invariant if you change how entries are written.
+  private val defaultGroupingKey: InternalRow = RangeScanBoundaryUtils.defaultInternalRow(
+    keySchemaForSecIndex(1).dataType.asInstanceOf[StructType])
+
   /**
    * Encodes a timestamp into an UnsafeRow key for the secondary index.
    * The timestamp is incremented by 1 so that the encoded key serves as an exclusive
@@ -127,6 +135,7 @@ class TimerStateImpl(
     if (tsMs < Long.MaxValue) {
       val row = new GenericInternalRow(keySchemaForSecIndex.length)
       row.setLong(0, tsMs + 1)
+      row.update(1, defaultGroupingKey)
       Some(secIndexProjection.apply(row).copy())
     } else {
       None

@@ -1287,6 +1287,44 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
     )
   }
 
+  test("SPARK-56400: transformWithState - event time timers fire under legacy single-watermark " +
+    "propagator (STATEFUL_OPERATOR_ALLOW_MULTIPLE = false)") {
+    // Guards against the propagator-type bug in processTimers. In legacy single-watermark
+    // mode, UseSingleWatermarkPropagator returns the *current* batch's watermark for both
+    // getInputWatermarkForLateEvents and getInputWatermarkForEviction. If the optimization
+    // naively uses `eventTimeWatermarkForLateEvents` as the `prevWatermark` lower bound,
+    // the scan range collapses to (wm, wm] = empty from batch 2 onward, so timers silently
+    // never fire. The fix gates the use of that watermark on
+    // STATEFUL_OPERATOR_ALLOW_MULTIPLE = true, falling back to None (full scan) otherwise.
+    withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+      val inputData = MemoryStream[(String, Int)]
+      val result =
+        inputData.toDS()
+          .select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
+          .withWatermark("eventTime", "10 seconds")
+          .as[(String, Long)]
+          .groupByKey(_._1)
+          .transformWithState(
+            new MaxEventTimeStatefulProcessor(),
+            TimeMode.EventTime(),
+            OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        StartStream(),
+
+        AddData(inputData, ("a", 11), ("a", 13), ("a", 15)),
+        // Max event time = 15. Timeout timestamp for "a" = 15 + 5 = 20. Watermark = 15 - 10 = 5.
+        CheckNewAnswer(("a", 15)),
+
+        AddData(inputData, ("b", 31)),
+        // Watermark = 31 - 10 = 21 > 20, so "a"'s timer must fire and emit -1. This is
+        // the assertion that catches the propagator-type bug: without the fix, the timer
+        // would never fire under legacy mode.
+        CheckNewAnswer(("a", -1), ("b", 31))
+      )
+    }
+  }
+
   test("transformWithState - timer duration should be reflected in metrics") {
     val clock = new StreamManualClock
     val inputData = MemoryStream[String]
