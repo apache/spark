@@ -165,7 +165,7 @@
   loop:
     - digest
     - knitr
-    - devtools
+    - remotes
     - plyr
     - roxygen2
     - rmarkdown
@@ -179,5 +179,5 @@
   register: r_check
 
 - name: install lintr v2.0.0
-  command: /usr/bin/Rscript --no-echo --no-save --no-restore-history -e "devtools::install_github('jimhester/lintr@v2.0.0')"
+  command: /usr/bin/Rscript --no-echo --no-save --no-restore-history -e "remotes::install_github('jimhester/lintr@v2.0.0')"
   when: "'lintr' not in r_check.stdout"

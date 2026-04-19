@@ -137,6 +137,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
+      max-parallel: 20
       matrix:
         java:
           - ${{ inputs.java }}
@@ -282,13 +283,13 @@ jobs:
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-results-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: failure()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/unit-tests.log"
@@ -351,6 +352,7 @@ jobs:
       image: ${{ needs.precondition.outputs.image_url }}
     strategy:
       fail-fast: false
+      max-parallel: 20
       matrix:
         java:
           - ${{ inputs.java }}
@@ -385,6 +387,7 @@ jobs:
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
+      NOLINT_ON_COMPILE: true
       SKIP_UNIDOC: true
       SKIP_MIMA: true
       SKIP_PACKAGING: true
@@ -462,13 +465,13 @@ jobs:
         name: PySpark
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-results-${{ matrix.modules }}--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: failure()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: unit-tests-log-${{ matrix.modules }}--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
@@ -542,7 +545,7 @@ jobs:
         ./dev/run-tests --parallelism 1 --modules sparkr
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-results-sparkr--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
@@ -686,8 +689,8 @@ jobs:
         apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev \
           libfontconfig1-dev libharfbuzz-dev libfribidi-dev libfreetype6-dev libpng-dev \
           libtiff5-dev libjpeg-dev
-        Rscript -e "install.packages(c('devtools'), repos='https://cloud.r-project.org/')"
-        Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
+        Rscript -e "install.packages(c('remotes'), repos='https://cloud.r-project.org/')"
+        Rscript -e "remotes::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
         ./R/install-dev.sh
     - name: Install dependencies for documentation generation
       run: |
@@ -705,9 +708,9 @@ jobs:
         python3.9 -m pip install 'docutils<0.18.0' # See SPARK-39421
         apt-get update -y
         apt-get install -y ruby ruby-dev
-        Rscript -e "install.packages(c('devtools', 'testthat', 'knitr', 'rmarkdown', 'markdown', 'e1071', 'roxygen2', 'ggplot2', 'mvtnorm', 'statmod'), repos='https://cloud.r-project.org/')"
-        Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
-        Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
+        Rscript -e "install.packages(c('remotes', 'testthat', 'knitr', 'rmarkdown', 'markdown', 'e1071', 'roxygen2', 'ggplot2', 'mvtnorm', 'statmod'), repos='https://cloud.r-project.org/')"
+        Rscript -e "remotes::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
+        Rscript -e "remotes::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
         gem install bundler -v 2.4.22
         cd docs
         bundle install
@@ -730,6 +733,7 @@ jobs:
     name: Java ${{ matrix.java }} build with Maven
     strategy:
       fail-fast: false
+      max-parallel: 20
       matrix:
         java:
           - 11
@@ -831,8 +835,7 @@ jobs:
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).tpcds-1g == 'true'
     name: Run TPC-DS queries with SF=1
-    # Pin to 'Ubuntu 20.04' due to 'databricks/tpcds-kit' compilation
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     env:
       SPARK_LOCAL_IP: localhost
     steps:
@@ -882,7 +885,7 @@ jobs:
       uses: actions/checkout@v3
       with:
         repository: databricks/tpcds-kit
-        ref: 2a5078a782192ddb6efbcead8de9973d6ab4f069
+        ref: 1b7fb7529edae091684201fab142d956d6afd881
         path: ./tpcds-kit
     - name: Build tpcds-kit
       if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
@@ -915,13 +918,13 @@ jobs:
           spark.sql.join.forceApplyShuffledHashJoin=true
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-results-tpcds--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: failure()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: unit-tests-log-tpcds--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
@@ -981,13 +984,13 @@ jobs:
         ./dev/run-tests --parallelism 1 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-results-docker-integration--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: failure()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: unit-tests-log-docker-integration--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
@@ -1029,6 +1032,11 @@ jobs:
           key: k8s-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
           restore-keys: |
             k8s-integration-coursier-
+      - name: Free up disk space
+        run: |
+          if [ -f ./dev/free_disk_space ]; then
+            ./dev/free_disk_space
+          fi
       - name: Install Java ${{ inputs.java }}
         uses: actions/setup-java@v3
         with:
@@ -1058,7 +1066,7 @@ jobs:
           build/sbt -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
       - name: Upload Spark on K8S integration tests log files
         if: failure()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: spark-on-kubernetes-it-log
           path: "**/target/integration-tests.log"

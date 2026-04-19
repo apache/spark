@@ -623,6 +623,7 @@ object functions {
    * @group agg_funcs
    * @since 2.0.0
    */
+  @scala.annotation.varargs
   def grouping_id(cols: Column*): Column = Column(GroupingID(cols.map(_.expr)))
 
   /**
@@ -637,6 +638,7 @@ object functions {
    * @group agg_funcs
    * @since 2.0.0
    */
+  @scala.annotation.varargs
   def grouping_id(colName: String, colNames: String*): Column = {
     grouping_id((Seq(colName) ++ colNames).map(n => Column(n)) : _*)
   }
@@ -1676,6 +1678,7 @@ object functions {
    * @group normal_funcs
    * @since 3.5.0
    */
+  @scala.annotation.varargs
   def named_struct(cols: Column*): Column = withExpr { CreateNamedStruct(cols.map(_.expr)) }
 
   /**
@@ -3661,6 +3664,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
+  @scala.annotation.varargs
   def reflect(cols: Column*): Column = withExpr {
     CallMethodViaReflection(cols.map(_.expr))
   }
@@ -3671,6 +3675,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
+  @scala.annotation.varargs
   def java_method(cols: Column*): Column =
     call_function("java_method", cols: _*)
 
@@ -3702,6 +3707,7 @@ object functions {
    * @group misc_funcs
    * @since 3.5.0
    */
+  @scala.annotation.varargs
   def stack(cols: Column*): Column = withExpr {
     Stack(cols.map(_.expr))
   }
@@ -4547,6 +4553,7 @@ object functions {
    * @group string_funcs
    * @since 3.5.0
    */
+  @scala.annotation.varargs
   def printf(format: Column, arguments: Column*): Column =
     call_function("printf", (format +: arguments): _*)
 

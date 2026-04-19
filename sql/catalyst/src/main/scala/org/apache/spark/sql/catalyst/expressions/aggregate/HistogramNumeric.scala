@@ -139,7 +139,10 @@ case class HistogramNumeric(
     // Ignore empty rows, for example: histogram_numeric(null)
     if (value != null) {
       // Convert the value to a double value
-      val doubleValue = value.asInstanceOf[Number].doubleValue
+      val doubleValue = value match {
+        case d: Decimal => d.toDouble
+        case o => o.asInstanceOf[Number].doubleValue()
+      }
       buffer.add(doubleValue)
     }
     buffer
@@ -174,6 +177,11 @@ case class HistogramNumeric(
             case ShortType => coord.x.toShort
             case _: DayTimeIntervalType | LongType | TimestampType | TimestampNTZType | TimeType =>
               coord.x.toLong
+            case d: DecimalType =>
+              val bigDecimal = BigDecimal
+                .decimal(coord.x, new java.math.MathContext(d.precision))
+                .setScale(d.scale, BigDecimal.RoundingMode.HALF_UP)
+              Decimal(bigDecimal)
             case _ => coord.x
           }
           InternalRow.apply(result, coord.y)

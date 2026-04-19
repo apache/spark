@@ -54,7 +54,13 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
         .map(_.toAttribute)
     ))
 
-    upperHasNoDuplicateSensitiveAgg && upperRefsOnlyDeterministicNonAgg
+    // If the lower aggregation is global, it is not redundant because a project with
+    // non-aggregate expressions is different with global aggregation in semantics.
+    // E.g., if the input relation is empty, a project might be optimized to an empty
+    // relation, while a global aggregation will return a single row.
+    lazy val lowerIsGlobalAgg = lower.groupingExpressions.isEmpty
+
+    upperHasNoDuplicateSensitiveAgg && upperRefsOnlyDeterministicNonAgg && !lowerIsGlobalAgg
   }
 
   private def isDuplicateSensitive(ae: AggregateExpression): Boolean = {

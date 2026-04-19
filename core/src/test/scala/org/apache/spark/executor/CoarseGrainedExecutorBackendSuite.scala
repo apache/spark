@@ -339,6 +339,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       backend.self.send(LaunchTask(new SerializableBuffer(serializedTaskDescription)))
       eventually(timeout(10.seconds)) {
         assert(backend.taskResources.size == 1)
+        assert(runningTasks.size == 1)
         val resources = backend.taskResources.get(taskId)
         assert(resources(GPU).addresses sameElements Array("0", "1"))
       }

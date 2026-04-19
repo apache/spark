@@ -32,7 +32,7 @@ RUN \
   rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/*
 
 COPY R ${SPARK_HOME}/R
-ENV R_HOME /usr/lib/R
+ENV R_HOME=/usr/lib/R
 
 WORKDIR /opt/spark/work-dir
 ENTRYPOINT [ "/opt/entrypoint.sh" ]

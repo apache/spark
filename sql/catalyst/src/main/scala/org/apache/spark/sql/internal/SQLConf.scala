@@ -3496,11 +3496,12 @@ object SQLConf {
       .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
 
   val PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN =
-    buildConf("spark.databricks.sql.optimizer.pruneFiltersCanPruneStreamingSubplan")
+    buildConf("spark.sql.optimizer.pruneFiltersCanPruneStreamingSubplan")
       .internal()
       .doc("Allow PruneFilters to remove streaming subplans when we encounter a false filter. " +
         "This flag is to restore prior buggy behavior for broken pipelines.")
       .version("4.0.0")
+      .withAlternative("spark.databricks.sql.optimizer.pruneFiltersCanPruneStreamingSubplan")
       .booleanConf
       .createWithDefault(false)
 
@@ -4496,7 +4497,7 @@ object SQLConf {
       .internal()
       .doc("When true, exclude the references from the subquery expressions (in, exists, etc.) " +
         s"while removing redundant aliases.")
-      .version("4.0.0")
+      .version("3.5.1")
       .booleanConf
       .createWithDefault(true)
 
@@ -4522,22 +4523,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val COMBINE_JOINED_AGGREGATES_ENABLED =
-    buildConf("spark.sql.ibm.optimizer.combineJoinedAggregates.enabled")
-      .doc("When true, we attempt to eliminate join by combine aggregates " +
-        "to reduce the scan times and avoid shuffle.")
-      .version("3.4.2")
+  val LEGACY_DF_WRITER_V2_IGNORE_PATH_OPTION =
+    buildConf("spark.sql.legacy.dataFrameWriterV2IgnorePathOption")
+      .internal()
+      .doc("When set to true, DataFrameWriterV2 ignores the 'path' option and always write data " +
+        "to the default table location.")
+      .version("3.5.6")
       .booleanConf
-      .createWithDefault(true)
-
-  val MAX_TREE_NODE_NUM_OF_PREDICATE =
-    buildConf("spark.sql.ibm.optimizer.combineJoinedAggregates.maxTreeNodeNumOfPredicate")
-      .doc("Maximum tree node number of predicate. If tree node number of predicate exceeds the" +
-        "limit, CombineJoinedAggregates will not merging the aggregates connected with join.")
-      .version("3.4.2")
-      .intConf
-      .checkValue(_ > 0, "The threshold of tree node numbers should be positive")
-      .createWithDefault(10)
+      .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -4596,7 +4589,9 @@ object SQLConf {
       DeprecatedConfig(LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED.key, "3.2",
         """Use `.format("avro")` in `DataFrameWriter` or `DataFrameReader` instead."""),
       DeprecatedConfig(COALESCE_PARTITIONS_MIN_PARTITION_NUM.key, "3.2",
-        s"Use '${COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key}' instead.")
+        s"Use '${COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key}' instead."),
+      DeprecatedConfig(PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.alternatives.head, "3.5.5",
+        s"Use '${PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key}' instead.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)

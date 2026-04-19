@@ -525,9 +525,13 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
     // The following 3 scenarios are only for the method: createDirectory(File)
     // 6. Symbolic link
+    lazy val javaVersion = System.getProperty("java.version").split("[+.\\-]+", 3)
     val scenario6 = java.nio.file.Files.createSymbolicLink(new File(testDir, "scenario6")
       .toPath, scenario1.toPath).toFile
     if (Utils.isJavaVersionAtLeast21) {
+      assert(Utils.createDirectory(scenario6))
+    } else if (javaVersion(0).equals("17") && javaVersion(2).toInt >= 14) {
+      // SPARK-50946: Java 17.0.14 includes JDK-8294193, so scenario6 can succeed.
       assert(Utils.createDirectory(scenario6))
     } else {
       assert(!Utils.createDirectory(scenario6))
@@ -962,9 +966,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
   test("Set Spark CallerContext") {
     val context = "test"
     new CallerContext(context).setCurrentContext()
-    if (CallerContext.callerContextEnabled) {
-      assert(s"SPARK_$context" === HadoopCallerContext.getCurrent.toString)
-    }
+    assert(s"SPARK_$context" === HadoopCallerContext.getCurrent.toString)
   }
 
   test("encodeFileNameToURIRawPath") {

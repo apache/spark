@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.ScalarSubquery._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.optimizer.RewriteCorrelatedScalarSubquery.splitSubquery
+import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -100,6 +101,25 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  def exprsContainsAggregateInSubquery(exprs: Seq[Expression]): Boolean = {
+    exprs.exists { expr =>
+      exprContainsAggregateInSubquery(expr)
+    }
+  }
+
+  def exprContainsAggregateInSubquery(expr: Expression): Boolean = {
+    expr.exists {
+      case InSubquery(values, _) =>
+        values.exists { v =>
+          v.exists {
+            case _: AggregateExpression => true
+            case _ => false
+          }
+        }
+      case _ => false;
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(EXISTS_SUBQUERY, LIST_SUBQUERY)) {
     case Filter(condition, child)
@@ -162,15 +182,75 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           Project(p.output, Filter(newCond.get, inputPlan))
       }
 
+    // Handle the case where the left-hand side of an IN-subquery contains an aggregate.
+    //
+    // If an Aggregate node contains such an IN-subquery, this handler will pull up all
+    // expressions from the Aggregate node into a new Project node. The new Project node
+    // will then be handled by the Unary node handler.
+    //
+    // The Unary node handler uses the left-hand side of the IN-subquery in a
+    // join condition. Thus, without this pre-transformation, the join condition
+    // contains an aggregate, which is illegal. With this pre-transformation, the
+    // join condition contains an attribute from the left-hand side of the
+    // IN-subquery contained in the Project node.
+    //
+    // For example:
+    //
+    //   SELECT SUM(col2) IN (SELECT c3 FROM v1) AND SUM(col3) > -1 AS x
+    //   FROM v2;
+    //
+    // The above query has this plan on entry to RewritePredicateSubquery#apply:
+    //
+    //   Aggregate [(sum(col2#18) IN (list#12 []) AND (sum(col3#19) > -1)) AS x#13]
+    //   :  +- LocalRelation [c3#28L]
+    //   +- LocalRelation [col2#18, col3#19]
+    //
+    // Note that the Aggregate node contains the IN-subquery and the left-hand
+    // side of the IN-subquery is an aggregate expression sum(col2#18)).
+    //
+    // This handler transforms the above plan into the following:
+    // scalastyle:off line.size.limit
+    //
+    //   Project [(_aggregateexpression#20L IN (list#12 []) AND (_aggregateexpression#21L > -1)) AS x#13]
+    //   :  +- LocalRelation [c3#28L]
+    //   +- Aggregate [sum(col2#18) AS _aggregateexpression#20L, sum(col3#19) AS _aggregateexpression#21L]
+    //      +- LocalRelation [col2#18, col3#19]
+    //
+    // scalastyle:on
+    // Note that both the IN-subquery and the greater-than expressions have been
+    // pulled up into the Project node. These expressions use attributes
+    // (_aggregateexpression#20L and _aggregateexpression#21L) to refer to the aggregations
+    // which are still performed in the Aggregate node (sum(col2#18) and sum(col3#19)).
+    case p @ PhysicalAggregation(
+        groupingExpressions, aggregateExpressions, resultExpressions, child)
+        if exprsContainsAggregateInSubquery(p.expressions) =>
+      val aggExprs = aggregateExpressions.map(
+        ae => Alias(ae, "_aggregateexpression")(ae.resultId))
+      val aggExprIds = aggExprs.map(_.exprId).toSet
+      val resExprs = resultExpressions.map(_.transform {
+        case a: AttributeReference if aggExprIds.contains(a.exprId) =>
+          a.withName("_aggregateexpression")
+      }.asInstanceOf[NamedExpression])
+      // Rewrite the projection and the aggregate separately and then piece them together.
+      val newAgg = Aggregate(groupingExpressions, groupingExpressions ++ aggExprs, child)
+      val newProj = Project(resExprs, newAgg)
+      handleUnaryNode(newProj)
+
     case u: UnaryNode if u.expressions.exists(
-        SubqueryExpression.hasInOrCorrelatedExistsSubquery) =>
-      var newChild = u.child
-      u.mapExpressions(expr => {
-        val (newExpr, p) = rewriteExistentialExpr(Seq(expr), newChild)
-        newChild = p
-        // The newExpr can not be None
-        newExpr.get
-      }).withNewChildren(Seq(newChild))
+        SubqueryExpression.hasInOrCorrelatedExistsSubquery) => handleUnaryNode(u)
+  }
+
+  /**
+   * Handle the unary node case
+   */
+  private def handleUnaryNode(u: UnaryNode): LogicalPlan = {
+    var newChild = u.child
+    u.mapExpressions(expr => {
+      val (newExpr, p) = rewriteExistentialExpr(Seq(expr), newChild)
+      newChild = p
+      // The newExpr can not be None
+      newExpr.get
+    }).withNewChildren(Seq(newChild))
   }
 
   /**

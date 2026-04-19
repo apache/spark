@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.{classTag, ClassTag}
 
 import com.fasterxml.jackson.annotation.JsonInclude
+import com.fasterxml.jackson.core.StreamReadConstraints
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.fusesource.leveldbjni.internal.NativeDB
 import org.rocksdb.RocksDBException
@@ -75,6 +76,10 @@ private[spark] object KVUtils extends Logging {
     mapper.registerModule(DefaultScalaModule)
     mapper.setSerializationInclusion(JsonInclude.Include.NON_ABSENT)
 
+    // SPARK-49872: Remove jackson JSON string length limitation.
+    mapper.getFactory.setStreamReadConstraints(
+      StreamReadConstraints.builder().maxStringLength(Int.MaxValue).build()
+    )
   }
 
   /**
@@ -207,6 +212,20 @@ private[spark] object KVUtils extends Logging {
   def mapToSeq[T, B](view: KVStoreView[T])(mapFunc: T => B): Seq[B] = {
     Utils.tryWithResource(view.closeableIterator()) { iter =>
       iter.asScala.map(mapFunc).toList
+    }
+  }
+
+  /**
+   * Maps all values of KVStoreView to new values using a transformation function
+   * and filtered by a filter function.
+   */
+  def mapToSeqWithFilter[T, B](
+      view: KVStoreView[T],
+      max: Int)
+      (mapFunc: T => B)
+      (filterFunc: B => Boolean): Seq[B] = {
+    Utils.tryWithResource(view.closeableIterator()) { iter =>
+      iter.asScala.map(mapFunc).filter(filterFunc).take(max).toList
     }
   }
 

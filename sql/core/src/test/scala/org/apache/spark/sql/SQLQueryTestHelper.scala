@@ -48,6 +48,9 @@ trait SQLQueryTestHelper extends Logging {
       .replaceAll(s"file:[^\\s,]*$clsName", s"file:$notIncludedMsg/{warehouse_dir}")
       .replaceAll("Created By.*", s"Created By $notIncludedMsg")
       .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
+      .replaceAll(s"transient_lastDdlTime=\\d+", s"transient_lastDdlTime=$notIncludedMsg")
+      .replaceAll(s""""transient_lastDdlTime":"\\d+"""",
+        s""""transient_lastDdlTime $notIncludedMsg":"None"""")
       .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
       .replaceAll("Owner\t.*", s"Owner\t$notIncludedMsg")
       .replaceAll("Partition Statistics\t\\d+", s"Partition Statistics\t$notIncludedMsg")

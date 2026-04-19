@@ -48,6 +48,7 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil.SOURCE_SPARK
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchDatabaseException, NoSuchPartitionException, NoSuchPartitionsException, NoSuchTableException, PartitionsAlreadyExistException}
@@ -843,8 +844,10 @@ private[hive] class HiveClientImpl(
 
   /**
    * Runs the specified SQL query using Hive.
+   * This should be used only in testing environment.
    */
   override def runSqlHive(sql: String): Seq[String] = {
+    assert(Utils.isTesting, s"${IS_TESTING.key} is not set to true")
     val maxResults = 100000
     val results = runHive(sql, maxResults)
     // It is very confusing when you only get back some of the results...

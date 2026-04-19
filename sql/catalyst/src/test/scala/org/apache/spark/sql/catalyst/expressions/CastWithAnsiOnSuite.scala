@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
 import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -37,6 +38,33 @@ import org.apache.spark.unsafe.types.UTF8String
 class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
 
   override def evalMode: EvalMode.Value = EvalMode.ANSI
+
+  protected def checkInvalidCastFromNumericTypeToBinaryType(): Unit = {
+    def checkNumericTypeCast(
+        testValue: Any,
+        srcType: DataType,
+        to: DataType,
+        expectedErrorClass: String,
+        extraParams: Map[String, String] = Map.empty): Unit = {
+      val expectedError = createCastMismatch(srcType, to, expectedErrorClass, extraParams)
+      assert(cast(testValue, to).checkInputDataTypes() == expectedError)
+    }
+
+    // Integer types: suggest config change
+    val configParams = Map(
+      "config" -> toSQLConf(SQLConf.ANSI_ENABLED.key),
+      "configVal" -> toSQLValue("false", StringType)
+    )
+    checkNumericTypeCast(1.toByte, ByteType, BinaryType, "CAST_WITH_CONF_SUGGESTION", configParams)
+    checkNumericTypeCast(
+      1.toShort, ShortType, BinaryType, "CAST_WITH_CONF_SUGGESTION", configParams)
+    checkNumericTypeCast(1, IntegerType, BinaryType, "CAST_WITH_CONF_SUGGESTION", configParams)
+    checkNumericTypeCast(1L, LongType, BinaryType, "CAST_WITH_CONF_SUGGESTION", configParams)
+
+    // Floating types: no suggestion
+    checkNumericTypeCast(1.0.toFloat, FloatType, BinaryType, "CAST_WITHOUT_SUGGESTION")
+    checkNumericTypeCast(1.0, DoubleType, BinaryType, "CAST_WITHOUT_SUGGESTION")
+  }
 
   private def isTryCast = evalMode == EvalMode.TRY
 
@@ -141,7 +169,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
 
   test("ANSI mode: disallow type conversions between Numeric types and Date type") {
     import DataTypeTestUtils.numericTypes
-    checkInvalidCastFromNumericType(DateType)
+    checkInvalidCastFromNumericTypeToDateType()
     verifyCastFailure(
       cast(Literal(0L), DateType),
       DataTypeMismatch(
@@ -167,7 +195,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
 
   test("ANSI mode: disallow type conversions between Numeric types and Binary type") {
     import DataTypeTestUtils.numericTypes
-    checkInvalidCastFromNumericType(BinaryType)
+    checkInvalidCastFromNumericTypeToBinaryType()
     val binaryLiteral = Literal(new Array[Byte](1.toByte), BinaryType)
     numericTypes.foreach { numericType =>
       assert(cast(binaryLiteral, numericType).checkInputDataTypes() ==

@@ -2142,7 +2142,8 @@ private[spark] object Utils
   def getHeapHistogram(): Array[String] = {
     // From Java 9+, we can use 'ProcessHandle.current().pid()'
     val pid = getProcessName().split("@").head
-    val jmap = System.getProperty("java.home") + "/bin/jmap"
+    val jmap = Option(System.getenv("JAVA_HOME"))
+      .getOrElse(System.getProperty("java.home")) + "/bin/jmap"
     val builder = new ProcessBuilder(jmap, "-histo:live", pid)
     val p = builder.start()
     val rows = ArrayBuffer.empty[String]
@@ -2304,7 +2305,7 @@ private[spark] object Utils
       case e: MultiException =>
         e.getThrowables.asScala.exists(isBindCollision)
       case e: NativeIoException =>
-        (e.getMessage != null && e.getMessage.startsWith("bind() failed: ")) ||
+        (e.getMessage != null && e.getMessage.matches("bind.*failed.*")) ||
           isBindCollision(e.getCause)
       case e: Exception => isBindCollision(e.getCause)
       case _ => false

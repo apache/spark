@@ -410,7 +410,8 @@ object SparkBuild extends PomBuild {
   /* Enable shared settings on all projects */
   (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ copyJarsProjects ++ Seq(spark, tools))
     .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
-      ExcludedDependencies.settings ++ Checkstyle.settings))
+      ExcludedDependencies.settings ++
+      (if (sys.env.contains("NOLINT_ON_COMPILE")) Nil else Checkstyle.settings)))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
@@ -1046,7 +1047,7 @@ object KubernetesIntegrationTests {
         val rDockerFile = sys.props.getOrElse("spark.kubernetes.test.rDockerFile",
             s"$bindingsDir/R/Dockerfile")
         val extraOptions = if (javaImageTag.isDefined) {
-          Seq("-b", s"java_image_tag=$javaImageTag")
+          Seq("-b", s"java_image_tag=${javaImageTag.get}")
         } else {
           Seq("-f", s"$dockerFile")
         }
@@ -1103,7 +1104,8 @@ object DependencyOverrides {
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
     dependencyOverrides += "xerces" % "xercesImpl" % "2.12.2",
     dependencyOverrides += "jline" % "jline" % "2.14.6",
-    dependencyOverrides += "org.apache.avro" % "avro" % "1.11.2")
+    dependencyOverrides += "org.apache.avro" % "avro" % "1.11.5",
+    dependencyOverrides += "org.apache.commons" % "commons-compress" % "1.23.0")
 }
 
 /**
@@ -1487,7 +1489,7 @@ object Unidoc {
     ) ++ (
       // Add links to sources when generating Scaladoc for a non-snapshot release
       if (!isSnapshot.value) {
-        Opts.doc.sourceUrl(unidocSourceBase.value + "€{FILE_PATH}.scala")
+        Opts.doc.sourceUrl(unidocSourceBase.value + "€{FILE_PATH_EXT}")
       } else {
         Seq()
       }
@@ -1599,6 +1601,7 @@ object TestSettings {
     (Test / javaOptions) += "-Dspark.ui.enabled=false",
     (Test / javaOptions) += "-Dspark.ui.showConsoleProgress=false",
     (Test / javaOptions) += "-Dspark.unsafe.exceptionOnMemoryLeak=true",
+    (Test / javaOptions) += "-Dspark.hadoop.hadoop.caller.context.enabled=true",
     (Test / javaOptions) += "-Dhive.conf.validation=false",
     (Test / javaOptions) += "-Dsun.io.serialization.extendedDebugInfo=false",
     (Test / javaOptions) += "-Dderby.system.durability=test",

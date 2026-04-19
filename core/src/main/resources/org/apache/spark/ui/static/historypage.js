@@ -23,6 +23,16 @@ var appLimit = -1;
 function setAppLimit(val) {
   appLimit = val;
 }
+/* escape XSS  */
+function escapeHtml(text) {
+  if (typeof text !== 'string') return text;
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 /* eslint-enable no-unused-vars*/
 
 function makeIdNumeric(id) {
@@ -147,7 +157,7 @@ $(document).ready(function() {
         attempt["durationMillisec"] = attempt["duration"];
         attempt["duration"] = formatDuration(attempt["duration"]);
         attempt["id"] = id;
-        attempt["name"] = name;
+        attempt["name"] = escapeHtml(name);
         attempt["version"] = version;
         attempt["attemptUrl"] = uiRoot + "/history/" + id + "/" +
           (attempt.hasOwnProperty("attemptId") ? attempt["attemptId"] + "/" : "") + "jobs/";
@@ -198,7 +208,11 @@ $(document).ready(function() {
             data: 'duration',
             render:  (id, type, row) => `<span title="${row.durationMillisec}">${row.duration}</span>`
           },
-          {name: 'user', data: 'sparkUser' },
+          {
+            name: 'user',
+            data: 'sparkUser',
+            render: (name) => escapeHtml(name)
+          },
           {name: 'lastUpdated', data: 'lastUpdated' },
           {
             name: 'eventLog',

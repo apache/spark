@@ -3281,6 +3281,30 @@ Expression types in proto.</td>
 Command types in proto.</td>
   <td>3.4.0</td>
 </tr>
+<tr>
+  <td><code>spark.connect.jvmStacktrace.maxSize</code></td>
+  <td>
+    2048
+  </td>
+  <td>Sets the maximum stack trace size to display when `spark.sql.pyspark.jvmStacktrace.enabled` is true.</td>
+  <td>3.5.0</td>
+</tr>
+<tr>
+  <td><code>spark.sql.connect.ui.retainedSessions</code></td>
+  <td>
+    200
+  </td>
+  <td>The number of client sessions kept in the Spark Connect UI history.</td>
+  <td>3.5.0</td>
+</tr>
+<tr>
+  <td><code>spark.sql.connect.ui.retainedStatements</code></td>
+  <td>
+    200
+  </td>
+  <td>The number of statements kept in the Spark Connect UI history.</td>
+  <td>3.5.0</td>
+</tr>
 </table>
 
 ### Security

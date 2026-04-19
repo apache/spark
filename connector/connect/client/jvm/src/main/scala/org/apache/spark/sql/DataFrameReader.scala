@@ -45,7 +45,7 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
    * @since 3.4.0
    */
   def format(source: String): DataFrameReader = {
-    this.source = source
+    this.source = Some(source)
     this
   }
 
@@ -179,8 +179,7 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
   def load(paths: String*): DataFrame = {
     sparkSession.newDataFrame { builder =>
       val dataSourceBuilder = builder.getReadBuilder.getDataSourceBuilder
-      assertSourceFormatSpecified()
-      dataSourceBuilder.setFormat(source)
+      source.foreach(dataSourceBuilder.setFormat)
       userSpecifiedSchema.foreach(schema => dataSourceBuilder.setSchema(schema.toDDL))
       extraOptions.foreach { case (k, v) =>
         dataSourceBuilder.putOptions(k, v)
@@ -285,7 +284,7 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
     sparkSession.newDataFrame { builder =>
       val dataSourceBuilder = builder.getReadBuilder.getDataSourceBuilder
       format("jdbc")
-      dataSourceBuilder.setFormat(source)
+      source.foreach(dataSourceBuilder.setFormat)
       predicates.foreach(predicate => dataSourceBuilder.addPredicates(predicate))
       this.extraOptions ++= Seq("url" -> url, "dbtable" -> table)
       val params = extraOptions ++ connectionProperties.asScala
@@ -539,12 +538,6 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
     text(paths: _*).select("value").as(StringEncoder)
   }
 
-  private def assertSourceFormatSpecified(): Unit = {
-    if (source == null) {
-      throw new IllegalArgumentException("The source format must be specified.")
-    }
-  }
-
   private def parse(ds: Dataset[String], format: ParseFormat): DataFrame = {
     sparkSession.newDataFrame { builder =>
       val parseBuilder = builder.getParseBuilder
@@ -571,7 +564,7 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
   // Builder pattern config options
   ///////////////////////////////////////////////////////////////////////////////////////
 
-  private var source: String = _
+  private var source: Option[String] = None
 
   private var userSpecifiedSchema: Option[StructType] = None
 

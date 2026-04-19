@@ -1204,8 +1204,10 @@ class UserDefinedType(DataType):
         pyClass = pyUDT[split + 1 :]
         m = __import__(pyModule, globals(), locals(), [pyClass])
         if not hasattr(m, pyClass):
-            s = base64.b64decode(json["serializedClass"].encode("utf-8"))
-            UDT = CloudPickleSerializer().loads(s)
+            raise PySparkValueError(
+                errorClass="UNSUPPORTED_OPERATION",
+                messageParameters={"operation": "unpickling user defined types"},
+            )
         else:
             UDT = getattr(m, pyClass)
         return UDT()
@@ -1411,7 +1413,7 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
         else:
             raise PySparkValueError(
                 error_class="CANNOT_PARSE_DATATYPE",
-                message_parameters={"error": str(json_value)},
+                message_parameters={"msg": str(json_value)},
             )
     else:
         tpe = json_value["type"]

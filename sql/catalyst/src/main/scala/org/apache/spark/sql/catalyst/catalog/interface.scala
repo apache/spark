@@ -76,7 +76,7 @@ case class CatalogStorageFormat(
 
   def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]()
-    locationUri.foreach(l => map.put("Location", l.toString))
+    locationUri.foreach(l => map.put("Location", CatalogUtils.URIToString(l)))
     serde.foreach(map.put("Serde Library", _))
     inputFormat.foreach(map.put("InputFormat", _))
     outputFormat.foreach(map.put("OutputFormat", _))
@@ -499,7 +499,7 @@ object CatalogTable {
     props.get(key).orElse {
       if (props.exists { case (mapKey, _) => mapKey.startsWith(key) }) {
         props.get(s"$key.numParts") match {
-          case None => throw QueryCompilationErrors.insufficientTablePropertyError(key)
+          case None => None
           case Some(numParts) =>
             val parts = (0 until numParts.toInt).map { index =>
               val keyPart = s"$key.part.$index"

@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources
 import java.util.Collections
 
 import org.scalatest.BeforeAndAfter
-import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog}
@@ -42,7 +41,7 @@ class InMemoryTableMetricSuite
     spark.sessionState.conf.clear()
   }
 
-  private def testMetricOnDSv2(func: String => Unit, checker: Map[Long, String] => Unit): Unit = {
+  private def testMetricOnDSv2(func: String => Unit, checker: Map[String, String] => Unit): Unit = {
     withTable("testcat.table_name") {
       val statusStore = spark.sharedState.statusStore
       val oldCount = statusStore.executionsList().size
@@ -54,21 +53,8 @@ class InMemoryTableMetricSuite
         new StructType().add("i", "int"),
         Array.empty[Transform], Collections.emptyMap[String, String])
 
-      func("testcat.table_name")
+      val metrics = runAndFetchMetrics(func("testcat.table_name"))
 
-      // Wait until the new execution is started and being tracked.
-      eventually(timeout(10.seconds), interval(10.milliseconds)) {
-        assert(statusStore.executionsCount() >= oldCount)
-      }
-
-      // Wait for listener to finish computing the metrics for the execution.
-      eventually(timeout(10.seconds), interval(10.milliseconds)) {
-        assert(statusStore.executionsList().nonEmpty &&
-          statusStore.executionsList().last.metricValues != null)
-      }
-
-      val execId = statusStore.executionsList().last.executionId
-      val metrics = statusStore.executionMetrics(execId)
       checker(metrics)
     }
   }

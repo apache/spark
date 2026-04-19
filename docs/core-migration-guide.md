@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Core 3.5.3 to 3.5.4
+
+- Since Spark 3.5.4, when reading files hits `org.apache.hadoop.security.AccessControlException` and `org.apache.hadoop.hdfs.BlockMissingException`, the exception will be thrown and fail the task, even if `spark.files.ignoreCorruptFiles` is set to `true`.
+
 ## Upgrading from Core 3.4 to 3.5
 
 - Since Spark 3.5, `spark.yarn.executor.failuresValidityInterval` is deprecated. Use `spark.executor.failuresValidityInterval` instead.

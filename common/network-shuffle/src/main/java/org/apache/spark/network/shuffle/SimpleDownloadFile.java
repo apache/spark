@@ -69,7 +69,8 @@ public class SimpleDownloadFile implements DownloadFile {
     }
 
     @Override
-    public ManagedBuffer closeAndRead() {
+    public ManagedBuffer closeAndRead() throws IOException {
+      channel.close();
       return new FileSegmentManagedBuffer(transportConf, file, 0, file.length());
     }
 

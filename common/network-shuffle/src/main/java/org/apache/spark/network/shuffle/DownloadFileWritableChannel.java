@@ -19,6 +19,7 @@ package org.apache.spark.network.shuffle;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 
+import java.io.IOException;
 import java.nio.channels.WritableByteChannel;
 
 /**
@@ -26,5 +27,5 @@ import java.nio.channels.WritableByteChannel;
  * after the writer has been closed.  Used with DownloadFile and DownloadFileManager.
  */
 public interface DownloadFileWritableChannel extends WritableByteChannel {
-  ManagedBuffer closeAndRead();
+  ManagedBuffer closeAndRead() throws IOException;
 }

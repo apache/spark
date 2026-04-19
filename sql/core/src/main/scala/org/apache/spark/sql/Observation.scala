@@ -20,9 +20,13 @@ package org.apache.spark.sql
 import java.util.UUID
 
 import scala.collection.JavaConverters
+import scala.concurrent.{Future, Promise}
+import scala.concurrent.duration.Duration
 
+import org.apache.spark.sql.catalyst.plans.logical.CollectMetrics
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
+import org.apache.spark.util.SparkThreadUtils
 
 
 /**
@@ -58,7 +62,14 @@ class Observation(val name: String) {
 
   @volatile private var sparkSession: Option[SparkSession] = None
 
-  @volatile private var metrics: Option[Map[String, Any]] = None
+  @volatile private var dataframeId: Option[Long] = None
+
+  private val promise = Promise[Row]()
+
+  /**
+   * Future holding the (yet to be completed) observation.
+   */
+  val future: Future[Row] = promise.future
 
   /**
    * Attach this observation to the given [[Dataset]] to observe aggregation expressions.
@@ -70,11 +81,15 @@ class Observation(val name: String) {
    * @return observed dataset
    * @throws IllegalArgumentException If this is a streaming Dataset (ds.isStreaming == true)
    */
-  private[spark] def on[T](ds: Dataset[T], expr: Column, exprs: Column*): Dataset[T] = {
+  private[spark] def on[T](
+      ds: Dataset[T],
+      expr: Column,
+      exprs: Column*): Dataset[T] = {
     if (ds.isStreaming) {
       throw new IllegalArgumentException("Observation does not support streaming Datasets")
     }
-    register(ds.sparkSession)
+    val dataframeId = ds.id
+    register(ds.sparkSession, dataframeId)
     ds.observe(name, expr, exprs: _*)
   }
 
@@ -83,26 +98,30 @@ class Observation(val name: String) {
    * its first action. Only the result of the first action is available. Subsequent actions do not
    * modify the result.
    *
+   *
+   * Note that if no metrics were recorded, an empty map is probably returned. It possibly happens
+   * when the operators used for observation are optimized away.
+   *
    * @return the observed metrics as a `Map[String, Any]`
    * @throws InterruptedException interrupted while waiting
    */
   @throws[InterruptedException]
   def get: Map[String, _] = {
-    synchronized {
-      // we need to loop as wait might return without us calling notify
-      // https://en.wikipedia.org/w/index.php?title=Spurious_wakeup&oldid=992601610
-      while (this.metrics.isEmpty) {
-        wait()
-      }
+    val row = getRow
+    if (row == null || row.schema == null) {
+      Map.empty
+    } else {
+      row.getValuesMap(row.schema.map(_.name))
     }
-
-    this.metrics.get
   }
 
   /**
    * (Java-specific) Get the observed metrics. This waits for the observed dataset to finish
    * its first action. Only the result of the first action is available. Subsequent actions do not
    * modify the result.
+   *
+   * Note that if no metrics were recorded, an empty map is probably returned. It possibly happens
+   * when the operators used for observation are optimized away.
    *
    * @return the observed metrics as a `java.util.Map[String, Object]`
    * @throws InterruptedException interrupted while waiting
@@ -114,7 +133,7 @@ class Observation(val name: String) {
     )
   }
 
-  private def register(sparkSession: SparkSession): Unit = {
+  private def register(sparkSession: SparkSession, dataframeId: Long): Unit = {
     // makes this class thread-safe:
     // only the first thread entering this block can set sparkSession
     // all other threads will see the exception, as it is only allowed to do this once
@@ -123,6 +142,7 @@ class Observation(val name: String) {
         throw new IllegalArgumentException("An Observation can be used with a Dataset only once")
       }
       this.sparkSession = Some(sparkSession)
+      this.dataframeId = Some(dataframeId)
     }
 
     sparkSession.listenerManager.register(this.listener)
@@ -133,18 +153,36 @@ class Observation(val name: String) {
   }
 
   private[spark] def onFinish(qe: QueryExecution): Unit = {
-    synchronized {
-      if (this.metrics.isEmpty) {
-        val row = qe.observedMetrics.get(name)
-        this.metrics = row.map(r => r.getValuesMap[Any](r.schema.fieldNames))
-        if (metrics.isDefined) {
-          notifyAll()
+    if (qe.logical.exists {
+      case CollectMetrics(name, _, _, dataframeId) =>
+        name == this.name && dataframeId == this.dataframeId.get
+      case _ => false
+    }) {
+      val metrics = qe.observedMetrics.get(name)
+      if (metrics.isEmpty) {
+        // If the key exists but no metrics were collected, it means for some reason the metrics
+        // could not be collected. This can happen e.g., if the CollectMetricsExec was optimized
+        // away.
+        promise.trySuccess(Row.empty)
+        unregister()
+      } else {
+        metrics.foreach { metrics =>
+          promise.trySuccess(metrics)
           unregister()
         }
       }
     }
   }
 
+  /**
+   * Get the observed metrics as a Row.
+   *
+   * @return
+   *   the observed metrics as a `Row`.
+   */
+  private[sql] def getRow: Row = {
+    SparkThreadUtils.awaitResult(future, Duration.Inf)
+  }
 }
 
 private[sql] case class ObservationListener(observation: Observation)

@@ -45,13 +45,13 @@ from pyspark.sql.types import (
     Row,
 )
 
-from pyspark.testing.sqlutils import (
+from pyspark.testing.objects import (
     MyObject,
-    SQLTestUtils,
     PythonOnlyUDT,
     ExamplePoint,
     PythonOnlyPoint,
 )
+from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.connectutils import (
     should_test_connect,
     ReusedConnectTestCase,

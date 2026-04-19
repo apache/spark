@@ -864,3 +864,77 @@ Location [not included in comparison]/{warehouse_dir}/e
 # Column Default Values	                    	                    
 a                   	string              	CONCAT('a\n b\n ', 'c\n d')
 b                   	int                 	42
+
+
+-- !query
+CREATE TABLE f USING json PARTITIONED BY (B, C) AS SELECT 'APACHE' A, CAST('SPARK' AS BINARY) B, TIMESTAMP'2018-11-17 13:33:33' C
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESC FORMATTED f PARTITION (B='SPARK', C=TIMESTAMP'2018-11-17 13:33:33')
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+A                   	string              	                    
+B                   	binary              	                    
+C                   	timestamp           	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
+B                   	binary              	                    
+C                   	timestamp           	                    
+                    	                    	                    
+# Detailed Partition Information	                    	                    
+Database            	default             	                    
+Table               	f                   	                    
+Partition Values    	[B=SPARK, C=2018-11-17 13:33:33]	                    
+Location [not included in comparison]/{warehouse_dir}/f/B=SPARK/C=2018-11-17 13%3A33%3A33	                    
+Partition Parameters	{numFiles=1, totalSize=15, transient_lastDdlTime=[not included in comparison]}	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+                    	                    	                    
+# Storage Information	                    	                    
+Location [not included in comparison]/{warehouse_dir}/f
+
+
+-- !query
+DESC TABLE EXTENDED f PARTITION (B='SPARK', C=TIMESTAMP'2018-11-17 13:33:33') AS JSON
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'JSON'",
+    "hint" : ": extra input 'JSON'"
+  }
+}
+
+
+-- !query
+DROP TABLE d
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE e
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE f
+-- !query schema
+struct<>
+-- !query output
+

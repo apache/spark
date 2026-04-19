@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentRow, DenseRank, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, IntegerLiteral, LessThan, LessThanOrEqual, Literal, NamedExpression, PredicateHelper, Rank, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentRow, DenseRank, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, IntegerLiteral, LessThan, LessThanOrEqual, Literal, NamedExpression, PredicateHelper, Rank, RowFrame, RowNumber, SizeBasedWindowFunction, SpecifiedWindowFrame, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Limit, LocalRelation, LogicalPlan, Window, WindowGroupLimit}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{FILTER, WINDOW}
@@ -26,12 +26,29 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{FILTER, WINDOW}
  * Inserts a `WindowGroupLimit` below `Window` if the `Window` has rank-like functions
  * and the function results are further filtered by limit-like predicates. Example query:
  * {{{
- *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE rn = 5
- *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE 5 = rn
- *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE rn < 5
- *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE 5 > rn
- *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE rn <= 5
- *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE 5 >= rn
+ *   SELECT * FROM (
+ *      SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1
+ *   ) WHERE rn = 5;
+ *
+ *   SELECT * FROM (
+ *      SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1
+ *   ) WHERE 5 = rn;
+ *
+ *   SELECT * FROM (
+ *      SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1
+ *   ) WHERE rn < 5;
+ *
+ *   SELECT * FROM (
+ *      SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1
+ *   ) WHERE 5 > rn;
+ *
+ *   SELECT * FROM (
+ *      SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1
+ *    ) WHERE rn <= 5;
+ *
+ *   SELECT * FROM (
+ *      SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1
+ *   ) WHERE 5 >= rn;
  * }}}
  */
 object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
@@ -53,13 +70,14 @@ object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   /**
-   * All window expressions should use the same expanding window, so that
-   * we can safely do the early stop.
+   * All window expressions should use the same expanding window and do not contains
+   * `SizeBasedWindowFunction`, so that we can safely do the early stop.
    */
   private def isExpandingWindow(
       windowExpression: NamedExpression): Boolean = windowExpression match {
-    case Alias(WindowExpression(_, WindowSpecDefinition(_, _,
-    SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))), _) => true
+    case Alias(WindowExpression(windowFunction, WindowSpecDefinition(_, _,
+    SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))), _)
+      if !windowFunction.isInstanceOf[SizeBasedWindowFunction] => true
     case _ => false
   }
 

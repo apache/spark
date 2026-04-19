@@ -462,4 +462,9 @@ This file is divided into 3 sections:
       and URIs to and from String. If possible, please use SparkPath.
     ]]></customMessage>
   </check>
+
+  <check customId="configName" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">buildConf\("spark.databricks.</parameter></parameters>
+    <customMessage>Use Apache Spark config namespace.</customMessage>
+  </check>
 </scalastyle>
