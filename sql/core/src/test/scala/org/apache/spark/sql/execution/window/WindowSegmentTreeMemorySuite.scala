@@ -170,7 +170,11 @@ class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext 
     }
     // Tight budget: only ~1 block's worth of headroom. Any new block that
     // needs levels will force the spiller to evict the prior block.
-    withTmm(budget = 64L) { (tmm, _) =>
+    //
+    // Sizing: for (fanout=4, blockSize=4) the cached level shape is
+    // [4, 1] slots; at bufferWidth=16 B per slot blockBytes = 5 * 16 = 80 B.
+    // budget=128 B admits exactly one block and forces spill on the second.
+    withTmm(budget = 128L) { (tmm, _) =>
       val tree = buildTree(tmm, values, fanout = 4, blockSize = 4,
         maxCachedBlocks = Some(3))
       try {
@@ -280,6 +284,77 @@ class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext 
         assert(queryMin(tree, 0, 16) == 0)
         assert(tree.testOnlySpiller().getMode == tmm.getTungstenMemoryMode)
         assert(tree.testOnlySpiller().getMode == MemoryMode.OFF_HEAP)
+      } finally tree.close()
+    }
+  }
+
+  // ---- T10 ----
+  test("T10 blockBytes oracle: hand-computed table + runtime-anchored cross-check") {
+    // Part A: hand-computed golden table. These values were derived by
+    // listing the cached level widths produced by buildBlockLevels and
+    // multiplying by the 16 B/field buffer width used below. They do NOT
+    // share a code path with production `cachedSlotsPerBlock` -- if the
+    // production loop regresses (e.g., fencepost off-by-one or drops a
+    // level) at least one of these cases flips, including:
+    //   - blockSize == 1   : single leaf, no parent levels (edge case).
+    //   - (F=3, B=5)       : non-power-of-fanout, asymmetric top levels.
+    //   - (F=4, B=7)       : non-power-of-fanout, typical tail-shape.
+    //   - (F=16, B=65536)  : deep tree, catches compounding fencepost.
+    // Level breakdown per case (leaves + parents + ... + root):
+    //   (F=4,  B=1)     -> 1                              =    1 slot
+    //   (F=4,  B=4)     -> 4 + 1                          =    5 slots
+    //   (F=3,  B=5)     -> 5 + 2 + 1                      =    8 slots
+    //   (F=4,  B=7)     -> 7 + 2 + 1                      =   10 slots
+    //   (F=8,  B=16)    -> 16 + 2 + 1                     =   19 slots
+    //   (F=16, B=256)   -> 256 + 16 + 1                   =  273 slots
+    //   (F=16, B=65536) -> 65536 + 4096 + 256 + 16 + 1    = 69905 slots
+    val expectedSlots: Seq[((Int, Int), Long)] = Seq(
+      (4, 1) -> 1L,
+      (4, 4) -> 5L,
+      (3, 5) -> 8L,
+      (4, 7) -> 10L,
+      (8, 16) -> 19L,
+      (16, 256) -> 273L,
+      (16, 65536) -> 69905L)
+
+    withTmm() { (tmm, _) =>
+      for (((fanout, blockSize), slots) <- expectedSlots) {
+        val tree = buildTree(tmm, Seq(1, 2, 3, 4, 5, 6, 7, 8),
+          fanout = fanout, blockSize = blockSize, maxCachedBlocks = Some(1))
+        try {
+          // Min on a single IntegerType field -> 1 buffer field x 16 B.
+          val expected = math.max(1L, slots * 16L)
+          assert(tree.peekBlockBytes == expected,
+            s"blockBytes mismatch at (F=$fanout, blockSize=$blockSize): " +
+              s"got=${tree.peekBlockBytes} expected=$expected (slots=$slots)")
+        } finally tree.close()
+      }
+    }
+
+    // Part B: runtime-anchored cross-check. Build a block, read back the
+    // *actual* cached level array lengths via peek hooks, and assert
+    // `blockBytes == sum(levels) * bufferWidth`. This guards against the
+    // formula and buildBlockLevels drifting apart without sharing a code
+    // path with either side.
+    withTmm() { (tmm, _) =>
+      val fanout = 4
+      val blockSize = 8
+      val tree = buildTree(tmm, (0 until blockSize),
+        fanout = fanout, blockSize = blockSize, maxCachedBlocks = Some(1))
+      try {
+        // Force block 0 to be materialized.
+        assert(queryMin(tree, 0, blockSize) == 0)
+        val levelCount = tree.peekLevelCount(0)
+        var slotSum = 0L
+        var lvl = 0
+        while (lvl < levelCount) {
+          slotSum += tree.peekLevelSize(0, lvl)
+          lvl += 1
+        }
+        val expected = math.max(1L, slotSum * 16L)
+        assert(tree.peekBlockBytes == expected,
+          s"runtime-anchored oracle mismatch: slots=$slotSum " +
+            s"expected=$expected got=${tree.peekBlockBytes}")
       } finally tree.close()
     }
   }

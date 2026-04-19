@@ -3,12 +3,12 @@ Section A - MIN (non-invertible)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 MIN sliding window, W=1001, 2M rows:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-MIN naive (current, baseline)                     31854          31959         124          0.1       15188.9       1.0X
-MIN segtree (default)                              3289           3335          80          0.6        1568.2       9.7X
-MIN segtree (blockSize=256)                        3625           3641          28          0.6        1728.3       8.8X
+MIN naive (current, baseline)                     31849          32023         268          0.1       15186.8       1.0X
+MIN segtree (default)                              3440           3538          85          0.6        1640.4       9.3X
+MIN segtree (blockSize=256)                        3545           3590          51          0.6        1690.5       9.0X
 
 
 ================================================================================================
@@ -16,12 +16,12 @@ Section A - MAX (non-invertible, noisy -> iters=5)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 MAX sliding window, W=1001, 2M rows:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-MAX naive (current, baseline)                     33657          33704          83          0.1       16049.1       1.0X
-MAX segtree (default)                              3218           3370         179          0.7        1534.2      10.5X
-MAX segtree (blockSize=256)                        3619           3701          63          0.6        1725.8       9.3X
+MAX naive (current, baseline)                     34944          34999          61          0.1       16662.7       1.0X
+MAX segtree (default)                              3376           3471          99          0.6        1609.9      10.4X
+MAX segtree (blockSize=256)                        3457           3580          84          0.6        1648.6      10.1X
 
 
 ================================================================================================
@@ -29,12 +29,12 @@ Section A - SUM (Spark has no inverse; full recompute)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 SUM sliding window, W=1001, 2M rows:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SUM naive (current, baseline)                     33770          33817          56          0.1       16102.9       1.0X
-SUM segtree (default)                              3339           3363          22          0.6        1592.1      10.1X
-SUM segtree (blockSize=256)                        3562           3734         153          0.6        1698.4       9.5X
+SUM naive (current, baseline)                     35147          42921        6742          0.1       16759.6       1.0X
+SUM segtree (default)                              3585           3601          14          0.6        1709.3       9.8X
+SUM segtree (blockSize=256)                        3548           3646         155          0.6        1691.8       9.9X
 
 
 ================================================================================================
@@ -42,12 +42,12 @@ Section A - COUNT
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 COUNT sliding window, W=1001, 2M rows:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-COUNT naive (current, baseline)                   27951          27952           2          0.1       13328.1       1.0X
-COUNT segtree (default)                            3121           3170          46          0.7        1488.1       9.0X
-COUNT segtree (blockSize=256)                      3293           3334          44          0.6        1570.2       8.5X
+COUNT naive (current, baseline)                   30053          30946        1361          0.1       14330.5       1.0X
+COUNT segtree (default)                            3494           3507          22          0.6        1665.9       8.6X
+COUNT segtree (blockSize=256)                      3288           3326          49          0.6        1568.1       9.1X
 
 
 ================================================================================================
@@ -55,12 +55,12 @@ Section A - AVG (multi-buffer)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 AVG sliding window, W=1001, 2M rows:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-AVG naive (current, baseline)                     46389          46453          56          0.0       22120.0       1.0X
-AVG segtree (default)                              4514           4567          49          0.5        2152.6      10.3X
-AVG segtree (blockSize=256)                        4972           5080         166          0.4        2370.8       9.3X
+AVG naive (current, baseline)                     48510          48594         106          0.0       23131.2       1.0X
+AVG segtree (default)                              4572           4602          39          0.5        2180.1      10.6X
+AVG segtree (blockSize=256)                        5115           5136          25          0.4        2439.1       9.5X
 
 
 ================================================================================================

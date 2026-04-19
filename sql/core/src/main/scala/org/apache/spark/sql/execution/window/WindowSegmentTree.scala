@@ -109,22 +109,47 @@ private[window] class WindowSegmentTree(
    *  merged buffer over all rows in block i. */
   private var blockAggregates: Array[InternalRow] = Array.empty
 
-  /** Rough byte width of one aggregate buffer row. Derived from buffer schema
-   *  types (defaults to 8 bytes / field, matching `SpecificInternalRow`
-   *  word-aligned slots). Used by [[blockBytes]] (contract I5). */
+  /** Rough byte width of one aggregate buffer row. Chosen at 16 B/field as a
+   *  conservative heap-overhead-aware lower bound for a
+   *  `SpecificInternalRow` slot: primitive `MutableValue` is 8 B, boxed
+   *  references and object headers push the effective footprint higher.
+   *  Tighter per-type sizing (real boxing cost, variable-length fields) is
+   *  intentionally out of scope here; TaskMemoryManager remains the hard
+   *  backstop via spill / OOM.
+   *  TODO(SPARK-XXXXX): per-type width estimator keyed on
+   *  `bufferDataTypes` (primitive 16 B, String/Binary/Decimal wider). */
   private val bufferWidthBytes: Long = {
-    // SpecificInternalRow stores each field in a MutableValue (8 bytes for
-    // most primitives, object header for complex). 8 bytes/field is the
-    // minimum lower bound; we pick 16 as a conservative heap-overhead-aware
-    // default so memory accounting is not a gross under-estimate. This is
-    // consistent with UnsafeRow's word-aligned record layout.
     val bytesPerField = 16L
     math.max(1L, bufferDataTypes.size.toLong * bytesPerField)
   }
 
-  /** Bytes accounted per cached block's levels (contract Section 2.4 / I5). Covers
-   *  a factor-of-F over-estimate of the geometric series of level sizes. */
-  private[this] val blockBytes: Long = fanout.toLong * bufferWidthBytes
+  /** Number of aggregate-buffer slots cached per block (contract I5).
+   *
+   *  Invariant: equals `sum over levels L of levels(L).length` for any
+   *  block materialized by [[buildBlockLevels]]. Level 0 holds `blockSize`
+   *  leaf buffers and each subsequent level holds `ceil(prev / fanout)`
+   *  parent buffers until a single root remains. The iterative ceiling
+   *  matches the allocation in [[buildBlockLevels]] for every
+   *  `(blockSize, fanout)` pair, including non-power-of-`fanout` cases.
+   *  For `blockSize == 1` the block is a single leaf with no parent
+   *  levels, so this returns 1.
+   *  TODO(SPARK-XXXXX): drop the leaf term when [[buildBlockLevels]]
+   *  switches to on-demand leaf recomputation. */
+  private val cachedSlotsPerBlock: Long = {
+    var n = blockSize.toLong
+    var sum = n
+    while (n > 1L) {
+      n = (n + fanout - 1) / fanout
+      sum += n
+    }
+    sum
+  }
+
+  /** Bytes accounted per cached block (contract I5). Conservative: assumes
+   *  every block is full; tail block (`numRows % blockSize != 0`) will
+   *  hold fewer leaves, giving a small headroom. */
+  private[this] val blockBytes: Long =
+    math.max(1L, cachedSlotsPerBlock * bufferWidthBytes)
 
   /** `spans(L)` = number of leaves covered by a single node at level L. Depends
    *  only on fanout + blockSize, so precomputed once. */
@@ -316,6 +341,9 @@ private[window] class WindowSegmentTree(
   private[window] def peekBlockCount: Int = numBlocks
 
   private[window] def testOnlySpiller(): MemoryConsumer = spiller
+
+  /** Test-only accessor for the per-block memory accounting value. */
+  private[window] def peekBlockBytes: Long = blockBytes
 
   /** NOTE: test-only; promotes block to MRU in the LRU cache as a side effect. */
   private[window] def peekLevelSize(blockIdx: Int, level: Int): Int = {

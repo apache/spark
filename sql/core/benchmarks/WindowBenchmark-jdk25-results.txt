@@ -6,9 +6,9 @@ OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.17.0-1010-azure
 AMD EPYC 9V74 80-Core Processor
 MIN sliding window, W=1001, 2M rows:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-MIN naive (current, baseline)                     21945          21990          69          0.1       10464.4       1.0X
-MIN segtree (default)                              2821           2854          31          0.7        1345.4       7.8X
-MIN segtree (blockSize=256)                        2714           2752          33          0.8        1294.2       8.1X
+MIN naive (current, baseline)                     28768          28801          29          0.1       13717.9       1.0X
+MIN segtree (default)                              3512           3534          22          0.6        1674.5       8.2X
+MIN segtree (blockSize=256)                        3471           3553          72          0.6        1655.0       8.3X
 
 
 ================================================================================================
@@ -19,9 +19,9 @@ OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.17.0-1010-azure
 AMD EPYC 9V74 80-Core Processor
 MAX sliding window, W=1001, 2M rows:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-MAX naive (current, baseline)                     23210          23252          25          0.1       11067.5       1.0X
-MAX segtree (default)                              2661           2700          40          0.8        1268.8       8.7X
-MAX segtree (blockSize=256)                        2739           2774          25          0.8        1305.9       8.5X
+MAX naive (current, baseline)                     27683          27725          29          0.1       13200.1       1.0X
+MAX segtree (default)                              3487           3543          36          0.6        1662.8       7.9X
+MAX segtree (blockSize=256)                        3595           3625          18          0.6        1714.4       7.7X
 
 
 ================================================================================================
@@ -32,9 +32,9 @@ OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.17.0-1010-azure
 AMD EPYC 9V74 80-Core Processor
 SUM sliding window, W=1001, 2M rows:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SUM naive (current, baseline)                     25445          25461          14          0.1       12133.1       1.0X
-SUM segtree (default)                              2664           2686          23          0.8        1270.4       9.6X
-SUM segtree (blockSize=256)                        2749           2786          33          0.8        1310.6       9.3X
+SUM naive (current, baseline)                     35589          35618          31          0.1       16970.2       1.0X
+SUM segtree (default)                              3516           3538          20          0.6        1676.5      10.1X
+SUM segtree (blockSize=256)                        3654           3690          31          0.6        1742.1       9.7X
 
 
 ================================================================================================
@@ -45,9 +45,9 @@ OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.17.0-1010-azure
 AMD EPYC 9V74 80-Core Processor
 COUNT sliding window, W=1001, 2M rows:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-COUNT naive (current, baseline)                   22468          22492          21          0.1       10713.6       1.0X
-COUNT segtree (default)                            2462           2498          31          0.9        1173.9       9.1X
-COUNT segtree (blockSize=256)                      2576           2623          45          0.8        1228.3       8.7X
+COUNT naive (current, baseline)                   29180          29242          76          0.1       13914.1       1.0X
+COUNT segtree (default)                            3301           3335          29          0.6        1574.0       8.8X
+COUNT segtree (blockSize=256)                      3425           3466          57          0.6        1632.9       8.5X
 
 
 ================================================================================================
@@ -58,9 +58,9 @@ OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.17.0-1010-azure
 AMD EPYC 9V74 80-Core Processor
 AVG sliding window, W=1001, 2M rows:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-AVG naive (current, baseline)                     37060          37081          23          0.1       17671.6       1.0X
-AVG segtree (default)                              3630           3663          31          0.6        1730.9      10.2X
-AVG segtree (blockSize=256)                        3850           3931          76          0.5        1835.9       9.6X
+AVG naive (current, baseline)                     47777          48095         496          0.0       22781.9       1.0X
+AVG segtree (default)                              4716           4743          42          0.4        2248.8      10.1X
+AVG segtree (blockSize=256)                        5225           5243          27          0.4        2491.5       9.1X
 
 
 ================================================================================================
