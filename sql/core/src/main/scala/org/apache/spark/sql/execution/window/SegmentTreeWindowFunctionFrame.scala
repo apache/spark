@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, FrameType, MutableProjection, RangeFrame, RowFrame, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -55,7 +56,9 @@ private[window] final class SegmentTreeWindowFunctionFrame(
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     conf: SQLConf,
     maxCachedBlocks: Option[Int],
-    taskMemoryManager: TaskMemoryManager)
+    taskMemoryManager: TaskMemoryManager,
+    numSegmentTreeFrames: Option[SQLMetric] = None,
+    numSegmentTreeFallbackFrames: Option[SQLMetric] = None)
   extends WindowFunctionFrame with AutoCloseable {
 
   require(frameType == RowFrame || frameType == RangeFrame,
@@ -94,8 +97,21 @@ private[window] final class SegmentTreeWindowFunctionFrame(
   private[this] var lowerBound: Int = 0
   private[this] var upperBound: Int = 0
 
-  /** Test hook; the frame integration.5 wires this to a SQLMetric (see backlog). */
+  /**
+   * Runtime dispatch flag: when `true`, `write()`, `currentLowerBound()`,
+   * and `currentUpperBound()` delegate to the wrapped
+   * [[SlidingWindowFunctionFrame]] (small-partition path). Set by
+   * `prepare()` based on partition size vs.
+   * `spark.sql.window.segmentTree.minPartitionRows`.
+   */
   private[window] var fallbackUsed: Boolean = false
+
+  // Idempotency guard for the metric counters. `prepare()` is allowed to be
+  // called more than once on the same partition (see comment in prepare()),
+  // so we key on (identityHashCode(rows), rows.length) to dedupe repeat
+  // invocations without requiring an explicit reset hook. See
+  // `the PR description (SQLMetrics exposure)` section 2.5.
+  private[this] var lastPreparedKey: Long = -1L
 
   // Register close() once per frame instance so the tree's block cache and
   // any open row-array iterators are released when the task completes.
@@ -123,9 +139,13 @@ private[window] final class SegmentTreeWindowFunctionFrame(
     upperRow = null
     lowerBound = 0
     upperBound = 0
+    val key = (System.identityHashCode(rows).toLong << 32) | (rows.length & 0xffffffffL)
+    val alreadyCounted = key == lastPreparedKey
     if (rows.length < conf.windowSegmentTreeMinPartitionRows) {
       fallbackUsed = true
       fallback.prepare(rows)
+      if (!alreadyCounted) numSegmentTreeFallbackFrames.foreach(_ += 1)
+      lastPreparedKey = key
       return
     }
     fallbackUsed = false
@@ -140,6 +160,10 @@ private[window] final class SegmentTreeWindowFunctionFrame(
     // Build first (drains rows into the tree's internal row array), then
     // open fresh iterator(s) for per-row bound advancement.
     tree.build(rows.generateIterator())
+    // Count only on the successful segtree path: if `tree.build` throws
+    // (e.g. OOM during block allocation), the counter is not bumped.
+    if (!alreadyCounted) numSegmentTreeFrames.foreach(_ += 1)
+    lastPreparedKey = key
     frameType match {
       case RowFrame =>
         boundIter = rows.generateIterator()

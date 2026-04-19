@@ -36,6 +36,15 @@ trait WindowEvaluatorFactoryBase {
   def orderSpec: Seq[SortOrder]
   def childOutput: Seq[Attribute]
   def spillSize: SQLMetric
+  /**
+   * Counters for [[SegmentTreeWindowFunctionFrame]] observability. Default
+   * `None` means the subclass does not integrate with the segment-tree frame
+   * path (e.g. [[org.apache.spark.sql.execution.python.ArrowWindowPythonEvaluatorFactory]]);
+   * only [[WindowEvaluatorFactory]] wires them. See
+   * `the PR description (SQLMetrics exposure)`.
+   */
+  def numSegmentTreeFrames: Option[SQLMetric] = None
+  def numSegmentTreeFallbackFrames: Option[SQLMetric] = None
 
   /**
    * Create the resulting projection.
@@ -309,7 +318,9 @@ trait WindowEvaluatorFactoryBase {
                   (e, s) => MutableProjection.create(e, s),
                   conf,
                   cacheHint,
-                  tmm)
+                  tmm,
+                  numSegmentTreeFrames,
+                  numSegmentTreeFallbackFrames)
               }
             } else {
               target: InternalRow => {

@@ -30,8 +30,14 @@ class WindowEvaluatorFactory(
     val partitionSpec: Seq[Expression],
     val orderSpec: Seq[SortOrder],
     val childOutput: Seq[Attribute],
-    val spillSize: SQLMetric)
+    val spillSize: SQLMetric,
+    segmentTreeFrames: SQLMetric,
+    segmentTreeFallbackFrames: SQLMetric)
   extends PartitionEvaluatorFactory[InternalRow, InternalRow] with WindowEvaluatorFactoryBase {
+
+  override def numSegmentTreeFrames: Option[SQLMetric] = Some(segmentTreeFrames)
+  override def numSegmentTreeFallbackFrames: Option[SQLMetric] =
+    Some(segmentTreeFallbackFrames)
 
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] = {
     new WindowPartitionEvaluator()
