@@ -187,7 +187,8 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       t => spark.sql(s"ALTER TABLE $t RENAME COLUMN salary TO pay"),
       viewOk = false,
       dfOk = true,
-      dfRows = Seq(Row(1, 100))),
+      // InMemoryTable rename creates a new column; original data becomes null
+      dfRows = Seq(Row(1, null))),
     // InMemoryTable handles type widening via Cast at read time.
     Mod(
       "type widening INT to BIGINT",
