@@ -1582,6 +1582,78 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  // Verify that drop+recreate with same schema produces DIFFERENT column IDs,
+  // even though column names are identical. This ensures column IDs track column
+  // identity (was this column created in this specific table instance?) rather
+  // than just column names.
+  test("drop and recreate table with same schema produces different column IDs") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+
+      // capture original column IDs
+      val originalCols = catalog("testcat").loadTable(ident).columns()
+      val originalIdColId = originalCols.find(_.name() == "id").get.id()
+      val originalSalaryColId = originalCols.find(_.name() == "salary").get.id()
+      assert(originalIdColId != null, "Column ID should be assigned")
+      assert(originalSalaryColId != null, "Column ID should be assigned")
+
+      // drop and recreate with identical schema
+      sql(s"DROP TABLE $t")
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+
+      // new table has same column names but DIFFERENT column IDs
+      val newCols = catalog("testcat").loadTable(ident).columns()
+      val newIdColId = newCols.find(_.name() == "id").get.id()
+      val newSalaryColId = newCols.find(_.name() == "salary").get.id()
+      assert(newIdColId != originalIdColId,
+        "Column 'id' should have a new ID after drop+recreate: " +
+          s"was $originalIdColId, got $newIdColId")
+      assert(newSalaryColId != originalSalaryColId,
+        s"Column 'salary' should have a new ID after drop+recreate: " +
+          s"was $originalSalaryColId, got $newSalaryColId")
+    }
+  }
+
+  // Even with same table name, same column names, and same types,
+  // a DataFrame captured before drop+recreate should detect the change
+  // via column IDs (if table ID check were not present, column IDs alone
+  // would still catch it).
+  test("column IDs differ after drop+recreate even with identical column names") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      // capture column IDs from the original table
+      val originalCols = catalog("testcat").loadTable(ident).columns()
+      val df = spark.table(t)
+
+      sql(s"DROP TABLE $t")
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+
+      val newCols = catalog("testcat").loadTable(ident).columns()
+
+      // column names are identical but IDs are different
+      assert(originalCols.map(_.name()).toSeq === newCols.map(_.name()).toSeq,
+        "Column names should be the same")
+      assert(originalCols.map(_.id()).toSeq !== newCols.map(_.id()).toSeq,
+        "Column IDs should be different after drop+recreate")
+
+      // the DataFrame should detect the change (TABLE_ID_MISMATCH fires first
+      // because table ID check runs before column ID check)
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.TABLE_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map(
+          "tableName" -> ".*", "capturedTableId" -> ".*",
+          "currentTableId" -> ".*"))
+    }
+  }
+
   test("column addition does not trigger column ID mismatch") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -1751,6 +1823,66 @@ class DataSourceV2DataFrameSuite
         condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  // Drop column "data" of type STRING, re-add as STRING but with different
+  // case in the type specification. Since Spark normalizes types, both resolve
+  // to StringType. The column ID should still change because it was dropped
+  // and re-added (physically a different column).
+  test("drop and re-add column with same type detects ID change") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, data STRING) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'hello')")
+
+      val df = spark.table(t)
+
+      // drop and re-add with same type
+      sql(s"ALTER TABLE $t DROP COLUMN data")
+      sql(s"ALTER TABLE $t ADD COLUMN data STRING")
+
+      // column ID changed even though name and type are identical
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.collect()
+        },
+        condition =
+          "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  // Nested struct columns: column IDs are assigned at the top-level column
+  // granularity. When a nested field is added to a struct, the top-level
+  // column ID stays the same but the type changes. This is caught by
+  // schema validation (COLUMNS_MISMATCH), not column ID validation.
+  // When the entire struct column is dropped and re-added, the column ID
+  // changes.
+  test("drop and re-add struct column gets new column ID") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, " +
+        s"person STRUCT<name: STRING, age: INT>) USING foo")
+
+      // capture original column IDs
+      val origCols = catalog("testcat").loadTable(ident).columns()
+      val origPersonId = origCols.find(_.name() == "person").get.id()
+      assert(origPersonId != null)
+
+      // drop and re-add the struct column with same schema
+      sql(s"ALTER TABLE $t DROP COLUMN person")
+      sql(s"ALTER TABLE $t ADD COLUMN " +
+        s"person STRUCT<name: STRING, age: INT>")
+
+      // verify the struct column got a NEW ID
+      val newCols = catalog("testcat").loadTable(ident).columns()
+      val newPersonId = newCols.find(_.name() == "person").get.id()
+      assert(newPersonId != origPersonId,
+        "Struct column should get new ID after drop+re-add: " +
+          s"was $origPersonId, got $newPersonId")
     }
   }
 
