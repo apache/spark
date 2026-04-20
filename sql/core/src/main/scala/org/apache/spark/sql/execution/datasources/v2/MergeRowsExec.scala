@@ -117,8 +117,10 @@ case class MergeRowsExec(
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val funcName = ctx.freshName("mergeProcessRow")
+    // Wraps instruction logic in a separate function so that `return` statements
+    // exit this function instead of the outer produce loop.
     val (args, params, paramExprs) =
-      buildConsumeParameters(ctx, input)
+      constructConsumeParameters(ctx, child.output, input)
     val body = generateInstructionExecutionCode(ctx, paramExprs)
 
     ctx.addNewFunction(funcName,
@@ -130,37 +132,6 @@ case class MergeRowsExec(
        """.stripMargin)
 
     s"$funcName(${args.mkString(", ")});"
-  }
-
-  private def buildConsumeParameters(
-      ctx: CodegenContext,
-      input: Seq[ExprCode]): (Seq[String], Seq[String], Seq[ExprCode]) = {
-    val args = Seq.newBuilder[String]
-    val params = Seq.newBuilder[String]
-    val paramExprs = Seq.newBuilder[ExprCode]
-
-    input.zip(child.output).zipWithIndex.foreach {
-      case ((ev, attr), i) =>
-        val paramName = ctx.freshName(s"mergeExpr_$i")
-        val paramType = CodeGenerator.javaType(attr.dataType)
-        args += ev.value.toString
-        params += s"$paramType $paramName"
-
-        val paramIsNull = if (!attr.nullable) {
-          FalseLiteral
-        } else {
-          val isNull = ctx.freshName(s"mergeIsNull_$i")
-          args += ev.isNull.toString
-          params += s"boolean $isNull"
-          JavaCode.isNullVariable(isNull)
-        }
-
-        paramExprs += ExprCode(
-          paramIsNull,
-          JavaCode.variable(paramName, attr.dataType))
-    }
-
-    (args.result(), params.result(), paramExprs.result())
   }
 
   /**
@@ -268,6 +239,7 @@ case class MergeRowsExec(
         val metricUpdateCode = generateMetricUpdateCode(ctx, context, sourcePresent)
 
         s"""
+           |${ctx.registerComment(s"Keep($context) instruction")}
            |${code.code}
            |if (${code.value}) {
            |  $metricUpdateCode
@@ -281,6 +253,7 @@ case class MergeRowsExec(
         val metricUpdateCode = generateDeleteMetricUpdateCode(ctx, sourcePresent)
 
         s"""
+           |${ctx.registerComment("Discard instruction")}
            |${code.code}
            |if (${code.value}) {
            |  $metricUpdateCode
@@ -295,6 +268,7 @@ case class MergeRowsExec(
         val metricUpdateCode = generateUpdateMetricUpdateCode(ctx, sourcePresent)
 
         s"""
+           |${ctx.registerComment("Split instruction")}
            |${code.code}
            |if (${code.value}) {
            |  $metricUpdateCode
