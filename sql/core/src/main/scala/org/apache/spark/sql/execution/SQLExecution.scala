@@ -218,7 +218,7 @@ object SQLExecution extends Logging {
                     case NonFatal(e) =>
                       logDebug("Failed to generate SparkPlanInfo", e)
                       // If the queryExecution already failed before this, we are not able to
-                      // generate the the plan info, so we use and empty graphviz node to make the
+                      // generate the plan info, so we use an empty graphviz node to make the
                       // UI happy
                       SparkPlanInfo.EMPTY
                   }
