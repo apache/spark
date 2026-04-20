@@ -49,8 +49,7 @@ class CatalogSuite extends SparkFunSuite {
    * but test assertions compare against Column.create() which produces null IDs.
    */
   private def stripIds(cols: Array[Column]): Array[Column] = {
-    cols.map(c => Column.create(c.name(), c.dataType(), c.nullable(), c.comment(),
-      c.defaultValue(), c.metadataInJSON()))
+    cols.map(c => Column.withId(c, null))
   }
 
   /** Asserts that columns match ignoring column IDs. */
