@@ -126,7 +126,7 @@ SUM segtree (blockSize=256) W=4001                 3917           3972          
 
 
 ================================================================================================
-Section F - spill regression guard (String, stress)
+Section B7 - spill regression guard (String, stress)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.17.0-1010-azure
