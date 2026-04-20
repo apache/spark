@@ -1168,6 +1168,42 @@ class ScalarPandasUDFPeakmemBench(_ScalarPandasBenchMixin, _PeakmemBenchBase):
     pass
 
 
+# -- SQL_SCALAR_PANDAS_ITER_UDF ---------------------------------------------
+# UDF receives ``Iterator[pandas.Series]``, returns ``Iterator[pandas.Series]``.
+
+
+class _ScalarPandasIterBenchMixin(_ScalarPandasBenchMixin):
+    """Mixin for SQL_SCALAR_PANDAS_ITER_UDF benchmarks."""
+
+    def _identity_pandas_iter(it):
+        return (s for s in it)
+
+    def _sort_pandas_iter(it):
+        for s in it:
+            yield s.sort_values().reset_index(drop=True)
+
+    def _nullcheck_pandas_iter(it):
+        for s in it:
+            yield s.notna()
+
+    _eval_type = PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
+    _udfs = {
+        "identity_udf": (_identity_pandas_iter, None, [0]),
+        "sort_udf": (_sort_pandas_iter, None, [0]),
+        "nullcheck_udf": (_nullcheck_pandas_iter, BooleanType(), [0]),
+    }
+    params = [list(_ScalarPandasBenchMixin._scenario_configs), list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+
+class ScalarPandasIterUDFTimeBench(_ScalarPandasIterBenchMixin, _TimeBenchBase):
+    pass
+
+
+class ScalarPandasIterUDFPeakmemBench(_ScalarPandasIterBenchMixin, _PeakmemBenchBase):
+    pass
+
+
 # -- SQL_WINDOW_AGG_ARROW_UDF ------------------------------------------------
 # UDF receives ``pa.Array`` columns for the entire window partition, returns scalar.
 
