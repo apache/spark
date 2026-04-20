@@ -47,7 +47,6 @@ import org.apache.spark.util.ArrayImplicits._
  * Note: the design doc Section 3.3 specifies leaves are NOT materialized and
  * recomputed from the spillable array on demand. For initial implementation simplicity
  * we materialize leaves inside the per-block internal node arrays.
- * // TODO(SPARK-XXXXX) re-assess after Frame integration.
  *
  * @note Instances are not thread-safe.
  */
@@ -116,9 +115,7 @@ private[window] class WindowSegmentTree(
    *  references and object headers push the effective footprint higher.
    *  Tighter per-type sizing (real boxing cost, variable-length fields) is
    *  intentionally out of scope here; TaskMemoryManager remains the hard
-   *  backstop via spill / OOM.
-   *  TODO(SPARK-XXXXX): per-type width estimator keyed on
-   *  `bufferDataTypes` (primitive 16 B, String/Binary/Decimal wider). */
+   *  backstop via spill / OOM. */
   private val bufferWidthBytes: Long = {
     val bytesPerField = 16L
     math.max(1L, bufferDataTypes.size.toLong * bytesPerField)
@@ -133,9 +130,7 @@ private[window] class WindowSegmentTree(
    *  matches the allocation in [[buildBlockLevels]] for every
    *  `(blockSize, fanout)` pair, including non-power-of-`fanout` cases.
    *  For `blockSize == 1` the block is a single leaf with no parent
-   *  levels, so this returns 1.
-   *  TODO(SPARK-XXXXX): drop the leaf term when [[buildBlockLevels]]
-   *  switches to on-demand leaf recomputation. */
+   *  levels, so this returns 1. */
   private val cachedSlotsPerBlock: Long = {
     var n = blockSize.toLong
     var sum = n
@@ -210,13 +205,9 @@ private[window] class WindowSegmentTree(
       // I8: rowArray spilled-to-disk detection. If the rowArray has already
       // spilled, evicting our cache is counter-productive (rebuild would
       // O(blockStart)-scan the spill file). Return 0L to let TMM fall
-      // through to the next consumer.
-      //
-      // TODO(SPARK-XXXXX) #segtree-spill-priority (contract Section 7 O4): current
-      // heuristic uses `spillSize > 0` as the "has spilled" signal. A more
-      // precise check would consult `UnsafeExternalSorter.getSpillWriters`
-      // state, but that API is not public. Re-evaluate after benchmark.
-      // FIXME(kentyao): upstream a public "hasSpilled" hook on the array.
+      // through to the next consumer. The current check uses `spillSize > 0`
+      // as the "has spilled" signal; a more precise check would consult
+      // `UnsafeExternalSorter.getSpillWriters` state, which is not public.
       if (rowArray != null && rowArray.spillSize > 0) return 0L
       evictUntil(size)
     }

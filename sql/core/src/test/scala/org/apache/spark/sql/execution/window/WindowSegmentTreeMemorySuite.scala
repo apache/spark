@@ -35,9 +35,9 @@ import org.apache.spark.sql.types.IntegerType
  * `the PR description` Section 5.
  *
  * Tests T5 (rowArray-spilled priority) and T8 (task-kill listener) are
- * deferred -- tracked as upstream follow-up JIRAs (spill priority and
- * memory-manager integration); stubs are `ignore`d
- * with a pointer comment so the matrix stays visible.
+ * intentionally left as `ignore`d stubs so the matrix stays visible;
+ * each stub documents what additional infrastructure it needs before
+ * it can run.
  */
 class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext {
 
@@ -359,17 +359,19 @@ class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext 
     }
   }
 
-  // ---- T5 (deferred) ----
-  ignore("T5 rowArray-spilled short-circuit in SegTreeSpiller.spill -- deferred") {
+  // ---- T5 (ignored stub) ----
+  ignore("T5 rowArray-spilled short-circuit in SegTreeSpiller.spill -- ignored stub") {
     // Requires a controllable `hasSpilled` hook on
-    // ExternalAppendOnlyUnsafeRowArray. See
-    // an upstream follow-up JIRA.
+    // ExternalAppendOnlyUnsafeRowArray, which the current public API does
+    // not expose. The production path uses a `spillSize > 0` heuristic in
+    // WindowSegmentTree; this cell is kept as an ignored stub so the T5
+    // row of the memory-manager matrix stays visible.
   }
 
-  // ---- T8 (deferred) ----
-  ignore("T8 task-kill completion listener triggers close -- deferred") {
+  // ---- T8 (ignored stub) ----
+  ignore("T8 task-kill completion listener triggers close -- ignored stub") {
     // Requires a SparkContext/DAGScheduler-driven task-kill path; covered
-    // implicitly by the frame-layer listener wiring.
-    // See an upstream follow-up JIRA.
+    // implicitly by the frame-layer listener wiring. Kept as an ignored
+    // stub so the T8 row of the memory-manager matrix stays visible.
   }
 }
