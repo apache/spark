@@ -1180,7 +1180,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
             |QUALIFY b > 1
           """.stripMargin).queryExecution.analyzed
       }
-      assert(e.getMessage.contains("b"))
+      assert(e.getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+      assert(e.getMessageParameters.get("objectName").contains("b"))
     }
   }
 

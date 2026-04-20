@@ -485,10 +485,10 @@ class Analyzer(
       new ResolveSetVariable(catalogManager) ::
       new ResolveFetchCursor(catalogManager) ::
       new ResolveCursors() ::
-      ResolveQualify ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
+      ResolveQualify ::
       TimeWindowing ::
       SessionWindowing ::
       ResolveWindowTime ::
@@ -3425,7 +3425,6 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
       _.containsPattern(WINDOW_EXPRESSION), ruleId) {
 
-
       case Filter(condition, _) if hasWindowFunction(condition) =>
         throw QueryCompilationErrors.windowFunctionNotAllowedError("WHERE")
 
@@ -4022,11 +4021,9 @@ class Analyzer(
    */
   object ResolveQualify extends Rule[LogicalPlan] {
     /**
-     * Resolve the qualify condition using the child output of the top Project/Aggregate
-     * in the plan and add the missing references to the Project/Aggregate and preserve
-     * them in all intermediate operators.
+     * Resolve subqueries in the condition expression using the fake Project pattern.
+     * This reuses the same approach as HAVING resolution (see line ~722).
      */
-    /** Resolve subqueries in the condition expression using the fake Project pattern. */
     private def resolveConditionSubqueries(
         cond: Expression, outer: LogicalPlan): Expression = {
       if (SubqueryExpression.hasSubquery(cond)) {
@@ -4037,6 +4034,11 @@ class Analyzer(
       }
     }
 
+    /**
+     * Resolve the qualify condition by recursing through the child plan tree
+     * (Project/Aggregate/Window/Filter) and adding missing attribute references
+     * to each intermediate node so they are preserved through window extraction.
+     */
     private def resolveQualifyCondition(
         cond: Expression,
         candidateAttrs: AttributeSet,
