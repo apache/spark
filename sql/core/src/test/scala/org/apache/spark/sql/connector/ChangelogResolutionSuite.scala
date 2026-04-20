@@ -24,9 +24,12 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.ChangelogRange
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
+import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{LongType, StringType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, TimestampType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * Tests for the CDC (Change Data Capture) analyzer resolution path:
@@ -202,5 +205,153 @@ class ChangelogResolutionSuite extends QueryTest with SharedSparkSession {
     val range = info.get.range().asInstanceOf[ChangelogRange.VersionRange]
     assert(range.startingVersion() == "1")
     assert(range.endingVersion().get() == "5")
+  }
+
+  // ===========================================================================
+  // Generic changelog schema validation (SPARK-55951 completion)
+  // ===========================================================================
+
+  private def stubInfo(): ChangelogInfo = new ChangelogInfo(
+    new ChangelogRange.VersionRange("1", java.util.Optional.of("2"), true, true),
+    ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS,
+    false)
+
+  private def cl(name: String, cols: (String, org.apache.spark.sql.types.DataType)*)
+      : BrokenChangelog = {
+    new BrokenChangelog(name, cols.map { case (n, t) => Column.create(n, t) }.toArray)
+  }
+
+  private def missing(columnName: String): Map[String, String] =
+    Map("changelogName" -> "bad_cl", "columnName" -> columnName)
+
+  private def wrongType(columnName: String, expected: String, actual: String)
+      : Map[String, String] = Map(
+    "changelogName" -> "bad_cl",
+    "columnName" -> columnName,
+    "expectedType" -> expected,
+    "actualType" -> actual)
+
+  // Valid metadata tuples; tests swap one of these out to create broken schemas.
+  private val validChangeType = "_change_type" -> StringType
+  private val validVersion = "_commit_version" -> LongType
+  private val validTimestamp = "_commit_timestamp" -> TimestampType
+
+  test("ChangelogTable - missing _change_type column throws") {
+    checkError(
+      intercept[AnalysisException] {
+        ChangelogTable(cl("bad_cl", validVersion, validTimestamp), stubInfo())
+      },
+      condition = "INVALID_CHANGELOG_SCHEMA.MISSING_COLUMN",
+      parameters = missing("_change_type"))
+  }
+
+  test("ChangelogTable - missing _commit_version column throws") {
+    checkError(
+      intercept[AnalysisException] {
+        ChangelogTable(cl("bad_cl", validChangeType, validTimestamp), stubInfo())
+      },
+      condition = "INVALID_CHANGELOG_SCHEMA.MISSING_COLUMN",
+      parameters = missing("_commit_version"))
+  }
+
+  test("ChangelogTable - missing _commit_timestamp column throws") {
+    checkError(
+      intercept[AnalysisException] {
+        ChangelogTable(cl("bad_cl", validChangeType, validVersion), stubInfo())
+      },
+      condition = "INVALID_CHANGELOG_SCHEMA.MISSING_COLUMN",
+      parameters = missing("_commit_timestamp"))
+  }
+
+  test("ChangelogTable - wrong _change_type data type throws") {
+    checkError(
+      intercept[AnalysisException] {
+        ChangelogTable(
+          cl("bad_cl", "_change_type" -> IntegerType, validVersion, validTimestamp),
+          stubInfo())
+      },
+      condition = "INVALID_CHANGELOG_SCHEMA.INVALID_COLUMN_TYPE",
+      parameters = wrongType("_change_type", "STRING", "INT"))
+  }
+
+  test("ChangelogTable - wrong _commit_timestamp data type throws") {
+    checkError(
+      intercept[AnalysisException] {
+        ChangelogTable(
+          cl("bad_cl", validChangeType, validVersion, "_commit_timestamp" -> LongType),
+          stubInfo())
+      },
+      condition = "INVALID_CHANGELOG_SCHEMA.INVALID_COLUMN_TYPE",
+      parameters = wrongType("_commit_timestamp", "TIMESTAMP", "BIGINT"))
+  }
+
+  test("ChangelogTable - _commit_version type is connector-defined (any type accepted)") {
+    Seq(IntegerType, LongType, StringType).foreach { versionType =>
+      ChangelogTable(
+        cl("any_cl", validChangeType, "_commit_version" -> versionType, validTimestamp),
+        stubInfo())
+    }
+  }
+
+  test("ChangelogTable - valid schema with data columns passes") {
+    ChangelogTable(
+      cl("good_cl", "id" -> LongType, "name" -> StringType,
+        validChangeType, validVersion, validTimestamp),
+      stubInfo())
+  }
+
+  test("ChangelogTable - post-processing flag with empty rowId throws") {
+    // Connector advertises containsCarryoverRows=true but returns no rowId(). Spark cannot
+    // post-process without row identity, so relation construction must fail fast.
+    val bad = new BrokenChangelog(
+      "no_rowid_cl",
+      Array(
+        Column.create("id", LongType),
+        Column.create("_change_type", StringType),
+        Column.create("_commit_version", LongType),
+        Column.create("_commit_timestamp", TimestampType))) {
+      override def containsCarryoverRows(): Boolean = true
+      override def rowId(): Array[NamedReference] = Array.empty
+    }
+    checkError(
+      intercept[AnalysisException] { ChangelogTable(bad, stubInfo()) },
+      condition = "INVALID_CHANGELOG_SCHEMA.MISSING_ROW_ID",
+      parameters = Map("changelogName" -> "no_rowid_cl"))
+  }
+
+  test("ChangelogTable - nested rowId (multi-segment NamedReference) throws") {
+    // Nested rowId paths (e.g. Seq("payload", "id")) are intentionally rejected for now.
+    // See the TODO in ResolveChangelogTable for the re-enable plan.
+    val nested = new BrokenChangelog(
+      "nested_cl",
+      Array(
+        Column.create("payload", LongType),
+        Column.create("_change_type", StringType),
+        Column.create("_commit_version", LongType),
+        Column.create("_commit_timestamp", TimestampType))) {
+      override def rowId(): Array[NamedReference] = Array(FieldReference(Seq("payload", "id")))
+    }
+    checkError(
+      intercept[AnalysisException] { ChangelogTable(nested, stubInfo()) },
+      condition = "INVALID_CHANGELOG_SCHEMA.NESTED_ROW_ID",
+      parameters = Map("changelogName" -> "nested_cl", "rowId" -> "payload.id"))
+  }
+}
+
+/**
+ * Test-only [[Changelog]] implementation that returns a hand-crafted schema. Used to
+ * exercise [[ChangelogTable]]'s schema validation without going through a real catalog.
+ */
+private class BrokenChangelog(
+    nameArg: String,
+    cols: Array[Column]) extends Changelog {
+  override def name(): String = nameArg
+  override def columns(): Array[Column] = cols
+  override def containsCarryoverRows(): Boolean = false
+  override def containsIntermediateChanges(): Boolean = false
+  override def representsUpdateAsDeleteAndInsert(): Boolean = false
+  override def rowId(): Array[NamedReference] = Array.empty
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+    throw new UnsupportedOperationException("not needed for schema validation tests")
   }
 }

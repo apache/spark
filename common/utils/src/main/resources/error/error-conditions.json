@@ -3276,6 +3276,34 @@
     },
     "sqlState" : "42K03"
   },
+  "INVALID_CHANGELOG_SCHEMA" : {
+    "message" : [
+      "The Change Data Capture (CDC) schema returned by connector <changelogName> is invalid."
+    ],
+    "subClass" : {
+      "INVALID_COLUMN_TYPE" : {
+        "message" : [
+          "Column `<columnName>` has type <actualType>, expected <expectedType>."
+        ]
+      },
+      "MISSING_COLUMN" : {
+        "message" : [
+          "Required column `<columnName>` is missing."
+        ]
+      },
+      "MISSING_ROW_ID" : {
+        "message" : [
+          "Connector advertises one or more post-processing properties (`containsCarryoverRows`, `representsUpdateAsDeleteAndInsert`, `containsIntermediateChanges`) that require row identity, but `Changelog.rowId()` returned an empty array. Either set all three to `false`, or return at least one row-id `NamedReference`."
+        ]
+      },
+      "NESTED_ROW_ID" : {
+        "message" : [
+          "rowId `<rowId>` is nested. Spark currently requires row identity columns to be top-level columns of the changelog schema. Project the nested field to a top-level column in `Changelog.columns()` and point `Changelog.rowId()` at that column."
+        ]
+      }
+    },
+    "sqlState" : "42K03"
+  },
   "INVALID_CLONE_SESSION_REQUEST" : {
     "message" : [
       "Invalid session clone request."

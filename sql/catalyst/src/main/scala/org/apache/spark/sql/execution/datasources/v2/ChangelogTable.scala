@@ -19,9 +19,12 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.{EnumSet => JEnumSet, Set => JSet}
 
-import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogInfo, Column, SupportsRead, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{
+  Changelog, ChangelogInfo, Column, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, MICRO_BATCH_READ}
 import org.apache.spark.sql.connector.read.ScanBuilder
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.types.{DataType, StringType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -35,6 +38,11 @@ case class ChangelogTable(
     changelog: Changelog,
     changelogInfo: ChangelogInfo) extends Table with SupportsRead {
 
+  // Validate the connector returned a schema with the required CDC metadata columns
+  // and correct types. `_commit_version` is connector-defined per the Changelog contract,
+  // so its type is not checked.
+  ChangelogTable.validateSchema(changelog)
+
   override def name: String = changelog.name
 
   override def columns: Array[Column] = changelog.columns
@@ -44,4 +52,42 @@ case class ChangelogTable(
   }
 
   override def capabilities: JSet[TableCapability] = JEnumSet.of(BATCH_READ, MICRO_BATCH_READ)
+}
+
+object ChangelogTable {
+
+  def validateSchema(cl: Changelog): Unit = {
+    val byName = cl.columns.map(c => c.name -> c).toMap
+    def check(name: String, expected: DataType*): Unit = {
+      val col = byName.getOrElse(name,
+        throw QueryCompilationErrors.changelogMissingColumnError(cl.name, name))
+      if (expected.nonEmpty && col.dataType != expected.head) {
+        throw QueryCompilationErrors.changelogInvalidColumnTypeError(
+          cl.name, name, expected.head.sql, col.dataType.sql)
+      }
+    }
+    check("_change_type", StringType)
+    check("_commit_version")           // connector-defined, any type accepted
+    check("_commit_timestamp", TimestampType)
+    // If the connector advertises any property that requires row identity for Spark-side
+    // post-processing, rowId() must be non-empty. Checked here so bad connectors fail at
+    // relation construction rather than silently having post-processing skipped.
+    val needsRowId =
+      cl.containsCarryoverRows ||
+      cl.representsUpdateAsDeleteAndInsert ||
+      cl.containsIntermediateChanges
+    if (needsRowId && cl.rowId().isEmpty) {
+      throw QueryCompilationErrors.changelogMissingRowIdError(cl.name)
+    }
+    // TODO(Sandro): relax when nested rowId support is re-added (see ResolveChangelogTable
+    // for the reasoning and prior-commit pointer). For now, every rowId must resolve to a
+    // top-level column of the changelog schema.
+    cl.rowId().foreach { ref =>
+      val parts = ref.fieldNames()
+      if (parts.length != 1) {
+        throw QueryCompilationErrors.changelogNestedRowIdError(
+          cl.name, parts.mkString("."))
+      }
+    }
+  }
 }
