@@ -1262,8 +1262,9 @@ object StaxXmlParser {
       return
     }
 
-    // Skip type inference when the user has disabled it: keep the raw XML text as a string.
-    if (!options.inferSchema) {
+    // Skip type inference when the user has disabled it via inferSchema=false, gated by
+    // spark.sql.xml.variant.respectInferSchema so existing workloads keep inferring by default.
+    if (!options.inferSchema && options.respectVariantInferSchema) {
       builder.appendString(value)
       return
     }
