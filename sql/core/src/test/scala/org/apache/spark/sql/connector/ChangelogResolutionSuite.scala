@@ -208,7 +208,7 @@ class ChangelogResolutionSuite extends QueryTest with SharedSparkSession {
   }
 
   // ===========================================================================
-  // Generic changelog schema validation (SPARK-55951 completion)
+  // Generic changelog schema validation
   // ===========================================================================
 
   private def stubInfo(): ChangelogInfo = new ChangelogInfo(

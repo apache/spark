@@ -109,6 +109,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
     val changeTypeAttr = plan.output.find(_.name == "_change_type").get
     val rowIdExprs = V2ExpressionUtils.resolveRefs[NamedExpression](cl.rowId().toSeq, plan)
     val rowVersionExpr = V2ExpressionUtils.resolveRef[NamedExpression](cl.rowVersion(), plan)
+
     // Layer 1: Window with _del_cnt, _ins_cnt
     val insertIf = If(
       EqualTo(changeTypeAttr, Literal("insert")), Literal(1), Literal(null, IntegerType))
@@ -190,24 +191,8 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
     val sortOrder = (rowIdExprs ++ Seq(rowVersionExpr, changeTypeAttr))
       .map(e => SortOrder(e, Ascending))
     val sorted = Sort(sortOrder, global = false, repartitioned)
-    // 4. Build CarryOverRemoval with column NAMES, not ordinals.
-    //
-    // TODO(review discussion): We pass column names and resolve them to ordinals at execution
-    // time in CarryOverRemovalExec.doExecute(). Ordinals computed at analysis time were tried
-    // first but broke: ColumnPruning / projection rewrites between analysis and physical
-    // planning can reorder or re-number columns, so analysis-time ordinals pointed at the
-    // wrong fields by the time the exec node ran. Resolving names against child.output at
-    // execute time dodges that. Flagging this as a discussion point. @Johan: is
-    // name-resolution the right idiom here, or is there a cleaner way to pin ordinals
-    // through the optimizer?
-    //
-    // TODO(Sandro): Support nested rowId paths (e.g. Seq("payload", "id")). Spark's
-    // NamedReference API admits them, and prior commits on this branch (see git log before
-    // this commit) implemented struct-field extraction in CarryOverRemovalExec plus a
-    // "keep the parent struct in data comparison" special case in the dataColumnNames
-    // computation below. Restore from that history when the first real connector needs it.
-    // The top-level-only restriction is enforced in ChangelogTable.validateSchema, so here
-    // we can take `fieldNames()(0)` directly.
+    // 4. Build CarryOverRemoval keyed by column names (ordinals would break under
+    // ColumnPruning); nested rowId paths are rejected in ChangelogTable.validateSchema.
     val rowIdColumnNames = cl.rowId().map(_.fieldNames()(0)).toSeq
     val rowVersionColumnName = cl.rowVersion().fieldNames()(0)  // e.g. "_commit_version"
 
@@ -215,18 +200,13 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
     val excluded = metadataNames ++ rowIdColumnNames.toSet
     val dataColumnNames = plan.output.map(_.name).filterNot(excluded.contains)
 
-    // TODO(review discussion): pinning every relation attribute via requiredAttributes is a
-    // blunt instrument: it disables ColumnPruning for the entire subtree rooted at
-    // CarryOverRemoval. @Johan, is there a more surgical way to keep just the data columns
-    // alive through the optimizer (e.g. a dedicated trait, or marking the logical node as
-    // requires-all-output)? For now this is defensive.
     val requiredAttrs = plan.output
 
     CarryOverRemoval(sorted, rowIdColumnNames, rowVersionColumnName, dataColumnNames, requiredAttrs)
   }
 
   // ---------------------------------------------------------------------------
-  // Net Change Computation TODO
+  // Net Change Computation
   // ---------------------------------------------------------------------------
 
   /**

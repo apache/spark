@@ -31,11 +31,6 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
  * All ordinals are resolved dynamically from the actual child output at execution time,
  * because the optimizer may insert projections that change column positions.
  *
- * rowId columns are restricted to top-level columns in the child output. Nested rowId paths
- * (e.g. `payload.id`) are rejected at analysis time by
- * [[org.apache.spark.sql.catalyst.analysis.ResolveChangelogTable]]. If a future connector
- * needs nested row identity, see the TODO there for the strategy and prior-commit pointer.
- *
  * @param child the pre-sorted child plan
  * @param rowIdColumnNames top-level names of row identity columns (supports composite keys)
  * @param rowVersionColumnName name of the row version column

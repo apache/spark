@@ -756,7 +756,7 @@ class ResolveChangelogTablePostProcessingSuite
   // ===========================================================================
 
   test("no-op UPDATE (unchanged data) is dropped as carry-over") {
-    // SPIP B.6: connector-agnostic carry-over removal compares data columns. A no-op
+    // Connector-agnostic carry-over removal compares data columns. A no-op
     // UPDATE produces byte-identical delete+insert, indistinguishable from a CoW
     // carry-over, and is therefore dropped. Legacy getChangeRows would have emitted
     // update_preimage/update_postimage here.

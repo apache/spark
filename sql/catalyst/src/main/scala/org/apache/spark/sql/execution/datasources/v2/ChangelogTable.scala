@@ -79,9 +79,7 @@ object ChangelogTable {
     if (needsRowId && cl.rowId().isEmpty) {
       throw QueryCompilationErrors.changelogMissingRowIdError(cl.name)
     }
-    // TODO(Sandro): relax when nested rowId support is re-added (see ResolveChangelogTable
-    // for the reasoning and prior-commit pointer). For now, every rowId must resolve to a
-    // top-level column of the changelog schema.
+    // Assumption: every rowId is a top-level column (nested paths rejected until supported)
     cl.rowId().foreach { ref =>
       val parts = ref.fieldNames()
       if (parts.length != 1) {

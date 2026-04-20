@@ -31,12 +31,6 @@ import org.apache.spark.sql.types.{DataType, StructType}
  *   - If data columns differ -> real change, emit both rows
  *   - Unpaired delete or insert -> emit as-is
  *
- * TODO(@Johan): Input rows may be mutable/reused by the upstream iterator. Any row buffered
- * for comparison against the next row is defensively copied via `.copy()`. This is the
- * standard DSv2 pattern, but the per-row copy cost is non-trivial on large scans. Confirm
- * whether the upstream stage here guarantees non-reused rows (in which case we could drop the
- * copy), or whether we should keep the defensive copy.
- *
  * @param input pre-sorted iterator of InternalRow
  * @param rowIdOrdinals column indices for row identity columns (supports composite keys)
  * @param rowVersionOrdinal column index for row version comparison
@@ -106,27 +100,27 @@ class CarryOverIterator(
    * Each tick handles one of four input states, resolved in this priority order:
    *
    *  (1) `pendingNext` non-null. A row re-queued by a previous tick (cross-group or stray
-   *      delete). If it's a delete, becomes `pendingDelete` and we loop; otherwise it's the
+   *      delete). If it's a delete, becomes `pendingDelete` and we loop. Otherwise it's the
    *      next thing to emit and we're done.
    *
-   *  (2) No `pendingDelete` and input empty. Nothing left to do; exit.
+   *  (2) No `pendingDelete` and input empty. Nothing left to do -> exit.
    *
    *  (3) `pendingDelete` non-null and input empty. The buffered delete has no partner and
    *      must be emitted as-is (real change).
    *
    *  (4) No `pendingDelete` and input has more. Read the next row. If it's a delete, buffer
-   *      it (needs the next row to classify); otherwise emit directly.
+   *      it (needs the next row to classify). Otherwise emit directly.
    *
    *  (5) `pendingDelete` non-null and input has more. Read the next row and decide:
    *      - same (rowId, rowVersion) AND `_change_type == insert` AND all data columns equal
    *        -> CoW carry-over: drop both.
-   *      - same group AND insert AND data differs: real UPDATE-as-delete-insert; emit the
+   *      - same group AND insert AND data differs: real UPDATE-as-delete-insert -> emit the
    *        delete now, re-queue the insert as `pendingNext` for emission next tick.
    *      - different group OR not an insert: the buffered delete was unpaired; emit it and
    *        re-queue the peeked row.
    *
    * Invariant: sort order is (rowId, rowVersion, `_change_type ASC`) so `delete` always
-   * precedes `insert` within a group; this lets us hold at most one unmatched delete at a
+   * precedes `insert` within a group. This lets us hold at most one unmatched delete at a
    * time without multi-row lookahead.
    *
    * Termination: every iteration either (a) consumes one row from `input`, (b) resolves a
