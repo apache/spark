@@ -1262,6 +1262,12 @@ object StaxXmlParser {
       return
     }
 
+    // Skip type inference when the user has disabled it: keep the raw XML text as a string.
+    if (!options.inferSchema) {
+      builder.appendString(value)
+      return
+    }
+
     // Try parsing the value as boolean first
     if (value.toLowerCase(Locale.ROOT) == "true") {
       builder.appendBoolean(true)
