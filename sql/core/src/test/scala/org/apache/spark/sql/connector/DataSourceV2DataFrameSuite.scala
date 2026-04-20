@@ -2171,9 +2171,9 @@ class DataSourceV2DataFrameSuite
 
       sql(s"ALTER TABLE $t RENAME COLUMN salary TO compensation")
 
-      // InMemoryTableCatalog gives renamed column a new ID,
-      // plus the column name changed, so both checks fire.
-      // COLUMN_ID_MISMATCH fires first (runs before schema check)
+      // Column ID check skips renamed columns (old name "salary" not
+      // found in current table), so COLUMNS_MISMATCH fires from the
+      // schema check detecting the removed/added column.
       checkError(
         exception = intercept[AnalysisException] {
           df.collect()
