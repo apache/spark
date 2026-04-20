@@ -28,11 +28,10 @@ ARG APT_INSTALL="apt-get install --no-install-recommends -y"
 
 RUN apt-get clean
 RUN apt-get update
-RUN PKGS="software-properties-common git libxml2-dev pkg-config curl wget openjdk-8-jdk libpython3-dev python3-pip python3-setuptools python3.9 build-essential gfortran libopenblas-dev liblapack-dev"; $APT_INSTALL $PKGS || (apt-get update && $APT_INSTALL $PKGS)
+RUN PKGS="software-properties-common git libxml2-dev pkg-config curl wget openjdk-8-jdk libpython3-dev python3-pip python3-setuptools python3.9 build-essential gfortran libopenblas-dev liblapack-dev gpg gpg-agent software-properties-common"; $APT_INSTALL $PKGS || (apt-get update && $APT_INSTALL $PKGS)
 RUN update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
 
 # We also want Python 3.8 since that's the oldest supported version for Spark 3.5
-RUN apt install software-properties-common
 RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update
 RUN PKGS="python3.8"; (apt install $PKGS || apt-get update && apt install $PKGS)
