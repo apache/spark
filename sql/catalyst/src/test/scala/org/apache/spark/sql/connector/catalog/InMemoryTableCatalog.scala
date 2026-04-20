@@ -211,7 +211,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       case _: InMemoryTableWithV2Filter =>
         new InMemoryTableWithV2Filter(
           name = table.name,
-          columns = CatalogV2Util.structTypeToV2Columns(schema),
+          columns = reconciledColumns,
           partitioning = finalPartitioning,
           properties = properties)
           .alterTableWithData(table.data, schema)

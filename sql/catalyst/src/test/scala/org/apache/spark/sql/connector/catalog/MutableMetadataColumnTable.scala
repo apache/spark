@@ -77,6 +77,8 @@ class MutableMetadataColumnCatalog extends InMemoryTableCatalog {
 /**
  * Wrapper that delegates everything to the base table but
  * overrides metadataColumns to read from the mutable static.
+ * Intentionally does not implement SupportsWrite since this
+ * is only used for read path metadata column validation tests.
  */
 private class TableWithMutableMetadata(base: Table)
   extends Table
