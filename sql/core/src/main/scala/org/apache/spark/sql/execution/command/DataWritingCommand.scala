@@ -103,7 +103,6 @@ object DataWritingCommand {
   }
   /**
    * When execute CTAS operators, and the location is not empty, throw [[AnalysisException]].
-   * For CTAS, the SaveMode is always [[ErrorIfExists]]
    *
    * @param tablePath Table location.
    * @param saveMode  Save mode of the table.
