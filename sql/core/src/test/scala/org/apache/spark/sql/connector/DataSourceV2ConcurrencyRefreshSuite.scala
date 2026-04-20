@@ -1366,9 +1366,11 @@ class DataSourceV2ConcurrencyRefreshSuite
         if (setOpOk(mod)) {
           df1.union(df2).collect()
         } else {
-          assertThrows[AnalysisException] {
-            df1.union(df2).collect()
-          }
+          checkError(
+            exception = intercept[AnalysisException] {
+              df1.union(df2).collect()
+            },
+            condition = setOpCondition(mod))
         }
       }
     }
@@ -1386,9 +1388,11 @@ class DataSourceV2ConcurrencyRefreshSuite
         if (setOpOk(mod)) {
           df1.except(df2).collect()
         } else {
-          assertThrows[AnalysisException] {
-            df1.except(df2).collect()
-          }
+          checkError(
+            exception = intercept[AnalysisException] {
+              df1.except(df2).collect()
+            },
+            condition = setOpCondition(mod))
         }
       }
     }
@@ -1406,9 +1410,11 @@ class DataSourceV2ConcurrencyRefreshSuite
         if (setOpOk(mod)) {
           df1.intersect(df2).collect()
         } else {
-          assertThrows[AnalysisException] {
-            df1.intersect(df2).collect()
-          }
+          checkError(
+            exception = intercept[AnalysisException] {
+              df1.intersect(df2).collect()
+            },
+            condition = setOpCondition(mod))
         }
       }
     }

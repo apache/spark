@@ -57,8 +57,10 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       oldColumns.find(_.name().toLowerCase(Locale.ROOT) == normalizedName) match {
         case Some(oldCol) if oldCol.id() != null =>
           Column.withId(newCol, oldCol.id())
-        case _ =>
+        case _ if newCol.id() == null =>
           Column.withId(newCol, InMemoryBaseTable.nextColumnId().toString)
+        case _ =>
+          newCol
       }
     }
   }
