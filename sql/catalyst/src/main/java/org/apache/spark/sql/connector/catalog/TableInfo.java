@@ -30,6 +30,9 @@ public class TableInfo {
   private final Map<String, String> properties;
   private final Transform[] partitions;
   private final Constraint[] constraints;
+  private final String tableType;
+  private final String viewDefinition;
+  private final DependencyList viewDependencies;
 
   /**
    * Constructor for TableInfo used by the builder.
@@ -40,6 +43,9 @@ public class TableInfo {
     this.properties = builder.properties;
     this.partitions = builder.partitions;
     this.constraints = builder.constraints;
+    this.tableType = builder.tableType;
+    this.viewDefinition = builder.viewDefinition;
+    this.viewDependencies = builder.viewDependencies;
   }
 
   public Column[] columns() {
@@ -60,11 +66,39 @@ public class TableInfo {
 
   public Constraint[] constraints() { return constraints; }
 
+  /**
+   * The table type (e.g. "MANAGED", "EXTERNAL", "VIEW", "METRIC_VIEW").
+   * May be null if the connector should infer the type from properties.
+   *
+   * @see TableSummary for table type constants
+   * @since 4.2.0
+   */
+  public String tableType() { return tableType; }
+
+  /**
+   * The view definition text. For metric views this is the YAML body;
+   * for regular views this would be the SQL text. May be null for non-view tables.
+   *
+   * @since 4.2.0
+   */
+  public String viewDefinition() { return viewDefinition; }
+
+  /**
+   * The list of dependencies for this view or metric view. May be null
+   * if dependency information is not provided.
+   *
+   * @since 4.2.0
+   */
+  public DependencyList viewDependencies() { return viewDependencies; }
+
   public static class Builder {
     private Column[] columns = new Column[0];
     private Map<String, String> properties = new HashMap<>();
     private Transform[] partitions = new Transform[0];
     private Constraint[] constraints = new Constraint[0];
+    private String tableType;
+    private String viewDefinition;
+    private DependencyList viewDependencies;
 
     public Builder withColumns(Column[] columns) {
       this.columns = columns;
@@ -83,6 +117,24 @@ public class TableInfo {
 
     public Builder withConstraints(Constraint[] constraints) {
       this.constraints = constraints;
+      return this;
+    }
+
+    /** @since 4.2.0 */
+    public Builder withTableType(String tableType) {
+      this.tableType = tableType;
+      return this;
+    }
+
+    /** @since 4.2.0 */
+    public Builder withViewDefinition(String viewDefinition) {
+      this.viewDefinition = viewDefinition;
+      return this;
+    }
+
+    /** @since 4.2.0 */
+    public Builder withViewDependencies(DependencyList viewDependencies) {
+      this.viewDependencies = viewDependencies;
       return this;
     }
 

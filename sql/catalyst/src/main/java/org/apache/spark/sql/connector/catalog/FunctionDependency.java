@@ -21,25 +21,18 @@ import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
 
+/**
+ * A function dependency of a SQL object.
+ * <p>
+ * The dependent function is identified by its fully-qualified three-part name
+ * in the form {@code catalog_name.schema_name.function_name}.
+ *
+ * @param functionFullName fully-qualified three-part function name
+ * @since 4.2.0
+ */
 @Evolving
-public interface TableSummary {
-    String MANAGED_TABLE_TYPE = "MANAGED";
-    String EXTERNAL_TABLE_TYPE = "EXTERNAL";
-    String VIEW_TABLE_TYPE = "VIEW";
-    String FOREIGN_TABLE_TYPE = "FOREIGN";
-    String METRIC_VIEW_TABLE_TYPE = "METRIC_VIEW";
-
-    Identifier identifier();
-    String tableType();
-
-    static TableSummary of(Identifier identifier, String tableType) {
-        return new TableSummaryImpl(identifier, tableType);
-    }
-}
-
-record TableSummaryImpl(Identifier identifier, String tableType) implements TableSummary {
-    TableSummaryImpl {
-      Objects.requireNonNull(identifier, "Identifier of a table summary object cannot be null");
-      Objects.requireNonNull(tableType, "Table type of a table summary object cannot be null");
-    }
+public record FunctionDependency(String functionFullName) implements Dependency {
+  public FunctionDependency {
+    Objects.requireNonNull(functionFullName, "functionFullName must not be null");
+  }
 }
