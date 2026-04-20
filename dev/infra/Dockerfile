@@ -15,11 +15,11 @@
 # limitations under the License.
 #
 
-# Image for building and testing Spark branches. Based on Ubuntu 20.04.
+# Image for building and testing Spark branches. Based on Ubuntu 22.04.
 # See also in https://hub.docker.com/_/ubuntu
-FROM ubuntu:focal-20221019
+FROM ubuntu:jammy
 
-ENV FULL_REFRESH_DATE 20221118
+ENV FULL_REFRESH_DATE 20260420
 
 ENV DEBIAN_FRONTEND noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN true
@@ -47,10 +47,10 @@ RUN mkdir -p /usr/local/pypy/pypy3.8 && \
 
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
 
-RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/' >> /etc/apt/sources.list
+RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/' >> /etc/apt/sources.list
 RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
 RUN gpg -a --export E084DAB9 | apt-key add -
-RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/'
+RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/'
 RUN apt update
 RUN $APT_INSTALL r-base
 RUN Rscript -e "install.packages(c('remotes', 'knitr', 'markdown', 'rmarkdown', 'testthat', 'e1071', 'survival', 'arrow', 'roxygen2', 'xml2'), repos='https://cloud.r-project.org/')"
