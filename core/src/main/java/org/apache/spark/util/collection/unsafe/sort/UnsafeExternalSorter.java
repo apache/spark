@@ -595,6 +595,13 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
           MDC.of(LogKeys.NUM_SPILL_WRITERS, spillWriters.size()),
           MDC.of(LogKeys.MERGE_FACTOR, spillMergeFactor));
 
+      // This assignment is not inside synchronized(this), unlike the read in
+      // cleanupResources(). That is safe because all callers of cleanupResources()
+      // (the task completion listener, iterator-end cleanup from wrappers like
+      // UnsafeExternalRowSorter / UnsafeKVExternalSorter / SortExec, etc.) run on
+      // the task thread, sequentially with getSortedIterator(). The volatile modifier
+      // on boundedMerger provides memory visibility across any intervening
+      // synchronized blocks.
       boundedMerger = new UnsafeSorterBoundedSpillMerger(
           spillMergeFactor,
           recordComparatorSupplier.get(),
