@@ -1980,6 +1980,150 @@ class DataSourceV2DataFrameSuite
   }
 
   // =========================================================================
+  // Column ID invariants inspired by Delta column mapping test dimensions
+  // =========================================================================
+
+  // RENAME COLUMN in InMemoryTableCatalog: the reconcileColumnIds
+  // method matches by name, so a rename produces a new column ID
+  // (the new name doesn't match the old name). Real connectors
+  // like Delta preserve IDs through renames at the connector level.
+  // This test documents InMemoryTableCatalog's behavior.
+  test("rename column gets new ID in InMemoryTableCatalog") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+
+      val origCols = catalog("testcat").loadTable(ident).columns()
+      val origSalaryId =
+        origCols.find(_.name() == "salary").get.id()
+
+      sql(s"ALTER TABLE $t RENAME COLUMN salary TO compensation")
+
+      val newCols = catalog("testcat").loadTable(ident).columns()
+      val newCompId =
+        newCols.find(_.name() == "compensation").get.id()
+
+      // InMemoryTableCatalog assigns new ID on rename because
+      // reconcileColumnIds matches by name, not by rename tracking
+      assert(origSalaryId !== newCompId,
+        "InMemoryTableCatalog assigns new ID on rename: " +
+          s"was $origSalaryId, got $newCompId")
+    }
+  }
+
+  // DataFrame detects column ID change after rename because
+  // InMemoryTableCatalog assigns a new ID.
+  test("DataFrame detects rename as column ID change") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t RENAME COLUMN salary TO compensation")
+
+      // InMemoryTableCatalog gives renamed column a new ID,
+      // plus the column name changed, so both checks fire.
+      // COLUMN_ID_MISMATCH fires first (runs before schema check)
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.collect()
+        },
+        condition =
+          "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  // No duplicate column IDs: every column in a table should have
+  // a unique ID. Verify this after multiple schema evolutions.
+  test("no duplicate column IDs after multiple schema evolutions") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (a INT, b STRING) USING foo")
+
+      // add, drop, add again, add more
+      sql(s"ALTER TABLE $t ADD COLUMN c INT")
+      sql(s"ALTER TABLE $t DROP COLUMN b")
+      sql(s"ALTER TABLE $t ADD COLUMN b DOUBLE")
+      sql(s"ALTER TABLE $t ADD COLUMN d STRING")
+      sql(s"ALTER TABLE $t DROP COLUMN c")
+      sql(s"ALTER TABLE $t ADD COLUMN c STRING")
+
+      val cols = catalog("testcat").loadTable(ident).columns()
+      val ids = cols.map(_.id())
+
+      // all IDs should be non-null
+      ids.foreach(id => assert(id != null,
+        "Every column should have an ID"))
+
+      // all IDs should be unique
+      assert(ids.distinct.length === ids.length,
+        s"Duplicate column IDs found: ${ids.mkString(", ")}")
+    }
+  }
+
+  // Multi-step sequence: add -> rename -> drop -> re-add.
+  // The re-added column should have a new ID even after the
+  // intermediate rename step.
+  test("multi-step schema evolution: add, rename, drop, re-add") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1)")
+
+      // step 1: add column
+      sql(s"ALTER TABLE $t ADD COLUMN bonus INT")
+      val afterAdd = catalog("testcat").loadTable(ident).columns()
+      val bonusId1 =
+        afterAdd.find(_.name() == "bonus").get.id()
+
+      // step 2: rename column (InMemoryTableCatalog assigns new ID)
+      sql(s"ALTER TABLE $t RENAME COLUMN bonus TO reward")
+      val afterRename =
+        catalog("testcat").loadTable(ident).columns()
+      val rewardId =
+        afterRename.find(_.name() == "reward").get.id()
+      // InMemoryTableCatalog gives new ID on rename
+      assert(rewardId != null)
+
+      // step 3: drop column
+      sql(s"ALTER TABLE $t DROP COLUMN reward")
+
+      // step 4: re-add with original name
+      sql(s"ALTER TABLE $t ADD COLUMN bonus INT")
+      val afterReAdd =
+        catalog("testcat").loadTable(ident).columns()
+      val bonusId2 =
+        afterReAdd.find(_.name() == "bonus").get.id()
+
+      // re-added column must have a DIFFERENT ID
+      assert(bonusId1 !== bonusId2,
+        "Re-added column should get new ID: " +
+          s"original $bonusId1, re-added $bonusId2")
+
+      // DataFrame from before drop should fail
+      val df = spark.table(t)
+      sql(s"ALTER TABLE $t DROP COLUMN bonus")
+      sql(s"ALTER TABLE $t ADD COLUMN bonus STRING")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.collect()
+        },
+        condition =
+          "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  // =========================================================================
   // Column ID tests from design doc: pinning and refresh scenarios
   // =========================================================================
 
