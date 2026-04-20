@@ -21,7 +21,7 @@ import java.util.{LinkedHashMap => JLinkedHashMap, Map => JMap}
 
 import scala.collection.mutable
 
-import org.apache.spark.{SparkEnv, SparkException, TaskContext}
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.memory.{MemoryConsumer, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -57,8 +57,6 @@ private[window] class WindowSegmentTree(
     fanout: Int = WindowSegmentTree.DefaultFanout,
     blockSize: Int = WindowSegmentTree.DefaultBlockSize,
     maxCachedBlocks: Option[Int] = None,
-    spillThreshold: Int = Int.MaxValue,
-    inMemoryThreshold: Int = Int.MaxValue,
     taskMemoryManager: TaskMemoryManager = null)
   extends AutoCloseable {
 
@@ -92,9 +90,6 @@ private[window] class WindowSegmentTree(
     newMutableProjection(updateExpressions, bufferAttrs ++ inputSchema)
   private[this] val mergeProj: MutableProjection =
     newMutableProjection(mergeExpressions, bufferAttrs ++ rightAttrs)
-
-  private val inputUnsafeProj: UnsafeProjection =
-    UnsafeProjection.create(inputSchema.map(_.dataType).toArray)
 
   private[this] val joinedRow = new JoinedRow()
 
@@ -230,44 +225,36 @@ private[window] class WindowSegmentTree(
   def size: Int = numRows
 
   /**
-   * Drain `rows` into this tree, replacing any previously built state.
-   * Exception-safe: if iteration or aggregation throws, the previously built
-   * state (if any) is preserved.
+   * Build the tree against a caller-owned row array.
+   *
+   * Ownership contract: the tree holds a reference to `rows` for its lifetime
+   * but does NOT own it -- the caller (typically
+   * `WindowPartitionEvaluator.buffer`) is responsible for `clear()`/lifetime
+   * management at partition boundaries. The tree's `close()` drops its
+   * reference without mutating the array.
+   *
+   * Exception-safe: if aggregation throws, the previously built state (if
+   * any) is preserved.
    */
-  def build(rows: Iterator[InternalRow]): Unit = {
-    val oldArray = rowArray
-    var newArray: ExternalAppendOnlyUnsafeRowArray = null
-    try {
-      newArray = newRowArray()
-      while (rows.hasNext) {
-        val r = rows.next()
-        val u = inputUnsafeProj(r)
-        newArray.add(u)
-      }
-      // newArray.length is Int (bounded by Int.MaxValue by design); keep the
-      // check for clarity against any future widening of that contract.
-      val n = newArray.length
-      if (n < 0) {
-        throw SparkException.internalError(
-          s"WindowSegmentTree cannot hold more than Int.MaxValue rows, got $n")
-      }
-      val nBlocks = if (n == 0) 0 else (n + blockSize - 1) / blockSize
-      val newBlockAggs = computeBlockAggregates(newArray, n, nBlocks)
-
-      // Commit.
-      rowArray = newArray
-      numRows = n
-      numBlocks = nBlocks
-      blockAggregates = newBlockAggs
-      // Rebuild invalidates cached block levels; release all acquired memory
-      // before dropping the cache entries (I4).
-      releaseAllCachedBlocks()
-    } catch {
-      case t: Throwable =>
-        if (newArray != null) newArray.clear()
-        throw t
+  def build(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+    // rows.length is Int (bounded by Int.MaxValue by design); keep the
+    // check for clarity against any future widening of that contract.
+    val n = rows.length
+    if (n < 0) {
+      throw SparkException.internalError(
+        s"WindowSegmentTree cannot hold more than Int.MaxValue rows, got $n")
     }
-    if (oldArray != null) oldArray.clear()
+    val nBlocks = if (n == 0) 0 else (n + blockSize - 1) / blockSize
+    val newBlockAggs = computeBlockAggregates(rows, n, nBlocks)
+
+    // Commit.
+    rowArray = rows
+    numRows = n
+    numBlocks = nBlocks
+    blockAggregates = newBlockAggs
+    // Rebuild invalidates cached block levels; release all acquired memory
+    // before dropping the cache entries (I4).
+    releaseAllCachedBlocks()
   }
 
   /**
@@ -567,31 +554,10 @@ private[window] class WindowSegmentTree(
     }
   }
 
-  private def newRowArray(): ExternalAppendOnlyUnsafeRowArray = {
-    val taskContext = TaskContext.get()
-    if (taskContext == null) {
-      throw SparkException.internalError(
-        "WindowSegmentTree.build requires an active TaskContext")
-    }
-    val env = SparkEnv.get
-    new ExternalAppendOnlyUnsafeRowArray(
-      taskContext.taskMemoryManager(),
-      env.blockManager,
-      env.serializerManager,
-      taskContext,
-      1024,
-      env.memoryManager.pageSizeBytes,
-      inMemoryThreshold,
-      Long.MaxValue,
-      spillThreshold,
-      Long.MaxValue)
-  }
-
   private def closeRowArray(): Unit = {
-    if (rowArray != null) {
-      rowArray.clear()
-      rowArray = null
-    }
+    // rowArray is caller-owned (see `build` docstring). Drop the reference
+    // only; the caller (WindowPartitionEvaluator.buffer) manages clear().
+    rowArray = null
   }
 }
 

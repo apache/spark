@@ -64,7 +64,7 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
       r.update(0, v)
       r.asInstanceOf[InternalRow]
     }
-    tree.build(rows)
+    SegmentTreeWindowTestHelpers.buildTreeFromIter(tree, rows, inputSchema)
     tree
   }
 
@@ -93,7 +93,7 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
       val values = Seq(5, 2, 9, 1, 7, 3, 4, 8, 6, 0)
       val tree = buildTree(values, fanout = 4, blockSize = 1024)
       try {
-        // single-point queries → identity (null for MIN)
+        // single-point queries -> identity (null for MIN)
         for (i <- 0 to values.length) {
           assert(queryMin(tree, i, i) == null, s"identity at i=$i")
         }
@@ -312,12 +312,12 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
       val tree = new WindowSegmentTree(
         Array(minAgg), inputSchema, newMutableProjection,
         fanout = 4, blockSize = 8, maxCachedBlocks = Some(2),
-        spillThreshold = 8, inMemoryThreshold = 4,
         taskMemoryManager = TaskContext.get().taskMemoryManager())
       val rows = values.iterator.map { v =>
         val r = new GenericInternalRow(1); r.update(0, v); r.asInstanceOf[InternalRow]
       }
-      tree.build(rows)
+      SegmentTreeWindowTestHelpers.buildTreeFromIter(
+        tree, rows, inputSchema, inMemoryThreshold = 4, spillThreshold = 8)
       try {
         for (_ <- 0 until 40) {
           val a = rnd.nextInt(numRows + 1)
@@ -345,9 +345,9 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
       }
 
       try {
-        tree.build(iterOf(v1))
+        SegmentTreeWindowTestHelpers.buildTreeFromIter(tree, iterOf(v1), inputSchema)
         assert(queryMin(tree, 0, v1.length) == v1.min)
-        tree.build(iterOf(v2))
+        SegmentTreeWindowTestHelpers.buildTreeFromIter(tree, iterOf(v2), inputSchema)
         assert(tree.size == v2.length)
         for (lo <- 0 to v2.length; hi <- lo to v2.length) {
           assert(queryMin(tree, lo, hi) == naiveMin(v2, lo, hi),
@@ -364,13 +364,14 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
             val r = new GenericInternalRow(1); r.update(0, -1); r.asInstanceOf[InternalRow]
           }
         }
-        intercept[RuntimeException](tree.build(boomIter))
+        intercept[RuntimeException](
+          SegmentTreeWindowTestHelpers.buildTreeFromIter(tree, boomIter, inputSchema))
         // Prior v2 state intact.
         assert(tree.size == v2.length)
         assert(queryMin(tree, 0, v2.length) == v2.min)
 
         // Build v3 successfully after the failure.
-        tree.build(iterOf(v3))
+        SegmentTreeWindowTestHelpers.buildTreeFromIter(tree, iterOf(v3), inputSchema)
         assert(tree.size == v3.length)
         for (lo <- 0 to v3.length; hi <- lo to v3.length) {
           assert(queryMin(tree, lo, hi) == naiveMin(v3, lo, hi),
@@ -447,7 +448,7 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
           r.update(0, v)
           r.asInstanceOf[InternalRow]
         }
-        tree.build(rows)
+        SegmentTreeWindowTestHelpers.buildTreeFromIter(tree, rows, schema)
 
         // Build an AggregateProcessor identical to what the Frame uses so
         // `queryInto` exercises evaluateExpression (sqrt(m2/(n-1)) with

@@ -113,4 +113,42 @@ private[window] object SegmentTreeWindowTestHelpers {
     }
     frame
   }
+
+  /**
+   * Build the given [[WindowSegmentTree]] from a caller-supplied row
+   * iterator. Tests historically called `tree.build(iter)` when the tree
+   * itself owned an internal buffer; after the ownership flip the caller
+   * (here, the helper) materialises an [[ExternalAppendOnlyUnsafeRowArray]],
+   * projects rows with [[UnsafeProjection]], and hands the backing array to
+   * the tree. The tree retains a reference to the array; the helper does
+   * not close it (close is idempotent via `tree.close()` / partition
+   * teardown).
+   *
+   * `inMemoryThreshold` / `spillThreshold` tune the backing array so tests
+   * can exercise the spill path (see `WindowSegmentTreeSuite` D9).
+   */
+  def buildTreeFromIter(
+      tree: WindowSegmentTree,
+      rows: Iterator[InternalRow],
+      inputSchema: Seq[Attribute],
+      inMemoryThreshold: Int = Int.MaxValue,
+      spillThreshold: Int = Int.MaxValue): Unit = {
+    val tc = TaskContext.get()
+    require(tc != null, "buildTreeFromIter requires an active TaskContext")
+    val env = SparkEnv.get
+    val array = new ExternalAppendOnlyUnsafeRowArray(
+      tc.taskMemoryManager(),
+      env.blockManager,
+      env.serializerManager,
+      tc,
+      1024,
+      env.memoryManager.pageSizeBytes,
+      inMemoryThreshold,
+      Long.MaxValue,
+      spillThreshold,
+      Long.MaxValue)
+    val proj = UnsafeProjection.create(inputSchema.map(_.dataType).toArray)
+    rows.foreach(r => array.add(proj(r)))
+    tree.build(array)
+  }
 }

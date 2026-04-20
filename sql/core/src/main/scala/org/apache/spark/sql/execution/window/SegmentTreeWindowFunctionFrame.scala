@@ -150,9 +150,9 @@ private[window] final class SegmentTreeWindowFunctionFrame(
       blockSize = conf.windowSegmentTreeBlockSize,
       maxCachedBlocks = maxCachedBlocks,
       taskMemoryManager = taskMemoryManager)
-    // Build first (drains rows into the tree's internal row array), then
-    // open fresh iterator(s) for per-row bound advancement.
-    tree.build(rows.generateIterator())
+    // Tree holds a reference to `rows` (caller-owned); no extra copy. Open
+    // fresh iterator(s) below for per-row bound advancement.
+    tree.build(rows)
     // Count only on the successful segtree path: if `tree.build` throws
     // (e.g. OOM during block allocation), the counter is not bumped.
     numSegmentTreeFrames.foreach(_ += 1)

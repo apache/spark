@@ -243,7 +243,7 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
       }
       r.asInstanceOf[InternalRow]
     }
-    tree.build(rows)
+    SegmentTreeWindowTestHelpers.buildTreeFromIter(tree, rows, schema)
     (tree, attr)
   }
 
@@ -445,7 +445,7 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
       }
       r.asInstanceOf[InternalRow]
     }
-    tree.build(rows)
+    SegmentTreeWindowTestHelpers.buildTreeFromIter(tree, rows, schema)
     val processor = AggregateProcessor(
       Array[Expression](agg),
       ordinal = 0,
