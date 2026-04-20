@@ -823,6 +823,25 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
       spark.catalog.dropTempView("t")
     }
   }
+
+  test("SPARK-56546: LAG does not eagerly construct AggregateProcessor under segtree") {
+    // Pre-fix, `val processor` eagerly invoked `AggregateProcessor.apply` on any
+    // non-empty `functions`, which threw `INTERNAL_ERROR: Unsupported aggregate
+    // function: lag(...)` as soon as the routing hit the FRAME_LESS_OFFSET branch
+    // (Lag/Lead extend FrameLessOffsetWindowFunction and always match that case).
+    // The Spark SQL dialect rejects explicit ROWS/RANGE clauses on lag/lead at
+    // analysis time, so the HiveQL `lag(x, 1, x) OVER (... ROWS BETWEEN ...)`
+    // variant of this bug is guarded by Hive tests (windowing.q /
+    // windowing_navfn.q); the frameless form below is sufficient as the
+    // minimal reproducer.
+    withSQLConf(enableSegTree.toSeq: _*) {
+      val df = spark.range(10).select(
+        col("id"),
+        expr("lag(id, 1, id) OVER (ORDER BY id)").as("lag"))
+      val expected = (0L until 10L).map(i => Row(i, if (i == 0) 0L else i - 1))
+      checkAnswer(df, expected)
+    }
+  }
 }
 
 /** Legacy `UserDefinedAggregateFunction` -- wrapped at analysis time as

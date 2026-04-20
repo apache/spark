@@ -597,4 +597,16 @@ class SQLConfSuite extends SharedSparkSession {
     assert(e.getMessage.contains("forceSnapshotUploadOnLag"))
     assert(e.getMessage.contains("coordinatorReportSnapshotUploadLag"))
   }
+
+  test("SPARK-56546: segment-tree SQLConf entries declare SESSION bindingPolicy") {
+    import org.apache.spark.internal.config.ConfigBindingPolicy
+    Seq(
+      SQLConf.WINDOW_SEGMENT_TREE_ENABLED,
+      SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS,
+      SQLConf.WINDOW_SEGMENT_TREE_BLOCK_SIZE,
+      SQLConf.WINDOW_SEGMENT_TREE_FANOUT).foreach { entry =>
+      assert(entry.bindingPolicy === Some(ConfigBindingPolicy.SESSION),
+        s"${entry.key} must declare SESSION bindingPolicy")
+    }
+  }
 }
