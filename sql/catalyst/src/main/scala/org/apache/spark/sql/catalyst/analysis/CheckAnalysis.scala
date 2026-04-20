@@ -214,6 +214,13 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       operator: LogicalPlan,
       a: Attribute,
       errorClass: String): Nothing = {
+    // The column was resolved against a Spark Connect plan id in the tree, but its resolved
+    // attribute was filtered out because it's not in the current operator's output (e.g. the
+    // user referenced a column from a DataFrame whose value was overwritten). Raise the
+    // dedicated error to point the user at the wrong DataFrame reference.
+    if (a.containsTag(LogicalPlan.DATAFRAME_COLUMN_OUT_OF_SCOPE_TAG)) {
+      throw QueryCompilationErrors.cannotResolveDataFrameColumn(a)
+    }
     val missingCol = a.sql
     val candidates = operator.inputSet.toSeq
       .map(attr => attr.qualifier :+ attr.name)
