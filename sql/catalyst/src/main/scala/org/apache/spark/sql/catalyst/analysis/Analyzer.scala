@@ -29,6 +29,7 @@ import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperati
 import org.apache.spark.internal.config.ConfigBindingPolicy
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.DefaultValueFillMode._
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   AnalyzerBridgeState,
   HybridAnalyzer,
@@ -3653,7 +3654,6 @@ class Analyzer(
         validateStoreAssignmentPolicy()
         TableOutputResolver.suitableForByNameCheck(v2Write.isByName,
           expected = v2Write.table.output, queryOutput = v2Write.query.output)
-        import TableOutputResolver.DefaultValueFillMode._
         val defaultValueFillMode =
           if (conf.coerceInsertNestedTypes && v2Write.schemaEvolutionEnabled) RECURSE
           else FILL
