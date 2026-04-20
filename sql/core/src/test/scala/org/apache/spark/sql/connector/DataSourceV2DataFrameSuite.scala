@@ -1887,79 +1887,197 @@ class DataSourceV2DataFrameSuite
   // granularity. When a nested field is added to a struct, the top-level
   // column ID stays the same but the type changes. This is caught by
   // schema validation (COLUMNS_MISMATCH), not column ID validation.
-  // When the entire struct column is dropped and re-added, the column ID
-  // changes.
-  test("drop and re-add struct column gets new column ID") {
+  // Verify that ALL columns in a mixed schema (scalar, struct, array,
+  // map) get IDs assigned, all IDs are unique, and drop+recreate
+  // produces entirely different IDs for every column.
+  test("all column types get unique IDs including complex types") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (" +
+        s"id INT, " +
+        s"person STRUCT<name: STRING, age: INT>, " +
+        s"tags ARRAY<STRING>, " +
+        s"props MAP<STRING, INT>) USING foo")
+
+      val origCols =
+        catalog("testcat").loadTable(ident).columns()
+
+      // every column (scalar + complex) must have an ID
+      origCols.foreach { col =>
+        assert(col.id() != null,
+          s"Column '${col.name()}' should have an ID")
+      }
+
+      // all IDs must be unique
+      val origIds = origCols.map(_.id())
+      assert(origIds.distinct.length === origIds.length,
+        s"Duplicate IDs: ${origIds.mkString(", ")}")
+
+      // verify each complex type column individually
+      val origPersonId =
+        origCols.find(_.name() == "person").get.id()
+      val origTagsId =
+        origCols.find(_.name() == "tags").get.id()
+      val origPropsId =
+        origCols.find(_.name() == "props").get.id()
+
+      // drop and recreate table with identical schema
+      sql(s"DROP TABLE $t")
+      sql(s"CREATE TABLE $t (" +
+        s"id INT, " +
+        s"person STRUCT<name: STRING, age: INT>, " +
+        s"tags ARRAY<STRING>, " +
+        s"props MAP<STRING, INT>) USING foo")
+
+      val newCols =
+        catalog("testcat").loadTable(ident).columns()
+      val newIds = newCols.map(_.id())
+
+      // every column gets new IDs
+      newCols.foreach { col =>
+        assert(col.id() != null,
+          s"Column '${col.name()}' should have an ID " +
+            s"after recreate")
+      }
+      assert(newIds.distinct.length === newIds.length,
+        s"Duplicate IDs after recreate: " +
+          s"${newIds.mkString(", ")}")
+
+      // each complex type column got a DIFFERENT ID
+      val newPersonId =
+        newCols.find(_.name() == "person").get.id()
+      val newTagsId =
+        newCols.find(_.name() == "tags").get.id()
+      val newPropsId =
+        newCols.find(_.name() == "props").get.id()
+
+      assert(newPersonId != origPersonId,
+        "Struct column ID changed after recreate: " +
+          s"was $origPersonId, got $newPersonId")
+      assert(newTagsId != origTagsId,
+        "Array column ID changed after recreate: " +
+          s"was $origTagsId, got $newTagsId")
+      assert(newPropsId != origPropsId,
+        "Map column ID changed after recreate: " +
+          s"was $origPropsId, got $newPropsId")
+
+      // no overlap between old and new ID sets
+      assert(origIds.toSet.intersect(newIds.toSet).isEmpty,
+        "Old and new IDs must not overlap")
+    }
+  }
+
+  // Drop and re-add individual complex type columns, verify
+  // each gets a new ID while other columns keep theirs.
+  test("drop+re-add struct column gets new ID, others unchanged") {
     val t = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, " +
-        s"person STRUCT<name: STRING, age: INT>) USING foo")
+        s"person STRUCT<name: STRING, age: INT>, " +
+        s"tags ARRAY<STRING>) USING foo")
 
-      // capture original column IDs
-      val origCols = catalog("testcat").loadTable(ident).columns()
-      val origPersonId = origCols.find(_.name() == "person").get.id()
-      assert(origPersonId != null)
+      val origCols =
+        catalog("testcat").loadTable(ident).columns()
+      val origIdCol = origCols.find(_.name() == "id").get.id()
+      val origPerson =
+        origCols.find(_.name() == "person").get.id()
+      val origTags =
+        origCols.find(_.name() == "tags").get.id()
 
-      // drop and re-add the struct column with same schema
+      // drop and re-add only the struct column
       sql(s"ALTER TABLE $t DROP COLUMN person")
       sql(s"ALTER TABLE $t ADD COLUMN " +
         s"person STRUCT<name: STRING, age: INT>")
 
-      // verify the struct column got a NEW ID
-      val newCols = catalog("testcat").loadTable(ident).columns()
-      val newPersonId = newCols.find(_.name() == "person").get.id()
-      assert(newPersonId != origPersonId,
-        "Struct column should get new ID after drop+re-add: " +
-          s"was $origPersonId, got $newPersonId")
+      val newCols =
+        catalog("testcat").loadTable(ident).columns()
+      val newIdCol = newCols.find(_.name() == "id").get.id()
+      val newPerson =
+        newCols.find(_.name() == "person").get.id()
+      val newTags =
+        newCols.find(_.name() == "tags").get.id()
+
+      // struct column got new ID
+      assert(newPerson != origPerson,
+        "Struct column should get new ID: " +
+          s"was $origPerson, got $newPerson")
+      // scalar and array columns kept their IDs
+      assert(newIdCol === origIdCol,
+        "Scalar column ID should be unchanged")
+      assert(newTags === origTags,
+        "Array column ID should be unchanged")
     }
   }
 
-  // Column IDs for ARRAY columns: drop and re-add gets a new ID,
-  // just like scalar or struct columns.
-  test("drop and re-add array column gets new column ID") {
+  test("drop+re-add array column gets new ID, others unchanged") {
     val t = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     withTable(t) {
-      sql(s"CREATE TABLE $t (id INT, tags ARRAY<STRING>) USING foo")
+      sql(s"CREATE TABLE $t (id INT, " +
+        s"tags ARRAY<STRING>, " +
+        s"props MAP<STRING, INT>) USING foo")
 
-      val origCols = catalog("testcat").loadTable(ident).columns()
-      val origTagsId = origCols.find(_.name() == "tags").get.id()
-      assert(origTagsId != null)
+      val origCols =
+        catalog("testcat").loadTable(ident).columns()
+      val origId = origCols.find(_.name() == "id").get.id()
+      val origTags =
+        origCols.find(_.name() == "tags").get.id()
+      val origProps =
+        origCols.find(_.name() == "props").get.id()
 
       sql(s"ALTER TABLE $t DROP COLUMN tags")
       sql(s"ALTER TABLE $t ADD COLUMN tags ARRAY<STRING>")
 
-      val newCols = catalog("testcat").loadTable(ident).columns()
-      val newTagsId = newCols.find(_.name() == "tags").get.id()
-      assert(newTagsId != origTagsId,
-        "Array column should get new ID after drop+re-add: " +
-          s"was $origTagsId, got $newTagsId")
+      val newCols =
+        catalog("testcat").loadTable(ident).columns()
+      assert(
+        newCols.find(_.name() == "tags").get.id() !=
+          origTags,
+        "Array column should get new ID")
+      assert(
+        newCols.find(_.name() == "id").get.id() === origId,
+        "Scalar column ID should be unchanged")
+      assert(
+        newCols.find(_.name() == "props").get.id() ===
+          origProps,
+        "Map column ID should be unchanged")
     }
   }
 
-  // Column IDs for MAP columns: drop and re-add gets a new ID.
-  test("drop and re-add map column gets new column ID") {
+  test("drop+re-add map column gets new ID, others unchanged") {
     val t = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     withTable(t) {
-      sql(s"CREATE TABLE $t " +
-        s"(id INT, props MAP<STRING, INT>) USING foo")
+      sql(s"CREATE TABLE $t (id INT, " +
+        s"tags ARRAY<STRING>, " +
+        s"props MAP<STRING, INT>) USING foo")
 
-      val origCols = catalog("testcat").loadTable(ident).columns()
-      val origPropsId =
+      val origCols =
+        catalog("testcat").loadTable(ident).columns()
+      val origId = origCols.find(_.name() == "id").get.id()
+      val origTags =
+        origCols.find(_.name() == "tags").get.id()
+      val origProps =
         origCols.find(_.name() == "props").get.id()
-      assert(origPropsId != null)
 
       sql(s"ALTER TABLE $t DROP COLUMN props")
       sql(s"ALTER TABLE $t ADD COLUMN props MAP<STRING, INT>")
 
-      val newCols = catalog("testcat").loadTable(ident).columns()
-      val newPropsId =
-        newCols.find(_.name() == "props").get.id()
-      assert(newPropsId != origPropsId,
-        "Map column should get new ID after drop+re-add: " +
-          s"was $origPropsId, got $newPropsId")
+      val newCols =
+        catalog("testcat").loadTable(ident).columns()
+      assert(
+        newCols.find(_.name() == "props").get.id() !=
+          origProps,
+        "Map column should get new ID")
+      assert(
+        newCols.find(_.name() == "id").get.id() === origId,
+        "Scalar column ID should be unchanged")
+      assert(
+        newCols.find(_.name() == "tags").get.id() ===
+          origTags,
+        "Array column ID should be unchanged")
     }
   }
 
