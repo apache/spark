@@ -204,11 +204,12 @@ trait WindowEvaluatorFactoryBase {
           case WindowExpression(ae: AggregateExpression, _) => ae.filter
           case _ => None
         }.toArray
-        // Shared per (key) across the factory closure's invocations; each
-        // Frame calls `processor.initialize(...)` in `prepare`, so cross-
-        // partition reuse is safe. Previously `def`, which re-allocated on
-        // every factory application (keeping listener registration idempotent).
-        val processor = if (functions.exists(_.isInstanceOf[PythonFuncExpression])) {
+        // Keep as `def` (by-name): the FRAME_LESS_OFFSET / UNBOUNDED_OFFSET /
+        // UNBOUNDED_PRECEDING_OFFSET branches do not read `processor`. Eager
+        // `val` construction would invoke `AggregateProcessor.apply` on
+        // Lag / Lead / NthValue and throw
+        // `INTERNAL_ERROR: Unsupported aggregate function`.
+        def processor = if (functions.exists(_.isInstanceOf[PythonFuncExpression])) {
           null
         } else {
           AggregateProcessor(
