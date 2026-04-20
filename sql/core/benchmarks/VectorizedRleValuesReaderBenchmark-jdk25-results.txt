@@ -3,19 +3,19 @@ Boolean decode
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.17.0-1010-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+AMD EPYC 9V74 80-Core Processor
 RLE readBooleans decode:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-cold reader, trueRatio=0.0                            0              0           0       5339.6           0.2       1.0X
-reused reader, trueRatio=0.0                          0              0           0      48832.3           0.0       9.1X
-cold reader, trueRatio=0.1                            1              1           0        834.9           1.2       0.2X
-reused reader, trueRatio=0.1                          1              1           0        833.3           1.2       0.2X
-cold reader, trueRatio=0.5                            1              1           0        930.9           1.1       0.2X
-reused reader, trueRatio=0.5                          1              1           0        926.9           1.1       0.2X
-cold reader, trueRatio=0.9                            1              1           0        833.8           1.2       0.2X
-reused reader, trueRatio=0.9                          1              1           0        821.5           1.2       0.2X
-cold reader, trueRatio=1.0                            0              0           0      48372.7           0.0       9.1X
-reused reader, trueRatio=1.0                          0              0           0      48941.7           0.0       9.2X
+cold reader, trueRatio=0.0                            0              0           0     107052.2           0.0       1.0X
+reused reader, trueRatio=0.0                          0              0           0     102640.6           0.0       1.0X
+cold reader, trueRatio=0.1                            1              1           0        929.5           1.1       0.0X
+reused reader, trueRatio=0.1                          1              1           0        982.9           1.0       0.0X
+cold reader, trueRatio=0.5                            1              1           0       1045.2           1.0       0.0X
+reused reader, trueRatio=0.5                          1              1           0       1073.5           0.9       0.0X
+cold reader, trueRatio=0.9                            1              1           0        929.0           1.1       0.0X
+reused reader, trueRatio=0.9                          1              1           0        978.2           1.0       0.0X
+cold reader, trueRatio=1.0                            0              0           0     109752.6           0.0       1.0X
+reused reader, trueRatio=1.0                          0              0           0     104284.0           0.0       1.0X
 
 
 ================================================================================================
@@ -23,21 +23,21 @@ Integer decode
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.17.0-1010-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+AMD EPYC 9V74 80-Core Processor
 RLE readIntegers dictionary-id decode:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-PACKED cold, bitWidth=4                               2              2           0        542.6           1.8       1.0X
-PACKED reused, bitWidth=4                             2              2           0        500.0           2.0       0.9X
-RLE, bitWidth=4                                       0              0           0       6442.7           0.2      11.9X
-PACKED cold, bitWidth=8                               2              2           0        545.0           1.8       1.0X
-PACKED reused, bitWidth=8                             2              2           0        544.5           1.8       1.0X
-RLE, bitWidth=8                                       0              0           0       6444.6           0.2      11.9X
-PACKED cold, bitWidth=12                              2              2           0        446.3           2.2       0.8X
-PACKED reused, bitWidth=12                            2              2           0        438.5           2.3       0.8X
-RLE, bitWidth=12                                      0              0           0       6440.3           0.2      11.9X
-PACKED cold, bitWidth=20                              3              3           0        388.1           2.6       0.7X
-PACKED reused, bitWidth=20                            3              3           0        387.2           2.6       0.7X
-RLE, bitWidth=20                                      0              0           0       7203.7           0.1      13.3X
+PACKED cold, bitWidth=4                               2              2           0        590.0           1.7       1.0X
+PACKED reused, bitWidth=4                             2              2           0        587.4           1.7       1.0X
+RLE, bitWidth=4                                       0              0           0      23549.2           0.0      39.9X
+PACKED cold, bitWidth=8                               2              2           0        622.3           1.6       1.1X
+PACKED reused, bitWidth=8                             2              2           0        627.5           1.6       1.1X
+RLE, bitWidth=8                                       0              0           0      23607.5           0.0      40.0X
+PACKED cold, bitWidth=12                              2              2           0        502.7           2.0       0.9X
+PACKED reused, bitWidth=12                            2              2           0        500.3           2.0       0.8X
+RLE, bitWidth=12                                      0              0           0      23811.8           0.0      40.4X
+PACKED cold, bitWidth=20                              2              2           0        430.9           2.3       0.7X
+PACKED reused, bitWidth=20                            2              2           0        431.1           2.3       0.7X
+RLE, bitWidth=20                                      0              0           0      23849.7           0.0      40.4X
 
 
 ================================================================================================
@@ -45,19 +45,19 @@ Nullable batch decode with def-level materialization
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.17.0-1010-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+AMD EPYC 9V74 80-Core Processor
 Nullable batch with def-levels:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-nullRatio=0.0, n/a                                    0              0           0       4871.3           0.2       1.0X
-nullRatio=0.1, random                                 9              9           0        119.8           8.3       0.0X
-nullRatio=0.1, clustered                              6              6           0        175.5           5.7       0.0X
-nullRatio=0.3, random                                13             13           0         82.2          12.2       0.0X
-nullRatio=0.3, clustered                              6              6           0        174.5           5.7       0.0X
-nullRatio=0.5, random                                14             14           0         75.0          13.3       0.0X
-nullRatio=0.5, clustered                              6              6           0        176.4           5.7       0.0X
-nullRatio=0.9, random                                 8              8           0        134.4           7.4       0.0X
-nullRatio=0.9, clustered                              6              6           0        190.1           5.3       0.0X
-nullRatio=1.0, random                                 0              0           0       9037.3           0.1       1.9X
+nullRatio=0.0, n/a                                    0              0           0       8133.2           0.1       1.0X
+nullRatio=0.1, random                                 7              7           0        145.3           6.9       0.0X
+nullRatio=0.1, clustered                              5              5           0        206.9           4.8       0.0X
+nullRatio=0.3, random                                11             11           0         99.2          10.1       0.0X
+nullRatio=0.3, clustered                              5              5           0        206.8           4.8       0.0X
+nullRatio=0.5, random                                12             12           0         90.0          11.1       0.0X
+nullRatio=0.5, clustered                              5              5           0        208.4           4.8       0.0X
+nullRatio=0.9, random                                 7              7           0        157.3           6.4       0.0X
+nullRatio=0.9, clustered                              5              5           0        223.3           4.5       0.0X
+nullRatio=1.0, random                                 0              0           0       9623.1           0.1       1.2X
 
 
 ================================================================================================
@@ -65,18 +65,18 @@ Nullable batch decode without def-level materialization
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.17.0-1010-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+AMD EPYC 9V74 80-Core Processor
 Nullable batch without def-levels:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-nullRatio=0.0, n/a                                    0              0           0       8211.7           0.1       1.0X
-nullRatio=0.1, random                                 7              7           0        151.2           6.6       0.0X
-nullRatio=0.1, clustered                              5              5           0        223.4           4.5       0.0X
-nullRatio=0.3, random                                11             11           0         96.1          10.4       0.0X
-nullRatio=0.3, clustered                              5              5           0        220.2           4.5       0.0X
-nullRatio=0.5, random                                12             12           0         90.8          11.0       0.0X
-nullRatio=0.5, clustered                              5              5           0        219.0           4.6       0.0X
-nullRatio=0.9, random                                 6              7           0        161.9           6.2       0.0X
-nullRatio=0.9, clustered                              5              5           0        228.3           4.4       0.0X
-nullRatio=1.0, random                                 0              0           0      12331.5           0.1       1.5X
+nullRatio=0.0, n/a                                    0              0           0      12871.6           0.1       1.0X
+nullRatio=0.1, random                                 6              6           0        181.5           5.5       0.0X
+nullRatio=0.1, clustered                              4              4           0        262.8           3.8       0.0X
+nullRatio=0.3, random                                 9              9           0        119.5           8.4       0.0X
+nullRatio=0.3, clustered                              4              4           0        260.9           3.8       0.0X
+nullRatio=0.5, random                                10             10           0        107.7           9.3       0.0X
+nullRatio=0.5, clustered                              4              4           0        259.8           3.8       0.0X
+nullRatio=0.9, random                                 5              5           0        196.1           5.1       0.0X
+nullRatio=0.9, clustered                              4              4           0        270.4           3.7       0.0X
+nullRatio=1.0, random                                 0              0           0      13887.7           0.1       1.1X
 
 
