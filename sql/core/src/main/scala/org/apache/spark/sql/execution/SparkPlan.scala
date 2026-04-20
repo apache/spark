@@ -431,7 +431,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /** The RDD id of the last wrapper RDD created by [[getByteArrayRdd]]. Visible for testing. */
-  @transient private var _lastByteArrayRddId: Option[Int] = None
+  @transient @volatile private var _lastByteArrayRddId: Option[Int] = None
   private[spark] def lastByteArrayRddId: Option[Int] = _lastByteArrayRddId
 
   /**

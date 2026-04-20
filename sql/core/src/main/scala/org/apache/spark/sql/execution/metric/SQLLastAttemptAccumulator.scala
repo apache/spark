@@ -115,14 +115,24 @@ import org.apache.spark.util.{AccumulatorV2, LastAttemptAccumulator}
  * executed in the scope of a Dataset's QueryExecution, via
  * [[lastAttemptValueForDataset]] and [[lastAttemptValueForQueryExecution]] methods.
  */
-trait SQLLastAttemptAccumulator[IN, OUT, PARTIAL] extends LastAttemptAccumulator[IN, OUT, PARTIAL] {
+trait SQLLastAttemptAccumulator[IN, OUT, PARTIAL, DRIVER_ACC]
+    extends LastAttemptAccumulator[IN, OUT, PARTIAL] {
   this: AccumulatorV2[IN, OUT] =>
 
+  /** Create a fresh accumulator to hold driver-side values for one QueryExecution. */
+  protected def newDriverQueryExecutionAcc(): DRIVER_ACC
+  /** Add a value to a driver-side per-QueryExecution accumulator. */
+  protected def addToDriverAcc(acc: DRIVER_ACC, value: IN): Unit
+  /** Set the value of a driver-side per-QueryExecution accumulator. */
+  protected def setDriverAcc(acc: DRIVER_ACC, value: OUT): Unit
+  /** Read the value of a driver-side per-QueryExecution accumulator. */
+  protected def driverAccValue(acc: DRIVER_ACC): OUT
+
   @transient
-  private var lastAttemptDirectDriverQueryExecutionValues: mutable.Map[String, this.type] = _
+  private var lastAttemptDirectDriverQueryExecutionValues: mutable.Map[String, DRIVER_ACC] = _
 
   override def initializeLastAttemptAccumulator()(implicit ct: ClassTag[PARTIAL]): Unit = try {
-    lastAttemptDirectDriverQueryExecutionValues = new mutable.HashMap[String, this.type]()
+    lastAttemptDirectDriverQueryExecutionValues = new mutable.HashMap[String, DRIVER_ACC]()
     super.initializeLastAttemptAccumulator()(ct)
   } catch {
     case NonFatal(e) =>
@@ -133,7 +143,7 @@ trait SQLLastAttemptAccumulator[IN, OUT, PARTIAL] extends LastAttemptAccumulator
   }
 
   override def resetLastAttemptAccumulator(): Unit = try {
-    lastAttemptDirectDriverQueryExecutionValues = new mutable.HashMap[String, this.type]()
+    lastAttemptDirectDriverQueryExecutionValues = new mutable.HashMap[String, DRIVER_ACC]()
     super.resetLastAttemptAccumulator()
   } catch {
     case NonFatal(e) =>
@@ -148,12 +158,11 @@ trait SQLLastAttemptAccumulator[IN, OUT, PARTIAL] extends LastAttemptAccumulator
     assert(lastAttemptDirectDriverQueryExecutionValues != null)
   }
 
-  protected def getOrCreateDirectDriverQueryExecutionValue(queryExecutionId: String): this.type = {
+  protected def getOrCreateDirectDriverQueryExecutionValue(queryExecutionId: String): DRIVER_ACC = {
     lastAttemptDirectDriverQueryExecutionValues.synchronized {
       if (!lastAttemptDirectDriverQueryExecutionValues.contains(queryExecutionId)) {
         lastAttemptDirectDriverQueryExecutionValues.put(
-          queryExecutionId,
-          this.copyAndReset().asInstanceOf[this.type])
+          queryExecutionId, newDriverQueryExecutionAcc())
       }
       lastAttemptDirectDriverQueryExecutionValues(queryExecutionId)
     }
@@ -178,8 +187,7 @@ trait SQLLastAttemptAccumulator[IN, OUT, PARTIAL] extends LastAttemptAccumulator
       // Direct update on the driver, not from within a task.
       getActiveDatasetQueryExecutionId match {
         case Some(qeId) =>
-          val driverMetric = getOrCreateDirectDriverQueryExecutionValue(qeId)
-          driverMetric.add(value)
+          addToDriverAcc(getOrCreateDirectDriverQueryExecutionValue(qeId), value)
         case None => // pass
       }
     }
@@ -191,9 +199,28 @@ trait SQLLastAttemptAccumulator[IN, OUT, PARTIAL] extends LastAttemptAccumulator
         exception = Some(e))
   }
 
+  /**
+   * Like [[addQueryExecutionValueIfOnDriverSide]], but for set operations.
+   */
+  protected def setQueryExecutionValueIfOnDriverSide(value: OUT): Unit = try {
+    if (isAtDriverSide && lastAttemptAccumulatorInitialized && !lastAttemptAccumulatorInvalid) {
+      getActiveDatasetQueryExecutionId match {
+        case Some(qeId) =>
+          setDriverAcc(getOrCreateDirectDriverQueryExecutionValue(qeId), value)
+        case None => // pass
+      }
+    }
+  } catch {
+    case NonFatal(e) =>
+      unexpectedLastAttemptMetricOperation(
+        invalidate = true,
+        reason = "Unexpected exception in setQueryExecutionValueIfOnDriverSide",
+        exception = Some(e))
+  }
+
   override def logAccumulatorState: LogEntry = try {
     val driverQEVals = Option(lastAttemptDirectDriverQueryExecutionValues)
-      .map(_.map { case (key, metric) => s"$key -> ${metric.value}" }.mkString("\n"))
+      .map(_.map { case (key, acc) => s"$key -> ${driverAccValue(acc)}" }.mkString("\n"))
       .getOrElse("<not initialized>")
     super.logAccumulatorState +
       log"""
@@ -223,7 +250,7 @@ trait SQLLastAttemptAccumulator[IN, OUT, PARTIAL] extends LastAttemptAccumulator
     assertValid()
     // If there was a driver set value defined in the scope of this QueryExecution, return that.
     lastAttemptDirectDriverQueryExecutionValues.get(qe.id.toString) match {
-      case Some(metric) => return Some(metric.value)
+      case Some(acc) => return Some(driverAccValue(acc))
       case None => // pass
     }
     // Otherwise, gather the RDD scoped from the plan and find metric updates from these scopes.
@@ -257,7 +284,7 @@ trait SQLLastAttemptAccumulator[IN, OUT, PARTIAL] extends LastAttemptAccumulator
 
   /** Visible for testing. */
   def getDirectDriverQueryExecutionValue(qeId: String): Option[OUT] = {
-    lastAttemptDirectDriverQueryExecutionValues.get(qeId).map(_.value)
+    lastAttemptDirectDriverQueryExecutionValues.get(qeId).map(driverAccValue)
   }
 }
 

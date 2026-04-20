@@ -438,7 +438,7 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
   /** Log entry to log debug information about the internal state of the accumulator. */
   def logAccumulatorState: LogEntry = try {
     log"""LastAttemptAccumulator id=${MDC(LogKeys.ACCUMULATOR_ID, accumulatorId)}:
-    |Invalidated: ${MDC(LogKeys.SLAM_INVALIDATE, lastAttemptAccumulatorInvalid)}.
+    |Invalidated: ${MDC(LogKeys.LAST_ATTEMPT_ACC_INVALIDATE, lastAttemptAccumulatorInvalid)}.
     |Direct driver value: ${MDC(logKeyAccumulatorState, lastAttemptDirectDriverValue)}.
     |Value: ${MDC(logKeyAccumulatorState, value)}.
     |lastAttemptRddsMap:
@@ -468,12 +468,11 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
       exception: Option[Throwable] = None,
       newAccumPartialValue: Option[AccumulatorPartialVal[PARTIAL]] = None,
       oldAccumPartialValue: Option[AccumulatorPartialVal[PARTIAL]] = None): Unit = {
-    // TODO(LC-6501): Add usage logging events with structured logging.
     val logEntry =
       log"""Unexpected last attempt tracking for accumulator ${
         MDC(LogKeys.ACCUMULATOR_ID, accumulatorId)}.
-      |Invalidate: ${MDC(LogKeys.SLAM_INVALIDATE, invalidate)}.
-      |Reason: ${MDC(LogKeys.SLAM_UNEXPECTED_REASON, reason)}.
+      |Invalidate: ${MDC(LogKeys.LAST_ATTEMPT_ACC_INVALIDATE, invalidate)}.
+      |Reason: ${MDC(LogKeys.LAST_ATTEMPT_ACC_UNEXPECTED_REASON, reason)}.
       |""".stripMargin +
       log"State:\n" + logAccumulatorState +
       log"Update:\n" + logAccumulatorUpdate(newAccumPartialValue, oldAccumPartialValue)
@@ -525,9 +524,9 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
 
   protected def logKeyAccumulatorState: LogKey = {
     if (accumulatorStoresUserData) {
-      LogKeys.SLAM_STATE_USER_METRIC
+      LogKeys.LAST_ATTEMPT_ACC_USER_METRIC
     } else {
-      LogKeys.SLAM_STATE_SYSTEM_METRIC
+      LogKeys.LAST_ATTEMPT_ACC_SYSTEM_METRIC
     }
   }
 
@@ -702,6 +701,9 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
   /**
    * Returns the last attempt value of this accumulator, aggregated from a set of RDDs.
    *
+   * If the metric was used directly on the driver, and wa not used in any RDD execution,
+   * the driver value will be used instead.
+   *
    * Should be used only on the Spark Driver, on the instance of [[LastAttemptAccumulator]] that
    * was created and registered in [[AccumulatorContext]] by [[AccumulatorV2.register()]].
    *
@@ -730,6 +732,9 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
   /**
    * Returns the last attempt value of this accumulator, aggregated from a specific RDD.
    *
+   * If the metric was used directly on the driver, and wa not used in any RDD execution,
+   * the driver value will be used instead.
+   *
    * Should be used only on the Spark Driver, on the instance of [[LastAttemptAccumulator]] that
    * was created and registered in [[AccumulatorContext]] by [[AccumulatorV2.register()]].
    *
@@ -749,6 +754,9 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
   /**
    * Returns the last attempt value of this accumulator, aggregated from all RDDs that ever
    * returned any values for it.
+   *
+   * If the metric was used directly on the driver, and wa not used in any RDD execution,
+   * the driver value will be used instead.
    *
    * Should be used only on the Spark Driver, on the instance of [[LastAttemptAccumulator]] that
    * was created and registered in [[AccumulatorContext]] by [[AccumulatorV2.register()]].
@@ -772,6 +780,9 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
   /**
    * Returns the last attempt value of this accumulator, aggregated from the RDD with the highest
    * id that ever returned any values for it.
+   *
+   * If the metric was used directly on the driver, and wa not used in any RDD execution,
+   * the driver value will be used instead.
    *
    * Should be used only on the Spark Driver, on the instance of [[LastAttemptAccumulator]] that
    * was created and registered in [[AccumulatorContext]] by [[AccumulatorV2.register()]].
@@ -801,6 +812,9 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
   /**
    * Returns the last attempt value of this accumulator, aggregated from RDDs with given scope ids.
    *
+   * If the metric was used directly on the driver, and wa not used in any RDD execution,
+   * the driver value will be used instead.
+   *
    * Should be used only on the Spark Driver, on the instance of [[LastAttemptAccumulator]] that
    * was created and registered in [[AccumulatorContext]] by [[AccumulatorV2.register()]].
    *
@@ -817,14 +831,11 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
     val matchingRDDs = lastAttemptRddsMap.values.filter { rddVal =>
       rddVal.rddScopeId.exists(scopesLookup.contains)
     }.toSeq
-    // When multiple RDDs share the same scope from different SQL executions (e.g. repeated
-    // Dataset.collect() calls), only aggregate the ones from the latest execution per scope.
-    val rddIds = matchingRDDs.groupBy(_.rddScopeId).values.flatMap { rddsInScope =>
-      val maxExecId = rddsInScope.flatMap(_.lastSqlExecutionId).maxOption
-      rddsInScope.filter { r =>
-        maxExecId.isEmpty || r.lastSqlExecutionId == maxExecId
-      }
-    }.map(_.rddId).toSeq
+    // When multiple RDDs share the same scope (e.g. repeated Dataset.collect() calls create
+    // new wrapper RDDs in the same scope, or BroadcastNestedLoopJoin executing the probe side
+    // twice), only aggregate the latest one per scope, identified by the highest RDD id.
+    // RDD ids are globally monotonic, so the highest id is the latest.
+    val rddIds = matchingRDDs.groupBy(_.rddScopeId).values.map(_.maxBy(_.rddId).rddId).toSeq
     lastAttemptValueForRDDIds(rddIds)
   } catch {
     case NonFatal(e) =>

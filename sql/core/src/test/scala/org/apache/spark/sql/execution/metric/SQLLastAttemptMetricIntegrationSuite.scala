@@ -598,7 +598,7 @@ class SQLLastAttemptMetricIntegrationSuite
     }
   }
 
-  test("SC-168178 BroadcastNestedLoopJoin outer executes probe side twice") {
+  test("BroadcastNestedLoopJoin outer executes probe side twice") {
     val slam = SQLLastAttemptMetrics.createMetric(spark.sparkContext, "test SLAM")
     val build =
       spark.range(5).selectExpr("id as b").hint("broadcast")
@@ -611,13 +611,14 @@ class SQLLastAttemptMetricIntegrationSuite
     })
     // When build side is outer, probe side gets executed twice by BNLJ:
     // once for matches, and once to mark unmatched build rows.
-    // TODO(SC-168178) This can be a non-determinism correctness issue
+    // This is a non-determinism correctness issue, and the two executions
+    // should not be double-counted in the last attempt value.
     assert(slam.getNumRDDs === 2)
     assert(slam.lastAttemptValueForAllRDDs() === Some(200))
-    // However, the two executions are different RDDs, but only one of them is highest id.
+    // The two executions are different RDDs, but only one of them is highest id.
     assert(slam.lastAttemptValueForHighestRDDId() === Some(100))
-    // Dataset sees both RDDs.
-    assert(slam.lastAttemptValueForDataset(df) === Some(200))
+    // Dataset dedups per scope and returns only the latest RDD's value.
+    assert(slam.lastAttemptValueForDataset(df) === Some(100))
   }
 
   test("SLAM with AQE CoalesceShufflePartitions") {

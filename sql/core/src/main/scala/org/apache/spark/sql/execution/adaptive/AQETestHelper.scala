@@ -39,6 +39,7 @@ object AQETestHelper {
       thunk
     } finally {
       metricIdsForForcedCancellation = Set.empty
+      forcedCancellationTriggeredForPlans.clear()
     }
     res
   }
@@ -53,7 +54,7 @@ object AQETestHelper {
     Utils.isTesting && metricIdsForForcedCancellation.nonEmpty
 
   /** Return `true` if forced cancellation has already been triggered for `plan`. */
-  def wasForcedCancellationTriggeredForPlan(plan: SparkPlan): Boolean = synchronized {
+  private def wasForcedCancellationTriggeredForPlan(plan: SparkPlan): Boolean = synchronized {
     forcedCancellationTriggeredForPlans.contains(plan.id)
   }
 

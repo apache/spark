@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution.metric
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.SparkContext
 import org.apache.spark.util.AccumulatorV2
 
@@ -25,13 +23,13 @@ class SQLLastAttemptMetric(
     metricType: String,
     initValue: Long = 0L)
   extends SQLMetric(metricType, initValue)
-  with SQLLastAttemptAccumulator[Long, Long, Long] {
+  with SQLLastAttemptAccumulator[Long, Long, Long, SQLMetric] {
 
   override protected def partialMergeVal: Long = _value
 
   override protected def partialMerge(value: Long): Unit = {
-    if (isZero) _value = 0
-    _value += value
+    // For SQLLastAttemptMetric, this is just add to the underlying SQLMetric.
+    super.add(value)
   }
 
   override protected def isMergeable(other: AccumulatorV2[_, _]): Boolean = other match {
@@ -43,33 +41,11 @@ class SQLLastAttemptMetric(
   // number of rows processed, and it should not store user data.
   protected def accumulatorStoresUserData: Boolean = false
 
-  /**
-   * Check if the value is added on the driver side, not from within a task.
-   * If it is set in the scope of a Dataset's QueryExecution, associate it with that scope.
-   * This must be called from `set` methods of this SQLMetric subclass.
-   * This should be called there after setValueIfOnDriverSide.
-   * See [[addQueryExecutionValueIfOnDriverSide]].
-   * This method is directly in this class, because in general AccumulatorV2 does not have a
-   * direct set method, only SQLMetric has it.
-   */
-  protected def setQueryExecutionValueIfOnDriverSide(value: Long): Unit = try {
-    // Note: setValueIfOnDriverSide will already make it invalid if there are also RDD updates.
-    if (isAtDriverSide && lastAttemptAccumulatorInitialized && !lastAttemptAccumulatorInvalid) {
-      // Direct update on the driver, not from within a task.
-      getActiveDatasetQueryExecutionId match {
-        case Some(qeId) =>
-          val driverMetric = getOrCreateDirectDriverQueryExecutionValue(qeId)
-          driverMetric.set(value)
-        case None => // pass
-      }
-    }
-  } catch {
-    case NonFatal(e) =>
-      unexpectedLastAttemptMetricOperation(
-        invalidate = true,
-        reason = "Unexpected exception in addQueryExecutionValueIfOnDriverSide",
-        exception = Some(e))
-  }
+  override protected def newDriverQueryExecutionAcc(): SQLMetric =
+    new SQLMetric(metricType, initValue)
+  override protected def addToDriverAcc(acc: SQLMetric, value: Long): Unit = acc.add(value)
+  override protected def setDriverAcc(acc: SQLMetric, value: Long): Unit = acc.set(value)
+  override protected def driverAccValue(acc: SQLMetric): Long = acc.value
 
   override def copy(): SQLLastAttemptMetric = {
     val newAcc = new SQLLastAttemptMetric(metricType, initValue)
