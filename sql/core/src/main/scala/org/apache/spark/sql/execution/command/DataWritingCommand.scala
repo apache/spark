@@ -110,7 +110,8 @@ object DataWritingCommand {
    * @param hadoopConf Configuration.
    */
   def assertEmptyRootPath(tablePath: URI, saveMode: SaveMode, hadoopConf: Configuration): Unit = {
-    if (saveMode == SaveMode.ErrorIfExists && !SQLConf.get.allowNonEmptyLocationInCTAS) {
+    if ((saveMode == SaveMode.ErrorIfExists || saveMode == SaveMode.Ignore) &&
+        !SQLConf.get.allowNonEmptyLocationInCTAS) {
       val filePath = new org.apache.hadoop.fs.Path(tablePath)
       val fs = filePath.getFileSystem(hadoopConf)
       if (fs.exists(filePath) &&
