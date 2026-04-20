@@ -619,14 +619,6 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       // A DataFrame column can be resolved as a metadata column, we should keep it.
       r._1.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))
     }
-    // If the column was resolved in a descendant matching the plan id but got filtered out
-    // because its references are not part of `p`'s output, mark the `UnresolvedAttribute` so
-    // `CheckAnalysis` can emit an actionable error if the attribute ends up unresolved. Some
-    // analyzer rules (e.g. `ResolveReferencesInSort`) can still resolve the attribute later; if
-    // they do, the tag on the original `UnresolvedAttribute` has no effect.
-    if (resolved.nonEmpty && filtered.isEmpty) {
-      u.setTagValue(LogicalPlan.DATAFRAME_COLUMN_OUT_OF_SCOPE_TAG, ())
-    }
     (filtered, matched)
   }
 

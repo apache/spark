@@ -217,19 +217,6 @@ object LogicalPlan {
   //    to the old code path.
   private[spark] val PLAN_ID_TAG = TreeNodeTag[Long]("plan_id")
   private[spark] val IS_METADATA_COL = TreeNodeTag[Unit]("is_metadata_col")
-
-  // A dedicated tag for Spark Connect.
-  // Attached to an [[UnresolvedAttribute]] when its plan id matched a plan node in the tree and
-  // the column was resolved there, but the resolved attribute was filtered out because it's not
-  // part of some ancestor operator's output. This happens when the user references a column from
-  // a DataFrame whose value was overwritten (e.g., by `withColumn`) in the current DataFrame.
-  //    df1 = spark.range(10)
-  //    df2 = df1.withColumn("id", col("id") + 1)
-  //    df2.select(df1["id"])  <- df1's "id" is shadowed by df2's new "id"
-  // The tag allows [[CheckAnalysis]] to produce a more actionable error when this attribute
-  // fails to be resolved by subsequent rules.
-  private[spark] val DATAFRAME_COLUMN_OUT_OF_SCOPE_TAG =
-    TreeNodeTag[Unit]("dataframe_column_out_of_scope")
 }
 
 /**
