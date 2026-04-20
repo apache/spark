@@ -17,24 +17,16 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.io.ByteArrayOutputStream
-import java.lang.reflect.{InvocationTargetException, Method}
 import java.nio.ByteBuffer
-import java.util.PrimitiveIterator
 
 import scala.util.Random
 
-import org.apache.parquet.bytes.{ByteBufferInputStream, HeapByteBufferAllocator}
-import org.apache.parquet.column.{ColumnDescriptor, Dictionary}
-import org.apache.parquet.column.values.rle.RunLengthBitPackingHybridEncoder
-import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
-import org.apache.parquet.schema.Type.Repetition
-import org.apache.parquet.schema.Types
+import org.apache.parquet.bytes.ByteBufferInputStream
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.sql.execution.datasources.parquet.VectorizedRleValuesReaderTestUtils._
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.types.{BooleanType, IntegerType}
-import org.apache.spark.util.SparkClassUtils
 
 /**
  * Low-level benchmark for `VectorizedRleValuesReader`. Measures both RLE and PACKED decode
@@ -70,130 +62,17 @@ object VectorizedRleValuesReaderBenchmark extends BenchmarkBase {
   private val NUM_ITERS = 5
   private val BATCH_SIZE = 4096
 
-  // --------------- Encoding / descriptor / updater helpers ---------------
-
-  private def encodeRle(values: Array[Int], bitWidth: Int): Array[Byte] = {
-    val enc = new RunLengthBitPackingHybridEncoder(
-      bitWidth, 64 * 1024, 1024 * 1024, new HeapByteBufferAllocator)
-    values.foreach(enc.writeInt)
-    val out = new ByteArrayOutputStream()
-    enc.toBytes.writeAllTo(out)
-    out.toByteArray
-  }
-
   private def toInputStream(bytes: Array[Byte]): ByteBufferInputStream =
     ByteBufferInputStream.wrap(ByteBuffer.wrap(bytes))
 
-  private def intColumnDescriptor(maxDef: Int): ColumnDescriptor = {
-    val rep = if (maxDef == 0) Repetition.REQUIRED else Repetition.OPTIONAL
-    val prim = Types.primitive(PrimitiveTypeName.INT32, rep).named("col")
-    new ColumnDescriptor(Array("col"), prim, 0, maxDef)
-  }
-
-  private val integerUpdater: ParquetVectorUpdater = new ParquetVectorUpdater {
-    override def readValues(
-        total: Int, offset: Int,
-        values: WritableColumnVector, reader: VectorizedValuesReader): Unit =
-      reader.readIntegers(total, values, offset)
-
-    override def skipValues(total: Int, reader: VectorizedValuesReader): Unit =
-      reader.skipIntegers(total)
-
-    override def readValue(
-        offset: Int, values: WritableColumnVector, reader: VectorizedValuesReader): Unit =
-      values.putInt(offset, reader.readInteger())
-
-    override def decodeSingleDictionaryId(
-        offset: Int,
-        values: WritableColumnVector,
-        dictionaryIds: WritableColumnVector,
-        dictionary: Dictionary): Unit =
-      values.putInt(offset, dictionary.decodeToInt(dictionaryIds.getDictId(offset)))
-  }
-
-  // --------------- Reflective bridge to package-private ParquetReadState ---------------
-  //
-  // Under spark-submit --jars, test and main classes load from different classloaders, blocking
-  // package-private access across runtime packages. Reflection with setAccessible sidesteps
-  // the check without widening production visibility.
-
-  private val stateCls = SparkClassUtils.classForName[Any](
-    "org.apache.spark.sql.execution.datasources.parquet.ParquetReadState")
-
-  private val stateCtor = {
-    val c = stateCls.getDeclaredConstructor(
-      classOf[ColumnDescriptor],
-      java.lang.Boolean.TYPE,
-      classOf[PrimitiveIterator.OfLong])
-    c.setAccessible(true)
-    c
-  }
-
-  private val resetForNewBatchMethod = {
-    val m = stateCls.getDeclaredMethod("resetForNewBatch", Integer.TYPE)
-    m.setAccessible(true)
-    m
-  }
-
-  private val resetForNewPageMethod = {
-    val m = stateCls.getDeclaredMethod(
-      "resetForNewPage", Integer.TYPE, java.lang.Long.TYPE)
-    m.setAccessible(true)
-    m
-  }
-
-  private val readBatchMethod: Method =
-    classOf[VectorizedRleValuesReader].getMethods
-      .find(m =>
-        m.getName == "readBatch"
-          && m.getParameterCount == 5
-          && m.getParameterTypes()(0) == stateCls)
-      .getOrElse(throw new NoSuchMethodException(
-        "VectorizedRleValuesReader.readBatch/5"))
+  // --------------- ReadState helpers (delegate to shared reflection bridge) ---------------
 
   private def newReadState(maxDef: Int, valuesInPage: Int): AnyRef = {
-    val state = try {
-      stateCtor.newInstance(
-        intColumnDescriptor(maxDef),
-        Boolean.box(maxDef == 0),
-        null).asInstanceOf[AnyRef]
-    } catch { case e: ReflectiveOperationException => throw rethrow(e) }
-    resetForNewBatch(state, BATCH_SIZE)
-    resetForNewPage(state, valuesInPage, 0L)
+    val state = ParquetReadStateTestAccess.newState(
+      intColumnDescriptor(maxDef), maxDef == 0)
+    ParquetReadStateTestAccess.resetForNewBatch(state, BATCH_SIZE)
+    ParquetReadStateTestAccess.resetForNewPage(state, valuesInPage, 0L)
     state
-  }
-
-  private def resetForNewBatch(state: AnyRef, batchSize: Int): Unit =
-    try { resetForNewBatchMethod.invoke(state, Int.box(batchSize)) }
-    catch { case e: ReflectiveOperationException => throw rethrow(e) }
-
-  private def resetForNewPage(
-      state: AnyRef, total: Int, firstRow: Long): Unit =
-    try {
-      resetForNewPageMethod.invoke(state, Int.box(total), Long.box(firstRow))
-    } catch { case e: ReflectiveOperationException => throw rethrow(e) }
-
-  private def invokeReadBatch(
-      reader: VectorizedRleValuesReader,
-      state: AnyRef,
-      values: WritableColumnVector,
-      defLevels: WritableColumnVector,
-      valueReader: VectorizedValuesReader): Unit =
-    try {
-      readBatchMethod.invoke(
-        reader, state, values, defLevels, valueReader, integerUpdater)
-    } catch { case e: ReflectiveOperationException => throw rethrow(e) }
-
-  private def rethrow(e: ReflectiveOperationException): RuntimeException = {
-    val cause = e match {
-      case ite: InvocationTargetException => ite.getCause
-      case other => other
-    }
-    cause match {
-      case re: RuntimeException => throw re
-      case er: Error => throw er
-      case _ => throw new RuntimeException(cause)
-    }
   }
 
   // --------------- Data generation helpers ---------------
@@ -379,7 +258,8 @@ object VectorizedRleValuesReaderBenchmark extends BenchmarkBase {
           benchmark.addCase(
               f"nullRatio=${nullRatio}%.1f, $clusterTag") { _ =>
             reader.initFromPage(NUM_ROWS, toInputStream(bytes))
-            resetForNewPage(state, NUM_ROWS, 0L)
+            ParquetReadStateTestAccess.resetForNewPage(
+              state, NUM_ROWS, 0L)
             runBatches(reader, state, values, defLevelsVec, factory())
           }
         }
@@ -397,8 +277,9 @@ object VectorizedRleValuesReaderBenchmark extends BenchmarkBase {
     var produced = 0
     while (produced < NUM_ROWS) {
       val toRead = math.min(BATCH_SIZE, NUM_ROWS - produced)
-      resetForNewBatch(state, toRead)
-      invokeReadBatch(reader, state, values, defLevelsVec, valueReader)
+      ParquetReadStateTestAccess.resetForNewBatch(state, toRead)
+      ParquetReadStateTestAccess.readBatch(
+        reader, state, values, defLevelsVec, valueReader, integerUpdater)
       produced += toRead
     }
   }

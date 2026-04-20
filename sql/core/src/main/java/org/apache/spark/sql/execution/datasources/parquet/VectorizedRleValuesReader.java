@@ -245,16 +245,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
             }
             state.valueOffset += n;
           }
-          case PACKED -> {
-            for (int i = 0; i < n; ++i) {
-              int currentValue = currentBuffer[currentBufferIdx++];
-              if (currentValue == state.maxDefinitionLevel) {
-                updater.readValue(state.valueOffset++, values, valueReader);
-              } else {
-                nulls.putNull(state.valueOffset++);
-              }
-            }
-          }
+          case PACKED ->
+            readPackedBatch(n, state, values, nulls, valueReader, updater);
         }
         state.levelOffset += n;
         leftInBatch -= n;
@@ -267,6 +259,52 @@ public final class VectorizedRleValuesReader extends ValuesReader
     state.rowsToReadInBatch = leftInBatch;
     state.valuesToReadInPage = leftInPage;
     state.rowId = rowId;
+  }
+
+  /**
+   * PACKED-branch decode for {@link #readBatchInternal}. Extracted into a separate method so
+   * C2 can keep {@link #readBatchInternal}'s RLE fast path small and inlineable. Scans for
+   * contiguous null/non-null runs, batches value-side reads, but keeps null writes per-row
+   * to avoid polluting {@code putNulls(offset, count)}'s JIT profile (called with large
+   * counts from the RLE branch; short PACKED counts would average out its optimization).
+   */
+  private void readPackedBatch(
+      int n,
+      ParquetReadState state,
+      WritableColumnVector values,
+      WritableColumnVector nulls,
+      VectorizedValuesReader valueReader,
+      ParquetVectorUpdater updater) {
+    final int maxDefLevel = state.maxDefinitionLevel;
+    final int bufEnd = currentBufferIdx + n;
+    int valueOff = state.valueOffset;
+    while (currentBufferIdx < bufEnd) {
+      int runStart = currentBufferIdx;
+      if (currentBuffer[currentBufferIdx] == maxDefLevel) {
+        do {
+          currentBufferIdx++;
+        } while (currentBufferIdx < bufEnd
+            && currentBuffer[currentBufferIdx] == maxDefLevel);
+        int runLen = currentBufferIdx - runStart;
+        if (runLen == 1) {
+          updater.readValue(valueOff, values, valueReader);
+        } else {
+          updater.readValues(runLen, valueOff, values, valueReader);
+        }
+        valueOff += runLen;
+      } else {
+        do {
+          currentBufferIdx++;
+        } while (currentBufferIdx < bufEnd
+            && currentBuffer[currentBufferIdx] != maxDefLevel);
+        int runLen = currentBufferIdx - runStart;
+        for (int k = 0; k < runLen; k++) {
+          nulls.putNull(valueOff + k);
+        }
+        valueOff += runLen;
+      }
+    }
+    state.valueOffset = valueOff;
   }
 
   private void readBatchInternalWithDefLevels(
@@ -636,18 +674,57 @@ public final class VectorizedRleValuesReader extends ValuesReader
         state.valueOffset += n;
         defLevels.putInts(state.levelOffset, n, currentValue);
       }
-      case PACKED -> {
-        for (int i = 0; i < n; ++i) {
-          int currentValue = currentBuffer[currentBufferIdx++];
-          if (currentValue == state.maxDefinitionLevel) {
-            updater.readValue(state.valueOffset++, values, valueReader);
-          } else {
-            nulls.putNull(state.valueOffset++);
-          }
-          defLevels.putInt(state.levelOffset + i, currentValue);
+      case PACKED ->
+        readPackedBatchWithDefLevels(
+            n, state, defLevels, values, nulls, valueReader, updater);
+    }
+  }
+
+  /**
+   * PACKED-branch decode for {@link #readValuesN}. Extracted for the same JIT reason as
+   * {@link #readPackedBatch}: keeps the parent's RLE fast path small enough to inline.
+   * Groups by exact def-level value (required for nested columns with multiple null def-
+   * level values), batches value-side reads via {@code readValues(runLen,...)} for
+   * runs &gt; 1, but keeps null and def-level writes per-row so the large-count RLE call
+   * sites for {@code putNulls}/{@code putInts} retain monomorphic JIT profiles.
+   */
+  private void readPackedBatchWithDefLevels(
+      int n,
+      ParquetReadState state,
+      WritableColumnVector defLevels,
+      WritableColumnVector values,
+      WritableColumnVector nulls,
+      VectorizedValuesReader valueReader,
+      ParquetVectorUpdater updater) {
+    final int maxDefLevel = state.maxDefinitionLevel;
+    final int end = currentBufferIdx + n;
+    int valueOff = state.valueOffset;
+    int levelIdx = state.levelOffset;
+    while (currentBufferIdx < end) {
+      int runStart = currentBufferIdx;
+      int runValue = currentBuffer[currentBufferIdx];
+      do {
+        currentBufferIdx++;
+      } while (currentBufferIdx < end && currentBuffer[currentBufferIdx] == runValue);
+      int runLen = currentBufferIdx - runStart;
+      if (runValue == maxDefLevel) {
+        if (runLen == 1) {
+          updater.readValue(valueOff, values, valueReader);
+        } else {
+          updater.readValues(runLen, valueOff, values, valueReader);
+        }
+      } else {
+        for (int k = 0; k < runLen; k++) {
+          nulls.putNull(valueOff + k);
         }
       }
+      valueOff += runLen;
+      for (int k = 0; k < runLen; k++) {
+        defLevels.putInt(levelIdx + k, runValue);
+      }
+      levelIdx += runLen;
     }
+    state.valueOffset = valueOff;
   }
 
   /**
