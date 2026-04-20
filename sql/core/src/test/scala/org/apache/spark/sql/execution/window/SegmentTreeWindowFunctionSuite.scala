@@ -132,7 +132,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
         max($"v").over(winSpec(-50, 50)).as("mx")))
   }
 
-  
+
   test("partition below minPartitionRows falls back to SlidingWindowFunctionFrame") {
     // 5-row partition, min threshold = 10 -> must fall back.
     val df = spark.range(0, 5).selectExpr(
@@ -162,7 +162,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  
+
   test("NTH_VALUE over ROWS frame falls back cleanly (no mergeExpressions crash)") {
     // NthValue extends DeclarativeAggregate but its mergeExpressions throws
     // mergeUnsupportedByWindowFunctionError. eligibleForSegTree must exclude it.
@@ -309,7 +309,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
         max($"vt").over(winSpec(-3, 3)).as("mxt")))
   }
 
-  
+
   test("collect_list falls back cleanly (non-DeclarativeAggregate)") {
     // collect_list is a Collect(TypedImperativeAggregate) -- not a
     // DeclarativeAggregate, so eligibleForSegTree must decline and the
@@ -511,7 +511,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
     withSQLConf(extra: _*)(body)
   }
 
-  
+
   /**
    * 20 rows in a single partition, Decimal(38, 0) values near the type's
    * upper bound. Frame of `segTreeFramePrec` PRECEDING..CURRENT ROW means
@@ -633,7 +633,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
     None
   }
 
-  
+
   /** Pattern of 20 Array[Byte] values used across a. */
   private def binaryVariedRows: Seq[(Int, Array[Byte])] = {
     (0 until 20).map { i =>
