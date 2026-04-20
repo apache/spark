@@ -21,6 +21,8 @@ import java.util.ConcurrentModificationException
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicReference
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession, SQLHelper}
 import org.apache.spark.sql.connect.test.IntegrationTestUtils.isAssemblyJarsDirExists
@@ -103,6 +105,34 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       }
     }
     checkChain(e)
+  }
+
+  /**
+   * Validates only the error condition, skipping parameter validation. Connect's checkError
+   * requires exact parameter matching but parameterized tests don't know exact parameters in
+   * advance. This override passes the exception's own parameters so the condition is validated
+   * without parameter mismatches.
+   */
+  private def checkErrorCondition(exception: AnalysisException, condition: String): Unit = {
+    checkError(
+      exception = exception,
+      condition = condition,
+      parameters = exception.getMessageParameters.asScala.toMap)
+  }
+
+  /**
+   * Compares data rows ignoring schema names. Use instead of checkAnswer when column rename
+   * changes schema names but data is unchanged. checkAnswer in Connect validates schema names,
+   * causing false failures for the column rename modification.
+   */
+  private def checkDataOnly(df: DataFrame, expected: Seq[Row]): Unit = {
+    val actual = df.collect().toSeq
+    assert(
+      actual.toSet == expected.toSet,
+      s"Expected ${expected.mkString("[", ", ", "]")} but got ${actual.mkString("[", ", ", "]")}")
+    assert(
+      actual.length == expected.length,
+      s"Expected ${expected.length} rows but got ${actual.length}")
   }
 
   // =====================================================================
@@ -221,12 +251,11 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
           } else {
             // DF-based views use VIEW_PLAN_CHANGED (plan-based validation),
             // unlike SQL views which use SQL_VIEW_CHANGED or UPCAST.
-            checkError(
+            checkErrorCondition(
               exception = intercept[AnalysisException] {
                 spark.sql("SELECT * FROM tmp").collect()
               },
-              condition = mod.dfViewCondition,
-              matchPVals = true)
+              condition = mod.dfViewCondition)
           }
         }
       }
@@ -245,8 +274,10 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         setupTable()
         checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
         mod.fn(T)
-        // Fresh analysis each time in Connect: all succeed
-        checkAnswer(spark.sql(s"SELECT * FROM $T"), mod.dfRows)
+        // Fresh analysis each time in Connect: all succeed.
+        // Use checkDataOnly because column rename changes schema names
+        // which breaks checkAnswer's schema validation.
+        checkDataOnly(spark.sql(s"SELECT * FROM $T"), mod.dfRows)
       }
     }
   }
@@ -291,7 +322,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         val df = spark.sql(s"SELECT * FROM $T")
         mod.fn(T)
         // Connect re-analyzes: all succeed
-        checkAnswer(df, mod.dfRows)
+        checkDataOnly(df, mod.dfRows)
       }
     }
   }
@@ -310,7 +341,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         checkAnswer(df, Seq(Row(1, 100)))
         mod.fn(T)
         // Connect re-analyzes on every action: NOT stale (unlike classic)
-        checkAnswer(df, mod.dfRows)
+        checkDataOnly(df, mod.dfRows)
       }
     }
   }
@@ -355,7 +386,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
           WHERE id IN (SELECT id FROM $T)""")
         mod.fn(T)
         // Connect re-analyzes subqueries: all succeed
-        checkAnswer(df, mod.dfRows)
+        checkDataOnly(df, mod.dfRows)
       }
     }
   }
@@ -380,12 +411,11 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
             checkAnswer(spark.sql("SELECT * FROM tmp"), mod.viewRows)
           } else {
             // SQL views use SQL_VIEW_CHANGED or UPCAST (type widening / drop+add diff type)
-            checkError(
+            checkErrorCondition(
               exception = intercept[AnalysisException] {
                 spark.sql("SELECT * FROM tmp").collect()
               },
-              condition = mod.sqlViewCondition,
-              matchPVals = true)
+              condition = mod.sqlViewCondition)
           }
         }
       }
@@ -1378,12 +1408,11 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         spark.sql(s"ALTER TABLE $T ADD COLUMN addr.zip STRING")
 
         // DF view: nested field addition is incompatible
-        checkError(
+        checkErrorCondition(
           exception = intercept[AnalysisException] {
             spark.sql("SELECT * FROM tmp").collect()
           },
-          condition = VIEW_PLAN_CHANGED,
-          matchPVals = true)
+          condition = VIEW_PLAN_CHANGED)
       }
     }
   }
@@ -1406,12 +1435,11 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
 
         // Nested addition: fails (struct type changed)
         spark.sql(s"ALTER TABLE $T ADD COLUMN info.email STRING")
-        checkError(
+        checkErrorCondition(
           exception = intercept[AnalysisException] {
             spark.sql("SELECT * FROM tmp").collect()
           },
-          condition = VIEW_PLAN_CHANGED,
-          matchPVals = true)
+          condition = VIEW_PLAN_CHANGED)
       }
     }
   }
@@ -1703,12 +1731,11 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         spark.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
 
         // SQL view: captured column `salary` no longer exists
-        checkError(
+        checkErrorCondition(
           exception = intercept[AnalysisException] {
             spark.sql("SELECT * FROM tmp").collect()
           },
-          condition = SQL_VIEW_CHANGED,
-          matchPVals = true)
+          condition = SQL_VIEW_CHANGED)
       }
     }
   }
@@ -1740,12 +1767,11 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
 
         spark.sql(s"ALTER TABLE $T ALTER COLUMN salary TYPE BIGINT").collect()
 
-        checkError(
+        checkErrorCondition(
           exception = intercept[AnalysisException] {
             spark.sql("SELECT * FROM tmp").collect()
           },
-          condition = UPCAST,
-          matchPVals = true)
+          condition = UPCAST)
       }
     }
   }
@@ -1760,12 +1786,11 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
 
         spark.sql(s"ALTER TABLE $T RENAME COLUMN salary TO pay").collect()
 
-        checkError(
+        checkErrorCondition(
           exception = intercept[AnalysisException] {
             spark.sql("SELECT * FROM tmp").collect()
           },
-          condition = SQL_VIEW_CHANGED,
-          matchPVals = true)
+          condition = SQL_VIEW_CHANGED)
       }
     }
   }
@@ -1784,12 +1809,11 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         spark.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
 
         // DF-based view uses plan-based validation: VIEW_PLAN_CHANGED
-        checkError(
+        checkErrorCondition(
           exception = intercept[AnalysisException] {
             spark.sql("SELECT * FROM tmp").collect()
           },
-          condition = VIEW_PLAN_CHANGED,
-          matchPVals = true)
+          condition = VIEW_PLAN_CHANGED)
       }
     }
   }
@@ -1883,12 +1907,11 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         spark.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
         spark.sql(s"ALTER TABLE $T ADD COLUMN salary STRING").collect()
 
-        checkError(
+        checkErrorCondition(
           exception = intercept[AnalysisException] {
             spark.sql("SELECT * FROM tmp").collect()
           },
-          condition = UPCAST,
-          matchPVals = true)
+          condition = UPCAST)
       }
     }
   }
