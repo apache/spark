@@ -34,7 +34,9 @@ class InMemoryTableWithV2Filter(
     columns: Array[Column],
     partitioning: Array[Transform],
     properties: util.Map[String, String])
-  extends InMemoryBaseTable(name, columns, partitioning, properties) with SupportsDeleteV2 {
+  extends InMemoryBaseTable(name, columns, partitioning, properties)
+  with SupportsDeleteV2
+  with InMemoryDeleteRowCountMetric {
 
   override def canDeleteWhere(predicates: Array[Predicate]): Boolean = {
     InMemoryTableWithV2Filter.supportsPredicates(predicates)
@@ -42,8 +44,10 @@ class InMemoryTableWithV2Filter(
 
   override def deleteWhere(filters: Array[Predicate]): Unit = dataMap.synchronized {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
-    dataMap --= InMemoryTableWithV2Filter
+    val keysToDelete = InMemoryTableWithV2Filter
       .filtersToKeys(dataMap.keys, partCols.map(_.toSeq.quoted).toImmutableArraySeq, filters)
+    recordDeletedRows(keysToDelete)
+    dataMap --= keysToDelete
   }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
