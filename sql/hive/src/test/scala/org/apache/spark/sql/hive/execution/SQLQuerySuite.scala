@@ -599,6 +599,31 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
+  test("SPARK-XXXX: CTAS IF NOT EXISTS skips execution when table exists, " +
+    "regardless of non-empty location") {
+    def executeCTASWithNonEmptyLocation(tempLocation: String): Unit = {
+      sql(s"CREATE TABLE ctas1(id string) stored as rcfile LOCATION '$tempLocation/ctas1'")
+      sql("INSERT INTO TABLE ctas1 SELECT 'A' ")
+      sql(s"CREATE TABLE ctas2(id string) stored as rcfile LOCATION '$tempLocation/ctas2'")
+      sql(s"""CREATE TABLE IF NOT EXISTS ctas2 stored as rcfile
+             |LOCATION '$tempLocation/ctas1'
+             |AS SELECT key k, value FROM src ORDER BY k, value""".stripMargin)
+    }
+
+    Seq(false, true).foreach { convertCTASFlag =>
+      withSQLConf(
+        SQLConf.CONVERT_CTAS.key -> convertCTASFlag.toString,
+        SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key -> "false") {
+        withTempDir { dir =>
+          val tempLocation = dir.toURI.toString
+          withTable("ctas1", "ctas2") {
+            executeCTASWithNonEmptyLocation(tempLocation)
+          }
+        }
+      }
+    }
+  }
+
   test("CTAS with serde") {
     withTable("ctas1", "ctas2", "ctas3", "ctas4", "ctas5") {
       sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
