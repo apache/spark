@@ -39,7 +39,6 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.classic.ClassicConversions._
@@ -538,6 +537,16 @@ trait QueryTestBase
 
 }
 
+/**
+ * Helper trait that should be extended by all SQL test suites within the Spark code base.
+ *
+ * This allows subclasses to plugin a custom `SparkSession`. It comes with test data
+ * prepared in advance as well as all implicit conversions used extensively by dataframes.
+ * To use implicit methods, import `testImplicits._` instead of through the `SparkSession`.
+ *
+ * Subclasses should *not* create `SparkSession`s in the test suite constructor, which is
+ * prone to leaving multiple overlapping [[org.apache.spark.SparkContext]]s in the same JVM.
+ */
 trait QueryTest extends SparkFunSuite with QueryTestBase with PlanTest {
   // Whether to materialize all test data before the first test is run
   private var loadTestDataBeforeTests = false

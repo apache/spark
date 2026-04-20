@@ -17,22 +17,20 @@
 
 package org.apache.spark.sql.test
 
-import org.scalatest.Suite
-
 import org.apache.spark.sql.{QueryTest, QueryTestBase, Row}
 import org.apache.spark.sql.catalyst.util._
 
 /**
- * Helper trait that should be extended by all SQL test suites within the Spark
- * code base. Now a thin alias for [[QueryTest]].
+ * Kept as an empty alias of [[QueryTest]] for backward compatibility with existing subclasses.
+ * New test suites should extend [[QueryTest]] directly.
  */
 private[sql] trait SQLTestUtils extends QueryTest
 
 /**
- * Helper trait that can be extended by all external SQL test suites.
- * Now a thin alias for [[QueryTestBase]].
+ * Kept as an empty alias of [[QueryTestBase]] for backward compatibility with existing subclasses.
+ * New test suites should extend [[QueryTestBase]] directly.
  */
-private[sql] trait SQLTestUtilsBase extends QueryTestBase { self: Suite => }
+private[sql] trait SQLTestUtilsBase extends QueryTestBase
 
 private[sql] object SQLTestUtils {
 
