@@ -1675,6 +1675,33 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  // Same as above but schema changes are done via direct catalog API
+  // to simulate an external session (design doc Section 1.6 external).
+  test("external drop and re-add column with different type detects schema change") {
+    val t = "testcat2.ns.tbl"
+    val ident = Identifier.of(Array("ns"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      // create DataFrame and trigger analysis
+      val df = spark.table(t)
+
+      // simulate external session dropping and re-adding column with different type
+      val cat = catalog("testcat2")
+      cat.alterTable(ident, TableChange.deleteColumn(Array("salary"), false))
+      cat.alterTable(ident,
+        TableChange.addColumn(Array("salary"), StringType, true, null, null, null))
+
+      // execution should fail with column ID mismatch
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
   // =========================================================================
   // Column ID tests from design doc: pinning and refresh scenarios
   // =========================================================================
