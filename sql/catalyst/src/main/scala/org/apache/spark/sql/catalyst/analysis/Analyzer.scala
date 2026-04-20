@@ -485,10 +485,10 @@ class Analyzer(
       new ResolveSetVariable(catalogManager) ::
       new ResolveFetchCursor(catalogManager) ::
       new ResolveCursors() ::
+      ResolveQualify ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
-      ResolveQualify ::
       TimeWindowing ::
       SessionWindowing ::
       ResolveWindowTime ::
@@ -3425,6 +3425,7 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
       _.containsPattern(WINDOW_EXPRESSION), ruleId) {
 
+
       case Filter(condition, _) if hasWindowFunction(condition) =>
         throw QueryCompilationErrors.windowFunctionNotAllowedError("WHERE")
 
@@ -4076,10 +4077,15 @@ class Analyzer(
         (newCond, newAgg)
 
       case p: Project =>
+        // First resolve against this Project's children output.
         val resolved = resolveExpressionByPlanChildren(cond, p)
-        val newCond = resolveConditionSubqueries(resolved, p.child)
-        val missingAttrs = (newCond.references -- p.outputSet).intersect(p.child.outputSet)
-        val newProject = p.copy(projectList = p.projectList ++ missingAttrs)
+        val subqueryResolved = resolveConditionSubqueries(resolved, p.child)
+        // Recurse into child to resolve any remaining unresolved references and
+        // propagate missing attributes through intermediate nodes.
+        val (newCond, newChild) = resolveQualifyCondition(
+          subqueryResolved, candidateAttrs, p.child)
+        val missingAttrs = (newCond.references -- p.outputSet).intersect(newChild.outputSet)
+        val newProject = p.copy(projectList = p.projectList ++ missingAttrs, child = newChild)
         (newCond, newProject)
 
       case w: Window =>
@@ -4090,18 +4096,30 @@ class Analyzer(
         val (newCond, newChild) = resolveQualifyCondition(cond, candidateAttrs, f.child)
         (newCond, f.copy(child = newChild))
 
-      case o =>
-        throw SparkException.internalError(s"Invalid QUALIFY usage with ${o.nodeName}")
+      case other =>
+        // Base case (SubqueryAlias, View, etc.): try resolving the condition
+        // using a fake UnresolvedQualify wrapper so resolveExpressionByPlanChildren
+        // can resolve against this node's output.
+        val resolved = cond.transformUp {
+          case u: UnresolvedAttribute =>
+            other.output.resolve(u.nameParts, conf.resolver).getOrElse(u)
+        }
+        (resolved, other)
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(UNRESOLVED_QUALIFY)) {
       case q @ UnresolvedQualify(cond, child) if child.resolved =>
+        // Save the original output before missing attrs are added.
+        val originalOutput = child.output
         val (resolvedByChildren, newChild) =
           resolveQualifyCondition(cond, child.outputSet, child)
-        // Resolve the condition by the plan's output (aliases from SELECT list).
-        val maybeResolved =
+        // Also try resolving by the current child's output (for SELECT aliases).
+        val maybeResolved = if (resolvedByChildren.resolved) {
+          resolvedByChildren
+        } else {
           resolveExpressionByPlanChildren(resolvedByChildren, q)
+        }
         val newPlan = if (maybeResolved.resolved) {
           // Extract canonically unique window functions in the qualify condition.
           val windowExpressionToAliasMap = new java.util.LinkedHashMap[Expression, Alias]()
@@ -4125,16 +4143,16 @@ class Analyzer(
           if (windowExpressionToAliasMap.size() > 0) {
             val projectList =
               windowExpressionToAliasMap.values().asScala.toSeq
-            Filter(newCond, Project(child.output ++ projectList, newChild))
+            Filter(newCond, Project(newChild.output ++ projectList, newChild))
           } else {
             Filter(newCond, newChild)
           }
         } else {
           UnresolvedQualify(maybeResolved, newChild)
         }
-        // Trim additional attributes to preserve original output.
-        if (!newPlan.sameOutput(q)) {
-          Project(q.output, newPlan)
+        // Trim additional attributes to preserve original SELECT output.
+        if (newPlan.output.map(_.exprId) != originalOutput.map(_.exprId)) {
+          Project(originalOutput, newPlan)
         } else {
           newPlan
         }

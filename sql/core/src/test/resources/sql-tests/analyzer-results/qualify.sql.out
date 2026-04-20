@@ -55,7 +55,7 @@ ORDER BY car_model, city
 Sort [car_model#x ASC NULLS FIRST, city#x ASC NULLS FIRST], true
 +- Project [city#x, car_model#x]
    +- Filter (RANK() OVER (PARTITION BY dealer.car_model ORDER BY dealer.quantity ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x = 1)
-      +- Project [city#x, car_model#x, RANK() OVER (PARTITION BY dealer.car_model ORDER BY dealer.quantity ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
+      +- Project [city#x, car_model#x, quantity#x, RANK() OVER (PARTITION BY dealer.car_model ORDER BY dealer.quantity ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
          +- Project [city#x, car_model#x, quantity#x, RANK() OVER (PARTITION BY dealer.car_model ORDER BY dealer.quantity ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, RANK() OVER (PARTITION BY dealer.car_model ORDER BY dealer.quantity ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
             +- Window [rank(quantity#x) windowspecdefinition(car_model#x, quantity#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS RANK() OVER (PARTITION BY dealer.car_model ORDER BY dealer.quantity ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [car_model#x], [quantity#x ASC NULLS FIRST]
                +- Project [city#x, car_model#x, quantity#x]

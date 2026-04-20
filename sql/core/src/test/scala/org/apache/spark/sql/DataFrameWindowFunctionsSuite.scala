@@ -1184,6 +1184,38 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     }
   }
 
+  test("QUALIFY can reference columns not in SELECT list") {
+    withTempView("t") {
+      Seq((1, 10, "x"), (2, 20, "y"), (3, 30, "z"))
+        .toDF("a", "b", "c").createOrReplaceTempView("t")
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT ROW_NUMBER() OVER (ORDER BY b) AS rn
+            |FROM t
+            |QUALIFY a = 1
+          """.stripMargin),
+        Row(1))
+    }
+  }
+
+  test("QUALIFY with window in condition and non-selected column reference") {
+    withTempView("t") {
+      Seq((1, 10, "x"), (2, 20, "y"), (3, 30, "z"))
+        .toDF("a", "b", "c").createOrReplaceTempView("t")
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a
+            |FROM t
+            |QUALIFY ROW_NUMBER() OVER (ORDER BY b) = 1 AND c > 'w'
+          """.stripMargin),
+        Row(1))
+    }
+  }
+
   test("QUALIFY is non-reserved in non-ANSI mode") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       checkAnswer(sql("SELECT qualify FROM VALUES (1) AS t(qualify)"), Row(1))
