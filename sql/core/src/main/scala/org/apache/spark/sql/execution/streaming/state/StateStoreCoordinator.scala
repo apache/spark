@@ -323,7 +323,7 @@ private class StateStoreCoordinator(
       // Check if any loaded provider id is already loaded in other executor.
       val providerIdsToUnload = providerIdsToCheck.filter { providerId =>
         val providerLoc = instances.get(providerId)
-        // This provider is is already loaded in other executor. Marked it to unload.
+        // This provider is already loaded in other executor. Marked it to unload.
         providerLoc.map(_ != taskLocation).getOrElse(false)
       }
       // Check if the store is lagging behind in snapshot uploads

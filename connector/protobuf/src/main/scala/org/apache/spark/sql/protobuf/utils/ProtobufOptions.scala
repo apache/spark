@@ -75,7 +75,7 @@ private[sql] class ProtobufOptions(
     parameters.get("mode").map(ParseMode.fromString).getOrElse(FailFastMode)
 
   /**
-   * Adds support for recursive fields. If this option is is not specified, recursive fields are
+   * Adds support for recursive fields. If this option is not specified, recursive fields are
    * not permitted. Setting it to 1 drops the recursive fields, 0 allows it to be recursed once,
    * and 3 allows it to be recursed twice and so on, up to 10. Values larger than 10 are not
    * allowed in order avoid inadvertently creating very large schemas. If a Protobuf message
