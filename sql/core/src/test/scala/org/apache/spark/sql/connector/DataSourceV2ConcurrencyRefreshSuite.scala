@@ -104,7 +104,7 @@ class DataSourceV2ConcurrencyRefreshSuite
       classOf[SharedInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.sharedcat.copyOnLoad", "true")
     // copyOnLoad=false: shared table instance, no copies
-    .set("spark.sql.catalog.nocopycal",
+    .set("spark.sql.catalog.nocopycat",
       classOf[InMemoryTableCatalog].getName)
     // Caching connector: simulates Iceberg CachingCatalog
     .set("spark.sql.catalog.cachingcat",
@@ -114,14 +114,10 @@ class DataSourceV2ConcurrencyRefreshSuite
     .set("spark.sql.catalog.nullidcat",
       classOf[NullIdInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.nullidcat.copyOnLoad", "true")
-    // NOTE: MutableMetadataColumnCatalog exists but is not
-    // registered because custom metadata columns can't be
-    // scanned by InMemoryTable's read infrastructure.
 
   override def afterEach(): Unit = {
     SharedInMemoryTableCatalog.reset()
     CachingInMemoryTableCatalog.clearCache()
-    // MutableMetadataColumnTable.reset() not needed (unused)
     try {
       spark.sessionState.catalogManager.reset()
     } finally {
@@ -4161,7 +4157,7 @@ class DataSourceV2ConcurrencyRefreshSuite
   // Modifications are immediately visible without refresh.
   // =====================================================================
 
-  private val NC = "nocopycal.ns1.tbl"
+  private val NC = "nocopycat.ns1.tbl"
 
   test("[copyOnLoad=false] data write visible without refresh") {
     withTable(NC) {
