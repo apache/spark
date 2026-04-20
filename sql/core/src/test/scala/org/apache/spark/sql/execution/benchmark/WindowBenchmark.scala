@@ -26,13 +26,19 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Benchmark to measure window function performance with bounded ROWS frames.
  *
- * Matrix (rev3; see todos/features/window-segment-tree/docs/benchmark-design.md):
- *   - Section A: 6 aggregates x 3 cells (naive / segtree default / segtree bs=256),
- *                N=2M, W=1001. MAX / STDDEV_SAMP use numIters=5 (noisier); others 3.
- *   - Section B: MIN only, W sweep {201, 1001, 4001}; naive / segtree default.
- *                W=4001 also runs segtree bs=256 (cross-block stress).
- *   - Section F: Spill regression guard, 1M String(20)-like rows x MAX x W=1001,
- *                 naive / segtree default. Meaningful only under `-Xmx2g`.
+ * Matrix (rev4; see the PR description):
+ *   - Section A: 5 aggregates x 3 cells (naive / segtree default / segtree bs=256),
+ *                per-case N calibrated so naive lands in 3-5s/iter. STDDEV_SAMP keeps
+ *                N=2M (stress: multi-buffer noise demo).
+ *   - Section B: SUM-over-INT, W sweep {10, 50, 201, 4001}; naive / segtree default.
+ *                W=4001 also runs segtree bs=256. W=10 / W=50 are stress cases
+ *                demonstrating Pareto-loss zone (segtree slower than naive).
+ *   - Section F: Spill regression guard, 1M String rows x MAX x W=1001 (stress).
+ *   - Section C: N-sweep {2M, 8M, 16M} segtree-only at W=1001 (stress): memory-pressure
+ *                invariance / sub-linear growth demonstration.
+ *
+ * Reading guide: W-sweep uses different N per point so naive lands in 3-5s. Compare
+ * `Per Row(ns)` column (not Best time) to read O(log W) scaling on segtree side.
  *
  * Invocation arguments (positional; dev smoke only, do NOT set with
  * SPARK_GENERATE_BENCHMARK_FILES=1):
@@ -50,17 +56,40 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object WindowBenchmark extends SqlBasedBenchmark {
 
-  private val FULL_N: Long = 2L << 20          // 2,097,152
-  private val SPILL_N: Long = 1L << 20         // 1,048,576
-  private val MAIN_HALF_W: Int = 500           // Section A: W = 1001
+  // ---- Section A: per-case N (naive baseline ~3-5s/iter) ----
+  private val A_N_INT: Long = 256L * 1024              // MIN/MAX/SUM/COUNT @ W=1001
+  private val A_N_AVG: Long = 192L * 1024              // AVG  @ W=1001
+  private val A_N_STDDEV: Long = 2L * 1000L * 1000L    // STDDEV stress
+
+  // ---- Section B: W-sweep ----
+  private val B_N_W10: Long = 2L * 1000L * 1000L       // stress (Pareto loss)
+  private val B_N_W50: Long = 2L * 1000L * 1000L       // stress (Pareto loss)
+  private val B_N_W201: Long = 1L * 1000L * 1000L
+  private val B_N_W4001: Long = 2L * 1000L * 1000L     // stress O(W) cliff
+
+  // ---- Section F: String spill ----
+  private val SPILL_N: Long = 1L * 1000L * 1000L
+
+  // ---- Section C: N-sweep segtree-only ----
+  private val C_N_SMALL: Long = 2L * 1000L * 1000L
+  private val C_N_MID: Long = 8L * 1000L * 1000L
+  private val C_N_LARGE: Long = 16L * 1000L * 1000L
+  private val C_HALF_W: Int = 500                      // W=1001
+
+  private val MAIN_HALF_W: Int = 500                   // Section A W=1001
+
+  private val ITERS_NORMAL: Int = 5
+  private val ITERS_STRESS: Int = 3
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val smokeMode = mainArgs.nonEmpty
-    val rowCount = if (smokeMode) mainArgs(0).toLong else FULL_N
+    val smokeRowCount = if (smokeMode) mainArgs(0).toLong else 0L
     val smokeHalfW = if (mainArgs.length > 1) mainArgs(1).toInt else 100
 
-    require(rowCount >= 4096,
-      s"rowCount=$rowCount too small; segtree may fallback. Use >= 4096.")
+    if (smokeMode) {
+      require(smokeRowCount >= 4096,
+        s"rowCount=$smokeRowCount too small; segtree may fallback. Use >= 4096.")
+    }
 
     // Shared metrics listener: per-case peak mem + disk spill
     val metrics = mutable.Map[String, (Long, Long)]()
@@ -118,8 +147,6 @@ object WindowBenchmark extends SqlBasedBenchmark {
     // and real bugs that exceed 1e-3 relative error are still caught.
     // Integer aggregates (MIN/MAX/SUM/COUNT over INT inputs) remain
     // bit-exact and are hashed directly.
-    // All callers pass uppercase literals (AVG, STDDEV_SAMP, etc.), so no
-    // case folding is needed (and avoids the toUpperCase locale lint).
     def digestExprFor(aggFn: String): String = {
       if (aggFn.startsWith("AVG") || aggFn.startsWith("STDDEV") ||
           aggFn.startsWith("VAR")) {
@@ -137,8 +164,15 @@ object WindowBenchmark extends SqlBasedBenchmark {
       }
     }
 
-    // Section A: one aggregate, 3 cells, numIters configurable.
-    def runSectionA(aggFn: String, iters: Int, rows: Long, halfW: Int): Unit = {
+    def rowsLabel(rows: Long): String = {
+      if (rows >= 1000000) s"${rows / 1000000}M"
+      else if (rows >= 1024) s"${rows / 1024}K"
+      else rows.toString
+    }
+
+    // Section A: one aggregate, 3 cells.
+    def runSectionA(
+        aggFn: String, iters: Int, rows: Long, halfW: Int, stressMark: String): Unit = {
       val frame = frameFor(halfW)
       val dNaive = digest(aggFn, frame)
       val dSeg = digest(aggFn, frame, SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true")
@@ -151,9 +185,9 @@ object WindowBenchmark extends SqlBasedBenchmark {
         s"$aggFn segtree (bs=256) digest mismatch: naive=$dNaive seg=$dSegBs")
 
       val W = 2 * halfW + 1
-      val rowsLabel = if (rows >= 1000000) s"${rows / 1000000}M" else rows.toString
       val benchmark = new Benchmark(
-        s"$aggFn sliding window, W=$W, $rowsLabel rows", rows, output = output)
+        s"$aggFn sliding window, W=$W, ${rowsLabel(rows)} rows$stressMark",
+        rows, output = output)
       val nNaive = s"$aggFn naive (current, baseline)"
       val nSeg = s"$aggFn segtree (default)"
       val nSegBs = s"$aggFn segtree (blockSize=256)"
@@ -180,29 +214,29 @@ object WindowBenchmark extends SqlBasedBenchmark {
       benchmark.run()
     }
 
-    // Section B: MIN-only, one W, naive+default(+bs=256 when stressBs true).
-    def runSectionB(halfW: Int, stressBs: Boolean, rows: Long): Unit = {
-      val aggFn = "MIN"
+    // Section B: SUM-over-INT, one W, naive+default(+bs=256 when stressBs true).
+    def runSectionB(
+        halfW: Int, stressBs: Boolean, rows: Long, iters: Int, stressMark: String): Unit = {
+      val aggFn = "SUM"
       val frame = frameFor(halfW)
       val W = 2 * halfW + 1
       val dNaive = digest(aggFn, frame)
       val dSeg = digest(aggFn, frame, SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true")
       require(dNaive == dSeg, s"Section B W=$W digest mismatch: naive=$dNaive seg=$dSeg")
 
-      val rowsLabel = if (rows >= 1000000) s"${rows / 1000000}M" else rows.toString
       val benchmark = new Benchmark(
-        s"MIN scaling, W=$W, $rowsLabel rows", rows, output = output)
-      val nNaive = s"MIN naive W=$W"
-      val nSeg = s"MIN segtree (default) W=$W"
+        s"$aggFn scaling, W=$W, ${rowsLabel(rows)} rows$stressMark", rows, output = output)
+      val nNaive = s"$aggFn naive W=$W"
+      val nSeg = s"$aggFn segtree (default) W=$W"
       allCaseNames ++= Seq(nNaive, nSeg)
-      benchmark.addCase(nNaive, numIters = 3) { _ =>
+      benchmark.addCase(nNaive, numIters = iters) { _ =>
         currentCase = nNaive
-        spark.sql(s"SELECT MIN(v) $frame FROM t").noop()
+        spark.sql(s"SELECT $aggFn(v) $frame FROM t").noop()
       }
-      benchmark.addCase(nSeg, numIters = 3) { _ =>
+      benchmark.addCase(nSeg, numIters = iters) { _ =>
         currentCase = nSeg
         withSQLConf(SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true") {
-          spark.sql(s"SELECT MIN(v) $frame FROM t").noop()
+          spark.sql(s"SELECT $aggFn(v) $frame FROM t").noop()
         }
       }
       if (stressBs) {
@@ -211,14 +245,14 @@ object WindowBenchmark extends SqlBasedBenchmark {
           SQLConf.WINDOW_SEGMENT_TREE_BLOCK_SIZE.key -> "256")
         require(dNaive == dSegBs,
           s"Section B W=$W bs=256 digest mismatch: naive=$dNaive segBs=$dSegBs")
-        val nSegBs = s"MIN segtree (blockSize=256) W=$W"
+        val nSegBs = s"$aggFn segtree (blockSize=256) W=$W"
         allCaseNames += nSegBs
-        benchmark.addCase(nSegBs, numIters = 3) { _ =>
+        benchmark.addCase(nSegBs, numIters = iters) { _ =>
           currentCase = nSegBs
           withSQLConf(
             SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
             SQLConf.WINDOW_SEGMENT_TREE_BLOCK_SIZE.key -> "256") {
-            spark.sql(s"SELECT MIN(v) $frame FROM t").noop()
+            spark.sql(s"SELECT $aggFn(v) $frame FROM t").noop()
           }
         }
       }
@@ -233,18 +267,41 @@ object WindowBenchmark extends SqlBasedBenchmark {
       // W=1001 naive costs ~90s. Correctness is covered by unit tests
       // (SegmentTreeWindowFunctionSuite), so we only observe perf here.
       val benchmark = new Benchmark(
-        "MAX String spill guard, W=1001, 1M rows", SPILL_N, output = output)
+        "MAX String spill guard, W=1001, 1M rows (stress)", SPILL_N, output = output)
       val nNaive = "MAX naive (String)"
       val nSeg = "MAX segtree default (String)"
       allCaseNames ++= Seq(nNaive, nSeg)
-      benchmark.addCase(nNaive, numIters = 3) { _ =>
+      benchmark.addCase(nNaive, numIters = ITERS_STRESS) { _ =>
         currentCase = nNaive
         spark.sql(s"SELECT MAX(v) $frame FROM t").noop()
       }
-      benchmark.addCase(nSeg, numIters = 3) { _ =>
+      benchmark.addCase(nSeg, numIters = ITERS_STRESS) { _ =>
         currentCase = nSeg
         withSQLConf(SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true") {
           spark.sql(s"SELECT MAX(v) $frame FROM t").noop()
+        }
+      }
+      benchmark.run()
+    }
+
+    // Section C: N-sweep, segtree-only.
+    // Digest check skipped: correctness covered by Section A (same aggregate SUM at N=2M
+    // shares the same code path). Naive not run at 16M (would cost ~4min/iter with no
+    // measurement value). The goal is memory-pressure invariance / sub-linear growth:
+    // segtree per-row ns at 16M should be <= 2 x per-row ns at 2M.
+    def runSectionC(rows: Long): Unit = {
+      val aggFn = "SUM"
+      val frame = frameFor(C_HALF_W)
+      val W = 2 * C_HALF_W + 1
+      val benchmark = new Benchmark(
+        s"$aggFn N-sweep (segtree-only), W=$W, ${rowsLabel(rows)} rows (stress)",
+        rows, output = output)
+      val nSeg = s"$aggFn segtree (default) N=${rowsLabel(rows)}"
+      allCaseNames += nSeg
+      benchmark.addCase(nSeg, numIters = ITERS_STRESS) { _ =>
+        currentCase = nSeg
+        withSQLConf(SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true") {
+          spark.sql(s"SELECT $aggFn(v) $frame FROM t").noop()
         }
       }
       benchmark.run()
@@ -254,54 +311,77 @@ object WindowBenchmark extends SqlBasedBenchmark {
     try {
       if (smokeMode) {
         // Dev smoke: Section A MIN only + Section B at the given halfW.
-        setupIntTable(rowCount)
+        setupIntTable(smokeRowCount)
         runBenchmark("SMOKE: Section A MIN") {
-          runSectionA("MIN", 3, rowCount, smokeHalfW)
+          runSectionA("MIN", ITERS_STRESS, smokeRowCount, smokeHalfW, "")
         }
-        runBenchmark("SMOKE: Section B MIN W sweep point") {
-          runSectionB(smokeHalfW, stressBs = smokeHalfW >= 2000, rowCount)
+        runBenchmark("SMOKE: Section B SUM W sweep point") {
+          runSectionB(
+            smokeHalfW, stressBs = smokeHalfW >= 2000, smokeRowCount, ITERS_STRESS, "")
         }
       } else {
-        // Full matrix
-        setupIntTable(FULL_N)
-
-        // Section A: 6 aggregates x 3 cells; MAX/STDDEV use iters=5 per rev3 skeptic
+        // --- Section A: 5 aggregates @ per-case N; W=1001. ---
+        // MIN/MAX/SUM/COUNT share A_N_INT; AVG uses A_N_AVG; STDDEV is stress @ 2M.
+        setupIntTable(A_N_INT)
         runBenchmark("Section A - MIN (non-invertible)") {
-          runSectionA("MIN", 3, FULL_N, MAIN_HALF_W)
+          runSectionA("MIN", ITERS_NORMAL, A_N_INT, MAIN_HALF_W, "")
         }
-        runBenchmark("Section A - MAX (non-invertible, noisy -> iters=5)") {
-          runSectionA("MAX", 5, FULL_N, MAIN_HALF_W)
+        runBenchmark("Section A - MAX (non-invertible)") {
+          runSectionA("MAX", ITERS_NORMAL, A_N_INT, MAIN_HALF_W, "")
         }
         runBenchmark("Section A - SUM (Spark has no inverse; full recompute)") {
-          runSectionA("SUM", 3, FULL_N, MAIN_HALF_W)
+          runSectionA("SUM", ITERS_NORMAL, A_N_INT, MAIN_HALF_W, "")
         }
         runBenchmark("Section A - COUNT") {
-          runSectionA("COUNT", 3, FULL_N, MAIN_HALF_W)
+          runSectionA("COUNT", ITERS_NORMAL, A_N_INT, MAIN_HALF_W, "")
         }
+
+        setupIntTable(A_N_AVG)
         runBenchmark("Section A - AVG (multi-buffer)") {
-          runSectionA("AVG", 3, FULL_N, MAIN_HALF_W)
-        }
-        runBenchmark("Section A - STDDEV_SAMP (multi-buffer, noisy -> iters=5)") {
-          runSectionA("STDDEV_SAMP", 5, FULL_N, MAIN_HALF_W)
+          runSectionA("AVG", ITERS_NORMAL, A_N_AVG, MAIN_HALF_W, "")
         }
 
-        // Section B: MIN, W sweep
+        setupIntTable(A_N_STDDEV)
+        runBenchmark("Section A - STDDEV_SAMP (multi-buffer, stress)") {
+          runSectionA("STDDEV_SAMP", ITERS_STRESS, A_N_STDDEV, MAIN_HALF_W, " (stress)")
+        }
+
+        // --- Section B: SUM, W sweep. W=10/50 are stress (Pareto loss zone). ---
+        setupIntTable(B_N_W10)
+        runBenchmark("Section B - W=10 scaling (stress: Pareto loss zone)") {
+          runSectionB(5, stressBs = false, B_N_W10, ITERS_STRESS, " (stress)")
+        }
+        setupIntTable(B_N_W50)
+        runBenchmark("Section B - W=50 scaling (stress: Pareto loss zone)") {
+          runSectionB(25, stressBs = false, B_N_W50, ITERS_STRESS, " (stress)")
+        }
+        setupIntTable(B_N_W201)
         runBenchmark("Section B - W=201 scaling") {
-          runSectionB(100, stressBs = false, FULL_N)
+          runSectionB(100, stressBs = false, B_N_W201, ITERS_NORMAL, "")
         }
-        runBenchmark("Section B - W=1001 scaling") {
-          runSectionB(500, stressBs = false, FULL_N)
-        }
-        runBenchmark("Section B - W=4001 scaling (+ bs=256 cross-block stress)") {
-          runSectionB(2000, stressBs = true, FULL_N)
+        setupIntTable(B_N_W4001)
+        runBenchmark("Section B - W=4001 scaling (stress, + bs=256 cross-block)") {
+          runSectionB(2000, stressBs = true, B_N_W4001, ITERS_STRESS, " (stress)")
         }
 
-        // Section F: spill regression guard -- only meaningful with tight heap.
-        // Phase 0 baseline (C1/C2 unpatched): numbers are observational only,
-        // no hard threshold. Will be gated after R1.
+        // --- Section F: spill guard. ---
         setupStringTable(SPILL_N)
-        runBenchmark("Section F - spill regression guard (String, baseline)") {
+        runBenchmark("Section F - spill regression guard (String, stress)") {
           runSpillGuard()
+        }
+
+        // --- Section C: N-sweep segtree-only (memory-pressure invariance). ---
+        setupIntTable(C_N_SMALL)
+        runBenchmark("Section C - N-sweep small (stress)") {
+          runSectionC(C_N_SMALL)
+        }
+        setupIntTable(C_N_MID)
+        runBenchmark("Section C - N-sweep mid (stress)") {
+          runSectionC(C_N_MID)
+        }
+        setupIntTable(C_N_LARGE)
+        runBenchmark("Section C - N-sweep large (stress)") {
+          runSectionC(C_N_LARGE)
         }
       }
 
