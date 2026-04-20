@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.test
 
+import org.scalatest.Suite
+
 import org.apache.spark.sql.{QueryTest, QueryTestBase, Row}
 import org.apache.spark.sql.catalyst.util._
 
@@ -30,7 +32,7 @@ private[sql] trait SQLTestUtils extends QueryTest
  * Kept as an empty alias of [[QueryTestBase]] for backward compatibility with existing subclasses.
  * New test suites should extend [[QueryTestBase]] directly.
  */
-private[sql] trait SQLTestUtilsBase extends QueryTestBase
+private[sql] trait SQLTestUtilsBase extends QueryTestBase { self: Suite => }
 
 private[sql] object SQLTestUtils {
 
