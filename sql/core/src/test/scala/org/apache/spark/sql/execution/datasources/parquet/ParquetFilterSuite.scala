@@ -2353,7 +2353,7 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
           assert(pushedParquetFilters.exists(_.getClass === filterClass),
             s"${pushedParquetFilters.map(_.getClass).toList} did not contain ${filterClass}.")
 
-          checker(stripSparkFilter(query), expected)
+          checker(stripSparkFilter(query.asInstanceOf[classic.DataFrame]), expected)
         } else {
           assert(selectedFilters.isEmpty, "There is filter pushed down")
         }
@@ -2416,7 +2416,7 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
           assert(pushedParquetFilters.exists(_.getClass === filterClass),
             s"${pushedParquetFilters.map(_.getClass).toList} did not contain ${filterClass}.")
 
-          checker(stripSparkFilter(query), expected)
+          checker(stripSparkFilter(query.asInstanceOf[classic.DataFrame]), expected)
 
         case _ => assert(false, "Can not match ParquetTable in the query.")
       }
