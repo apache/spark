@@ -50,6 +50,7 @@ RUN apt-get update && apt-get install -y \
     libpython3-dev \
     libssl-dev \
     libtiff5-dev \
+    libuv1-dev \
     libwebp-dev \
     libxml2-dev \
     pandoc \
