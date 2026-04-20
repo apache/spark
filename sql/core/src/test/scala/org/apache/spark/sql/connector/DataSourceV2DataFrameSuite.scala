@@ -1702,6 +1702,58 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  // Case sensitivity: drop "salary" and add "SALARY" (different case).
+  // In case-insensitive mode (default), the validation matches by normalized name
+  // and detects the column ID change. The re-added column has a new ID even though
+  // the name differs only in case.
+  test("drop and re-add column with different case detects column ID mismatch") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df = spark.table(t)
+
+      // drop "salary" and add "SALARY" (case change only)
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN SALARY INT")
+
+      // validation is case-insensitive by default: "salary" matches "SALARY"
+      // since the column was dropped and re-added, the ID changed
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  // Case sensitivity in join: drop "salary" and add "Salary" then join
+  // with a DataFrame captured before the change. The column ID mismatch
+  // should be detected even though only the case differs.
+  test("join detects column ID mismatch with case-different re-added column") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df1 = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN Salary INT")
+
+      val df2 = spark.table(t)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          df1.join(df2, df1("id") === df2("id")).collect()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
   // =========================================================================
   // Column ID tests from design doc: pinning and refresh scenarios
   // =========================================================================
