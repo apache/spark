@@ -1425,7 +1425,7 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
   }
 
   // ---------------------------------------------------------------------------
-  // Tests for source with fewer columns/fields than target (mirroring MERGE)
+  // Tests for source with fewer columns/fields than target
   // ---------------------------------------------------------------------------
 
   test("Insert schema evolution: source missing top-level column by name") {

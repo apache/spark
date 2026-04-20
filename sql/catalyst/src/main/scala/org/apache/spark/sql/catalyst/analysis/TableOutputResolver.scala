@@ -40,18 +40,11 @@ import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegralTyp
 object TableOutputResolver extends SQLConfHelper with Logging {
 
   /**
-   * Controls how missing columns or nested struct fields are handled during output resolution.
-   *
-   * NONE: Do not fill any missing columns. Mismatches in column count or nested struct
-   *   fields cause errors. Used for V1 CTAS.
-   * FILL: Fill missing top-level columns with their default values (or null if no default
-   *   is defined). Nested struct field mismatches still cause errors. Used for V1 inserts
-   *   and V2 inserts without nested type coercion.
-   * RECURSE: Fill missing top-level columns with defaults and also recurse into nested
-   *   structs, arrays, and maps to fill missing fields with null. Additionally relaxes
-   *   the by-position arity check to allow fewer source columns than target columns.
-   *   Used for V2 inserts with schema evolution and nested type coercion enabled.
-   *   Gated by `spark.sql.insertNestedTypeCoercion.enabled` (default false).
+   * Modes for filling in default or null values for missing columns.
+   * If FILL, fill missing top-level columns with their default values.
+   * If RECURSE, fill missing top-level columns and also recurse into nested struct
+   * fields to fill null.
+   * If NONE, do not fill any missing columns.
    */
   object DefaultValueFillMode extends Enumeration {
     val FILL, RECURSE, NONE = Value
