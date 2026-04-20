@@ -425,9 +425,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case DescribeNamespace(ResolvedNamespace(catalog, ns, _), extended, output) =>
       DescribeNamespaceExec(output, catalog.asNamespaceCatalog, ns, extended) :: Nil
 
-    case DescribeRelation(r: ResolvedTable, partitionSpec, isExtended, output) =>
-      DescribeTableExec(output, r.table, isExtended,
-        partitionSpec.map(_.asInstanceOf[ResolvedPartitionSpec])) :: Nil
+    case DescribeRelation(r: ResolvedTable, _, isExtended, output) =>
+      DescribeTableExec(output, r.table, isExtended) :: Nil
+
+    case DescribeTablePartition(r: ResolvedTable, part, isExtended, output) =>
+      DescribeTablePartitionExec(output, r.table.asPartitionable, r.identifier,
+        Seq(part).asResolvedPartitionSpecs.head, isExtended) :: Nil
 
     case DescribeColumn(r: ResolvedTable, column, isExtended, output) =>
       column match {

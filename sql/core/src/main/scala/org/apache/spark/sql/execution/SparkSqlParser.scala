@@ -1476,9 +1476,10 @@ class SparkSqlAstBuilder extends AstBuilder {
       if (asJson) {
         // DescribeRelationJsonCommand uses the raw Map directly (V1 path only).
         DescribeRelationJsonCommand(relation, rawSpec, isExtended)
+      } else if (rawSpec.nonEmpty) {
+        DescribeTablePartition(relation, UnresolvedPartitionSpec(rawSpec), isExtended)
       } else {
-        val partitionSpec = if (rawSpec.nonEmpty) Some(UnresolvedPartitionSpec(rawSpec)) else None
-        DescribeRelation(relation, partitionSpec, isExtended)
+        DescribeRelation(relation, rawSpec, isExtended)
       }
     }
   }
