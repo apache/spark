@@ -155,12 +155,12 @@ private[sql] object V2TableUtil extends SQLConfHelper {
   def validateCapturedColumnIds(
       table: Table,
       originCols: Seq[Column]): Seq[String] = {
-    val currentCols = table.columns.toImmutableArraySeq
+    val currentColsByName = table.columns.toImmutableArraySeq
+      .map(c => normalize(c.name()) -> c).toMap
     val errors = new mutable.ArrayBuffer[String]()
     for (origin <- originCols) {
       if (origin.id() != null) {
-        val normalizedName = normalize(origin.name())
-        currentCols.find(c => normalize(c.name()) == normalizedName).foreach { current =>
+        currentColsByName.get(normalize(origin.name())).foreach { current =>
           if (current.id() != null && current.id() != origin.id()) {
             errors += s"`${origin.name()}` column ID has changed from " +
               s"${origin.id()} to ${current.id()}"

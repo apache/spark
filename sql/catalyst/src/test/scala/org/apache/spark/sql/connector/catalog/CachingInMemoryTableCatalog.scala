@@ -35,6 +35,9 @@ import java.util.concurrent.ConcurrentHashMap
 class CachingInMemoryTableCatalog extends InMemoryTableCatalog {
   import CachingInMemoryTableCatalog._
 
+  // Only the read path is overridden. The write path (loadTable with writePrivileges)
+  // falls through to the parent and returns the live table, so writes always see the
+  // latest state. This mirrors how real caching catalogs (e.g. Iceberg) behave.
   override def loadTable(ident: Identifier): Table = {
     cachedTables.computeIfAbsent(cacheKey(name, ident), _ => {
       super.loadTable(ident)
