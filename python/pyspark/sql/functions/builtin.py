@@ -8332,8 +8332,12 @@ def when(condition: Column, value: Any) -> Column:
     # Explicitly not using ColumnOrName type here to make reading condition less opaque
     if not isinstance(condition, Column):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN",
-            messageParameters={"arg_name": "condition", "arg_type": type(condition).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column",
+                "arg_name": "condition",
+                "arg_type": type(condition).__name__,
+            },
         )
     value = _enum_to_value(value)
     v = value._jc if isinstance(value, Column) else _enum_to_value(value)
@@ -13209,8 +13213,12 @@ def window(
     def check_string_field(field, fieldName):  # type: ignore[no-untyped-def]
         if not field or type(field) is not str:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": fieldName, "arg_type": type(field).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": fieldName,
+                    "expected_type": "str",
+                    "arg_type": type(field).__name__,
+                },
             )
 
     windowDuration = _enum_to_value(windowDuration)
@@ -13354,8 +13362,12 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
     def check_field(field: Union[Column, str], fieldName: str) -> None:
         if field is None or not isinstance(field, (str, Column)):
             raise PySparkTypeError(
-                errorClass="NOT_COLUMN_OR_STR",
-                messageParameters={"arg_name": fieldName, "arg_type": type(field).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "Column or str",
+                    "arg_name": fieldName,
+                    "arg_type": type(field).__name__,
+                },
             )
 
     time_col = _to_java_column(timeColumn)
@@ -13602,6 +13614,31 @@ def current_catalog() -> Column:
     +-----------------+
     """
     return _invoke_function("current_catalog")
+
+
+@_try_remote_functions
+def current_path() -> Column:
+    """Returns the current SQL path as a comma-separated list of qualified schema names.
+
+    .. versionadded:: 4.2.0
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.current_catalog`
+    :meth:`pyspark.sql.functions.current_database`
+    :meth:`pyspark.sql.functions.current_schema`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.current_path()).show() # doctest: +SKIP
+    +----------------------------------------------------+
+    |                                      current_path()|
+    +----------------------------------------------------+
+    |system.builtin,system.session,spark_catalog.default |
+    +----------------------------------------------------+
+    """
+    return _invoke_function("current_path")
 
 
 @_try_remote_functions
@@ -14099,8 +14136,12 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
         return _invoke_function_over_columns("assert_true", col)
     if not isinstance(errMsg, (str, Column)):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "errMsg",
+                "arg_type": type(errMsg).__name__,
+            },
         )
     return _invoke_function_over_columns("assert_true", col, lit(errMsg))
 
@@ -14140,8 +14181,12 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
     errMsg = _enum_to_value(errMsg)
     if not isinstance(errMsg, (str, Column)):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "errMsg",
+                "arg_type": type(errMsg).__name__,
+            },
         )
     return _invoke_function_over_columns("raise_error", lit(errMsg))
 
@@ -15057,14 +15102,22 @@ def overlay(
     pos = _enum_to_value(pos)
     if not isinstance(pos, (int, str, Column)):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_INT_OR_STR",
-            messageParameters={"arg_name": "pos", "arg_type": type(pos).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column, int or str",
+                "arg_name": "pos",
+                "arg_type": type(pos).__name__,
+            },
         )
     len = _enum_to_value(len)
     if len is not None and not isinstance(len, (int, str, Column)):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_INT_OR_STR",
-            messageParameters={"arg_name": "len", "arg_type": type(len).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column, int or str",
+                "arg_name": "len",
+                "arg_type": type(len).__name__,
+            },
         )
 
     if isinstance(pos, int):
@@ -21426,8 +21479,12 @@ def schema_of_json(json: Union[Column, str], options: Optional[Mapping[str, str]
     json = _enum_to_value(json)
     if not isinstance(json, (str, Column)):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "json", "arg_type": type(json).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "json",
+                "arg_type": type(json).__name__,
+            },
         )
 
     return _invoke_function("schema_of_json", _to_java_column(lit(json)), _options_to_str(options))
@@ -21593,8 +21650,12 @@ def from_xml(
         schema = _to_java_column(schema)
     elif not isinstance(schema, str):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_STR_OR_STRUCT",
-            messageParameters={"arg_name": "schema", "arg_type": type(schema).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "StructType, Column or str",
+                "arg_name": "schema",
+                "arg_type": type(schema).__name__,
+            },
         )
     return _invoke_function("from_xml", _to_java_column(col), schema, _options_to_str(options))
 
@@ -21683,8 +21744,12 @@ def schema_of_xml(xml: Union[Column, str], options: Optional[Mapping[str, str]] 
     xml = _enum_to_value(xml)
     if not isinstance(xml, (str, Column)):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "xml", "arg_type": type(xml).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "xml",
+                "arg_type": type(xml).__name__,
+            },
         )
 
     return _invoke_function("schema_of_xml", _to_java_column(lit(xml)), _options_to_str(options))
@@ -21818,8 +21883,12 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Mapping[str, str]] 
     csv = _enum_to_value(csv)
     if not isinstance(csv, (str, Column)):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "csv", "arg_type": type(csv).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "csv",
+                "arg_type": type(csv).__name__,
+            },
         )
 
     return _invoke_function("schema_of_csv", _to_java_column(lit(csv)), _options_to_str(options))
@@ -22457,12 +22526,16 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
 @_try_remote_functions
 def reverse(col: "ColumnOrName") -> Column:
     """
-    Collection function: returns a reversed string or an array with elements in reverse order.
+    Collection function: returns a reversed string, a binary value with bytes in reverse order,
+    or an array with elements in reverse order.
 
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    .. versionchanged:: 4.2.0
+        Added support for binary type.
 
     Parameters
     ----------
@@ -22472,7 +22545,8 @@ def reverse(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        A new column that contains a reversed string or an array with elements in reverse order.
+        A new column that contains a reversed string, a binary value with bytes in reverse order,
+        or an array with elements in reverse order.
 
     Examples
     --------
@@ -22499,6 +22573,17 @@ def reverse(col: "ColumnOrName") -> Column:
     |          [1]|
     |           []|
     +-------------+
+
+    Example 3: Reverse binary data
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytearray(b"\\xCA\\xFE"),)], "data: binary")
+    >>> df.select(sf.hex(sf.reverse(df.data))).show()
+    +------------------+
+    |hex(reverse(data))|
+    +------------------+
+    |              FECA|
+    +------------------+
     """
     return _invoke_function_over_columns("reverse", col)
 
@@ -23367,8 +23452,12 @@ def from_csv(
 
     if not isinstance(schema, (str, Column)):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "schema", "arg_type": type(schema).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "schema",
+                "arg_type": type(schema).__name__,
+            },
         )
 
     return _invoke_function(
@@ -25087,8 +25176,12 @@ def time_to_micros(col: "ColumnOrName") -> Column:
 def _ensure_column_or_name(arg: Optional[Any]) -> "ColumnOrName":
     if not isinstance(arg, (Column, str)):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "arg", "arg_type": type(arg).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "arg",
+                "arg_type": type(arg).__name__,
+            },
         )
     return arg
 

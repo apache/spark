@@ -399,34 +399,34 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 DROP VIEW basic_data
 -- !query analysis
-DropTempViewCommand basic_data
+DropTempViewCommand basic_data, false
 
 
 -- !query
 DROP VIEW dept_data
 -- !query analysis
-DropTempViewCommand dept_data
+DropTempViewCommand dept_data, false
 
 
 -- !query
 DROP VIEW null_data
 -- !query analysis
-DropTempViewCommand null_data
+DropTempViewCommand null_data, false
 
 
 -- !query
 DROP VIEW null_value_data
 -- !query analysis
-DropTempViewCommand null_value_data
+DropTempViewCommand null_value_data, false
 
 
 -- !query
 DROP VIEW typed_data
 -- !query analysis
-DropTempViewCommand typed_data
+DropTempViewCommand typed_data, false
 
 
 -- !query
 DROP VIEW date_data
 -- !query analysis
-DropTempViewCommand date_data
+DropTempViewCommand date_data, false

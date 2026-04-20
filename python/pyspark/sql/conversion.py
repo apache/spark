@@ -112,6 +112,8 @@ class ArrowBatchTransformer:
         cls,
         batch: "pa.RecordBatch",
         arrow_schema: "pa.Schema",
+        *,
+        arrow_cast: bool = True,
         safecheck: bool = True,
     ) -> "pa.RecordBatch":
         """
@@ -124,6 +126,9 @@ class ArrowBatchTransformer:
         arrow_schema : pa.Schema
             Target Arrow schema. Callers should pre-compute this once via
             to_arrow_schema() to avoid repeated conversion.
+        arrow_cast : bool, default True
+            If True, cast mismatched types to the target type.
+            If False, raise an error on type mismatch instead of casting.
         safecheck : bool, default True
             If True, use safe casting (fails on overflow/truncation).
 
@@ -149,8 +154,19 @@ class ArrowBatchTransformer:
 
         coerced_arrays = []
         for i, field in enumerate(arrow_schema):
-            arr = batch.column(i) if use_index else batch.column(field.name)
+            try:
+                arr = batch.column(i) if use_index else batch.column(field.name)
+            except KeyError:
+                raise PySparkTypeError(
+                    f"Result column '{field.name}' does not exist in the output. "
+                    f"Expected schema: {arrow_schema}, got: {batch.schema}."
+                )
             if arr.type != field.type:
+                if not arrow_cast:
+                    raise PySparkTypeError(
+                        f"Result type of column '{field.name}' does not match "
+                        f"the expected type. Expected: {field.type}, got: {arr.type}."
+                    )
                 try:
                     arr = arr.cast(target_type=field.type, safe=safecheck)
                 except (pa.ArrowInvalid, pa.ArrowTypeError) as e:
@@ -219,54 +235,6 @@ class ArrowBatchTransformer:
             )
             for i in range(batch.num_columns)
         ]
-
-
-# TODO: elevate to ArrowBatchTransformer and operate on full RecordBatch schema
-#       instead of per-column coercion.
-def coerce_arrow_array(
-    arr: "pa.Array",
-    target_type: "pa.DataType",
-    *,
-    safecheck: bool = True,
-    arrow_cast: bool = True,
-) -> "pa.Array":
-    """
-    Coerce an Arrow Array to a target type, with optional type-mismatch enforcement.
-
-    When ``arrow_cast`` is True (default), mismatched types are cast to the
-    target type.  When False, a type mismatch raises an error instead.
-
-    Parameters
-    ----------
-    arr : pa.Array
-        Input Arrow array
-    target_type : pa.DataType
-        Target Arrow type
-    safecheck : bool
-        Whether to use safe casting (default True)
-    arrow_cast : bool
-        Whether to allow casting when types don't match (default True)
-
-    Returns
-    -------
-    pa.Array
-    """
-    from pyspark.errors import PySparkTypeError
-
-    if arr.type == target_type:
-        return arr
-
-    if not arrow_cast:
-        raise PySparkTypeError(
-            "Arrow UDFs require the return type to match the expected Arrow type. "
-            f"Expected: {target_type}, but got: {arr.type}."
-        )
-
-    # when safe is True, the cast will fail if there's a overflow or other
-    # unsafe conversion.
-    # RecordBatch.cast(...) isn't used as minimum PyArrow version
-    # required for RecordBatch.cast(...) is v16.0
-    return arr.cast(target_type=target_type, safe=safecheck)
 
 
 class PandasToArrowConversion:
@@ -978,13 +946,13 @@ class ArrowTableToRowsConversion:
 
     @overload
     @staticmethod
-    def _create_converter(dataType: DataType) -> Callable:
+    def _create_converter(dataType: DataType, *, binary_as_bytes: bool = True) -> Callable:
         pass
 
     @overload
     @staticmethod
     def _create_converter(
-        dataType: DataType, *, none_on_identity: bool = True, binary_as_bytes: bool = True
+        dataType: DataType, *, none_on_identity: bool, binary_as_bytes: bool = True
     ) -> Optional[Callable]:
         pass
 

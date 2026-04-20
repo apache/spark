@@ -106,7 +106,7 @@ class CachedTableSuite extends QueryTest
     maybeBlock.nonEmpty && isExpectLevel
   }
 
-  private def getNumInMemoryRelations(ds: classic.Dataset[_]): Int = {
+  private def getNumInMemoryRelations(ds: Dataset[_]): Int = {
     val plan = ds.queryExecution.withCachedData
     var sum = plan.collect { case _: InMemoryRelation => 1 }.sum
     plan.transformAllExpressions {

@@ -292,6 +292,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 DESC FORMATTED a
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`a`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.a, V1Table(default.a), [b#x, a#x]
 
 
 -- !query

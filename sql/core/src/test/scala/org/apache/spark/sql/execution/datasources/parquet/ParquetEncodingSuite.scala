@@ -25,6 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.hadoop.ParquetOutputFormat
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
 import org.apache.spark.TestUtils
 import org.apache.spark.memory.MemoryMode
@@ -233,6 +234,29 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
         assert(actual.map(_.getBoolean(1)).forall(_ == false))
         val excepted = (1 to size).map { i => i % 2 == 1 }
         assert(actual.map(_.getBoolean(2)).sameElements(excepted))
+      }
+    }
+  }
+
+  test("per-write options take precedence over session config") {
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    withTempPath { dir =>
+      val path = s"${dir.getCanonicalPath}/test.parquet"
+      // Session sets INT96, but the per-write option overrides to TIMESTAMP_MICROS.
+      withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "INT96") {
+        spark.sql("SELECT TIMESTAMP '2024-01-01 12:00:00' AS ts")
+          .write
+          .option(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key, "TIMESTAMP_MICROS")
+          .mode("overwrite")
+          .parquet(path)
+      }
+
+      for (footer <- readAllFootersWithoutSummaryFiles(new Path(path), hadoopConf)) {
+        val schema = footer.getParquetMetadata.getFileMetaData.getSchema
+        val tsField = schema.getFields.asScala.find(_.getName == "ts").get
+          .asPrimitiveType()
+        // TIMESTAMP_MICROS is stored as INT64, not INT96
+        assert(tsField.getPrimitiveTypeName === PrimitiveTypeName.INT64)
       }
     }
   }

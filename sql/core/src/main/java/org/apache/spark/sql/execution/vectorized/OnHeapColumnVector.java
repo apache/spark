@@ -202,6 +202,12 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
+  public void putBytes(int rowId, int count, ByteBuffer src, int srcIndex) {
+    // Absolute bulk get: single copy, does not modify src's position.
+    src.get(srcIndex, byteData, rowId, count);
+  }
+
+  @Override
   public byte getByte(int rowId) {
     if (dictionary == null) {
       return byteData[rowId];

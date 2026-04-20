@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
@@ -80,6 +82,30 @@ object NaturalAndUsingJoinResolution extends DataTypeErrorsBase with SQLConfHelp
       joinType
     )
     (output, hiddenOutput, newCondition)
+  }
+
+  /**
+   * Computes a multiset intersection of two name sequences, respecting case sensitivity.
+   * Preserves multiplicity: each name appears min(left count, right count) times.
+   */
+  def canonicalizedIntersect(
+      leftNames: Seq[String],
+      rightNames: Seq[String]): Seq[String] = {
+    val rightNameCounts = mutable.HashMap[String, Int]()
+    for (name <- rightNames) {
+      val key = conf.canonicalize(name)
+      rightNameCounts(key) = rightNameCounts.getOrElse(key, 0) + 1
+    }
+    leftNames.filter { leftName =>
+      val key = conf.canonicalize(leftName)
+      val count = rightNameCounts.getOrElse(key, 0)
+      if (count > 0) {
+        rightNameCounts(key) = count - 1
+        true
+      } else {
+        false
+      }
+    }
   }
 
   /**

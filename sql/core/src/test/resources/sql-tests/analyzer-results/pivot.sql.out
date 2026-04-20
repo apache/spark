@@ -792,6 +792,7 @@ Project [a#x, z#x, b#x, y#x, c#x, x#x, d#x, w#x, dotNET#xL, Java#xL]
                            +- SubqueryAlias courseSales
                               +- LocalRelation [course#x, year#x, earnings#x]
 
+
 -- !query
 SELECT pv.year, pv.net, pv.jv FROM (
   SELECT year, course, earnings FROM courseSales

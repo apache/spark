@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution
 
+import java.math.{BigDecimal => JBigDecimal}
+import java.time.Duration
+
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
@@ -30,7 +33,7 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNes
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DayTimeIntervalType, DecimalType, IntegerType, StringType, StructField, StructType}
 
 // Disable AQE because the WholeStageCodegenExec is added when running QueryStageExec
 class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
@@ -948,12 +951,20 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
 
   test("SPARK-56032: subexpression elimination in FilterExec codegen") {
     val schema = StructType(Seq(
-      StructField("a", IntegerType, nullable = true),
-      StructField("b", IntegerType, nullable = true)))
+      StructField("a", DayTimeIntervalType(), nullable = true),
+      StructField("b", DayTimeIntervalType(), nullable = true)))
     val data = spark.sparkContext.parallelize(Seq(
-      Row(1, 5), Row(null, 3), Row(4, null), Row(5, 6), Row(7, 8), Row(2, 3)))
+      Row(Duration.ofDays(1), Duration.ofDays(5)),
+      Row(null, Duration.ofDays(3)),
+      Row(Duration.ofDays(4), null),
+      Row(Duration.ofDays(5), Duration.ofDays(6)),
+      Row(Duration.ofDays(7), Duration.ofDays(8)),
+      Row(Duration.ofDays(2), Duration.ofDays(3))))
 
-    val expected = Seq(Row(1, 5), Row(5, 6), Row(2, 3))
+    val expected = Seq(
+      Row(Duration.ofDays(1), Duration.ofDays(5)),
+      Row(Duration.ofDays(5), Duration.ofDays(6)),
+      Row(Duration.ofDays(2), Duration.ofDays(3)))
 
     Seq("1", Int.MaxValue.toString).foreach { splitThreshold =>
       def testFilterCSE(cseEnabled: Boolean): String = {
@@ -964,7 +975,8 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> splitThreshold) {
           val df = spark.createDataFrame(data, schema)
           val filtered = df.where(
-            "a IS NOT NULL AND (a + b) > 3 AND (a + b) < 15 AND (a + b) != 10")
+            "a IS NOT NULL AND (a + b) > INTERVAL '3' DAY " +
+              "AND (a + b) < INTERVAL '15' DAY AND (a + b) != INTERVAL '10' DAY")
           val plan = filtered.queryExecution.executedPlan
           assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
             "Filter should be in whole-stage codegen")
@@ -982,6 +994,39 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       assert(cseAddCount < noCseAddCount,
         s"CSE should reduce repeated evaluation (splitThreshold=$splitThreshold): " +
           s"addExact appears $cseAddCount times with CSE vs $noCseAddCount times without")
+    }
+  }
+
+  test("SPARK-56431: CSE in FilterExec preserves null guards for notNull columns") {
+    // The CSE precomputation in FilterExec runs BEFORE IsNotNull short-circuits.
+    // If the CSE-bound expressions use the tightened output nullability
+    // (notNullAttributes marked non-null), the generated code omits null
+    // checks and crashes on types whose arithmetic NPEs on null (Decimal).
+    val schema = StructType(Seq(
+      StructField("a", DecimalType(10, 2), nullable = true),
+      StructField("b", DecimalType(10, 2), nullable = true)))
+    val data = spark.sparkContext.parallelize(Seq(
+      Row(null, new JBigDecimal("100.00")),
+      Row(new JBigDecimal("50.00"), new JBigDecimal("200.00")),
+      Row(new JBigDecimal("80.00"), new JBigDecimal("100.00"))))
+
+    withSQLConf(
+      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df = spark.createDataFrame(data, schema)
+      // abs(b - a) appears twice, creating a CSE candidate.
+      // a IS NOT NULL puts a in FilterExec.notNullAttributes.
+      // Without the fix the first row (a=null) causes NPE in the
+      // CSE precomputation because Decimal.subtract skips null check.
+      val filtered = df.where(
+        "a IS NOT NULL AND abs(b - a) > 0.10 AND abs(b - a) < 1000.00")
+      val plan = filtered.queryExecution.executedPlan
+      assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+        "Filter should be in whole-stage codegen")
+      checkAnswer(filtered, Seq(
+        Row(new JBigDecimal("50.00"), new JBigDecimal("200.00")),
+        Row(new JBigDecimal("80.00"), new JBigDecimal("100.00"))))
     }
   }
 }

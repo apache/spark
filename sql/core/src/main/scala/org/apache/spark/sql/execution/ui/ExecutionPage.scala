@@ -17,16 +17,18 @@
 
 package org.apache.spark.sql.execution.ui
 
-import scala.xml.Node
+import scala.xml.{Node, Unparsed, Utility}
 
 import jakarta.servlet.http.HttpServletRequest
+import org.apache.commons.text.StringEscapeUtils
 import org.json4s.JNull
 import org.json4s.JsonAST.{JBool, JString}
 import org.json4s.jackson.JsonMethods.parse
 
+import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.UI.UI_SQL_GROUP_SUB_EXECUTION_ENABLED
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.internal.config.UI.{UI_SQL_GROUP_SUB_EXECUTION_ENABLED, UI_TIMELINE_ENABLED, UI_TIMELINE_JOBS_MAXIMUM}
+import org.apache.spark.ui.{CspNonce, UIUtils, WebUIPage}
 import org.apache.spark.ui.jobs.ApiHelper
 
 class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
@@ -126,7 +128,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     }
 
     UIUtils.headerSparkPage(
-      request, s"Details for Query $executionId", content, parent)
+      request, s"Details for Query $executionId", content, parent, useTimeline = true)
   }
 
 
@@ -197,6 +199,81 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
   private def jobURL(request: HttpServletRequest, jobId: Long): String =
     "%s/jobs/job/?id=%s".format(UIUtils.prependBaseUri(request, parent.basePath), jobId)
+
+  /** Render a vis-timeline showing job start/end times for this SQL execution. */
+  private def jobTimeline(executionUIData: SQLExecutionUIData): Seq[Node] = {
+    if (!parent.conf.get(UI_TIMELINE_ENABLED)) return Nil
+
+    val jobIds = executionUIData.jobs.keys.toSeq.sorted
+    if (jobIds.isEmpty) return Nil
+
+    val store = parent.parent.store
+    val now = System.currentTimeMillis()
+    val startTime = executionUIData.submissionTime
+    val maxJobs = parent.conf.get(UI_TIMELINE_JOBS_MAXIMUM)
+
+    val jobEvents = jobIds.takeRight(maxJobs).flatMap { jobId =>
+      try {
+        val job = store.job(jobId)
+        if (job.submissionTime.isEmpty) None
+        else {
+          val (_, lastStageDesc) = ApiHelper.lastStageNameAndDescription(store, job)
+          val desc = job.description.getOrElse(lastStageDesc)
+          val escapedDesc = Utility.escape(desc)
+          val jsDesc = StringEscapeUtils.escapeEcmaScript(Utility.escape(escapedDesc))
+          val jsLabel = StringEscapeUtils.escapeEcmaScript(escapedDesc)
+          val subTime = job.submissionTime.get.getTime
+          val endTime = job.completionTime.map(_.getTime).getOrElse(now)
+          val cssClass = job.status match {
+            case JobExecutionStatus.SUCCEEDED => "succeeded"
+            case JobExecutionStatus.FAILED => "failed"
+            case JobExecutionStatus.RUNNING => "running"
+            case _ => "unknown"
+          }
+          Some(
+            s"""{
+               |  'className': 'job application-timeline-object $cssClass',
+               |  'group': 'jobs',
+               |  'start': new Date($subTime),
+               |  'end': new Date($endTime),
+               |  'content': '<div class="application-timeline-content"' +
+               |    'data-bs-html="true" data-bs-toggle="tooltip"' +
+               |    'data-bs-title="$jsDesc (Job $jobId)<br>' +
+               |    'Status: ${job.status}<br>' +
+               |    'Duration: ${UIUtils.formatDuration(endTime - subTime)}">' +
+               |    '$jsLabel (Job $jobId)</div>'
+               |}""".stripMargin)
+        }
+      } catch {
+        case _: NoSuchElementException => None
+      }
+    }
+
+    if (jobEvents.isEmpty) return Nil
+
+    val groupJson = """[{'id': 'jobs', 'content': '<div>Jobs</div>'}]"""
+    val eventArrayJson = jobEvents.mkString("[", ",", "]")
+
+    // scalastyle:off line.size.limit
+    <div>
+      <span class="expand-application-timeline">
+        <span class="expand-application-timeline-arrow arrow-closed"></span>
+        <a>Job Timeline</a>
+      </span>
+      <div id="application-timeline" class="collapsed">
+        <div class="control-panel">
+          <div id="application-timeline-zoom-lock">
+            <input type="checkbox"></input>
+            <span>Enable zooming</span>
+          </div>
+        </div>
+      </div>
+      <script type="text/javascript" nonce={CspNonce.get}>
+        {Unparsed(s"drawApplicationTimeline($groupJson, $eventArrayJson, $startTime, ${UIUtils.getTimeZoneOffset()});")}
+      </script>
+    </div>
+    // scalastyle:on line.size.limit
+  }
 
   private def physicalPlanDescription(physicalPlanDescription: String): Seq[Node] = {
     val (initialPlan, finalPlan) = extractInitialAndFinalPlans(physicalPlanDescription)
@@ -350,6 +427,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         </h4>
       </span>
       <div class="collapsible-table collapse show" id="sql-jobs-table">
+        {jobTimeline(executionUIData)}
         <div class="table-responsive">
         <table class="table table-bordered table-hover table-sm sortable">
           <thead>

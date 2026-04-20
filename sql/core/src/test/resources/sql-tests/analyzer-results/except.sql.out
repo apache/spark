@@ -308,16 +308,16 @@ Aggregate [sum(v#x) AS sum(v)#x]
 -- !query
 DROP VIEW IF EXISTS t1
 -- !query analysis
-DropTempViewCommand t1
+DropTempViewCommand t1, true
 
 
 -- !query
 DROP VIEW IF EXISTS t2
 -- !query analysis
-DropTempViewCommand t2
+DropTempViewCommand t2, true
 
 
 -- !query
 DROP VIEW IF EXISTS t3
 -- !query analysis
-DropTempViewCommand t3
+DropTempViewCommand t3, true

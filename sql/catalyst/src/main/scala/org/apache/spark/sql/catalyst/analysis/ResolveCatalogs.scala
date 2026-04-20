@@ -121,6 +121,10 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, columns)
       r.copy(name = resolvedIdentifier)
 
+    case c @ CreateTableLike(UnresolvedIdentifier(nameParts, allowTemp), _, _, _, _, _, _) =>
+      val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, Nil)
+      c.copy(name = resolvedIdentifier)
+
     case UnresolvedIdentifier(nameParts, allowTemp) =>
       resolveIdentifier(nameParts, allowTemp, Nil)
 

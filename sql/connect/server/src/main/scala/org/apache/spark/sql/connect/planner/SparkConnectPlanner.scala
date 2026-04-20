@@ -83,6 +83,7 @@ import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulPr
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
 import org.apache.spark.storage.CacheId
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -313,6 +314,23 @@ class SparkConnectPlanner(
         transformSetCurrentCatalog(catalog.getSetCurrentCatalog)
       case proto.Catalog.CatTypeCase.LIST_CATALOGS =>
         transformListCatalogs(catalog.getListCatalogs)
+      case proto.Catalog.CatTypeCase.DROP_TABLE => transformDropTable(catalog.getDropTable)
+      case proto.Catalog.CatTypeCase.DROP_VIEW => transformDropView(catalog.getDropView)
+      case proto.Catalog.CatTypeCase.CREATE_DATABASE =>
+        transformCreateDatabase(catalog.getCreateDatabase)
+      case proto.Catalog.CatTypeCase.DROP_DATABASE =>
+        transformDropDatabase(catalog.getDropDatabase)
+      case proto.Catalog.CatTypeCase.LIST_PARTITIONS =>
+        transformListPartitions(catalog.getListPartitions)
+      case proto.Catalog.CatTypeCase.LIST_VIEWS => transformListViews(catalog.getListViews)
+      case proto.Catalog.CatTypeCase.GET_TABLE_PROPERTIES =>
+        transformGetTableProperties(catalog.getGetTableProperties)
+      case proto.Catalog.CatTypeCase.GET_CREATE_TABLE_STRING =>
+        transformGetCreateTableString(catalog.getGetCreateTableString)
+      case proto.Catalog.CatTypeCase.TRUNCATE_TABLE =>
+        transformTruncateTable(catalog.getTruncateTable)
+      case proto.Catalog.CatTypeCase.ANALYZE_TABLE =>
+        transformAnalyzeTable(catalog.getAnalyzeTable)
       case other =>
         throw InvalidInputErrors.invalidOneOfField(other, catalog.getDescriptorForType)
     }
@@ -434,7 +452,7 @@ class SparkConnectPlanner(
       rel.getLowerBound,
       rel.getUpperBound,
       rel.getWithReplacement,
-      if (rel.hasSeed) rel.getSeed else Utils.random.nextLong,
+      if (rel.hasSeed) Some(rel.getSeed) else None,
       plan)
   }
 
@@ -1740,13 +1758,26 @@ class SparkConnectPlanner(
       localMap.foreach { case (key, value) => reader.option(key, value) }
       reader
     }
-    def ds: Dataset[String] = Dataset(session, transformRelation(rel.getInput))(Encoders.STRING)
+    def ds: Dataset[String] = {
+      val input = transformRelation(rel.getInput)
+      val df = Dataset.ofRows(session, input)
+      val fields = df.schema.fields
+      if (fields.length != 1) {
+        throw QueryCompilationErrors.dataframeInputNotSingleColumnError(fields.length)
+      }
+      if (fields.head.dataType != org.apache.spark.sql.types.StringType) {
+        throw QueryCompilationErrors.dataframeInputNotStringTypeError(fields.head.dataType)
+      }
+      df.as(Encoders.STRING)
+    }
 
     rel.getFormat match {
       case ParseFormat.PARSE_FORMAT_CSV =>
         dataFrameReader.csv(ds).queryExecution.analyzed
       case ParseFormat.PARSE_FORMAT_JSON =>
         dataFrameReader.json(ds).queryExecution.analyzed
+      case ParseFormat.PARSE_FORMAT_XML =>
+        dataFrameReader.xml(ds).queryExecution.analyzed
       case other => throw InvalidInputErrors.invalidEnum(other)
     }
   }
@@ -4252,6 +4283,75 @@ class SparkConnectPlanner(
     } else {
       session.catalog.listCatalogs().logicalPlan
     }
+  }
+
+  private def transformDropTable(p: proto.DropTable): LogicalPlan = {
+    session.catalog.dropTable(p.getTableName, p.getIfExists, p.getPurge)
+    emptyLocalRelation
+  }
+
+  private def transformDropView(p: proto.DropView): LogicalPlan = {
+    session.catalog.dropView(p.getViewName, p.getIfExists)
+    emptyLocalRelation
+  }
+
+  private def transformCreateDatabase(p: proto.CreateDatabase): LogicalPlan = {
+    val jmap = new java.util.HashMap[String, String]()
+    p.getPropertiesMap.asScala.foreach { case (k, v) => jmap.put(k, v) }
+    session.catalog.createDatabase(p.getDbName, p.getIfNotExists, jmap)
+    emptyLocalRelation
+  }
+
+  private def transformDropDatabase(p: proto.DropDatabase): LogicalPlan = {
+    session.catalog.dropDatabase(p.getDbName, p.getIfExists, p.getCascade)
+    emptyLocalRelation
+  }
+
+  private def transformListPartitions(p: proto.ListPartitions): LogicalPlan = {
+    session.catalog.listPartitions(p.getTableName).logicalPlan
+  }
+
+  private def transformListViews(p: proto.ListViews): LogicalPlan = {
+    if (p.hasDbName) {
+      if (p.hasPattern) {
+        session.catalog.listViews(p.getDbName, p.getPattern).logicalPlan
+      } else {
+        session.catalog.listViews(p.getDbName).logicalPlan
+      }
+    } else if (p.hasPattern) {
+      val currentDatabase = session.catalog.currentDatabase
+      session.catalog.listViews(currentDatabase, p.getPattern).logicalPlan
+    } else {
+      session.catalog.listViews().logicalPlan
+    }
+  }
+
+  private def transformGetTableProperties(p: proto.GetTableProperties): LogicalPlan = {
+    val props = session.catalog.getTableProperties(p.getTableName).asScala
+    val attrs = Seq(
+      AttributeReference("key", StringType, nullable = false)(),
+      AttributeReference("value", StringType, nullable = true)())
+    val rows = props.map { case (k, v) =>
+      InternalRow(UTF8String.fromString(k), UTF8String.fromString(v))
+    }.toSeq
+    LocalRelation(attrs, rows)
+  }
+
+  private def transformGetCreateTableString(p: proto.GetCreateTableString): LogicalPlan = {
+    session
+      .createDataset(session.catalog.getCreateTableString(p.getTableName, p.getAsSerde) :: Nil)(
+        Encoders.STRING)
+      .logicalPlan
+  }
+
+  private def transformTruncateTable(p: proto.TruncateTable): LogicalPlan = {
+    session.catalog.truncateTable(p.getTableName)
+    emptyLocalRelation
+  }
+
+  private def transformAnalyzeTable(p: proto.AnalyzeTable): LogicalPlan = {
+    session.catalog.analyzeTable(p.getTableName, p.getNoScan)
+    emptyLocalRelation
   }
 
   private def transformSubqueryExpression(

@@ -42,6 +42,7 @@ import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   extends UnaryExecNode
     with CodegenSupport
+    with SafeForKWayMerge
     with PartitioningPreservingUnaryExecNode
     with OrderPreservingUnaryExecNode {
 
@@ -222,7 +223,7 @@ trait GeneratePredicateHelper extends PredicateHelper {
 
 /** Physical plan for Filter. */
 case class FilterExec(condition: Expression, child: SparkPlan)
-  extends UnaryExecNode with CodegenSupport with GeneratePredicateHelper {
+  extends UnaryExecNode with CodegenSupport with GeneratePredicateHelper with SafeForKWayMerge {
 
   // Split out all the IsNotNulls from condition.
   private val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {
@@ -256,11 +257,14 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // Apply CSE to otherPreds only (notNullPreds are simple IsNotNull checks with no CSE value).
     val (inputVarsCode, subExprsCode, predicateCode) =
       if (conf.subexpressionEliminationEnabled && otherPreds.nonEmpty) {
+        // Bind against child.output (not output) so that columns in
+        // notNullAttributes keep their original nullable=true for the
+        // CSE precomputation, which runs BEFORE IsNotNull short-circuits.
         val boundOtherPreds = otherPreds.map(
-          BindReferences.bindReference(_, output))
+          BindReferences.bindReference(_, child.output))
         // Pre-evaluate input variables before CSE analysis: CSE clears
-        // ctx.currentVars[i].code as a side effect, which causes "is not an rvalue"
-        // errors if notNullPreds reference the same inputs.
+        // ctx.currentVars[i].code as a side effect; without this pre-evaluation, Janino fails
+        // with "Unknown variable or type" when notNullPreds reference the same input columns.
         val otherPredInputAttrs = AttributeSet(otherPreds.flatMap(_.references))
         val inputVarsEvalCode = evaluateRequiredVariables(
           child.output, input, otherPredInputAttrs)
@@ -270,11 +274,18 @@ case class FilterExec(condition: Expression, child: SparkPlan)
           var code = ""
           ctx.withSubExprEliminationExprs(subExprs.states) {
             code = generatePredicateCode(
-              ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes)
+              ctx, child.output, input, child.output, notNullPreds, otherPreds, notNullAttributes)
             Seq.empty
           }
           code
         }
+        // Note: subExprs.exprCodesNeedEvaluate is intentionally not used here, unlike ProjectExec.
+        // evaluateRequiredVariables above cleared input[i].code = EmptyBlock for all
+        // otherPredInputAttrs before CSE analysis ran, so getLocalInputVariableValues never
+        // adds them to exprCodesNeedEvaluate -- it is always empty. Do NOT replace the
+        // pre-evaluation above with evaluateVariables(subExprs.exprCodesNeedEvaluate):
+        // that would leave notNullPreds referencing undeclared variables (Janino: "Unknown
+        // variable or type") for any input column shared between notNullPreds and otherPreds.
         (inputVarsEvalCode, ctx.evaluateSubExprEliminationState(subExprs.states.values), predCode)
       } else {
         ("", "", generatePredicateCode(
@@ -345,8 +356,11 @@ case class SampleExec(
     lowerBound: Double,
     upperBound: Double,
     withReplacement: Boolean,
-    seed: Long,
+    seed: Option[Long],
     child: SparkPlan) extends UnaryExecNode with CodegenSupport {
+
+  val resolvedSeed: Long = seed.getOrElse((math.random() * 1000).toLong)
+
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -362,9 +376,9 @@ case class SampleExec(
         child.execute(),
         new PoissonSampler[InternalRow](upperBound - lowerBound, useGapSamplingIfPossible = false),
         preservesPartitioning = true,
-        seed)
+        resolvedSeed)
     } else {
-      child.execute().randomSampleWithRange(lowerBound, upperBound, seed)
+      child.execute().randomSampleWithRange(lowerBound, upperBound, resolvedSeed)
     }
   }
 
@@ -398,7 +412,7 @@ case class SampleExec(
             s"""
               | private void $initSampler() {
               |   $v = new $samplerClass<UnsafeRow>($upperBound - $lowerBound, false);
-              |   java.util.Random random = new java.util.Random(${seed}L);
+              |   java.util.Random random = new java.util.Random(${resolvedSeed}L);
               |   long randomSeed = random.nextLong();
               |   int loopCount = 0;
               |   while (loopCount < partitionIndex) {
@@ -424,7 +438,7 @@ case class SampleExec(
       val sampler = ctx.addMutableState(s"$samplerClass<UnsafeRow>", "sampler",
         v => s"""
           | $v = new $samplerClass<UnsafeRow>($lowerBound, $upperBound, false);
-          | $v.setSeed(${seed}L + partitionIndex);
+          | $v.setSeed(${resolvedSeed}L + partitionIndex);
          """.stripMargin.trim)
 
       s"""

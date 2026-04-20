@@ -30,7 +30,7 @@ import org.scalatest.{BeforeAndAfter, Tag}
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
@@ -42,78 +42,87 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType, StructType}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
-trait AlsoTestWithVirtualColumnFamilyJoins extends SQLTestUtils {
-  /** Tests both with and without join ops using virtual column families */
+abstract class StreamingJoinSuite
+  extends StreamTest with StateStoreMetricsTest with BeforeAndAfter {
+
+  sealed trait Mode
+  object Mode {
+    case object WithVCF extends Mode
+    case object WithoutVCF extends Mode
+  }
+
+  protected def testMode: Mode
+
+  /** Dispatches each test to VCF or non-VCF mode based on [[testMode]]. */
   override protected def test(testName: String, testTags: Tag*)(testBody: => Any)(
     implicit pos: Position): Unit = {
-    // Test with virtual column family joins with changelog checkpointing enabled and disabled
-    // Since virtual column family joins require RocksDB, we only test with RocksDB here.
-    Seq("false", "true").foreach { enabled =>
-      testWithVirtualColumnFamilyJoins(
-        testName + s" with (with changelog checkpointing = $enabled)", testTags: _*) {
-        withSQLConf(
-          "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" -> enabled
-        ) {
-          testBody
+    testMode match {
+      case Mode.WithVCF =>
+        // Test with VCF with changelog checkpointing enabled and disabled.
+        // Since VCF requires RocksDB, we only test with RocksDB here.
+        Seq("false", "true").foreach { enabled =>
+          testWithVirtualColumnFamilyJoins(
+            testName + s" (with changelog checkpointing = $enabled)", testTags: _*) {
+            withSQLConf(
+              "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" -> enabled
+            ) {
+              testBody
+            }
+          }
         }
-      }
-    }
-
-    // Test with both RocksDB and HDFS state store providers without virtual column family joins
-    val providers = Seq(
-      classOf[RocksDBStateStoreProvider].getName,
-      classOf[HDFSBackedStateStoreProvider].getName
-    )
-
-    providers.foreach { provider =>
-      testWithoutVirtualColumnFamilyJoins(testName + s" (with $provider)", testTags: _*) {
-        withSQLConf(
-          SQLConf.STATE_STORE_PROVIDER_CLASS.key -> provider
-        ) {
-          testBody
+      case Mode.WithoutVCF =>
+        // Test with both RocksDB and HDFS state store providers without VCF.
+        val providers = Seq(
+          classOf[RocksDBStateStoreProvider].getName,
+          classOf[HDFSBackedStateStoreProvider].getName
+        )
+        providers.foreach { provider =>
+          testWithoutVirtualColumnFamilyJoins(testName + s" (with $provider)", testTags: _*) {
+            withSQLConf(
+              SQLConf.STATE_STORE_PROVIDER_CLASS.key -> provider
+            ) {
+              testBody
+            }
+          }
         }
-      }
     }
   }
 
-  def testWithVirtualColumnFamilyJoins(testName: String, testTags: Tag*)(testBody: => Any): Unit = {
-    super.test(testName + " (with virtual column family joins)", testTags: _*) {
-      // in case tests have any code that needs to execute before every test
-      super.beforeEach()
-      // We must be using RocksDB for virtual column family joins
-      withSQLConf(
-        SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3",
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName
-      ) {
-        testBody
+  def testWithVirtualColumnFamilyJoins(testName: String, testTags: Tag*)(
+    testBody: => Any): Unit = {
+    if (testMode == Mode.WithVCF) {
+      super.test(testName + " (with virtual column family joins)", testTags: _*) {
+        withSQLConf(
+          SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3",
+          SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName
+        ) {
+          testBody
+        }
       }
-      // in case tests have any code that needs to execute after every test
-      super.afterEach()
     }
   }
 
   def testWithoutVirtualColumnFamilyJoins(testName: String, testTags: Tag*)(
     testBody: => Any): Unit = {
-    super.test(testName + " (without virtual column family joins)", testTags: _*) {
-      // in case tests have any code that needs to execute before every test
-      super.beforeEach()
-      withSQLConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "2") {
-        testBody
+    if (testMode == Mode.WithoutVCF) {
+      super.test(testName + " (without virtual column family joins)", testTags: _*) {
+        withSQLConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "2") {
+          testBody
+        }
       }
-      // in case tests have any code that needs to execute after every test
-      super.afterEach()
     }
   }
-}
 
-abstract class StreamingJoinSuite
-  extends StreamTest with StateStoreMetricsTest with BeforeAndAfter
-  with AlsoTestWithVirtualColumnFamilyJoins {
+  protected def testWithAppendAndUpdate(testName: String, testTags: Tag*)(
+      testBody: OutputMode => Any): Unit = {
+    Seq(OutputMode.Append(), OutputMode.Update()).foreach { outputMode =>
+      test(s"$testName - $outputMode", testTags: _*)(testBody(outputMode))
+    }
+  }
 
   import testImplicits._
 
@@ -318,10 +327,10 @@ abstract class StreamingJoinSuite
 }
 
 @SlowSQLTest
-class StreamingInnerJoinSuite extends StreamingJoinSuite {
+abstract class StreamingInnerJoinBase extends StreamingJoinSuite {
 
   import testImplicits._
-  test("stream stream inner join on non-time column") {
+  testWithAppendAndUpdate("stream stream inner join on non-time column") { outputMode =>
     val input1 = MemoryStream[Int]
     val input2 = MemoryStream[Int]
 
@@ -329,7 +338,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     val df2 = input2.toDF().select($"value" as "key", ($"value" * 3) as "rightValue")
     val joined = df1.join(df2, "key")
 
-    testStream(joined)(
+    testStream(joined, outputMode)(
       AddData(input1, 1),
       CheckAnswer(),
       AddData(input2, 1, 10),       // 1 arrived on input1 first, then input2, should join
@@ -350,7 +359,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     )
   }
 
-  test("stream stream inner join on windows - without watermark") {
+  testWithAppendAndUpdate("stream stream inner join on windows - without watermark") { outputMode =>
     val input1 = MemoryStream[Int]
     val input2 = MemoryStream[Int]
 
@@ -367,7 +376,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     val joined = df1.join(df2, Seq("key", "window"))
       .select($"key", $"window.end".cast("long"), $"leftValue", $"rightValue")
 
-    testStream(joined)(
+    testStream(joined, outputMode)(
       AddData(input1, 1),
       CheckNewAnswer(),
       AddData(input2, 1),
@@ -391,56 +400,8 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     )
   }
 
-  test("stream stream inner join on windows - with watermark") {
-    val input1 = MemoryStream[Int]
-    val input2 = MemoryStream[Int]
-
-    val df1 = input1.toDF()
-      .select($"value" as "key", timestamp_seconds($"value") as "timestamp",
-        ($"value" * 2) as "leftValue")
-      .withWatermark("timestamp", "10 seconds")
-      .select($"key", window($"timestamp", "10 second"), $"leftValue")
-
-    val df2 = input2.toDF()
-      .select($"value" as "key", timestamp_seconds($"value") as "timestamp",
-        ($"value" * 3) as "rightValue")
-      .select($"key", window($"timestamp", "10 second"), $"rightValue")
-
-    val joined = df1.join(df2, Seq("key", "window"))
-      .select($"key", $"window.end".cast("long"), $"leftValue", $"rightValue")
-
-    testStream(joined)(
-      AddData(input1, 1),
-      CheckAnswer(),
-      assertNumStateRows(total = 1, updated = 1),
-
-      AddData(input2, 1),
-      CheckAnswer((1, 10, 2, 3)),
-      assertNumStateRows(total = 2, updated = 1),
-      StopStream,
-      StartStream(),
-
-      AddData(input1, 25),
-      CheckNewAnswer(),   // watermark = 15, no-data-batch should remove 2 rows having window=[0,10]
-      assertNumStateRows(total = 1, updated = 1),
-
-      AddData(input2, 25),
-      CheckNewAnswer((25, 30, 50, 75)),
-      assertNumStateRows(total = 2, updated = 1),
-      StopStream,
-      StartStream(),
-
-      AddData(input2, 1),
-      CheckNewAnswer(),                             // Should not join as < 15 removed
-      assertNumStateRows(total = 2, updated = 0),   // row not add as 1 < state key watermark = 15
-
-      AddData(input1, 5),
-      CheckNewAnswer(),                             // Same reason as above
-      assertNumStateRows(total = 2, updated = 0, droppedByWatermark = 1)
-    )
-  }
-
-  test("stream stream inner join with time range - with watermark - one side condition") {
+  testWithAppendAndUpdate("stream stream inner join with time range - with watermark" +
+      " - one side condition") { outputMode =>
     import org.apache.spark.sql.functions._
 
     val leftInput = MemoryStream[(Int, Int)]
@@ -460,7 +421,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
       df1.join(df2, expr("leftKey = rightKey AND leftTime < rightTime - interval 5 seconds"))
         .select($"leftKey", $"leftTime".cast("int"), $"rightTime".cast("int"))
 
-    testStream(joined)(
+    testStream(joined, outputMode)(
       AddData(leftInput, (1, 5)),
       CheckAnswer(),
       AddData(rightInput, (1, 11)),
@@ -500,7 +461,8 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     )
   }
 
-  test("stream stream inner join with time range - with watermark - two side conditions") {
+  testWithAppendAndUpdate("stream stream inner join with time range - with watermark" +
+      " - two side conditions") { outputMode =>
     import org.apache.spark.sql.functions._
 
     val leftInput = MemoryStream[(Int, Int)]
@@ -545,7 +507,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
       df1.join(df2, condition).select($"leftKey", $"leftTime".cast("int"),
         $"rightTime".cast("int"))
 
-    testStream(joined)(
+    testStream(joined, outputMode)(
       // If leftTime = 20, then it match only with rightTime = [15, 30]
       AddData(leftInput, (1, 20)),
       CheckAnswer(),
@@ -603,14 +565,14 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     assert(e.toString.contains("Stream-stream join without equality predicate is not supported"))
   }
 
-  test("stream stream self join") {
+  testWithAppendAndUpdate("stream stream self join") { outputMode =>
     val input = MemoryStream[Int]
     val df = input.toDF()
     val join =
       df.select($"value" % 5 as "key", $"value").join(
         df.select($"value" % 5 as "key", $"value"), "key")
 
-    testStream(join)(
+    testStream(join, outputMode)(
       AddData(input, 1, 2),
       CheckAnswer((1, 1, 1), (2, 2, 2)),
       StopStream,
@@ -716,7 +678,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
         assert(query.lastExecution.executedPlan.collect {
           case j @ StreamingSymmetricHashJoinExec(_, _, _, _, _, _, _, _, _,
             ShuffleExchangeExec(opA: HashPartitioning, _, _, _),
-            ShuffleExchangeExec(opB: HashPartitioning, _, _, _))
+            ShuffleExchangeExec(opB: HashPartitioning, _, _, _), _)
               if partitionExpressionsColumns(opA.expressions) === Seq("a", "b")
                 && partitionExpressionsColumns(opB.expressions) === Seq("a", "b")
                 && opA.numPartitions == numPartitions && opB.numPartitions == numPartitions => j
@@ -922,89 +884,39 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     )
   }
 
-  test("SPARK-35896: metrics in StateOperatorProgress are output correctly") {
-    val input1 = MemoryStream[Int]
-    val input2 = MemoryStream[Int]
-
-    val df1 = input1.toDF()
-      .select($"value" as "key", timestamp_seconds($"value") as "timestamp",
-        ($"value" * 2) as "leftValue")
-      .withWatermark("timestamp", "10 seconds")
-      .select($"key", window($"timestamp", "10 second"), $"leftValue")
-
-    val df2 = input2.toDF()
-      .select($"value" as "key", timestamp_seconds($"value") as "timestamp",
-        ($"value" * 3) as "rightValue")
-      .select($"key", window($"timestamp", "10 second"), $"rightValue")
-
-    val joined = df1.join(df2, Seq("key", "window"))
-      .select($"key", $"window.end".cast("long"), $"leftValue", $"rightValue")
-
-    val useVirtualColumnFamilies =
-      spark.sessionState.conf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION) >= 3
-    // Number of shuffle partitions being used is 3
-    val numStateStoreInstances = if (useVirtualColumnFamilies) {
-      // Only one state store is created per partition if we're using virtual column families
-      3
-    } else {
-      // Four state stores are created per partition otherwise
-      3 * 4
-    }
-
-    testStream(joined)(
-      StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "3")),
-      AddData(input1, 1),
-      CheckAnswer(),
-      assertStateOperatorProgressMetric(operatorName = "symmetricHashJoin",
-        numShufflePartitions = 3, numStateStoreInstances = numStateStoreInstances),
-
-      AddData(input2, 1),
-      CheckAnswer((1, 10, 2, 3)),
-      assertNumStateRows(
-        total = Seq(2), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(0))),
-
-      AddData(input1, 25),
-      CheckNewAnswer(),   // watermark = 15, no-data-batch should remove 2 rows having window=[0,10]
-      assertNumStateRows(
-        total = Seq(1), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(2))),
-
-      AddData(input2, 25),
-      CheckNewAnswer((25, 30, 50, 75)),
-      assertNumStateRows(
-        total = Seq(2), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(0)))
-    )
-  }
-
-  test("joining non-nullable left join key with nullable right join key") {
+  testWithAppendAndUpdate("joining non-nullable left join key with nullable right join key") {
+    outputMode =>
     val input1 = MemoryStream[Int]
     val input2 = MemoryStream[JInteger]
 
     val joined = testForJoinKeyNullability(input1.toDF(), input2.toDF())
-    testStream(joined)(
+    testStream(joined, outputMode)(
       AddData(input1, 1, 5),
       AddData(input2, JInteger.valueOf(1), JInteger.valueOf(5), JInteger.valueOf(10), null),
       CheckNewAnswer(Row(1, 1, 2, 3), Row(5, 5, 10, 15))
     )
   }
 
-  test("joining nullable left join key with non-nullable right join key") {
+  testWithAppendAndUpdate("joining nullable left join key with non-nullable right join key") {
+    outputMode =>
     val input1 = MemoryStream[JInteger]
     val input2 = MemoryStream[Int]
 
     val joined = testForJoinKeyNullability(input1.toDF(), input2.toDF())
-    testStream(joined)(
+    testStream(joined, outputMode)(
       AddData(input1, JInteger.valueOf(1), JInteger.valueOf(5), JInteger.valueOf(10), null),
       AddData(input2, 1, 5),
       CheckNewAnswer(Row(1, 1, 2, 3), Row(5, 5, 10, 15))
     )
   }
 
-  test("joining nullable left join key with nullable right join key") {
+  testWithAppendAndUpdate("joining nullable left join key with nullable right join key") {
+    outputMode =>
     val input1 = MemoryStream[JInteger]
     val input2 = MemoryStream[JInteger]
 
     val joined = testForJoinKeyNullability(input1.toDF(), input2.toDF())
-    testStream(joined)(
+    testStream(joined, outputMode)(
       AddData(input1, JInteger.valueOf(1), JInteger.valueOf(5), JInteger.valueOf(10), null),
       AddData(input2, JInteger.valueOf(1), JInteger.valueOf(5), null),
       CheckNewAnswer(
@@ -1012,91 +924,6 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
         Row(JInteger.valueOf(5), JInteger.valueOf(5), JInteger.valueOf(10), JInteger.valueOf(15)),
         Row(null, null, null, null))
     )
-  }
-
-  // Only ran with virtual column family joins as the previous join version uses different schemas
-  testWithVirtualColumnFamilyJoins(
-    "SPARK-51779 Verify StateSchemaV3 writes correct key and value schemas for join operator") {
-    withTempDir { checkpointDir =>
-      val input1 = MemoryStream[Int]
-      val input2 = MemoryStream[Int]
-
-      val df1 = input1.toDF().select($"value" as "key", ($"value" * 2) as "leftValue")
-      val df2 = input2.toDF().select($"value" as "key", ($"value" * 3) as "rightValue")
-      val joined = df1.join(df2, "key")
-
-      val metadataPathPostfix = "state/0/_stateSchema/default"
-      val stateSchemaPath = new Path(checkpointDir.toString, s"$metadataPathPostfix")
-      val hadoopConf = spark.sessionState.newHadoopConf()
-      val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
-
-      val keySchemaForNums = new StructType().add("field0", IntegerType, nullable = false)
-      val keySchemaForIndex = keySchemaForNums.add("index", LongType)
-      val numSchema: StructType = new StructType().add("value", LongType)
-      val leftIndexSchema: StructType = new StructType()
-        .add("key", IntegerType, nullable = false)
-        .add("leftValue", IntegerType, nullable = false)
-        .add("matched", BooleanType)
-      val rightIndexSchema: StructType = new StructType()
-        .add("key", IntegerType, nullable = false)
-        .add("rightValue", IntegerType, nullable = false)
-        .add("matched", BooleanType)
-
-      val schemaLeftIndex = StateStoreColFamilySchema(
-        "left-keyWithIndexToValue", 0,
-        keySchemaForIndex, 0,
-        leftIndexSchema,
-        Some(NoPrefixKeyStateEncoderSpec(keySchemaForIndex)),
-        None
-      )
-      val schemaLeftNum = StateStoreColFamilySchema(
-        "left-keyToNumValues", 0,
-        keySchemaForNums, 0,
-        numSchema,
-        Some(NoPrefixKeyStateEncoderSpec(keySchemaForNums)),
-        None
-      )
-      val schemaRightIndex = StateStoreColFamilySchema(
-        "right-keyWithIndexToValue", 0,
-        keySchemaForIndex, 0,
-        rightIndexSchema,
-        Some(NoPrefixKeyStateEncoderSpec(keySchemaForIndex)),
-        None
-      )
-      val schemaRightNum = StateStoreColFamilySchema(
-        "right-keyToNumValues", 0,
-        keySchemaForNums, 0,
-        numSchema,
-        Some(NoPrefixKeyStateEncoderSpec(keySchemaForNums)),
-        None
-      )
-
-      testStream(joined)(
-        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
-        AddData(input1, 1),
-        CheckAnswer(),
-        AddData(input2, 1, 10),
-        CheckNewAnswer((1, 2, 3)),
-        Execute { q =>
-          val schemaFilePath = fm.list(stateSchemaPath).toSeq.head.getPath
-          val providerId = StateStoreProviderId(
-            StateStoreId(checkpointDir.getCanonicalPath, 0, 0), q.lastProgress.runId
-          )
-          val checker = new StateSchemaCompatibilityChecker(
-            providerId,
-            hadoopConf,
-            List(schemaFilePath)
-          )
-          val colFamilySeq = checker.readSchemaFile()
-          // Verify schema count and contents
-          assert(colFamilySeq.length == 4)
-          assert(colFamilySeq.map(_.toString).toSet == Set(
-            schemaLeftIndex, schemaLeftNum, schemaRightIndex, schemaRightNum
-          ).map(_.toString))
-        },
-        StopStream
-      )
-    }
   }
 
   testWithVirtualColumnFamilyJoins(
@@ -1116,13 +943,16 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
         AddData(input2, 1, 10),
         CheckNewAnswer((1, 2, 3)),
         Execute { query =>
-          val numInternalKeys =
+          val numInternalCfs =
             query.lastProgress
               .stateOperators(0)
               .customMetrics
-              .get("rocksdbNumInternalColFamiliesKeys")
-          // Number of internal column family keys should be nonzero for this join implementation
-          assert(numInternalKeys.longValue() > 0)
+              .get("rocksdbNumInternalColumnFamilies")
+          // The V4 virtual-column-family join uses internal column families for the
+          // secondary index, so the CF count should be nonzero for this join implementation.
+          // Note: we intentionally check the CF count (not the key count), because for joins
+          // without event time the secondary index is created but never populated.
+          assert(numInternalCfs.longValue() > 0)
         },
         StopStream,
         // Restart the query from the same checkpoint
@@ -1133,13 +963,13 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
         CheckNewAnswer((2, 4, 6), (2, 4, 6)),
         Execute { query =>
           // The join implementation should not have changed between runs
-          val numInternalKeys =
+          val numInternalCfs =
             query.lastProgress
               .stateOperators(0)
               .customMetrics
-              .get("rocksdbNumInternalColFamiliesKeys")
-          // Number of internal column family keys should still be nonzero for this join
-          assert(numInternalKeys.longValue() > 0)
+              .get("rocksdbNumInternalColumnFamilies")
+          // Number of internal column families should still be nonzero for this join
+          assert(numInternalCfs.longValue() > 0)
         },
         StopStream
       )
@@ -1229,12 +1059,222 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
   }
 }
 
+/** Adds tests that are specific to state format V1-V3 (not compatible with V4). */
+abstract class StreamingInnerJoinSuite extends StreamingInnerJoinBase {
+  import testImplicits._
+
+  testWithAppendAndUpdate("stream stream inner join on windows - with watermark") { outputMode =>
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+
+    val df1 = input1.toDF()
+      .select($"value" as "key", timestamp_seconds($"value") as "timestamp",
+        ($"value" * 2) as "leftValue")
+      .withWatermark("timestamp", "10 seconds")
+      .select($"key", window($"timestamp", "10 second"), $"leftValue")
+
+    val df2 = input2.toDF()
+      .select($"value" as "key", timestamp_seconds($"value") as "timestamp",
+        ($"value" * 3) as "rightValue")
+      .select($"key", window($"timestamp", "10 second"), $"rightValue")
+
+    val joined = df1.join(df2, Seq("key", "window"))
+      .select($"key", $"window.end".cast("long"), $"leftValue", $"rightValue")
+
+    testStream(joined, outputMode)(
+      AddData(input1, 1),
+      CheckAnswer(),
+      assertNumStateRows(total = 1, updated = 1),
+
+      AddData(input2, 1),
+      CheckAnswer((1, 10, 2, 3)),
+      assertNumStateRows(total = 2, updated = 1),
+      StopStream,
+      StartStream(),
+
+      AddData(input1, 25),
+      CheckNewAnswer(),   // watermark = 15, no-data-batch should remove 2 rows having window=[0,10]
+      assertNumStateRows(total = 1, updated = 1),
+
+      AddData(input2, 25),
+      CheckNewAnswer((25, 30, 50, 75)),
+      assertNumStateRows(total = 2, updated = 1),
+      StopStream,
+      StartStream(),
+
+      AddData(input2, 1),
+      CheckNewAnswer(),                             // Should not join as < 15 removed
+      assertNumStateRows(total = 2, updated = 0),   // row not add as 1 < state key watermark = 15
+
+      AddData(input1, 5),
+      CheckNewAnswer(),                             // Same reason as above
+      assertNumStateRows(total = 2, updated = 0, droppedByWatermark = 1)
+    )
+  }
+
+  test("SPARK-35896: metrics in StateOperatorProgress are output correctly") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+
+    val df1 = input1.toDF()
+      .select($"value" as "key", timestamp_seconds($"value") as "timestamp",
+        ($"value" * 2) as "leftValue")
+      .withWatermark("timestamp", "10 seconds")
+      .select($"key", window($"timestamp", "10 second"), $"leftValue")
+
+    val df2 = input2.toDF()
+      .select($"value" as "key", timestamp_seconds($"value") as "timestamp",
+        ($"value" * 3) as "rightValue")
+      .select($"key", window($"timestamp", "10 second"), $"rightValue")
+
+    val joined = df1.join(df2, Seq("key", "window"))
+      .select($"key", $"window.end".cast("long"), $"leftValue", $"rightValue")
+
+    val useVirtualColumnFamilies =
+      spark.sessionState.conf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION) >= 3
+    // Number of shuffle partitions being used is 3
+    val numStateStoreInstances = if (useVirtualColumnFamilies) {
+      // Only one state store is created per partition if we're using virtual column families
+      3
+    } else {
+      // Four state stores are created per partition otherwise
+      3 * 4
+    }
+
+    testStream(joined)(
+      StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "3")),
+      AddData(input1, 1),
+      CheckAnswer(),
+      assertStateOperatorProgressMetric(operatorName = "symmetricHashJoin",
+        numShufflePartitions = 3, numStateStoreInstances = numStateStoreInstances),
+
+      AddData(input2, 1),
+      CheckAnswer((1, 10, 2, 3)),
+      assertNumStateRows(
+        total = Seq(2), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+
+      AddData(input1, 25),
+      CheckNewAnswer(),   // watermark = 15, no-data-batch should remove 2 rows having window=[0,10]
+      assertNumStateRows(
+        total = Seq(1), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(2))),
+
+      AddData(input2, 25),
+      CheckNewAnswer((25, 30, 50, 75)),
+      assertNumStateRows(
+        total = Seq(2), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(0)))
+    )
+  }
+
+  // Only ran with virtual column family joins as the previous join version uses different schemas
+  testWithVirtualColumnFamilyJoins(
+    "SPARK-51779 Verify StateSchemaV3 writes correct key and value schemas for join operator") {
+    withTempDir { checkpointDir =>
+      val input1 = MemoryStream[Int]
+      val input2 = MemoryStream[Int]
+
+      val df1 = input1.toDF().select($"value" as "key", ($"value" * 2) as "leftValue")
+      val df2 = input2.toDF().select($"value" as "key", ($"value" * 3) as "rightValue")
+      val joined = df1.join(df2, "key")
+
+      val metadataPathPostfix = "state/0/_stateSchema/default"
+      val stateSchemaPath = new Path(checkpointDir.toString, s"$metadataPathPostfix")
+      val hadoopConf = spark.sessionState.newHadoopConf()
+      val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
+
+      val keySchemaForNums = new StructType().add("field0", IntegerType, nullable = false)
+      val keySchemaForIndex = keySchemaForNums.add("index", LongType)
+      val numSchema: StructType = new StructType().add("value", LongType)
+      val leftIndexSchema: StructType = new StructType()
+        .add("key", IntegerType, nullable = false)
+        .add("leftValue", IntegerType, nullable = false)
+        .add("matched", BooleanType)
+      val rightIndexSchema: StructType = new StructType()
+        .add("key", IntegerType, nullable = false)
+        .add("rightValue", IntegerType, nullable = false)
+        .add("matched", BooleanType)
+
+      val schemaLeftIndex = StateStoreColFamilySchema(
+        "left-keyWithIndexToValue", 0,
+        keySchemaForIndex, 0,
+        leftIndexSchema,
+        Some(NoPrefixKeyStateEncoderSpec(keySchemaForIndex)),
+        None
+      )
+      val schemaLeftNum = StateStoreColFamilySchema(
+        "left-keyToNumValues", 0,
+        keySchemaForNums, 0,
+        numSchema,
+        Some(NoPrefixKeyStateEncoderSpec(keySchemaForNums)),
+        None
+      )
+      val schemaRightIndex = StateStoreColFamilySchema(
+        "right-keyWithIndexToValue", 0,
+        keySchemaForIndex, 0,
+        rightIndexSchema,
+        Some(NoPrefixKeyStateEncoderSpec(keySchemaForIndex)),
+        None
+      )
+      val schemaRightNum = StateStoreColFamilySchema(
+        "right-keyToNumValues", 0,
+        keySchemaForNums, 0,
+        numSchema,
+        Some(NoPrefixKeyStateEncoderSpec(keySchemaForNums)),
+        None
+      )
+
+      testStream(joined)(
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        AddData(input1, 1),
+        CheckAnswer(),
+        AddData(input2, 1, 10),
+        CheckNewAnswer((1, 2, 3)),
+        Execute { q =>
+          val schemaFilePath = fm.list(stateSchemaPath).toSeq.head.getPath
+          val providerId = StateStoreProviderId(
+            StateStoreId(checkpointDir.getCanonicalPath, 0, 0), q.lastProgress.runId
+          )
+          val checker = new StateSchemaCompatibilityChecker(
+            providerId,
+            hadoopConf,
+            List(schemaFilePath)
+          )
+          val colFamilySeq = checker.readSchemaFile()
+          // Verify schema count and contents
+          assert(colFamilySeq.length == 4)
+          assert(colFamilySeq.map(_.toString).toSet == Set(
+            schemaLeftIndex, schemaLeftNum, schemaRightIndex, schemaRightNum
+          ).map(_.toString))
+        },
+        StopStream
+      )
+    }
+  }
+}
 
 @SlowSQLTest
-class StreamingOuterJoinSuite extends StreamingJoinSuite {
+abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
 
   import testImplicits._
   import org.apache.spark.sql.functions._
+
+  Seq("left_outer", "right_outer").foreach { joinType =>
+    test(s"stream-stream $joinType join does not support Update mode") {
+      val input1 = MemoryStream[Int]
+      val input2 = MemoryStream[Int]
+
+      val df1 = input1.toDF().select($"value" as "key", ($"value" * 2) as "leftValue")
+      val df2 = input2.toDF().select($"value" as "key", ($"value" * 3) as "rightValue")
+      val joined = df1.join(df2, Seq("key"), joinType)
+
+      val e = intercept[AnalysisException] {
+        testStream(joined, OutputMode.Update())(
+          AddData(input1, 1),
+          CheckAnswer()
+        )
+      }
+      assert(e.getMessage.contains("is not supported in Update output mode"))
+    }
+  }
 
   test("left outer early state exclusion on left") {
     withTempDir { checkpointDir =>
@@ -1877,9 +1917,13 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
     }
   }
 
-  // This test is currently marked to run without virtual column family joins because it requires
-  // inferSchema from StateDataSource, which is not supported for this version of joins yet.
-  testWithoutVirtualColumnFamilyJoins(
+}
+
+/** Adds tests that are specific to state format V1-V3 (not compatible with V4). */
+abstract class StreamingOuterJoinSuite extends StreamingOuterJoinBase {
+  import testImplicits._
+
+  test(
     "SPARK-49829 left-outer join, input being unmatched is between WM for late event and " +
     "WM for eviction") {
 
@@ -1942,7 +1986,26 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
 }
 
 @SlowSQLTest
-class StreamingFullOuterJoinSuite extends StreamingJoinSuite {
+abstract class StreamingFullOuterJoinBase extends StreamingJoinSuite {
+
+  import testImplicits._
+
+  test("stream-stream full outer join does not support Update mode") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+
+    val df1 = input1.toDF().select($"value" as "key", ($"value" * 2) as "leftValue")
+    val df2 = input2.toDF().select($"value" as "key", ($"value" * 3) as "rightValue")
+    val joined = df1.join(df2, Seq("key"), "full_outer")
+
+    val e = intercept[AnalysisException] {
+      testStream(joined, OutputMode.Update())(
+        AddData(input1, 1),
+        CheckAnswer()
+      )
+    }
+    assert(e.getMessage.contains("is not supported in Update output mode"))
+  }
 
   test("windowed full outer join") {
     withTempDir { checkpointDir =>
@@ -2158,16 +2221,19 @@ class StreamingFullOuterJoinSuite extends StreamingJoinSuite {
   }
 }
 
+/** No V3-specific tests for full outer joins. */
+abstract class StreamingFullOuterJoinSuite extends StreamingFullOuterJoinBase
+
 @SlowSQLTest
-class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
+abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
 
   import testImplicits._
 
-  test("windowed left semi join") {
+  testWithAppendAndUpdate("windowed left semi join") { outputMode =>
     withTempDir { checkpointDir =>
       val (leftInput, rightInput, joined) = setupWindowedJoin("left_semi")
 
-      testStream(joined)(
+      testStream(joined, outputMode)(
         StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
         MultiAddData(leftInput, 1, 2, 3, 4, 5)(rightInput, 3, 4, 5, 6, 7),
         CheckNewAnswer(Row(3, 10, 6), Row(4, 10, 8), Row(5, 10, 10)),
@@ -2229,10 +2295,10 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
     }
   }
 
-  test("left semi early state exclusion on left") {
+  testWithAppendAndUpdate("left semi early state exclusion on left") { outputMode =>
     val (leftInput, rightInput, joined) = setupWindowedJoinWithLeftCondition("left_semi")
 
-    testStream(joined)(
+    testStream(joined, outputMode)(
       MultiAddData(leftInput, 1, 2, 3)(rightInput, 3, 4, 5),
       // The left rows with leftValue <= 4 should not generate their semi join rows and
       // not get added to the state.
@@ -2266,10 +2332,10 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
     )
   }
 
-  test("left semi early state exclusion on right") {
+  testWithAppendAndUpdate("left semi early state exclusion on right") { outputMode =>
     val (leftInput, rightInput, joined) = setupWindowedJoinWithRightCondition("left_semi")
 
-    testStream(joined)(
+    testStream(joined, outputMode)(
       MultiAddData(leftInput, 3, 4, 5)(rightInput, 1, 2, 3),
       // The right rows with rightValue <= 7 should never be added to the state.
       // The right row with rightValue = 9 > 7, hence joined and added to state.
@@ -2304,10 +2370,10 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
     )
   }
 
-  test("left semi join with watermark range condition") {
+  testWithAppendAndUpdate("left semi join with watermark range condition") { outputMode =>
     val (leftInput, rightInput, joined) = setupJoinWithRangeCondition("left_semi")
 
-    testStream(joined)(
+    testStream(joined, outputMode)(
       AddData(leftInput, (1, 5), (3, 5)),
       CheckNewAnswer(),
       // states
@@ -2360,10 +2426,10 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
     )
   }
 
-  test("self left semi join") {
+  testWithAppendAndUpdate("self left semi join") { outputMode =>
     val (inputStream, query) = setupSelfJoin("left_semi")
 
-    testStream(query)(
+    testStream(query, outputMode)(
       AddData(inputStream, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
       CheckNewAnswer((2, 2), (4, 4)),
       // batch 1 - global watermark = 0
@@ -2402,9 +2468,13 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
     )
   }
 
-  // This test is currently marked to run without virtual column family joins because it requires
-  // inferSchema from StateDataSource, which is not supported for this version of joins yet.
-  testWithoutVirtualColumnFamilyJoins(
+}
+
+/** Adds tests that are specific to state format V1-V3 (not compatible with V4). */
+abstract class StreamingLeftSemiJoinSuite extends StreamingLeftSemiJoinBase {
+  import testImplicits._
+
+  test(
     "SPARK-49829 two chained stream-stream left outer joins among three input streams") {
     withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
       val memoryStream1 = MemoryStream[(Long, Int)]
@@ -2528,4 +2598,46 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
        */
     }
   }
+}
+
+// Concrete single-mode suites for parallel CI execution and failure isolation.
+
+@SlowSQLTest
+class StreamingInnerJoinWithVCFSuite extends StreamingInnerJoinSuite {
+  override protected def testMode = Mode.WithVCF
+}
+
+@SlowSQLTest
+class StreamingInnerJoinWithoutVCFSuite extends StreamingInnerJoinSuite {
+  override protected def testMode = Mode.WithoutVCF
+}
+
+@SlowSQLTest
+class StreamingOuterJoinWithVCFSuite extends StreamingOuterJoinSuite {
+  override protected def testMode = Mode.WithVCF
+}
+
+@SlowSQLTest
+class StreamingOuterJoinWithoutVCFSuite extends StreamingOuterJoinSuite {
+  override protected def testMode = Mode.WithoutVCF
+}
+
+@SlowSQLTest
+class StreamingFullOuterJoinWithVCFSuite extends StreamingFullOuterJoinSuite {
+  override protected def testMode = Mode.WithVCF
+}
+
+@SlowSQLTest
+class StreamingFullOuterJoinWithoutVCFSuite extends StreamingFullOuterJoinSuite {
+  override protected def testMode = Mode.WithoutVCF
+}
+
+@SlowSQLTest
+class StreamingLeftSemiJoinWithVCFSuite extends StreamingLeftSemiJoinSuite {
+  override protected def testMode = Mode.WithVCF
+}
+
+@SlowSQLTest
+class StreamingLeftSemiJoinWithoutVCFSuite extends StreamingLeftSemiJoinSuite {
+  override protected def testMode = Mode.WithoutVCF
 }

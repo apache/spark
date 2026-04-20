@@ -1252,7 +1252,7 @@ abstract class JsonSuite
         StructField("f4", ArrayType(StringType), nullable = true) ::
         StructField("f5", IntegerType, true) :: Nil)
 
-      val rowRDD1 = unparsedStrings.map { r =>
+      val rowRDD1 = unparsedStrings.as[String].rdd.map { r =>
         val values = r.split(",").map(_.trim)
         val v5 = try values(3).toInt catch {
           case _: NumberFormatException => null
@@ -1275,7 +1275,7 @@ abstract class JsonSuite
           StructField("f12", BooleanType, false) :: Nil), false) ::
         StructField("f2", MapType(StringType, IntegerType, true), false) :: Nil)
 
-      val rowRDD2 = unparsedStrings.map { r =>
+      val rowRDD2 = unparsedStrings.as[String].rdd.map { r =>
         val values = r.split(",").map(_.trim)
         val v4 = try values(3).toInt catch {
           case _: NumberFormatException => null
@@ -3813,7 +3813,7 @@ abstract class JsonSuite
   }
 
   test("SPARK-40667: validate JSON Options") {
-    assert(JSONOptions.getAllOptions.size == 31)
+    assert(JSONOptions.getAllOptions.size == 32)
     // Please add validation on any new Json options here
     assert(JSONOptions.isValidOption("samplingRatio"))
     assert(JSONOptions.isValidOption("primitivesAsString"))
@@ -3838,6 +3838,7 @@ abstract class JsonSuite
     assert(JSONOptions.isValidOption("multiLine"))
     assert(JSONOptions.isValidOption("lineSep"))
     assert(JSONOptions.isValidOption("pretty"))
+    assert(JSONOptions.isValidOption("sortKeys"))
     assert(JSONOptions.isValidOption("inferTimestamp"))
     assert(JSONOptions.isValidOption("columnNameOfCorruptRecord"))
     assert(JSONOptions.isValidOption("timeZone"))
@@ -3850,6 +3851,21 @@ abstract class JsonSuite
     assert(JSONOptions.getAlternativeOption("encoding").contains("charset"))
     assert(JSONOptions.getAlternativeOption("charset").contains("encoding"))
     assert(JSONOptions.getAlternativeOption("dateFormat").isEmpty)
+  }
+
+  test("SPARK-54878: write JSON with sortKeys option via datasource") {
+    withSQLConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1") {
+      withTempPath { path =>
+        val basePath = path.getCanonicalPath
+        val df = spark.sql(
+          "SELECT named_struct('c', 3, 'a', 1, 'b', 2) as s")
+        df.write.option("sortKeys", "true").json(basePath)
+
+        val written = spark.read.option("wholetext", "true")
+          .text(basePath).map(_.getString(0)).collect().mkString
+        assert(written.contains(""""a":1,"b":2,"c":3"""))
+      }
+    }
   }
 
   test("SPARK-25159: json schema inference should only trigger one job") {

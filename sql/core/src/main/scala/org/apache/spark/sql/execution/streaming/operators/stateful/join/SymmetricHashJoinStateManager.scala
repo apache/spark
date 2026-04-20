@@ -25,14 +25,14 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{END_INDEX, START_INDEX, STATE_STORE_ID}
+import org.apache.spark.internal.LogKeys.{END_INDEX, INDEX, JOIN_SIDE, KEY, NUM_VALUES, PARTITION_ID, START_INDEX, STATE_STORE_ID, STATE_STORE_VERSION}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, SafeProjection, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, WatermarkSupport}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper._
-import org.apache.spark.sql.execution.streaming.state.{DropLastNFieldsStatePartitionKeyExtractor, KeyStateEncoderSpec, NoopStatePartitionKeyExtractor, NoPrefixKeyStateEncoderSpec, StatePartitionKeyExtractor, StateSchemaBroadcast, StateStore, StateStoreCheckpointInfo, StateStoreColFamilySchema, StateStoreConf, StateStoreErrors, StateStoreId, StateStoreMetrics, StateStoreProvider, StateStoreProviderId, SupportsFineGrainedReplay, TimestampAsPostfixKeyStateEncoderSpec, TimestampAsPrefixKeyStateEncoderSpec, TimestampKeyStateEncoder}
+import org.apache.spark.sql.execution.streaming.state.{DropLastNFieldsStatePartitionKeyExtractor, KeyStateEncoderSpec, NoopStatePartitionKeyExtractor, NoPrefixKeyStateEncoderSpec, RangeScanBoundaryUtils, StatePartitionKeyExtractor, StateSchemaBroadcast, StateStore, StateStoreCheckpointInfo, StateStoreColFamilySchema, StateStoreConf, StateStoreErrors, StateStoreId, StateStoreMetrics, StateStoreProvider, StateStoreProviderId, SupportsFineGrainedReplay, TimestampAsPostfixKeyStateEncoderSpec, TimestampAsPrefixKeyStateEncoderSpec, TimestampKeyStateEncoder}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, LongType, NullType, StructField, StructType}
 import org.apache.spark.util.NextIterator
@@ -66,6 +66,10 @@ trait SymmetricHashJoinStateManager {
    * The matched flag will be updated to true for the values being returned, if it is semantically
    * required to do so.
    *
+   * For skipUpdatingMatchedFlag = true, the method will skip updating the matched flag for the
+   * values being returned. This is useful for the non-outer side of stream-stream join where
+   * the matched flag is never checked during state eviction.
+   *
    * It is caller's responsibility to consume the whole iterator.
    *
    * @param timestampRange Optional optimization hint as (minTimestamp, maxTimestamp), both
@@ -76,7 +80,8 @@ trait SymmetricHashJoinStateManager {
       key: UnsafeRow,
       generateJoinedRow: InternalRow => JoinedRow,
       predicate: JoinedRow => Boolean,
-      timestampRange: Option[(Long, Long)] = None): Iterator[JoinedRow]
+      timestampRange: Option[(Long, Long)] = None,
+      skipUpdatingMatchedFlag: Boolean = false): Iterator[JoinedRow]
 
   /**
    * Retrieve all joined rows for the given key and remove the matched rows from state. The joined
@@ -179,15 +184,28 @@ trait SupportsEvictByCondition { self: SymmetricHashJoinStateManager =>
 trait SupportsEvictByTimestamp { self: SymmetricHashJoinStateManager =>
   import SymmetricHashJoinStateManager._
 
-  /** Evict the state by timestamp. Returns the number of values evicted. */
-  def evictByTimestamp(endTimestamp: Long): Long
+  /**
+   * Evict the state by timestamp. Returns the number of values evicted.
+   *
+   * @param endTimestamp Inclusive upper bound: evicts entries with timestamp <= endTimestamp.
+   * @param startTimestamp Exclusive lower bound: entries with timestamp <= startTimestamp are
+   *   assumed to have been evicted already (e.g. from the previous batch). When provided,
+   *   the scan starts from startTimestamp + 1.
+   */
+  def evictByTimestamp(endTimestamp: Long, startTimestamp: Option[Long] = None): Long
 
   /**
    * Evict the state by timestamp and return the evicted key-value pairs.
    *
    * It is caller's responsibility to consume the whole iterator.
+   *
+   * @param endTimestamp Inclusive upper bound: evicts entries with timestamp <= endTimestamp.
+   * @param startTimestamp Exclusive lower bound: entries with timestamp <= startTimestamp are
+   *   assumed to have been evicted already (e.g. from the previous batch). When provided,
+   *   the scan starts from startTimestamp + 1.
    */
-  def evictAndReturnByTimestamp(endTimestamp: Long): Iterator[KeyToValuePair]
+  def evictAndReturnByTimestamp(
+      endTimestamp: Long, startTimestamp: Option[Long] = None): Iterator[KeyToValuePair]
 }
 
 /**
@@ -239,6 +257,16 @@ class SymmetricHashJoinStateManagerV4(
     // pass the information. The information is in SQLConf.
     allowMultipleEventTimeColumns = false)
 
+  // When there is no event time column in the value and no watermark ordinal in the key,
+  // the secondary index (TsWithKey) will never be used for eviction. Skip writing to it
+  // to avoid unnecessary RocksDB merge overhead.
+  // TODO(SPARK-56536): This could be further optimized by also considering whether the state
+  //   watermark predicate is defined. Even when an event time column exists, the secondary index
+  //   is unused if eviction is not possible (e.g., only one side defines a watermark in a time
+  //   interval join). That would require propagating the predicate information here.
+  private val hasEventTime: Boolean =
+    eventTimeColIdxOpt.isDefined || joinKeyOrdinalForWatermark.isDefined
+
   private val random = new scala.util.Random(System.currentTimeMillis())
   private val bucketCountForNoEventTime = 1024
   private val extractEventTimeFn: UnsafeRow => Long = { row =>
@@ -281,7 +309,13 @@ class SymmetricHashJoinStateManagerV4(
   // V4 uses a single store with VCFs (not separate keyToNumValues/keyWithIndexToValue stores).
   // Use the keyToNumValues checkpoint ID for loading the correct committed version.
   private val stateStoreCkptId: Option[String] = keyToNumValuesStateStoreCkptId
-  private val handlerSnapshotOptions: Option[HandlerSnapshotOptions] = None
+  private val handlerSnapshotOptions: Option[HandlerSnapshotOptions] = snapshotOptions.map { opts =>
+    HandlerSnapshotOptions(
+      snapshotVersion = opts.snapshotVersion,
+      endVersion = opts.endVersion,
+      startStateStoreCkptId = opts.startKeyToNumValuesStateStoreCkptId,
+      endStateStoreCkptId = opts.endKeyToNumValuesStateStoreCkptId)
+  }
 
   private var stateStoreProvider: StateStoreProvider = _
 
@@ -342,14 +376,17 @@ class SymmetricHashJoinStateManagerV4(
     val eventTime = extractEventTimeFnFromKey(key).getOrElse(extractEventTimeFn(value))
     // We always do blind merge for appending new value.
     keyWithTsToValues.append(key, eventTime, value, matched)
-    tsWithKey.add(eventTime, key)
+    if (hasEventTime) {
+      tsWithKey.add(eventTime, key)
+    }
   }
 
   override def getJoinedRows(
       key: UnsafeRow,
       generateJoinedRow: InternalRow => JoinedRow,
       predicate: JoinedRow => Boolean,
-      timestampRange: Option[(Long, Long)] = None): Iterator[JoinedRow] = {
+      timestampRange: Option[(Long, Long)] = None,
+      skipUpdatingMatchedFlag: Boolean = false): Iterator[JoinedRow] = {
     def getJoinedRowsFromTsAndValues(
         ts: Long,
         valuesAndMatched: Array[ValueAndMatchPair]): Iterator[JoinedRow] = {
@@ -365,7 +402,7 @@ class SymmetricHashJoinStateManagerV4(
 
             val joinedRow = generateJoinedRow(vmp.value)
             if (predicate(joinedRow)) {
-              if (!vmp.matched) {
+              if (!skipUpdatingMatchedFlag && !vmp.matched) {
                 valuesAndMatched(currentIndex) = vmp.copy(matched = true)
                 shouldUpdateValuesIntoStateStore = true
               }
@@ -387,7 +424,6 @@ class SymmetricHashJoinStateManagerV4(
 
         override protected def close(): Unit = {
           if (shouldUpdateValuesIntoStateStore) {
-            // Update back to the state store
             val updatedValuesWithMatched = valuesAndMatched.map { vmp =>
               (vmp.value, vmp.matched)
             }.toSeq
@@ -496,9 +532,11 @@ class SymmetricHashJoinStateManagerV4(
     }
   }
 
-  override def evictByTimestamp(endTimestamp: Long): Long = {
+  override def evictByTimestamp(endTimestamp: Long, startTimestamp: Option[Long] = None): Long = {
+    require(hasEventTime,
+      "evictByTimestamp requires event time; secondary index was not populated")
     var removed = 0L
-    tsWithKey.scanEvictedKeys(endTimestamp).foreach { evicted =>
+    tsWithKey.scanEvictedKeys(endTimestamp, startTimestamp).foreach { evicted =>
       val key = evicted.key
       val timestamp = evicted.timestamp
       val numValues = evicted.numValues
@@ -512,10 +550,13 @@ class SymmetricHashJoinStateManagerV4(
     removed
   }
 
-  override def evictAndReturnByTimestamp(endTimestamp: Long): Iterator[KeyToValuePair] = {
+  override def evictAndReturnByTimestamp(
+      endTimestamp: Long, startTimestamp: Option[Long] = None): Iterator[KeyToValuePair] = {
+    require(hasEventTime,
+      "evictAndReturnByTimestamp requires event time; secondary index was not populated")
     val reusableKeyToValuePair = KeyToValuePair()
 
-    tsWithKey.scanEvictedKeys(endTimestamp).flatMap { evicted =>
+    tsWithKey.scanEvictedKeys(endTimestamp, startTimestamp).flatMap { evicted =>
       val key = evicted.key
       val timestamp = evicted.timestamp
       val values = keyWithTsToValues.get(key, timestamp)
@@ -636,14 +677,33 @@ class SymmetricHashJoinStateManagerV4(
 
     /**
      * Returns entries where minTs <= timestamp <= maxTs (both inclusive), grouped by timestamp.
-     * Skips entries before minTs and stops iterating past maxTs (timestamps are sorted).
+     * When maxTs is bounded (< Long.MaxValue), uses rangeScanWithMultiValues for efficient
+     * range access; falls back to prefixScan otherwise to stay within the key's scope.
+     *
+     * When prefixScan is used (maxTs == Long.MaxValue), entries outside [minTs, maxTs] are
+     * filtered out so both code paths produce identical results.
      */
     def getValuesInRange(
         key: UnsafeRow, minTs: Long, maxTs: Long): Iterator[GetValuesResult] = {
       val reusableGetValuesResult = new GetValuesResult()
+      // Only use rangeScan when maxTs < Long.MaxValue, since rangeScan requires
+      // an exclusive end key (maxTs + 1) which would overflow at Long.MaxValue.
+      val useRangeScan = maxTs < Long.MaxValue
 
       new NextIterator[GetValuesResult] {
-        private val iter = stateStore.prefixScanWithMultiValues(key, colFamilyName)
+        private val iter = if (useRangeScan) {
+          // startKey must be copied because the second createKeyRow call below reuses
+          // the same projection buffer and would otherwise overwrite its contents.
+          // endKey does not need a copy: rangeScanWithMultiValues encodes both bounds
+          // to independent byte arrays eagerly at call time, and the scope of endKey
+          // ends with the call of rangeScanWithMultiValues.
+          val startKey = createKeyRow(key, minTs).copy()
+          // rangeScanWithMultiValues endKey is exclusive, so use maxTs + 1
+          val endKey = Some(createKeyRow(key, maxTs + 1))
+          stateStore.rangeScanWithMultiValues(Some(startKey), endKey, colFamilyName)
+        } else {
+          stateStore.prefixScanWithMultiValues(key, colFamilyName)
+        }
 
         private var currentTs = -1L
         private var pastUpperBound = false
@@ -669,6 +729,11 @@ class SymmetricHashJoinStateManagerV4(
           } else {
             val unsafeRowPair = iter.next()
             val ts = TimestampKeyStateEncoder.extractTimestamp(unsafeRowPair.key)
+
+            if (useRangeScan && (ts < minTs || ts > maxTs)) {
+              throw StateStoreErrors.streamStreamJoinRangeScanTimestampOutOfRange(
+                ts, minTs, maxTs)
+            }
 
             if (ts > maxTs) {
               pastUpperBound = true
@@ -746,6 +811,8 @@ class SymmetricHashJoinStateManagerV4(
       isInternal = true
     )
 
+    // Returns an UnsafeRow backed by a reused projection buffer. Callers that need to
+    // hold the row beyond the immediate state store call must invoke copy() on the result.
     private def createKeyRow(key: UnsafeRow, timestamp: Long): UnsafeRow = {
       TimestampKeyStateEncoder.attachTimestamp(
         attachTimestampProjection, keySchemaWithTimestamp, key, timestamp)
@@ -761,9 +828,60 @@ class SymmetricHashJoinStateManagerV4(
 
     case class EvictedKeysResult(key: UnsafeRow, timestamp: Long, numValues: Int)
 
-    // NOTE: This assumes we consume the whole iterator to trigger completion.
-    def scanEvictedKeys(endTimestamp: Long): Iterator[EvictedKeysResult] = {
-      val evictIterator = stateStore.iteratorWithMultiValues(colFamilyName)
+    // Reusable default key row for scan boundary construction; see
+    // [[RangeScanBoundaryUtils]] for rationale. Safe to reuse because createKeyRow
+    // only reads this row (via BoundReference evaluations) and writes to the
+    // projection's own internal buffer. Correctness relies on real stored entries
+    // never having internally-null key fields, which is preserved by join-key
+    // expressions being evaluated via the user's expression encoder. Preserve this
+    // invariant if you change how entries are written.
+    private lazy val defaultKey: UnsafeRow = RangeScanBoundaryUtils.defaultUnsafeRow(keySchema)
+
+    /**
+     * Build a scan boundary row for rangeScan. The TsWithKeyTypeStore uses
+     * TimestampAsPrefixKeyStateEncoder, which encodes the row as [timestamp][key_fields].
+     * We need a full-schema row (not just the timestamp) because the encoder expects all
+     * key columns to be present. Default values are used for the key fields since only the
+     * timestamp matters for ordering in the prefix encoder.
+     */
+    private def createScanBoundaryRow(timestamp: Long): UnsafeRow = {
+      createKeyRow(defaultKey, timestamp).copy()
+    }
+
+    /**
+     * Scan keys eligible for eviction within the timestamp range.
+     *
+     * This assumes we consume the whole iterator to trigger completion.
+     *
+     * @param endTimestamp Inclusive upper bound: entries with timestamp <= endTimestamp are
+     *   eligible for eviction.
+     * @param startTimestamp Exclusive lower bound: entries with timestamp <= startTimestamp
+     *   are assumed to have been evicted already. The scan starts from startTimestamp + 1.
+     */
+    def scanEvictedKeys(
+        endTimestamp: Long,
+        startTimestamp: Option[Long] = None): Iterator[EvictedKeysResult] = {
+      // If startTimestamp == Long.MaxValue, everything has already been evicted;
+      // nothing can match, so return immediately.
+      if (startTimestamp.contains(Long.MaxValue)) {
+        return Iterator.empty
+      }
+
+      // rangeScanWithMultiValues: startKey is inclusive, endKey is exclusive.
+      // startTimestamp is exclusive (already evicted), so we seek from st + 1.
+      val startKeyRow = startTimestamp.map { st =>
+        createScanBoundaryRow(st + 1)
+      }
+      // endTimestamp is inclusive, so we use endTimestamp + 1 as the exclusive upper bound.
+      // When endTimestamp == Long.MaxValue we cannot add 1, so endKeyRow is None. This is
+      // safe because rangeScanWithMultiValues with no end key uses the column-family prefix
+      // as the upper bound, naturally scoping the scan within this column family.
+      val endKeyRow = if (endTimestamp < Long.MaxValue) {
+        Some(createScanBoundaryRow(endTimestamp + 1))
+      } else {
+        None
+      }
+      val evictIterator = stateStore.rangeScanWithMultiValues(startKeyRow, endKeyRow, colFamilyName)
       new NextIterator[EvictedKeysResult]() {
         var currentKeyRow: UnsafeRow = null
         var currentEventTime: Long = -1L
@@ -1014,7 +1132,9 @@ abstract class SymmetricHashJoinStateManagerBase(
       override def getNext(): JoinedRow = {
         while (index < numValues) {
           val valuePair = keyWithIndexToValue.get(key, index)
-          if (valuePair == null && storeConf.skipNullsForStreamStreamJoins) {
+          if (valuePair == null) {
+            handleNullValuePair(key, index, numValues)
+            skippedNullValueCount.foreach(_ += 1L)
             index += 1
           } else if (valuePair.matched) {
             // See the NOTE in the method doc about rationale.
@@ -1050,17 +1170,21 @@ abstract class SymmetricHashJoinStateManagerBase(
   /**
    * Get all the matched values for given join condition, with marking matched.
    * This method is designed to mark joined rows properly without exposing internal index of row.
+   *
+   * @param skipUpdatingMatchedFlag If true, do not update the matched flag even when the row
+   *                                matches.
    */
   def getJoinedRows(
       key: UnsafeRow,
       generateJoinedRow: InternalRow => JoinedRow,
       predicate: JoinedRow => Boolean,
-      timestampRange: Option[(Long, Long)] = None): Iterator[JoinedRow] = {
+      timestampRange: Option[(Long, Long)] = None,
+      skipUpdatingMatchedFlag: Boolean = false): Iterator[JoinedRow] = {
     val numValues = keyToNumValues.get(key)
     keyWithIndexToValue.getAll(key, numValues).map { keyIdxToValue =>
       val joinedRow = generateJoinedRow(keyIdxToValue.value)
       if (predicate(joinedRow)) {
-        if (!keyIdxToValue.matched) {
+        if (!skipUpdatingMatchedFlag && !keyIdxToValue.matched) {
           keyWithIndexToValue.put(key, keyIdxToValue.valueIndex, keyIdxToValue.value,
             matched = true)
         }
@@ -1250,8 +1374,10 @@ abstract class SymmetricHashJoinStateManagerBase(
       /**
        * Find the next value satisfying the condition, updating `currentKey` and `numValues` if
        * needed. Returns null when no value can be found.
-       * Note that we will skip nulls explicitly if config setting for the same is
-       * set to true via STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS.
+       *
+       * Null values from the state store are handled by [[handleNullValuePair]]:
+       * skipped if STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS is enabled,
+       * otherwise an exception is thrown with diagnostic context.
        */
       private def findNextValueForIndex(): ValueAndMatchPair = {
         // Loop across all values for the current key, and then all other keys, until we find a
@@ -1262,7 +1388,9 @@ abstract class SymmetricHashJoinStateManagerBase(
           if (hasMoreValuesForCurrentKey) {
             // First search the values for the current key.
             val valuePair = keyWithIndexToValue.get(currentKey, index)
-            if (valuePair == null && storeConf.skipNullsForStreamStreamJoins) {
+            if (valuePair == null) {
+              handleNullValuePair(currentKey, index, numValues)
+              skippedNullValueCount.foreach(_ += 1L)
               index += 1
             } else if (removalCondition(valuePair.value)) {
               return valuePair
@@ -1312,6 +1440,40 @@ abstract class SymmetricHashJoinStateManagerBase(
 
   /** Projects the key of unsafe row to internal row for printable log message. */
   def getInternalRowOfKeyWithIndex(currentKey: UnsafeRow): InternalRow = keyProjection(currentKey)
+
+  @volatile private var nullValueWarningLogged = false
+
+  /**
+   * Called when keyWithIndexToValue.get(key, index) returns null even though
+   * keyToNumValues claims there should be a value at that index.
+   *
+   * Logs a warning (once per instance) with diagnostic context, then either
+   * returns normally (if skipNullsForStreamStreamJoins is enabled, caller skips)
+   * or throws a [[StreamStreamJoinInconsistentStateNullValue]].
+   */
+  protected def handleNullValuePair(
+      key: UnsafeRow,
+      nullIndex: Long,
+      numValues: Long): Unit = {
+    if (!nullValueWarningLogged) {
+      nullValueWarningLogged = true
+      logWarning(log"Null value detected in stream-stream join state: " +
+        log"joinSide=${MDC(JOIN_SIDE, joinSide)}, key=${MDC(KEY, keyProjection(key))}, " +
+        log"index=${MDC(INDEX, nullIndex)}, numValues=${MDC(NUM_VALUES, numValues)}, " +
+        log"storeVersion=${MDC(STATE_STORE_VERSION, stateInfo.get.storeVersion)}, " +
+        log"partitionId=${MDC(PARTITION_ID, partitionId)}")
+    }
+
+    if (!storeConf.skipNullsForStreamStreamJoins) {
+      throw StateStoreErrors.streamStreamJoinNullValue(
+        valueIndex = nullIndex,
+        numValues = numValues,
+        joinSide = joinSide.toString,
+        storeVersion = stateInfo.get.storeVersion,
+        partitionId = partitionId,
+        configKey = SQLConf.STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS.key)
+    }
+  }
 
   /** Commit all the changes to all the state stores */
   def commit(): Unit
@@ -1594,8 +1756,6 @@ abstract class SymmetricHashJoinStateManagerBase(
     /**
      * Get all values and indices for the provided key.
      * Should not return null.
-     * Note that we will skip nulls explicitly if config setting for the same is
-     * set to true via STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS.
      */
     def getAll(key: UnsafeRow, numValues: Long): Iterator[KeyWithIndexAndValue] = {
       new NextIterator[KeyWithIndexAndValue] {
@@ -1608,7 +1768,8 @@ abstract class SymmetricHashJoinStateManagerBase(
             val keyWithIndex = keyWithIndexRow(key, index)
             val valuePair =
               valueRowConverter.convertValue(stateStore.get(keyWithIndex, colFamilyName))
-            if (valuePair == null && storeConf.skipNullsForStreamStreamJoins) {
+            if (valuePair == null) {
+              handleNullValuePair(key, index, numValues)
               skippedNullValueCount.foreach(_ += 1L)
               index += 1
             } else {
@@ -1917,6 +2078,13 @@ object SymmetricHashJoinStateManager {
     }
   }
 
+  def allStateStoreNamesV4(joinSides: JoinSide*): Seq[String] = {
+    val allStateStoreTypes: Seq[StateStoreType] = Seq(KeyWithTsToValuesType, TsWithKeyType)
+    for (joinSide <- joinSides; stateStoreType <- allStateStoreTypes) yield {
+      getStateStoreName(joinSide, stateStoreType)
+    }
+  }
+
   def getSchemaForStateStores(
       joinSide: JoinSide,
       inputValueAttributes: Seq[Attribute],
@@ -1968,7 +2136,6 @@ object SymmetricHashJoinStateManager {
       inputValueAttributes: Seq[Attribute],
       joinKeys: Seq[Expression],
       stateFormatVersion: Int): Map[String, StateStoreColFamilySchema] = {
-    // Convert the original schemas for state stores into StateStoreColFamilySchema objects
     val schemas =
       getSchemaForStateStores(joinSide, inputValueAttributes, joinKeys, stateFormatVersion)
 
@@ -2145,9 +2312,13 @@ object SymmetricHashJoinStateManager {
     } else if (storeName == getStateStoreName(LeftSide, KeyWithIndexToValueType) ||
       storeName == getStateStoreName(RightSide, KeyWithIndexToValueType)) {
       KeyWithIndexToValueType
+    } else if (storeName == getStateStoreName(LeftSide, KeyWithTsToValuesType) ||
+      storeName == getStateStoreName(RightSide, KeyWithTsToValuesType)) {
+      KeyWithTsToValuesType
+    } else if (storeName == getStateStoreName(LeftSide, TsWithKeyType) ||
+      storeName == getStateStoreName(RightSide, TsWithKeyType)) {
+      TsWithKeyType
     } else {
-      // TODO: [SPARK-55628] Add support of KeyWithTsToValuesType and TsWithKeyType during
-      //  integration.
       throw new IllegalArgumentException(s"Unsupported join store name: $storeName")
     }
   }
@@ -2162,17 +2333,17 @@ object SymmetricHashJoinStateManager {
       stateFormatVersion: Int): StatePartitionKeyExtractor = {
     assert(stateFormatVersion <= 4, "State format version must be less than or equal to 4")
     val name = if (stateFormatVersion >= 3) colFamilyName else storeName
-    if (getStoreType(name) == KeyWithIndexToValueType) {
-      // For KeyWithIndex, the index is added to the join (i.e. partition) key.
-      // Drop the last field (index) to get the partition key
-      new DropLastNFieldsStatePartitionKeyExtractor(stateKeySchema, numLastColsToDrop = 1)
-    } else if (getStoreType(name) == KeyToNumValuesType) {
-      // State key is the partition key
-      new NoopStatePartitionKeyExtractor(stateKeySchema)
-    } else {
-      // TODO: [SPARK-55628] Add support of KeyWithTsToValuesType and TsWithKeyType during
-      //  integration.
-      throw new IllegalArgumentException(s"Unsupported join store name: $storeName")
+    getStoreType(name) match {
+      case KeyWithIndexToValueType =>
+        // For KeyWithIndex, the index is added to the join (i.e. partition) key.
+        // Drop the last field (index) to get the partition key
+        new DropLastNFieldsStatePartitionKeyExtractor(stateKeySchema, numLastColsToDrop = 1)
+      case KeyToNumValuesType =>
+        new NoopStatePartitionKeyExtractor(stateKeySchema)
+      case KeyWithTsToValuesType | TsWithKeyType =>
+        // For v4 stores, the logical key schema in the schema file is just the join key
+        // (timestamp is managed by the encoder), so the state key IS the partition key.
+        new NoopStatePartitionKeyExtractor(stateKeySchema)
     }
   }
 

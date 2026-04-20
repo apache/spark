@@ -304,6 +304,11 @@ public interface TableChange {
     }
 
     @Override
+    public String toString() {
+      return "SET PROPERTY " + property + " = " + value;
+    }
+
+    @Override
     public boolean equals(Object o) {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
@@ -347,6 +352,11 @@ public interface TableChange {
 
     public String property() {
       return property;
+    }
+
+    @Override
+    public String toString() {
+      return "REMOVE PROPERTY " + property;
     }
 
     @Override

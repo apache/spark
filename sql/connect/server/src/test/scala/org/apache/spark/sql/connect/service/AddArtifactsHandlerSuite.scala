@@ -16,9 +16,11 @@
  */
 package org.apache.spark.sql.connect.service
 
-import java.io.InputStream
+import java.io.{FileOutputStream, InputStream}
 import java.nio.file.{Files, Path}
 import java.util.UUID
+import java.util.jar.{JarEntry, JarOutputStream}
+import java.util.zip.CRC32
 
 import scala.collection.mutable
 import scala.concurrent.Promise
@@ -37,7 +39,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.sql.connect.ResourceHelper
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
 
@@ -85,8 +87,88 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
     def forceCleanUp(): Unit = super.cleanUpStagedArtifacts()
   }
 
-  protected val inputFilePath: Path = commonResourcePath.resolve("artifact-tests")
-  protected val crcPath: Path = inputFilePath.resolve("crc")
+  // Generate test artifacts and CRC files dynamically.
+  protected lazy val inputFilePath: Path = {
+    val dir = Utils.createTempDir().toPath.resolve("artifact-tests")
+    Files.createDirectories(dir)
+    val crc = dir.resolve("crc")
+    Files.createDirectories(crc)
+    // Generate test artifacts. The .class files and JAR entries are not valid Java
+    // class files -- they contain arbitrary bytes. The tests only verify byte-level
+    // transfer protocol (chunking, CRC), so valid class content is not required.
+    // smallClassFile.class -- minimal Java class
+    val small = "public class smallClassFile {}".getBytes
+    createClassFileAndCrc(dir, crc, "smallClassFile", small)
+    // smallClassFileDup.class -- same content
+    createClassFileAndCrc(dir, crc, "smallClassFileDup", small)
+    // smallJar.jar -- minimal JAR containing a dummy class
+    createSmallJar(dir, crc, "smallJar", small)
+    // largeJar.jar -- large JAR for multi-chunk transfer test (>32KB)
+    createLargeJar(dir, crc, "largeJar")
+    // Hello.class -- small dummy (only used for byte transfer)
+    createClassFileAndCrc(dir, crc, "Hello", small)
+    dir
+  }
+  protected lazy val crcPath: Path = inputFilePath.resolve("crc")
+
+  private def writeCrc(crcDir: Path, baseName: String, data: Array[Byte]): Unit = {
+    val chunkSize = CHUNK_SIZE
+    val crcs = data
+      .grouped(chunkSize)
+      .map { chunk =>
+        val c = new CRC32()
+        c.update(chunk)
+        c.getValue.toString
+      }
+      .toSeq
+    Files.writeString(crcDir.resolve(s"$baseName.txt"), crcs.mkString("\n"))
+  }
+
+  private def createClassFileAndCrc(
+      dir: Path,
+      crcDir: Path,
+      name: String,
+      content: Array[Byte]): Unit = {
+    val file = dir.resolve(s"$name.class")
+    Files.write(file, content)
+    writeCrc(crcDir, name, content)
+  }
+
+  private def createSmallJar(
+      dir: Path,
+      crcDir: Path,
+      name: String,
+      classContent: Array[Byte]): Unit = {
+    val jarFile = dir.resolve(s"$name.jar")
+    val jos = new JarOutputStream(new FileOutputStream(jarFile.toFile))
+    try {
+      jos.putNextEntry(new JarEntry("HelloWorld/Main.class"))
+      jos.write(classContent)
+    } finally { jos.close() }
+    writeCrc(crcDir, name, Files.readAllBytes(jarFile))
+  }
+
+  private def createLargeJar(dir: Path, crcDir: Path, name: String): Unit = {
+    val jarFile = dir.resolve(s"$name.jar")
+    val jos = new JarOutputStream(new FileOutputStream(jarFile.toFile))
+    try {
+      // Create enough entries to exceed 32KB (CHUNK_SIZE), using STORED to avoid compression
+      for (i <- 0 until 100) {
+        val data = new Array[Byte](4096)
+        java.util.Arrays.fill(data, i.toByte)
+        val entry = new JarEntry(s"pkg/Class$i.class")
+        entry.setMethod(java.util.zip.ZipEntry.STORED)
+        entry.setSize(data.length)
+        entry.setCompressedSize(data.length)
+        val crc = new CRC32()
+        crc.update(data)
+        entry.setCrc(crc.getValue)
+        jos.putNextEntry(entry)
+        jos.write(data)
+      }
+    } finally { jos.close() }
+    writeCrc(crcDir, name, Files.readAllBytes(jarFile))
+  }
 
   private def readNextChunk(in: InputStream): ByteString = {
     val buf = new Array[Byte](CHUNK_SIZE)
@@ -209,7 +291,6 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
     try {
       val name = "classes/smallClassFile.class"
       val artifactPath = inputFilePath.resolve("smallClassFile.class")
-      assume(artifactPath.toFile.exists)
       addSingleChunkArtifact(handler, name, artifactPath)
       handler.onCompleted()
       val response = ThreadUtils.awaitResult(promise.future, 5.seconds)
@@ -232,9 +313,8 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
     val promise = Promise[AddArtifactsResponse]()
     val handler = new TestAddArtifactsHandler(new DummyStreamObserver(promise))
     try {
-      val name = "jars/junitLargeJar.jar"
-      val artifactPath = inputFilePath.resolve("junitLargeJar.jar")
-      assume(artifactPath.toFile.exists)
+      val name = "jars/largeJar.jar"
+      val artifactPath = inputFilePath.resolve("largeJar.jar")
       addChunkedArtifact(handler, name, artifactPath)
       handler.onCompleted()
       val response = ThreadUtils.awaitResult(promise.future, 5.seconds)
@@ -259,16 +339,15 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
     try {
       val names = Seq(
         "classes/smallClassFile.class",
-        "jars/junitLargeJar.jar",
+        "jars/largeJar.jar",
         "classes/smallClassFileDup.class",
         "jars/smallJar.jar")
 
       val artifactPaths = Seq(
         inputFilePath.resolve("smallClassFile.class"),
-        inputFilePath.resolve("junitLargeJar.jar"),
+        inputFilePath.resolve("largeJar.jar"),
         inputFilePath.resolve("smallClassFileDup.class"),
         inputFilePath.resolve("smallJar.jar"))
-      artifactPaths.foreach(p => assume(p.toFile.exists))
 
       addSingleChunkArtifact(handler, names.head, artifactPaths.head)
       addChunkedArtifact(handler, names(1), artifactPaths(1))
@@ -300,7 +379,6 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
     try {
       val name = "classes/smallClassFile.class"
       val artifactPath = inputFilePath.resolve("smallClassFile.class")
-      assume(artifactPath.toFile.exists)
       val dataChunks = getDataChunks(artifactPath)
       assert(dataChunks.size == 1)
       val bytes = dataChunks.head
@@ -473,7 +551,6 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
       val artifactPath1 = inputFilePath.resolve("smallClassFile.class")
       val artifactPath2 = inputFilePath.resolve("smallJar.jar")
 
-      assume(artifactPath1.toFile.exists)
       addSingleChunkArtifact(handler, sessionKey, name1, artifactPath1)
       addSingleChunkArtifact(handler, sessionKey, name3, artifactPath1)
 

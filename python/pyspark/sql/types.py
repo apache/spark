@@ -1587,8 +1587,12 @@ class StructType(DataType):
             return StructType(self.fields[key])
         else:
             raise PySparkTypeError(
-                errorClass="NOT_INT_OR_SLICE_OR_STR",
-                messageParameters={"arg_name": "key", "arg_type": type(key).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "int, slice or str",
+                    "arg_name": "key",
+                    "arg_type": type(key).__name__,
+                },
             )
 
     def simpleString(self) -> str:
@@ -1986,8 +1990,10 @@ class UserDefinedType(DataType):
         pyClass = pyUDT[split + 1 :]
         m = __import__(pyModule, globals(), locals(), [pyClass])
         if not hasattr(m, pyClass):
-            s = base64.b64decode(json["serializedClass"].encode("utf-8"))
-            UDT = CloudPickleSerializer().loads(s)
+            raise PySparkValueError(
+                errorClass="UNSUPPORTED_OPERATION",
+                messageParameters={"operation": "unpickling user defined types"},
+            )
         else:
             UDT = getattr(m, pyClass)
         return UDT()
@@ -2591,14 +2597,14 @@ _array_type_mappings: Dict[str, Type[DataType]] = {
 }
 
 # compute array typecode mappings for signed integer types
-for _typecode in _array_signed_int_typecode_ctype_mappings.keys():
+for _typecode in _array_signed_int_typecode_ctype_mappings:
     size = ctypes.sizeof(_array_signed_int_typecode_ctype_mappings[_typecode]) * 8
     dt = _int_size_to_type(size)
     if dt is not None:
         _array_type_mappings[_typecode] = dt
 
 # compute array typecode mappings for unsigned integer types
-for _typecode in _array_unsigned_int_typecode_ctype_mappings.keys():
+for _typecode in _array_unsigned_int_typecode_ctype_mappings:
     # JVM does not have unsigned types, so use signed types that is at least 1
     # bit larger to store
     size = ctypes.sizeof(_array_unsigned_int_typecode_ctype_mappings[_typecode]) * 8 + 1

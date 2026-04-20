@@ -248,8 +248,8 @@ statement
     | createTableHeader (LEFT_PAREN tableElementList RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS? query)?                                                   #createTable
-    | CREATE TABLE (IF errorCapturingNot EXISTS)? target=tableIdentifier
-        LIKE source=tableIdentifier
+    | CREATE TABLE (IF errorCapturingNot EXISTS)? target=identifierReference
+        LIKE source=identifierReference
         (tableProvider |
         rowFormat |
         createFileFormat |
@@ -376,6 +376,7 @@ statement
     | SHOW CREATE TABLE identifierReference (AS SERDE)?                #showCreateTable
     | SHOW CURRENT namespace                                           #showCurrentNamespace
     | SHOW CATALOGS (LIKE? pattern=stringLit)?                            #showCatalogs
+    | SHOW COLLATIONS (LIKE? pattern=stringLit)?                          #showCollations
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) PROCEDURE identifierReference                  #describeProcedure
     | (DESC | DESCRIBE) namespace EXTENDED?
@@ -574,7 +575,10 @@ query
 insertInto
     : INSERT (WITH SCHEMA EVOLUTION)? OVERWRITE TABLE? identifierReference optionsClause? (partitionSpec (IF errorCapturingNot EXISTS)?)?  ((BY NAME) | identifierList)? #insertOverwriteTable
     | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference optionsClause? partitionSpec? (IF errorCapturingNot EXISTS)? ((BY NAME) | identifierList)?   #insertIntoTable
-    | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference optionsClause? (BY NAME)? REPLACE whereClause              #insertIntoReplaceWhere
+    | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference tableAlias optionsClause? (BY NAME)?
+        REPLACE (WHERE | ON) replaceCondition=booleanExpression        #insertIntoReplaceBooleanCond
+    | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference tableAlias optionsClause? (BY NAME)?
+        REPLACE USING identifierList                                   #insertIntoReplaceUsing
     | INSERT OVERWRITE LOCAL? DIRECTORY path=stringLit rowFormat? createFileFormat?                     #insertOverwriteHiveDir
     | INSERT OVERWRITE LOCAL? DIRECTORY (path=stringLit)? tableProvider (OPTIONS options=propertyList)? #insertOverwriteDir
     ;
@@ -719,7 +723,7 @@ resource
     ;
 
 dmlStatementNoWith
-    : insertInto query                                                             #singleInsertQuery
+    : insertInto (query | LEFT_PAREN query RIGHT_PAREN queryAlias=tableAlias)      #singleInsertQuery
     | fromClause multiInsertQueryBody+                                             #multiInsertQuery
     | DELETE FROM identifierReference tableAlias whereClause?                      #deleteFromTable
     | UPDATE identifierReference tableAlias setClause whereClause?                 #updateTable
@@ -1293,7 +1297,7 @@ datetimeUnit
     ;
 
 primaryExpression
-    : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER | USER | SESSION_USER | CURRENT_TIME)             #currentLike
+    : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER | USER | SESSION_USER | CURRENT_TIME | CURRENT_PATH)             #currentLike
     | name=(TIMESTAMPADD | DATEADD | DATE_ADD) LEFT_PAREN (unit=datetimeUnit | invalidUnit=stringLit) COMMA unitsAmount=valueExpression COMMA timestamp=valueExpression RIGHT_PAREN             #timestampadd
     | name=(TIMESTAMPDIFF | DATEDIFF | DATE_DIFF | TIMEDIFF) LEFT_PAREN (unit=datetimeUnit | invalidUnit=stringLit) COMMA startTimestamp=valueExpression COMMA endTimestamp=valueExpression RIGHT_PAREN    #timestampdiff
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
@@ -1491,7 +1495,7 @@ primitiveType
 dataType
     : complex=ARRAY (LT dataType GT)?                           #complexDataType
     | complex=MAP (LT dataType COMMA dataType GT)?              #complexDataType
-    | complex=STRUCT ((LT complexColTypeList? GT) | NEQ)?       #complexDataType
+    | complex=STRUCT ((LT complexColTypeList? GT) | NEQ {((SqlBaseLexer) getTokenStream().getTokenSource()).decComplexTypeLevelCounter();})?       #complexDataType
     | primitiveType                                             #primitiveDataType
     ;
 
@@ -1957,6 +1961,7 @@ ansiNonReserved
     | CURSOR
     | CUBE
     | CURRENT
+    | CURRENT_DATABASE
     | DATA
     | DATABASE
     | DATABASES
@@ -1973,6 +1978,7 @@ ansiNonReserved
     | DECIMAL
     | DECLARE
     | DEFAULT
+    | DEFAULT_PATH
     | DEFINED
     | DEFINER
     | DELAY
@@ -2108,6 +2114,7 @@ ansiNonReserved
     | PARTITION
     | PARTITIONED
     | PARTITIONS
+    | PATH
     | PERCENTLIT
     | PIVOT
     | PLACING
@@ -2183,6 +2190,7 @@ ansiNonReserved
     | SUBSTR
     | SUBSTRING
     | SYNC
+    | SYSTEM_PATH
     | SYSTEM_TIME
     | SYSTEM_VERSION
     | TABLES
@@ -2318,6 +2326,7 @@ nonReserved
     | CODEGEN
     | COLLATE
     | COLLATION
+    | COLLATIONS
     | COLLECTION
     | COLUMN
     | COLUMNS
@@ -2337,7 +2346,10 @@ nonReserved
     | CUBE
     | CURRENT
     | CURSOR
+    | CURRENT_DATABASE
     | CURRENT_DATE
+    | CURRENT_PATH
+    | CURRENT_SCHEMA
     | CURRENT_TIME
     | CURRENT_TIMESTAMP
     | CURRENT_USER
@@ -2357,6 +2369,7 @@ nonReserved
     | DECIMAL
     | DECLARE
     | DEFAULT
+    | DEFAULT_PATH
     | DEFINED
     | DEFINER
     | DELAY
@@ -2519,6 +2532,7 @@ nonReserved
     | PARTITION
     | PARTITIONED
     | PARTITIONS
+    | PATH
     | PERCENTLIT
     | PIVOT
     | PLACING
@@ -2599,6 +2613,7 @@ nonReserved
     | SUBSTR
     | SUBSTRING
     | SYNC
+    | SYSTEM_PATH
     | SYSTEM_TIME
     | SYSTEM_VERSION
     | TABLE

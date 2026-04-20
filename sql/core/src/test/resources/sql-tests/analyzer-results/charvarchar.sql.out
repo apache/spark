@@ -9,6 +9,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`char_tbl`, false
 desc formatted char_tbl
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_tbl`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.char_tbl, V1Table(default.char_tbl), [c#x, v#x]
 
 
 -- !query
@@ -44,6 +45,7 @@ ShowCreateTable false, [createtab_stmt#x]
 desc formatted char_tbl2
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_tbl2`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.char_tbl2, V1Table(default.char_tbl2), [c#x, v#x]
 
 
 -- !query
@@ -55,13 +57,14 @@ DescribeColumnCommand `spark_catalog`.`default`.`char_tbl2`, [spark_catalog, def
 -- !query
 create table char_tbl3 like char_tbl
 -- !query analysis
-CreateTableLikeCommand `char_tbl3`, `char_tbl`, Storage(), false
+CreateTableLikeCommand `spark_catalog`.`default`.`char_tbl3`, `spark_catalog`.`default`.`char_tbl`, Storage(), false
 
 
 -- !query
 desc formatted char_tbl3
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_tbl3`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.char_tbl3, V1Table(default.char_tbl3), [c#x, v#x]
 
 
 -- !query
@@ -94,6 +97,7 @@ org.apache.spark.sql.AnalysisException
 desc formatted char_view
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_view`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.char_view, `spark_catalog`.`default`.`char_view`
 
 
 -- !query
@@ -118,6 +122,7 @@ AlterTableRenameCommand `spark_catalog`.`default`.`char_tbl`, `char_tbl1`, false
 desc formatted char_tbl1
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_tbl1`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.char_tbl1, V1Table(default.char_tbl1), [c#x, v#x]
 
 
 -- !query
@@ -154,6 +159,7 @@ AlterTableChangeColumnCommand `spark_catalog`.`default`.`char_tbl1`, c, StructFi
 desc formatted char_tbl1
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_tbl1`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.char_tbl1, V1Table(default.char_tbl1), [c#x, v#x]
 
 
 -- !query
@@ -166,6 +172,7 @@ AlterTableAddColumnsCommand `spark_catalog`.`default`.`char_tbl1`, [StructField(
 desc formatted char_tbl1
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_tbl1`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.char_tbl1, V1Table(default.char_tbl1), [c#x, v#x, d#x]
 
 
 -- !query
@@ -182,6 +189,7 @@ AlterViewAsCommand `spark_catalog`.`default`.`char_view`, select * from char_tbl
 desc formatted char_view
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_view`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.char_view, `spark_catalog`.`default`.`char_view`
 
 
 -- !query
@@ -194,6 +202,7 @@ AlterTableSetPropertiesCommand `spark_catalog`.`default`.`char_tbl1`, [yes=no], 
 desc formatted char_tbl1
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_tbl1`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.char_tbl1, V1Table(default.char_tbl1), [c#x, v#x, d#x]
 
 
 -- !query
@@ -206,6 +215,7 @@ AlterTableSetPropertiesCommand `spark_catalog`.`default`.`char_view`, [yes=no], 
 desc formatted char_view
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_view`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.char_view, `spark_catalog`.`default`.`char_view`
 
 
 -- !query
@@ -218,6 +228,7 @@ AlterTableUnsetPropertiesCommand `spark_catalog`.`default`.`char_tbl1`, [yes], f
 desc formatted char_tbl1
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_tbl1`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.char_tbl1, V1Table(default.char_tbl1), [c#x, v#x, d#x]
 
 
 -- !query
@@ -230,6 +241,7 @@ AlterTableUnsetPropertiesCommand `spark_catalog`.`default`.`char_view`, [yes], f
 desc formatted char_view
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_view`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.char_view, `spark_catalog`.`default`.`char_view`
 
 
 -- !query
@@ -242,6 +254,7 @@ AlterTableSerDePropertiesCommand `spark_catalog`.`default`.`char_tbl1`, Map(yes 
 desc formatted char_tbl1
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_tbl1`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.char_tbl1, V1Table(default.char_tbl1), [c#x, v#x, d#x]
 
 
 -- !query
@@ -261,6 +274,7 @@ org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 desc formatted char_part
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_part`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.char_part, V1Table(default.char_part), [c1#x, v1#x, v2#x, c2#x]
 
 
 -- !query
@@ -293,6 +307,7 @@ org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
 desc formatted char_part
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_part`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.char_part, V1Table(default.char_part), [c1#x, v1#x, v2#x, c2#x]
 
 
 -- !query
@@ -313,6 +328,7 @@ org.apache.spark.sql.AnalysisException
 desc formatted char_part
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_part`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.char_part, V1Table(default.char_part), [c1#x, v1#x, v2#x, c2#x]
 
 
 -- !query
@@ -325,6 +341,7 @@ AlterTableSetLocationCommand `spark_catalog`.`default`.`char_part`, Map(v2 -> ke
 desc formatted char_part
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_part`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.char_part, V1Table(default.char_part), [c1#x, v1#x, v2#x, c2#x]
 
 
 -- !query
@@ -337,6 +354,7 @@ RepairTableCommand `spark_catalog`.`default`.`char_part`, true, false, MSCK REPA
 desc formatted char_part
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_part`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.char_part, V1Table(default.char_part), [c1#x, v1#x, v2#x, c2#x]
 
 
 -- !query

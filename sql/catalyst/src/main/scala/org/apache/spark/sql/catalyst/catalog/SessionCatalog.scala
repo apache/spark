@@ -92,6 +92,11 @@ class SessionCatalog(
   import SessionCatalog._
   import CatalogTypes.TablePartitionSpec
 
+  private val SESSION_NAMESPACE_TEMPLATE = FunctionIdentifier(
+    funcName = "",
+    database = Some(CatalogManager.SESSION_NAMESPACE),
+    catalog = Some(CatalogManager.SYSTEM_CATALOG_NAME))
+
   /**
    * Creates a FunctionIdentifier for a temporary function using SESSION_NAMESPACE_TEMPLATE.
    * Temporary functions are stored with the session namespace (system.session) to coexist
@@ -107,65 +112,18 @@ class SessionCatalog(
   private def isTempFunctionIdentifier(identifier: FunctionIdentifier): Boolean =
     identifier.copy(funcName = "") == SESSION_NAMESPACE_TEMPLATE
 
-  // --------------------------------
-  // | PATH-Based Resolution        |
-  // --------------------------------
-  // Functions are resolved by searching through an ordered PATH of namespaces.
-  // This provides a unified, data-driven resolution mechanism instead of hardcoded checks.
-
   /**
-   * Function resolution PATH - ordered list of namespaces to search for unqualified functions.
-   * Each entry is a FunctionIdentifier representing a namespace (catalog + database).
-   * The funcName field is unused (empty string) as these represent namespace templates.
-   *
-   * Resolution order follows the configured path: builtin then session (default "second"),
-   * or session then builtin (legacy "first"), or builtin only ("last" - session tried after
-   * persistent in FunctionResolution).
-   *
-   * When resolving a view, the system.session namespace is included in the path, but
-   * handleViewContext filters to only return temporary functions that were referred to
-   * when the view was created.
-   *
-   * These identifiers are cached for performance since they're accessed frequently.
+   * Session function kinds in resolution order for unqualified lookups.
+   * Matches [[SQLConf.sessionFunctionResolutionOrder]]: "first" (session first),
+   * "second" (default), "last" (builtin only; session tried after persistent).
    */
-  private val SESSION_NAMESPACE_TEMPLATE = FunctionIdentifier(
-    funcName = "",
-    database = Some(CatalogManager.SESSION_NAMESPACE),
-    catalog = Some(CatalogManager.SYSTEM_CATALOG_NAME))
-
-  private val BUILTIN_NAMESPACE_TEMPLATE = FunctionIdentifier(
-    funcName = "",
-    database = Some(CatalogManager.BUILTIN_NAMESPACE),
-    catalog = Some(CatalogManager.SYSTEM_CATALOG_NAME))
-
-  // The resolution path: builtin -> session (session "second")
-  private val RESOLUTION_PATH = Seq(
-    BUILTIN_NAMESPACE_TEMPLATE,
-    SESSION_NAMESPACE_TEMPLATE
-  )
-
-  // Legacy resolution path: session -> builtin (session "first")
-  private val LEGACY_RESOLUTION_PATH = Seq(
-    SESSION_NAMESPACE_TEMPLATE,
-    BUILTIN_NAMESPACE_TEMPLATE
-  )
-
-  // Session last: only builtin (session tried after persistent in FunctionResolution)
-  private val SESSION_LAST_RESOLUTION_PATH = Seq(BUILTIN_NAMESPACE_TEMPLATE)
-
-  /**
-   * Returns the resolution path for function lookup.
-   * @return Ordered sequence of namespace identifiers.
-   */
-  private def resolutionPath(): Seq[FunctionIdentifier] = {
+  private def sessionFunctionKindsInResolutionOrder: Seq[SessionFunctionKind] = {
     conf.sessionFunctionResolutionOrder match {
-      case "first" => LEGACY_RESOLUTION_PATH
-      case "last" => SESSION_LAST_RESOLUTION_PATH
-      case _ => RESOLUTION_PATH // "second" (default)
+      case "first" => Seq(Temp, Builtin)
+      case "last" => Seq(Builtin)
+      case _ => Seq(Builtin, Temp) // "second" (default)
     }
   }
-
-
 
   /**
    * Checks if a namespace represents temporary functions.
@@ -910,10 +868,17 @@ class SessionCatalog(
 
   /**
    * Return the raw logical plan of a temporary local or global view for the given name.
+   * Accepts: 1-part (local temp), 2-part session.v or global_temp.v, 3-part system.session.v.
    */
   def getRawLocalOrGlobalTempView(name: Seq[String]): Option[TemporaryViewRelation] = {
     name match {
       case Seq(v) => getRawTempView(v)
+      case Seq(db, v) if db.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) =>
+        getRawTempView(v)
+      case Seq(cat, ns, v)
+          if cat.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+            ns.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) =>
+        getRawTempView(v)
       case Seq(db, v) if isGlobalTempViewDB(db) => getRawGlobalTempView(v)
       case _ => None
     }
@@ -973,6 +938,10 @@ class SessionCatalog(
     } else if (format(name.database.get) == globalTempDatabase) {
       globalTempViewManager.get(table).map(_.tableMeta)
         .getOrElse(throw new NoSuchTableException(globalTempDatabase, table))
+    } else if (format(name.database.get) == CatalogManager.SESSION_NAMESPACE) {
+      // session.viewName or system.session.viewName: resolve as local temp view by table name
+      tempViews.get(table).map(_.tableMeta)
+        .getOrElse(throw new NoSuchTableException(CatalogManager.SESSION_NAMESPACE, table))
     } else {
       getTableMetadata(name)
     }
@@ -2382,9 +2351,39 @@ class SessionCatalog(
       }
     }
 
+  /** Resolves the function identifier for the given kind and unqualified name. */
+  private def functionIdentifierForKind(
+      kind: SessionFunctionKind,
+      name: String): FunctionIdentifier =
+    kind match {
+      case Builtin => FunctionRegistry.builtinFunctionIdentifier(name)
+      case Temp => tempFunctionIdentifier(name)
+    }
+
+  /** Kind-based lookup for function metadata (used by lookupFunctionWithShadowing). */
+  private def lookupFunctionInfo(
+      kind: SessionFunctionKind,
+      name: String,
+      tableFunction: Boolean): Option[ExpressionInfo] =
+    lookupFunctionInfoByIdentifier(functionIdentifierForKind(kind, name), tableFunction)
+
+  /** Kind-based resolve for scalar functions (used by resolveBuiltinOrTempFunction). */
+  private def resolveScalarFunction(
+      kind: SessionFunctionKind,
+      name: String,
+      arguments: Seq[Expression]): Option[Expression] =
+    resolveScalarFunctionByIdentifier(functionIdentifierForKind(kind, name), arguments)
+
+  /** Kind-based resolve for table functions (used by resolveBuiltinOrTempTableFunction). */
+  private def resolveTableFunction(
+      kind: SessionFunctionKind,
+      name: String,
+      arguments: Seq[Expression]): Option[LogicalPlan] =
+    resolveTableFunctionByIdentifier(functionIdentifierForKind(kind, name), arguments)
+
   /**
-   * Looks up functions using PATH-based resolution.
-   * Searches through the configured resolution path with view context handling.
+   * Looks up functions by trying each session namespace in resolution order.
+   * Uses the kind-based lookup; built-in operators are checked first for scalar functions.
    *
    * @param name The function name (unqualified).
    * @param registry The registry to search (FunctionRegistry or TableFunctionRegistry).
@@ -2405,14 +2404,11 @@ class SessionCatalog(
       None
     }
 
+    val tableFunction = registry eq tableFunctionRegistry
     operatorResult.orElse {
-      // Use PATH-based resolution: iterate through namespaces until a match is found.
-      val path = resolutionPath()
-
-      // Use iterator for short-circuit evaluation (stops at first match).
-      path.iterator.flatMap { namespace =>
-        lookupInNamespace(namespace, name, registry)
-      }.nextOption()
+      sessionFunctionKindsInResolutionOrder.iterator
+        .flatMap(kind => lookupFunctionInfo(kind, name, tableFunction))
+        .nextOption()
     }
   }
 
@@ -2507,7 +2503,9 @@ class SessionCatalog(
    * Resolution order follows the configured path (e.g. builtin then session).
    */
   def resolveBuiltinOrTempFunction(name: String, arguments: Seq[Expression]): Option[Expression] =
-    resolveFunctionWithFallback(name, arguments, functionRegistry)
+    sessionFunctionKindsInResolutionOrder.iterator
+      .flatMap(kind => resolveScalarFunction(kind, name, arguments))
+      .nextOption()
 
   /**
    * Look up a table function by name and resolve it to a LogicalPlan.
@@ -2521,32 +2519,9 @@ class SessionCatalog(
   def resolveBuiltinOrTempTableFunction(
       name: String,
       arguments: Seq[Expression]): Option[LogicalPlan] =
-    resolveFunctionWithFallback(name, arguments, tableFunctionRegistry)
-
-  /**
-   * Resolves functions using PATH-based resolution.
-   * Searches through the resolution path, returning the first function found.
-   *
-   * @param name The function name (unqualified).
-   * @param arguments The arguments to pass to the function.
-   * @param registry The registry to search (FunctionRegistry or TableFunctionRegistry).
-   * @tparam T The registry's type parameter (Expression for FunctionRegistry,
-   *           LogicalPlan for TableFunctionRegistry).
-   * @return Resolved function if found, None otherwise.
-   */
-  private def resolveFunctionWithFallback[T](
-      name: String,
-      arguments: Seq[Expression],
-      registry: FunctionRegistryBase[T]): Option[T] = {
-
-    // Use PATH-based resolution: iterate through namespaces until a match is found.
-    val path = resolutionPath()
-
-    // Use iterator for short-circuit evaluation (stops at first match).
-    path.iterator.flatMap { namespace =>
-      resolveInNamespace(namespace, name, arguments, registry)
-    }.nextOption()
-  }
+    sessionFunctionKindsInResolutionOrder.iterator
+      .flatMap(kind => resolveTableFunction(kind, name, arguments))
+      .nextOption()
 
   /**
    * Look up a persistent function's ExpressionInfo by name (for DESCRIBE FUNCTION).
@@ -2561,7 +2536,7 @@ class SessionCatalog(
         val funcMetadata = fetchCatalogFunction(qualifiedIdent)
         if (funcMetadata.isUserDefinedFunction) {
           UserDefinedFunction.fromCatalogFunction(funcMetadata, parser).toExpressionInfo
-          } else {
+        } else {
           makeExprInfoForHiveFunction(funcMetadata)
         }
       }

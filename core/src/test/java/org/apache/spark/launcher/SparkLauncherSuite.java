@@ -229,11 +229,17 @@ public class SparkLauncherSuite extends BaseSuite {
       assertTrue(handle.getError().isPresent());
       assertSame(handle.getError().get(), DUMMY_EXCEPTION);
     } finally {
-      if (handle != null) {
-        handle.kill();
+      try {
+        if (handle != null) {
+          handle.kill();
+          // Wait for the handle to be fully disposed so the LauncherServer is properly
+          // cleaned up before postChecks() runs.
+          waitFor(handle);
+        }
+      } finally {
+        restoreSystemProperties(properties);
+        waitForSparkContextShutdown();
       }
-      restoreSystemProperties(properties);
-      waitForSparkContextShutdown();
     }
   }
 
@@ -259,6 +265,9 @@ public class SparkLauncherSuite extends BaseSuite {
     } finally {
       if (handle != null) {
         handle.kill();
+        // Wait for the handle to be fully disposed so the LauncherServer is properly
+        // cleaned up before postChecks() runs.
+        waitFor(handle);
       }
     }
   }
@@ -273,7 +282,7 @@ public class SparkLauncherSuite extends BaseSuite {
     // Here DAGScheduler is stopped, while SparkContext.clearActiveContext may not be called yet.
     // Wait for a reasonable amount of time to avoid creating two active SparkContext in JVM.
     // See SPARK-23019 and SparkContext.stop() for details.
-    eventually(Duration.ofSeconds(5), Duration.ofMillis(10), () ->
+    eventually(Duration.ofSeconds(30), Duration.ofMillis(100), () ->
       assertTrue(SparkContext$.MODULE$.getActive().isEmpty(), "SparkContext is still alive."));
   }
 

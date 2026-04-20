@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHiveUdfsJar}
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.apache.spark.util.ArrayImplicits._
@@ -141,14 +141,11 @@ class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveS
   ).toImmutableArraySeq
 
   udfTestInfos.foreach { udfInfo =>
-    // The test jars are built from below commit:
+    // The test jar is generated at runtime from Java sources originally from:
     // https://github.com/HeartSaVioR/hive/commit/12f3f036b6efd0299cd1d457c0c0a65e0fd7e5f2
-    // which contain new UDF classes to be dynamically loaded and tested via Spark.
 
     // This jar file should not be placed to the classpath.
-    val jarPath = "src/test/noclasspath/hive-test-udfs.jar"
-    assume(new java.io.File(jarPath).exists)
-    val jarUrl = s"file://${System.getProperty("user.dir")}/$jarPath"
+    val jarUrl = s"file://${TestHiveUdfsJar.jar.getAbsolutePath}"
 
     test("Spark should be able to run Hive UDF using jar regardless of " +
       s"current thread context classloader (${udfInfo.identifier}") {

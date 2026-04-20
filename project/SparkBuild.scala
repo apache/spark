@@ -59,13 +59,17 @@ object BuildCommons {
     Seq("connect-common", "connect", "connect-client-jdbc", "connect-client-jvm", "connect-shims")
       .map(ProjectRef(buildLocation, _))
 
+  val udfWorkerProjects@Seq(udfWorkerProto, udfWorkerCore) =
+    Seq("udf-worker-proto", "udf-worker-core").map(ProjectRef(buildLocation, _))
+
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
     commonUtils, commonUtilsJava, variant, pipelines, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
     "tags", "sketch", "kvstore", "common-utils", "common-utils-java", "variant", "pipelines"
-  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ connectProjects
+  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ connectProjects ++
+    udfWorkerProjects
 
   val optionallyEnabledProjects@Seq(kubernetes, yarn,
     sparkGangliaLgpl, streamingKinesisAsl, profiler,
@@ -301,14 +305,16 @@ object SparkBuild extends PomBuild {
     unidocGenjavadocVersion := "0.19",
 
     // Override SBT's default resolvers:
-    resolvers := Seq(
-      // Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
-      // See https://storage-download.googleapis.com/maven-central/index.html for more info.
-      "gcs-maven-central-mirror" at "https://maven-central.storage-download.googleapis.com/maven2/",
-      DefaultMavenRepository,
-      Resolver.mavenLocal,
-      Resolver.file("ivyLocal", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
-    ),
+    resolvers :=
+      sys.env.get("MAVEN_MIRROR_URL").map("maven-mirror" at _).toSeq ++
+      Seq(
+        // Google Mirror of Maven Central, placed first so that it's used instead of flaky Maven Central.
+        // See https://storage-download.googleapis.com/maven-central/index.html for more info.
+        "gcs-maven-central-mirror" at "https://maven-central.storage-download.googleapis.com/maven2/",
+        DefaultMavenRepository,
+        Resolver.mavenLocal,
+        Resolver.file("ivyLocal", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
+      ),
     externalResolvers := resolvers.value,
     otherResolvers := SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))).value,
     (MavenCompile / publishLocalConfiguration) := PublishConfiguration()
@@ -405,7 +411,8 @@ object SparkBuild extends PomBuild {
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, tokenProviderKafka010, sqlKafka010, pipelines, connectCommon, connect,
-      connectJdbc, connectClient, variant, connectShims, profiler, commonUtilsJava
+      connectJdbc, connectClient, variant, connectShims, profiler, commonUtilsJava,
+      udfWorkerProto, udfWorkerCore
     ).contains(x)
   }
 
@@ -457,6 +464,9 @@ object SparkBuild extends PomBuild {
 
   /* Protobuf settings */
   enable(SparkProtobuf.settings)(protobuf)
+
+  /* UDF Worker Proto settings */
+  enable(UDFWorkerProto.settings)(udfWorkerProto)
 
   enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
 
@@ -1077,6 +1087,59 @@ object SparkProtobuf {
   }
 }
 
+object UDFWorkerProto {
+  import BuildCommons.protoVersion
+  lazy val settings = Seq(
+    PB.protocVersion := BuildCommons.protoVersion,
+    libraryDependencies += "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf",
+
+    dependencyOverrides += "com.google.protobuf" % "protobuf-java" % protoVersion,
+
+    (Compile / PB.targets) := Seq(
+      PB.gens.java -> target.value / "generated-sources"
+    ),
+
+    (assembly / test) := { },
+
+    (assembly / logLevel) := Level.Info,
+
+    // Exclude `scala-library` from assembly.
+    (assembly / assemblyPackageScala / assembleArtifact) := false,
+
+    // Include only the proto module jar and protobuf-java in the assembly.
+    (assembly / assemblyExcludedJars) := {
+      val cp = (assembly / fullClasspath).value
+      val validPrefixes = Set("spark-udf-worker-proto", "protobuf-")
+      cp filterNot { v =>
+        validPrefixes.exists(v.data.getName.startsWith)
+      }
+    },
+
+    (assembly / assemblyShadeRules) := Seq(
+      ShadeRule.rename("com.google.protobuf.**" ->
+        "org.sparkproject.spark_udf_worker.protobuf.@1").inAll,
+    ),
+
+    (assembly / assemblyMergeStrategy) := {
+      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
+      case m if m.toLowerCase(Locale.ROOT).matches("meta-inf.*\\.sf$") => MergeStrategy.discard
+      case m if m.toLowerCase(Locale.ROOT).startsWith("meta-inf/services/") =>
+        MergeStrategy.filterDistinctLines
+      case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
+      case _ => MergeStrategy.first
+    }
+  ) ++ {
+    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
+    if (sparkProtocExecPath.isDefined) {
+      Seq(
+        PB.protocExecutable := file(sparkProtocExecPath.get)
+      )
+    } else {
+      Seq.empty
+    }
+  }
+}
+
 object Unsafe {
   lazy val settings = Seq()
 }
@@ -1192,17 +1255,23 @@ object DependencyOverrides {
     dependencyOverrides ++= {
       val guavaVersion = sys.props.get("guava.version").getOrElse(
         SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String])
+      val gsonVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("gson.version").asInstanceOf[String]
       val jlineVersion =
         SbtPomKeys.effectivePom.value.getProperties.get("jline.version").asInstanceOf[String]
       val avroVersion =
         SbtPomKeys.effectivePom.value.getProperties.get("avro.version").asInstanceOf[String]
       val slf4jVersion =
         SbtPomKeys.effectivePom.value.getProperties.get("slf4j.version").asInstanceOf[String]
+      val xzVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("xz.version").asInstanceOf[String]
       Seq(
         "com.google.guava" % "guava" % guavaVersion,
+        "com.google.code.gson" % "gson" % gsonVersion,
         "jline" % "jline" % jlineVersion,
         "org.apache.avro" % "avro" % avroVersion,
         "org.slf4j" % "slf4j-api" % slf4jVersion,
+        "org.tukaani" % "xz" % xzVersion,
         "org.scala-lang" % "scalap" % scalaVersion.value
       ) ++ jacksonDeps.key.value
     }
@@ -1220,7 +1289,9 @@ object ExcludedDependencies {
       ExclusionRule(organization = "ch.qos.logback"),
       ExclusionRule("org.lz4", "lz4-java"),
       ExclusionRule("org.slf4j", "slf4j-simple"),
-      ExclusionRule("javax.servlet", "javax.servlet-api"))
+      ExclusionRule("javax.servlet", "javax.servlet-api"),
+      ExclusionRule("io.netty", "netty-codec-protobuf"),
+      ExclusionRule("io.netty", "netty-codec-marshalling"))
   )
 }
 
@@ -1654,7 +1725,7 @@ object Unidoc {
     (JavaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
         yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectJdbc,
-        connectClient, connectShims, protobuf, profiler),
+        connectClient, connectShims, protobuf, profiler, udfWorkerProto, udfWorkerCore),
   )
 }
 

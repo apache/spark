@@ -16,10 +16,10 @@
 #
 from abc import ABC, abstractmethod
 from collections import UserDict
+from collections.abc import MutableMapping
 from dataclasses import dataclass
 from typing import (
     Any,
-    Dict,
     Iterable,
     Iterator,
     List,
@@ -85,7 +85,7 @@ class DataSource(ABC):
     .. versionadded: 4.0.0
     """
 
-    def __init__(self, options: Dict[str, str]) -> None:
+    def __init__(self, options: MutableMapping[str, str]) -> None:
         """
         Initializes the data source with user-provided options.
 
@@ -1279,7 +1279,7 @@ class CaseInsensitiveDict(UserDict):
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
+        super().__init__()
         self.update(*args, **kwargs)
 
     def __setitem__(self, key: str, value: Any) -> None:

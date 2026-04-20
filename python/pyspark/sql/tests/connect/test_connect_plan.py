@@ -27,11 +27,21 @@ from pyspark.testing.connectutils import (
 )
 from pyspark.errors import PySparkValueError
 
+from unittest.mock import MagicMock
+
 if should_test_connect:
     import pyspark.sql.connect.proto as proto
     from pyspark.sql.connect.column import Column
     from pyspark.sql.connect.dataframe import DataFrame
-    from pyspark.sql.connect.plan import WriteOperation, Read
+    from pyspark.sql.connect.plan import (
+        WriteOperation,
+        Read,
+        Join,
+        SetOperation,
+        CollectMetrics,
+        LogicalPlan,
+    )
+    from pyspark.sql.connect.observation import Observation
     from pyspark.sql.connect.readwriter import DataFrameReader
     from pyspark.sql.connect.expressions import LiteralExpression
     from pyspark.sql.connect.functions import col, lit, max, min, sum
@@ -595,6 +605,72 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(len(data_source.paths), 1)
         self.assertEqual(data_source.paths[0], "test_path")
 
+    def test_relation_changes(self):
+        reader = DataFrameReader(self.connect)
+        df = reader.option("startingVersion", "1").option("endingVersion", "5").changes("myTable")
+        plan = df._plan.to_proto(self.connect)
+        relation_changes = plan.root.relation_changes
+        self.assertEqual(relation_changes.unparsed_identifier, "myTable")
+        self.assertEqual(relation_changes.options.get("startingVersion"), "1")
+        self.assertEqual(relation_changes.options.get("endingVersion"), "5")
+        self.assertFalse(relation_changes.is_streaming)
+
+    def test_relation_changes_no_options(self):
+        reader = DataFrameReader(self.connect)
+        df = reader.changes("catalog.schema.myTable")
+        plan = df._plan.to_proto(self.connect)
+        relation_changes = plan.root.relation_changes
+        self.assertEqual(relation_changes.unparsed_identifier, "catalog.schema.myTable")
+        self.assertEqual(len(relation_changes.options), 0)
+        self.assertFalse(relation_changes.is_streaming)
+
+    def test_relation_changes_with_timestamp_options(self):
+        reader = DataFrameReader(self.connect)
+        df = (
+            reader.option("startingTimestamp", "2024-01-01T00:00:00Z")
+            .option("endingTimestamp", "2024-06-01T00:00:00Z")
+            .changes("myTable")
+        )
+        plan = df._plan.to_proto(self.connect)
+        relation_changes = plan.root.relation_changes
+        self.assertEqual(relation_changes.options.get("startingTimestamp"), "2024-01-01T00:00:00Z")
+        self.assertEqual(relation_changes.options.get("endingTimestamp"), "2024-06-01T00:00:00Z")
+
+    def test_relation_changes_oneof_is_relation_changes(self):
+        reader = DataFrameReader(self.connect)
+        df = reader.option("startingVersion", "1").changes("myTable")
+        plan = df._plan.to_proto(self.connect)
+        self.assertEqual(plan.root.WhichOneof("rel_type"), "relation_changes")
+
+    def test_relation_changes_streaming(self):
+        from pyspark.sql.connect.plan import RelationChanges
+
+        plan = RelationChanges("myTable", {"startingVersion": "10"}, is_streaming=True).plan(
+            self.connect
+        )
+        relation_changes = plan.relation_changes
+        self.assertEqual(relation_changes.unparsed_identifier, "myTable")
+        self.assertEqual(relation_changes.options.get("startingVersion"), "10")
+        self.assertTrue(relation_changes.is_streaming)
+
+    def test_relation_changes_streaming_via_stream_reader(self):
+        from pyspark.sql.connect.streaming.readwriter import DataStreamReader
+
+        reader = DataStreamReader(self.connect)
+        df = reader.option("startingVersion", "1").changes("myTable")
+        plan = df._plan.to_proto(self.connect)
+        relation_changes = plan.root.relation_changes
+        self.assertEqual(relation_changes.unparsed_identifier, "myTable")
+        self.assertEqual(relation_changes.options.get("startingVersion"), "1")
+        self.assertTrue(relation_changes.is_streaming)
+
+    def test_relation_changes_plan_print(self):
+        from pyspark.sql.connect.plan import RelationChanges
+
+        rc = RelationChanges("myTable", {"startingVersion": "1"})
+        self.assertIn("RelationChanges", rc.print())
+        self.assertIn("myTable", rc.print())
+
     def test_all_the_plans(self):
         df = self.connect.readTable(table_name=self.tbl_name)
         df = df.select(df.col1).filter(df.col2 == 2).sort(df.col3.asc())
@@ -1063,6 +1139,89 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             )
 
             LiteralExpression._to_value(proto_lit, DoubleType)
+
+
+if should_test_connect:
+
+    class _StubPlan(LogicalPlan):
+        """Minimal LogicalPlan that returns a fixed observations dict."""
+
+        def __init__(self, observations=None):
+            super().__init__(None)
+            self._obs = observations or {}
+
+        @property
+        def observations(self):
+            return self._obs
+
+        def plan(self, session):
+            raise NotImplementedError
+
+        def print(self, indent=0):
+            return ""
+
+
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
+class TestObservationMerging(unittest.TestCase):
+    """Verify that observations are deduplicated when plan branches share the same key."""
+
+    def test_join_with_duplicate_observation_names(self):
+        obs = MagicMock()
+        obs._name = "shared"
+        shared = {"shared": obs}
+
+        left = _StubPlan(observations=shared)
+        right = _StubPlan(observations=shared)
+
+        join = Join.__new__(Join)
+        join._child = left
+        join.right = right
+
+        result = join.observations
+        self.assertEqual(result, {"shared": obs})
+
+    def test_join_with_distinct_observations(self):
+        obs_a = MagicMock()
+        obs_a._name = "a"
+        obs_b = MagicMock()
+        obs_b._name = "b"
+
+        left = _StubPlan(observations={"a": obs_a})
+        right = _StubPlan(observations={"b": obs_b})
+
+        join = Join.__new__(Join)
+        join._child = left
+        join.right = right
+
+        result = join.observations
+        self.assertEqual(result, {"a": obs_a, "b": obs_b})
+
+    def test_set_operation_with_duplicate_observation_names(self):
+        obs = MagicMock()
+        obs._name = "shared"
+        shared = {"shared": obs}
+
+        left = _StubPlan(observations=shared)
+        right = _StubPlan(observations=shared)
+
+        set_op = SetOperation.__new__(SetOperation)
+        set_op._child = left
+        set_op.other = right
+
+        result = set_op.observations
+        self.assertEqual(result, {"shared": obs})
+
+    def test_collect_metrics_with_duplicate_observation_name(self):
+        obs = Observation("my_metric")
+        parent = _StubPlan(observations={"my_metric": obs})
+
+        cm = CollectMetrics.__new__(CollectMetrics)
+        cm._child = parent
+        cm._observation = obs
+        cm._exprs = []
+
+        result = cm.observations
+        self.assertEqual(result, {"my_metric": obs})
 
 
 if __name__ == "__main__":

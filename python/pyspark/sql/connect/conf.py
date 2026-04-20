@@ -121,9 +121,10 @@ class RuntimeConf:
         """Assert that an object is of type str."""
         if not isinstance(obj, str):
             raise PySparkTypeError(
-                errorClass="NOT_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": identifier,
+                    "expected_type": "str",
                     "arg_type": type(obj).__name__,
                 },
             )

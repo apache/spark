@@ -591,6 +591,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
+  def unsupportedInsertReplaceOnOrUsing(tableName: String): Throwable = {
+    unsupportedTableOperationError(tableName, "INSERT INTO ... REPLACE ON/USING")
+  }
+
   def writeIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
     new AnalysisException(
       errorClass = "VIEW_WRITE_NOT_ALLOWED",
@@ -943,6 +947,34 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "searchPath" -> searchPath.map(toSQLId).mkString("[", ", ", "]")
       ),
       origin = context)
+  }
+
+  /**
+   * Raises TABLE_OR_VIEW_NOT_FOUND with a formatted list of resolution path entries.
+   *
+   * @param quotedResolutionPathEntries each string is already a display-ready path entry (typically
+   *        `toSQLId` of each segment from `SQLConf.resolutionSearchPath`). They are joined with
+   *        ", " inside square brackets. This differs from [[noSuchTableError]](nameParts:
+   *        Seq[String]), which builds one dotted bracketed path from `nameParts.dropRight(1)` via
+   *        [[org.apache.spark.sql.catalyst.analysis.NoSuchTableException]].
+   */
+  def tableOrViewNotFoundWithSearchPath(
+      name: Seq[String],
+      quotedResolutionPathEntries: Seq[String],
+      origin: Origin): Throwable = {
+    // Payload is data only: path list or fallback when empty. Template adds "Search path: " label.
+    val searchPathValue = if (quotedResolutionPathEntries.isEmpty) {
+      "not available"
+    } else {
+      quotedResolutionPathEntries.mkString("[", ", ", "]")
+    }
+    new AnalysisException(
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      messageParameters = Map(
+        "relationName" -> toSQLId(name),
+        "searchPath" -> searchPathValue
+      ),
+      origin = origin)
   }
 
   def notAScalarFunctionError(
@@ -1537,6 +1569,38 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new CannotReplaceMissingTableException(tableIdentifier, cause)
   }
 
+  def cannotReplaceMissingTableError(
+      tableIdentifier: Identifier,
+      searchPath: Seq[String]): Throwable = {
+    new CannotReplaceMissingTableException(tableIdentifier, None, searchPath)
+  }
+
+  def cannotReplaceMissingTableError(
+      tableIdentifier: Identifier,
+      searchPath: Seq[String],
+      cause: Option[Throwable]): Throwable = {
+    new CannotReplaceMissingTableException(tableIdentifier, cause, searchPath)
+  }
+
+  def cannotReplaceMissingTableError(
+      catalogName: String,
+      tableIdentifier: Identifier): Throwable = {
+    new CannotReplaceMissingTableException(
+      tableIdentifier,
+      None,
+      catalogName +: tableIdentifier.namespace().toSeq)
+  }
+
+  def cannotReplaceMissingTableError(
+      catalogName: String,
+      tableIdentifier: Identifier,
+      cause: Option[Throwable]): Throwable = {
+    new CannotReplaceMissingTableException(
+      tableIdentifier,
+      cause,
+      catalogName +: tableIdentifier.namespace().toSeq)
+  }
+
   def streamingSourcesDoNotSupportCommonExecutionModeError(
       microBatchSources: Seq[String],
       continuousSources: Seq[String]): Throwable = {
@@ -1551,6 +1615,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new NoSuchTableException(catalogName +: ident.asMultipartIdentifier)
   }
 
+  /**
+   * Table or view not found (TABLE_OR_VIEW_NOT_FOUND). The `searchPath` segment uses
+   * `nameParts.dropRight(1)` when `nameParts` has more than one part (catalog plus namespace);
+   * see [[NoSuchTableException]].
+   */
   def noSuchTableError(nameParts: Seq[String]): Throwable = {
     new NoSuchTableException(nameParts)
   }
@@ -1616,9 +1685,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def unsupportedJDBCNamespaceChangeInCatalogError(changes: Seq[NamespaceChange]): Throwable = {
+    val changesDesc = changes.map(_.toString).mkString("; ")
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1120",
-      messageParameters = Map("changes" -> changes.toString()))
+      messageParameters = Map("changes" -> changesDesc))
   }
 
   private def tableDoesNotSupportError(cmd: String, table: Table): Throwable = {
@@ -3424,6 +3494,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "columnName" -> toSQLId(columnName)
       )
     )
+  }
+
+  def dataframeInputNotSingleColumnError(numColumns: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "DATAFRAME_INPUT_NOT_SINGLE_COLUMN",
+      messageParameters = Map("numColumns" -> numColumns.toString))
+  }
+
+  def dataframeInputNotStringTypeError(dataType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "DATAFRAME_INPUT_NOT_STRING_TYPE",
+      messageParameters = Map("dataType" -> toSQLType(dataType)))
   }
 
   def textDataSourceWithMultiColumnsError(schema: StructType): Throwable = {

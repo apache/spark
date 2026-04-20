@@ -196,8 +196,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
     case DescribeRelation(
-        ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended, output) =>
-      DescribeTableCommand(ident, partitionSpec, isExtended, output)
+        resolvedChild @ ResolvedV1TableOrViewIdentifier(ident),
+        partitionSpec,
+        isExtended,
+        output) =>
+      DescribeTableCommand(resolvedChild, ident, partitionSpec, isExtended, output)
 
     case DescribeColumn(
         ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended, output) =>
@@ -293,6 +296,17 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c
       }
 
+    // For CREATE TABLE LIKE, use the v1 command if both the target and source are in the session
+    // catalog (or a V1-compatible catalog extension). If source is in a different catalog, fall
+    // through to the V2 execution path (CreateTableLikeExec via DataSourceV2Strategy).
+    case CreateTableLike(
+        ResolvedV1Identifier(targetIdent),
+        ResolvedV1TableOrViewIdentifier(sourceIdent),
+        location, provider, serdeInfo, properties, ifNotExists) =>
+      val fileFormat = buildStorageFormatFromSerdeInfo(location, serdeInfo)
+      CreateTableLikeCommand(
+        targetIdent, sourceIdent, fileFormat, provider, properties, ifNotExists)
+
     case DropTable(ResolvedV1Identifier(ident), ifExists, purge) if conf.useV1Command =>
       DropTableCommand(ident, ifExists, isView = false, purge = purge)
 
@@ -300,12 +314,16 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DropTable(ResolvedIdentifier(FakeSystemCatalog, ident), _, _) =>
       DropTempViewCommand(ident)
 
+    // Session-qualified temp view: same execution path as FakeSystemCatalog DROP VIEW.
+    case DropView(ResolvedTempView(ident, _), ifExists) =>
+      DropTempViewCommand(ident, ifExists)
+
     case DropView(DropViewInSessionCatalog(ident), ifExists) =>
       DropTableCommand(ident, ifExists, isView = true, purge = false)
 
-    case DropView(r @ ResolvedIdentifier(catalog, ident), _) =>
+    case DropView(r @ ResolvedIdentifier(catalog, ident), ifExists) =>
       if (catalog == FakeSystemCatalog) {
-        DropTempViewCommand(ident)
+        DropTempViewCommand(ident, ifExists)
       } else {
         throw QueryCompilationErrors.catalogOperationNotSupported(catalog, "views")
       }
@@ -416,7 +434,22 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         output,
         pattern.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
 
-    case ShowColumns(ResolvedV1TableOrViewIdentifier(ident), ns, output) =>
+    case ShowColumns(resolvedChild @ ResolvedViewIdentifier(ident), ns, output) =>
+      val resolver = conf.resolver
+      val db = ns match {
+        case Some(nsSeq) if ident.database.exists(!resolver(_, nsSeq.head)) =>
+          throw QueryCompilationErrors.showColumnsWithConflictNamespacesError(
+            Seq(nsSeq.head), Seq(ident.database.get))
+        case _ => ns.map(_.head)
+      }
+      // Use unqualified table name when namespace comes from FROM clause so analyzer output
+      // matches expected format (e.g. "SHOW COLUMNS IN showcolumn4 FROM global_temp").
+      val tableNameForCommand =
+        if (db.isDefined && ident.database == db) TableIdentifier(ident.table, None) else ident
+      ShowColumnsCommand(resolvedChild, db, tableNameForCommand, output)
+
+    case ShowColumns(
+        resolvedChild @ ResolvedV1TableIdentifier(ident), ns, output) =>
       val v1TableName = ident
       val resolver = conf.resolver
       val db = ns match {
@@ -425,7 +458,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
             Seq(db.head), Seq(v1TableName.database.get))
         case _ => ns.map(_.head)
       }
-      ShowColumnsCommand(db, v1TableName, output)
+      ShowColumnsCommand(resolvedChild, db, v1TableName, output)
 
     // V2 catalog doesn't support RECOVER PARTITIONS yet, we must use v1 command here.
     case RecoverPartitions(ResolvedV1TableIdentifierInSessionCatalog(ident)) =>
@@ -626,6 +659,15 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     CreateTableV1(tableDesc, mode, query)
   }
 
+  private def buildStorageFormatFromSerdeInfo(
+      location: Option[String],
+      maybeSerdeInfo: Option[SerdeInfo]): CatalogStorageFormat = {
+    HiveSerDe.buildStorageFormat(
+      location,
+      maybeSerdeInfo,
+      si => QueryCompilationErrors.invalidFileFormatForStoredAsError(si))
+  }
+
   private def getStorageFormatAndProvider(
       provider: Option[String],
       options: Map[String, String],
@@ -730,7 +772,12 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
 
       case ResolvedTempView(ident, _) =>
-        Some(TableIdentifier(ident.name(), ident.namespace().headOption))
+        // Global temp views have a namespace (e.g. global_temp); preserve it so ALTER VIEW
+        // and DROP VIEW find the view. Local temp views are keyed by table name only.
+        // system.session.viewName -> use database "session" so SessionCatalog resolves
+        // it as a temp view.
+        val db = CatalogManager.databaseForSessionQualifiedViewIdentifier(ident.namespace().toSeq)
+        Some(TableIdentifier(ident.name(), db))
 
       case _ => None
     }
@@ -791,6 +838,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
             throw QueryCompilationErrors.operationNotAllowedOnBuiltinNamespaceError(
               statement, objectType, ident.name())
           }
+          // Pass full identifier (namespace + name) so error shows e.g. "`a`.`b`.`c`"
           throw QueryCompilationErrors
             .requiresSinglePartNamespaceError(ident.namespace().toSeq :+ ident.name())
         }

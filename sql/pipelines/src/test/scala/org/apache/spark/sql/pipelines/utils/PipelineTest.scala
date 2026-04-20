@@ -44,6 +44,7 @@ abstract class PipelineTest
   with TargetCatalogAndDatabaseMixin
   with Logging
   with Eventually {
+  import testImplicits._
 
   protected def startPipelineAndWaitForCompletion(
        unresolvedDataflowGraph: DataflowGraph): Unit = {

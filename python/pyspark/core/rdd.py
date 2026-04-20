@@ -97,7 +97,7 @@ from pyspark.util import PythonEvalType  # noqa: F401
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
 
-    from pyspark._typing import S, NumberOrArray
+    from pyspark._typing import S, SizedIterable, NumberOrArray
     from pyspark.core.context import SparkContext
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.types import AtomicType, StructType
@@ -1274,7 +1274,7 @@ class RDD(Generic[T_co]):
         serializer = self._jrdd_deserializer
 
         def sortPartition(iterator: Iterable[Tuple[K, V]]) -> Iterable[Tuple[K, V]]:
-            sort = ExternalSorter(memory * 0.9, serializer).sorted
+            sort = ExternalSorter[tuple[K, V]](memory * 0.9, serializer).sorted
             return iter(sort(iterator, key=lambda k_v: keyfunc(k_v[0]), reverse=(not ascending)))
 
         return self.partitionBy(numPartitions, partitionFunc).mapPartitions(sortPartition, True)
@@ -1354,7 +1354,7 @@ class RDD(Generic[T_co]):
         serializer = self._jrdd_deserializer
 
         def sortPartition(iterator: Iterable[Tuple[K, V]]) -> Iterable[Tuple[K, V]]:
-            sort = ExternalSorter(memory * 0.9, serializer).sorted
+            sort = ExternalSorter[tuple[K, V]](memory * 0.9, serializer).sorted
             return iter(sort(iterator, key=lambda kv: keyfunc(kv[0]), reverse=(not ascending)))
 
         if numPartitions == 1:
@@ -3841,7 +3841,7 @@ class RDD(Generic[T_co]):
         agg = Aggregator(createCombiner, mergeValue, mergeCombiners)
 
         def combineLocally(iterator: Iterable[Tuple[K, V]]) -> Iterable[Tuple[K, U]]:
-            merger = ExternalMerger(agg, memory * 0.9, serializer)
+            merger = ExternalMerger[K, V, U](agg, memory * 0.9, serializer)
             merger.mergeValues(iterator)
             return merger.items()
 
@@ -3849,7 +3849,7 @@ class RDD(Generic[T_co]):
         shuffled = locally_combined.partitionBy(numPartitions, partitionFunc)
 
         def _mergeCombiners(iterator: Iterable[Tuple[K, U]]) -> Iterable[Tuple[K, U]]:
-            merger = ExternalMerger(agg, memory, serializer)
+            merger = ExternalMerger[K, V, U](agg, memory, serializer)
             merger.mergeCombiners(iterator)
             return merger.items()
 
@@ -4033,15 +4033,15 @@ class RDD(Generic[T_co]):
         agg = Aggregator(createCombiner, mergeValue, mergeCombiners)
 
         def combine(iterator: Iterable[Tuple[K, V]]) -> Iterable[Tuple[K, List[V]]]:
-            merger = ExternalMerger(agg, memory * 0.9, serializer)
+            merger = ExternalMerger[K, V, list[V]](agg, memory * 0.9, serializer)
             merger.mergeValues(iterator)
             return merger.items()
 
         locally_combined = self.mapPartitions(combine, preservesPartitioning=True)
         shuffled = locally_combined.partitionBy(numPartitions, partitionFunc)
 
-        def groupByKey(it: Iterable[Tuple[K, List[V]]]) -> Iterable[Tuple[K, List[V]]]:
-            merger = ExternalGroupBy(agg, memory, serializer)
+        def groupByKey(it: Iterable[Tuple[K, List[V]]]) -> Iterable[Tuple[K, "SizedIterable[V]"]]:
+            merger = ExternalGroupBy[K, V](agg, memory, serializer)  # type: ignore[arg-type]
             merger.mergeCombiners(it)
             return merger.items()
 

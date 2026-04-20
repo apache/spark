@@ -296,15 +296,25 @@ class PlanParserSuite extends AnalysisTest {
       cte(table("cte2").select(star()), false,
         "cte1" -> ((OneRowRelation().select(1), Seq.empty)),
         "cte2" -> ((table("cte1").select(star()), Seq.empty))))
-    val sql = "with cte1 (select 1), cte1 as (select 1 from cte1) select * from cte1"
+    val sql1 = "with cte1 (select 1), cte1 as (select 1 from cte1) select * from cte1"
     checkError(
-      exception = parseException(sql),
+      exception = parseException(sql1),
       condition = "DUPLICATED_CTE_NAMES",
       parameters = Map("duplicateNames" -> "`cte1`"),
       context = ExpectedContext(
-        fragment = sql,
+        fragment = sql1,
         start = 0,
         stop = 68))
+    // Case-insensitive duplicate CTE names should also be detected.
+    val sql2 = "with CTE1 (select 1), cte1 as (select 2) select * from cte1"
+    checkError(
+      exception = parseException(sql2),
+      condition = "DUPLICATED_CTE_NAMES",
+      parameters = Map("duplicateNames" -> "`cte1`"),
+      context = ExpectedContext(
+        fragment = sql2,
+        start = 0,
+        stop = 58))
   }
 
   test("simple select query") {
@@ -821,9 +831,14 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(s"$sql tablesample(100 rows)",
       table("t").limit(100).select(star()))
     assertEqual(s"$sql tablesample(43 percent) as x",
-      Sample(0, .43d, withReplacement = false, 10L, table("t").as("x")).select(star()))
+      Sample(0, .43d, withReplacement = false, None, table("t").as("x")).select(star()))
     assertEqual(s"$sql tablesample(bucket 4 out of 10) as x",
-      Sample(0, .4d, withReplacement = false, 10L, table("t").as("x")).select(star()))
+      Sample(0, .4d, withReplacement = false, None, table("t").as("x")).select(star()))
+    // REPEATABLE clause produces Some(seed)
+    assertEqual(s"$sql tablesample(43 percent) repeatable (10) as x",
+      Sample(0, .43d, withReplacement = false, 10L, table("t").as("x")).select(star()))
+    assertEqual(s"$sql tablesample(bucket 4 out of 10) repeatable (99) as x",
+      Sample(0, .4d, withReplacement = false, 99L, table("t").as("x")).select(star()))
 
     val sql1 = s"$sql tablesample(bucket 4 out of 10 on x) as x"
     val fragment1 = "tablesample(bucket 4 out of 10 on x)"

@@ -67,6 +67,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private val minRegisteredExecutors = initialExecutors * minRegisteredRatio
 
+  private val appId: String =
+    conf.getOption("spark.app.id").getOrElse(KubernetesConf.getKubernetesAppId())
+
   private val namespace = conf.get(KUBERNETES_NAMESPACE)
 
   private val PATCH_CONTEXT = PatchContext.of(PatchType.STRATEGIC_MERGE)
@@ -98,13 +101,11 @@ private[spark] class KubernetesClusterSchedulerBackend(
   /**
    * Get an application ID associated with the job.
    * This returns the string value of spark.app.id if set, otherwise
-   * the locally-generated ID.
+   * a generated Kubernetes app ID.
    *
    * @return The application ID
    */
-  override def applicationId(): String = {
-    conf.getOption("spark.app.id").getOrElse(KubernetesConf.getKubernetesAppId())
-  }
+  override def applicationId(): String = appId
 
   override def start(): Unit = {
     super.start()

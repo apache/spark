@@ -1219,9 +1219,10 @@ class SparkSession(SparkConversionMixin):
 
         else:
             raise PySparkTypeError(
-                errorClass="NOT_LIST_OR_NONE_OR_STRUCT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "schema",
+                    "expected_type": "list, None or StructType",
                     "arg_type": type(schema).__name__,
                 },
             )
@@ -1261,9 +1262,10 @@ class SparkSession(SparkConversionMixin):
 
         else:
             raise PySparkTypeError(
-                errorClass="NOT_LIST_OR_NONE_OR_STRUCT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "schema",
+                    "expected_type": "list, None or StructType",
                     "arg_type": type(schema).__name__,
                 },
             )
@@ -1702,6 +1704,50 @@ class SparkSession(SparkConversionMixin):
         df._schema = struct
         return df
 
+    def emptyDataFrame(self, schema: Union[StructType, str]) -> "ParentDataFrame":
+        """Creates an empty :class:`DataFrame` with the specified schema.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        schema : :class:`StructType` or str
+            a :class:`StructType` or a DDL-formatted string that describes the schema.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            An empty DataFrame with the specified schema.
+
+        Examples
+        --------
+        Create an empty DataFrame with a StructType schema.
+
+        >>> from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+        >>> schema = StructType([
+        ...     StructField("name", StringType(), True),
+        ...     StructField("age", IntegerType(), True)
+        ... ])
+        >>> df = spark.emptyDataFrame(schema)
+        >>> df.printSchema()
+        root
+         |-- name: string (nullable = true)
+         |-- age: integer (nullable = true)
+        >>> df.count()
+        0
+
+        Create an empty DataFrame with a DDL-formatted string schema.
+
+        >>> df = spark.emptyDataFrame("name STRING, age INT")
+        >>> df.printSchema()
+        root
+         |-- name: string (nullable = true)
+         |-- age: integer (nullable = true)
+        >>> df.count()
+        0
+        """
+        return self.createDataFrame([], schema)
+
     def sql(
         self, sqlQuery: str, args: Optional[Union[Dict[str, Any], List]] = None, **kwargs: Any
     ) -> "ParentDataFrame":
@@ -1904,8 +1950,12 @@ class SparkSession(SparkConversionMixin):
         """
         if not isinstance(tableName, str):
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "tableName", "arg_type": type(tableName).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "tableName",
+                    "expected_type": "str",
+                    "arg_type": type(tableName).__name__,
+                },
             )
 
         return DataFrame(self._jsparkSession.table(tableName), self)

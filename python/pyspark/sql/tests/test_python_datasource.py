@@ -17,7 +17,6 @@
 import contextlib
 import io
 import os
-import platform
 import tempfile
 import unittest
 import logging
@@ -824,9 +823,6 @@ class BasePythonDataSourceTestsMixin:
         rounded = df.select("d").first().d
         self.assertEqual(rounded, Decimal("1.233999999999999986"))
 
-    @unittest.skipIf(
-        "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
-    )
     def test_data_source_segfault(self):
         import ctypes
 

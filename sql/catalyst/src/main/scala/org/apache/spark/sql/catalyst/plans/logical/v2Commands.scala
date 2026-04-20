@@ -57,11 +57,11 @@ trait KeepAnalyzedQuery extends Command {
 /**
  * Trait that gathers schema evolution logic shared by V2 write commands and MERGE INTO.
  */
-trait SupportsSchemaEvolution extends LogicalPlan {
+trait WriteWithSchemaEvolution extends LogicalPlan {
   /** The target of the write operation. */
   def table: LogicalPlan
 
-  def withNewTable(newTable: NamedRelation): SupportsSchemaEvolution
+  def withNewTable(newTable: NamedRelation): WriteWithSchemaEvolution
 
   /** Whether schema evolution is enabled for the write operation. */
   def withSchemaEvolution: Boolean
@@ -98,7 +98,7 @@ trait V2WriteCommand
     extends UnaryCommand
     with KeepAnalyzedQuery
     with CTEInChildren
-    with SupportsSchemaEvolution {
+    with WriteWithSchemaEvolution {
   def table: NamedRelation
   def query: LogicalPlan
   def isByName: Boolean
@@ -130,7 +130,7 @@ trait V2WriteCommand
 
   override lazy val pendingSchemaChanges: Seq[TableChange] = {
     if (schemaEvolutionEnabled && schemaEvolutionReady) {
-      ResolveSchemaEvolution.computeSchemaChanges(table.schema, query.schema, isByName).toSeq
+      ResolveSchemaEvolution.computeSupportedSchemaChanges(table, query.schema, isByName).toSeq
     } else {
       Seq.empty
     }
@@ -616,6 +616,41 @@ case class CreateTable(
 }
 
 /**
+ * Create a new table with the same schema/partitioning as an existing table or view,
+ * for use with a v2 catalog.
+ *
+ * @param name        Target table identifier. Starts as UnresolvedIdentifier, resolved to
+ *                    ResolvedIdentifier by ResolveCatalogs.
+ * @param source      Source table or view. Starts as UnresolvedTableOrView, resolved to
+ *                    ResolvedTable / ResolvedPersistentView / ResolvedTempView by ResolveRelations.
+ * @param location    User-specified LOCATION. None if not specified.
+ * @param provider    User-specified USING provider. None if not specified.
+ * @param serdeInfo   User-specified STORED AS / ROW FORMAT (Hive-style). None if not specified.
+ *                    Kept separate from [[location]] so that [[ResolveSessionCatalog]] can
+ *                    reconstruct the full
+ *                    [[org.apache.spark.sql.catalyst.catalog.CatalogStorageFormat]]
+ *                    for the V1 fallback path without pulling V1 catalog types into this plan.
+ * @param properties  User-specified TBLPROPERTIES.
+ * @param ifNotExists IF NOT EXISTS flag.
+ */
+case class CreateTableLike(
+    name: LogicalPlan,
+    source: LogicalPlan,
+    location: Option[String],
+    provider: Option[String],
+    serdeInfo: Option[SerdeInfo],
+    properties: Map[String, String],
+    ifNotExists: Boolean) extends BinaryCommand {
+
+  override def left: LogicalPlan = name
+  override def right: LogicalPlan = source
+
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): CreateTableLike =
+    copy(name = newLeft, source = newRight)
+}
+
+/**
  * Create a new table from a select query with a v2 catalog.
  */
 case class CreateTableAsSelect(
@@ -963,7 +998,7 @@ case class MergeIntoTable(
     notMatchedActions: Seq[MergeAction],
     notMatchedBySourceActions: Seq[MergeAction],
     withSchemaEvolution: Boolean)
-    extends BinaryCommand with SupportsSchemaEvolution with SupportsSubquery {
+    extends BinaryCommand with WriteWithSchemaEvolution with SupportsSubquery {
 
   override val table: LogicalPlan = EliminateSubqueryAliases(targetTable)
 
@@ -1007,8 +1042,8 @@ case class MergeIntoTable(
   override lazy val pendingSchemaChanges: Seq[TableChange] = {
     if (schemaEvolutionEnabled && schemaEvolutionReady) {
       val referencedSourceSchema = MergeIntoTable.sourceSchemaForSchemaEvolution(this)
-      ResolveSchemaEvolution.computeSchemaChanges(
-        targetTable.schema, referencedSourceSchema, isByName = true).toSeq
+      ResolveSchemaEvolution.computeSupportedSchemaChanges(
+        table, referencedSourceSchema, isByName = true).toSeq
     } else {
       Seq.empty
     }
@@ -1115,6 +1150,7 @@ object MergeIntoTable {
     expr match {
       case UnresolvedAttribute(nameParts) if allowUnresolved => nameParts
       case a: AttributeReference => Seq(a.name)
+      case Alias(child, _) => extractFieldPath(child, allowUnresolved)
       case GetStructField(child, ordinal, nameOpt) =>
         extractFieldPath(child, allowUnresolved) :+ nameOpt.getOrElse(s"col$ordinal")
       case _ => Seq.empty
