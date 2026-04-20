@@ -7123,7 +7123,6 @@ object SQLConf {
 
   val XML_VARIANT_RESPECT_INFER_SCHEMA =
     buildConf("spark.sql.xml.variant.respectInferSchema")
-      .internal()
       .doc(
         "When set to true, the XML to Variant parser honors the 'inferSchema' option: if " +
         "'inferSchema' is false, primitive leaf values (text and attributes) are preserved as " +
