@@ -49,7 +49,7 @@ class InMemoryTable(
     override val id: String = UUID.randomUUID().toString)
   extends InMemoryBaseTable(name, columns, partitioning, properties, constraints, distribution,
     ordering, numPartitions, advisoryPartitionSize, isDistributionStrictlyRequired,
-    numRowsPerSplit) with SupportsDelete {
+    numRowsPerSplit) with SupportsDelete with InMemoryDeleteRowCountMetric {
 
   def this(
       name: String,
@@ -69,8 +69,10 @@ class InMemoryTable(
 
   override def deleteWhere(filters: Array[Filter]): Unit = dataMap.synchronized {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
-    dataMap --= InMemoryTable
+    val keysToDelete = InMemoryTable
       .filtersToKeys(dataMap.keys, partCols.map(_.toSeq.quoted).toImmutableArraySeq, filters)
+    recordDeletedRows(keysToDelete)
+    dataMap --= keysToDelete
     increaseVersion()
   }
 

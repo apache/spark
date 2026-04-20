@@ -18,10 +18,13 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.connector.metric.NumDeletedRowsMetric
+import org.apache.spark.sql.execution.datasources.v2.TruncateTableExec
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -36,6 +39,23 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "TRUNCATE TABLE"
+
+  /**
+   * Runs `thunk` (a TRUNCATE TABLE statement) and, when a v2 [[TruncateTableExec]] plan is
+   * produced, asserts the number of deleted rows reported via the connector's driver metrics.
+   * On the v1 command path no [[TruncateTableExec]] is emitted, so the assertion is skipped.
+   */
+  protected def checkTruncateMetrics(numDeletedRows: Long)(thunk: => Unit): Unit = {
+    val plans = withQueryExecutionsCaptured(spark)(thunk).map(_.executedPlan).collect {
+      case t: TruncateTableExec => t
+    }
+    if (plans.nonEmpty) {
+      assert(plans.size === 1, s"expected exactly one TruncateTableExec, got $plans")
+      val actual = plans.head.metrics(NumDeletedRowsMetric.NAME).value
+      assert(actual === numDeletedRows,
+        s"expected numDeletedRows=$numDeletedRows, got $actual")
+    }
+  }
 
   test("table does not exist") {
     withNamespaceAndTable("ns", "does_not_exist") { t =>
@@ -53,7 +73,9 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"CREATE TABLE $t (c0 INT, c1 INT) $defaultUsing")
       sql(s"INSERT INTO $t SELECT 0, 1")
 
-      sql(s"TRUNCATE TABLE $t")
+      checkTruncateMetrics(numDeletedRows = 1) {
+        sql(s"TRUNCATE TABLE $t")
+      }
       QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Nil)
     }
   }
@@ -159,7 +181,9 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       checkAnswer(
         sql(s"SELECT width, length, height FROM $t"),
         Seq(Row(0, 0, 0), Row(1, 1, 1), Row(1, 2, 3)))
-      sql(s"TRUNCATE TABLE $t")
+      checkTruncateMetrics(numDeletedRows = 3) {
+        sql(s"TRUNCATE TABLE $t")
+      }
       checkAnswer(sql(s"SELECT width, length, height FROM $t"), Nil)
       checkPartitions(t,
         Map("width" -> "0", "length" -> "0"),
@@ -203,7 +227,9 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"CACHE TABLE $t")
       assert(spark.catalog.isCached(t))
       QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Row(0) :: Nil)
-      sql(s"TRUNCATE TABLE $t")
+      checkTruncateMetrics(numDeletedRows = 1) {
+        sql(s"TRUNCATE TABLE $t")
+      }
       assert(spark.catalog.isCached(t))
       QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Nil)
     }

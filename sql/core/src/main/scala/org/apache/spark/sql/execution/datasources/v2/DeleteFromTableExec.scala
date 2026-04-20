@@ -21,14 +21,21 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.SupportsDeleteV2
 import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.execution.metric.SQLMetric
 
 case class DeleteFromTableExec(
     table: SupportsDeleteV2,
     condition: Array[Predicate],
-    refreshCache: () => Unit) extends LeafV2CommandExec {
+    refreshCache: () => Unit)
+  extends LeafV2CommandExec
+  with SupportsCustomDriverMetrics {
+
+  override lazy val customMetrics: Map[String, SQLMetric] =
+    createCustomMetrics(table.supportedCustomMetrics())
 
   override protected def run(): Seq[InternalRow] = {
     table.deleteWhere(condition)
+    postDriverMetrics(table.reportDriverMetrics())
     refreshCache()
     Seq.empty
   }
