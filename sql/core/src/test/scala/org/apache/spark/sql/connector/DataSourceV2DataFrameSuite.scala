@@ -1886,6 +1886,99 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  // Column IDs for ARRAY columns: drop and re-add gets a new ID,
+  // just like scalar or struct columns.
+  test("drop and re-add array column gets new column ID") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, tags ARRAY<STRING>) USING foo")
+
+      val origCols = catalog("testcat").loadTable(ident).columns()
+      val origTagsId = origCols.find(_.name() == "tags").get.id()
+      assert(origTagsId != null)
+
+      sql(s"ALTER TABLE $t DROP COLUMN tags")
+      sql(s"ALTER TABLE $t ADD COLUMN tags ARRAY<STRING>")
+
+      val newCols = catalog("testcat").loadTable(ident).columns()
+      val newTagsId = newCols.find(_.name() == "tags").get.id()
+      assert(newTagsId != origTagsId,
+        "Array column should get new ID after drop+re-add: " +
+          s"was $origTagsId, got $newTagsId")
+    }
+  }
+
+  // Column IDs for MAP columns: drop and re-add gets a new ID.
+  test("drop and re-add map column gets new column ID") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t " +
+        s"(id INT, props MAP<STRING, INT>) USING foo")
+
+      val origCols = catalog("testcat").loadTable(ident).columns()
+      val origPropsId =
+        origCols.find(_.name() == "props").get.id()
+      assert(origPropsId != null)
+
+      sql(s"ALTER TABLE $t DROP COLUMN props")
+      sql(s"ALTER TABLE $t ADD COLUMN props MAP<STRING, INT>")
+
+      val newCols = catalog("testcat").loadTable(ident).columns()
+      val newPropsId =
+        newCols.find(_.name() == "props").get.id()
+      assert(newPropsId != origPropsId,
+        "Map column should get new ID after drop+re-add: " +
+          s"was $origPropsId, got $newPropsId")
+    }
+  }
+
+  // DataFrame detects column ID change for array column
+  // after drop+re-add with same name and type.
+  test("DataFrame detects array column ID change after drop+re-add") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, tags ARRAY<STRING>) USING foo")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN tags")
+      sql(s"ALTER TABLE $t ADD COLUMN tags ARRAY<STRING>")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.collect()
+        },
+        condition =
+          "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  // DataFrame detects column ID change for map column
+  // after drop+re-add with same name and type.
+  test("DataFrame detects map column ID change after drop+re-add") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t " +
+        s"(id INT, props MAP<STRING, INT>) USING foo")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN props")
+      sql(s"ALTER TABLE $t ADD COLUMN props MAP<STRING, INT>")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.collect()
+        },
+        condition =
+          "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
   // =========================================================================
   // Column ID tests from design doc: pinning and refresh scenarios
   // =========================================================================
