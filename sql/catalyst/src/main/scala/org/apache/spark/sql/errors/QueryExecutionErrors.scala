@@ -1123,7 +1123,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def failedToMergeIncompatibleSchemasError(
-      left: StructType, right: StructType, e: Throwable): Throwable = {
+      left: StructType, right: StructType, e: Throwable = null): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2095",
       messageParameters = Map("left" -> left.toString(), "right" -> right.toString()),

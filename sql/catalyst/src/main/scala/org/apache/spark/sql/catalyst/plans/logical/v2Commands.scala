@@ -38,7 +38,6 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructType}
@@ -131,7 +130,7 @@ trait V2WriteCommand
 
   override lazy val pendingSchemaChanges: Seq[TableChange] = {
     if (schemaEvolutionEnabled && schemaEvolutionReady) {
-      ResolveSchemaEvolution.computeSupportedSchemaChanges(table, query.schema, isByName).toSeq
+      ResolveSchemaEvolution.computeSupportedSchemaChanges(table, query.schema, isByName)
     } else {
       Seq.empty
     }
@@ -1042,16 +1041,13 @@ case class MergeIntoTable(
 
   override lazy val pendingSchemaChanges: Seq[TableChange] = {
     if (schemaEvolutionEnabled && schemaEvolutionReady) {
-      val candidateChanges = MergeIntoTable.pendingSchemaChanges(this)
-      ResolveSchemaEvolution.filterSupportedChanges(table, candidateChanges.toArray).toSeq
+      val candidateChanges = MergeIntoTable.computePendingSchemaChanges(this)
+      ResolveSchemaEvolution.filterSupportedChanges(table, candidateChanges)
     } else {
       Seq.empty
     }
   }
 
-  // Guard that assignments are either resolved or candidates for evolution before
-  // evaluating schema evolution. We need to use resolved assignment values to check
-  // candidates; see `isSchemaEvolutionCandidate` in the MergeIntoTable companion object.
   override lazy val schemaEvolutionReady: Boolean = {
     targetTable.resolved && sourceTable.resolved && actionsSchemaEvolutionReady
   }
@@ -1098,13 +1094,8 @@ object MergeIntoTable {
       .toSet
   }
 
-  private def pendingSchemaChanges(merge: MergeIntoTable): Seq[TableChange] = {
-    val onError: () => Nothing = () =>
-      throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
-        merge.targetTable.schema, merge.sourceTable.schema, null)
-
+  private def computePendingSchemaChanges(merge: MergeIntoTable): Seq[TableChange] = {
     schemaEvolutionTriggeringAssignments(merge).flatMap {
-
       // New column: the key didn't resolve against the target, so the column is missing.
       // Applies to top-level fields (e.g. SET new_col = source.new_col) and nested fields
       // where the leaf is missing (e.g. SET addr.zip = source.addr.zip).
@@ -1116,17 +1107,23 @@ object MergeIntoTable {
       // For atomic types this produces an updateColumnType; for structs this recurses to
       // find nested additions or type changes (e.g. SET addr = source.addr where source.addr
       // has an extra field or a widened child type).
-      case a if a.key.dataType != a.value.dataType =>
+      case a if a.key.resolved && a.key.dataType != a.value.dataType =>
         ResolveSchemaEvolution.computeSchemaChanges(
           a.key.dataType,
           a.value.dataType,
-          fieldPath = extractFieldPath(a.key).toList,
+          fieldPath = extractFieldPath(a.key),
           isByName = true,
-          onError).toSeq
+          throwError = throwIncompatibleSchemasError(merge))
 
       // Types already match - no schema change needed.
       case _ => Seq.empty
     }.distinct
+  }
+
+  private def throwIncompatibleSchemasError(merge: MergeIntoTable): Nothing = {
+    ResolveSchemaEvolution.throwIncompatibleSchemasError(
+      merge.targetTable.schema,
+      merge.sourceTable.schema)
   }
 
   // Schema evolution affects only fields referenced in MERGE INTO assignments.
