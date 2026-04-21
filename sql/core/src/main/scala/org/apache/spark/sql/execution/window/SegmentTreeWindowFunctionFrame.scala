@@ -62,9 +62,19 @@ private[window] final class SegmentTreeWindowFunctionFrame(
   require(frameType == RowFrame || frameType == RangeFrame,
     s"SegmentTreeWindowFunctionFrame supports RowFrame or RangeFrame, got $frameType")
 
-  private[this] val fallback =
-    new SlidingWindowFunctionFrame(target, processor, lbound, ubound)
+  private[this] var fallback: SlidingWindowFunctionFrame = _
   private[this] var tree: WindowSegmentTree = _
+
+  /** Allocate a fresh fallback sliding-window frame. Called lazily from
+   *  `prepare()` on the small-partition path so segtree-exclusive frames
+   *  never pay the allocation. Factored out for testability (subclasses can
+   *  override to inject a throwing fallback for prepare-failure tests).
+   */
+  private[window] def newFallback(): SlidingWindowFunctionFrame =
+    new SlidingWindowFunctionFrame(target, processor, lbound, ubound)
+
+  /** Test hook: whether the fallback frame has been lazily allocated. */
+  private[window] def fallbackAllocated: Boolean = fallback != null
 
   // ---- RowFrame-only driver state ----
   // `boundIter` advances `upperBound` one row at a time (sliding admit loop);
@@ -116,29 +126,30 @@ private[window] final class SegmentTreeWindowFunctionFrame(
   }
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
-    // First-call hygiene: release prior tree/iterators/cursors before building
-    // the new tree. `prepare` is called exactly once per (partition, frame) by
-    // `WindowPartitionEvaluator.fetchNextPartition` (the sole call site); this
-    // mirrors `SlidingWindowFunctionFrame`, which has no guard. Counters bump
-    // unconditionally on the successful branch.
-    if (tree != null) {
-      tree.close()
-      tree = null
-    }
-    closeIters()
-    nextRow = null
-    lowerRow = null
-    upperRow = null
-    lowerBound = 0
-    upperBound = 0
+    // INVARIANT: sole call site is `WindowPartitionEvaluator.fetchNextPartition`;
+    // `prepare` is called exactly once per (partition, frame). No mid-partition
+    // retry is supported.
+    //
+    // Ordering (matches `OffsetWindowFunctionFrameBase.prepare`): commit to a
+    // path first (allocate+prepare the fallback, or build the tree), and only
+    // then reset the opposite path's cached state. If the committing action
+    // throws, the frame stays in its previous (possibly stale but self-consistent)
+    // state; callers treat a thrown `prepare` as fatal for the task (no retry).
     if (rows.length < conf.windowSegmentTreeMinPartitionRows) {
+      if (fallback == null) fallback = newFallback()
+      fallback.prepare(rows)  // may throw -- frame unchanged on failure
+      // Commit fallback path only after `prepare` succeeded.
+      resetSegtreeState()
       fallbackUsed = true
-      fallback.prepare(rows)
-      // Count only on the successful fallback path: if `fallback.prepare`
-      // throws, the counter is not bumped.
       numSegmentTreeFallbackFrames.foreach(_ += 1)
       return
     }
+    // Segtree path. Drop the retained fallback reference (if any) so its
+    // internal row-copy buffer from a prior small partition is eligible for
+    // GC rather than held for the duration of this and subsequent segtree
+    // partitions. Next small partition re-allocates via `newFallback()`.
+    fallback = null
+    resetSegtreeState()
     fallbackUsed = false
     tree = new WindowSegmentTree(
       functions,
@@ -148,8 +159,7 @@ private[window] final class SegmentTreeWindowFunctionFrame(
       blockSize = conf.windowSegmentTreeBlockSize,
       maxCachedBlocks = maxCachedBlocks,
       taskMemoryManager = taskMemoryManager)
-    // Tree holds a reference to `rows` (caller-owned); no extra copy. Open
-    // fresh iterator(s) below for per-row bound advancement.
+    // Tree holds a reference to `rows` (caller-owned); no extra copy.
     tree.build(rows)
     // Count only on the successful segtree path: if `tree.build` throws
     // (e.g. OOM during block allocation), the counter is not bumped.
@@ -169,6 +179,20 @@ private[window] final class SegmentTreeWindowFunctionFrame(
         lowerRow = WindowFunctionFrame.getNextOrNull(lowerIter)
         upperRow = WindowFunctionFrame.getNextOrNull(upperIter)
     }
+  }
+
+  /** Release prior segtree-path cached state (tree + row-cursors + bounds). */
+  private def resetSegtreeState(): Unit = {
+    if (tree != null) {
+      tree.close()
+      tree = null
+    }
+    closeIters()
+    nextRow = null
+    lowerRow = null
+    upperRow = null
+    lowerBound = 0
+    upperBound = 0
   }
 
   override def write(index: Int, current: InternalRow): Unit = {
