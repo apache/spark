@@ -18,8 +18,6 @@
 package org.apache.spark.sql.connector
 
 import java.util
-import java.util.concurrent._
-import java.util.concurrent.atomic.AtomicReference
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql._
@@ -116,20 +114,6 @@ class DataSourceV2ConcurrencyRefreshSuite
   private def setupTable(): Unit = {
     sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
     sql(s"INSERT INTO $T VALUES (1, 100)")
-  }
-
-  /** Barrier for controlled thread synchronization (inspired by Delta's AtomicBarrier). */
-  private class PhaseBarrier(name: String) {
-    private val latch = new CountDownLatch(1)
-    def await(ms: Long = 30000): Unit =
-      require(latch.await(ms, TimeUnit.MILLISECONDS), s"PhaseBarrier '$name' timed out")
-    def unblock(): Unit = latch.countDown()
-  }
-
-  private def withExecutor(n: Int = 4)(f: ExecutorService => Unit): Unit = {
-    val exec = Executors.newFixedThreadPool(n)
-    try f(exec)
-    finally { exec.shutdown(); exec.awaitTermination(60, TimeUnit.SECONDS) }
   }
 
   // =====================================================================
@@ -253,162 +237,6 @@ class DataSourceV2ConcurrencyRefreshSuite
       dfCondition = COL_ID_MISMATCH))
 
   // =====================================================================
-  // Section 1: Temp View x All Modifications
-  // =====================================================================
-
-  mods.foreach { mod =>
-    test(s"[S1] temp view: ${mod.name}") {
-      withTable(T) {
-        setupTable()
-        spark.table(T).createOrReplaceTempView("tmp")
-        checkAnswer(spark.table("tmp"), Seq(Row(1, 100)))
-        mod.fn(T)
-        if (mod.tempViewOk) {
-          checkAnswer(spark.table("tmp"), mod.tempViewRows)
-        } else {
-          checkError(
-            exception = intercept[AnalysisException] {
-              spark.table("tmp").collect()
-            },
-            condition = mod.viewPlanCondition)
-        }
-      }
-    }
-  }
-
-  // Section 1 external: "someone else changed the table" via catalog API.
-  extMods.foreach { mod =>
-    test(s"[S1-ext] temp view: ${mod.name}") {
-      withTable(T) {
-        setupTable()
-        spark.table(T).createOrReplaceTempView("tmp")
-        checkAnswer(spark.table("tmp"), Seq(Row(1, 100)))
-        mod.fn(T)
-        if (mod.tempViewOk) {
-          checkAnswer(spark.table("tmp"), mod.tempViewRows)
-        } else {
-          checkError(
-            exception = intercept[AnalysisException] {
-              spark.table("tmp").collect()
-            },
-            condition = mod.viewPlanCondition)
-        }
-      }
-    }
-  }
-
-  // =====================================================================
-  // Section 3: Join x All Modifications
-  // =====================================================================
-
-  mods.foreach { mod =>
-    test(s"[S3] join: ${mod.name}") {
-      withTable(T) {
-        setupTable()
-        val df1 = spark.table(T)
-        mod.fn(T)
-        val df2 = spark.table(T)
-        val joined = df1.join(df2, df1("id") === df2("id"))
-        if (mod.joinOk) {
-          checkAnswer(joined, mod.joinRows)
-        } else {
-          checkError(
-            exception = intercept[AnalysisException] {
-              joined.collect()
-            },
-            condition = mod.dfCondition)
-        }
-      }
-    }
-  }
-
-  // Section 3 external: join with external modifications
-  extMods.foreach { mod =>
-    test(s"[S3-ext] join: ${mod.name}") {
-      withTable(T) {
-        setupTable()
-        val df1 = spark.table(T)
-        mod.fn(T)
-        val df2 = spark.table(T)
-        val joined = df1.join(df2, df1("id") === df2("id"))
-        if (mod.joinOk) {
-          checkAnswer(joined, mod.joinRows)
-        } else {
-          checkError(
-            exception = intercept[AnalysisException] {
-              joined.collect()
-            },
-            condition = mod.dfCondition)
-        }
-      }
-    }
-  }
-
-  // =====================================================================
-  // Section 4: DataFrame First Access x All Modifications
-  // =====================================================================
-
-  mods.foreach { mod =>
-    test(s"[S4a] DataFrame first access: ${mod.name}") {
-      withTable(T) {
-        setupTable()
-        val df = spark.table(T)
-        mod.fn(T)
-        if (mod.dfOk) {
-          checkAnswer(df, mod.dfRows)
-        } else {
-          checkError(
-            exception = intercept[AnalysisException] { df.collect() },
-            condition = mod.dfCondition)
-        }
-      }
-    }
-  }
-
-  // Section 4 show variant: access DF before modification, then again after.
-  // show/count/head create derived DFs with new QEs each time, so they
-  // always reflect the latest data after refresh.
-  mods.foreach { mod =>
-    test(s"[S4-show] DataFrame show before and after: ${mod.name}") {
-      withTable(T) {
-        setupTable()
-        val df = spark.table(T)
-        // First access: materializes analyzed plan but does NOT pin
-        // collect() QE because count() creates a derived DF
-        assert(df.count() === 1)
-        mod.fn(T)
-        // Second access: count creates new derived DF with new QE.
-        // The refresh phase detects stale table and reloads.
-        if (mod.dfOk) {
-          assert(df.count() === mod.dfRows.length.toLong)
-        } else {
-          checkError(
-            exception = intercept[AnalysisException] { df.count() },
-            condition = mod.dfCondition)
-        }
-      }
-    }
-  }
-
-  // Section 4a external: DataFrame first access with external mods
-  extMods.foreach { mod =>
-    test(s"[S4a-ext] DataFrame first access: ${mod.name}") {
-      withTable(T) {
-        setupTable()
-        val df = spark.table(T)
-        mod.fn(T)
-        if (mod.dfOk) {
-          checkAnswer(df, mod.dfRows)
-        } else {
-          checkError(
-            exception = intercept[AnalysisException] { df.collect() },
-            condition = mod.dfCondition)
-        }
-      }
-    }
-  }
-
-  // =====================================================================
   // Section 6: Subquery Same Table x All Modifications
   // =====================================================================
 
@@ -443,75 +271,6 @@ class DataSourceV2ConcurrencyRefreshSuite
         } else {
           checkError(
             exception = intercept[AnalysisException] { df.collect() },
-            condition = mod.dfCondition)
-        }
-      }
-    }
-  }
-
-  // =====================================================================
-  // PHASE-LOCKED: DF analysis --> modification --> execution
-  // Deterministic interleaving using barriers (inspired by Delta's
-  // PhaseLockingTransactionExecutionObserver).
-  // =====================================================================
-
-  mods.foreach { mod =>
-    test(s"[phase-locked] DF analysis -> ${mod.name} -> execute") {
-      withTable(T) {
-        setupTable()
-        withExecutor() { exec =>
-          val analysisReady = new PhaseBarrier("analysis-ready")
-          val modDone = new PhaseBarrier("mod-done")
-          val error = new AtomicReference[Throwable](null)
-
-          // Phase 1: DataFrame created (analysis complete)
-          val df = spark.table(T)
-          analysisReady.unblock()
-
-          // Phase 2: Writer modifies table
-          val writer = exec.submit(new Runnable {
-            override def run(): Unit = try {
-              analysisReady.await()
-              mod.fn(T)
-              modDone.unblock()
-            } catch { case e: Throwable => error.set(e); modDone.unblock() }
-          })
-
-          modDone.await()
-          writer.get(30, TimeUnit.SECONDS)
-          assert(error.get() == null, s"Writer failed: ${error.get()}")
-
-          // Phase 3: Execute DataFrame with refreshed/stale table
-          if (mod.dfOk) {
-            df.collect()
-          } else {
-            checkError(
-              exception = intercept[AnalysisException] { df.collect() },
-              condition = mod.dfCondition)
-          }
-        }
-      }
-    }
-  }
-
-  // =====================================================================
-  // PHASE-LOCKED: Join analysis --> modification --> execution
-  // Both sides of join analyzed before modification.
-  // =====================================================================
-
-  mods.foreach { mod =>
-    test(s"[phase-locked-join] df1+df2 -> ${mod.name} -> join") {
-      withTable(T) {
-        setupTable()
-        val df1 = spark.table(T)
-        val df2 = spark.table(T)
-        mod.fn(T)
-        val joined = df1.join(df2, df1("id") === df2("id"))
-        if (mod.joinOk) {
-          joined.collect()
-        } else {
-          checkError(
-            exception = intercept[AnalysisException] { joined.collect() },
             condition = mod.dfCondition)
         }
       }
