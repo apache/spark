@@ -128,7 +128,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
       relation: DataSourceV2Relation): Unit = {
     val errors = V2TableUtil.validateCapturedColumnIds(currentTable, relation)
     if (errors.nonEmpty) {
-      throw QueryCompilationErrors.columnIdsChangedAfterAnalysis(relation.name, errors)
+      throw QueryCompilationErrors.columnIdMismatchAfterAnalysis(relation.name, errors)
     }
   }
 
@@ -138,7 +138,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
       mode: SchemaValidationMode): Unit = {
     val errors = V2TableUtil.validateCapturedColumns(currentTable, relation, mode)
     if (errors.nonEmpty) {
-      throw QueryCompilationErrors.columnsChangedAfterAnalysis(relation.name, errors)
+      throw QueryCompilationErrors.columnsMissingOrAddedAfterAnalysis(relation.name, errors)
     }
   }
 

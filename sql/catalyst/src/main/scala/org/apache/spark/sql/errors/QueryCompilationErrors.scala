@@ -2242,7 +2242,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "currentTableId" -> currentTableId))
   }
 
-  def columnIdsChangedAfterAnalysis(
+  def columnIdMismatchAfterAnalysis(
       tableName: String,
       errors: Seq[String]): Throwable = {
     new AnalysisException(
@@ -2252,7 +2252,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "errors" -> errors.mkString("- ", "\n- ", "")))
   }
 
-  def columnsChangedAfterAnalysis(
+  def columnsMissingOrAddedAfterAnalysis(
       tableName: String,
       errors: Seq[String]): Throwable = {
     new AnalysisException(
