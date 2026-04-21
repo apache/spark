@@ -34,19 +34,37 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * Block-chunked segment tree for range aggregate queries over window partitions.
  *
- * See `the class documentation`
- * for the full design (API contract Section 2, block-chunked memory layout Section 3,
- * DeclarativeAggregate binding Section 4, error handling Section 5, test hooks Section 6).
+ * The data layer uses `ExternalAppendOnlyUnsafeRowArray` to hold input rows
+ * (spillable). Each block materializes its own small segment tree (levels
+ * 0..h). Internal nodes are cached in an LRU keyed by block index; block
+ * root aggregates (block pre-aggregates) stay resident for all blocks.
+ * Leaves are materialized inside the per-block internal node arrays; a
+ * future revision may drop leaf materialization and recompute leaves from
+ * the spillable array on demand to reduce memory at the cost of CPU.
  *
- * initial implementation scope: correctness only. The data layer uses
- * `ExternalAppendOnlyUnsafeRowArray` to hold input rows (spillable). Each
- * block materializes its own small segment tree (levels 0..h). Internal
- * nodes are cached in an LRU keyed by block index; block root aggregates
- * (block pre-aggregates) stay resident for all blocks.
+ * === Memory accounting invariants ===
  *
- * Note: the design doc Section 3.3 specifies leaves are NOT materialized and
- * recomputed from the spillable array on demand. For initial implementation simplicity
- * we materialize leaves inside the per-block internal node arrays.
+ *  - I1: `SegTreeSpiller.spill()` must not call `acquireMemory` on its own
+ *        [[MemoryConsumer]]. Doing so would deadlock against TMM's
+ *        consumer-priority sort. All acquires happen on the hot path
+ *        ([[ensureBlockLevels]]).
+ *  - I2: `SegTreeSpiller.spill(_, trigger)` returns 0 when `trigger eq this`
+ *        (self-trigger short-circuit) to prevent re-entrant eviction.
+ *  - I3: The LRU's `removeEldestEntry` is disabled; eviction is driven
+ *        explicitly from [[ensureBlockLevels]] (capacity overflow) or
+ *        [[SegTreeSpiller.spill]] (TMM pressure).
+ *  - I4: Every successful [[acquireBlockMemory]] is paired with exactly one
+ *        [[releaseBlockMemory]] -- on eviction, on [[close]], and on
+ *        exception paths where block construction fails. [[close]] is
+ *        idempotent.
+ *  - I5: Bytes accounted per block are a conservative upper bound
+ *        (`cachedSlotsPerBlock * bufferWidthBytes`): assumes a full block
+ *        and per-field 16 byte cost. Tail blocks and cheaper types leave
+ *        headroom rather than under-report to TMM.
+ *  - I8: If the underlying `rowArray` has already spilled to disk,
+ *        `SegTreeSpiller.spill` returns 0 (rebuild after eviction would
+ *        O(blockStart)-scan the spill file); TMM falls through to another
+ *        consumer.
  *
  * @note Instances are not thread-safe.
  */
@@ -116,7 +134,7 @@ private[window] class WindowSegmentTree(
     math.max(1L, bufferDataTypes.size.toLong * bytesPerField)
   }
 
-  /** Number of aggregate-buffer slots cached per block (contract I5).
+  /** Number of aggregate-buffer slots cached per block (see I5 in class doc).
    *
    *  Invariant: equals `sum over levels L of levels(L).length` for any
    *  block materialized by [[buildBlockLevels]]. Level 0 holds `blockSize`
@@ -136,7 +154,7 @@ private[window] class WindowSegmentTree(
     sum
   }
 
-  /** Bytes accounted per cached block (contract I5). Conservative: assumes
+  /** Bytes accounted per cached block (see I5 in class doc). Conservative: assumes
    *  every block is full; tail block (`numRows % blockSize != 0`) will
    *  hold fewer leaves, giving a small headroom. */
   private[this] val blockBytes: Long =
@@ -164,7 +182,7 @@ private[window] class WindowSegmentTree(
 
   /** LRU cache of per-block internal node arrays. Key = blockIdx.
    *  Value = `Array[Array[InternalRow]]` with levels(0..h). Auto-eviction via
-   *  `removeEldestEntry` is disabled (contract I3) -- eviction is driven
+   *  `removeEldestEntry` is disabled (see I3 in class doc) -- eviction is driven
    *  explicitly from [[ensureBlockLevels]] (capacity overflow) or
    *  [[SegTreeSpiller.spill]] (TMM pressure). Each cache entry maps 1:1 to
    *  one [[acquireBlockMemory]] accounting. Callers (e.g.
@@ -176,7 +194,7 @@ private[window] class WindowSegmentTree(
           eldest: JMap.Entry[Integer, Array[Array[InternalRow]]]): Boolean = false
     }
 
-  // ---------- Memory consumer (contract Section 2.2) ----------
+  // ---------- Memory consumer ----------
 
   /**
    * Private MemoryConsumer tracking cached block levels under TMM.
@@ -187,17 +205,17 @@ private[window] class WindowSegmentTree(
    * we call these -- so TMM's consumer-priority sort in
    * `acquireExecutionMemory` sees our pressure accurately.
    *
-   * @note `spill()` MUST NOT call `acquireMemory` (contract I1).
+   * @note `spill()` MUST NOT call `acquireMemory` (see I1 in class doc).
    */
   private final class SegTreeSpiller extends MemoryConsumer(
       taskMemoryManager,
       taskMemoryManager.pageSizeBytes(),
       taskMemoryManager.getTungstenMemoryMode()) {
     override def spill(size: Long, trigger: MemoryConsumer): Long = {
-      // I2: self-trigger short-circuit. Prevents re-entrant eviction when
+      // Self-trigger short-circuit (I2): prevents re-entrant eviction when
       // our own acquireMemory() triggers TMM to poll us.
       if (trigger eq this) return 0L
-      // I8: rowArray spilled-to-disk detection. If the rowArray has already
+      // rowArray spilled-to-disk detection (I8). If the rowArray has already
       // spilled, evicting our cache is counter-productive (rebuild would
       // O(blockStart)-scan the spill file). Return 0L to let TMM fall
       // through to the next consumer. The current check uses `spillSize > 0`
@@ -211,8 +229,8 @@ private[window] class WindowSegmentTree(
   private[this] val spiller: SegTreeSpiller = new SegTreeSpiller
 
   // Task kill / completion fall-back: ensure cache is freed even if caller
-  // forgets close() (contract Section 2.5). Frame already registers a
-  // listener too; double close is idempotent (contract I4).
+  // forgets close(). Frame already registers a listener too; double close is
+  // idempotent (I4).
   {
     val tc = TaskContext.get()
     if (tc != null) {
@@ -253,15 +271,14 @@ private[window] class WindowSegmentTree(
     numBlocks = nBlocks
     blockAggregates = newBlockAggs
     // Rebuild invalidates cached block levels; release all acquired memory
-    // before dropping the cache entries (I4).
+    // before dropping the cache entries (I4 pairing).
     releaseAllCachedBlocks()
   }
 
   /**
    * Query [lo, hi) and directly evaluate the result via `processor.evaluate`
    * into `target`. Uses an internal pre-allocated buffer so no per-call
-   * allocation is needed. See
-   * `docs/frame-integration-contract.md` Section 2.
+   * allocation is needed.
    */
   private[window] def queryInto(
       lo: Int, hi: Int, processor: AggregateProcessor, target: InternalRow): Unit = {
@@ -303,7 +320,7 @@ private[window] class WindowSegmentTree(
     }
   }
 
-  /** Terminal: releases all state. Idempotent (contract I4). */
+  /** Terminal: releases all state. Idempotent (I4). */
   override def close(): Unit = {
     if (closed) return
     // Free all cached-block accounting before dropping references.
@@ -415,8 +432,9 @@ private[window] class WindowSegmentTree(
     }
   }
 
-  /** Build (or fetch from LRU) the full per-block levels array. See contract
-   *  Section 3 (acquire -> build -> cache) and Section 6 pseudocode. */
+  /** Build (or fetch from LRU) the full per-block levels array.
+   *  Protocol: acquire memory -> build -> cache. Eviction on capacity
+   *  overflow or on TMM spill request. */
   private def ensureBlockLevels(blockIdx: Int): Array[Array[InternalRow]] = {
     val cached = blockLevelsCache.get(Integer.valueOf(blockIdx))
     if (cached != null) return cached
@@ -429,7 +447,7 @@ private[window] class WindowSegmentTree(
 
     // Acquire memory accounting for this block before building. If TMM
     // can't grant blockBytes up-front, try one manual evict-and-retry cycle
-    // before giving up (contract Section 6).
+    // before giving up.
     if (!acquireBlockMemory(blockIdx)) {
       if (!evictEldest() || !acquireBlockMemory(blockIdx)) {
         // scalastyle:off throwerror
@@ -439,7 +457,7 @@ private[window] class WindowSegmentTree(
       }
     }
 
-    // I4: if buildBlockLevels throws, release the memory we just acquired.
+    // If buildBlockLevels throws, release the memory we just acquired (I4).
     val levels =
       try buildBlockLevels(blockIdx)
       catch { case t: Throwable => releaseBlockMemory(); throw t }
@@ -498,7 +516,7 @@ private[window] class WindowSegmentTree(
       s"LRU cache eviction failed for block $blockIdx (size=${blockLevelsCache.size})")
   }
 
-  // ---------- Memory accounting helpers (contract Section 2.3) ----------
+  // ---------- Memory accounting helpers ----------
 
   /** Try to acquire `blockBytes` for one cached block. Returns true on full
    *  grant, false on partial (after rolling the partial grant back). Must
@@ -514,7 +532,7 @@ private[window] class WindowSegmentTree(
   }
 
   /** Release the accounting for one block. Caller ensures pairing with a
-   *  prior successful [[acquireBlockMemory]] (contract I4). */
+   *  prior successful [[acquireBlockMemory]] (I4). */
   private def releaseBlockMemory(): Unit = {
     spiller.freeMemory(blockBytes)
   }

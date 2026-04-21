@@ -34,9 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
  * `spark.sql.window.segmentTree.minPartitionRows`, delegates to a wrapped
  * [[SlidingWindowFunctionFrame]].
  *
- * See `docs/frame-integration-contract.md` Section 1 for the full contract.
- *
- * RANGE support (RANGE frame support): when `frameType == RangeFrame`, the per-row
+ * RANGE support: when `frameType == RangeFrame`, the per-row
  * driver uses two forward-only cursors (`lowerIter` / `upperIter`) over the
  * materialized `rowArray` to advance `lowerBound` / `upperBound`. Endpoints
  * are monotone per partition (SQL RANGE semantics + sorted input), so total

@@ -30,9 +30,12 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjecti
 import org.apache.spark.sql.types.IntegerType
 
 /**
- * Memory-manager integration tests for [[WindowSegmentTree]] (memory-manager integration).
- * Exercises the matrix defined in
- * `the PR description` Section 5.
+ * Memory-manager integration tests for [[WindowSegmentTree]]. Covers:
+ *  - `SegTreeSpiller` registration with `TaskMemoryManager`
+ *  - `acquireBlockMemory` grant / partial-grant rollback
+ *  - `evictUntil` LRU eviction driven by TMM pressure
+ *  - `spill()` self-trigger short-circuit and rowArray-spilled fall-through
+ *  - task completion / kill listener releasing all cached blocks
  *
  * Tests T5 (rowArray-spilled priority) and T8 (task-kill listener) are
  * intentionally left as `ignore`d stubs so the matrix stays visible;
@@ -251,10 +254,7 @@ class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext 
         // will see 0 -> SparkOutOfMemoryError.
         mm.markConsequentOOM(10)
         val ex = intercept[SparkOutOfMemoryError](queryMin(tree, 0, 20))
-        assert(ex.getMessage.contains("UNABLE_TO_ACQUIRE_MEMORY") ||
-        val ex = intercept[SparkOutOfMemoryError](queryMin(tree, 0, 20))
         assert(ex.getMessage.contains("UNABLE_TO_ACQUIRE_MEMORY"),
-          s"unexpected OOM message: ${ex.getMessage}")
           s"unexpected OOM message: ${ex.getMessage}")
         // Critically: the failed acquire path must not have left any bytes
         // accounted against the task.

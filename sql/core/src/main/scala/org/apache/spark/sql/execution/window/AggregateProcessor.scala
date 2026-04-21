@@ -184,8 +184,7 @@ private[window] final class AggregateProcessor(
   def evaluate(target: InternalRow): Unit = evaluate(buffer, target)
 
   /** Evaluate using an arbitrary `source` buffer (e.g. a segment-tree query
-   *  result) instead of the internal one. See
-   *  `docs/frame-integration-contract.md` Section 3. */
+   *  result) instead of the internal one. */
   private[window] def evaluate(source: InternalRow, target: InternalRow): Unit = {
     evaluateProjection.target(target)(source)
   }

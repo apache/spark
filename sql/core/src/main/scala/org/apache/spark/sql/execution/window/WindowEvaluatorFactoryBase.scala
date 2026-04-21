@@ -40,8 +40,7 @@ trait WindowEvaluatorFactoryBase {
    * Counters for [[SegmentTreeWindowFunctionFrame]] observability. Default
    * `None` means the subclass does not integrate with the segment-tree frame
    * path (e.g. [[org.apache.spark.sql.execution.python.ArrowWindowPythonEvaluatorFactory]]);
-   * only [[WindowEvaluatorFactory]] wires them. See
-   * `the PR description (SQLMetrics exposure)`.
+   * only [[WindowEvaluatorFactory]] wires them.
    */
   def numSegmentTreeFrames: Option[SQLMetric] = None
   def numSegmentTreeFallbackFrames: Option[SQLMetric] = None

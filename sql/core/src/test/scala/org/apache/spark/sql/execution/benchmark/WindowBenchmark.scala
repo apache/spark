@@ -26,7 +26,7 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Benchmark to measure window function performance with bounded ROWS frames.
  *
- * Matrix (rev4; see the PR description):
+ * Matrix (see the PR description for the rationale behind each section):
  *   - Section A: 5 aggregates x 3 cells (naive / segtree default / segtree bs=256),
  *                per-case N calibrated so naive lands in 3-5s/iter. STDDEV_SAMP keeps
  *                N=2M (stress: multi-buffer noise demo).

@@ -32,8 +32,6 @@ import org.apache.spark.sql.test.SharedSparkSession
  * segtree-path: segtree path bumps `numSegmentTreeFrames`.
  * fallback-path: fallback path bumps `numSegmentTreeFallbackFrames`.
  * feature-flag-off: feature-flag off -> both counters stay at 0 (no false positives).
- *
- * See `the PR description (SQLMetrics exposure)`.
  */
 class SegmentTreeWindowMetricsSuite
     extends QueryTest with SharedSparkSession with SQLMetricsTestUtils {
@@ -123,7 +121,7 @@ class SegmentTreeWindowMetricsSuite
 
   // ---------------------------------------------------------------------
   // T1-T4: regression coverage for the removed idempotency guard in
-  // `SegmentTreeWindowFunctionFrame.prepare()` (see the class documentation).
+  // `SegmentTreeWindowFunctionFrame.prepare()`.
   // The guard keyed on `(System.identityHashCode(rows), rows.length)`, but
   // `WindowPartitionEvaluator` reuses a single `ExternalAppendOnlyUnsafeRowArray`
   // across all partitions in a task, so the identity hash is constant per
