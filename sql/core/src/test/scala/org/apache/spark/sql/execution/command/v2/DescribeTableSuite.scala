@@ -79,12 +79,17 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
   test("DESCRIBE TABLE PARTITION on a table without partition management raises an error") {
     withNamespaceAndTable("ns", "table", nonPartitionCatalog) { tbl =>
       sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing")
-      val e = intercept[AnalysisException] {
-        sql(s"DESCRIBE TABLE $tbl PARTITION (id = 1)")
-      }
-      assert(e.getCondition ==
-          "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED" ||
-        e.getCondition == "INVALID_PARTITION_OPERATION.PARTITION_SCHEMA_IS_EMPTY")
+      val sqlText = s"DESCRIBE TABLE $tbl PARTITION (id = 1)"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        condition = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
+        parameters = Map("name" -> s"`$nonPartitionCatalog`.`ns`.`table`"),
+        queryContext = Array(ExpectedContext(
+          fragment = tbl,
+          start = sqlText.indexOf(tbl),
+          stop = sqlText.indexOf(tbl) + tbl.length - 1)))
     }
   }
 
@@ -93,10 +98,15 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
       sql(s"CREATE TABLE $tbl (id bigint, city string, data string) " +
         s"$defaultUsing PARTITIONED BY (id, city)")
       sql(s"ALTER TABLE $tbl ADD PARTITION (id = 1, city = 'NYC')")
-      val e = intercept[AnalysisException] {
-        sql(s"DESCRIBE TABLE $tbl PARTITION (id = 1)")
-      }
-      assert(e.getMessage.contains("id") && e.getMessage.contains("city"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"DESCRIBE TABLE $tbl PARTITION (id = 1)")
+        },
+        condition = "_LEGACY_ERROR_TEMP_1232",
+        parameters = Map(
+          "specKeys" -> "id",
+          "partitionColumnNames" -> "id, city",
+          "tableName" -> s"`$catalog`.`ns`.`table`"))
     }
   }
 
@@ -119,10 +129,14 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
   test("DESCRIBE TABLE PARTITION with unknown partition column raises an error") {
     withNamespaceAndTable("ns", "table") { tbl =>
       sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-      val e = intercept[AnalysisException] {
-        sql(s"DESCRIBE TABLE $tbl PARTITION (xyz = 1)")
-      }
-      assert(e.getMessage.contains("xyz"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"DESCRIBE TABLE $tbl PARTITION (xyz = 1)")
+        },
+        condition = "PARTITIONS_NOT_FOUND",
+        parameters = Map(
+          "partitionList" -> "`xyz`",
+          "tableName" -> s"`$catalog`.`ns`.`table`"))
     }
   }
 
@@ -144,7 +158,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
       val result = sql(s"DESCRIBE TABLE EXTENDED $tbl PARTITION (id = null)").collect()
       val partRow = result.find(_.getString(0) == "Partition Values")
       assert(partRow.isDefined, s"Partition Values row not found in: ${result.mkString("\n")}")
-      assert(partRow.get.getString(1) == "[id=NULL]" || partRow.get.getString(1) == "[id=null]",
+      assert(partRow.get.getString(1) == "[id=NULL]",
         s"Unexpected partition value: ${partRow.get.getString(1)}")
     }
   }

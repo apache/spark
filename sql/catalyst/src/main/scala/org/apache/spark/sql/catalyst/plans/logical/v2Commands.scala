@@ -910,7 +910,6 @@ case class SetNamespaceLocation(
  */
 case class DescribeRelation(
     relation: LogicalPlan,
-    partitionSpec: TablePartitionSpec,
     isExtended: Boolean,
     override val output: Seq[Attribute] = DescribeRelation.getOutputAttrs) extends UnaryCommand {
   override def child: LogicalPlan = relation
@@ -931,7 +930,6 @@ case class DescribeTablePartition(
     isExtended: Boolean,
     override val output: Seq[Attribute] = DescribeRelation.getOutputAttrs)
   extends V2PartitionCommand {
-  override def allowPartialPartitionSpec: Boolean = false
   override protected def withNewChildInternal(newChild: LogicalPlan): DescribeTablePartition =
     copy(table = newChild)
 }

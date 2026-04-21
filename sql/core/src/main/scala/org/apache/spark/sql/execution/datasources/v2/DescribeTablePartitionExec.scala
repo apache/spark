@@ -35,36 +35,33 @@ case class DescribeTablePartitionExec(
     isExtended: Boolean) extends LeafV2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
-    // Always validate partition existence, even for non-extended describe.
-    validatePartitionExists()
+    val partitionRow = validateAndGetPartition()
 
+    // Delegate schema + partitioning + clustering to DescribeTableExec.
     val rows = new ArrayBuffer[InternalRow]()
-    addSchema(rows)
-    addPartitioning(rows)
+    DescribeTableExec(output, table, isExtended = false).addBaseDescription(rows)
 
     if (isExtended) {
-      addPartitionDetails(rows)
+      addPartitionDetails(rows, partitionRow)
     }
     rows.toSeq
   }
 
-  private def validatePartitionExists(): Unit = {
+  private def validateAndGetPartition(): InternalRow = {
     val partitionSchema = table.partitionSchema()
     val (names, ident) = (partSpec.names, partSpec.ident)
     val partitionIdentifiers = table.listPartitionIdentifiers(names.toArray, ident)
     if (partitionIdentifiers.isEmpty) {
       throw QueryCompilationErrors.notExistPartitionError(tableIdent, ident, partitionSchema)
     }
+    assert(partitionIdentifiers.length == 1)
+    partitionIdentifiers.head
   }
 
-  private def addPartitionDetails(rows: ArrayBuffer[InternalRow]): Unit = {
+  private def addPartitionDetails(
+      rows: ArrayBuffer[InternalRow],
+      partitionRow: InternalRow): Unit = {
     val partitionSchema = table.partitionSchema()
-    val (names, ident) = (partSpec.names, partSpec.ident)
-
-    // Re-list to obtain the canonical partition row for rendering.
-    val partitionIdentifiers = table.listPartitionIdentifiers(names.toArray, ident)
-    assert(partitionIdentifiers.length == 1)
-    val row = partitionIdentifiers.head
 
     // Render partition values using ToPrettyString + escapePathName,
     // consistent with ShowTablePartitionExec.
@@ -73,55 +70,20 @@ case class DescribeTablePartitionExec(
     val timeZoneId = conf.sessionLocalTimeZone
     for (i <- 0 until len) {
       val dataType = partitionSchema(i).dataType
-      val partValueUTF8String = ToPrettyString(Literal(row.get(i, dataType), dataType),
+      val partValueUTF8String = ToPrettyString(Literal(partitionRow.get(i, dataType), dataType),
         Some(timeZoneId)).eval(null)
       val partValueStr = if (partValueUTF8String == null) "null" else partValueUTF8String.toString
       partitions(i) = escapePathName(partitionSchema(i).name) + "=" + escapePathName(partValueStr)
     }
     val partitionValues = partitions.mkString("[", ", ", "]")
 
-    rows += emptyRow()
+    rows += toCatalystRow("", "", "")
     rows += toCatalystRow("# Detailed Partition Information", "", "")
     rows += toCatalystRow("Partition Values", partitionValues, "")
 
-    val metadata = table.loadPartitionMetadata(ident)
+    val metadata = table.loadPartitionMetadata(partSpec.ident)
     metadata.asScala.toSeq.sortBy(_._1).foreach { case (k, v) =>
       rows += toCatalystRow(k, v, "")
     }
   }
-
-  private def addSchema(rows: ArrayBuffer[InternalRow]): Unit = {
-    rows ++= table.columns().map { column =>
-      toCatalystRow(column.name, column.dataType.simpleString, column.comment)
-    }
-  }
-
-  private def addPartitioning(rows: ArrayBuffer[InternalRow]): Unit = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Util
-    import org.apache.spark.sql.connector.expressions.IdentityTransform
-    import org.apache.spark.sql.catalyst.util.quoteIfNeeded
-
-    val partitioning = table.partitioning
-    if (partitioning.nonEmpty) {
-      val partitionColumnsOnly = partitioning.forall(t => t.isInstanceOf[IdentityTransform])
-      if (partitionColumnsOnly) {
-        rows += toCatalystRow("# Partition Information", "", "")
-        rows += toCatalystRow(s"# ${output(0).name}", output(1).name, output(2).name)
-        val schema = CatalogV2Util.v2ColumnsToStructType(table.columns())
-        rows ++= partitioning
-          .map(_.asInstanceOf[IdentityTransform].ref.fieldNames())
-          .map { fieldNames =>
-            val nestedField = schema.findNestedField(fieldNames.toIndexedSeq)
-            nestedField.get
-          }.map { case (path, field) =>
-            toCatalystRow(
-              (path :+ field.name).map(quoteIfNeeded(_)).mkString("."),
-              field.dataType.simpleString,
-              field.getComment().orNull)
-          }
-      }
-    }
-  }
-
-  private def emptyRow(): InternalRow = toCatalystRow("", "", "")
 }

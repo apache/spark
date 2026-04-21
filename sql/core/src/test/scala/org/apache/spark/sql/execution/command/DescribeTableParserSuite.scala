@@ -30,20 +30,16 @@ class DescribeTableParserSuite extends SharedSparkSession with AnalysisTest {
   test("SPARK-17328: Fix NPE with EXPLAIN DESCRIBE TABLE") {
     comparePlans(parsePlan("describe t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        Map.empty, isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), isExtended = false))
     comparePlans(parsePlan("describe table t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        Map.empty, isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), isExtended = false))
     comparePlans(parsePlan("describe table extended t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        Map.empty, isExtended = true))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), isExtended = true))
     comparePlans(parsePlan("describe table formatted t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
-        Map.empty, isExtended = true))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), isExtended = true))
   }
 
   test("describe table with partition spec") {

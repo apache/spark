@@ -1479,7 +1479,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       } else if (rawSpec.nonEmpty) {
         DescribeTablePartition(relation, UnresolvedPartitionSpec(rawSpec), isExtended)
       } else {
-        DescribeRelation(relation, rawSpec, isExtended)
+        DescribeRelation(relation, isExtended)
       }
     }
   }
