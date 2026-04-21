@@ -287,5 +287,40 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
           |END""".stripMargin
       )
     )
+
+    // SPARK-54876: statement after semicolon ending with block comment should not be dropped
+    assert(
+      splitSemiColonWithIndex(
+        "SELECT 1; SELECT 2 /* comment */",
+        enableSqlScripting = false) == Seq("SELECT 1", " SELECT 2 /* comment */")
+    )
+
+    // SPARK-54876: line comment followed by block comment should produce empty result
+    assert(
+      splitSemiColonWithIndex(
+        "-- foo\n/* bar */",
+        enableSqlScripting = false) == Seq()
+    )
+
+    // SPARK-54876: line comment before block comment after semicolon
+    assert(
+      splitSemiColonWithIndex(
+        "SELECT 1; -- foo\n /* bar */",
+        enableSqlScripting = false) == Seq("SELECT 1")
+    )
+
+    // SPARK-54876: nested block comments
+    assert(
+      splitSemiColonWithIndex(
+        "SELECT 1; /* outer /* inner */ */",
+        enableSqlScripting = false) == Seq("SELECT 1")
+    )
+
+    // SPARK-54876: preceding closed block comment + line comment (no SQL statement)
+    assert(
+      splitSemiColonWithIndex(
+        "/* a */ -- foo\n/* b */",
+        enableSqlScripting = false) == Seq()
+    )
   }
 }

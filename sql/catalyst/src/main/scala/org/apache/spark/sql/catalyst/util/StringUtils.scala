@@ -279,139 +279,73 @@ object StringUtils extends Logging {
     pattern.matches(cleanText)
   }
 
-  private def containsNonWhiteSpaceCharacters(inputString: String): Boolean = {
-    val pattern = "\\S".r
-    pattern.findFirstIn(inputString).isDefined
+  // Structural scanner for splitting SQL by semicolons.
+  // Handles: quoted strings with escapes, line comments (--), nested block comments (/* */),
+  // and semicolons inside strings/comments are not treated as delimiters.
+  // Note: [SPARK-31595], [SPARK-33100], [SPARK-54876]
+  def splitSemiColonWithIndex(line: String, enableSqlScripting: Boolean): List[String] = {
+    lazy val insideSqlScript: Boolean = isSqlScript(line)
+    if (enableSqlScripting && insideSqlScript) return List(line)
+
+    val ret = new ArrayBuffer[String]()
+    val n = line.length
+    var i = 0
+    var chunkStart = 0
+    var chunkHasSql = false
+    var chunkHasUnclosed = false
+
+    def consumeString(start: Int, quote: Char): Int = {
+      var p = start + 1
+      while (p < n) {
+        val c = line.charAt(p)
+        if (c == '\\' && p + 1 < n) p += 2
+        else if (c == quote) return p + 1
+        else p += 1
+      }
+      chunkHasUnclosed = true; n
+    }
+
+    def consumeLineComment(start: Int): Int = {
+      var p = start + 2
+      while (p < n && line.charAt(p) != '\n') p += 1
+      p
+    }
+
+    def consumeBlockComment(start: Int): Int = {
+      var p = start + 2
+      var level = 1
+      while (p + 1 < n && level > 0) {
+        val c0 = line.charAt(p); val c1 = line.charAt(p + 1)
+        if (c0 == '/' && c1 == '*') { level += 1; p += 2 }
+        else if (c0 == '*' && c1 == '/') { level -= 1; p += 2 }
+        else p += 1
+      }
+      if (level > 0) { chunkHasUnclosed = true; n } else p
+    }
+
+    while (i < n) {
+      val c = line.charAt(i)
+      def peek(ch: Char): Boolean = i + 1 < n && line.charAt(i + 1) == ch
+      if (c == '\'' || c == '"' || c == '`') {
+        chunkHasSql = true; i = consumeString(i, c)
+      } else if (c == '-' && peek('-')) {
+        i = consumeLineComment(i)
+      } else if (c == '/' && peek('*')) {
+        i = consumeBlockComment(i)
+      } else if (c == ';') {
+        if (chunkHasSql) ret += line.substring(chunkStart, i)
+        chunkStart = i + 1; chunkHasSql = false; chunkHasUnclosed = false; i += 1
+      } else {
+        if (!Character.isWhitespace(c)) chunkHasSql = true
+        i += 1
+      }
+    }
+    if (chunkHasSql || chunkHasUnclosed) ret += line.substring(chunkStart)
+    ret.toList
   }
 
-  // Implementation is grabbed from SparkSQLCLIDriver.splitSemiColon, the only difference is this
-  // implementation handles backtick and treat it as single/double quote.
-  // Below comments are from the source:
-  // Adapted splitSemiColon from Hive 2.3's CliDriver.splitSemiColon.
-  // Note: [SPARK-31595] if there is a `'` in a double quoted string, or a `"` in a single quoted
-  // string, the origin implementation from Hive will not drop the trailing semicolon as expected,
-  // hence we refined this function a little bit.
-  // Note: [SPARK-33100] Ignore a semicolon inside a bracketed comment in spark-sql.
-  def splitSemiColonWithIndex(line: String, enableSqlScripting: Boolean): List[String] = {
-    var insideSingleQuote = false
-    var insideDoubleQuote = false
-    var insideBacktick = false
-    var insideSimpleComment = false
-    var bracketedCommentLevel = 0
-    var escape = false
-    var beginIndex = 0
-    var leavingBracketedComment = false
-    var hasPrecedingNonCommentString = false
-    var isStatement = false
-    val ret = new ArrayBuffer[String]()
-
-    lazy val insideSqlScript: Boolean = isSqlScript(line)
-
-    def insideBracketedComment: Boolean = bracketedCommentLevel > 0
-    def insideComment: Boolean = insideSimpleComment || insideBracketedComment
-    def statementInProgress(index: Int): Boolean =
-      isStatement || (!insideComment &&
-        index > beginIndex && !s"${line.charAt(index)}".trim.isEmpty)
-
-    for (index <- 0 until line.length) {
-      // Checks if we need to decrement a bracketed comment level; the last character '/' of
-      // bracketed comments is still inside the comment, so `insideBracketedComment` must keep
-      // true in the previous loop and we decrement the level here if needed.
-      if (leavingBracketedComment) {
-        bracketedCommentLevel -= 1
-        leavingBracketedComment = false
-      }
-
-      if (line.charAt(index) == '\'' && !insideComment) {
-        // take a look to see if it is escaped
-        // See the comment above about SPARK-31595
-        if (!escape && !insideDoubleQuote && !insideBacktick) {
-          // flip the boolean variable
-          insideSingleQuote = !insideSingleQuote
-        }
-      } else if (line.charAt(index) == '\"' && !insideComment) {
-        // take a look to see if it is escaped
-        // See the comment above about SPARK-31595
-        if (!escape && !insideSingleQuote && !insideBacktick) {
-          // flip the boolean variable
-          insideDoubleQuote = !insideDoubleQuote
-        }
-      } else if (line.charAt(index) == '`' && !insideComment) {
-        // take a look to see if it is escaped
-        // See the comment above about SPARK-31595
-        if (!escape && !insideSingleQuote && !insideDoubleQuote) {
-          // flip the boolean variable
-          insideBacktick = !insideBacktick
-        }
-      } else if (line.charAt(index) == '-') {
-        val hasNext = index + 1 < line.length
-        if (insideDoubleQuote || insideSingleQuote || insideBacktick || insideComment) {
-          // Ignores '-' in any case of quotes or comment.
-          // Avoids to start a comment(--) within a quoted segment or already in a comment.
-          // Sample query: select "quoted value --"
-          //                                    ^^ avoids starting a comment if inside quotes.
-        } else if (hasNext && line.charAt(index + 1) == '-') {
-          // ignore quotes and ; in simple comment
-          insideSimpleComment = true
-        }
-      } else if (line.charAt(index) == ';') {
-        if (insideSingleQuote || insideDoubleQuote || insideBacktick || insideComment) {
-          // do not split
-        } else if (enableSqlScripting && insideSqlScript) {
-          // do not split
-        } else {
-          if (isStatement) {
-            // split, do not include ; itself
-            ret.append(line.substring(beginIndex, index))
-          }
-          beginIndex = index + 1
-          isStatement = false
-        }
-      } else if (line.charAt(index) == '\n') {
-        // with a new line the inline simple comment should end.
-        if (!escape) {
-          insideSimpleComment = false
-        }
-      } else if (line.charAt(index) == '/' && !insideSimpleComment) {
-        val hasNext = index + 1 < line.length
-        if (insideSingleQuote || insideDoubleQuote || insideBacktick) {
-          // Ignores '/' in any case of quotes
-        } else if (insideBracketedComment && line.charAt(index - 1) == '*') {
-          // Decrements `bracketedCommentLevel` at the beginning of the next loop
-          leavingBracketedComment = true
-        } else if (hasNext && line.charAt(index + 1) == '*') {
-          bracketedCommentLevel += 1
-          // Check if there's non-comment characters(non space, non newline characters) before
-          // multiline comments.
-          hasPrecedingNonCommentString = beginIndex != index && containsNonWhiteSpaceCharacters(
-            line.substring(beginIndex, index)
-          )
-        }
-      }
-      // set the escape
-      if (escape) {
-        escape = false
-      } else if (line.charAt(index) == '\\') {
-        escape = true
-      }
-
-      isStatement = statementInProgress(index)
-    }
-    // Check the last char is end of nested bracketed comment.
-    val endOfBracketedComment = leavingBracketedComment && bracketedCommentLevel == 1 &&
-      !hasPrecedingNonCommentString
-    // Spark SQL support simple comment and nested bracketed comment in query body.
-    // But if Spark SQL receives a comment alone, it will throw parser exception.
-    // In Spark SQL CLI, if there is a completed comment in the end of whole query,
-    // since Spark SQL CLL use `;` to split the query, CLI will pass the comment
-    // to the backend engine and throw exception. CLI should ignore this comment,
-    // If there is an uncompleted statement or an uncompleted bracketed comment in the end,
-    // CLI should also pass this part to the backend engine, which may throw an exception
-    // with clear error message (for incomplete statement, if there's non comment characters,
-    // we would still append the string).
-    if (!endOfBracketedComment && (isStatement || insideBracketedComment)) {
-      ret.append(line.substring(beginIndex))
-    }
-    ret.toList
+  /** Convenience wrapper: splits on semicolons without SQL scripting awareness. */
+  def splitSemiColon(line: String): List[String] = {
+    splitSemiColonWithIndex(line, enableSqlScripting = false)
   }
 }
