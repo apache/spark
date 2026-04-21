@@ -15,18 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector
+package org.apache.spark.sql.connector.write;
 
-class DeltaBasedNoMetadataDeleteFromTableSuite extends DeleteFromTableSuiteBase {
+import org.apache.spark.annotation.Evolving;
 
-  override protected def deltaDelete: Boolean = true
+/**
+ * Provides an informational summary of the UPDATE operation producing write.
+ *
+ * @since 4.2.0
+ */
+@Evolving
+public interface UpdateSummary extends WriteSummary {
 
-  override protected def extraTableProps: java.util.Map[String, String] = {
-    val props = new java.util.HashMap[String, String]()
-    props.put("supports-deltas", "true")
-    props.put("no-metadata", "true")
-    props
-  }
+  /**
+   * Returns the number of rows updated, or -1 if not found.
+   */
+  long numUpdatedRows();
 
-  override def enforceCheckConstraintOnDelete: Boolean = false
+  /**
+   * Returns the number of rows copied unmodified, or -1 if not found.
+   */
+  long numCopiedRows();
 }

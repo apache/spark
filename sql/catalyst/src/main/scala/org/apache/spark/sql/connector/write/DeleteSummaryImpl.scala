@@ -15,18 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector
+package org.apache.spark.sql.connector.write
 
-class DeltaBasedNoMetadataDeleteFromTableSuite extends DeleteFromTableSuiteBase {
-
-  override protected def deltaDelete: Boolean = true
-
-  override protected def extraTableProps: java.util.Map[String, String] = {
-    val props = new java.util.HashMap[String, String]()
-    props.put("supports-deltas", "true")
-    props.put("no-metadata", "true")
-    props
-  }
-
-  override def enforceCheckConstraintOnDelete: Boolean = false
+/**
+ * Implementation of [[DeleteSummary]] that provides DELETE operation summary.
+ */
+private[sql] case class DeleteSummaryImpl(
+    numDeletedRows: Long,
+    numCopiedRows: Long)
+  extends DeleteSummary {
 }

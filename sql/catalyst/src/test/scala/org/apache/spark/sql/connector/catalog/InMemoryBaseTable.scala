@@ -34,7 +34,7 @@ import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.{Literal => V2Literal}
-import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric, CustomTaskMetric}
+import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric, CustomTaskMetric, NumDeletedRowsMetric}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram, HistogramBin}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
@@ -1123,6 +1123,40 @@ class InMemoryCustomDriverTaskMetric(value: Long) extends CustomTaskMetric {
 class RowsReadCustomMetric extends CustomSumMetric {
   override def name(): String = "rows_read"
   override def description(): String = "number of rows read"
+}
+
+/**
+ * Mixin for [[InMemoryBaseTable]] subclasses that implement [[TruncatableTable]] (directly or via
+ * `SupportsDelete` / `SupportsDeleteV2`) and want to surface the number of rows removed by the
+ * most recent metadata-only DELETE or TRUNCATE. Subclasses call [[recordDeletedRows]] from their
+ * `deleteWhere` implementation with the set of partition keys being removed.
+ */
+trait InMemoryDeleteRowCountMetric extends TruncatableTable { self: InMemoryBaseTable =>
+
+  private var lastDeletedRowCount: Long = -1L
+
+  protected def recordDeletedRows(keysToDelete: Iterable[Seq[Any]]): Unit = {
+    lastDeletedRowCount = keysToDelete.iterator
+      .flatMap(dataMap.get)
+      .flatten
+      .map(_.rows.size.toLong)
+      .sum
+  }
+
+  override def supportedCustomMetrics(): Array[CustomMetric] = {
+    Array(new NumDeletedRowsMetric)
+  }
+
+  override def reportDriverMetrics(): Array[CustomTaskMetric] = {
+    if (lastDeletedRowCount < 0) {
+      Array.empty
+    } else {
+      Array(new CustomTaskMetric {
+        override def name(): String = NumDeletedRowsMetric.NAME
+        override def value(): Long = lastDeletedRowCount
+      })
+    }
+  }
 }
 
 case class Commit(id: Long, writeSummary: Option[WriteSummary] = None)

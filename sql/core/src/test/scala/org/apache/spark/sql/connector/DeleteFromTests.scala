@@ -18,6 +18,9 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
+import org.apache.spark.sql.connector.metric.NumDeletedRowsMetric
+import org.apache.spark.sql.execution.datasources.v2.{DeleteFromTableExec, TruncateTableExec}
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.SimpleScanSource
 
@@ -28,12 +31,30 @@ trait DeleteFromTests extends DatasourceV2SQLBase {
 
   protected val catalogAndNamespace: String
 
+  /**
+   * Runs `thunk` (which is expected to execute a single metadata-only DELETE or TRUNCATE) and
+   * asserts the number of deleted rows reported via the connector's driver metrics.
+   */
+  protected def checkDeleteMetrics(numDeletedRows: Long)(thunk: => Unit): Unit = {
+    val plans = withQueryExecutionsCaptured(spark)(thunk).map(_.executedPlan).filter {
+      case _: DeleteFromTableExec | _: TruncateTableExec => true
+      case _ => false
+    }
+    assert(plans.size === 1,
+      s"expected exactly one metadata-only delete or truncate plan, got $plans")
+    val actual = plans.head.metrics(NumDeletedRowsMetric.NAME).value
+    assert(actual === numDeletedRows,
+      s"expected numDeletedRows=$numDeletedRows, got $actual")
+  }
+
   test("DeleteFrom with v2 filtering: basic - delete all") {
     val t = s"${catalogAndNamespace}tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
       sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
-      sql(s"DELETE FROM $t")
+      checkDeleteMetrics(numDeletedRows = 3) {
+        sql(s"DELETE FROM $t")
+      }
       checkAnswer(spark.table(t), Seq())
     }
   }
@@ -43,7 +64,9 @@ trait DeleteFromTests extends DatasourceV2SQLBase {
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
       sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
-      sql(s"DELETE FROM $t WHERE id = 2")
+      checkDeleteMetrics(numDeletedRows = 2) {
+        sql(s"DELETE FROM $t WHERE id = 2")
+      }
       checkAnswer(spark.table(t), Seq(
         Row(3, "c", 3)))
     }
@@ -54,7 +77,9 @@ trait DeleteFromTests extends DatasourceV2SQLBase {
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
       sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
-      sql(s"DELETE FROM $t AS tbl WHERE tbl.id = 2")
+      checkDeleteMetrics(numDeletedRows = 2) {
+        sql(s"DELETE FROM $t AS tbl WHERE tbl.id = 2")
+      }
       checkAnswer(spark.table(t), Seq(
         Row(3, "c", 3)))
     }
@@ -65,7 +90,9 @@ trait DeleteFromTests extends DatasourceV2SQLBase {
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
       sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
-      sql(s"DELETE FROM $t AS tbl WHERE tbl.ID = 2")
+      checkDeleteMetrics(numDeletedRows = 2) {
+        sql(s"DELETE FROM $t AS tbl WHERE tbl.ID = 2")
+      }
       checkAnswer(spark.table(t), Seq(
         Row(3, "c", 3)))
     }
@@ -129,7 +156,9 @@ trait DeleteFromTests extends DatasourceV2SQLBase {
         sql(s"CACHE TABLE view AS SELECT id FROM $t")
         assert(spark.table(view).count() == 3)
 
-        sql(s"DELETE FROM $t WHERE id = 2")
+        checkDeleteMetrics(numDeletedRows = 2) {
+          sql(s"DELETE FROM $t WHERE id = 2")
+        }
         assert(spark.table(view).count() == 1)
       }
     }
