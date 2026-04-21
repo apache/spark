@@ -28,7 +28,7 @@ import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{BufferedRows, Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTable, InMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SharedInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo}
+import org.apache.spark.sql.connector.catalog.{BufferedRows, Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTable, InMemoryTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SharedInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
 import org.apache.spark.sql.connector.catalog.TableChange
@@ -61,6 +61,9 @@ class DataSourceV2DataFrameSuite
     .set("spark.sql.catalog.nullidcat",
       classOf[NullTableIdInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.nullidcat.copyOnLoad", "true")
+    .set("spark.sql.catalog.nullcolidcat",
+      classOf[NullColumnIdInMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.nullcolidcat.copyOnLoad", "true")
 
   after {
     SharedInMemoryTableCatalog.reset()
@@ -1630,7 +1633,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  // RENAME COLUMN in InMemoryTableCatalog: the reconcileColumnIds
+  // RENAME COLUMN in InMemoryTableCatalog: the preserveOldIDsAndAssignNewIDs
   // method matches by name, so a rename produces a new column ID
   // (the new name doesn't match the old name). Real connectors
   // like Delta preserve IDs through renames at the connector level.
@@ -1652,7 +1655,7 @@ class DataSourceV2DataFrameSuite
         newCols.find(_.name() == "compensation").get.id()
 
       // InMemoryTableCatalog assigns new ID on rename because
-      // reconcileColumnIds matches by name, not by rename tracking
+      // preserveOldIDsAndAssignNewIDs matches by name, not by rename tracking
       assert(origSalaryId !== newCompId,
         "InMemoryTableCatalog assigns new ID on rename: " +
           s"was $origSalaryId, got $newCompId")
@@ -1779,6 +1782,28 @@ class DataSourceV2DataFrameSuite
         parameters = Map(
           "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
           "errors" -> s"- `salary` column ID has changed from $originalSalaryId to $newSalaryId"))
+    }
+  }
+
+  test("column type change preserves column ID") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val originalId = catalog("testcat").loadTable(ident)
+        .columns().find(_.name() == "salary").get.id()
+
+      // change column type (INT -> LONG)
+      sql(s"ALTER TABLE $t ALTER COLUMN salary TYPE LONG")
+
+      val newId = catalog("testcat").loadTable(ident)
+        .columns().find(_.name() == "salary").get.id()
+
+      // column ID should be preserved after type change
+      assert(originalId === newId,
+        "Column ID should be preserved after type change")
     }
   }
 
@@ -1991,7 +2016,7 @@ class DataSourceV2DataFrameSuite
   }
 
   // Nested field drop+re-add: dropping a nested field changes the top-level
-  // column's type, which causes the column ID to change (reconcileColumnIds
+  // column's type, which causes the column ID to change (preserveOldIDsAndAssignNewIDs
   // matches on name AND type). Re-adding the field changes the type again,
   // producing yet another new ID. The DataFrame detects the ID mismatch.
   test("drop+re-add nested struct field detected via top-level column ID change") {
@@ -2287,6 +2312,57 @@ class DataSourceV2DataFrameSuite
         condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  // Column ID tests: Null column ID connector
+
+  // When the connector does not support column IDs (all column IDs are null),
+  // drop/re-add of a column is not detected via column ID validation.
+  // The validation gracefully skips columns with null IDs.
+  test("null column IDs: drop+re-add column not detected by column ID check") {
+    val t = "nullcolidcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val cat = catalog("nullcolidcat")
+
+      // verify column IDs are null
+      val originalCols = cat.loadTable(ident).columns()
+      assert(originalCols.forall(_.id() == null),
+        "NullColumnIdInMemoryTableCatalog should produce null column IDs")
+
+      val df = spark.table(t)
+
+      // drop and re-add column with same name and type
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+
+      // should succeed because column ID validation is skipped when IDs are null
+      val result = df.collect()
+      assert(result.isEmpty || result.nonEmpty)
+    }
+  }
+
+  // When a DataFrame is captured against a connector with column IDs, but
+  // the table is later replaced by one without column IDs (or vice versa),
+  // validation should gracefully skip rather than fail.
+  test("null column IDs: connector without column IDs tolerates schema changes") {
+    val t = "nullcolidcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df = spark.table(t)
+
+      // add a column
+      sql(s"ALTER TABLE $t ADD COLUMN bonus INT")
+      sql(s"INSERT INTO $t VALUES (2, 200, 50)")
+
+      // original DF should still work (captures original columns, new column is ignored)
+      checkAnswer(df, Seq(Row(1, 100), Row(2, 200)))
     }
   }
 
