@@ -138,7 +138,7 @@ private[sql] object V2TableUtil extends SQLConfHelper {
       relation: DataSourceV2Relation): Seq[String] = {
     validateCapturedColumnIds(
       table = table,
-      originCols = relation.table.columns.toImmutableArraySeq)
+      originalCapturedCols = relation.table.columns.toImmutableArraySeq)
   }
 
   /**
@@ -147,21 +147,22 @@ private[sql] object V2TableUtil extends SQLConfHelper {
    * Only validates columns where the original and current column both have non-null IDs.
    *
    * @param table the current table metadata
-   * @param originCols the originally captured columns
+   * @param originalCapturedCols the originally captured columns
    * @return validation errors, or empty sequence if valid
    */
   def validateCapturedColumnIds(
       table: Table,
-      originCols: Seq[Column]): Seq[String] = {
+      originalCapturedCols: Seq[Column]): Seq[String] = {
     val currentColsByNormalizedName = table.columns.toImmutableArraySeq
       .map(currentCol => normalize(currentCol.name()) -> currentCol).toMap
     val errors = new mutable.ArrayBuffer[String]()
-    for (originCol <- originCols) {
-      if (originCol.id() != null) {
-        currentColsByNormalizedName.get(normalize(originCol.name())) match {
-          case Some(currentCol) if currentCol.id() != null && currentCol.id() != originCol.id() =>
-            errors += s"`${originCol.name()}` column ID has changed from " +
-              s"${originCol.id()} to ${currentCol.id()}"
+    for (originalCapturedCol <- originalCapturedCols) {
+      if (originalCapturedCol.id() != null) {
+        currentColsByNormalizedName.get(normalize(originalCapturedCol.name())) match {
+          case Some(currentCol)
+            if currentCol.id() != null && currentCol.id() != originalCapturedCol.id() =>
+            errors += s"`${originalCapturedCol.name()}` column ID has changed from " +
+              s"${originalCapturedCol.id()} to ${currentCol.id()}"
           case _ =>
             // Column exists in the original schema but not in the current table
             // (dropped columns), or both column IDs match. Dropped columns are
