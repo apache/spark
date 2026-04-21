@@ -34,6 +34,41 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * Block-chunked segment tree for range aggregate queries over window partitions.
  *
+ * === Why a segment tree ===
+ *
+ * For moving-frame window aggregates over a sorted partition, the classic
+ * alternatives are:
+ *
+ *   - '''Add/remove with inverse''' (a.k.a. SlidingWindowFunctionFrame's O(1)
+ *     path, and the approach SPARK-36844 explored): maintain a single running
+ *     buffer, `add` on the advancing edge, `remove` on the retreating edge.
+ *     Only works for '''invertible''' aggregates (SUM, COUNT, AVG) -- MIN/MAX
+ *     have no inverse. Numerically problematic for floating-point STDDEV/VAR/
+ *     FP-SUM: error '''accumulates across the whole partition''' and drifts
+ *     monotonically over long partitions.
+ *   - '''Monotonic deque''': O(1) amortized for MIN/MAX only; does not
+ *     generalize.
+ *
+ * Segment-tree merges give up O(1) per row for O(log W) per row but preserve
+ * two load-bearing properties:
+ *
+ *   1. '''No inverse required''' -- any aggregate whose `mergeExpressions`
+ *      is associative works, including MIN/MAX and other non-invertible cases.
+ *      The segment-tree path is therefore the single moving-frame strategy
+ *      applicable to MIN/MAX at scale.
+ *   2. '''Bounded FP error per query''' -- each output row performs
+ *      O(log W) merges over independent block pre-aggregates with no
+ *      cumulative state carried across rows. Rounding error is bounded per
+ *      row rather than accumulating over the partition. This is the reason to
+ *      prefer segtree for STDDEV/VAR/FP-SUM even though an inverse-based O(1)
+ *      scheme looks cheaper on paper.
+ *
+ * Any future author considering an inverse-based optimization for the
+ * aggregates in [[EligibleAggregates]] should verify both properties still
+ * hold before replacing this path.
+ *
+ * === Layout ===
+ *
  * The data layer uses `ExternalAppendOnlyUnsafeRowArray` to hold input rows
  * (spillable). Each block materializes its own small segment tree (levels
  * 0..h). Internal nodes are cached in an LRU keyed by block index; block
