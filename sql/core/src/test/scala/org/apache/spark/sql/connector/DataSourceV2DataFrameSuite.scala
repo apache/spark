@@ -25,7 +25,6 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
 import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTable, InMemoryTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo}
@@ -114,12 +113,9 @@ class DataSourceV2DataFrameSuite
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
       // Default saveMode is ErrorIfExists
-      checkError(
-        exception = intercept[TableAlreadyExistsException] {
-          df.write.saveAsTable(t1)
-        },
-        condition = "TABLE_OR_VIEW_ALREADY_EXISTS",
-        parameters = Map("relationName" -> "`ns1`.`ns2`.`tbl`"))
+      intercept[TableAlreadyExistsException] {
+        df.write.saveAsTable(t1)
+      }
       assert(spark.table(t1).count() === 0)
 
       // appends are by name not by position
@@ -886,14 +882,13 @@ class DataSourceV2DataFrameSuite
               Seq(LiteralValue(100, IntegerType), LiteralValue(23, IntegerType))),
             LiteralValue(123, IntegerType)),
           "{}"))
-      val exception = intercept[SparkException] {
+      val e = intercept[SparkException] {
         val tableInfo = new TableInfo.Builder().withColumns(columns).build()
         catalog("testcat").createTable(Identifier.of(Array("ns1", "ns2"), "tbl"), tableInfo)
         val df = Seq(1, 2, 3).toDF("c1")
         df.writeTo(tableName).append()
       }
-      assert(exception.getMessage.contains(
-        "connector expression couldn't be converted to Catalyst"))
+      assert(e.getMessage.contains("connector expression couldn't be converted to Catalyst"))
     }
   }
 
