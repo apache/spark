@@ -416,7 +416,7 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec {
 }
 
 /**
- * A trait for row-level write operations (UPDATE, DELETE, MERGE) that carry the command.
+ * A trait for row-level write operations (UPDATE, DELETE, MERGE).
  */
 trait RowLevelWriteExec extends V2ExistingTableWriteExec {
   def rowLevelCommand: RowLevelOperation.Command
@@ -474,7 +474,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
   override def output: Seq[Attribute] = Nil
 
   protected val customMetrics: Map[String, SQLMetric] = Map.empty
-  def operationMetrics: Map[String, SQLMetric] = Map.empty
+  protected def operationMetrics: Map[String, SQLMetric] = Map.empty
 
   override lazy val metrics = customMetrics ++ operationMetrics
 
@@ -648,7 +648,7 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
 case class DataAndMetadataWritingSparkTask(
     dataProj: ProjectingInternalRow,
     metadataProj: ProjectingInternalRow,
-    operationMetrics: Map[String, SQLMetric] = Map.empty)
+    operationMetrics: Map[String, SQLMetric])
   extends WritingSparkTask[DataWriter[InternalRow]] {
 
   override protected def write(
@@ -689,7 +689,7 @@ case class DataAndMetadataWritingSparkTask(
 
 case class DataWithProjectionWritingSparkTask(
     dataProj: ProjectingInternalRow,
-    operationMetrics: Map[String, SQLMetric] = Map.empty)
+    operationMetrics: Map[String, SQLMetric])
   extends WritingSparkTask[DataWriter[InternalRow]] {
 
   override protected def write(
@@ -735,7 +735,7 @@ object DataWritingSparkTask extends WritingSparkTask[DataWriter[InternalRow]] {
 
 case class DeltaWritingSparkTask(
     projections: WriteDeltaProjections,
-    operationMetrics: Map[String, SQLMetric] = Map.empty)
+    operationMetrics: Map[String, SQLMetric])
   extends WritingSparkTask[DeltaWriter[InternalRow]] {
 
   private lazy val rowProjection = projections.rowProjection.orNull
@@ -782,7 +782,7 @@ case class DeltaWritingSparkTask(
 
 case class DeltaWithMetadataWritingSparkTask(
     projections: WriteDeltaProjections,
-    operationMetrics: Map[String, SQLMetric] = Map.empty)
+    operationMetrics: Map[String, SQLMetric])
   extends WritingSparkTask[DeltaWriter[InternalRow]] {
 
   private lazy val rowProjection = projections.rowProjection.orNull
@@ -810,9 +810,9 @@ case class DeltaWithMetadataWritingSparkTask(
           metadataProjection.project(row)
           writer.update(metadataProjection, rowIdProjection, rowProjection)
 
-        // When representUpdateAsDeleteAndInsert is true, each logical update is split
-        // into a DELETE and a REINSERT. Count the REINSERT as one updated row.
         case REINSERT_OPERATION =>
+          // When representUpdateAsDeleteAndInsert is true, each logical update is split
+          // into a DELETE and a REINSERT. Count the REINSERT as one updated row.
           numUpdatedRows += 1L
           rowProjection.project(row)
           metadataProjection.project(row)
