@@ -31,8 +31,8 @@ import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
-import org.apache.spark.sql.internal.connector.ColumnImpl
 import org.apache.spark.sql.connector.read.{LocalScan, Scan}
+import org.apache.spark.sql.internal.connector.ColumnImpl
 import org.apache.spark.sql.types.{DataTypes, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
