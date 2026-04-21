@@ -39,6 +39,91 @@ import org.apache.spark.sql.types.IntegerType
 private[window] object SegmentTreeWindowTestHelpers {
 
   /**
+   * Shared plumbing for lifecycle tests: sets up a fake TaskContext, gives
+   * `body` a `newArray(rows)` builder and a `newFrame(arrayLength?)` builder
+   * (unprepared frame, caller drives `prepare()`/`write()`/`close()` as
+   * needed). Always closes any frames the caller registers via `registerClose`.
+   */
+  def withFrameFactory(conf: SQLConf)
+      (body: FrameFactory => Unit): Unit = {
+    val existing = TaskContext.get()
+    val owned = existing == null
+    val tc = if (owned) {
+      val fake = MemoryTestingUtils.fakeTaskContext(SparkEnv.get)
+      TaskContext.setTaskContext(fake)
+      fake
+    } else existing
+    val factory = new FrameFactory(conf, tc)
+    try body(factory) finally {
+      factory.closeAll()
+      if (owned) TaskContext.unset()
+    }
+  }
+
+  final class FrameFactory(conf: SQLConf, tc: TaskContext) {
+    private val attr = AttributeReference("v", IntegerType, nullable = false)()
+    private val input = Seq[Attribute](attr)
+    private val fn = Sum(attr)
+    private val bufAttrs = fn.aggBufferAttributes
+    private val processor = AggregateProcessor(
+      Array[Expression](fn),
+      0,
+      input,
+      (es, s) => GenerateMutableProjection.generate(es, s),
+      Array[Option[Expression]](None))
+    private val unsafeProj = UnsafeProjection.create(Array(attr.dataType))
+    private val opened = scala.collection.mutable.Buffer[AutoCloseable]()
+
+    def newArray(rows: Int): ExternalAppendOnlyUnsafeRowArray = {
+      val array = new ExternalAppendOnlyUnsafeRowArray(
+        tc.taskMemoryManager(),
+        SparkEnv.get.blockManager,
+        SparkEnv.get.serializerManager,
+        tc,
+        1024,
+        SparkEnv.get.memoryManager.pageSizeBytes,
+        Int.MaxValue,
+        Long.MaxValue,
+        Int.MaxValue,
+        Long.MaxValue)
+      var i = 0
+      while (i < rows) {
+        array.add(unsafeProj(new GenericInternalRow(Array[Any](i))))
+        i += 1
+      }
+      array
+    }
+
+    /** Create a new frame. Caller owns lifecycle unless tracked via `track()`. */
+    def newFrame(): SegmentTreeWindowFunctionFrame = {
+      val target = new SpecificInternalRow(Seq(bufAttrs.head.dataType))
+      val frame = new SegmentTreeWindowFunctionFrame(
+        target,
+        processor,
+        Array(fn),
+        input,
+        RowFrame,
+        RowBoundOrdering(-1),
+        RowBoundOrdering(1),
+        (es, s) => GenerateMutableProjection.generate(es, s),
+        conf,
+        None,
+        tc.taskMemoryManager())
+      track(frame)
+      frame
+    }
+
+    def track[T <: AutoCloseable](c: T): T = { opened += c; c }
+
+    def closeAll(): Unit = {
+      opened.foreach { c =>
+        try c.close() catch { case _: Throwable => () }
+      }
+      opened.clear()
+    }
+  }
+
+  /**
    * Build a small-partition [[SegmentTreeWindowFunctionFrame]] (Sum over a
    * single IntegerType column, `rows` values = 0..rows-1, frame = -1..+1),
    * drive it through all rows, and hand the frame to `body`. Manages a
@@ -47,71 +132,17 @@ private[window] object SegmentTreeWindowTestHelpers {
    */
   def withSmallPartitionFrame(conf: SQLConf, rows: Int)
       (body: SegmentTreeWindowFunctionFrame => Unit): Unit = {
-    val existing = TaskContext.get()
-    val owned = existing == null
-    val tc = if (owned) {
-      val fake = MemoryTestingUtils.fakeTaskContext(SparkEnv.get)
-      TaskContext.setTaskContext(fake)
-      fake
-    } else existing
-    try {
-      val frame = buildSmallPartitionFrame(conf, rows, tc)
-      try body(frame) finally frame.close()
-    } finally {
-      if (owned) TaskContext.unset()
+    withFrameFactory(conf) { factory =>
+      val frame = factory.newFrame()
+      val array = factory.newArray(rows)
+      frame.prepare(array)
+      var j = 0
+      while (j < rows) {
+        frame.write(j, InternalRow.empty)
+        j += 1
+      }
+      body(frame)
     }
-  }
-
-  private def buildSmallPartitionFrame(
-      conf: SQLConf, rows: Int, tc: TaskContext): SegmentTreeWindowFunctionFrame = {
-    val attr = AttributeReference("v", IntegerType, nullable = false)()
-    val input = Seq[Attribute](attr)
-    val fn = Sum(attr)
-    val bufAttrs = fn.aggBufferAttributes
-    val processor = AggregateProcessor(
-      Array[Expression](fn),
-      0,
-      input,
-      (es, s) => GenerateMutableProjection.generate(es, s),
-      Array[Option[Expression]](None))
-    val target = new SpecificInternalRow(Seq(bufAttrs.head.dataType))
-    val array = new ExternalAppendOnlyUnsafeRowArray(
-      tc.taskMemoryManager(),
-      SparkEnv.get.blockManager,
-      SparkEnv.get.serializerManager,
-      tc,
-      1024,
-      SparkEnv.get.memoryManager.pageSizeBytes,
-      Int.MaxValue,
-      Long.MaxValue,
-      Int.MaxValue,
-      Long.MaxValue)
-    val unsafeProj = UnsafeProjection.create(Array(attr.dataType))
-    var i = 0
-    while (i < rows) {
-      val r = new GenericInternalRow(Array[Any](i))
-      array.add(unsafeProj(r))
-      i += 1
-    }
-    val frame = new SegmentTreeWindowFunctionFrame(
-      target,
-      processor,
-      Array(fn),
-      input,
-      RowFrame,
-      RowBoundOrdering(-1),
-      RowBoundOrdering(1),
-      (es, s) => GenerateMutableProjection.generate(es, s),
-      conf,
-      None,
-      tc.taskMemoryManager())
-    frame.prepare(array)
-    var j = 0
-    while (j < rows) {
-      frame.write(j, InternalRow.empty)
-      j += 1
-    }
-    frame
   }
 
   /**
