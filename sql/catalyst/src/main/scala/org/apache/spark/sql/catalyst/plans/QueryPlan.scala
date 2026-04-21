@@ -526,11 +526,13 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    */
   def subqueries: Seq[PlanType] = _subqueries()
 
-  private val _subqueries = new TransientBestEffortLazyVal(() =>
+  private val _subqueries = new TransientBestEffortLazyVal(() => {
+    val planFamily = QueryPlan.planFamilyClass(getClass)
     expressions.filter(_.containsPattern(PLAN_EXPRESSION)).flatMap(_.collect {
-      case e: PlanExpression[_] => e.plan.asInstanceOf[PlanType]
+      case e: PlanExpression[_] if planFamily.isInstance(e.plan) =>
+        e.plan.asInstanceOf[PlanType]
     })
-  )
+  })
 
   /**
    * All the subqueries of the current plan node and all its children. Nested subqueries are also
@@ -868,5 +870,20 @@ object QueryPlan extends PredicateHelper {
     case str: String if (str == null || str.isEmpty) => s"${fieldName}: None"
     case str: String => s"${fieldName}: ${str}"
     case _ => throw new IllegalArgumentException(s"Unsupported type for argument values: $values")
+  }
+
+  /**
+   * Returns the direct subclass of [[QueryPlan]] in the given class's hierarchy.
+   * Used to determine the "plan family" (e.g. LogicalPlan, SparkPlan) for safe type filtering.
+   */
+  def planFamilyClass(clazz: Class[_]): Class[_] = {
+    val base = classOf[QueryPlan[_]]
+    var current: Class[_] = clazz
+    while (current != null) {
+      val parent: Class[_] = current.getSuperclass
+      if (parent == base) return current
+      current = parent
+    }
+    base
   }
 }

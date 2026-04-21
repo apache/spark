@@ -185,4 +185,18 @@ class QueryPlanSuite extends SparkFunSuite {
     assert(visited.size == 2)
     assert(visited.forall(_.containsPattern(TreePattern.FILTER)))
   }
+
+  test("SPARK-54560: subqueries filters out plans of incompatible type") {
+    val a: NamedExpression = AttributeReference("a", IntegerType)()
+    val innerPlan = Project(Seq(a), UnresolvedRelation(TableIdentifier("t", None)))
+
+    // Normal case: LogicalPlan with LogicalPlan subquery should still work.
+    val normalPlan = Filter(ListQuery(innerPlan), UnresolvedRelation(TableIdentifier("t", None)))
+    assert(normalPlan.subqueries.size == 1)
+
+    // Test planFamilyClass utility returns the correct direct subclass of QueryPlan.
+    assert(QueryPlan.planFamilyClass(classOf[Project]) == classOf[LogicalPlan])
+    assert(QueryPlan.planFamilyClass(classOf[Filter]) == classOf[LogicalPlan])
+    assert(QueryPlan.planFamilyClass(classOf[LocalRelation]) == classOf[LogicalPlan])
+  }
 }
