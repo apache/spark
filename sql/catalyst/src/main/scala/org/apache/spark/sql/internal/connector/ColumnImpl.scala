@@ -23,7 +23,6 @@ import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, Ident
 import org.apache.spark.sql.types.DataType
 
 // The standard concrete implementation of data source V2 column.
-// Column ID is excluded from equals/hashCode.
 case class ColumnImpl(
     name: String,
     dataType: DataType,
@@ -35,6 +34,7 @@ case class ColumnImpl(
     metadataInJSON: String,
     override val id: String = null) extends Column {
 
+  // [[id]] is excluded from [[equals]] and [[hashCode]].
   override def equals(other: Any): Boolean = other match {
     case that: ColumnImpl =>
       name == that.name &&
