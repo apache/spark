@@ -305,7 +305,8 @@ class ChannelBuilder:
         ua_len = len(urllib.parse.quote(user_agent))
         if ua_len > 2048:
             raise SparkConnectException(
-                f"'user_agent' parameter should not exceed 2048 characters, found {len} characters."
+                f"'user_agent' parameter should not exceed 2048 characters after URL "
+                f"escaping, found {ua_len} characters."
             )
         return " ".join(
             [
