@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   TypeCoercionValidation,
   UnresolvedAlias,
   UnresolvedAttribute,
+  UnresolvedExtractValue,
   UnresolvedFunction,
   UnresolvedHaving,
   UnresolvedOrdinal,
@@ -149,6 +150,7 @@ class ExpressionResolver(
   private val ordinalResolver = new OrdinalResolver(resolver)
   private val lcaResolver = new LateralColumnAliasResolver(this, resolver)
   private val semiStructuredExtractResolver = new SemiStructuredExtractResolver(this)
+  private val extractValueResolver = new ExtractValueResolver(this)
 
   /**
    * Get the expression tree traversal stack.
@@ -219,6 +221,17 @@ class ExpressionResolver(
     val (resolvedExpression, _) =
       resolveExpressionTreeInOperatorImpl(unresolvedExpression, parentOperator)
     resolvedExpression
+  }
+
+  def resolveExpressionPotentiallyContainingGroupingAnalytics(
+      expression: Expression,
+      parentOperator: LogicalPlan): (Expression, Boolean) = {
+    val (resolvedExpression, expressionResolutionContext) = resolveExpressionTreeInOperatorImpl(
+      unresolvedExpression = expression,
+      parentOperator = parentOperator
+    )
+
+    (resolvedExpression, expressionResolutionContext.hasGroupingAnalyticsExpression)
   }
 
   /**
@@ -362,6 +375,8 @@ class ExpressionResolver(
             resolveCollation(unresolvedCollation)
           case semiStructuredExtract: SemiStructuredExtract =>
             semiStructuredExtractResolver.resolve(semiStructuredExtract)
+          case unresolvedExtractValue: UnresolvedExtractValue =>
+            extractValueResolver.resolve(unresolvedExtractValue)
           case expression: Expression =>
             resolveExpressionGenericallyWithTypeCoercion(expression)
         }
@@ -848,6 +863,12 @@ class ExpressionResolver(
       tryAddReferencedAttribute(candidate)
 
       val processedCandidate = processCandidateFromNameTarget(candidate)
+
+      candidate match {
+        case _: Grouping | _: GroupingID =>
+          expressionResolutionContextStack.peek().hasGroupingAnalyticsExpression = true
+        case _ =>
+      }
 
       if (expressionResolutionContext.shouldPreserveAlias && nameTarget.aliasName.isDefined) {
         generateAliasForCandidateFromNameTarget(

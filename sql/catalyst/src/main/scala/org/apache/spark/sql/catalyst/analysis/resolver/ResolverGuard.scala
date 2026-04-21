@@ -177,8 +177,6 @@ class ResolverGuard(
     expression match {
       case alias: Alias =>
         checkAlias(alias)
-      case multiAlias: MultiAlias =>
-        checkMultiAlias(multiAlias)
       case unresolvedConditionalExpression: ConditionalExpression =>
         checkUnresolvedConditionalExpression(unresolvedConditionalExpression)
       case unresolvedCast: Cast =>
@@ -264,6 +262,12 @@ class ResolverGuard(
   private def checkProject(project: Project) = {
     checkProjectHiddenOutputTag(project)
       .orElse(checkOperator(project.child))
+      .orElse {
+        project.projectList.collectFirst {
+          case star: UnresolvedStar if hasUnsupportedStarTarget(star) =>
+            "unsupported star target"
+        }
+      }
       .orElse {
         project.projectList.filterNot(_.isInstanceOf[UnresolvedStar]).collectFirst {
           case CheckExpression(reason) => reason
@@ -665,6 +669,12 @@ class ResolverGuard(
    * We currently do not support a second resolution because information about the hidden output of
    * [[NaturalJoin]] is lost during the first resolution.
    */
+  private def hasUnsupportedStarTarget(star: UnresolvedStar): Boolean = {
+    star.target.exists(_.exists(name =>
+      ResolverGuard.UNSUPPORTED_ATTRIBUTE_NAMES.contains(name)
+    ))
+  }
+
   private def checkProjectHiddenOutputTag(project: Project): Option[String] = {
     project.getTagValue(Project.hiddenOutputTag) match {
       case Some(_) => Some("NaturalJoin second resolution")
@@ -726,6 +736,19 @@ object ResolverGuard {
     // Functions that are not resolved properly.
     // Functions that produce wrong schemas/plans because of alias assignment.
     map += ("from_json", ())
+    // Generator functions are not yet supported by the single-pass resolver.
+    map += ("collations", ())
+    map += ("explode", ())
+    map += ("explode_outer", ())
+    map += ("inline", ())
+    map += ("inline_outer", ())
+    map += ("json_tuple", ())
+    map += ("posexplode", ())
+    map += ("posexplode_outer", ())
+    map += ("stack", ())
+    map += ("sql_keywords", ())
+    map += ("variant_explode", ())
+    map += ("variant_explode_outer", ())
   }
 
   /**

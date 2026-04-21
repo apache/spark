@@ -30,6 +30,8 @@ import org.apache.spark.sql.catalyst.expressions.{
   Collate,
   Expression,
   ExpressionWithRandomSeed,
+  Grouping,
+  GroupingID,
   InheritAnalysisRules,
   ResolvedCollation,
   TryEval,
@@ -68,6 +70,8 @@ class FunctionResolver(
     with CoercesExpressionTypes {
 
   private val random = new Random()
+  private val higherOrderFunctionResolver =
+    new HigherOrderFunctionResolver(expressionResolver, functionResolution)
   private val traversals = expressionResolver.getExpressionTreeTraversals
   private val expressionResolutionContextStack =
     expressionResolver.getExpressionResolutionContextStack
@@ -121,6 +125,11 @@ class FunctionResolver(
       nameParts = unresolvedFunction.nameParts,
       unresolvedFunc = Some(unresolvedFunction)
     )
+
+    if (expressionInfo.exists(_.getGroup == "lambda_funcs")) {
+      return higherOrderFunctionResolver.resolve(unresolvedFunction)
+    }
+
     val expressionResolutionContext = expressionResolutionContextStack.peek()
 
     if (expressionInfo.exists(_.getGroup == "agg_funcs")) {
@@ -200,6 +209,9 @@ class FunctionResolver(
       case windowFunction: WindowFunction
           if (expressionResolutionContext.windowFunctionNestednessLevel != 1) =>
         throwWindowFunctionWithoutOverClause(windowFunction)
+      case grouping @ (_: Grouping | _: GroupingID) =>
+        expressionResolutionContextStack.peek().hasGroupingAnalyticsExpression = true
+        coerceExpressionTypes(expression = grouping, expressionTreeTraversal = traversals.current)
       case other =>
         coerceExpressionTypes(expression = other, expressionTreeTraversal = traversals.current)
     }

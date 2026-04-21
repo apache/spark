@@ -42,7 +42,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
  */
 class AggregateResolver(
     operatorResolver: Resolver,
-    expressionResolver: ExpressionResolver)
+    expressionResolver: ExpressionResolver,
+    groupingAnalyticsResolver: GroupingAnalyticsResolver)
     extends TreeNodeResolver[Aggregate, LogicalPlan]
     with AliasHelper
     with RetainsOriginalJoinOutput {
@@ -133,14 +134,23 @@ class AggregateResolver(
           resolvedGroupingExpressions
         }
 
-      val resolvedGroupingExpressionsWithoutAliases = resolvedGroupingExpressions.map(trimAliases)
-      val resolvedAggregateExpressionsWithoutAliases =
-        resolvedAggregateExpressions.expressions.map(trimNonTopLevelAliases)
-
-      val finalAggregate = unresolvedAggregate.copy(
-        groupingExpressions = resolvedGroupingExpressionsWithoutAliases,
-        aggregateExpressions = resolvedAggregateExpressionsWithoutAliases,
+      val resolvedAggregate = unresolvedAggregate.copy(
+        groupingExpressions = resolvedGroupingExpressions,
+        aggregateExpressions = resolvedAggregateExpressions.expressions,
         child = resolvedChildWithMetadataColumns
+      )
+
+      val resolvedAggregateWithGroupingAnalytics =
+        groupingAnalyticsResolver.resolve(aggregate = resolvedAggregate)
+
+      val groupingExpressionsWithoutAliases =
+        resolvedAggregateWithGroupingAnalytics.groupingExpressions.map(trimAliases)
+      val aggregateExpressionsWithoutAliases =
+        resolvedAggregateWithGroupingAnalytics.aggregateExpressions.map(trimNonTopLevelAliases)
+
+      val finalAggregate = resolvedAggregateWithGroupingAnalytics.copy(
+        groupingExpressions = groupingExpressionsWithoutAliases,
+        aggregateExpressions = aggregateExpressionsWithoutAliases
       )
 
       if (resolvedAggregateExpressions.hasLateralColumnAlias) {

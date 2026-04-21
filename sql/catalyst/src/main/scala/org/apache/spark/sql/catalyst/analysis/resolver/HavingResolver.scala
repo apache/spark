@@ -29,7 +29,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPl
 /**
  * Resolves [[UnresolvedHaving]] node and its condition.
  */
-class HavingResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
+class HavingResolver(
+    resolver: Resolver,
+    expressionResolver: ExpressionResolver,
+    groupingAnalyticsResolver: GroupingAnalyticsResolver)
     extends TreeNodeResolver[UnresolvedHaving, LogicalPlan]
     with RewritesAliasesInTopLcaProject
     with ResolvesNameByHiddenOutput
@@ -211,16 +214,26 @@ class HavingResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
       resolvedChild: LogicalPlan): LogicalPlan = {
     val partiallyResolvedHaving =
       Filter(condition = unresolvedHaving.havingCondition, child = resolvedChild)
-    val partiallyResolvedCondition = expressionResolver.resolveExpressionTreeInOperator(
-      partiallyResolvedHaving.condition,
-      partiallyResolvedHaving
-    )
+    val (partiallyResolvedCondition, hasGroupingAnalyticsExpression) =
+      expressionResolver.resolveExpressionPotentiallyContainingGroupingAnalytics(
+        partiallyResolvedHaving.condition,
+        partiallyResolvedHaving
+      )
+
+    val conditionWithGroupingAnalytics = if (hasGroupingAnalyticsExpression) {
+      groupingAnalyticsResolver.handleHavingConditionWithGroupingAnalytics(
+        havingCondition = partiallyResolvedCondition,
+        partiallyResolvedHaving = partiallyResolvedHaving
+      )
+    } else {
+      partiallyResolvedCondition
+    }
 
     val (resolvedCondition, missingExpressions) = resolvedChild match {
       case _ @(_: Project | _: Aggregate) if scopes.current.baseAggregate.isDefined =>
         handleAggregateBelowHaving(
           scopes.current.baseAggregate.get,
-          partiallyResolvedCondition
+          conditionWithGroupingAnalytics
         )
       case other =>
         throw SparkException.internalError(

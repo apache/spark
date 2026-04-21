@@ -21,7 +21,7 @@ import java.util.HashMap
 
 import org.apache.spark.sql.catalyst.analysis.{RelationResolution, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.LookupCatalog
+import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -76,18 +76,55 @@ trait RelationMetadataProvider extends LookupCatalog {
    * This method is public, because it's used in [[MetadataResolverSuite]].
    */
   def relationIdFromUnresolvedRelation(unresolvedRelation: UnresolvedRelation): RelationId = {
-    relationResolution.expandIdentifier(unresolvedRelation.multipartIdentifier) match {
-      case CatalogAndIdentifier(catalog, ident) =>
-        RelationId(
-          multipartIdentifier =
-            Seq(catalog.name()) ++ ident.namespace().toImmutableArraySeq ++ Seq(ident.name()),
-          options = unresolvedRelation.options,
-          isStreaming = unresolvedRelation.isStreaming,
-          timeTravelSpec = None
-        )
-      case _ =>
-        val searchPath = relationResolution.resolutionSearchPathForError
-        unresolvedRelation.tableNotFound(unresolvedRelation.multipartIdentifier, searchPath)
+    val identifier = unresolvedRelation.multipartIdentifier
+    val isGlobalTempView = identifier.length == 2 &&
+      catalogManager.v1SessionCatalog.isGlobalTempViewDB(identifier.head)
+    val isTempView = !isGlobalTempView &&
+      relationResolution.lookupTempView(identifier).isDefined
+    val multipartIdentifier =
+      if (isTempView) {
+        expandSessionTemporaryViewIdentifier(identifier)
+      } else {
+        val expanded = relationResolution.expandIdentifier(identifier)
+        expanded match {
+          case CatalogAndIdentifier(catalog, ident) =>
+            Seq(catalog.name()) ++ ident.namespace().toImmutableArraySeq ++ Seq(ident.name())
+          case _ =>
+            // expandIdentifier returns bare names at top level (not inside views).
+            // Fall back to current catalog/namespace to produce a unique key.
+            Seq(catalogManager.currentCatalog.name()) ++
+              catalogManager.currentNamespace.toImmutableArraySeq ++
+              identifier
+        }
+      }
+
+    RelationId(
+      multipartIdentifier = multipartIdentifier,
+      options = unresolvedRelation.options,
+      isStreaming = unresolvedRelation.isStreaming,
+      timeTravelSpec = None
+    )
+  }
+
+  /**
+   * Expands a session temporary view identifier to `system.session.<name>` to avoid
+   * [[RelationId]] collisions with persistent tables of the same name in the
+   * [[relationsWithResolvedMetadata]] map.
+   */
+  private def expandSessionTemporaryViewIdentifier(
+      multipartIdentifier: Seq[String]): Seq[String] = {
+    if (multipartIdentifier.length >= 3 &&
+        multipartIdentifier.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+        multipartIdentifier(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
+      Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE) ++
+        multipartIdentifier.drop(2)
+    } else if (multipartIdentifier.length >= 2 &&
+        multipartIdentifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
+      Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE) ++
+        multipartIdentifier.drop(1)
+    } else {
+      Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE) ++
+        multipartIdentifier
     }
   }
 }

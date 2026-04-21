@@ -203,12 +203,11 @@ object AnalysisContext {
     } else {
       originContext.maxNestedViewDepth
     }
-    val context = AnalysisContext(
+    val context = originContext.copy(
       isDefault = false,
       catalogAndNamespace = viewDesc.viewCatalogAndNamespace,
       nestedViewDepth = originContext.nestedViewDepth + 1,
       maxNestedViewDepth = maxNestedViewDepth,
-      relationCache = originContext.relationCache,
       referredTempViewNames = viewDesc.viewReferredTempViewNames,
       referredTempFunctionNames = mutable.Set(viewDesc.viewReferredTempFunctionNames: _*),
       referredTempVariableNames = viewDesc.viewReferredTempVariableNames,

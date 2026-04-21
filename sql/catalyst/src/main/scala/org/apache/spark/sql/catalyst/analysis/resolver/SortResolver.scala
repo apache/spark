@@ -43,7 +43,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{
 /**
  * Resolves a [[Sort]] by resolving its child and order expressions.
  */
-class SortResolver(operatorResolver: Resolver, expressionResolver: ExpressionResolver)
+class SortResolver(
+    operatorResolver: Resolver,
+    expressionResolver: ExpressionResolver,
+    groupingAnalyticsResolver: GroupingAnalyticsResolver)
     extends TreeNodeResolver[Sort, LogicalPlan]
     with RewritesAliasesInTopLcaProject
     with ResolvesNameByHiddenOutput {
@@ -150,18 +153,27 @@ class SortResolver(operatorResolver: Resolver, expressionResolver: ExpressionRes
     } else {
       val partiallyResolvedSort = unresolvedSort.copy(child = resolvedChild)
 
-      val (partiallyResolvedOrderExpressions, missingAttributes) =
+      val (partiallyResolvedOrderExpressions, missingAttributes, hasGroupingAnalyticsExpression) =
         resolveOrderExpressions(partiallyResolvedSort)
+
+      val orderExpressionsWithGroupingAnalytics = if (hasGroupingAnalyticsExpression) {
+        groupingAnalyticsResolver.handleSortOrderExpressionsWithGroupingAnalytics(
+          orderExpressions = partiallyResolvedOrderExpressions,
+          sort = partiallyResolvedSort
+        )
+      } else {
+        partiallyResolvedOrderExpressions
+      }
 
       val (resolvedOrderExpressions, missingExpressions) = resolvedChild match {
         case _ @(_: Aggregate | _: Filter | _: Project)
             if scopes.current.baseAggregate.isDefined =>
           extractReferencedGroupingAndAggregateExpressions(
             scopes.current.baseAggregate.get,
-            partiallyResolvedOrderExpressions
+            orderExpressionsWithGroupingAnalytics
           )
         case other =>
-          (partiallyResolvedOrderExpressions, missingAttributes)
+          (orderExpressionsWithGroupingAnalytics, missingAttributes)
       }
 
       val (resolvedOrderExpressionsWithAliasesReplaced, filteredMissingExpressions) =
@@ -231,17 +243,21 @@ class SortResolver(operatorResolver: Resolver, expressionResolver: ExpressionRes
    *     }}}
    */
   private def resolveOrderExpressions(
-      partiallyResolvedSort: Sort): (Seq[SortOrder], Seq[Attribute]) = {
+      partiallyResolvedSort: Sort): (Seq[SortOrder], Seq[Attribute], Boolean) = {
     val orderByOrdinal = conf.orderByOrdinal
     val replaceOrdinalsBeforeAnalysis = true
 
     val referencedAttributes = new HashMap[ExprId, Attribute]
+    var hasGroupingAnalyticsExpression = false
 
     val resolvedSortOrder = partiallyResolvedSort.order.map { sortOrder =>
-      val resolvedSortOrder = expressionResolver
-        .resolveExpressionTreeInOperator(sortOrder, partiallyResolvedSort)
-        .asInstanceOf[SortOrder]
+      val (resolvedExpression, hasGroupingAnalytics) =
+        expressionResolver.resolveExpressionPotentiallyContainingGroupingAnalytics(
+          sortOrder, partiallyResolvedSort
+        )
+      val resolvedSortOrder = resolvedExpression.asInstanceOf[SortOrder]
 
+      hasGroupingAnalyticsExpression |= hasGroupingAnalytics
       referencedAttributes.putAll(expressionResolver.getLastReferencedAttributes)
 
       if (replaceOrdinalsBeforeAnalysis) {
@@ -255,7 +271,7 @@ class SortResolver(operatorResolver: Resolver, expressionResolver: ExpressionRes
       referencedAttributes
     )
 
-    (resolvedSortOrder, missingAttributes)
+    (resolvedSortOrder, missingAttributes, hasGroupingAnalyticsExpression)
   }
 
   /**

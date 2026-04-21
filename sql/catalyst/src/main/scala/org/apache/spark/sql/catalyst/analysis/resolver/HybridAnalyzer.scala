@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.Random
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, Analyzer}
@@ -126,6 +127,9 @@ class HybridAnalyzer(
    * [[HybridAnalyzer]] scaladoc.
    * */
   private def resolveInDualRun(plan: LogicalPlan): LogicalPlan = {
+    val logDualRunResult =
+      conf.getConf(SQLConf.ANALYZER_LOG_ERRORS_INSTEAD_OF_THROWING_IN_DUAL_RUNS)
+
     var fixedPointException: Option[Throwable] = None
     val fixedPointResult = try {
       val (resolutionDuration, result) = recordDuration {
@@ -158,31 +162,88 @@ class HybridAnalyzer(
           case Some(_) =>
             throw fixedPointEx
           case None =>
-            throw QueryCompilationErrors.fixedPointFailedSinglePassSucceeded(
-              singlePassResult.get,
-              fixedPointEx
+            handleFixedPointFailedSinglePassSucceeded(
+              logDualRunResult = logDualRunResult,
+              singlePassResult = singlePassResult.get,
+              fixedPointException = fixedPointEx
             )
         }
       case None =>
         singlePassException match {
-          case Some(_: ExplicitlyUnsupportedResolverFeature) =>
-            fixedPointResult.get
+          case Some(singlePassEx: ExplicitlyUnsupportedResolverFeature) =>
+            handleExplicitlyUnsupportedResolverFeature(
+              logDualRunResult = logDualRunResult,
+              singlePassException = singlePassEx,
+              fixedPointResult = fixedPointResult.get
+            )
+          case Some(singlePassEx: SparkThrowable)
+              if singlePassEx.getCondition ==
+                "UNSUPPORTED_SINGLE_PASS_ANALYZER_FEATURE" =>
+            handleExplicitlyUnsupportedResolverFeature(
+              logDualRunResult = logDualRunResult,
+              singlePassException = singlePassEx.asInstanceOf[Throwable],
+              fixedPointResult = fixedPointResult.get
+            )
           case Some(singlePassEx) =>
-            throw QueryCompilationErrors.singlePassFailedFixedPointSucceeded(
-              fixedPointResult.get,
-              singlePassEx
+            handleSinglePassFailedFixedPointSucceeded(
+              logDualRunResult = logDualRunResult,
+              singlePassException = singlePassEx,
+              fixedPointResult = fixedPointResult.get
             )
           case None =>
-            validateLogicalPlans(
-              fixedPointResult = fixedPointResult.get,
-              singlePassResult = singlePassResult.get
-            )
-            if (conf.getConf(SQLConf.ANALYZER_DUAL_RUN_RETURN_SINGLE_PASS_RESULT)) {
-              singlePassResult.get
+            if (validateLogicalPlans(
+                fixedPointResult = fixedPointResult.get,
+                singlePassResult = singlePassResult.get,
+                logDualRunResult = logDualRunResult
+              )) {
+              handleDualRunSucceeded(
+                logDualRunResult = logDualRunResult,
+                fixedPointResult = fixedPointResult.get,
+                singlePassResult = singlePassResult.get
+              )
             } else {
               fixedPointResult.get
             }
         }
+    }
+  }
+
+  private def handleFixedPointFailedSinglePassSucceeded(
+      logDualRunResult: Boolean,
+      singlePassResult: LogicalPlan,
+      fixedPointException: Throwable): Nothing = {
+    throw fixedPointException
+  }
+
+  private def handleExplicitlyUnsupportedResolverFeature(
+      logDualRunResult: Boolean,
+      singlePassException: Throwable,
+      fixedPointResult: LogicalPlan): LogicalPlan = {
+    fixedPointResult
+  }
+
+  private def handleSinglePassFailedFixedPointSucceeded(
+      logDualRunResult: Boolean,
+      singlePassException: Throwable,
+      fixedPointResult: LogicalPlan): LogicalPlan = {
+    if (logDualRunResult) {
+      fixedPointResult
+    } else {
+      throw QueryCompilationErrors.singlePassFailedFixedPointSucceeded(
+        fixedPointResult = fixedPointResult,
+        singlePassException = singlePassException
+      )
+    }
+  }
+
+  private def handleDualRunSucceeded(
+      logDualRunResult: Boolean,
+      fixedPointResult: LogicalPlan,
+      singlePassResult: LogicalPlan): LogicalPlan = {
+    if (conf.getConf(SQLConf.ANALYZER_DUAL_RUN_RETURN_SINGLE_PASS_RESULT)) {
+      singlePassResult
+    } else {
+      fixedPointResult
     }
   }
 
@@ -283,30 +344,67 @@ class HybridAnalyzer(
 
   private def validateLogicalPlans(
       fixedPointResult: LogicalPlan,
-      singlePassResult: LogicalPlan): Unit = {
+      singlePassResult: LogicalPlan,
+      logDualRunResult: Boolean): Boolean = {
     if (fixedPointResult.schema != singlePassResult.schema) {
-      throw QueryCompilationErrors.hybridAnalyzerOutputSchemaComparisonMismatch(
+      handleSchemaMismatch(
+        logDualRunResult = logDualRunResult,
+        fixedPointResult = fixedPointResult,
+        singlePassResult = singlePassResult
+      )
+      false
+    } else {
+      compareLogicalPlans(
+        logDualRunResult = logDualRunResult,
+        fixedPointResult = fixedPointResult,
+        singlePassResult = singlePassResult
+      )
+    }
+  }
+
+  private def handleSchemaMismatch(
+      logDualRunResult: Boolean,
+      singlePassResult: LogicalPlan,
+      fixedPointResult: LogicalPlan): Unit = {
+    val outputSchemaMismatchException =
+      QueryCompilationErrors.hybridAnalyzerOutputSchemaComparisonMismatch(
         fixedPointResult.schema,
         singlePassResult.schema
       )
+    if (!logDualRunResult) {
+      throw outputSchemaMismatchException
     }
-
-    compareLogicalPlans(
-      fixedPointResult = fixedPointResult,
-      singlePassResult = singlePassResult
-    )
   }
 
   private def compareLogicalPlans(
+      logDualRunResult: Boolean,
       fixedPointResult: LogicalPlan,
-      singlePassResult: LogicalPlan): Unit = {
+      singlePassResult: LogicalPlan): Boolean = {
     val fixedPointNormalizedResult = normalizePlan(fixedPointResult)
     val singlePassNormalizedResult = normalizePlan(singlePassResult)
-    if (fixedPointNormalizedResult != singlePassNormalizedResult) {
-      throw QueryCompilationErrors.hybridAnalyzerLogicalPlanComparisonMismatch(
-        fixedPointOutput = fixedPointNormalizedResult,
-        singlePassOutput = singlePassNormalizedResult
+    if (fixedPointNormalizedResult == singlePassNormalizedResult) {
+      true
+    } else {
+      handleLogicalPlanMismatch(
+        logDualRunResult = logDualRunResult,
+        fixedPointResult = fixedPointNormalizedResult,
+        singlePassResult = singlePassNormalizedResult
       )
+      false
+    }
+  }
+
+  private def handleLogicalPlanMismatch(
+      logDualRunResult: Boolean,
+      singlePassResult: LogicalPlan,
+      fixedPointResult: LogicalPlan): Unit = {
+    val logicalPlanMismatchException =
+      QueryCompilationErrors.hybridAnalyzerLogicalPlanComparisonMismatch(
+        fixedPointOutput = fixedPointResult,
+        singlePassOutput = singlePassResult
+      )
+    if (!logDualRunResult) {
+      throw logicalPlanMismatchException
     }
   }
 
@@ -346,6 +444,7 @@ object HybridAnalyzer {
   val SESSION_LEVEL_CONFS_FOR_VIEWS: Seq[String] = Seq(
     SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key,
     SQLConf.ANALYZER_DUAL_RUN_RETURN_SINGLE_PASS_RESULT.key,
+    SQLConf.ANALYZER_LOG_ERRORS_INSTEAD_OF_THROWING_IN_DUAL_RUNS.key,
     SQLConf.ANALYZER_DUAL_RUN_SAMPLE_RATE.key,
     SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key,
     SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key,
