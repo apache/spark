@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 from pyspark.sql.profiler import ProfilerCollector, ProfileResultsParam
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import ProfileResults
+    from pyspark.sql.profiler import ProfileResults
 
 
 class ConnectProfilerCollector(ProfilerCollector):
