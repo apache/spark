@@ -395,11 +395,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           throw SparkException.internalError("Unexpected table relation: " + other)
       }
 
-    case rd @ ReplaceData(
-        _: DataSourceV2Relation,
-        _, query,
-        r: DataSourceV2Relation,
-        projections,
+    case rd @ ReplaceData(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections,
         _, Some(write)) =>
       ReplaceDataExec(
         planLater(query),
@@ -408,11 +404,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         write,
         rd.operation.command) :: Nil
 
-    case wd @ WriteDelta(
-        _: DataSourceV2Relation,
-        _, query,
-        r: DataSourceV2Relation,
-        projections,
+    case wd @ WriteDelta(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections,
         Some(write)) =>
       WriteDeltaExec(
         planLater(query),

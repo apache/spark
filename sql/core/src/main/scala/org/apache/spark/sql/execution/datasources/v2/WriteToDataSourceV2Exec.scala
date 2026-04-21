@@ -651,24 +651,24 @@ case class DataAndMetadataWritingSparkTask(
     operationMetrics: Map[String, SQLMetric] = Map.empty)
   extends WritingSparkTask[DataWriter[InternalRow]] {
 
-  private lazy val numUpdatedRows = operationMetrics.get("numUpdatedRows")
-  private lazy val numCopiedRows = operationMetrics.get("numCopiedRows")
-
   override protected def write(
       writer: DataWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
+    var numUpdatedRows = 0L
+    var numCopiedRows = 0L
+
     while (iter.hasNext) {
       val row = iter.next()
       val operation = row.getInt(0)
 
       operation match {
         case UPDATE_OPERATION =>
-          numUpdatedRows.foreach(_.add(1L))
+          numUpdatedRows += 1L
           dataProj.project(row)
           metadataProj.project(row)
           writer.write(metadataProj, dataProj)
 
         case COPY_OPERATION =>
-          numCopiedRows.foreach(_.add(1L))
+          numCopiedRows += 1L
           dataProj.project(row)
           metadataProj.project(row)
           writer.write(metadataProj, dataProj)
@@ -681,6 +681,9 @@ case class DataAndMetadataWritingSparkTask(
           throw new SparkException(s"Unexpected operation ID: $other")
       }
     }
+
+    operationMetrics.get("numUpdatedRows").foreach(_.add(numUpdatedRows))
+    operationMetrics.get("numCopiedRows").foreach(_.add(numCopiedRows))
   }
 }
 
@@ -689,23 +692,23 @@ case class DataWithProjectionWritingSparkTask(
     operationMetrics: Map[String, SQLMetric] = Map.empty)
   extends WritingSparkTask[DataWriter[InternalRow]] {
 
-  private lazy val numUpdatedRows = operationMetrics.get("numUpdatedRows")
-  private lazy val numCopiedRows = operationMetrics.get("numCopiedRows")
-
   override protected def write(
       writer: DataWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
+    var numUpdatedRows = 0L
+    var numCopiedRows = 0L
+
     while (iter.hasNext) {
       val row = iter.next()
       val operation = row.getInt(0)
 
       operation match {
         case UPDATE_OPERATION =>
-          numUpdatedRows.foreach(_.add(1L))
+          numUpdatedRows += 1L
           dataProj.project(row)
           writer.write(dataProj)
 
         case COPY_OPERATION =>
-          numCopiedRows.foreach(_.add(1L))
+          numCopiedRows += 1L
           dataProj.project(row)
           writer.write(dataProj)
 
@@ -717,6 +720,9 @@ case class DataWithProjectionWritingSparkTask(
           throw new SparkException(s"Unexpected operation ID: $other")
       }
     }
+
+    operationMetrics.get("numUpdatedRows").foreach(_.add(numUpdatedRows))
+    operationMetrics.get("numCopiedRows").foreach(_.add(numCopiedRows))
   }
 }
 
@@ -734,10 +740,11 @@ case class DeltaWritingSparkTask(
 
   private lazy val rowProjection = projections.rowProjection.orNull
   private lazy val rowIdProjection = projections.rowIdProjection
-  private lazy val numUpdatedRows = operationMetrics.get("numUpdatedRows")
 
   override protected def write(
       writer: DeltaWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
+    var numUpdatedRows = 0L
+
     while (iter.hasNext) {
       val row = iter.next()
       val operation = row.getInt(0)
@@ -748,15 +755,15 @@ case class DeltaWritingSparkTask(
           writer.delete(null, rowIdProjection)
 
         case UPDATE_OPERATION =>
-          numUpdatedRows.foreach(_.add(1L))
+          numUpdatedRows += 1L
           rowProjection.project(row)
           rowIdProjection.project(row)
           writer.update(null, rowIdProjection, rowProjection)
 
-        // When representUpdateAsDeleteAndInsert is true, each logical update is split
-        // into a DELETE and a REINSERT. Count the REINSERT as one updated row.
         case REINSERT_OPERATION =>
-          numUpdatedRows.foreach(_.add(1L))
+          // When representUpdateAsDeleteAndInsert is true, each logical update is split
+          // into a DELETE and a REINSERT. Count the REINSERT as one updated row.
+          numUpdatedRows += 1L
           rowProjection.project(row)
           writer.reinsert(null, rowProjection)
 
@@ -768,6 +775,8 @@ case class DeltaWritingSparkTask(
           throw new SparkException(s"Unexpected operation ID: $other")
       }
     }
+
+    operationMetrics.get("numUpdatedRows").foreach(_.add(numUpdatedRows))
   }
 }
 
@@ -779,10 +788,11 @@ case class DeltaWithMetadataWritingSparkTask(
   private lazy val rowProjection = projections.rowProjection.orNull
   private lazy val rowIdProjection = projections.rowIdProjection
   private lazy val metadataProjection = projections.metadataProjection.orNull
-  private lazy val numUpdatedRows = operationMetrics.get("numUpdatedRows")
 
   override protected def write(
       writer: DeltaWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
+    var numUpdatedRows = 0L
+
     while (iter.hasNext) {
       val row = iter.next()
       val operation = row.getInt(0)
@@ -794,7 +804,7 @@ case class DeltaWithMetadataWritingSparkTask(
           writer.delete(metadataProjection, rowIdProjection)
 
         case UPDATE_OPERATION =>
-          numUpdatedRows.foreach(_.add(1L))
+          numUpdatedRows += 1L
           rowProjection.project(row)
           rowIdProjection.project(row)
           metadataProjection.project(row)
@@ -803,7 +813,7 @@ case class DeltaWithMetadataWritingSparkTask(
         // When representUpdateAsDeleteAndInsert is true, each logical update is split
         // into a DELETE and a REINSERT. Count the REINSERT as one updated row.
         case REINSERT_OPERATION =>
-          numUpdatedRows.foreach(_.add(1L))
+          numUpdatedRows += 1L
           rowProjection.project(row)
           metadataProjection.project(row)
           writer.reinsert(metadataProjection, rowProjection)
@@ -816,6 +826,8 @@ case class DeltaWithMetadataWritingSparkTask(
           throw new SparkException(s"Unexpected operation ID: $other")
       }
     }
+
+    operationMetrics.get("numUpdatedRows").foreach(_.add(numUpdatedRows))
   }
 }
 
