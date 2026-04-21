@@ -35,13 +35,12 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.test.SQLTestUtils
 
 /**
  * The base for statistics test cases that we want to include in both the hive module (for
  * verifying behavior when using the Hive external catalog) as well as in the sql/core module.
  */
-abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils {
+abstract class StatisticsCollectionTestBase extends QueryTest {
   import testImplicits._
 
   private val dec1 = new java.math.BigDecimal("-1.756893400357024346")

@@ -29,11 +29,11 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.SimpleInsertSource
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 // The base trait for char/varchar tests that need to be run with different table implementations.
-trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
+trait CharVarcharTestSuite extends QueryTest {
 
   def format: String
 
