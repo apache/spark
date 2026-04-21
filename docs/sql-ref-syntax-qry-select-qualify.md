@@ -23,7 +23,8 @@ license: |
 
 The `QUALIFY` clause filters rows after window functions have been evaluated.
 It can refer to window functions in the `SELECT` list by alias, or define window
-functions directly in the `QUALIFY` condition.
+functions directly in the `QUALIFY` condition. When an alias in the `SELECT` list
+has the same name as an input column, the input column takes precedence.
 
 ### Syntax
 

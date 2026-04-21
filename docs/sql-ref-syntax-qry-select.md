@@ -128,7 +128,9 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
 
      Filters rows after window functions have been evaluated. The current `SELECT` list or the
      `QUALIFY` condition must contain at least one window function, and aggregate functions are
-     not allowed inside the `QUALIFY` condition.
+     not allowed inside the `QUALIFY` condition. Column references in `QUALIFY` are resolved
+     against input columns first; `SELECT` aliases are used only when there is no matching
+     input column.
 
 * **ORDER BY**
 
