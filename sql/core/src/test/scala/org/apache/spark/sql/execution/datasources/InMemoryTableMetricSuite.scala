@@ -53,7 +53,7 @@ class InMemoryTableMetricSuite
         Array(Column.create("i", IntegerType)),
         Array.empty[Transform], Collections.emptyMap[String, String])
 
-      val metrics = runAndFetchMetrics(func("testcat.table_name"))
+      val metrics = runAndFetchMetrics(func("testcat.table_name")).map(m => m._1._3 -> m._2)
 
       checker(metrics)
     }

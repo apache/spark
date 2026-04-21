@@ -1074,7 +1074,7 @@ def wrap_perf_profiler(f, eval_type, result_id):
     from pyspark.sql.profiler import ProfileResultsParam, WorkerPerfProfiler
 
     accumulator = _deserialize_accumulator(
-        SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
+        SpecialAccumulatorIds.SQL_UDF_PROFIER, {}, ProfileResultsParam
     )
 
     if _is_iter_based(eval_type):
@@ -1108,7 +1108,7 @@ def wrap_memory_profiler(f, eval_type, result_id):
         return f
 
     accumulator = _deserialize_accumulator(
-        SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
+        SpecialAccumulatorIds.SQL_UDF_PROFIER, {}, ProfileResultsParam
     )
 
     if _is_iter_based(eval_type):

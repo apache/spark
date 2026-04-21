@@ -33,7 +33,7 @@ import org.scalatest.{BeforeAndAfterAll, Suite, Tag}
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{classic, AnalysisException, Row}
+import org.apache.spark.sql.{classic, AnalysisException, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
@@ -41,7 +41,6 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.classic.{ClassicConversions, ColumnConversions, ColumnNodeToExpressionConverter, DataFrame, Dataset, SparkSession, SQLImplicits}
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
@@ -228,8 +227,6 @@ private[sql] trait SQLTestUtilsBase
   with SQLTestData
   with PlanTestBase { self: Suite =>
 
-  override protected def spark: classic.SparkSession
-
   protected def sparkContext = spark.sparkContext
 
   // Shorthand for running a query using our SparkSession
@@ -243,11 +240,13 @@ private[sql] trait SQLTestUtilsBase
    * but the implicits import is needed in the constructor.
    */
   protected object testImplicits
-    extends SQLImplicits
-      with ClassicConversions
-      with ColumnConversions {
-    override protected def session: SparkSession = self.spark
-    override protected def converter: ColumnNodeToExpressionConverter = self.spark.converter
+    extends classic.SQLImplicits
+      with classic.ClassicConversions
+      with classic.ColumnConversions {
+    override protected def session: classic.SparkSession =
+      self.spark.asInstanceOf[classic.SparkSession]
+    override protected def converter: classic.ColumnNodeToExpressionConverter =
+      self.spark.asInstanceOf[classic.SparkSession].converter
   }
 
   protected override def withSQLConf[T](pairs: (String, String)*)(f: => T): T = {
@@ -346,7 +345,7 @@ private[sql] trait SQLTestUtilsBase
     val tableIdent = spark.sessionState.sqlParser.parseTableIdentifier(tableName)
     val cascade = !spark.sessionState.catalog.isTempView(tableIdent)
     spark.sharedState.cacheManager.uncacheQuery(
-      spark.table(tableName),
+      spark.table(tableName).asInstanceOf[classic.Dataset[_]],
       cascade = cascade,
       blocking = true)
   }
@@ -455,15 +454,16 @@ private[sql] trait SQLTestUtilsBase
       case FilterExec(_, child) => child
     }
 
-    spark.internalCreateDataFrame(withoutFilters.execute(), schema)
+    spark.asInstanceOf[classic.SparkSession]
+      .internalCreateDataFrame(withoutFilters.execute(), schema)
   }
 
   /**
    * Turn a logical plan into a `DataFrame`. This should be removed once we have an easier
    * way to construct `DataFrame` directly out of local data without relying on implicits.
    */
-  protected implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
-    Dataset.ofRows(spark, plan)
+  protected implicit def logicalPlanToSparkQuery(plan: LogicalPlan): classic.DataFrame = {
+    classic.Dataset.ofRows(spark.asInstanceOf[classic.SparkSession], plan)
   }
 
 

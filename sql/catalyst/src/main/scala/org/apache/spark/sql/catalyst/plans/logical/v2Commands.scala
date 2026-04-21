@@ -1061,6 +1061,7 @@ case class MergeIntoTable(
     actions.forall {
       case a: UpdateAction => MergeIntoTable.areSchemaEvolutionReady(a.assignments, sourceTable)
       case a: InsertAction => MergeIntoTable.areSchemaEvolutionReady(a.assignments, sourceTable)
+      case _: DeleteAction => true
       case _ => false
     }
   }
@@ -1150,7 +1151,6 @@ object MergeIntoTable {
     expr match {
       case UnresolvedAttribute(nameParts) if allowUnresolved => nameParts
       case a: AttributeReference => Seq(a.name)
-      case Alias(child, _) => extractFieldPath(child, allowUnresolved)
       case GetStructField(child, ordinal, nameOpt) =>
         extractFieldPath(child, allowUnresolved) :+ nameOpt.getOrElse(s"col$ordinal")
       case _ => Seq.empty

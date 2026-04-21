@@ -1304,7 +1304,8 @@ case class SessionWindowStateStoreSaveExec(
 
     stateOpProgress.copy(
       newNumRowsUpdated = stateOpProgress.numRowsUpdated,
-      newNumRowsDroppedByWatermark = numRowsDroppedByWatermark)
+      newNumRowsDroppedByWatermark = numRowsDroppedByWatermark,
+      newNumRowsRemoved = stateOpProgress.numRowsRemoved)
   }
 }
 

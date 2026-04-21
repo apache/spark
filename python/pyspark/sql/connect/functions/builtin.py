@@ -4414,6 +4414,13 @@ def current_catalog() -> Column:
 current_catalog.__doc__ = pysparkfuncs.current_catalog.__doc__
 
 
+def current_path() -> Column:
+    return _invoke_function("current_path")
+
+
+current_path.__doc__ = pysparkfuncs.current_path.__doc__
+
+
 def current_database() -> Column:
     return _invoke_function("current_database")
 

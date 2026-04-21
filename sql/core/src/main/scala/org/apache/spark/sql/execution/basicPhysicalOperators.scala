@@ -42,6 +42,7 @@ import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   extends UnaryExecNode
     with CodegenSupport
+    with SafeForKWayMerge
     with PartitioningPreservingUnaryExecNode
     with OrderPreservingUnaryExecNode {
 
@@ -222,7 +223,7 @@ trait GeneratePredicateHelper extends PredicateHelper {
 
 /** Physical plan for Filter. */
 case class FilterExec(condition: Expression, child: SparkPlan)
-  extends UnaryExecNode with CodegenSupport with GeneratePredicateHelper {
+  extends UnaryExecNode with CodegenSupport with GeneratePredicateHelper with SafeForKWayMerge {
 
   // Split out all the IsNotNulls from condition.
   private val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {

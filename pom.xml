@@ -122,7 +122,7 @@
     <java.version>17</java.version>
     <java.minimum.version>17.0.11</java.minimum.version>
     <maven.compiler.release>${java.version}</maven.compiler.release>
-    <maven.version>3.9.14</maven.version>
+    <maven.version>3.9.15</maven.version>
     <exec-maven-plugin.version>3.6.1</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.9.1</asm.version>
@@ -197,7 +197,7 @@
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.13.1</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
-    <guava.version>33.5.0-jre</guava.version>
+    <guava.version>33.6.0-jre</guava.version>
     <guava.failureaccess.version>1.0.3</guava.failureaccess.version>
     <gson.version>2.13.2</gson.version>
     <janino.version>3.1.9</janino.version>
@@ -213,7 +213,7 @@
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.11.0</commons-cli.version>
-    <bouncycastle.version>1.83</bouncycastle.version>
+    <bouncycastle.version>1.84</bouncycastle.version>
     <tink.version>1.20.0</tink.version>
     <datasketches.version>6.2.0</datasketches.version>
     <netty.version>4.2.12.Final</netty.version>

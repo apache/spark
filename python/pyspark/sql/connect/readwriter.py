@@ -393,7 +393,7 @@ class DataFrameReader(OptionUtils):
 
     def xml(
         self,
-        path: PathOrPaths,
+        path: Union[PathOrPaths, "DataFrame"],
         rowTag: Optional[str] = None,
         schema: Optional[Union[StructType, str]] = None,
         excludeAttribute: Optional[Union[bool, str]] = None,
@@ -437,7 +437,32 @@ class DataFrameReader(OptionUtils):
         )
         if isinstance(path, str):
             path = [path]
-        return self.load(path=path, format="xml", schema=schema)
+        if isinstance(path, list):
+            return self.load(path=path, format="xml", schema=schema)
+
+        from pyspark.sql.connect.dataframe import DataFrame
+
+        if isinstance(path, DataFrame):
+            # Schema must be set explicitly here because the DataFrame path
+            # bypasses load(), which normally calls self.schema(schema).
+            if schema is not None:
+                self.schema(schema)
+            return self._df(
+                Parse(
+                    child=path._plan,
+                    format=proto.Parse.ParseFormat.PARSE_FORMAT_XML,
+                    schema=self._schema,
+                    options=self._options,
+                )
+            )
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "path",
+                "expected_type": "str, list, or DataFrame",
+                "arg_type": type(path).__name__,
+            },
+        )
 
     xml.__doc__ = PySparkDataFrameReader.xml.__doc__
 

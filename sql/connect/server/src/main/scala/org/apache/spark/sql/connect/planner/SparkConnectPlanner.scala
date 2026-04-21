@@ -1776,6 +1776,8 @@ class SparkConnectPlanner(
         dataFrameReader.csv(ds).queryExecution.analyzed
       case ParseFormat.PARSE_FORMAT_JSON =>
         dataFrameReader.json(ds).queryExecution.analyzed
+      case ParseFormat.PARSE_FORMAT_XML =>
+        dataFrameReader.xml(ds).queryExecution.analyzed
       case other => throw InvalidInputErrors.invalidEnum(other)
     }
   }

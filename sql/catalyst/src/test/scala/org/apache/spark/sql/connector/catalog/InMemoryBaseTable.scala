@@ -1044,14 +1044,6 @@ private class BufferedRowsReader(
   private def castElement(elem: Any, toType: DataType, fromType: DataType): Any =
     Cast(Literal(elem, fromType), toType, None, EvalMode.TRY).eval(null)
 
-  override def initMetricsValues(metrics: Array[CustomTaskMetric]): Unit = {
-    metrics.foreach { m =>
-      m.name match {
-        case "rows_read" => rowsRead = m.value()
-      }
-    }
-  }
-
   override def currentMetricsValues(): Array[CustomTaskMetric] = {
     checkNotClosed("currentMetricsValues()")
     val metric = new CustomTaskMetric {

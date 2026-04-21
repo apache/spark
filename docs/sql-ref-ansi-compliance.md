@@ -479,7 +479,10 @@ Below is a list of all the keywords in Spark SQL.
 |CROSS|reserved|strict-non-reserved|reserved|
 |CUBE|non-reserved|non-reserved|reserved|
 |CURRENT|non-reserved|non-reserved|reserved|
+|CURRENT_DATABASE|non-reserved|non-reserved|non-reserved|
 |CURRENT_DATE|reserved|non-reserved|reserved|
+|CURRENT_PATH|reserved|non-reserved|reserved|
+|CURRENT_SCHEMA|reserved|non-reserved|reserved|
 |CURRENT_TIME|reserved|non-reserved|reserved|
 |CURRENT_TIMESTAMP|reserved|non-reserved|reserved|
 |CURRENT_USER|reserved|non-reserved|reserved|
@@ -502,6 +505,7 @@ Below is a list of all the keywords in Spark SQL.
 |DEFAULT|non-reserved|non-reserved|non-reserved|
 |DEFINED|non-reserved|non-reserved|non-reserved|
 |DEFINER|non-reserved|non-reserved|non-reserved|
+|DEFAULT_PATH|non-reserved|non-reserved|not a keyword|
 |DELAY|non-reserved|non-reserved|non-reserved|
 |DELETE|non-reserved|non-reserved|reserved|
 |DELIMITED|non-reserved|non-reserved|non-reserved|
@@ -671,6 +675,7 @@ Below is a list of all the keywords in Spark SQL.
 |PARTITION|non-reserved|non-reserved|reserved|
 |PARTITIONED|non-reserved|non-reserved|non-reserved|
 |PARTITIONS|non-reserved|non-reserved|non-reserved|
+|PATH|non-reserved|non-reserved|not a keyword|
 |PERCENT|non-reserved|non-reserved|non-reserved|
 |PIVOT|non-reserved|non-reserved|non-reserved|
 |PLACING|non-reserved|non-reserved|non-reserved|
@@ -754,6 +759,7 @@ Below is a list of all the keywords in Spark SQL.
 |SUBSTR|non-reserved|non-reserved|non-reserved|
 |SUBSTRING|non-reserved|non-reserved|non-reserved|
 |SYNC|non-reserved|non-reserved|non-reserved|
+|SYSTEM_PATH|non-reserved|non-reserved|not a keyword|
 |SYSTEM_TIME|non-reserved|non-reserved|non-reserved|
 |SYSTEM_VERSION|non-reserved|non-reserved|non-reserved|
 |TABLE|reserved|non-reserved|reserved|

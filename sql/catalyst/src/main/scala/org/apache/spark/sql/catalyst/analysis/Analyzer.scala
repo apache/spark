@@ -1418,12 +1418,6 @@ class Analyzer(
       // to resolve column "DEFAULT" in the child plans so that they must be unresolved.
       case s: SetVariable => resolveColumnDefaultInCommandInputQuery(s)
 
-      // SPARK-43752: resolve column "DEFAULT" in V2 write commands before the
-      // query is fully resolved, matching the InsertIntoStatement behavior above.
-      case v2: V2WriteCommand
-          if v2.table.resolved && v2.query.containsPattern(UNRESOLVED_ATTRIBUTE) =>
-        resolveColumnDefaultInCommandInputQuery(v2)
-
       // Skip FetchCursor - let ResolveFetchCursor handle variable resolution
       // This prevents ResolveReferences from trying to resolve target variables as columns
       case s: SingleStatement if s.parsedPlan.isInstanceOf[FetchCursor] => s
@@ -3632,9 +3626,8 @@ class Analyzer(
       case j @ Join(left, right, NaturalJoin(joinType), condition, hint)
           if j.resolvedExceptNatural =>
         // find common column names from both sides
-        val joinNames = left.output.map(_.name).distinct.filter { leftName =>
-          right.output.map(_.name).exists(resolver(leftName, _))
-        }
+        val joinNames = NaturalAndUsingJoinResolution.canonicalizedIntersect(
+            left.output.map(_.name), right.output.map(_.name))
         val project = commonNaturalJoinProcessing(
           left, right, joinType, joinNames, condition, hint)
         j.getTagValue(LogicalPlan.PLAN_ID_TAG)
