@@ -28,7 +28,7 @@ import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{BufferedRows, Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTable, InMemoryTableCatalog, SharedInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo}
+import org.apache.spark.sql.connector.catalog.{BufferedRows, Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTable, InMemoryTableCatalog, NullIdInMemoryTableCatalog, SharedInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
 import org.apache.spark.sql.connector.catalog.TableChange
@@ -58,6 +58,9 @@ class DataSourceV2DataFrameSuite
     .set("spark.sql.catalog.sharedcat",
       classOf[SharedInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.sharedcat.copyOnLoad", "true")
+    .set("spark.sql.catalog.nullidcat",
+      classOf[NullIdInMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.nullidcat.copyOnLoad", "true")
 
   after {
     SharedInMemoryTableCatalog.reset()
@@ -2241,6 +2244,49 @@ class DataSourceV2DataFrameSuite
         parameters = Map(
           "tableName" -> ".*", "capturedTableId" -> ".*",
           "currentTableId" -> ".*"))
+    }
+  }
+
+  // When table ID is null (connector does not support table identity),
+  // the table ID check is skipped but column IDs still catch
+  // the drop/recreate because new columns get different IDs.
+  test("null table ID: column IDs still detect drop+recreate") {
+    val t = "nullidcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val cat = catalog("nullidcat")
+
+      // verify table ID is null
+      val originalTable = cat.loadTable(ident)
+      assert(originalTable.id == null, "NullIdInMemoryTableCatalog should produce null table IDs")
+
+      // columns still have IDs assigned by InMemoryBaseTable
+      val originalCols = originalTable.columns()
+      assert(originalCols.forall(_.id() != null), "Columns should still have IDs")
+
+      val df = spark.table(t)
+
+      sql(s"DROP TABLE $t")
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+
+      val newCols = cat.loadTable(ident).columns()
+
+      // column names are identical but IDs are different
+      assert(originalCols.map(_.name()).toSeq === newCols.map(_.name()).toSeq,
+        "Column names should be the same")
+      assert(originalCols.map(_.id()).toSeq !== newCols.map(_.id()).toSeq,
+        "Column IDs should be different after drop+recreate")
+
+      // TABLE_ID_MISMATCH cannot fire (both IDs are null),
+      // so COLUMN_ID_MISMATCH is what catches the change
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
   }
 

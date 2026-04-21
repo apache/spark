@@ -36,6 +36,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
    *
    * This method reloads table metadata from the catalog and validates:
    *  - Table identity: Ensures table ID has not changed
+   *  - Column IDs: Validates captured column IDs match the current table's column IDs
    *  - Data columns: Verifies captured columns align with the current schema
    *  - Metadata columns: Checks metadata column consistency
    *
@@ -62,6 +63,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
    *
    * This method reloads table metadata from the catalog and validates:
    *  - Table identity: Ensures table ID has not changed
+   *  - Column IDs: Validates captured column IDs match the current table's column IDs
    *  - Data columns: Verifies captured columns align with the current schema
    *  - Metadata columns: Checks metadata column consistency
    *

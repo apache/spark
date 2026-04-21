@@ -18,13 +18,15 @@
 package org.apache.spark.sql.connector.catalog
 
 /**
- * An InMemoryTableCatalog that creates tables WITHOUT table IDs
- * (id() returns null). This simulates connectors that don't
+ * An [[InMemoryTableCatalog]] that creates tables WITHOUT table IDs
+ * ([[Table.id]] returns null). This simulates connectors that do not
  * support table identity tracking.
  *
- * When table ID is null, the validateTableIdentity check in
- * V2TableRefreshUtil is skipped entirely, meaning drop/recreate
- * of a table is NOT detected as an error.
+ * When table ID is null, the [[validateTableIdentity]] check in
+ * [[V2TableRefreshUtil]] is skipped entirely, meaning drop/recreate
+ * of a table is NOT detected via table ID. However, column IDs
+ * assigned by [[InMemoryBaseTable]] still differ after recreate,
+ * so [[validateCapturedColumnIds]] catches the schema change.
  */
 class NullIdInMemoryTableCatalog extends InMemoryTableCatalog {
 
