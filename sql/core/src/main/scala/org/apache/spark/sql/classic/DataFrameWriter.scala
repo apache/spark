@@ -192,22 +192,19 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           val relation = DataSourceV2Relation.create(table, catalog, ident, dsOptions)
           checkPartitioningMatchesV2Table(table)
           if (curmode == SaveMode.Append) {
-            AppendData.byName(
-              relation, df.logicalPlan, finalOptions, withSchemaEvolution = _withSchemaEvolution)
+            AppendData.byName(relation, df.logicalPlan, finalOptions, _withSchemaEvolution)
           } else {
             // Truncate the table. TableCapabilityCheck will throw a nice exception if this
             // isn't supported
             OverwriteByExpression.byName(
-              relation, df.logicalPlan, Literal(true), finalOptions,
-              withSchemaEvolution = _withSchemaEvolution)
+              relation, df.logicalPlan, Literal(true), finalOptions, _withSchemaEvolution)
           }
 
         case createMode =>
           provider match {
             case supportsExtract: SupportsCatalogOptions =>
               if (_withSchemaEvolution) {
-                throw QueryCompilationErrors
-                  .schemaEvolutionNotSupportedForCreateTableWriteError()
+                throw QueryCompilationErrors.schemaEvolutionNotSupportedForCreateTableWriteError()
               }
               val ident = supportsExtract.extractIdentifier(dsOptions)
               val catalog = CatalogV2Util.getTableProviderCatalog(
@@ -361,8 +358,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
 
     curmode match {
       case SaveMode.Append | SaveMode.ErrorIfExists | SaveMode.Ignore =>
-        AppendData.byPosition(
-          table, df.logicalPlan, extraOptions.toMap, withSchemaEvolution = _withSchemaEvolution)
+        AppendData.byPosition(table, df.logicalPlan, extraOptions.toMap, _withSchemaEvolution)
 
       case SaveMode.Overwrite =>
         val conf = df.sparkSession.sessionState.conf
@@ -371,11 +367,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
 
         if (dynamicPartitionOverwrite) {
           OverwritePartitionsDynamic.byPosition(
-            table, df.logicalPlan, extraOptions.toMap, withSchemaEvolution = _withSchemaEvolution)
+            table, df.logicalPlan, extraOptions.toMap, _withSchemaEvolution)
         } else {
           OverwriteByExpression.byPosition(
-            table, df.logicalPlan, Literal(true), extraOptions.toMap,
-            withSchemaEvolution = _withSchemaEvolution)
+            table, df.logicalPlan, Literal(true), extraOptions.toMap, _withSchemaEvolution)
         }
     }
   }
@@ -496,9 +491,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
       case (SaveMode.Append, Some(table)) =>
         checkPartitioningMatchesV2Table(table)
         val v2Relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
-        AppendData.byName(
-          v2Relation, df.logicalPlan, extraOptions.toMap,
-          withSchemaEvolution = _withSchemaEvolution)
+        AppendData.byName(v2Relation, df.logicalPlan, extraOptions.toMap, _withSchemaEvolution)
 
       case (SaveMode.Overwrite, _) =>
         if (_withSchemaEvolution) {

@@ -210,8 +210,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   private[sql] def overwriteCommand(condition: Column): LogicalPlan = {
     OverwriteByExpression.byName(
       UnresolvedRelation(tableName).requireWritePrivileges(Set(INSERT, DELETE)),
-      logicalPlan, expression(condition), options.toMap,
-      withSchemaEvolution = _withSchemaEvolution)
+      logicalPlan, expression(condition), options.toMap, _withSchemaEvolution)
   }
 
   /** @inheritdoc */
@@ -223,7 +222,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   private[sql] def overwritePartitionsCommand(): LogicalPlan = {
     OverwritePartitionsDynamic.byName(
       UnresolvedRelation(tableName).requireWritePrivileges(Set(INSERT, DELETE)),
-      logicalPlan, options.toMap, withSchemaEvolution = _withSchemaEvolution)
+      logicalPlan, options.toMap, _withSchemaEvolution)
   }
 
   /**
