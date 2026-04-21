@@ -24,6 +24,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, LongType, StructType}
+import org.apache.spark.util.SparkErrorUtils
 
 /**
  * End-to-end tests for the block-chunked segment-tree moving window frame.
@@ -543,14 +544,14 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
           val e = intercept[Exception] {
             spark.sql(decimalOverflowSql).collect()
           }
-          assert(rootArithmeticCause(e).isDefined,
+          assert(hasArithmeticCause(e),
             s"expected ArithmeticException root cause, got: ${e.getMessage}")
         }
         withSQLConf(enableSegTree.toSeq: _*) {
           val e = intercept[Exception] {
             spark.sql(decimalOverflowSql).collect()
           }
-          assert(rootArithmeticCause(e).isDefined,
+          assert(hasArithmeticCause(e),
             s"expected ArithmeticException root cause, got: ${e.getMessage}")
         }
       }
@@ -623,15 +624,13 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  /** Walk a SparkException chain for an ArithmeticException (ANSI overflow). */
-  private def rootArithmeticCause(t: Throwable): Option[Throwable] = {
-    var cur: Throwable = t
-    while (cur != null) {
-      if (cur.isInstanceOf[ArithmeticException]) return Some(cur)
-      cur = cur.getCause
-    }
-    None
-  }
+  /**
+   * True iff the root cause of `t` is an [[ArithmeticException]] (ANSI overflow).
+   * Uses Spark's `SparkErrorUtils.getRootCause` rather than a bespoke
+   * cause-chain walk (per reviewer feedback).
+   */
+  private def hasArithmeticCause(t: Throwable): Boolean =
+    Option(SparkErrorUtils.getRootCause(t)).exists(_.isInstanceOf[ArithmeticException])
 
 
   /** Pattern of 20 Array[Byte] values used across a. */
