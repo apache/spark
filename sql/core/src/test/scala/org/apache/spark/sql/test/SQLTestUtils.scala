@@ -35,7 +35,7 @@ private[sql] trait SQLTestUtils extends QueryTest
 @deprecated("Use QueryTestBase directly instead.", "4.2.0")
 private[sql] trait SQLTestUtilsBase extends QueryTestBase { self: Suite => }
 
-@deprecated("Use QueryTest.compareAnswers directly instead.", "4.2.0")
+@deprecated("Use QueryTest directly instead.", "4.2.0")
 private[sql] object SQLTestUtils {
 
   /**
