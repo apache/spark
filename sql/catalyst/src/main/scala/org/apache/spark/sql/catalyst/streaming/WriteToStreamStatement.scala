@@ -56,9 +56,9 @@ case class WriteToStreamStatement(
     hadoopConf: Configuration,
     trigger: Trigger,
     inputQuery: LogicalPlan,
-    catalogAndIdent: Option[(TableCatalog, Identifier)],
-    catalogTable: Option[CatalogTable],
-    withSchemaEvolution: Boolean) extends UnaryNode {
+    catalogAndIdent: Option[(TableCatalog, Identifier)] = None,
+    catalogTable: Option[CatalogTable] = None,
+    withSchemaEvolution: Boolean = false) extends UnaryNode {
 
   override def isStreaming: Boolean = true
 

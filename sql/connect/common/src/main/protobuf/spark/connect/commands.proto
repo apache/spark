@@ -250,7 +250,7 @@ message WriteStreamOperationStart {
   // (Optional) Columns used for clustering the table.
   repeated string clustering_column_names = 15;
 
-  // (Optional) Enable automatic schema evolution for the streaming write.
+  // (Optional) Enable automatic schema evolution for streaming write.
   bool with_schema_evolution = 16;
 }
 

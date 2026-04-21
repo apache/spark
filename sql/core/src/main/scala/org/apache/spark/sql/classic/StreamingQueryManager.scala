@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, QUERY_ID, RUN_ID}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
-import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCapability, TableCatalog}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
@@ -224,12 +224,39 @@ class StreamingQueryManager private[sql] (
       sparkSession.sessionState.executePlan(dataStreamWritePlan).analyzed
         .asInstanceOf[WriteToStream]
 
+    if (withSchemaEvolution) {
+      if (!sparkSession.sessionState.conf.streamingWriteSchemaEvolutionEnabled) {
+        throw new SparkUnsupportedOperationException(
+          errorClass =
+            "UNSUPPORTED_SCHEMA_EVOLUTION.STREAMING_WRITE",
+          messageParameters = Map.empty[String, String])
+      }
+      if (!sink.isInstanceOf[SupportsWrite]) {
+        throw new SparkUnsupportedOperationException(
+          errorClass =
+            "UNSUPPORTED_SCHEMA_EVOLUTION.V1_TABLE",
+          messageParameters = Map.empty[String, String])
+      }
+      if (catalogAndIdent.isEmpty) {
+        throw new SparkUnsupportedOperationException(
+          errorClass =
+            "UNSUPPORTED_SCHEMA_EVOLUTION.NO_CATALOG_TABLE",
+          messageParameters = Map.empty[String, String])
+      }
+      if (!sink.capabilities().contains(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION)) {
+        throw new SparkUnsupportedOperationException(
+          errorClass =
+            "UNSUPPORTED_SCHEMA_EVOLUTION.TABLE_CAPABILITY_NOT_SUPPORTED",
+          messageParameters = Map("table" -> sink.name()))
+      }
+    }
+
     (sink, trigger) match {
       case (_: SupportsWrite, trigger: ContinuousTrigger) =>
         if (withSchemaEvolution) {
           throw new SparkUnsupportedOperationException(
             errorClass =
-              "UNSUPPORTED_STREAMING_SCHEMA_EVOLUTION.CONTINUOUS_TRIGGER",
+              "UNSUPPORTED_SCHEMA_EVOLUTION.CONTINUOUS_TRIGGER",
             messageParameters = Map.empty[String, String])
         }
         new StreamingQueryWrapper(new ContinuousExecution(

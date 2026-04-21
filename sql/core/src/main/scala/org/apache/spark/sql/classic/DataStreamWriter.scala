@@ -211,7 +211,10 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     tableInstance match {
       case t: SupportsWrite if t.supports(STREAMING_WRITE) =>
-        startQuery(t, extraOptions, catalogAndIdent = Some(catalog.asTableCatalog, identifier),
+        startQuery(
+          t,
+          extraOptions,
+          catalogAndIdent = Some(catalog.asTableCatalog, identifier),
           withSchemaEvolution = schemaEvolution)
       case t: V2TableWithV1Fallback =>
         writeToV1Table(t.v1Table)
@@ -251,7 +254,10 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
         throw QueryCompilationErrors.sourceNotSupportedWithContinuousTriggerError(source)
       }
       val sink = new ForeachBatchSink[T](foreachBatchWriter, ds.exprEnc)
-      startQuery(sink, extraOptions, catalogTable = catalogTable,
+      startQuery(
+        sink,
+        extraOptions,
+        catalogTable = catalogTable,
         withSchemaEvolution = schemaEvolution)
     } else {
       val cls = DataSource.lookupDataSource(source, ds.sparkSession.sessionState.conf)
@@ -298,7 +304,10 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
         createV1Sink(optionsWithPath)
       }
 
-      startQuery(sink, optionsWithPath, catalogTable = catalogTable,
+      startQuery(
+        sink,
+        optionsWithPath,
+        catalogTable = catalogTable,
         withSchemaEvolution = schemaEvolution)
     }
   }

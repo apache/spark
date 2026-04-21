@@ -3070,6 +3070,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val STREAMING_WRITE_SCHEMA_EVOLUTION_ENABLED =
+    buildConf("spark.sql.streaming.write.schemaEvolution.enabled")
+      .internal()
+      .doc("When true, streaming queries may opt into automatic sink table schema evolution " +
+        "via DataStreamWriter.withSchemaEvolution(). When false, calls to withSchemaEvolution() " +
+        "on a streaming write result in an error.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val STREAMING_CHECK_UNFINISHED_REPARTITION_ON_RESTART =
     buildConf("spark.sql.streaming.checkUnfinishedRepartitionOnRestart")
       .internal()
@@ -7545,6 +7555,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(STREAMING_MAX_NUM_STATE_SCHEMA_FILES)
 
   def enableStreamingSourceEvolution: Boolean = getConf(ENABLE_STREAMING_SOURCE_EVOLUTION)
+
+  def streamingWriteSchemaEvolutionEnabled: Boolean =
+    getConf(STREAMING_WRITE_SCHEMA_EVOLUTION_ENABLED)
 
   def streamingCheckUnfinishedRepartitionOnRestart: Boolean =
     getConf(STREAMING_CHECK_UNFINISHED_REPARTITION_ON_RESTART)

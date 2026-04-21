@@ -176,11 +176,9 @@ abstract class DataStreamWriter[T] extends WriteConfigMethods[DataStreamWriter[T
    * will be evolved to accommodate the new schema before data is written. The sink table must
    * support the `AUTOMATIC_SCHEMA_EVOLUTION` capability.
    *
-   * Schema evolution is applied at query analysis time: when the streaming query is started
-   * (or restarted after failure), the table schema is evolved if needed.
-   *
    * @since 4.2.0
    */
+  @Evolving
   def withSchemaEvolution(): this.type
 
   /**

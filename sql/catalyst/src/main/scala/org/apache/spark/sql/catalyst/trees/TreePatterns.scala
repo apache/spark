@@ -181,6 +181,7 @@ object TreePattern extends Enumeration  {
   val WINDOW: Value = Value
   val WINDOW_GROUP_LIMIT: Value = Value
   val WITH_WINDOW_DEFINITION: Value = Value
+  val WRITE_TO_MICRO_BATCH_DATA_SOURCE: Value = Value
 
   // Unresolved Plan patterns (Alphabetically ordered)
   val NAMED_STREAMING_RELATION: Value = Value

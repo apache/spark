@@ -8137,6 +8137,39 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_SCHEMA_EVOLUTION" : {
+    "message" : [
+      "Schema evolution is not supported for this write."
+    ],
+    "subClass" : {
+      "CONTINUOUS_TRIGGER" : {
+        "message" : [
+          "Continuous triggers do not support schema evolution. Use a micro-batch trigger instead."
+        ]
+      },
+      "NO_CATALOG_TABLE" : {
+        "message" : [
+          "Path-based writes do not support schema evolution. Use .toTable() to write to a named table instead."
+        ]
+      },
+      "STREAMING_WRITE" : {
+        "message" : [
+          "Streaming writes do not support schema evolution."
+        ]
+      },
+      "TABLE_CAPABILITY_NOT_SUPPORTED" : {
+        "message" : [
+          "Table <table> does not advertise the AUTOMATIC_SCHEMA_EVOLUTION capability."
+        ]
+      },
+      "V1_TABLE" : {
+        "message" : [
+          "Writes to V1 tables or V1 data sources do not support schema evolution."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_SHOW_CREATE_TABLE" : {
     "message" : [
       "Unsupported a SHOW CREATE TABLE command."
@@ -8191,23 +8224,6 @@
       "<outputMode> output mode not supported for <statefulOperator> on streaming DataFrames/DataSets without watermark."
     ],
     "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_STREAMING_SCHEMA_EVOLUTION" : {
-    "message" : [
-      "Schema evolution is not supported for this streaming write:"
-    ],
-    "subClass" : {
-      "CONTINUOUS_TRIGGER" : {
-        "message" : [
-          "Continuous triggers are not supported. Use a micro-batch trigger instead."
-        ]
-      },
-      "NOT_V2_TABLE" : {
-        "message" : [
-          "The sink is not a V2 table. Schema evolution requires a V2 table that supports the AUTOMATIC_SCHEMA_EVOLUTION capability."
-        ]
-      }
-    }
   },
   "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY" : {
     "message" : [

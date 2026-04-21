@@ -365,7 +365,7 @@ class MicroBatchExecution(
         if (plan.withSchemaEvolution) {
           throw new SparkUnsupportedOperationException(
             errorClass =
-              "UNSUPPORTED_STREAMING_SCHEMA_EVOLUTION.NOT_V2_TABLE",
+              "UNSUPPORTED_SCHEMA_EVOLUTION.V1_TABLE",
             messageParameters = Map.empty[String, String])
         }
         // SinkV1 is not compatible with Real-Time Mode due to API limitations.

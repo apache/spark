@@ -24,7 +24,7 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, WRITE_TO_MICRO_BATCH_DATA_SOURCE}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsSchemaEvolution, Table, TableCatalog, TableChange}
@@ -43,7 +43,7 @@ import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, Nul
 object ResolveSchemaEvolution extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
-    _.containsPattern(COMMAND)) {
+    _.containsAnyPattern(COMMAND, WRITE_TO_MICRO_BATCH_DATA_SOURCE)) {
     // This rule should run only if all assignments are resolved, except those
     // that will be satisfied by schema evolution
     case write: WriteWithSchemaEvolution if write.pendingSchemaChanges.nonEmpty =>

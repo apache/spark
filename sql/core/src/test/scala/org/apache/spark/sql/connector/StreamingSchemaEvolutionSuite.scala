@@ -23,18 +23,12 @@ import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, StreamTest, Trigger}
 import org.apache.spark.sql.types._
 
-/**
- * Tests for schema evolution in streaming writes using DataSourceV2.
- *
- * Schema evolution happens at query analysis time: when a streaming query is started (or
- * restarted) and the source schema has columns not present in the sink table, the table is
- * evolved to include those columns before any data is written.
- */
-class StreamingSchemaEvolutionSuite
-    extends StreamTest with BeforeAndAfter {
+/** Tests for schema evolution in streaming writes using DataSourceV2. */
+class StreamingSchemaEvolutionSuite extends StreamTest with BeforeAndAfter {
 
   import testImplicits._
 
@@ -45,12 +39,14 @@ class StreamingSchemaEvolutionSuite
   before {
     spark.conf.set(
       s"spark.sql.catalog.$catalogName", classOf[InMemoryTableCatalog].getName)
+    spark.conf.set(SQLConf.STREAMING_WRITE_SCHEMA_EVOLUTION_ENABLED.key, "true")
     sql(s"CREATE NAMESPACE IF NOT EXISTS $catalogName.$namespace")
   }
 
   after {
     spark.sessionState.catalogManager.reset()
     spark.sessionState.conf.unsetConf(s"spark.sql.catalog.$catalogName")
+    spark.sessionState.conf.unsetConf(SQLConf.STREAMING_WRITE_SCHEMA_EVOLUTION_ENABLED.key)
   }
 
   test("streaming write with extra source column adds column to table") {
@@ -114,51 +110,14 @@ class StreamingSchemaEvolutionSuite
     }
   }
 
-  test("streaming write evolves schema then processes multiple batches") {
-    withTable(tableIdent) {
-      withTempDir { checkpointDir =>
-        sql(s"CREATE TABLE $tableIdent (id INT, data STRING)")
-
-        val input = MemoryStream[(Int, String, Double)]
-        val df = input.toDF().toDF("id", "data", "amount")
-
-        val query = df.writeStream
-          .withSchemaEvolution()
-          .option("checkpointLocation", checkpointDir.getCanonicalPath)
-          .outputMode(OutputMode.Append())
-          .toTable(tableIdent)
-
-        try {
-          // First batch triggers schema evolution.
-          input.addData((1, "a", 10.0))
-          query.processAllAvailable()
-
-          // Second batch should work without re-triggering evolution.
-          // Note: InMemoryTableCatalog creates new table instances on alterTable,
-          // so the second batch writes to the old instance. We just verify
-          // that the second batch completes without errors.
-          input.addData((2, "b", 20.0))
-          query.processAllAvailable()
-        } finally {
-          query.stop()
-        }
-
-        val result = spark.table(tableIdent)
-        assert(result.schema == StructType(Seq(
-          StructField("id", IntegerType),
-          StructField("data", StringType),
-          StructField("amount", DoubleType))))
-      }
-    }
-  }
-
-  test("streaming write with multiple extra columns") {
+  test("streaming write with extra columns in different order") {
     withTable(tableIdent) {
       withTempDir { checkpointDir =>
         sql(s"CREATE TABLE $tableIdent (id INT)")
 
-        val input = MemoryStream[(Int, String, Double)]
-        val df = input.toDF().toDF("id", "data", "amount")
+        // Streaming writes resolve
+        val input = MemoryStream[(String, Int, Double)]
+        val df = input.toDF().toDF("before", "id", "after")
 
         val query = df.writeStream
           .withSchemaEvolution()
@@ -167,23 +126,23 @@ class StreamingSchemaEvolutionSuite
           .toTable(tableIdent)
 
         try {
-          input.addData((1, "a", 10.0))
+          input.addData(("x", 1, 10.0), ("y", 2, 20.0))
           query.processAllAvailable()
         } finally {
           query.stop()
         }
 
         val result = spark.table(tableIdent)
-        checkAnswer(result, Seq(Row(1, "a", 10.0)))
         assert(result.schema == StructType(Seq(
           StructField("id", IntegerType),
-          StructField("data", StringType),
-          StructField("amount", DoubleType))))
+          StructField("before", StringType),
+          StructField("after", DoubleType))))
+        checkAnswer(result, Seq(Row(1, "x", 10.0), Row(2, "y", 20.0)))
       }
     }
   }
 
-  test("table without AUTOMATIC_SCHEMA_EVOLUTION capability - schema not evolved") {
+  test("table without AUTOMATIC_SCHEMA_EVOLUTION capability - query fails at start") {
     withTable(tableIdent) {
       withTempDir { checkpointDir =>
         sql(
@@ -193,24 +152,19 @@ class StreamingSchemaEvolutionSuite
         val input = MemoryStream[(Int, String, Double)]
         val df = input.toDF().toDF("id", "data", "amount")
 
-        val query = df.writeStream
-          .withSchemaEvolution()
-          .option("checkpointLocation", checkpointDir.getCanonicalPath)
-          .outputMode(OutputMode.Append())
-          .toTable(tableIdent)
-
-        try {
-          input.addData((1, "a", 10.0))
-          query.processAllAvailable()
-        } finally {
-          query.stop()
+        // The user explicitly requested schema evolution, but the sink table does not
+        // advertise AUTOMATIC_SCHEMA_EVOLUTION. We fail fast at query start rather than
+        // silently degrade to a plain write (which could drop the extra column or fail
+        // later with an opaque schema-mismatch error).
+        val e = intercept[SparkUnsupportedOperationException] {
+          df.writeStream
+            .withSchemaEvolution()
+            .option("checkpointLocation", checkpointDir.getCanonicalPath)
+            .outputMode(OutputMode.Append())
+            .toTable(tableIdent)
         }
-
-        // Schema should NOT have been evolved since the table lacks the capability.
-        val result = spark.table(tableIdent)
-        assert(result.schema == StructType(Seq(
-          StructField("id", IntegerType),
-          StructField("data", StringType))))
+        assert(e.getCondition ==
+          "UNSUPPORTED_SCHEMA_EVOLUTION.TABLE_CAPABILITY_NOT_SUPPORTED")
       }
     }
   }
@@ -609,6 +563,28 @@ class StreamingSchemaEvolutionSuite
     }
   }
 
+  test("withSchemaEvolution rejected when feature flag is disabled") {
+    withTable(tableIdent) {
+      withTempDir { checkpointDir =>
+        sql(s"CREATE TABLE $tableIdent (id INT, data STRING)")
+
+        val input = MemoryStream[(Int, String)]
+        val df = input.toDF().toDF("id", "data")
+
+        withSQLConf(SQLConf.STREAMING_WRITE_SCHEMA_EVOLUTION_ENABLED.key -> "false") {
+          val e = intercept[SparkUnsupportedOperationException] {
+            df.writeStream
+              .withSchemaEvolution()
+              .option("checkpointLocation", checkpointDir.getCanonicalPath)
+              .outputMode(OutputMode.Append())
+              .toTable(tableIdent)
+          }
+          assert(e.getCondition ==
+            "UNSUPPORTED_SCHEMA_EVOLUTION.STREAMING_WRITE")
+        }
+      }
+    }
+  }
 
   test("withSchemaEvolution rejected with continuous trigger") {
     withTable(tableIdent) {
@@ -626,7 +602,7 @@ class StreamingSchemaEvolutionSuite
             .toTable(tableIdent)
         }
         assert(e.getCondition ==
-          "UNSUPPORTED_STREAMING_SCHEMA_EVOLUTION.CONTINUOUS_TRIGGER")
+          "UNSUPPORTED_SCHEMA_EVOLUTION.CONTINUOUS_TRIGGER")
       }
     }
   }
@@ -637,29 +613,93 @@ class StreamingSchemaEvolutionSuite
       val df = input.toDF().toDF("id", "data")
       input.addData((1, "a"))
 
-      // foreachBatch creates a V1 ForeachBatchSink. The error surfaces
-      // when the streaming thread evaluates MicroBatchExecution.logicalPlan.
-      val query = df.writeStream
-        .withSchemaEvolution()
-        .option("checkpointLocation", checkpointDir.getCanonicalPath)
-        .foreachBatch { (batch: org.apache.spark.sql.Dataset[Row], _: Long) =>
-          ()
-        }
-        .start()
+      // foreachBatch creates a V1 ForeachBatchSink. The error is thrown synchronously
+      // when the streaming query is started.
+      val e = intercept[SparkUnsupportedOperationException] {
+        df.writeStream
+          .withSchemaEvolution()
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .foreachBatch { (batch: org.apache.spark.sql.Dataset[Row], _: Long) =>
+            ()
+          }
+          .start()
+      }
+      assert(e.getCondition ==
+        "UNSUPPORTED_SCHEMA_EVOLUTION.V1_TABLE")
+    }
+  }
 
-      try {
-        val e = intercept[
-          org.apache.spark.sql.streaming.StreamingQueryException] {
-          query.processAllAvailable()
+  test("withSchemaEvolution rejected for path-based V1 write") {
+    withTempDir { checkpointDir =>
+      withTempDir { outputDir =>
+        val input = MemoryStream[(Int, String)]
+        val df = input.toDF().toDF("id", "data")
+
+        val e = intercept[SparkUnsupportedOperationException] {
+          df.writeStream
+            .withSchemaEvolution()
+            .format("parquet")
+            .option("checkpointLocation", checkpointDir.getCanonicalPath)
+            .start(outputDir.getCanonicalPath)
         }
-        assert(e.getCause
-          .isInstanceOf[SparkUnsupportedOperationException])
-        assert(e.getCause
-          .asInstanceOf[SparkUnsupportedOperationException]
-          .getCondition ==
-          "UNSUPPORTED_STREAMING_SCHEMA_EVOLUTION.NOT_V2_TABLE")
-      } finally {
-        query.stop()
+        assert(e.getCondition ==
+          "UNSUPPORTED_SCHEMA_EVOLUTION.V1_TABLE")
+      }
+    }
+  }
+
+  test("withSchemaEvolution rejected for path-based V2 write") {
+    withTempDir { checkpointDir =>
+      withTempDir { outputDir =>
+        val input = MemoryStream[(Int, String)]
+        val df = input.toDF().toDF("id", "data")
+
+        // fake-write-supporting-external-metadata is a V2 SupportsWrite source but when used
+        // via path-based .start() there is no catalog table to evolve.
+        val e = intercept[SparkUnsupportedOperationException] {
+          df.writeStream
+            .withSchemaEvolution()
+            .format("fake-write-supporting-external-metadata")
+            .option("checkpointLocation", checkpointDir.getCanonicalPath)
+            .start(outputDir.getCanonicalPath)
+        }
+        assert(e.getCondition ==
+          "UNSUPPORTED_SCHEMA_EVOLUTION.NO_CATALOG_TABLE")
+      }
+    }
+  }
+
+  test("multiple batches in a single query exercise the per-batch analyzer path") {
+    withTable(tableIdent) {
+      withTempDir { checkpointDir =>
+        sql(s"CREATE TABLE $tableIdent (id INT, data STRING)")
+
+        val input = MemoryStream[(Int, String)]
+        val df = input.toDF().toDF("id", "data")
+
+        val query = df.writeStream
+          .withSchemaEvolution()
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .outputMode(OutputMode.Append())
+          .toTable(tableIdent)
+
+        // Multiple processAllAvailable() calls drive separate micro-batches through the
+        // per-batch analyzer path. Even though evolution is a no-op here (source and sink
+        // schemas already match), every batch re-analyzes the plan and re-evaluates
+        // pendingSchemaChanges. This guards against any regression where the per-batch
+        // path becomes order-dependent.
+        try {
+          input.addData((1, "a"))
+          query.processAllAvailable()
+          input.addData((2, "b"))
+          query.processAllAvailable()
+          input.addData((3, "c"))
+          query.processAllAvailable()
+        } finally {
+          query.stop()
+        }
+
+        checkAnswer(spark.table(tableIdent), Seq(Row(1, "a"), Row(2, "b"), Row(3, "c")))
       }
     }
   }

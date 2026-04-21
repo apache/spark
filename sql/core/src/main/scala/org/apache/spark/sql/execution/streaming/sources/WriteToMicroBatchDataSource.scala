@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming.sources
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolveSchemaEvolution}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode, WriteWithSchemaEvolution}
-import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
+import org.apache.spark.sql.catalyst.trees.TreePattern.WRITE_TO_MICRO_BATCH_DATA_SOURCE
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, TableChange, TableWritePrivilege}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2CatalogAndIdentifier}
@@ -32,8 +32,6 @@ import org.apache.spark.sql.streaming.OutputMode
  * Note that this logical plan does not have a corresponding physical plan, as it will be converted
  * to [[org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2 WriteToDataSourceV2]]
  * with [[MicroBatchWrite]] before execution.
- *
- * @param withSchemaEvolution Whether to evolve the sink table schema to match the source.
  */
 case class WriteToMicroBatchDataSource(
     relation: Option[DataSourceV2Relation],
@@ -48,32 +46,44 @@ case class WriteToMicroBatchDataSource(
   override def child: LogicalPlan = query
   override def output: Seq[Attribute] = Nil
 
-  final override val nodePatterns = Seq(COMMAND)
+  final override val nodePatterns = Seq(WRITE_TO_MICRO_BATCH_DATA_SOURCE)
 
   override def table: LogicalPlan = relation.getOrElse {
     throw new IllegalStateException(
       "Cannot access table for schema evolution: no DataSourceV2Relation is set.")
   }
 
+  override lazy val schemaEvolutionEnabled: Boolean =
+    withSchemaEvolution && relation.exists {
+      case r: DataSourceV2Relation => r.autoSchemaEvolution
+      case _ => false
+    }
+
   override lazy val schemaEvolutionReady: Boolean =
     relation.exists(_.resolved) && query.resolved
 
   override def pendingSchemaChanges: Seq[TableChange] = {
     if (relation.isEmpty || !schemaEvolutionEnabled || !schemaEvolutionReady) {
-      return Seq.empty
-    }
+      Seq.empty
+    } else {
+      val currentRelation = relation.get match {
+        case r @ ExtractV2CatalogAndIdentifier(catalog, ident) =>
+          // Loading the current table from the catalog ensures we don't use a stale schema.
+          val currentTable = catalog.loadTable(ident)
+          r.copy(
+            table = currentTable,
+            output = DataTypeUtils.toAttributes(currentTable.columns))
+        case r => r
+      }
 
-    val currentRelation = relation.get match {
-      case r @ ExtractV2CatalogAndIdentifier(catalog, ident) =>
-        // Loading the current table from the catalog ensures we don't use a stale schema.
-        val currentTable = catalog.loadTable(ident)
-        r.copy(
-          table = currentTable,
-          output = DataTypeUtils.toAttributes(currentTable.columns))
-      case r => r
+      // TODO: Streaming writes don't go through TableOutputResolver to
+      // reorder columns based on by-position vs. by-name semantic. It's up to the
+      // connector to decide how to write the data when schemas don't match.
+      // Here we assume by-position to detect new columns for schema evolution, but that
+      // may not match what the connector expects.
+      ResolveSchemaEvolution.computeSupportedSchemaChanges(
+        currentRelation, query.schema, isByName = false).toSeq
     }
-    ResolveSchemaEvolution.computeSupportedSchemaChanges(
-      currentRelation, query.schema, isByName = true).toSeq
   }
 
   override val writePrivileges: Set[TableWritePrivilege] = Set(TableWritePrivilege.INSERT)
