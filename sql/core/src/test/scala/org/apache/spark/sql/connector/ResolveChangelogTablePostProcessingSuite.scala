@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.catalog.{
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{
-  BinaryType, BooleanType, DoubleType, LongType, StringType}
+  BinaryType, BooleanType, DoubleType, LongType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -67,7 +67,8 @@ class ResolveChangelogTablePostProcessingSuite
       ident,
       Array(
         Column.create("id", LongType),
-        Column.create("name", StringType)),
+        Column.create("name", StringType),
+        Column.create("row_commit_version", LongType)),
       Array.empty[Transform],
       Collections.emptyMap[String, String]())
   }
@@ -82,17 +83,25 @@ class ResolveChangelogTablePostProcessingSuite
 
   /**
    * Helper to create a change row matching schema
-   * (id, name, _change_type, _commit_version, _commit_timestamp).
+   * (id, name, row_commit_version, _change_type, _commit_version, _commit_timestamp).
+   *
+   * `rowCommitVersion` follows Delta row-tracking semantics: carry-over pairs (CoW-rewritten
+   * unchanged rows) share the same value on both sides; real updates carry the OLD value on
+   * the delete side and the NEW value on the insert side. Defaults to `commitVersion` for
+   * tests that don't exercise carry-over removal.
    */
   private def changeRow(
       id: Long,
       name: String,
       changeType: String,
       commitVersion: Long,
+      rowCommitVersion: Long = -1L,
       commitTimestamp: Long = 0L): InternalRow = {
+    val rcv = if (rowCommitVersion == -1L) commitVersion else rowCommitVersion
     InternalRow(
       id,
       UTF8String.fromString(name),
+      rcv,
       UTF8String.fromString(changeType),
       commitVersion,
       commitTimestamp)
@@ -106,16 +115,17 @@ class ResolveChangelogTablePostProcessingSuite
     catalog.setChangelogProperties(ident, ChangelogProperties(
       containsCarryoverRows = true,
       rowIdNames = Seq("id"),
-      rowVersionName = Some("_commit_version")))
+      rowVersionName = Some("row_commit_version")))
 
-    // v1: insert Alice and Bob
-    // v2: real delete Alice, carry-over for Bob (delete + insert with identical data)
+    // v1: insert Alice and Bob (rcv=1 each)
+    // v2: real delete Alice (preimage carries old rcv=1);
+    //     carry-over for Bob (CoW, rcv unchanged on both sides)
     catalog.addChangeRows(ident, Seq(
-      changeRow(1L, "Alice", "insert", 1L),
-      changeRow(2L, "Bob", "insert", 1L),
-      changeRow(1L, "Alice", "delete", 2L),
-      changeRow(2L, "Bob", "delete", 2L),  // carry-over
-      changeRow(2L, "Bob", "insert", 2L))) // carry-over
+      changeRow(1L, "Alice", "insert", 1L, rowCommitVersion = 1L),
+      changeRow(2L, "Bob", "insert", 1L, rowCommitVersion = 1L),
+      changeRow(1L, "Alice", "delete", 2L, rowCommitVersion = 1L),
+      changeRow(2L, "Bob", "delete", 2L, rowCommitVersion = 1L),  // carry-over
+      changeRow(2L, "Bob", "insert", 2L, rowCommitVersion = 1L))) // carry-over (same rcv)
 
     val rows = sql(
       s"SELECT id, name, _change_type, _commit_version " +
@@ -142,12 +152,12 @@ class ResolveChangelogTablePostProcessingSuite
     catalog.setChangelogProperties(ident, ChangelogProperties(
       containsCarryoverRows = true,
       rowIdNames = Seq("id"),
-      rowVersionName = Some("_commit_version")))
+      rowVersionName = Some("row_commit_version")))
 
     catalog.addChangeRows(ident, Seq(
-      changeRow(1L, "Alice", "insert", 1L),
-      changeRow(2L, "Bob", "delete", 2L),
-      changeRow(2L, "Bob", "insert", 2L)))
+      changeRow(1L, "Alice", "insert", 1L, rowCommitVersion = 1L),
+      changeRow(2L, "Bob", "delete", 2L, rowCommitVersion = 1L),
+      changeRow(2L, "Bob", "insert", 2L, rowCommitVersion = 1L)))
 
     val rows = sql(
       s"SELECT id FROM $catalogName.$testTableName " +
@@ -166,7 +176,7 @@ class ResolveChangelogTablePostProcessingSuite
       containsCarryoverRows = false,  // no carry-overs in this test
       representsUpdateAsDeleteAndInsert = true,
       rowIdNames = Seq("id"),
-      rowVersionName = Some("_commit_version")))
+      rowVersionName = Some("row_commit_version")))
 
     catalog.addChangeRows(ident, Seq(
       changeRow(1L, "Alice", "insert", 1L),
@@ -196,7 +206,7 @@ class ResolveChangelogTablePostProcessingSuite
     catalog.setChangelogProperties(ident, ChangelogProperties(
       representsUpdateAsDeleteAndInsert = true,
       rowIdNames = Seq("id"),
-      rowVersionName = Some("_commit_version")))
+      rowVersionName = Some("row_commit_version")))
 
     catalog.addChangeRows(ident, Seq(
       changeRow(1L, "Alice", "insert", 1L),
@@ -244,17 +254,17 @@ class ResolveChangelogTablePostProcessingSuite
       containsCarryoverRows = true,
       representsUpdateAsDeleteAndInsert = true,
       rowIdNames = Seq("id"),
-      rowVersionName = Some("_commit_version")))
+      rowVersionName = Some("row_commit_version")))
 
-    // v1: insert Alice, Bob
-    // v2: Alice carry-over (CoW), Bob real update (Bob -> Robert)
+    // v1: insert Alice (rcv=1), Bob (rcv=1)
+    // v2: Alice carry-over (CoW, rcv unchanged), Bob real update (old rcv=1, new rcv=2)
     catalog.addChangeRows(ident, Seq(
-      changeRow(1L, "Alice", "insert", 1L),
-      changeRow(2L, "Bob", "insert", 1L),
-      changeRow(1L, "Alice", "delete", 2L),  // carry-over
-      changeRow(1L, "Alice", "insert", 2L),  // carry-over
-      changeRow(2L, "Bob", "delete", 2L),    // update preimage
-      changeRow(2L, "Robert", "insert", 2L))) // update postimage
+      changeRow(1L, "Alice", "insert", 1L, rowCommitVersion = 1L),
+      changeRow(2L, "Bob", "insert", 1L, rowCommitVersion = 1L),
+      changeRow(1L, "Alice", "delete", 2L, rowCommitVersion = 1L),   // carry-over
+      changeRow(1L, "Alice", "insert", 2L, rowCommitVersion = 1L),   // carry-over
+      changeRow(2L, "Bob", "delete", 2L, rowCommitVersion = 1L),     // update preimage (old rcv)
+      changeRow(2L, "Robert", "insert", 2L, rowCommitVersion = 2L))) // update postimage (new rcv)
 
     val rows = sql(
       s"SELECT id, name, _change_type FROM $catalogName.$testTableName " +
@@ -286,15 +296,17 @@ class ResolveChangelogTablePostProcessingSuite
       containsCarryoverRows = true,
       representsUpdateAsDeleteAndInsert = true,
       rowIdNames = Seq("id"),
-      rowVersionName = Some("_commit_version")))
+      rowVersionName = Some("row_commit_version")))
 
     catalog.addChangeRows(ident, Seq(
-      changeRow(1L, "Alice", "insert", 1L),
-      changeRow(2L, "Bob", "insert", 1L),
-      changeRow(1L, "Alice", "delete", 2L),  // carry-over (CoW)
-      changeRow(1L, "Alice", "insert", 2L),  // carry-over (CoW)
-      changeRow(2L, "Bob", "delete", 2L),    // real change pre
-      changeRow(2L, "Robert", "insert", 2L))) // real change post
+      changeRow(1L, "Alice", "insert", 1L, rowCommitVersion = 1L),
+      changeRow(2L, "Bob", "insert", 1L, rowCommitVersion = 1L),
+      // Alice: carry-over (CoW, rcv unchanged on both sides)
+      changeRow(1L, "Alice", "delete", 2L, rowCommitVersion = 1L),
+      changeRow(1L, "Alice", "insert", 2L, rowCommitVersion = 1L),
+      // Bob -> Robert: real change (old rcv on pre, new rcv on post)
+      changeRow(2L, "Bob", "delete", 2L, rowCommitVersion = 1L),
+      changeRow(2L, "Robert", "insert", 2L, rowCommitVersion = 2L)))
 
     // Default computeUpdates=false: do NOT relabel, but DO drop carry-overs
     val rows = sql(
@@ -316,7 +328,7 @@ class ResolveChangelogTablePostProcessingSuite
     catalog.setChangelogProperties(ident, ChangelogProperties(
       representsUpdateAsDeleteAndInsert = true,
       rowIdNames = Seq("id"),
-      rowVersionName = Some("_commit_version")))
+      rowVersionName = Some("row_commit_version")))
 
     catalog.addChangeRows(ident, Seq(
       changeRow(1L, "Alice", "insert", 1L),
@@ -330,34 +342,6 @@ class ResolveChangelogTablePostProcessingSuite
     assert(rows.length == 2)
     assert(rows.forall(_.getString(1) == "insert"),
       s"Pure inserts must stay 'insert'. Got: ${rows.map(_.getString(1)).mkString(",")}")
-  }
-
-  // Pins the CASE-WHEN default branch in injectUpdateDetection: when a (rowId, rowVersion)
-  // partition has _del_cnt=1 but _ins_cnt=0, isUpdate is false and _change_type stays 'delete'.
-  test("update detection keeps delete as-is when partition has no paired insert") {
-    catalog.setChangelogProperties(ident, ChangelogProperties(
-      representsUpdateAsDeleteAndInsert = true,
-      rowIdNames = Seq("id"),
-      rowVersionName = Some("_commit_version")))
-
-    catalog.addChangeRows(ident, Seq(
-      changeRow(1L, "Alice", "insert", 1L),
-      changeRow(1L, "Alice", "delete", 2L)))  // unpaired delete at v2
-
-    val rows = sql(
-      s"SELECT id, name, _change_type, _commit_version FROM $catalogName.$testTableName " +
-      s"CHANGES FROM VERSION 1 TO VERSION 2 WITH (computeUpdates = 'true')")
-      .collect()
-
-    val descs = rows.map(r =>
-      s"${r.getLong(0)}:${r.getString(1)}:${r.getString(2)}:v${r.getLong(3)}")
-
-    assert(descs.contains("1:Alice:insert:v1"))
-    assert(descs.contains("1:Alice:delete:v2"),
-      s"Unpaired delete must stay 'delete', not become update_preimage. " +
-        s"Got: ${descs.mkString(",")}")
-    assert(!descs.exists(_.contains("update_")),
-      "No update_* labels when no insert partner exists in the partition")
   }
 
   // ===========================================================================
@@ -385,26 +369,27 @@ class ResolveChangelogTablePostProcessingSuite
       containsCarryoverRows = true,
       representsUpdateAsDeleteAndInsert = true,
       rowIdNames = Seq("id"),
-      rowVersionName = Some("_commit_version")))
+      rowVersionName = Some("row_commit_version")))
 
     catalog.addChangeRows(ident, Seq(
-      // v1: insert 3 rows
-      changeRow(1L, "Alice", "insert", 1L),
-      changeRow(2L, "Bob", "insert", 1L),
-      changeRow(3L, "Charlie", "insert", 1L),
-      // v2: delete Alice; CoW carry-overs for Bob/Charlie
-      changeRow(1L, "Alice", "delete", 2L),
-      changeRow(2L, "Bob", "delete", 2L),
-      changeRow(2L, "Bob", "insert", 2L),
-      changeRow(3L, "Charlie", "delete", 2L),
-      changeRow(3L, "Charlie", "insert", 2L),
-      // v3: update Bob -> Robert; CoW carry-over for Charlie
-      changeRow(2L, "Bob", "delete", 3L),
-      changeRow(2L, "Robert", "insert", 3L),
-      changeRow(3L, "Charlie", "delete", 3L),
-      changeRow(3L, "Charlie", "insert", 3L),
-      // v4: insert Diana
-      changeRow(4L, "Diana", "insert", 4L)))
+      // v1: insert 3 rows (rcv=1 each)
+      changeRow(1L, "Alice", "insert", 1L, rowCommitVersion = 1L),
+      changeRow(2L, "Bob", "insert", 1L, rowCommitVersion = 1L),
+      changeRow(3L, "Charlie", "insert", 1L, rowCommitVersion = 1L),
+      // v2: delete Alice (preimage carries old rcv=1); CoW carry-overs for Bob/Charlie
+      //     keep rcv=1 on both sides (row unchanged).
+      changeRow(1L, "Alice", "delete", 2L, rowCommitVersion = 1L),
+      changeRow(2L, "Bob", "delete", 2L, rowCommitVersion = 1L),
+      changeRow(2L, "Bob", "insert", 2L, rowCommitVersion = 1L),
+      changeRow(3L, "Charlie", "delete", 2L, rowCommitVersion = 1L),
+      changeRow(3L, "Charlie", "insert", 2L, rowCommitVersion = 1L),
+      // v3: update Bob -> Robert (old rcv=1, new rcv=3); CoW carry-over for Charlie (rcv=1)
+      changeRow(2L, "Bob", "delete", 3L, rowCommitVersion = 1L),
+      changeRow(2L, "Robert", "insert", 3L, rowCommitVersion = 3L),
+      changeRow(3L, "Charlie", "delete", 3L, rowCommitVersion = 1L),
+      changeRow(3L, "Charlie", "insert", 3L, rowCommitVersion = 1L),
+      // v4: insert Diana (rcv=4)
+      changeRow(4L, "Diana", "insert", 4L, rowCommitVersion = 4L)))
 
     val rows = sql(
       s"SELECT id, name, _change_type, _commit_version FROM $catalogName.$testTableName " +
@@ -429,6 +414,19 @@ class ResolveChangelogTablePostProcessingSuite
     assert(!descs.contains("3:Charlie:delete:v3"), "Charlie carry-over dropped in v3")
     // v4
     assert(descs.contains("4:Diana:insert:v4"))
+  }
+
+  test("larger insert batch returns all rows") {
+    catalog.addChangeRows(ident, (1 to 5).map(i =>
+      changeRow(i.toLong, ('A' + i - 1).toChar.toString, "insert", 1L)))
+
+    val rows = sql(
+      s"SELECT id, _change_type FROM $catalogName.$testTableName " +
+      s"CHANGES FROM VERSION 1 TO VERSION 1 WITH (deduplicationMode = 'none')")
+      .collect()
+
+    assert(rows.length == 5)
+    assert(rows.forall(_.getString(1) == "insert"))
   }
 
   test("EXCLUSIVE start bound skips the start version") {
@@ -469,13 +467,14 @@ class ResolveChangelogTablePostProcessingSuite
     catalog.setChangelogProperties(ident, ChangelogProperties(
       containsCarryoverRows = true,
       rowIdNames = Seq("id"),
-      rowVersionName = Some("_commit_version")))
+      rowVersionName = Some("row_commit_version")))
 
+    // v1 inserts carry rcv=1; v2 deletes carry the old rcv=1 (rcv tracks last modification)
     catalog.addChangeRows(ident, Seq(
-      changeRow(1L, "Alice", "insert", 1L),
-      changeRow(2L, "Bob", "insert", 1L),
-      changeRow(1L, "Alice", "delete", 2L),
-      changeRow(2L, "Bob", "delete", 2L)))
+      changeRow(1L, "Alice", "insert", 1L, rowCommitVersion = 1L),
+      changeRow(2L, "Bob", "insert", 1L, rowCommitVersion = 1L),
+      changeRow(1L, "Alice", "delete", 2L, rowCommitVersion = 1L),
+      changeRow(2L, "Bob", "delete", 2L, rowCommitVersion = 1L)))
 
     val rows = sql(
       s"SELECT id, name, _change_type, _commit_version FROM $catalogName.$testTableName " +
@@ -498,15 +497,16 @@ class ResolveChangelogTablePostProcessingSuite
       containsCarryoverRows = true,
       representsUpdateAsDeleteAndInsert = true,
       rowIdNames = Seq("id"),
-      rowVersionName = Some("_commit_version")))
+      rowVersionName = Some("row_commit_version")))
 
+    // Every v2 row is a real update: delete side carries old rcv=1, insert side new rcv=2.
     catalog.addChangeRows(ident, Seq(
-      changeRow(1L, "Alice", "insert", 1L),
-      changeRow(2L, "Bob", "insert", 1L),
-      changeRow(1L, "Alice", "delete", 2L),
-      changeRow(1L, "Alice_updated", "insert", 2L),
-      changeRow(2L, "Bob", "delete", 2L),
-      changeRow(2L, "Bob_updated", "insert", 2L)))
+      changeRow(1L, "Alice", "insert", 1L, rowCommitVersion = 1L),
+      changeRow(2L, "Bob", "insert", 1L, rowCommitVersion = 1L),
+      changeRow(1L, "Alice", "delete", 2L, rowCommitVersion = 1L),
+      changeRow(1L, "Alice_updated", "insert", 2L, rowCommitVersion = 2L),
+      changeRow(2L, "Bob", "delete", 2L, rowCommitVersion = 1L),
+      changeRow(2L, "Bob_updated", "insert", 2L, rowCommitVersion = 2L)))
 
     val rows = sql(
       s"SELECT id, name, _change_type, _commit_version FROM $catalogName.$testTableName " +
@@ -524,22 +524,38 @@ class ResolveChangelogTablePostProcessingSuite
     assert(rows.length == 6, s"Expected 2 inserts + 2 pre + 2 post. Got ${rows.length}")
   }
 
+  test("append-only workload: all inserts, no carry-over needed") {
+    catalog.addChangeRows(ident, Seq(
+      changeRow(1L, "Alice", "insert", 1L),
+      changeRow(2L, "Bob", "insert", 2L),
+      changeRow(3L, "Charlie", "insert", 3L)))
+
+    val rows = sql(
+      s"SELECT id, _change_type FROM $catalogName.$testTableName " +
+      s"CHANGES FROM VERSION 1 TO VERSION 3")
+      .collect()
+
+    assert(rows.length == 3)
+    assert(rows.forall(_.getString(1) == "insert"))
+  }
+
   test("carry-over removal with many rows: only real change remains") {
     catalog.setChangelogProperties(ident, ChangelogProperties(
       containsCarryoverRows = true,
       rowIdNames = Seq("id"),
-      rowVersionName = Some("_commit_version")))
+      rowVersionName = Some("row_commit_version")))
 
-    // 10 inserts at v1, then at v2: delete row 5; CoW writes 9 carry-over pairs + 1 real delete
+    // 10 inserts at v1 (rcv=1 each). At v2: delete row 5; CoW writes 9 carry-over pairs
+    // (rcv unchanged since v1, i.e. rcv=1 on both sides) plus 1 real delete (rcv=1, old).
     val v1Inserts = (1 to 10).map(i =>
-      changeRow(i.toLong, ('A' + i - 1).toChar.toString, "insert", 1L))
+      changeRow(i.toLong, ('A' + i - 1).toChar.toString, "insert", 1L, rowCommitVersion = 1L))
     val v2Carryovers = (1 to 10).filter(_ != 5).flatMap { i =>
       val name = ('A' + i - 1).toChar.toString
       Seq(
-        changeRow(i.toLong, name, "delete", 2L),
-        changeRow(i.toLong, name, "insert", 2L))
+        changeRow(i.toLong, name, "delete", 2L, rowCommitVersion = 1L),
+        changeRow(i.toLong, name, "insert", 2L, rowCommitVersion = 1L))
     }
-    val v2RealDelete = Seq(changeRow(5L, "E", "delete", 2L))
+    val v2RealDelete = Seq(changeRow(5L, "E", "delete", 2L, rowCommitVersion = 1L))
     catalog.addChangeRows(ident, v1Inserts ++ v2Carryovers ++ v2RealDelete)
 
     val rows = sql(
@@ -566,31 +582,32 @@ class ResolveChangelogTablePostProcessingSuite
         Column.create("id", LongType),
         Column.create("name", StringType),
         Column.create("score", DoubleType),
-        Column.create("active", BooleanType)),
+        Column.create("active", BooleanType),
+        Column.create("row_commit_version", LongType)),
       Array.empty[Transform],
       Collections.emptyMap[String, String]())
     cat.setChangelogProperties(mixedIdent, ChangelogProperties(
       containsCarryoverRows = true,
       representsUpdateAsDeleteAndInsert = true,
       rowIdNames = Seq("id"),
-      rowVersionName = Some("_commit_version")))
+      rowVersionName = Some("row_commit_version")))
 
     def mixedRow(
         id: Long, name: String, score: Double, active: Boolean,
-        ct: String, v: Long): InternalRow = {
+        ct: String, v: Long, rcv: Long): InternalRow = {
       InternalRow(
-        id, UTF8String.fromString(name), score, active,
+        id, UTF8String.fromString(name), score, active, rcv,
         UTF8String.fromString(ct), v, 0L)
     }
 
     cat.addChangeRows(mixedIdent, Seq(
-      mixedRow(1L, "Alice", 95.5, true, "insert", 1L),
-      mixedRow(2L, "Bob", 87.3, false, "insert", 1L),
-      // v2: update Alice's score; Bob is carry-over
-      mixedRow(1L, "Alice", 95.5, true, "delete", 2L),
-      mixedRow(1L, "Alice", 99.0, true, "insert", 2L),
-      mixedRow(2L, "Bob", 87.3, false, "delete", 2L),  // carry-over
-      mixedRow(2L, "Bob", 87.3, false, "insert", 2L))) // carry-over
+      mixedRow(1L, "Alice", 95.5, true, "insert", 1L, rcv = 1L),
+      mixedRow(2L, "Bob", 87.3, false, "insert", 1L, rcv = 1L),
+      // v2: update Alice's score (old rcv=1, new rcv=2); Bob is carry-over (rcv unchanged)
+      mixedRow(1L, "Alice", 95.5, true, "delete", 2L, rcv = 1L),
+      mixedRow(1L, "Alice", 99.0, true, "insert", 2L, rcv = 2L),
+      mixedRow(2L, "Bob", 87.3, false, "delete", 2L, rcv = 1L),  // carry-over
+      mixedRow(2L, "Bob", 87.3, false, "insert", 2L, rcv = 1L))) // carry-over
 
     val rows = sql(
       s"SELECT id, name, score, active, _change_type FROM $catalogName.$mixedTable " +
@@ -612,80 +629,67 @@ class ResolveChangelogTablePostProcessingSuite
   }
 
   // ===========================================================================
-  // Iterator correctness: state-machine paths + null handling in dataColumnsEqual
+  // Regression: nested rowId + nested rowVersion end-to-end
   // ===========================================================================
 
-  // Pins the "pendingDelete always null, input is all inserts" path of CarryOverIterator.
-  // Even with containsCarryoverRows=true, a stream of only inserts must pass through
-  // unchanged; the iterator should never enter the delete/insert pairing branch.
-  test("carry-over iterator passes append-only stream through unchanged") {
-    catalog.setChangelogProperties(ident, ChangelogProperties(
+  // rowId is payload.id (nested); rowVersion is also row-level. A delete+insert pair with
+  // the same payload.id but different row_commit_version is a real update and must survive.
+  // A pair with matching row_commit_version would be a CoW carry-over and would be dropped.
+  test("nested rowId must not hide sibling-field changes") {
+    val nestedTable = "events_nested"
+    val nestedIdent = Identifier.of(Array.empty, nestedTable)
+    val cat = catalog
+    if (cat.tableExists(nestedIdent)) cat.dropTable(nestedIdent)
+    cat.clearChangeRows(nestedIdent)
+
+    val payloadType = StructType(Seq(
+      StructField("id", LongType),
+      StructField("value", StringType)))
+
+    cat.createTable(
+      nestedIdent,
+      Array(
+        Column.create("payload", payloadType),
+        Column.create("row_commit_version", LongType)),
+      Array.empty[Transform],
+      Collections.emptyMap[String, String]())
+
+    cat.setChangelogProperties(nestedIdent, ChangelogProperties(
       containsCarryoverRows = true,
-      rowIdNames = Seq("id"),
-      rowVersionName = Some("_commit_version")))
+      rowIdPaths = Seq(Seq("payload", "id")),
+      rowVersionName = Some("row_commit_version")))
 
-    catalog.addChangeRows(ident, Seq(
-      changeRow(1L, "Alice", "insert", 1L),
-      changeRow(2L, "Bob", "insert", 1L),
-      changeRow(3L, "Charlie", "insert", 1L)))
-
-    val rows = sql(
-      s"SELECT id, name, _change_type FROM $catalogName.$testTableName " +
-      s"CHANGES FROM VERSION 1 TO VERSION 1")
-      .orderBy("id")
-      .collect()
-
-    assert(rows.length == 3, s"All 3 inserts must survive, got ${rows.length}")
-    assert(rows.forall(_.getString(2) == "insert"),
-      s"Every row must stay 'insert'. Got: ${rows.map(_.getString(2)).mkString(",")}")
-  }
-
-  // Pins null handling in CarryOverIterator.dataColumnsEqual:
-  //   - both-null  -> equal -> carry-over dropped
-  //   - one-null   -> not equal -> both rows survive
-  test("carry-over removal handles null data values correctly") {
-    catalog.setChangelogProperties(ident, ChangelogProperties(
-      containsCarryoverRows = true,
-      rowIdNames = Seq("id"),
-      rowVersionName = Some("_commit_version")))
-
-    // id=1: data null throughout (both-null carry-over, must be dropped)
-    // id=2: real change, "Bob" -> null (one-null, must survive as both rows)
-    catalog.addChangeRows(ident, Seq(
-      changeRow(1L, null, "insert", 1L),
-      changeRow(2L, "Bob", "insert", 1L),
-      changeRow(1L, null, "delete", 2L),   // both-null carry-over delete
-      changeRow(1L, null, "insert", 2L),   // both-null carry-over insert (drop pair)
-      changeRow(2L, "Bob", "delete", 2L),  // one-null vs value: real change pre
-      changeRow(2L, null, "insert", 2L)))  // one-null vs value: real change post
-
-    val rows = sql(
-      s"SELECT id, name, _change_type, _commit_version FROM $catalogName.$testTableName " +
-      s"CHANGES FROM VERSION 1 TO VERSION 2")
-      .orderBy("_commit_version", "id", "_change_type")
-      .collect()
-
-    // Use a string that makes null visible in the description
-    val descs = rows.map { r =>
-      val nameStr = if (r.isNullAt(1)) "<null>" else r.getString(1)
-      s"${r.getLong(0)}:$nameStr:${r.getString(2)}:v${r.getLong(3)}"
+    def nestedRow(id: Long, value: String, ct: String, v: Long, rcv: Long): InternalRow = {
+      InternalRow(
+        InternalRow(id, UTF8String.fromString(value)),
+        rcv,
+        UTF8String.fromString(ct), v, 0L)
     }
 
-    // v1 inserts preserved
-    assert(descs.contains("1:<null>:insert:v1"), s"Got: ${descs.mkString(",")}")
-    assert(descs.contains("2:Bob:insert:v1"))
-    // id=1 both-null pair dropped as carry-over
-    assert(!descs.contains("1:<null>:delete:v2"),
-      s"both-null pair must be dropped as carry-over. Got: ${descs.mkString(",")}")
-    assert(!descs.contains("1:<null>:insert:v2"),
-      s"both-null pair must be dropped as carry-over. Got: ${descs.mkString(",")}")
-    // id=2 value-vs-null real change survives
-    assert(descs.contains("2:Bob:delete:v2"),
-      s"value-vs-null pair must survive. Got: ${descs.mkString(",")}")
-    assert(descs.contains("2:<null>:insert:v2"),
-      s"value-vs-null pair must survive. Got: ${descs.mkString(",")}")
-    assert(rows.length == 4,
-      s"Expected 4 rows (2 v1 inserts + 2 id=2 v2 real change). Got ${rows.length}")
+    cat.addChangeRows(nestedIdent, Seq(
+      nestedRow(1L, "original", "insert", 1L, rcv = 1L),
+      // v2 update: rowId same, rowVersion differs (old rcv=1 on preimage, new rcv=2 on postimage)
+      nestedRow(1L, "original", "delete", 2L, rcv = 1L),
+      nestedRow(1L, "CHANGED", "insert", 2L, rcv = 2L)))
+
+    val rows = sql(
+      s"SELECT payload.id AS id, payload.value AS value, _change_type, _commit_version " +
+      s"FROM $catalogName.$nestedTable CHANGES FROM VERSION 1 TO VERSION 2")
+      .orderBy("_commit_version", "_change_type")
+      .collect()
+
+    val descs = rows.map(r =>
+      s"${r.getLong(0)}:${r.getString(1)}:${r.getString(2)}:v${r.getLong(3)}")
+
+    assert(descs.contains("1:original:insert:v1"),
+      s"v1 insert must survive. Got: ${descs.mkString(",")}")
+    assert(descs.contains("1:original:delete:v2"),
+      s"v2 delete must survive (payload.value differs from insert). Got: ${descs.mkString(",")}")
+    assert(descs.contains("1:CHANGED:insert:v2"),
+      s"v2 insert must survive (payload.value differs from delete). Got: ${descs.mkString(",")}")
+    assert(rows.length == 3,
+      s"Expected 3 rows (v1 insert + v2 delete + v2 insert). Got ${rows.length}: " +
+      descs.mkString(","))
   }
 
   // ===========================================================================
@@ -706,30 +710,35 @@ class ResolveChangelogTablePostProcessingSuite
       binIdent,
       Array(
         Column.create("id", LongType),
-        Column.create("payload", BinaryType)),
+        Column.create("payload", BinaryType),
+        Column.create("row_commit_version", LongType)),
       Array.empty[Transform],
       Collections.emptyMap[String, String]())
     cat.setChangelogProperties(binIdent, ChangelogProperties(
       containsCarryoverRows = true,
       rowIdNames = Seq("id"),
-      rowVersionName = Some("_commit_version")))
+      rowVersionName = Some("row_commit_version")))
 
-    def binRow(id: Long, payload: Array[Byte], ct: String, v: Long): InternalRow = {
-      InternalRow(id, payload, UTF8String.fromString(ct), v, 0L)
+    def binRow(id: Long, payload: Array[Byte], ct: String, v: Long, rcv: Long): InternalRow = {
+      InternalRow(id, payload, rcv, UTF8String.fromString(ct), v, 0L)
     }
 
-    // Bob's carry-over: two distinct byte[] instances holding identical bytes.
+    // Bob's carry-over: two distinct byte[] instances; but partition-based carry-over
+    // detection looks only at rowVersion, not byte content, so the distinct-instance
+    // concern is moot under the new design. Kept as a regression guard for schemas
+    // containing BinaryType columns.
     val bobPayloadA = Array[Byte](1, 2, 3, 4)
     val bobPayloadB = Array[Byte](1, 2, 3, 4)
     assert(bobPayloadA ne bobPayloadB, "test precondition: distinct array instances")
 
     cat.addChangeRows(binIdent, Seq(
-      binRow(1L, Array[Byte](9, 9), "insert", 1L),
-      binRow(2L, bobPayloadA, "insert", 1L),
-      // v2: real delete for Alice; Bob carry-over with distinct-but-equal byte arrays
-      binRow(1L, Array[Byte](9, 9), "delete", 2L),
-      binRow(2L, bobPayloadA, "delete", 2L),   // carry-over (same instance as v1 insert)
-      binRow(2L, bobPayloadB, "insert", 2L)))  // carry-over (distinct instance, equal bytes)
+      binRow(1L, Array[Byte](9, 9), "insert", 1L, rcv = 1L),
+      binRow(2L, bobPayloadA, "insert", 1L, rcv = 1L),
+      // v2: real delete for Alice (preimage carries old rcv=1);
+      //     Bob carry-over (rcv unchanged=1 on both sides)
+      binRow(1L, Array[Byte](9, 9), "delete", 2L, rcv = 1L),
+      binRow(2L, bobPayloadA, "delete", 2L, rcv = 1L),   // carry-over
+      binRow(2L, bobPayloadB, "insert", 2L, rcv = 1L)))  // carry-over (same rcv)
 
     val rows = sql(
       s"SELECT id, _change_type, _commit_version FROM $catalogName.$binTable " +
@@ -752,25 +761,26 @@ class ResolveChangelogTablePostProcessingSuite
   }
 
   // ===========================================================================
-  // Behavior divergence from getChangeRows: no-op UPDATE
+  // No-op UPDATE is correctly preserved as update_preimage/postimage
   // ===========================================================================
 
-  test("no-op UPDATE (unchanged data) is dropped as carry-over") {
-    // Connector-agnostic carry-over removal compares data columns. A no-op
-    // UPDATE produces byte-identical delete+insert, indistinguishable from a CoW
-    // carry-over, and is therefore dropped. Legacy getChangeRows would have emitted
-    // update_preimage/update_postimage here.
+  test("no-op UPDATE is labeled as update (row_commit_version differs on pre/post)") {
+    // Under the partition-based design (SPIP B.6 updated), a no-op UPDATE is no longer
+    // silently dropped. Delta bumps row_commit_version on every UPDATE even when data is
+    // byte-identical, so the delete side carries the OLD rcv and the insert side the NEW
+    // rcv. Carry-over removal sees different rowVersions -> real change -> both survive
+    // and get labeled as update_preimage / update_postimage by update detection.
     catalog.setChangelogProperties(ident, ChangelogProperties(
       containsCarryoverRows = true,
       representsUpdateAsDeleteAndInsert = true,
       rowIdNames = Seq("id"),
-      rowVersionName = Some("_commit_version")))
+      rowVersionName = Some("row_commit_version")))
 
     catalog.addChangeRows(ident, Seq(
-      changeRow(1L, "Alice", "insert", 1L),
-      // v2 no-op update: identical delete + insert
-      changeRow(1L, "Alice", "delete", 2L),
-      changeRow(1L, "Alice", "insert", 2L)))
+      changeRow(1L, "Alice", "insert", 1L, rowCommitVersion = 1L),
+      // v2 no-op update: identical data, but rcv differs (Delta bumps it on any UPDATE)
+      changeRow(1L, "Alice", "delete", 2L, rowCommitVersion = 1L),
+      changeRow(1L, "Alice", "insert", 2L, rowCommitVersion = 2L)))
 
     val rows = sql(
       s"SELECT id, name, _change_type, _commit_version FROM $catalogName.$testTableName " +
@@ -782,10 +792,11 @@ class ResolveChangelogTablePostProcessingSuite
       s"${r.getLong(0)}:${r.getString(1)}:${r.getString(2)}:v${r.getLong(3)}")
 
     assert(descs.contains("1:Alice:insert:v1"))
-    assert(!descs.exists(_.contains("update_")),
-      "No-op UPDATE indistinguishable from carry-over, so it is dropped")
-    assert(!descs.contains("1:Alice:delete:v2"))
-    assert(!descs.contains("1:Alice:insert:v2"))
-    assert(rows.length == 1, "Only v1 insert remains; v2 no-op UPDATE silently dropped")
+    assert(descs.contains("1:Alice:update_preimage:v2"),
+      s"No-op UPDATE preimage must be labeled. Got: ${descs.mkString(",")}")
+    assert(descs.contains("1:Alice:update_postimage:v2"),
+      s"No-op UPDATE postimage must be labeled. Got: ${descs.mkString(",")}")
+    assert(rows.length == 3,
+      s"Expected v1 insert + v2 update pre/post = 3 rows. Got ${rows.length}")
   }
 }

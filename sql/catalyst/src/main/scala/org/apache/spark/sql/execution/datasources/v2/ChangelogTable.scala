@@ -19,8 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.{EnumSet => JEnumSet, Set => JSet}
 
-import org.apache.spark.sql.connector.catalog.{
-  Changelog, ChangelogInfo, Column, SupportsRead, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogInfo, Column, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, MICRO_BATCH_READ}
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -69,23 +68,5 @@ object ChangelogTable {
     check("_change_type", StringType)
     check("_commit_version")           // connector-defined, any type accepted
     check("_commit_timestamp", TimestampType)
-    // If the connector advertises any property that requires row identity for Spark-side
-    // post-processing, rowId() must be non-empty. Checked here so bad connectors fail at
-    // relation construction rather than silently having post-processing skipped.
-    val needsRowId =
-      cl.containsCarryoverRows ||
-      cl.representsUpdateAsDeleteAndInsert ||
-      cl.containsIntermediateChanges
-    if (needsRowId && cl.rowId().isEmpty) {
-      throw QueryCompilationErrors.changelogMissingRowIdError(cl.name)
-    }
-    // Assumption: every rowId is a top-level column (nested paths rejected until supported)
-    cl.rowId().foreach { ref =>
-      val parts = ref.fieldNames()
-      if (parts.length != 1) {
-        throw QueryCompilationErrors.changelogNestedRowIdError(
-          cl.name, parts.mkString("."))
-      }
-    }
   }
 }

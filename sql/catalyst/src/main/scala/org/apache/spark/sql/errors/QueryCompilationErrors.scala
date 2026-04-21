@@ -3870,21 +3870,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "actualType" -> actualType))
   }
 
-  def changelogNestedRowIdError(
-      changelogName: String, rowId: String): AnalysisException = {
-    new AnalysisException(
-      errorClass = "INVALID_CHANGELOG_SCHEMA.NESTED_ROW_ID",
-      messageParameters = Map(
-        "changelogName" -> changelogName,
-        "rowId" -> rowId))
-  }
-
-  def changelogMissingRowIdError(changelogName: String): AnalysisException = {
-    new AnalysisException(
-      errorClass = "INVALID_CHANGELOG_SCHEMA.MISSING_ROW_ID",
-      messageParameters = Map("changelogName" -> changelogName))
-  }
-
   def invalidCdcOptionConflictingRangeTypes(): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_CDC_OPTION.CONFLICTING_RANGE_TYPES",

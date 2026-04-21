@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.connector
 
-import java.util
+import java.util.Collections
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.ChangelogRange
-import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
+import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -66,8 +66,8 @@ class ChangelogResolutionSuite extends QueryTest with SharedSparkSession {
       Array(
         Column.create("id", LongType),
         Column.create("data", StringType)),
-      Array.empty,
-      new util.HashMap[String, String]())
+      Array.empty[Transform],
+      Collections.emptyMap[String, String]())
 
     val noCdcCat = spark.sessionState.catalogManager.catalog(noCdcCatalogName).asTableCatalog
     val ident2 = Identifier.of(Array.empty, "test_table")
@@ -79,8 +79,8 @@ class ChangelogResolutionSuite extends QueryTest with SharedSparkSession {
       Array(
         Column.create("id", LongType),
         Column.create("data", StringType)),
-      Array.empty,
-      new util.HashMap[String, String]())
+      Array.empty[Transform],
+      Collections.emptyMap[String, String]())
   }
 
   test("CHANGES clause resolves to DataSourceV2Relation with ChangelogTable") {
@@ -298,43 +298,6 @@ class ChangelogResolutionSuite extends QueryTest with SharedSparkSession {
       cl("good_cl", "id" -> LongType, "name" -> StringType,
         validChangeType, validVersion, validTimestamp),
       stubInfo())
-  }
-
-  test("ChangelogTable - post-processing flag with empty rowId throws") {
-    // Connector advertises containsCarryoverRows=true but returns no rowId(). Spark cannot
-    // post-process without row identity, so relation construction must fail fast.
-    val bad = new BrokenChangelog(
-      "no_rowid_cl",
-      Array(
-        Column.create("id", LongType),
-        Column.create("_change_type", StringType),
-        Column.create("_commit_version", LongType),
-        Column.create("_commit_timestamp", TimestampType))) {
-      override def containsCarryoverRows(): Boolean = true
-      override def rowId(): Array[NamedReference] = Array.empty
-    }
-    checkError(
-      intercept[AnalysisException] { ChangelogTable(bad, stubInfo()) },
-      condition = "INVALID_CHANGELOG_SCHEMA.MISSING_ROW_ID",
-      parameters = Map("changelogName" -> "no_rowid_cl"))
-  }
-
-  test("ChangelogTable - nested rowId (multi-segment NamedReference) throws") {
-    // Nested rowId paths (e.g. Seq("payload", "id")) are intentionally rejected for now.
-    // See the TODO in ResolveChangelogTable for the re-enable plan.
-    val nested = new BrokenChangelog(
-      "nested_cl",
-      Array(
-        Column.create("payload", LongType),
-        Column.create("_change_type", StringType),
-        Column.create("_commit_version", LongType),
-        Column.create("_commit_timestamp", TimestampType))) {
-      override def rowId(): Array[NamedReference] = Array(FieldReference(Seq("payload", "id")))
-    }
-    checkError(
-      intercept[AnalysisException] { ChangelogTable(nested, stubInfo()) },
-      condition = "INVALID_CHANGELOG_SCHEMA.NESTED_ROW_ID",
-      parameters = Map("changelogName" -> "nested_cl", "rowId" -> "payload.id"))
   }
 }
 

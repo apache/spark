@@ -941,10 +941,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.DeserializeToObjectExec(deserializer, objAttr, planLater(child)) :: Nil
       case logical.SerializeFromObject(serializer, child) =>
         execution.SerializeFromObjectExec(serializer, planLater(child)) :: Nil
-      case logical.CarryOverRemoval(child, rowIdColumnNames, rowVersionColumnName,
-          dataColumnNames, _) =>
-        execution.CarryOverRemovalExec(
-          planLater(child), rowIdColumnNames, rowVersionColumnName, dataColumnNames) :: Nil
       case logical.MapPartitions(f, objAttr, child) =>
         execution.MapPartitionsExec(f, objAttr, planLater(child)) :: Nil
       case logical.MapPartitionsInR(f, p, b, is, os, objAttr, child) =>

@@ -135,6 +135,8 @@ class InMemoryChangelogCatalog extends InMemoryCatalog {
  * @param containsIntermediateChanges whether multiple changes per row may exist
  * @param representsUpdateAsDeleteAndInsert whether updates appear as raw delete+insert
  * @param rowIdNames optional row identity columns as top-level names (e.g. Seq("id"))
+ * @param rowIdPaths optional row identity paths for nested struct fields
+ *                   (e.g. Seq(Seq("payload", "id"))); takes precedence over rowIdNames
  * @param rowVersionName optional row version column (e.g. Some("_commit_version"))
  */
 case class ChangelogProperties(
@@ -142,6 +144,7 @@ case class ChangelogProperties(
     containsIntermediateChanges: Boolean = false,
     representsUpdateAsDeleteAndInsert: Boolean = false,
     rowIdNames: Seq[String] = Seq.empty,
+    rowIdPaths: Seq[Seq[String]] = Seq.empty,
     rowVersionName: Option[String] = None)
 
 /**
@@ -174,7 +177,11 @@ class InMemoryChangelog(
     properties.representsUpdateAsDeleteAndInsert
 
   override def rowId(): Array[NamedReference] = {
-    properties.rowIdNames.map(name => FieldReference.column(name): NamedReference).toArray
+    if (properties.rowIdPaths.nonEmpty) {
+      properties.rowIdPaths.map(parts => FieldReference(parts): NamedReference).toArray
+    } else {
+      properties.rowIdNames.map(name => FieldReference.column(name): NamedReference).toArray
+    }
   }
 
   override def rowVersion(): NamedReference = properties.rowVersionName match {
