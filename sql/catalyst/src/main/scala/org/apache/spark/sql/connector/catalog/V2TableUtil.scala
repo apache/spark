@@ -154,7 +154,7 @@ private[sql] object V2TableUtil extends SQLConfHelper {
       table: Table,
       originCols: Seq[Column]): Seq[String] = {
     val currentColsByName = table.columns.toImmutableArraySeq
-      .map(c => normalize(c.name()) -> c).toMap
+      .map(col => normalize(col.name()) -> col).toMap
     val errors = new mutable.ArrayBuffer[String]()
     for (origin <- originCols) {
       if (origin.id() != null) {
