@@ -165,7 +165,7 @@ private[sql] object V2TableUtil extends SQLConfHelper {
               s"${originCol.id()} to ${currentCol.id()}"
           case _ =>
             // Column was dropped or IDs match. Dropped columns are handled
-            // separately by columnsMissingOrAddedAfterAnalysis.
+            // separately by [[columnsMissingOrAddedAfterAnalysis]].
         }
       }
     }
