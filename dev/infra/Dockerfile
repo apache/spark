@@ -28,12 +28,13 @@ ARG APT_INSTALL="apt-get install --no-install-recommends -y"
 
 RUN apt-get clean
 RUN apt-get update
-RUN PKGS="software-properties-common git libxml2-dev pkg-config curl wget openjdk-8-jdk libpython3-dev python3-pip python3-setuptools python3.9 build-essential gfortran libopenblas-dev liblapack-dev gpg gpg-agent software-properties-common"; $APT_INSTALL $PKGS || (apt-get update && $APT_INSTALL $PKGS)
+RUN PKGS="software-properties-common git libxml2-dev pkg-config curl wget openjdk-8-jdk libpython3-dev python3-pip python3-setuptools build-essential gfortran libopenblas-dev liblapack-dev gpg gpg-agent software-properties-common"; $APT_INSTALL $PKGS || (apt-get update && $APT_INSTALL $PKGS)
 RUN update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
 
 # We also want Python 3.8 since that's the oldest supported version for Spark 3.5
 RUN add-apt-repository ppa:deadsnakes/ppa && apt-get update
-RUN PKGS="python3.8"; ($APT_INSTALL $PKGS || apt-get update && $APT_INSTALL $PKGS)
+RUN PKGS="python3.8 python3.9 python3.9-venv python3.8-venv"; ($APT_INSTALL $PKGS || apt-get update && $APT_INSTALL $PKGS)
+RUN ls /bin/python*
 
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
 
@@ -49,7 +50,7 @@ RUN mkdir -p /usr/local/pypy/pypy3.8 && \
     ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3.8 && \
     ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3
 
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
+RUN curl -sS https://bootstrap.pypa.io/pip/3.8/get-pip.py | pypy3
 
 RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/' >> /etc/apt/sources.list
 RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
@@ -66,8 +67,8 @@ RUN Rscript -e "remotes::install_version('roxygen2', version='7.2.0', repos='htt
 # See more in SPARK-39735
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
 
-RUN pypy3 -m pip install numpy 'pandas<=2.0.3' scipy coverage matplotlib
-RUN python3.9 -m pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'pandas<=2.0.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage 'matplotlib==3.7.2' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
+RUN pypy3 -m pip install 'numpy==1.25.1' 'pandas<=2.0.3' 'scipy<=1.10' coverage 'matplotlib==3.7.2'
+RUN python3.9 -m pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'pandas<=2.0.3' 'scipy<=1.10' unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage 'matplotlib==3.7.2' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
 
 # Add Python deps for Spark Connect.
 RUN python3.9 -m pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4'
