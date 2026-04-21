@@ -20,11 +20,10 @@ package org.apache.spark.sql.execution
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{classic, DataFrame, Row, SparkSessionProvider, SQLContext}
+import org.apache.spark.sql.{classic, DataFrame, QueryTest, Row, SparkSessionProvider, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.classic.ClassicConversions._
-import org.apache.spark.sql.test.SQLTestUtils
 
 /**
  * Base class for writing tests for individual physical operators. For an example of how this
@@ -178,7 +177,7 @@ object SparkPlanTest {
         return Some(errorMessage)
     }
 
-    SQLTestUtils.compareAnswers(actualAnswer, expectedAnswer, sortAnswers).map { errorMessage =>
+    QueryTest.compareAnswers(actualAnswer, expectedAnswer, sortAnswers).map { errorMessage =>
       s"""
          | Results do not match.
          | Actual result Spark plan:
@@ -223,7 +222,7 @@ object SparkPlanTest {
         return Some(errorMessage)
     }
 
-    SQLTestUtils.compareAnswers(sparkAnswer, expectedAnswer, sortAnswers).map { errorMessage =>
+    QueryTest.compareAnswers(sparkAnswer, expectedAnswer, sortAnswers).map { errorMessage =>
       s"""
          | Results do not match for Spark plan:
          | $outputPlan
