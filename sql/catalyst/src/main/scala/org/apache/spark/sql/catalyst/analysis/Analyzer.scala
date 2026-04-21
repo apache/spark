@@ -3789,6 +3789,10 @@ class Analyzer(
         validateStoreAssignmentPolicy()
         TableOutputResolver.suitableForByNameCheck(v2Write.isByName,
           expected = v2Write.table.output, queryOutput = v2Write.query.output)
+        // With schema evolution, allow the source to have fewer columns/fields than the target
+        // and fill missing ones with default values or nulls (RECURSE mode). Without schema
+        // evolution, only top-level default column values are filled (FILL mode) and any
+        // missing columns will cause a schema enforcement error.
         val defaultValueFillMode =
           if (conf.coerceInsertNestedTypes && v2Write.schemaEvolutionEnabled) RECURSE
           else FILL
