@@ -166,8 +166,9 @@ private[sql] object V2TableUtil extends SQLConfHelper {
               s"${originalCapturedCol.id()} to ${currentCol.id()}"
           case _ =>
             // Column exists in the original schema but not in the current table
-            // (dropped columns), or both column IDs match. Dropped columns are
-            // handled separately by [[columnsMissingOrAddedAfterAnalysis]].
+            // (dropped columns), or both column IDs match.
+            // Dropped columns are handled separately by
+            // [[columnsMissingOrAddedAfterAnalysis]].
         }
       }
     }
