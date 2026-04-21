@@ -133,7 +133,7 @@ class SegmentTreeWindowMetricsSuite
   // All four tests pin `minPartitionRows = 64` (landed default) so future
   // default changes don't silently rebucket the fixtures, and use a single
   // shuffle partition so the Window operator sees `numPartitions >
-  // numTasks` -- the exact shape the the segtree and fallback fixtures happened to avoid.
+  // numTasks` -- the exact shape the segtree and fallback fixtures happened to avoid.
   // ---------------------------------------------------------------------
 
   test("T1 (G1) numPartitions > numTasks, identical length: every partition counted") {
