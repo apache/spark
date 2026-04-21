@@ -8137,6 +8137,29 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_SCHEMA_EVOLUTION" : {
+    "message" : [
+      "Schema evolution is not supported for this write."
+    ],
+    "subClass" : {
+      "CREATE_TABLE" : {
+        "message" : [
+          "Creating a new table does not support schema evolution."
+        ]
+      },
+      "REPLACE_TABLE" : {
+        "message" : [
+          "Replacing a table does not support schema evolution."
+        ]
+      },
+      "V1_TABLE" : {
+        "message" : [
+          "Writes to V1 tables or V1 data sources do not support schema evolution."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_SHOW_CREATE_TABLE" : {
     "message" : [
       "Unsupported a SHOW CREATE TABLE command."

@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, CreateTableExec, DataSourceV2Relation, ReplaceTableExec}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, DoubleType, IntegerType, StringType, TimestampType}
+import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -2176,6 +2176,146 @@ class DataSourceV2DataFrameSuite
       }
     } finally {
       spark.listenerManager.unregister(listener)
+    }
+  }
+
+  test("withSchemaEvolution: saveAsTable append evolves the table schema to add a new column") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint) USING $v2Format")
+      val df = Seq((1L, "a")).toDF("id", "data")
+
+      df.write.mode("append").format(v2Format).withSchemaEvolution().saveAsTable(t)
+
+      assert(spark.table(t).schema ===
+        new StructType().add("id", LongType).add("data", StringType))
+      checkAnswer(spark.table(t), Seq(Row(1L, "a")))
+    }
+  }
+
+  test("withSchemaEvolution: insertInto evolves the table schema to add a new column") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint) USING $v2Format")
+      val df = Seq((1L, "a")).toDF("id", "data")
+
+      df.write.format(v2Format).withSchemaEvolution().insertInto(t)
+
+      assert(spark.table(t).schema ===
+        new StructType().add("id", LongType).add("data", StringType))
+      checkAnswer(spark.table(t), Seq(Row(1L, "a")))
+    }
+  }
+
+  test("withSchemaEvolution: insertInto Overwrite evolves the table schema") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint) USING $v2Format")
+      val df = Seq((1L, "a")).toDF("id", "data")
+
+      df.write.mode("overwrite").format(v2Format).withSchemaEvolution().insertInto(t)
+
+      assert(spark.table(t).schema ===
+        new StructType().add("id", LongType).add("data", StringType))
+      checkAnswer(spark.table(t), Seq(Row(1L, "a")))
+    }
+  }
+
+  test("withSchemaEvolution: dynamic partition overwrite evolves the table schema") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint) USING $v2Format PARTITIONED BY (id)")
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
+          SQLConf.PartitionOverwriteMode.DYNAMIC.toString) {
+        Seq((1L, "a")).toDF("id", "data")
+          .write.mode("overwrite").format(v2Format).withSchemaEvolution().insertInto(t)
+
+        assert(spark.table(t).schema ===
+          new org.apache.spark.sql.types.StructType()
+            .add("id", org.apache.spark.sql.types.LongType)
+            .add("data", StringType))
+        checkAnswer(spark.table(t), Seq(Row(1L, "a")))
+      }
+    }
+  }
+
+  test("withSchemaEvolution: saveAsTable Overwrite with existing table fails with REPLACE") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t USING $v2Format AS SELECT 0L id, 'z' data")
+      checkError(
+        exception = intercept[AnalysisException] {
+          Seq((1L, "a")).toDF("id", "data")
+            .write.mode("overwrite").format(v2Format).withSchemaEvolution().saveAsTable(t)
+        },
+        condition = "UNSUPPORTED_SCHEMA_EVOLUTION.REPLACE_TABLE",
+        parameters = Map.empty)
+    }
+  }
+
+  test("withSchemaEvolution: saveAsTable Overwrite with missing table fails with REPLACE") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      checkError(
+        exception = intercept[AnalysisException] {
+          Seq((1L, "a")).toDF("id", "data")
+            .write.mode("overwrite").format(v2Format).withSchemaEvolution().saveAsTable(t)
+        },
+        condition = "UNSUPPORTED_SCHEMA_EVOLUTION.REPLACE_TABLE",
+        parameters = Map.empty)
+    }
+  }
+
+  test("withSchemaEvolution: saveAsTable ErrorIfExists/Ignore fails with CREATE_TABLE") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      val df = Seq((1L, "a")).toDF("id", "data")
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.write.format(v2Format).withSchemaEvolution().saveAsTable(t)
+        },
+        condition = "UNSUPPORTED_SCHEMA_EVOLUTION.CREATE_TABLE",
+        parameters = Map.empty)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.write.mode("ignore").format(v2Format).withSchemaEvolution().saveAsTable(t)
+        },
+        condition = "UNSUPPORTED_SCHEMA_EVOLUTION.CREATE_TABLE",
+        parameters = Map.empty)
+    }
+  }
+
+  test("withSchemaEvolution: save/saveAsTable/insertInto to a V1 source/table fail") {
+    withTempPath { p =>
+      val path = p.getCanonicalPath
+      // V1 file-based source (parquet) - no V2 batch write, falls back to V1.
+      checkError(
+        exception = intercept[AnalysisException] {
+          Seq((1L, "a")).toDF("id", "data")
+            .write.format("parquet").withSchemaEvolution().save(path)
+        },
+        condition = "UNSUPPORTED_SCHEMA_EVOLUTION.V1_TABLE",
+        parameters = Map.empty)
+    }
+
+    withTable("v1_table") {
+      sql("CREATE TABLE v1_table (id bigint, data string) USING parquet")
+      val df = Seq((1L, "a")).toDF("id", "data")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.write.mode("append").withSchemaEvolution().saveAsTable("v1_table")
+        },
+        condition = "UNSUPPORTED_SCHEMA_EVOLUTION.V1_TABLE",
+        parameters = Map.empty)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.write.withSchemaEvolution().insertInto("v1_table")
+        },
+        condition = "UNSUPPORTED_SCHEMA_EVOLUTION.V1_TABLE",
+        parameters = Map.empty)
     }
   }
 }
