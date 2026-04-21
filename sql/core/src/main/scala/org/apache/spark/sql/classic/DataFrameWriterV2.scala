@@ -33,8 +33,10 @@ import org.apache.spark.sql.connector.catalog.TableWritePrivilege._
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.datasources.v2.V2TableRefreshUtil
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
 
 /**
  * Interface used to write a [[org.apache.spark.sql.classic.Dataset]] to external storage using
@@ -227,6 +229,12 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    * callback functions.
    */
   private def runCommand(command: LogicalPlan): Unit = {
+    // Validate the source DF's captured table versions BEFORE
+    // the new QE's analyzer re-resolves them. Use the analyzed
+    // plan (not logical) because logical is still unresolved.
+    V2TableRefreshUtil.refresh(
+      sparkSession, df.queryExecution.analyzed,
+      versionedOnly = true, PROHIBIT_CHANGES)
     val qe = new QueryExecution(sparkSession, command, df.queryExecution.tracker,
       shuffleCleanupModeOpt =
         Some(QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf)))
