@@ -159,11 +159,13 @@ private[sql] object V2TableUtil extends SQLConfHelper {
     val errors = new mutable.ArrayBuffer[String]()
     for (originCol <- originCols) {
       if (originCol.id() != null) {
-        currentColsByNormalizedName.get(normalize(originCol.name())).foreach { currentCol =>
-          if (currentCol.id() != null && currentCol.id() != originCol.id()) {
+        currentColsByNormalizedName.get(normalize(originCol.name())) match {
+          case Some(currentCol) if currentCol.id() != null && currentCol.id() != originCol.id() =>
             errors += s"`${originCol.name()}` column ID has changed from " +
               s"${originCol.id()} to ${currentCol.id()}"
-          }
+          case _ =>
+            // Column was dropped or IDs match. Dropped columns are handled
+            // separately by columnsMissingOrAddedAfterAnalysis.
         }
       }
     }
