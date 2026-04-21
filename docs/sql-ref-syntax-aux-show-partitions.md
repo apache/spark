@@ -69,7 +69,7 @@ SHOW PARTITIONS table_identifier [ partition_spec ] [ AS JSON ]
 
     | Field | Type | Description |
     |---|---|---|
-    | `partitions` | array of strings | Each element is a partition path string in `col=val/col=val` format, sorted lexicographically. The array is empty when no partitions match the optional `partition_spec`. |
+    | `partitions` | array of strings | Each element is a partition path string in `col=val/col=val` format. The array is empty when no partitions match the optional `partition_spec`. |
 
 ### Examples
 

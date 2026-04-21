@@ -106,7 +106,7 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
     }
   }
 
-  test("SPARK-54710: show partitions as JSON") {
+  test("show partitions as JSON") {
     withNamespaceAndTable("ns", "dateTable") { t =>
       createDateTable(t)
       val df = spark.sql(s"SHOW PARTITIONS $t AS JSON")
@@ -120,7 +120,7 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
     }
   }
 
-  test("SPARK-54710: show partitions with spec as JSON") {
+  test("show partitions with spec as JSON") {
     withNamespaceAndTable("ns", "dateTable") { t =>
       createDateTable(t)
       checkAnswer(
@@ -135,7 +135,7 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
     }
   }
 
-  test("SPARK-54710: no matching partitions as JSON") {
+  test("show partitions as JSON with no partitions matching the spec") {
     withNamespaceAndTable("ns", "dateTable") { t =>
       createDateTable(t)
       checkAnswer(
@@ -206,7 +206,7 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
     }
   }
 
-  test("SPARK-54710: non-partitioned table AS JSON") {
+  test("show partitions non-partitioned table AS JSON") {
     withNamespaceAndTable("ns", "not_partitioned_table") { t =>
       sql(s"CREATE TABLE $t (col1 int) $defaultUsing")
       val tableName =
