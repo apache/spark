@@ -599,7 +599,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
-  test("SPARK-XXXX: CTAS IF NOT EXISTS skips execution when table exists, " +
+  test("SPARK-56558: CTAS IF NOT EXISTS skips execution when table exists, " +
     "regardless of non-empty location") {
     def executeCTASWithNonEmptyLocation(tempLocation: String): Unit = {
       sql(s"CREATE TABLE ctas1(id string) stored as rcfile LOCATION '$tempLocation/ctas1'")
