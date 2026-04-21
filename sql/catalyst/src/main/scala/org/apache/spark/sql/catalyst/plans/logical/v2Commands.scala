@@ -38,6 +38,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructType}
@@ -1048,6 +1049,9 @@ case class MergeIntoTable(
     }
   }
 
+  // Guard that assignments are either resolved or candidates for evolution before
+  // evaluating schema evolution. We need to use resolved assignment values to check
+  // candidates; see `isSchemaEvolutionCandidate` in the MergeIntoTable companion object.
   override lazy val schemaEvolutionReady: Boolean = {
     targetTable.resolved && sourceTable.resolved && actionsSchemaEvolutionReady
   }
@@ -1111,7 +1115,7 @@ object MergeIntoTable {
         ResolveSchemaEvolution.computeSchemaChanges(
           a.key.dataType,
           a.value.dataType,
-          fieldPath = extractFieldPath(a.key),
+          fieldPath = extractFieldPath(a.key, allowUnresolved = false),
           isByName = true,
           throwError = throwIncompatibleSchemasError(merge))
 
@@ -1121,7 +1125,7 @@ object MergeIntoTable {
   }
 
   private def throwIncompatibleSchemasError(merge: MergeIntoTable): Nothing = {
-    ResolveSchemaEvolution.throwIncompatibleSchemasError(
+    throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
       merge.targetTable.schema,
       merge.sourceTable.schema)
   }
@@ -1151,12 +1155,12 @@ object MergeIntoTable {
     assignments.filter(isSchemaEvolutionTrigger(_, merge.sourceTable))
   }
 
-  private def extractFieldPath(expr: Expression): Seq[String] = {
+  private def extractFieldPath(expr: Expression, allowUnresolved: Boolean): Seq[String] = {
     expr match {
-      case UnresolvedAttribute(nameParts) => nameParts
+      case UnresolvedAttribute(nameParts) if allowUnresolved => nameParts
       case a: AttributeReference => Seq(a.name)
       case GetStructField(child, ordinal, nameOpt) =>
-        extractFieldPath(child) :+ nameOpt.getOrElse(s"col$ordinal")
+        extractFieldPath(child, allowUnresolved) :+ nameOpt.getOrElse(s"col$ordinal")
       case _ => Seq.empty
     }
   }
@@ -1185,8 +1189,8 @@ object MergeIntoTable {
   // `references` contains only root attributes, so subsetOf(source.outputSet) works for both.
   private def isSchemaEvolutionTrigger(assignment: Assignment, source: LogicalPlan): Boolean = {
     assignment.value.resolved && {
-      val keyPath = extractFieldPath(assignment.key)
-      val valuePath = extractFieldPath(assignment.value)
+      val keyPath = extractFieldPath(assignment.key, allowUnresolved = true)
+      val valuePath = extractFieldPath(assignment.value, allowUnresolved = false)
       keyPath == valuePath && assignment.value.references.subsetOf(source.outputSet)
     }
   }

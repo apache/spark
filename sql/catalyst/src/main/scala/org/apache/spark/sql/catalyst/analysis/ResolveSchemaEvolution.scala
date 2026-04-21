@@ -112,16 +112,25 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
     val candidateChanges = computeSchemaChanges(
       targetTable.schema,
       sourceSchema,
-      fieldPath = Nil,
-      isByName,
-      throwError = throwIncompatibleSchemasError(targetTable.schema, sourceSchema))
+      isByName)
     filterSupportedChanges(targetTable, candidateChanges)
   }
 
-  private[sql] def throwIncompatibleSchemasError(
-      targetSchema: StructType,
-      sourceSchema: StructType): Nothing = {
-    throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(targetSchema, sourceSchema)
+  /**
+   * Computes schema changes between two types, throwing an error with the provided
+   * target and source schemas if the types are incompatible.
+   */
+  private[catalyst] def computeSchemaChanges(
+      targetType: StructType,
+      sourceType: StructType,
+      isByName: Boolean): Seq[TableChange] = {
+    computeSchemaChanges(
+      targetType,
+      sourceType,
+      fieldPath = Nil,
+      isByName,
+      throwError =
+        throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(targetType, sourceType))
   }
 
   def filterSupportedChanges(
@@ -209,6 +218,10 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
     }
   }
 
+  /**
+   * Match fields by name: look up each target field in the source by name to collect schema
+   * differences. Nested struct fields are also matched by name.
+   */
   private def computeSchemaChangesByName(
       currentFields: Seq[StructField],
       newFields: Seq[StructField],
@@ -217,6 +230,7 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
     val currentFieldMap = toFieldMap(currentFields)
     val newFieldMap = toFieldMap(newFields)
 
+    // Collect field updates
     val updates = currentFields
       .filter(f => newFieldMap.contains(f.name))
       .flatMap { f =>
@@ -228,20 +242,27 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
           throwError)
       }
 
+    // Collect newly added fields
     val adds = newFields
       .filterNot(f => currentFieldMap.contains(f.name))
       .map { f =>
+        // Make the type nullable, since existing rows in the table will have NULLs for this column.
         TableChange.addColumn((fieldPath :+ f.name).toArray, f.dataType.asNullable)
       }
 
     updates ++ adds
   }
 
+  /**
+   * Match fields by position: pair target and source fields in order to collect schema
+   * differences. Nested struct fields are also matched by position.
+   */
   private def computeSchemaChangesByPosition(
       currentFields: Seq[StructField],
       newFields: Seq[StructField],
       fieldPath: Seq[String],
       throwError: => Nothing): Seq[TableChange] = {
+    // Update existing field types by pairing fields at the same position.
     val updates = currentFields.zip(newFields).flatMap { case (currentField, newField) =>
       computeSchemaChanges(
         currentField.dataType,
@@ -251,8 +272,10 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
         throwError)
     }
 
+    // Extra source fields beyond the target's field count are new additions.
     val adds = newFields.drop(currentFields.length)
       .map { f =>
+        // Make the type nullable, since existing rows in the table will have NULLs for this column.
         TableChange.addColumn((fieldPath :+ f.name).toArray, f.dataType.asNullable)
       }
 
