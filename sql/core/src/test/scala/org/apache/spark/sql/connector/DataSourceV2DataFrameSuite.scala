@@ -27,7 +27,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTable, InMemoryTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo}
+import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTable, InMemoryTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo, TypeChangePreservesColIdTableCatalog}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
 import org.apache.spark.sql.connector.catalog.TableChange
@@ -60,6 +60,9 @@ class DataSourceV2DataFrameSuite
     .set("spark.sql.catalog.nullcolidcat",
       classOf[NullColumnIdInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.nullcolidcat.copyOnLoad", "true")
+    .set("spark.sql.catalog.preserveidcat",
+      classOf[TypeChangePreservesColIdTableCatalog].getName)
+    .set("spark.sql.catalog.preserveidcat.copyOnLoad", "true")
 
   after {
     spark.sessionState.catalogManager.reset()
@@ -1614,6 +1617,42 @@ class DataSourceV2DataFrameSuite
 
   // Column ID tests: Complex types
 
+  test("drop+re-add array column rejects stale DataFrame") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, tags ARRAY<STRING>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, array('a', 'b'))")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN tags")
+      sql(s"ALTER TABLE $t ADD COLUMN tags ARRAY<STRING>")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("drop+re-add map column rejects stale DataFrame") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, props MAP<STRING, INT>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, map('x', 1))")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN props")
+      sql(s"ALTER TABLE $t ADD COLUMN props MAP<STRING, INT>")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
   test("drop+re-add nested struct field rejects stale DataFrame") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -1627,6 +1666,127 @@ class DataSourceV2DataFrameSuite
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
         condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  // When a connector preserves column IDs across type changes, adding a
+  // nested field keeps the same column ID but changes the struct type.
+  // Column ID check passes, schema validation catches the type mismatch.
+  test("same column ID but expanded struct type caught by schema validation") {
+    val t = "preserveidcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice'))")
+      val df = spark.table(t)
+
+      // add nested field; TypeChangePreservesColIdTableCatalog preserves
+      // the person column ID despite the type change
+      sql(s"ALTER TABLE $t ADD COLUMN person.age INT")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("add field to array element struct rejects stale DataFrame") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, items ARRAY<STRUCT<name: STRING>>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, array(named_struct('name', 'x')))")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t ADD COLUMN items.element.price INT")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("add field to map value struct rejects stale DataFrame") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, props MAP<STRING, STRUCT<v: INT>>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, map('a', named_struct('v', 1)))")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t ADD COLUMN props.value.label STRING")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("inserting new data into array column does not trigger column ID mismatch") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, tags ARRAY<STRING>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, array('a', 'b'))")
+      val df = spark.table(t)
+
+      sql(s"INSERT INTO $t VALUES (2, array('c', 'd', 'e'))")
+
+      checkAnswer(df, Seq(
+        Row(1, Seq("a", "b")),
+        Row(2, Seq("c", "d", "e"))))
+    }
+  }
+
+  test("inserting new data into map column does not trigger column ID mismatch") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, props MAP<STRING, INT>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, map('x', 1))")
+      val df = spark.table(t)
+
+      sql(s"INSERT INTO $t VALUES (2, map('y', 2, 'z', 3))")
+
+      checkAnswer(df, Seq(
+        Row(1, Map("x" -> 1)),
+        Row(2, Map("y" -> 2, "z" -> 3))))
+    }
+  }
+
+  test("inserting new data into struct column does not trigger column ID mismatch") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
+      val df = spark.table(t)
+
+      sql(s"INSERT INTO $t VALUES (2, named_struct('name', 'Bob', 'age', 25))")
+
+      checkAnswer(df, Seq(
+        Row(1, Row("Alice", 30)),
+        Row(2, Row("Bob", 25))))
+    }
+  }
+
+  // When a connector preserves column IDs across type widening (e.g.,
+  // INT -> LONG), the column ID check passes but schema validation
+  // catches the type mismatch.
+  test("same column ID but widened type caught by schema validation") {
+    val t = "preserveidcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t ALTER COLUMN salary TYPE LONG")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -1659,6 +1819,9 @@ class DataSourceV2DataFrameSuite
   }
 
   // Column ID tests: Temp view behavior
+  //
+  // SQL views do not capture column IDs. They resolve columns by name
+  // on each access, so column ID changes are invisible to them.
 
   test("temp view tolerates drop+re-add column with same type") {
     val t = "testcat.ns1.ns2.tbl"
@@ -1703,6 +1866,11 @@ class DataSourceV2DataFrameSuite
   }
 
   // Column ID tests: Write operations
+  //
+  // [[writeTo().append()]] re-analyzes the source plan before writing,
+  // which picks up the latest column IDs from the table. So even if
+  // a column was dropped and re-added, the write sees the new IDs
+  // and succeeds, unlike [[df.collect()]] which uses stale captured IDs.
 
   test("writeTo().append() succeeds after drop+re-add column same type") {
     val t = "testcat.ns1.ns2.tbl"
@@ -1715,6 +1883,7 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t ADD COLUMN salary INT")
 
       source.writeTo(t).append()
+      checkAnswer(spark.table(t), Seq(Row(1, 100), Row(1, 100)))
     }
   }
 
@@ -1749,7 +1918,7 @@ class DataSourceV2DataFrameSuite
   // Column ID tests: Null column ID connector
 
   // When a connector does not support column IDs, validation is skipped.
-  test("null column IDs: drop+re-add column not detected") {
+  test("connector with null column IDs: drop+re-add column not detected") {
     val t = "nullcolidcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     withTable(t) {
@@ -1765,11 +1934,11 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t ADD COLUMN salary INT")
 
       // succeeds because column ID validation is skipped when IDs are null
-      df.collect()
+      checkAnswer(df, Seq(Row(1, 100)))
     }
   }
 
-  test("null column IDs: column addition succeeds") {
+  test("connector with null column IDs: stale DataFrame reads after column addition without ID mismatch") {
     val t = "nullcolidcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
