@@ -673,8 +673,9 @@ abstract class InMemoryBaseTable(
           oldType = CatalogV2Util.v2ColumnsToStructType(columns()),
           newType = newSchema)
         val newColumns = CatalogV2Util.structTypeToV2Columns(mergedSchema)
-        tableColumns = InMemoryBaseTable.reconcileColumnIds(
-          oldColumns = columns(), newColumns = newColumns)
+        tableColumns = InMemoryBaseTable.preserveOldIDsAndAssignNewIDs(
+          oldColumns = columns(),
+          newColumns = newColumns)
         writer
       }
 
@@ -797,7 +798,7 @@ object InMemoryBaseTable {
 
   private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
 
-  def reconcileColumnIds(
+  def preserveOldIDsAndAssignNewIDs(
       oldColumns: Array[Column],
       newColumns: Array[Column]): Array[Column] = {
     newColumns.map { newCol =>
