@@ -252,7 +252,9 @@ class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext 
         mm.markConsequentOOM(10)
         val ex = intercept[SparkOutOfMemoryError](queryMin(tree, 0, 20))
         assert(ex.getMessage.contains("UNABLE_TO_ACQUIRE_MEMORY") ||
-          ex.getMessage.contains("unable"),
+        val ex = intercept[SparkOutOfMemoryError](queryMin(tree, 0, 20))
+        assert(ex.getMessage.contains("UNABLE_TO_ACQUIRE_MEMORY"),
+          s"unexpected OOM message: ${ex.getMessage}")
           s"unexpected OOM message: ${ex.getMessage}")
         // Critically: the failed acquire path must not have left any bytes
         // accounted against the task.
