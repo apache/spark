@@ -7132,6 +7132,7 @@ object SQLConf {
         "option."
       )
       .version("4.1.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
