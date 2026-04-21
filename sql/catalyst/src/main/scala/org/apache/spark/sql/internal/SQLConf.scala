@@ -7124,15 +7124,16 @@ object SQLConf {
   val XML_VARIANT_RESPECT_INFER_SCHEMA =
     buildConf("spark.sql.xml.variant.respectInferSchema")
       .doc(
-        "When set to true, the XML to Variant parser honors the 'inferSchema' option: if " +
-        "'inferSchema' is false, primitive leaf values (text and attributes) are preserved as " +
-        "strings inside the Variant instead of being inferred as boolean, long, or decimal. " +
-        "When false, type inference is always performed regardless of the 'inferSchema' option, " +
-        "which is the behavior prior to SPARK-56554."
+        "Kill switch for the SPARK-56554 fix. When true (default), the XML to Variant parser " +
+        "honors the 'inferSchema' option: if 'inferSchema' is false, primitive leaf values " +
+        "(text and attributes) are preserved as strings inside the Variant instead of being " +
+        "inferred as boolean, long, or decimal. Set this conf to false to restore the " +
+        "pre-SPARK-56554 behavior of always inferring types regardless of the 'inferSchema' " +
+        "option."
       )
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val ASSUME_ANSI_FALSE_IF_NOT_PERSISTED =
     buildConf("spark.sql.assumeAnsiFalseIfNotPersisted.enabled")

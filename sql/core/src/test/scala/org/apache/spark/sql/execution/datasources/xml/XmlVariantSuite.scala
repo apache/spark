@@ -164,11 +164,10 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
     }
   }
 
-  test(
-    "Parser: inferSchema=false is ignored by default when the respectInferSchema conf is off") {
-    // With the conf disabled (default), inferSchema=false must have no effect on the Variant
-    // parser -- primitive leaves are still type-inferred. This preserves the pre-SPARK-56554
-    // behavior for existing workloads.
+  test("Parser: respectInferSchema kill switch restores pre-SPARK-56554 behavior") {
+    // With the kill switch set to false, inferSchema=false has no effect on the Variant
+    // parser -- primitive leaves are still type-inferred. This lets users opt out of the
+    // SPARK-56554 fix if it breaks an existing workload.
     val noInfer = Map("inferSchema" -> "false")
     withSQLConf(SQLConf.XML_VARIANT_RESPECT_INFER_SCHEMA.key -> "false") {
       testParser("<ROW><id>007</id></ROW>", """{"id":7}""", noInfer)
