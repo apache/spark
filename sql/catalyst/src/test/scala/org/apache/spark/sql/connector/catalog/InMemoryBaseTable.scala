@@ -63,7 +63,8 @@ abstract class InMemoryBaseTable(
     val advisoryPartitionSize: Option[Long] = None,
     val isDistributionStrictlyRequired: Boolean = true,
     val numRowsPerSplit: Int = Int.MaxValue)
-  extends Table with SupportsRead with SupportsWrite with SupportsMetadataColumns {
+  extends Table with SupportsRead with SupportsWrite with SupportsMetadataColumns
+    with SupportsSchemaEvolution {
 
   // Tracks the current version number of the table.
   protected var tableVersion: Int = 0
@@ -122,6 +123,19 @@ abstract class InMemoryBaseTable(
   }
 
   override def schema(): StructType = CatalogV2Util.v2ColumnsToStructType(columns())
+
+  override def supportsColumnChange(change: TableChange.ColumnChange): Boolean = change match {
+    case typeChange: TableChange.UpdateColumnType =>
+      val fieldNames = typeChange.fieldNames()
+      val newType = typeChange.newDataType()
+
+      // Only allow changing to a strictly wider type.
+      schema()
+        .findNestedField(fieldNames.toImmutableArraySeq, includeCollections = true)
+        .exists { field => Cast.canUpCast(field._2.dataType, newType) }
+    case _: TableChange.AddColumn => true
+    case _ => false
+  }
 
   // purposely exposes a metadata column that conflicts with a data column in some tests
   override val metadataColumns: Array[MetadataColumn] = Array(IndexColumn, PartitionKeyColumn)
@@ -863,8 +877,13 @@ private class BufferedRowsReader(
 
   private var index: Int = -1
   private var rowsRead: Long = 0
+  private var closed: Boolean = false
+
+  private def checkNotClosed(op: String): Unit =
+    if (closed) throw new IllegalStateException(s"$op called on a closed BufferedRowsReader")
 
   override def next(): Boolean = {
+    checkNotClosed("next()")
     index += 1
     val hasNext = index < partition.rows.length
     if (hasNext) rowsRead += 1
@@ -872,6 +891,7 @@ private class BufferedRowsReader(
   }
 
   override def get(): InternalRow = {
+    checkNotClosed("get()")
     val originalRow = partition.rows(index)
     val values = new Array[Any](nonMetadataColumns.length)
     nonMetadataColumns.zipWithIndex.foreach { case (col, idx) =>
@@ -881,7 +901,13 @@ private class BufferedRowsReader(
     addMetadata(new GenericInternalRow(values))
   }
 
-  override def close(): Unit = {}
+  // Intentionally strict: double-close throws rather than being idempotent (as Closeable permits).
+  // This is test code whose purpose is to catch reader lifecycle bugs early; a silent no-op on
+  // double-close would mask the very errors we want to detect.
+  override def close(): Unit = {
+    checkNotClosed("close()")
+    closed = true
+  }
 
   private def extractFieldValue(
       field: StructField,
@@ -932,7 +958,13 @@ private class BufferedRowsReader(
             }
 
           case dt =>
-            row.get(writeIndex, dt)
+            val writeType = writeSchema.fields(writeIndex).dataType
+            val value = row.get(writeIndex, writeType)
+            if (writeType != dt && value != null) {
+              castElement(value, dt, writeType)
+            } else {
+              value
+            }
         }
       case (None, Some(_)) =>
         ResolveDefaultColumns.getExistenceDefaultValue(field)
@@ -1012,15 +1044,8 @@ private class BufferedRowsReader(
   private def castElement(elem: Any, toType: DataType, fromType: DataType): Any =
     Cast(Literal(elem, fromType), toType, None, EvalMode.TRY).eval(null)
 
-  override def initMetricsValues(metrics: Array[CustomTaskMetric]): Unit = {
-    metrics.foreach { m =>
-      m.name match {
-        case "rows_read" => rowsRead = m.value()
-      }
-    }
-  }
-
   override def currentMetricsValues(): Array[CustomTaskMetric] = {
+    checkNotClosed("currentMetricsValues()")
     val metric = new CustomTaskMetric {
       override def name(): String = "rows_read"
       override def value(): Long = rowsRead

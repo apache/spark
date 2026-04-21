@@ -3626,9 +3626,8 @@ class Analyzer(
       case j @ Join(left, right, NaturalJoin(joinType), condition, hint)
           if j.resolvedExceptNatural =>
         // find common column names from both sides
-        val joinNames = left.output.map(_.name).distinct.filter { leftName =>
-          right.output.map(_.name).exists(resolver(leftName, _))
-        }
+        val joinNames = NaturalAndUsingJoinResolution.canonicalizedIntersect(
+            left.output.map(_.name), right.output.map(_.name))
         val project = commonNaturalJoinProcessing(
           left, right, joinType, joinNames, condition, hint)
         j.getTagValue(LogicalPlan.PLAN_ID_TAG)

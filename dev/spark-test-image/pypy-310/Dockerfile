@@ -29,6 +29,8 @@ ENV FULL_REFRESH_DATE=20260207
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
 
+RUN printf 'Types: deb\nURIs: https://mirrors.edge.kernel.org/ubuntu\nSuites: noble noble-updates noble-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n' > /etc/apt/sources.list.d/mirror.sources
+
 RUN apt-get update && apt-get install -y \
     build-essential \
     ca-certificates \
@@ -64,4 +66,6 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Install PyPy 3.10 packages
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
-RUN pypy3 -m pip install numpy 'six==1.16.0' 'pandas==2.3.3' scipy coverage matplotlib lxml
+RUN echo 'meson<1.11.0' > /tmp/constraints.txt && \
+    PIP_CONSTRAINT=/tmp/constraints.txt pypy3 -m pip install numpy 'six==1.16.0' 'pandas==2.3.3' scipy coverage matplotlib 'lxml==4.9.4' && \
+    rm -f /tmp/constraints.txt

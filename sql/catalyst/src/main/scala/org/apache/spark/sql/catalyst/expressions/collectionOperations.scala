@@ -1343,21 +1343,26 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None) extends U
 }
 
 /**
- * Returns a reversed string or an array with reverse order of elements.
+ * Returns a reversed string, a binary value with bytes in reverse order,
+ * or an array with reverse order of elements.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(array) - Returns a reversed string or an array with reverse order of elements.",
+  usage = """_FUNC_(expr) - Returns a reversed string, a binary value with bytes in reverse order,
+    or an array with reverse order of elements.""",
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
        LQS krapS
       > SELECT _FUNC_(array(2, 1, 4, 3));
        [3,4,1,2]
+      > SELECT hex(_FUNC_(x'CAFE'));
+       FECA
   """,
   group = "collection_funcs",
   since = "1.5.0",
   note = """
     Reverse logic for arrays is available since 2.4.0.
+    Reverse logic for binary is available since 4.2.0.
   """
 )
 case class Reverse(child: Expression)
@@ -1365,7 +1370,10 @@ case class Reverse(child: Expression)
   override def nullIntolerant: Boolean = true
   // Input types are utilized by type coercion in ImplicitTypeCasts.
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(StringTypeWithCollation(supportsTrimCollation = true), ArrayType))
+    Seq(TypeCollection(
+      StringTypeWithCollation(supportsTrimCollation = true),
+      BinaryType,
+      ArrayType))
 
   override def dataType: DataType = child.dataType
 
@@ -1380,17 +1388,36 @@ case class Reverse(child: Expression)
         new GenericArrayData(arrayData.toObjectArray(elementType).reverse)
       }
     case _: StringType => _.asInstanceOf[UTF8String].reverse()
+    case BinaryType => input => input.asInstanceOf[Array[Byte]].reverse
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => dataType match {
       case _: StringType => stringCodeGen(ev, c)
+      case BinaryType => binaryCodeGen(ctx, ev, c)
       case _: ArrayType => arrayCodeGen(ctx, ev, c)
     })
   }
 
   private def stringCodeGen(ev: ExprCode, childName: String): String = {
     s"${ev.value} = ($childName).reverse();"
+  }
+
+  private def binaryCodeGen(
+      ctx: CodegenContext, ev: ExprCode, childName: String): String = {
+    val input = ctx.freshName("input")
+    val len = ctx.freshName("len")
+    val result = ctx.freshName("result")
+    val i = ctx.freshName("i")
+    s"""
+       |byte[] $input = (byte[]) $childName;
+       |int $len = $input.length;
+       |byte[] $result = new byte[$len];
+       |for (int $i = 0; $i < $len; $i++) {
+       |  $result[$i] = $input[$len - 1 - $i];
+       |}
+       |${ev.value} = $result;
+     """.stripMargin
   }
 
   private def arrayCodeGen(ctx: CodegenContext, ev: ExprCode, childName: String): String = {

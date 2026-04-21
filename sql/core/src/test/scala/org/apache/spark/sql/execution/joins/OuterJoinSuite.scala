@@ -31,7 +31,7 @@ import org.apache.spark.sql.test.{SharedSparkSession, SQLTestData}
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
 
 class OuterJoinSuite extends SparkPlanTest with SharedSparkSession with SQLTestData {
-  import testImplicits.toRichColumn
+  import testImplicits._
   setupTestData()
 
   private val EnsureRequirements = new EnsureRequirements()

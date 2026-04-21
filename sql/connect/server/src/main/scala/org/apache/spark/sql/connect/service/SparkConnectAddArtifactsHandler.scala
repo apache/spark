@@ -23,7 +23,6 @@ import java.util.zip.{CheckedOutputStream, CRC32}
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import com.google.common.io.CountingOutputStream
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.SparkRuntimeException
@@ -228,8 +227,7 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
     Files.createDirectories(stagedPath.getParent)
 
     private val fileOut = Files.newOutputStream(stagedPath)
-    private val countingOut = new CountingOutputStream(fileOut)
-    private val checksumOut = new CheckedOutputStream(countingOut, new CRC32)
+    private val checksumOut = new CheckedOutputStream(fileOut, new CRC32)
     private val overallChecksum = new CRC32()
 
     private val builder = ArtifactSummary.newBuilder().setName(name)

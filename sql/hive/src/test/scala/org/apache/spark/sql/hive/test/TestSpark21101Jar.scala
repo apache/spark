@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive.test
 import java.io.File
 import java.lang.management.ManagementFactory
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, Paths}
 
 import org.apache.spark.util.{SparkTestUtils, Utils}
 
@@ -52,6 +51,8 @@ object TestSpark21101Jar {
   private def readResource(name: String): String = {
     val url = Thread.currentThread().getContextClassLoader.getResource(name)
     assert(url != null, s"Resource not found: $name")
-    new String(Files.readAllBytes(Paths.get(url.toURI)), StandardCharsets.UTF_8)
+    Utils.tryWithResource(url.openStream()) { is =>
+      new String(is.readAllBytes(), StandardCharsets.UTF_8)
+    }
   }
 }

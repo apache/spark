@@ -1164,4 +1164,27 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-52709: STRUCT<> should not corrupt complex_type_level_counter") {
+    // STRUCT<> is tokenized as STRUCT + NEQ by the lexer. The parser must decrement
+    // the complex_type_level_counter so that subsequent >> is recognized as shift-right.
+    // Without the fix, this throws a parse error because >> is not recognized.
+    parser.parsePlan("SELECT CAST(null AS STRUCT<>), 2 >> 1")
+
+    // Multiple empty structs should not corrupt the counter
+    parser.parsePlan("SELECT CAST(null AS STRUCT<>), CAST(null AS STRUCT<>), 4 >> 2")
+
+    // Empty struct with unsigned shift right
+    parser.parsePlan("SELECT CAST(null AS STRUCT<>), 8 >>> 2")
+
+    // ARRAY with <> as not-equal operator should still work
+    parser.parsePlan("SELECT ARRAY(1 <> 2)")
+
+    // Nested complex types with >> should still work
+    parser.parsePlan("SELECT CAST(null AS MAP<STRING, ARRAY<INT>>)")
+
+    // Mix of empty struct and nested complex types
+    parser.parsePlan(
+      "SELECT CAST(null AS STRUCT<>), CAST(null AS MAP<STRING, ARRAY<INT>>), 2 >> 1")
+  }
 }

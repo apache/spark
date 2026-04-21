@@ -3496,9 +3496,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def parseInputNotStringTypeError(dataType: DataType): Throwable = {
+  def dataframeInputNotSingleColumnError(numColumns: Int): Throwable = {
     new AnalysisException(
-      errorClass = "PARSE_INPUT_NOT_STRING_TYPE",
+      errorClass = "DATAFRAME_INPUT_NOT_SINGLE_COLUMN",
+      messageParameters = Map("numColumns" -> numColumns.toString))
+  }
+
+  def dataframeInputNotStringTypeError(dataType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "DATAFRAME_INPUT_NOT_STRING_TYPE",
       messageParameters = Map("dataType" -> toSQLType(dataType)))
   }
 

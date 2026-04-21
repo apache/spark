@@ -67,6 +67,7 @@ case class TransformWithStateExec(
     outputObjAttr: Attribute,
     stateInfo: Option[StatefulOperatorStateInfo],
     batchTimestampMs: Option[Long],
+    prevBatchTimestampMs: Option[Long] = None,
     eventTimeWatermarkForLateEvents: Option[Long],
     eventTimeWatermarkForEviction: Option[Long],
     child: SparkPlan,
@@ -251,7 +252,7 @@ case class TransformWithStateExec(
       case ProcessingTime =>
         assert(batchTimestampMs.isDefined)
         val batchTimestamp = batchTimestampMs.get
-        processorHandle.getExpiredTimers(batchTimestamp)
+        processorHandle.getExpiredTimers(batchTimestamp, prevBatchTimestampMs)
           .flatMap { case (keyObj, expiryTimestampMs) =>
             numExpiredTimers += 1
             handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
@@ -260,7 +261,26 @@ case class TransformWithStateExec(
       case EventTime =>
         assert(eventTimeWatermarkForEviction.isDefined)
         val watermark = eventTimeWatermarkForEviction.get
-        processorHandle.getExpiredTimers(watermark)
+        // Use the late-events watermark as the scan lower bound only when we can prove that
+        // it equals the previous batch's eviction watermark for this operator. That holds
+        // when STATEFUL_OPERATOR_ALLOW_MULTIPLE is true.
+        //
+        // When STATEFUL_OPERATOR_ALLOW_MULTIPLE is false (legacy mode), lateEvents == eviction
+        // for the same batch, so using it would collapse the eviction range to (wm, wm] = empty
+        // and silently stop firing timers. Fall back to None (full scan) in that mode, as we
+        // don't expect the legacy mode to be used by many users.
+        //
+        // The prevBatchTimestampMs.isDefined check guards against the first batch, where
+        // watermark propagation yields Some(0) for late events even though no timers have been
+        // processed yet, which would incorrectly skip timers registered at timestamp 0.
+        val prevWatermark =
+          if (prevBatchTimestampMs.isDefined &&
+              conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)) {
+            eventTimeWatermarkForLateEvents
+          } else {
+            None
+          }
+        processorHandle.getExpiredTimers(watermark, prevWatermark)
           .flatMap { case (keyObj, expiryTimestampMs) =>
             numExpiredTimers += 1
             handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
@@ -493,7 +513,7 @@ case class TransformWithStateExec(
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, timeMode,
-      isStreaming, batchTimestampMs, metrics)
+      isStreaming, batchTimestampMs, prevBatchTimestampMs, metrics)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     withStatefulProcessorErrorHandling("init") {
@@ -509,7 +529,7 @@ case class TransformWithStateExec(
       initStateIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
-      keyEncoder, timeMode, isStreaming, batchTimestampMs, metrics)
+      keyEncoder, timeMode, isStreaming, batchTimestampMs, prevBatchTimestampMs, metrics)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     withStatefulProcessorErrorHandling("init") {
@@ -579,6 +599,7 @@ object TransformWithStateExec {
       outputObjAttr,
       Some(statefulOperatorStateInfo),
       Some(System.currentTimeMillis),
+      None,
       None,
       None,
       child,

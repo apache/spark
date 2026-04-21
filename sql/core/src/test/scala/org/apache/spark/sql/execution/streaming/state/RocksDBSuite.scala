@@ -264,7 +264,14 @@ trait AlsoTestWithRocksDBFeatures
       val newTestName = s"$testName - with enableStateStoreCheckpointIds = " +
         s"$enableStateStoreCheckpointIds"
       testWithColumnFamilies(newTestName, testMode, testTags: _*) { colFamiliesEnabled =>
-        testBody(enableStateStoreCheckpointIds, colFamiliesEnabled)
+        val v2Confs = if (enableStateStoreCheckpointIds) {
+          Seq(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2")
+        } else {
+          Seq.empty
+        }
+        withSQLConf(v2Confs: _*) {
+          testBody(enableStateStoreCheckpointIds, colFamiliesEnabled)
+        }
       }
     }
   }
@@ -277,7 +284,14 @@ trait AlsoTestWithRocksDBFeatures
       val newTestName = s"$testName - with enableStateStoreCheckpointIds = " +
         s"$enableStateStoreCheckpointIds"
       test(newTestName, testTags: _*) {
-        testBody(enableStateStoreCheckpointIds)
+        val v2Confs = if (enableStateStoreCheckpointIds) {
+          Seq(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2")
+        } else {
+          Seq.empty
+        }
+        withSQLConf(v2Confs: _*) {
+          testBody(enableStateStoreCheckpointIds)
+        }
       }
     }
   }
@@ -290,7 +304,14 @@ trait AlsoTestWithRocksDBFeatures
       val newTestName = s"$testName - with enableStateStoreCheckpointIds = " +
         s"$enableStateStoreCheckpointIds"
       testWithChangelogCheckpointingDisabled(newTestName, testTags: _*) {
-        enableStateStoreCheckpointIds => testBody(enableStateStoreCheckpointIds)
+        val v2Confs = if (enableStateStoreCheckpointIds) {
+          Seq(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2")
+        } else {
+          Seq.empty
+        }
+        withSQLConf(v2Confs: _*) {
+          testBody(enableStateStoreCheckpointIds)
+        }
       }
     }
   }
@@ -3550,7 +3571,9 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
 
     // reload version 2 - should succeed
-    withDB(remoteDir, version = 2, conf = conf) { db =>
+    withDB(remoteDir, version = 2, conf = conf,
+      enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+      versionToUniqueId = versionToUniqueId) { db =>
     }
   }
 
@@ -3584,15 +3607,25 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           db.commit() // create snapshot again
 
           // load version 1 - should succeed
-          withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf) { db =>
+          withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf,
+            enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+            versionToUniqueId = versionToUniqueId) { db =>
           }
 
           // upload recently created snapshot
           db.doMaintenance()
-          assert(snapshotVersionsPresent(remoteDir) == Seq(1))
+          // With V2 checkpoint format, each commit gets a unique ID so the second
+          // version-1 snapshot has a different filename and both coexist on disk.
+          if (enableStateStoreCheckpointIds) {
+            assert(snapshotVersionsPresent(remoteDir) == Seq(1, 1))
+          } else {
+            assert(snapshotVersionsPresent(remoteDir) == Seq(1))
+          }
 
           // load version 1 again - should succeed
-          withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf) { db =>
+          withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf,
+            enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+            versionToUniqueId = versionToUniqueId) { db =>
           }
         }
       }
@@ -3725,7 +3758,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
                 if (inc > 1) {
                   // Create changelog files in the gap
                   for (j <- 1 to inc - 1) {
-                    db2.load(curVer + j)
+                    db2.load(curVer + j, versionToUniqueId.get(curVer + j))
                     db2.put("foo", "bar")
                     db2.commit()
                   }

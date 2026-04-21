@@ -18,8 +18,6 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.CatalogV2Util
-import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
 
 /**
@@ -31,7 +29,6 @@ trait MergeIntoSchemaEvolutionTypeWideningAndExtraFieldTests
   import testImplicits._
 
   import org.apache.spark.sql.DataFrame
-  import org.apache.spark.sql.types.StructType
 
   // scalastyle:off argcount
   override protected def testEvolution(name: String)(
@@ -1523,63 +1520,172 @@ trait MergeIntoSchemaEvolutionTypeWideningAndExtraFieldTests
     requiresNestedTypeCoercion = true
   )
 
-  test("schema evolution - aliased assignment value should evolve nested struct fields") {
-    val targetSchema = StructType(Seq(
+  // ===== Type widening tests =====
+
+  testEvolution("type widening top-level field - int to long")(
+    targetData = Seq((1, 100, "hr"), (2, 200, "software")).toDF("pk", "salary", "dep"),
+    // Use narrower type for 'pk': type should stay int
+    sourceData = Seq(
+        (2.toShort, Long.MaxValue, "software"),
+        (3.toShort, Long.MaxValue, "engineering")
+      ).toDF("pk", "salary", "dep"),
+    clauses = Seq(updateAll(), insertAll()),
+    expected = Seq(
+        (1, 100L, "hr"),
+        (2, Long.MaxValue, "software"),
+        (3, Long.MaxValue, "engineering")
+      ).toDF("pk", "salary", "dep"),
+    expectedSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("salary", LongType, nullable = false),
+      StructField("dep", StringType))),
+    expectErrorWithoutEvolutionContains = "CAST_OVERFLOW_IN_TABLE_INSERT"
+  )
+
+  testNestedStructsEvolution("type widening nested struct field - int to long")(
+    target = Seq(
+      """{ "pk": 1, "info": { "salary": 100, "status": "active" }, "dep": "hr" }""",
+      """{ "pk": 2, "info": { "salary": 200, "status": "inactive" }, "dep": "software" }"""
+    ),
+    source = Seq(
+      """{ "pk": 2, "info": { "salary": 9999999999, "status": "updated" }, "dep": "software" }""",
+      """{ "pk": 3, "info": { "salary": 9999999999, "status": "new" }, "dep": "engineering" }"""
+    ),
+    targetSchema = StructType(Seq(
       StructField("pk", IntegerType, nullable = false),
       StructField("info", StructType(Seq(
-        StructField("a", IntegerType)
-      )))
-    ))
-    val sourceSchema = StructType(Seq(
+        StructField("salary", IntegerType),
+        StructField("status", StringType)))),
+      StructField("dep", StringType))),
+    sourceSchema = StructType(Seq(
       StructField("pk", IntegerType, nullable = false),
       StructField("info", StructType(Seq(
-        StructField("a", IntegerType),
-        StructField("b", IntegerType) // new field
-      )))
-    ))
+        StructField("salary", LongType),
+        StructField("status", StringType)))),
+      StructField("dep", StringType))),
+    clauses = Seq(updateAll(), insertAll()),
+    result = Seq(
+      """{ "pk": 1, "info": { "salary": 100, "status": "active" }, "dep": "hr" }""",
+      """{ "pk": 2, "info": { "salary": 9999999999, "status": "updated" }, "dep": "software" }""",
+      """{ "pk": 3, "info": { "salary": 9999999999, "status": "new" }, "dep": "engineering" }"""
+    ),
+    resultSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("info", StructType(Seq(
+        StructField("salary", LongType),
+        StructField("status", StringType)))),
+      StructField("dep", StringType))),
+    expectErrorWithoutEvolutionContains = "CAST_OVERFLOW_IN_TABLE_INSERT"
+  )
 
-    def readJson(json: Seq[String], schema: StructType): DataFrame =
-      spark.createDataFrame(spark.read.schema(schema).json(json.toDS()).rdd, schema)
+  testEvolution("type widening + extra field combined - UPDATE/INSERT *")(
+    targetData = Seq((1, 100, "hr"), (2, 200, "software")).toDF("pk", "salary", "dep"),
+    sourceData = Seq((2, Long.MaxValue, "software", true), (3, Long.MaxValue, "engineering", true))
+      .toDF("pk", "salary", "dep", "active"),
+    clauses = Seq(updateAll(), insertAll()),
+    expected = {
+      val schema = StructType(Seq(
+        StructField("pk", IntegerType, nullable = false),
+        StructField("salary", LongType, nullable = false),
+        StructField("dep", StringType),
+        StructField("active", BooleanType)))
+      spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+        Row(1, 100L, "hr", null),
+        Row(2, Long.MaxValue, "software", true),
+        Row(3, Long.MaxValue, "engineering", true)
+      )), schema)
+    },
+    expectedSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("salary", LongType, nullable = false),
+      StructField("dep", StringType),
+      StructField("active", BooleanType))),
+    expectErrorWithoutEvolutionContains = "CAST_OVERFLOW_IN_TABLE_INSERT"
+  )
 
-    withTable(tableNameAsString) {
-      withTempView("source") {
-        createTable(CatalogV2Util.structTypeToV2Columns(targetSchema), Seq.empty)
-        readJson(Seq(
-          """{ "pk": 1, "info": { "a": 10 } }""",
-          """{ "pk": 2, "info": { "a": 20 } }"""
-        ), targetSchema).writeTo(tableNameAsString).append()
+  testEvolution("type widening + extra field combined - direct assignment")(
+    targetData = Seq((1, 100, "hr"), (2, 200, "software")).toDF("pk", "salary", "dep"),
+    sourceData = Seq((2, Long.MaxValue, "software", true), (3, Long.MaxValue, "engineering", true))
+      .toDF("pk", "salary", "dep", "active"),
+    clauses = Seq(
+      update(set = "salary = s.salary, active = s.active"),
+      insert(values = "(pk, salary, dep, active) VALUES (s.pk, s.salary, s.dep, s.active)")
+    ),
+    expected = {
+      val schema = StructType(Seq(
+        StructField("pk", IntegerType, nullable = false),
+        StructField("salary", LongType, nullable = false),
+        StructField("dep", StringType),
+        StructField("active", BooleanType)))
+      spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+        Row(1, 100L, "hr", null),
+        Row(2, Long.MaxValue, "software", true),
+        Row(3, Long.MaxValue, "engineering", true)
+      )), schema)
+    },
+    expectedSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("salary", LongType, nullable = false),
+      StructField("dep", StringType),
+      StructField("active", BooleanType))),
+    expectErrorWithoutEvolutionContains =
+      "A column, variable, or function parameter with name `active` cannot be resolved"
+  )
 
-        readJson(Seq(
-          """{ "pk": 2, "info": { "a": 30, "b": 50 } }""",
-          """{ "pk": 3, "info": { "a": 40, "b": 75 } }"""
-        ), sourceSchema).createOrReplaceTempView("source")
+  testEvolution("type widening - column not used in assignments")(
+    targetData = Seq((1, 100, "hr"), (2, 200, "software")).toDF("pk", "salary", "dep"),
+    sourceData = Seq((2, Long.MaxValue, "software"), (3, Long.MaxValue, "engineering"))
+      .toDF("pk", "salary", "dep"),
+    clauses = Seq(
+      update(set = "dep = s.dep")
+    ),
+    // Type stays int since the salary column isn't used in assignments.
+    expected = Seq((1, 100, "hr"), (2, 200, "software")).toDF("pk", "salary", "dep"),
+    expectedSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("salary", IntegerType, nullable = false),
+      StructField("dep", StringType))),
+    expectedWithoutEvolution =
+      Seq((1, 100, "hr"), (2, 200, "software")).toDF("pk", "salary", "dep"),
+    expectedSchemaWithoutEvolution = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("salary", IntegerType, nullable = false),
+      StructField("dep", StringType)))
+  )
 
-        // Use DataFrame merge API and alias the source. The alias shouldn't prevent schema
-        // evolution.
-        spark.table("source")
-          .mergeInto(tableNameAsString,
-            col(s"$tableNameAsString.pk") === col("source.pk"))
-          .whenMatched().update(Map("info" -> col("source.info").as("info")))
-          .whenNotMatched().insert(Map(
-            "pk" -> col("source.pk").as("pk"),
-            "info" -> col("source.info").as("info")))
-          .withSchemaEvolution()
-          .merge()
-
-        val result = sql(s"SELECT * FROM $tableNameAsString")
-        assert(result.schema === StructType(Seq(
-          StructField("pk", IntegerType, nullable = false),
-          StructField("info", StructType(Seq(
-            StructField("a", IntegerType),
-            // Field `b` is correctly added during schema evolution.
-            StructField("b", IntegerType)
-          )))
-        )))
-        checkAnswer(result, Seq(
-          Row(1, Row(10, null)),
-          Row(2, Row(30, 50)),
-          Row(3, Row(40, 75))))
-      }
-    }
-  }
+  testNestedStructsEvolution("type widening in struct inside array")(
+    target = Seq(
+      """{ "pk": 0, "a": [ { "c1": 1, "c2": "x" } ], "dep": "sales" }""",
+      """{ "pk": 1, "a": [ { "c1": 2, "c2": "y" } ], "dep": "hr" }"""
+    ),
+    source = Seq(
+      """{ "pk": 1, "a": [ { "c1": 9999999999, "c2": "z" } ], "dep": "hr" }""",
+      """{ "pk": 2, "a": [ { "c1": 9999999999, "c2": "w" } ], "dep": "engineering" }"""
+    ),
+    targetSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("a", ArrayType(StructType(Seq(
+        StructField("c1", IntegerType),
+        StructField("c2", StringType))))),
+      StructField("dep", StringType))),
+    sourceSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("a", ArrayType(StructType(Seq(
+        StructField("c1", LongType),
+        StructField("c2", StringType))))),
+      StructField("dep", StringType))),
+    clauses = Seq(updateAll(), insertAll()),
+    result = Seq(
+      """{ "pk": 0, "a": [ { "c1": 1, "c2": "x" } ], "dep": "sales" }""",
+      """{ "pk": 1, "a": [ { "c1": 9999999999, "c2": "z" } ], "dep": "hr" }""",
+      """{ "pk": 2, "a": [ { "c1": 9999999999, "c2": "w" } ], "dep": "engineering" }"""
+    ),
+    resultSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("a", ArrayType(StructType(Seq(
+        StructField("c1", LongType),
+        StructField("c2", StringType))))),
+      StructField("dep", StringType))),
+    expectErrorWithoutEvolutionContains = "CAST_OVERFLOW_IN_TABLE_INSERT"
+  )
 }
