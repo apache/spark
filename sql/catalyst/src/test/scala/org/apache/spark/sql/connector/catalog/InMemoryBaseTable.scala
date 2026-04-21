@@ -20,8 +20,10 @@ package org.apache.spark.sql.connector.catalog
 import java.time.{Instant, ZoneId}
 import java.time.temporal.ChronoUnit
 import java.util
+import java.util.Locale
 import java.util.Objects
 import java.util.OptionalLong
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -73,8 +75,7 @@ abstract class InMemoryBaseTable(
   private var validatedTableVersion: String = null
 
   // Assign column IDs to columns that don't already have one.
-  // This simulates connector behavior (like Delta/Iceberg) where each column
-  // gets a unique ID that persists across schema evolution.
+  // This simulates connectors that support column identity tracking.
   private var tableColumns: Array[Column] = initialColumns.map { c =>
     if (c.id() == null) {
       c.asInstanceOf[ColumnImpl].copy(id = InMemoryBaseTable.nextColumnId().toString)
@@ -668,23 +669,12 @@ abstract class InMemoryBaseTable(
 
       override def toBatch: BatchWrite = {
         val newSchema = info.schema()
-        val mergedSchema = mergeSchema(CatalogV2Util.v2ColumnsToStructType(columns()), newSchema)
+        val mergedSchema = mergeSchema(
+          oldType = CatalogV2Util.v2ColumnsToStructType(columns()),
+          newType = newSchema)
         val newColumns = CatalogV2Util.structTypeToV2Columns(mergedSchema)
-        // Preserve column IDs for existing columns, assign new IDs only for new columns
-        val oldColumns = columns()
-        tableColumns = newColumns.map { newCol =>
-          val normalizedName = newCol.name().toLowerCase(java.util.Locale.ROOT)
-          oldColumns.find(_.name().toLowerCase(java.util.Locale.ROOT) == normalizedName) match {
-            case Some(oldCol) if oldCol.id() != null
-                && oldCol.dataType() == newCol.dataType() =>
-              newCol.asInstanceOf[ColumnImpl].copy(id = oldCol.id())
-            case _ if newCol.id() == null =>
-              newCol.asInstanceOf[ColumnImpl].copy(id =
-                InMemoryBaseTable.nextColumnId().toString)
-            case _ =>
-              newCol
-          }
-        }
+        tableColumns = InMemoryBaseTable.reconcileColumnIds(
+          oldColumns = columns(), newColumns = newColumns)
         writer
       }
 
@@ -802,9 +792,26 @@ abstract class InMemoryBaseTable(
 }
 
 object InMemoryBaseTable {
-  import java.util.concurrent.atomic.AtomicLong
-  private val columnIdCounter = new AtomicLong(0)
-  def nextColumnId(): Long = columnIdCounter.incrementAndGet()
+  private val columnIdGlobalCounter = new AtomicLong(0)
+  def nextColumnId(): Long = columnIdGlobalCounter.incrementAndGet()
+
+  private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
+
+  def reconcileColumnIds(
+      oldColumns: Array[Column],
+      newColumns: Array[Column]): Array[Column] = {
+    newColumns.map { newCol =>
+      oldColumns.find(c => normalize(c.name()) == normalize(newCol.name())) match {
+        case Some(oldCol) if oldCol.id() != null &&
+            oldCol.dataType() == newCol.dataType() =>
+          newCol.asInstanceOf[ColumnImpl].copy(id = oldCol.id())
+        case _ if newCol.id() == null =>
+          newCol.asInstanceOf[ColumnImpl].copy(id = nextColumnId().toString)
+        case _ =>
+          newCol
+      }
+    }
+  }
 
   val SIMULATE_FAILED_WRITE_OPTION = "spark.sql.test.simulateFailedWrite"
 

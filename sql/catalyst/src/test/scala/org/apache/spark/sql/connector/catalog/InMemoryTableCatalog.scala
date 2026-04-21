@@ -19,7 +19,6 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util
 import java.util.Collections
-import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -32,7 +31,6 @@ import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, Proced
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.connector.read.{LocalScan, Scan}
-import org.apache.spark.sql.internal.connector.ColumnImpl
 import org.apache.spark.sql.types.{DataTypes, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -49,24 +47,6 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
   private var _name: Option[String] = None
   private var copyOnLoad: Boolean = false
-
-  private def reconcileColumnIds(
-      oldColumns: Array[Column],
-      newColumns: Array[Column]): Array[Column] = {
-    newColumns.map { newCol =>
-      val normalizedName = newCol.name().toLowerCase(Locale.ROOT)
-      oldColumns.find(_.name().toLowerCase(Locale.ROOT) == normalizedName) match {
-        case Some(oldCol) if oldCol.id() != null
-            && oldCol.dataType() == newCol.dataType() =>
-          newCol.asInstanceOf[ColumnImpl].copy(id = oldCol.id())
-        case _ if newCol.id() == null =>
-          newCol.asInstanceOf[ColumnImpl].copy(id =
-            InMemoryBaseTable.nextColumnId().toString)
-        case _ =>
-          newCol
-      }
-    }
-  }
 
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     _name = Some(name)
@@ -201,8 +181,9 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
     table.increaseVersion()
     val currentVersion = table.version()
-    val reconciledColumns = reconcileColumnIds(
-      table.columns(), CatalogV2Util.structTypeToV2Columns(schema))
+    val reconciledColumns = InMemoryBaseTable.reconcileColumnIds(
+      oldColumns = table.columns(),
+      newColumns = CatalogV2Util.structTypeToV2Columns(schema))
     val newTable = table match {
       case _: InMemoryTable =>
         new InMemoryTable(
