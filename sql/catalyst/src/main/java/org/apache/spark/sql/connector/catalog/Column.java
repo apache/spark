@@ -53,8 +53,16 @@ public interface Column {
       boolean nullable,
       String comment,
       String metadataInJSON) {
-    return new ColumnImpl(name, dataType, nullable, comment, null, null, null,
-            metadataInJSON, null);
+    return new ColumnImpl(
+            name,
+            dataType,
+            nullable,
+            comment,
+            /* defaultValue = */ null,
+            /* generationExpression = */ null,
+            /* identityColumnSpec = */ null,
+            metadataInJSON,
+            /* id = */ null);
   }
 
   static Column create(
@@ -64,8 +72,16 @@ public interface Column {
       String comment,
       ColumnDefaultValue defaultValue,
       String metadataInJSON) {
-    return new ColumnImpl(name, dataType, nullable, comment, defaultValue,
-            null, null, metadataInJSON, null);
+    return new ColumnImpl(
+            name,
+            dataType,
+            nullable,
+            comment,
+            defaultValue,
+            /* generationExpression = */ null,
+            /* identityColumnSpec = */ null,
+            metadataInJSON,
+            /* id = */ null);
   }
 
   static Column create(
@@ -75,8 +91,16 @@ public interface Column {
       String comment,
       String generationExpression,
       String metadataInJSON) {
-    return new ColumnImpl(name, dataType, nullable, comment, null,
-            generationExpression, null, metadataInJSON, null);
+    return new ColumnImpl(
+            name,
+            dataType,
+            nullable,
+            comment,
+            /* defaultValue = */ null,
+            generationExpression,
+            /* identityColumnSpec = */ null,
+            metadataInJSON,
+            /* id = */ null);
   }
 
   static Column create(
@@ -86,17 +110,16 @@ public interface Column {
           String comment,
           IdentityColumnSpec identityColumnSpec,
           String metadataInJSON) {
-    return new ColumnImpl(name, dataType, nullable, comment, null,
-            null, identityColumnSpec, metadataInJSON, null);
-  }
-
-  /**
-   * Returns a copy of the given column with the specified ID.
-   */
-  static Column withId(Column col, String id) {
-    return new ColumnImpl(col.name(), col.dataType(), col.nullable(), col.comment(),
-            col.defaultValue(), col.generationExpression(), col.identityColumnSpec(),
-            col.metadataInJSON(), id);
+    return new ColumnImpl(
+            name,
+            dataType,
+            nullable,
+            comment,
+            /* defaultValue = */ null,
+            /* generationExpression = */ null,
+            identityColumnSpec,
+            metadataInJSON,
+            /* id = */ null);
   }
 
   /**
