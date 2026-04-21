@@ -57,7 +57,7 @@ case class ShowPartitionsJsonCommand(
         "json_metadata",
         StringType,
         nullable = false,
-        new MetadataBuilder().putString("comment", "JSON metadata of the table").build())()))
+        new MetadataBuilder().putString("comment", "Partition list of the table").build())()))
     extends UnaryRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {

@@ -6475,26 +6475,6 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * A command for users to list the partition names of a table. If partition spec is specified,
-   * partitions that match the spec are returned. Otherwise an empty result set is returned.
-   *
-   * This function creates a [[ShowPartitions]] logical plan
-   *
-   * The syntax of using this command in SQL is:
-   * {{{
-   *   SHOW PARTITIONS multi_part_name [partition_spec];
-   * }}}
-   */
-  override def visitShowPartitions(ctx: ShowPartitionsContext): LogicalPlan = withOrigin(ctx) {
-    val partitionKeys = Option(ctx.partitionSpec).map { specCtx =>
-      UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(specCtx), None)
-    }
-    ShowPartitions(
-      createUnresolvedTable(ctx.identifierReference, "SHOW PARTITIONS"),
-      partitionKeys)
-  }
-
-  /**
    * Create a [[RefreshTable]].
    *
    * For example:
