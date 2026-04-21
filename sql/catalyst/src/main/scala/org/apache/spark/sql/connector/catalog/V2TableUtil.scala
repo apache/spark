@@ -155,14 +155,14 @@ private[sql] object V2TableUtil extends SQLConfHelper {
       table: Table,
       originCols: Seq[Column]): Seq[String] = {
     val currentColsByName = table.columns.toImmutableArraySeq
-      .map(col => normalize(col.name()) -> col).toMap
+      .map(currentCol => normalize(currentCol.name()) -> currentCol).toMap
     val errors = new mutable.ArrayBuffer[String]()
-    for (origin <- originCols) {
-      if (origin.id() != null) {
-        currentColsByName.get(normalize(origin.name())).foreach { current =>
-          if (current.id() != null && current.id() != origin.id()) {
-            errors += s"`${origin.name()}` column ID has changed from " +
-              s"${origin.id()} to ${current.id()}"
+    for (originCol <- originCols) {
+      if (originCol.id() != null) {
+        currentColsByName.get(normalize(originCol.name())).foreach { currentCol =>
+          if (currentCol.id() != null && currentCol.id() != originCol.id()) {
+            errors += s"`${originCol.name()}` column ID has changed from " +
+              s"${originCol.id()} to ${currentCol.id()}"
           }
         }
       }
