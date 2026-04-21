@@ -31,6 +31,7 @@ import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
+import org.apache.spark.sql.internal.connector.ColumnImpl
 import org.apache.spark.sql.connector.read.{LocalScan, Scan}
 import org.apache.spark.sql.types.{DataTypes, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -56,9 +57,10 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       val normalizedName = newCol.name().toLowerCase(Locale.ROOT)
       oldColumns.find(_.name().toLowerCase(Locale.ROOT) == normalizedName) match {
         case Some(oldCol) if oldCol.id() != null =>
-          Column.withId(newCol, oldCol.id())
+          newCol.asInstanceOf[ColumnImpl].copy(id = oldCol.id())
         case _ if newCol.id() == null =>
-          Column.withId(newCol, InMemoryBaseTable.nextColumnId().toString)
+          newCol.asInstanceOf[ColumnImpl].copy(id =
+            InMemoryBaseTable.nextColumnId().toString)
         case _ =>
           newCol
       }

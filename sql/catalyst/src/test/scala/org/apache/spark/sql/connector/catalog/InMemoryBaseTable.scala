@@ -41,7 +41,7 @@ import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning,
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
+import org.apache.spark.sql.internal.connector.{ColumnImpl, SupportsStreamingUpdateAsAppend}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -77,7 +77,7 @@ abstract class InMemoryBaseTable(
   // gets a unique ID that persists across schema evolution.
   private var tableColumns: Array[Column] = initialColumns.map { c =>
     if (c.id() == null) {
-      Column.withId(c, InMemoryBaseTable.nextColumnId().toString)
+      c.asInstanceOf[ColumnImpl].copy(id = InMemoryBaseTable.nextColumnId().toString)
     } else {
       c
     }
@@ -676,9 +676,10 @@ abstract class InMemoryBaseTable(
           val normalizedName = newCol.name().toLowerCase(java.util.Locale.ROOT)
           oldColumns.find(_.name().toLowerCase(java.util.Locale.ROOT) == normalizedName) match {
             case Some(oldCol) if oldCol.id() != null =>
-              Column.withId(newCol, oldCol.id())
+              newCol.asInstanceOf[ColumnImpl].copy(id = oldCol.id())
             case _ if newCol.id() == null =>
-              Column.withId(newCol, InMemoryBaseTable.nextColumnId().toString)
+              newCol.asInstanceOf[ColumnImpl].copy(id =
+                InMemoryBaseTable.nextColumnId().toString)
             case _ =>
               newCol
           }

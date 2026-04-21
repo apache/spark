@@ -32,6 +32,7 @@ import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.{Expressions, FieldReference, LogicalExpressions, Transform}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.ColumnImpl
 import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -49,7 +50,7 @@ class CatalogSuite extends SparkFunSuite {
    * but test assertions compare against Column.create() which produces null IDs.
    */
   private def stripIds(cols: Array[Column]): Array[Column] = {
-    cols.map(c => Column.withId(c, null))
+    cols.map(c => c.asInstanceOf[ColumnImpl].copy(id = null))
   }
 
   /** Asserts that columns match ignoring column IDs. */
