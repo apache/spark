@@ -69,10 +69,11 @@ import org.apache.spark.util.ArrayImplicits._
  *
  * === Layout ===
  *
- * The data layer uses `ExternalAppendOnlyUnsafeRowArray` to hold input rows
- * (spillable). Each block materializes its own small segment tree (levels
- * 0..h). Internal nodes are cached in an LRU keyed by block index; block
- * root aggregates (block pre-aggregates) stay resident for all blocks.
+ * The data layer references the caller-owned `ExternalAppendOnlyUnsafeRowArray`
+ * (spillable) passed to `build`; the tree does not copy input rows. Each block
+ * materializes its own small segment tree (levels 0..h). Internal nodes are
+ * cached in an LRU keyed by block index; block root aggregates (block
+ * pre-aggregates) stay resident for all blocks.
  * Leaves are materialized inside the per-block internal node arrays; a
  * future revision may drop leaf materialization and recompute leaves from
  * the spillable array on demand to reduce memory at the cost of CPU.
