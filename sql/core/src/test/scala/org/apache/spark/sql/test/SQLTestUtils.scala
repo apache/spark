@@ -19,7 +19,7 @@ package org.apache.spark.sql.test
 
 import org.scalatest.Suite
 
-import org.apache.spark.sql.{QueryTest, QueryTestBase}
+import org.apache.spark.sql.{QueryTest, QueryTestBase, Row}
 
 /**
  * Kept as an empty alias of [[QueryTest]] for backward compatibility with existing subclasses.
@@ -32,3 +32,16 @@ private[sql] trait SQLTestUtils extends QueryTest
  * New test suites should extend [[QueryTestBase]] directly.
  */
 private[sql] trait SQLTestUtilsBase extends QueryTestBase { self: Suite => }
+
+private[sql] object SQLTestUtils {
+
+  /**
+   * Kept as a thin alias of [[QueryTest.compareAnswers]] for backward compatibility.
+   * New callers should use [[QueryTest.compareAnswers]] directly.
+   */
+  def compareAnswers(
+      sparkAnswer: Seq[Row],
+      expectedAnswer: Seq[Row],
+      sort: Boolean): Option[String] =
+    QueryTest.compareAnswers(sparkAnswer, expectedAnswer, sort)
+}
