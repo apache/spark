@@ -1194,14 +1194,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       new java.util.HashMap[String, String]())
   }
 
-  /**
-   * Thrown when a `WindowSegmentTree` block cannot acquire `requestedBytes`
-   * from the TaskMemoryManager even after a manual evict-and-retry cycle.
-   * `receivedBytes` reports any partial grant already rolled back to the
-   * TMM (currently always `0L` at the sole call site, since partial
-   * grants are rolled back inside `acquireBlockMemory` before reaching
-   * this path). Mirrors the `UNABLE_TO_ACQUIRE_MEMORY` error class.
-   */
   def cannotAcquireMemoryForWindowAggregateError(
       requestedBytes: Long,
       receivedBytes: Long): SparkOutOfMemoryError = {
