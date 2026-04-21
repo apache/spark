@@ -1957,6 +1957,31 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  // Nested field drop+re-add: dropping a nested field changes the top-level
+  // column's type, which causes the column ID to change (reconcileColumnIds
+  // matches on name AND type). Re-adding the field changes the type again,
+  // producing yet another new ID. The DataFrame detects the ID mismatch.
+  test("drop+re-add nested struct field detected via top-level column ID change") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
+      val df = spark.table(t)
+
+      // Drop nested field: person type changes, so person gets a new column ID
+      sql(s"ALTER TABLE $t DROP COLUMN person.age")
+      // Re-add nested field: person type changes again, so person gets another new ID
+      sql(s"ALTER TABLE $t ADD COLUMN person.age INT")
+
+      // DataFrame captured the original column ID; current ID is different
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
   // =========================================================================
   // Column ID invariants inspired by Delta column mapping test dimensions
   // =========================================================================

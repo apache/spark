@@ -56,7 +56,8 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     newColumns.map { newCol =>
       val normalizedName = newCol.name().toLowerCase(Locale.ROOT)
       oldColumns.find(_.name().toLowerCase(Locale.ROOT) == normalizedName) match {
-        case Some(oldCol) if oldCol.id() != null =>
+        case Some(oldCol) if oldCol.id() != null
+            && oldCol.dataType() == newCol.dataType() =>
           newCol.asInstanceOf[ColumnImpl].copy(id = oldCol.id())
         case _ if newCol.id() == null =>
           newCol.asInstanceOf[ColumnImpl].copy(id =
