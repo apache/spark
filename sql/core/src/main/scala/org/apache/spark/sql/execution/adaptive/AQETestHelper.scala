@@ -67,7 +67,7 @@ object AQETestHelper {
 
   /** Return `true` if we should try to force cancellation for `plan` at this point. */
   def shouldForceCancellation(plan: SparkPlan): Boolean = {
-    // Trigger the forced cancellation only we are in testing
+    // Trigger the forced cancellation only if we are in testing
     Utils.isTesting &&
       // ...and if we haven't triggered it yet
       !wasForcedCancellationTriggeredForPlan(plan) &&

@@ -264,8 +264,6 @@ class SQLLastAttemptMetricIntegrationSuite
     assert(slam1.getHighestRDDId.isDefined)
     val df1HighestId = slam1.getHighestRDDId.get
     val df1ExecutedPlanRddId = df1.queryExecution.executedPlan.execute().id
-    // The RDD id recorded by SLAM is the wrapper RDD from getByteArrayRdd.
-    assert(df1HighestId == df1.queryExecution.executedPlan.lastByteArrayRddId.get)
     assert(slam1.lastAttemptValueForHighestRDDId() === Some(10))
     assert(slam1.lastAttemptValueForRDDId(df1HighestId) === Some(10))
     // Values retrieved from the Dataset are the same as from the RDD.
@@ -276,7 +274,6 @@ class SQLLastAttemptMetricIntegrationSuite
     assert(withRetries || slam1.value === 20) // +10
     // The same executedPlan RDD is reused, but getByteArrayRdd creates a new wrapper.
     assert(df1.queryExecution.executedPlan.execute().id === df1ExecutedPlanRddId)
-    assert(slam1.getHighestRDDId === df1.queryExecution.executedPlan.lastByteArrayRddId)
     assert(slam1.lastAttemptValueForHighestRDDId() === Some(10))
     // Both wrapper RDDs are summed in allRDDs.
     assert(slam1.lastAttemptValueForAllRDDs() === Some(20))
@@ -286,8 +283,6 @@ class SQLLastAttemptMetricIntegrationSuite
     df2.collect()
     assert(withRetries || slam1.value === 35) // +15
     assert(slam1.getHighestRDDId.isDefined)
-    val df2HighestId = slam1.getHighestRDDId.get
-    assert(df2HighestId === df2.queryExecution.executedPlan.lastByteArrayRddId.get)
     // Both incrementMetric expressions are within the same Stage, so they record together.
     assert(slam1.lastAttemptValueForHighestRDDId() === Some(15))
     // allRDDs includes wrapper RDDs from repeated df1.collect() calls.
@@ -687,8 +682,6 @@ class SQLLastAttemptMetricIntegrationSuite
       }
       assert(wscg.isDefined)
       assert(slam.getHighestRDDId.isDefined)
-      // The highest tracked RDD is the wrapper RDD from getByteArrayRdd.
-      assert(slam.getHighestRDDId === df.queryExecution.executedPlan.lastByteArrayRddId)
     }
   }
 }

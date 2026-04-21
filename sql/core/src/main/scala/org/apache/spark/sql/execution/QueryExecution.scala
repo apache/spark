@@ -336,8 +336,8 @@ class QueryExecution(
   /**
    * Set the query execution id in thread-local properties while
    * executing the block. This is used by
-   * [[LastAttemptAccumulator]] to associate driver-side metric
-   * updates with a specific QueryExecution.
+   * [[org.apache.spark.sql.execution.metric.SQLLastAttemptAccumulator]] to associate
+   * driver-side metric updates with a specific QueryExecution.
    */
   private[sql] def withQueryExecutionId[T](
       session: SparkSession)(block: => T): T = {

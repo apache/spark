@@ -404,10 +404,6 @@ case class AdaptiveSparkPlanExec(
     logOnLevel(log"Final plan:\n${MDC(QUERY_PLAN, currentPhysicalPlan)}")
   }
 
-  /** Delegates to the inner plan's lastByteArrayRddId. Visible for testing. */
-  override private[spark] def lastByteArrayRddId: Option[Int] =
-    executedPlan.lastByteArrayRddId
-
   override def executeCollect(): Array[InternalRow] = {
     withFinalPlanUpdate(_.executeCollect())
   }

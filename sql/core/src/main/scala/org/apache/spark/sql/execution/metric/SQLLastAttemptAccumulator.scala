@@ -29,13 +29,13 @@ import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Broadcast
 import org.apache.spark.util.{AccumulatorV2, LastAttemptAccumulator}
 
 /*
- * SQLLastAttemptAccumulator is a LastAttemptAccumulator that allows to track the last attempt
+ * SQLLastAttemptAccumulator is a LastAttemptAccumulator that allows tracking the last attempt
  * updates that happened in the scope of execution of a plan created by a specific Dataset's
  * QueryExecution.
  *
  * Tracking RDDs belonging to a Dataset execution.
  * -----------------------------------------------
- * Dataset executes executedPlan from it's QueryExecution. Each SparkPlan node in the
+ * Dataset executes executedPlan from its QueryExecution. Each SparkPlan node in the
  * executedPlan saves the RDD with its execution (executeRDD or executeColumnarRDD). However,
  * the root RDD of a Spark Stage that actually gets submitted and executed is not necessarily
  * that RDD. It may be an ephemeral RDD created on the fly when submitting the job, e.g.:
@@ -54,7 +54,7 @@ import org.apache.spark.util.{AccumulatorV2, LastAttemptAccumulator}
  * Additionally, it is possible that the same queryExecution.executedPlan is reused. For
  * example, when collect() is called multiple times on the same Dataset.
  * - Part of the execution (e.g. the shuffles) should then be reused. Accumulator should still
- *   keep their partial values associated to it's RDDOperationScope, and return it for this
+ *   keep their partial values associated to its RDDOperationScope, and return it for this
  *   new attempt.
  * - Some of the execution (e.g. the result stage) may be recomputed. Since the SparkPlan will
  *   be the same, RDDOperationScope will be the same, and this should become a newer execution
@@ -72,8 +72,8 @@ import org.apache.spark.util.{AccumulatorV2, LastAttemptAccumulator}
  * final AQE plan, only values from the final plan and execution should be aggregated.
  *
  * It can also happen that the new AQE plan reuses SparkPlan instances from the old plan,
- * see CancelShuffleStageInBroadcastJoin. However, in that cases, the old plan will be put
- * under some new plan in a new submitted Stages. Since we only truly track the plans that
+ * see CancelShuffleStageInBroadcastJoin. However, in that case, the old plan will be put
+ * under some new plan in newly submitted Stages. Since we only truly track the plans that
  * submit Stages, these should be different and enough to disambiguate.
  *
  * Driver only updates
@@ -90,28 +90,28 @@ import org.apache.spark.util.{AccumulatorV2, LastAttemptAccumulator}
  * Cached / Checkpointed plans
  * ---------------------------
  * If the metric was used inside a cached (df.cache, df.persist) or checkpointed (df.checkpoint,
- * df.localCheckpoint, which is then turned into an RDDScanExec or InMemoryTableScanExec in the
- * Dataset's executedPlan, we deem it undefined behavior for [[lastAttemptValueForDataset]] and
- * [[lastAttemptValueForQueryExecution]]. [[lastAttemptValueForHighestRDDId()]] should return the
- * value from when the execution in which the plan was cached/checkpointed and should be used
- * instead.
+ * df.localCheckpoint) plan, which is then turned into an RDDScanExec or InMemoryTableScanExec
+ * in the Dataset's executedPlan, [[lastAttemptValueForDataset]] and
+ * [[lastAttemptValueForQueryExecution]] are declared undefined behavior. In this case,
+ * [[lastAttemptValueForHighestRDDId()]] should be used instead, which returns the value from
+ * the execution in which the plan was cached/checkpointed.
  *
  * The main issue is if the metric is in the top stage of the cached plan. When that plan is
  * executed in some Dataset (as lazy execution), the metric will be executed in the scope of the
  * stage that contains the InMemoryTableScanExec / RDDScanExec, which will be some parent of that
  * plan, and not plan of the cached plan. So if the cached plan is then used in another Dataset,
  * that Dataset will not have information about that parent.
- * There could be some hacks done to fix it by record in the InMemoryRelation the scopes in which
- * it was materialized. There are also other issues, like that checkpoint throws away the plan, so
- * it would also have to record the RDD scopes used during checkpointing. This gets further
- * complicated if recomputations are involved, and are done in yet another scope.
+ * There could be some hacks done to fix it by recording in the InMemoryRelation the scopes in
+ * which it was materialized. There are also other issues, like that checkpoint throws away the
+ * plan, so it would also have to record the RDD scopes used during checkpointing. This gets
+ * further complicated if recomputations are involved, and are done in yet another scope.
  * It was declared undefined behavior instead of pursuing this.
  */
 
 /**
  * A trait that can be mixed into a subclass of [[AccumulatorV2]] to track the "logical"
  * value of the "last attempt" of the execution using the accumulator.
- * In addition to what [[LastAttemptAccumulator]] does, it allows to track the last attempt
+ * In addition to what [[LastAttemptAccumulator]] does, it allows tracking the last attempt
  * executed in the scope of a Dataset's QueryExecution, via
  * [[lastAttemptValueForDataset]] and [[lastAttemptValueForQueryExecution]] methods.
  */
@@ -132,8 +132,8 @@ trait SQLLastAttemptAccumulator[IN, OUT, PARTIAL, DRIVER_ACC]
   private var lastAttemptDirectDriverQueryExecutionValues: mutable.Map[String, DRIVER_ACC] = _
 
   override def initializeLastAttemptAccumulator()(implicit ct: ClassTag[PARTIAL]): Unit = try {
-    lastAttemptDirectDriverQueryExecutionValues = new mutable.HashMap[String, DRIVER_ACC]()
     super.initializeLastAttemptAccumulator()(ct)
+    lastAttemptDirectDriverQueryExecutionValues = new mutable.HashMap[String, DRIVER_ACC]()
   } catch {
     case NonFatal(e) =>
       unexpectedLastAttemptMetricOperation(
@@ -143,8 +143,8 @@ trait SQLLastAttemptAccumulator[IN, OUT, PARTIAL, DRIVER_ACC]
   }
 
   override def resetLastAttemptAccumulator(): Unit = try {
-    lastAttemptDirectDriverQueryExecutionValues = new mutable.HashMap[String, DRIVER_ACC]()
     super.resetLastAttemptAccumulator()
+    lastAttemptDirectDriverQueryExecutionValues = new mutable.HashMap[String, DRIVER_ACC]()
   } catch {
     case NonFatal(e) =>
       unexpectedLastAttemptMetricOperation(
@@ -408,8 +408,9 @@ object SQLLastAttemptAccumulator extends Logging {
         // into it to check attribution.
         // We could try to make checkpoint collect and store the scopes of the original execution,
         // but even then it would face similar inconsistencies as described above for cached plans.
-        // - if the metric is in the top stage of that plan, then if it was executed in the scope of
-        //   this execution, it w
+        // - if the metric is in the top stage of that plan, then if it was executed in the scope
+        //   of this execution, it would be attributed to the scope of the parent stage that is
+        //   consuming the checkpointed RDD, not to any scope of the original plan.
         // - if the metric is in a map stage of the plan that was checkpointed, it requires that
         //   checkpoint would track these stages and scopes.
         //

@@ -154,4 +154,4 @@ trait AdaptiveSparkPlanHelper {
   }
 }
 
-object AdaptiveSparkPlanHelper extends AdaptiveSparkPlanHelper
+private[sql] object AdaptiveSparkPlanHelper extends AdaptiveSparkPlanHelper

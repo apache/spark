@@ -426,13 +426,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       Iterator((count.toLong, cbbos.toChunkedByteBuffer))
     }
     }
-    _lastByteArrayRddId = Some(rdd.id)
     rdd
   }
-
-  /** The RDD id of the last wrapper RDD created by [[getByteArrayRdd]]. Visible for testing. */
-  @transient @volatile private var _lastByteArrayRddId: Option[Int] = None
-  private[spark] def lastByteArrayRddId: Option[Int] = _lastByteArrayRddId
 
   /**
    * Decodes the byte arrays back to UnsafeRows and put them into buffer.
