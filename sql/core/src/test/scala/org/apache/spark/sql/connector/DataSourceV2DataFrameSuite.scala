@@ -28,7 +28,7 @@ import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{BufferedRows, Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTable, InMemoryTableCatalog, NullIdInMemoryTableCatalog, SharedInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo}
+import org.apache.spark.sql.connector.catalog.{BufferedRows, Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTable, InMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SharedInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
 import org.apache.spark.sql.connector.catalog.TableChange
@@ -59,7 +59,7 @@ class DataSourceV2DataFrameSuite
       classOf[SharedInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.sharedcat.copyOnLoad", "true")
     .set("spark.sql.catalog.nullidcat",
-      classOf[NullIdInMemoryTableCatalog].getName)
+      classOf[NullTableIdInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.nullidcat.copyOnLoad", "true")
 
   after {
@@ -2261,7 +2261,7 @@ class DataSourceV2DataFrameSuite
 
       // verify table ID is null
       val originalTable = cat.loadTable(ident)
-      assert(originalTable.id == null, "NullIdInMemoryTableCatalog should produce null table IDs")
+      assert(originalTable.id == null, "NullTableIdInMemoryTableCatalog should produce null table IDs")
 
       // columns still have IDs assigned by InMemoryBaseTable
       val originalCols = originalTable.columns()

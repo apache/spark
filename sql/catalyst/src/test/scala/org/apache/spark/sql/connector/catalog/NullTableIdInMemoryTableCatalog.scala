@@ -24,28 +24,26 @@ package org.apache.spark.sql.connector.catalog
  *
  * When table ID is null, the [[validateTableIdentity]] check in
  * [[V2TableRefreshUtil]] is skipped entirely, meaning drop/recreate
- * of a table is NOT detected via table ID. However, column IDs
- * assigned by [[InMemoryBaseTable]] still differ after recreate,
+ * of a table is NOT detected via table ID.
+ *
+ * This is to test the scenario where connectors do not implement
+ * table IDs but do implement column IDs. In this scenario, column
+ * IDs assigned by [[InMemoryBaseTable]] still differ after recreate,
  * so [[validateCapturedColumnIds]] catches the schema change.
  */
-class NullIdInMemoryTableCatalog extends InMemoryTableCatalog {
+class NullTableIdInMemoryTableCatalog extends InMemoryTableCatalog {
 
   override def createTable(
       ident: Identifier,
       info: TableInfo): Table = {
-    val created = super.createTable(ident, info)
-    // Replace with a null-ID wrapper
-    val nullIdTable = created match {
-      case t: InMemoryTable =>
-        new InMemoryTable(
-          t.name,
-          t.columns(),
-          t.partitioning,
-          t.properties,
-          t.constraints,
-          id = null) // null table ID
-      case other => other
-    }
+    val table = super.createTable(ident, info).asInstanceOf[InMemoryTable]
+    val nullIdTable = new InMemoryTable(
+      table.name,
+      table.columns(),
+      table.partitioning,
+      table.properties,
+      table.constraints,
+      id = null)
     tables.put(ident, nullIdTable)
     nullIdTable
   }
