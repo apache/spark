@@ -124,7 +124,7 @@ private[sql] object V2TableUtil extends SQLConfHelper {
   }
 
   /**
-   * Validates that captured column IDs match the current table columns.
+   * Validates that column IDs have not changed for columns that still exist in the table.
    *
    * Only validates columns where both the original and current column have non-null IDs.
    * If the connector does not support column IDs (returns null), this check is skipped.
@@ -136,15 +136,13 @@ private[sql] object V2TableUtil extends SQLConfHelper {
   def validateCapturedColumnIds(
       table: Table,
       relation: DataSourceV2Relation): Seq[String] = {
-    validateCapturedColumnIds(table, relation.table.columns.toImmutableArraySeq)
+    validateCapturedColumnIds(
+      table = table,
+      originCols = relation.table.columns.toImmutableArraySeq)
   }
 
   /**
-   * Validates that captured column IDs match the current table columns.
-   *
-   * Checks for:
-   *  - Column ID changes (same column name but different ID, indicating the column was
-   *    dropped and re-added)
+   * Validates that column IDs have not changed for columns that still exist in the table.
    *
    * Only validates columns where both the original and current column have non-null IDs.
    *
