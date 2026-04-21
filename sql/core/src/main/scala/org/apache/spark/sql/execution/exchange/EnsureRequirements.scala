@@ -273,7 +273,7 @@ case class EnsureRequirements(
             child match {
               case ShuffleExchangeExec(_, c, so, ps) =>
                 ShuffleExchangeExec(newPartitioning, c, so, ps)
-              case GroupPartitionsExec(c, _, _, _, _) => ShuffleExchangeExec(newPartitioning, c)
+              case gpe: GroupPartitionsExec => ShuffleExchangeExec(newPartitioning, gpe.child)
               case _ => ShuffleExchangeExec(newPartitioning, child)
             }
           }
@@ -286,7 +286,32 @@ case class EnsureRequirements(
       if (SortOrder.orderingSatisfies(child.outputOrdering, requiredOrdering)) {
         child
       } else {
-        SortExec(requiredOrdering, global = false, child = child)
+        // Before adding a SortExec, check whether a GroupPartitionsExec anywhere in the child
+        // subtree can self-satisfy via k-way merge.
+        var sortedMergeEnabled = false
+        var stop = false
+        val withKWayMerge = child.transformDownWithPruning(_ => !stop) {
+          case gpe: GroupPartitionsExec =>
+            stop = true
+            gpe.tryEnableSortedMerge() match {
+              case Some(updated) =>
+                sortedMergeEnabled = true
+                updated
+              case None => gpe
+            }
+          case node if !node.isInstanceOf[OrderPreservingUnaryExecNode] =>
+            // Stop traversal at nodes that do not preserve child ordering (binary nodes, leaf
+            // nodes, SortExec, exchanges, etc.) -- a GroupPartitionsExec below them cannot
+            // satisfy this parent's ordering requirement.
+            stop = true
+            node
+        }
+        if (sortedMergeEnabled &&
+            SortOrder.orderingSatisfies(withKWayMerge.outputOrdering, requiredOrdering)) {
+          withKWayMerge
+        } else {
+          SortExec(requiredOrdering, global = false, child = child)
+        }
       }
     }
 
