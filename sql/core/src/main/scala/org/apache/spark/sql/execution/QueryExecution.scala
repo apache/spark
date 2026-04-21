@@ -22,6 +22,7 @@ import java.util.UUID
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import javax.annotation.concurrent.GuardedBy
 
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -42,13 +43,13 @@ import org.apache.spark.sql.catalyst.transactions.TransactionUtils
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, LookupCatalog, SupportsCatalogOptions, TransactionalCatalogPlugin}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, LookupCatalog, SupportsCatalogOptions, TableCatalog, TransactionalCatalogPlugin}
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.execution.SQLExecution.EXECUTION_ROOT_ID_KEY
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.datasources.v2.{TransactionalExec, V2TableRefreshUtil}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, TransactionalExec, V2TableRefreshUtil}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
@@ -116,11 +117,17 @@ class QueryExecution(
     analyzerOpt.flatMap(_.catalogManager.transaction).orElse {
       // Only begin a new transaction for outer QEs that lead to execution.
       if (mode != CommandExecutionMode.SKIP) {
+        def resolve(w: TransactionalWritePlan): Option[TransactionalCatalogPlugin] =
+          pathBased(w) match {
+            case Some(c: TransactionalCatalogPlugin) => Some(c)
+            case Some(_) => None
+            // If the path is not data source based, fallback to catalog based resolution.
+            case None => TransactionalWrite.unapply(w)
+          }
         val catalog = logical match {
-          case UnresolvedWith(TransactionalWrite(c), _, _) => Some(c)
-          case TransactionalWrite(c) => Some(c)
-          case UnresolvedWith(inner, _, _) => pathBasedTransactionalCatalog(inner)
-          case other => pathBasedTransactionalCatalog(other)
+          case UnresolvedWith(w: TransactionalWritePlan, _, _) => resolve(w)
+          case w: TransactionalWritePlan => resolve(w)
+          case _ => None
         }
         catalog.map(TransactionUtils.beginTransaction)
       } else {
@@ -128,37 +135,29 @@ class QueryExecution(
       }
     }
 
-  // For path-based tables (e.g. `delta.`/path/to/table``) the first identifier part is a
-  // connector name, not a catalog. SupportsCatalogOptions on the connector tells us which
-  // catalog actually owns the table. We can only do this lookup in sql/core where DataSource
-  // is available; the catalyst-side TransactionalWrite extractor only handles catalog tables.
-  private def pathBasedTransactionalCatalog(
-      plan: LogicalPlan): Option[TransactionalCatalogPlugin] = {
-    EliminateSubqueryAliases(plan) match {
-      case write: TransactionalWritePlan =>
-        EliminateSubqueryAliases(write.table) match {
-          case UnresolvedRelation(parts, _, _) if parts.length >= 2 =>
-            // Only proceed if parts.head is not a registered catalog; if it were, the
-            // catalyst-side extractor would have already matched it above.
-            Try(catalogManager.catalog(parts.head)).toOption match {
-              case None =>
-                DataSource.lookupDataSourceV2(parts.head, sparkSession.sessionState.conf).flatMap {
-                  case sco: SupportsCatalogOptions =>
-                    val options = new CaseInsensitiveStringMap(
-                      java.util.Collections.singletonMap("path", parts.last))
-                    CatalogV2Util.getTableProviderCatalog(sco, catalogManager, options) match {
-                      case c: TransactionalCatalogPlugin => Some(c)
-                      case _ => None
-                    }
-                  case _ => None
-                }
-              case _ => None
-            }
-          case _ => None
-        }
+  // For path-based tables (e.g. `format.`/path/to/table``) the first identifier part is a
+  // connector name. SupportsCatalogOptions on the connector tells us which catalog actually
+  // owns the table. Returns Some(catalog) if parts.head is a recognized SupportsCatalogOptions
+  // data source (caller decides whether the catalog is transactional), or None to fall through
+  // to the catalog-based extractor.
+  private def pathBased(write: TransactionalWritePlan): Option[TableCatalog] =
+    EliminateSubqueryAliases(write.table) match {
+      case UnresolvedRelation(parts, _, _) if parts.length > 1 =>
+        Try(DataSource.lookupDataSourceV2(parts.head, sparkSession.sessionState.conf))
+          .toOption
+          .flatten
+          .collect { case sco: SupportsCatalogOptions => sco }
+          .map { sco =>
+            val sessionConfigs = DataSourceV2Utils.extractSessionConfigs(
+              sco, sparkSession.sessionState.conf)
+            // Pass the entire identifier as option. The connector can decide how to parse it
+            // if needed.
+            val options = sessionConfigs + ("identifier" -> parts.mkString("."))
+            CatalogV2Util.getTableProviderCatalog(
+              sco, catalogManager, new CaseInsensitiveStringMap(options.asJava))
+          }
       case _ => None
     }
-  }
 
   // Per-query analyzer: uses a transaction-aware CatalogManager when a transaction is active,
   // so that all catalog lookups and rule applications during analysis see the correct state
