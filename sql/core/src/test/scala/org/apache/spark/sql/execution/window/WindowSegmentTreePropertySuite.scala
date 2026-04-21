@@ -29,31 +29,23 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjecti
 import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType}
 
 /**
- * Property-based tests for [[WindowSegmentTree]] using ScalaCheck.
- *
- * Uses the row-by-row naive aggregate as parallel oracle; every property
- * ultimately reduces to `segtree(input) == naive(input)`.
- *
- * Follows the catalyst convention established by `ExpressionEvalHelper`:
- * mixes in [[ScalaCheckDrivenPropertyChecks]] from `scalatestplus.scalacheck`.
- *
- * Runtime note: tests wrap `forAll` inside a single `withTaskContext`, so all
- * generated cases share one `SparkContext` / `TaskMemoryManager`. Do NOT
- * invert: wrapping `withTaskContext` inside `forAll` would cold-start a
- * SparkContext per case.
+ * Property-based tests for [[WindowSegmentTree]] using ScalaCheck. Row-by-row
+ * naive aggregate is the parallel oracle: every property reduces to
+ * `segtree(input) == naive(input)`.
+ * Follows `ExpressionEvalHelper` convention (mixes in
+ * [[ScalaCheckDrivenPropertyChecks]]). All generated cases share one
+ * `SparkContext`/`TaskMemoryManager` by wrapping `forAll` inside a single
+ * `withTaskContext`; do NOT invert.
  */
 class WindowSegmentTreePropertySuite extends SparkFunSuite
     with LocalSparkContext with ScalaCheckDrivenPropertyChecks {
 
-  // ---- ScalaCheck config: fixed seed for CI reproducibility ----
-
+  // ScalaCheck config: deterministic seed (ScalaCheck 1.14+ default).
   // Quick tier: 100 cases for P1, 10 cases for P2 (see class doc).
-  // ScalaCheck 1.14+ uses a deterministic RNG seed by default, so CI
-  // failures are reproducible without any explicit seed pinning.
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfiguration(minSuccessful = 100, minSize = 0, sizeRange = 100)
 
-  // ---- test harness (mirrors WindowSegmentTreeSuite) ----
+  // test harness (mirrors WindowSegmentTreeSuite)
 
   private def newMutableProjection
       : (Seq[Expression], Seq[Attribute]) => MutableProjection =
@@ -73,8 +65,7 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
     }
   }
 
-  // ---- Oracle ----
-
+  // Oracle
   sealed trait AggKind
   case object AggMin extends AggKind
   case object AggMax extends AggKind
@@ -136,8 +127,7 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
       Some(c)
   }
 
-  // ---- Input case ADT ----
-
+  // Input case ADT
   private case class PbtCase(
       values: IndexedSeq[Option[Long]],
       dataType: DataType,   // IntegerType or LongType
@@ -147,8 +137,7 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
     def n: Int = values.length
   }
 
-  // ---- Generators ----
-
+  // Generators
   /** Weighted N: bias toward small boundaries (0,1,2 never hit under uniform). */
   private val genN: Gen[Int] = Gen.frequency(
     (2, Gen.choose(0, 4)),
@@ -157,11 +146,8 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
   )
 
   /**
-   * 20% null, 80% bounded value. For (AggSum, LongType) we shrink the
-   * range to keep the worst-case sum within Long bounds: max |v|=1e12
-   * x max n=5000 = 5e15 << Long.MaxValue (~9.2e18). For other (agg, dt)
-   * pairs we keep the full type range to preserve Min/Max edge-case
-   * coverage that the original property-based tests exercised.
+   * 20% null, 80% bounded. For (AggSum, LongType) range shrunk to +/-1e12
+   * so worst-case sum (1e12 x 5000 = 5e15) stays inside Long bounds.
    */
   private def genValue(dt: DataType, agg: AggKind): Gen[Option[Long]] = {
     val bounded: Gen[Long] = (dt, agg) match {
@@ -207,8 +193,7 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
     } yield if (a <= b) (a, b) else (b, a)
   }
 
-  // ---- Tree build/query glue ----
-
+  // Tree build/query glue
   private def buildAttr(dt: DataType): AttributeReference =
     AttributeReference("v", dt, nullable = true)()
 
@@ -259,16 +244,11 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
     }
   }
 
-  // ---- Properties ----
-
+  // Properties
   /**
-   * P1 Equivalence: for every generated (input, config, frame),
-   * segtree query result equals naive aggregate over the same frame.
-   *
-   * For each generated case we probe multiple random frames (including
-   * degenerate boundaries: lo=hi, lo=0, hi=n) rather than only the full
-   * range. This keeps the per-case cost bounded while amplifying
-   * coverage of block/fanout edge conditions.
+   * P1 Equivalence: segtree query result equals naive aggregate over random
+   * frames. Probes multiple frames per case (empty / degenerate / full /
+   * random) to amplify block/fanout edge coverage.
    */
   test("P1 equivalence: segtree query equals naive aggregate over random frames") {
     withTaskContext {
@@ -317,12 +297,9 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
   }
 
   /**
-   * P2 Determinism (10-case smoke): building the tree twice from the same
-   * input and querying the same frame returns identical results.
-   *
-   * The implementation has no RNG or hash iteration, so this property is
-   * unlikely to trip; it acts as a low-cost regression sentinel (10 cases,
-   * not 100) guarding against future non-deterministic refactors.
+   * P2 Determinism (10-case smoke): rebuild + requery yields identical
+   * results. Segtree has no RNG/hash iteration; acts as low-cost regression
+   * sentinel against future non-deterministic refactors.
    */
   test("P2 determinism: rebuild + requery yields identical results") {
     withTaskContext {
@@ -345,16 +322,11 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
     } finally tree.close()
   }
 
-  // ---- Floating-point family (Avg / StddevSamp / StddevPop) ----
-  //
-  // Welford merge order in the segtree differs from row-by-row updates in
-  // SlidingWindowFunctionFrame, so equality is *not* bit-exact for these
-  // aggregates. We compare with a relative tolerance (1e-9) plus a small
-  // absolute floor to handle near-zero results (e.g. constant-input frames
-  // where stddev = 0 +/- rounding).
-  //
-  // Kept as a separate property to avoid muddying the integer-family
-  // exact-equality contract (Min/Max/Sum/Count) with FP fuzziness.
+  // Floating-point family (Avg / StddevSamp / StddevPop).
+  // Welford merge order in segtree differs from row-by-row SlidingWindowFrame,
+  // so equality is NOT bit-exact; compared with relative tol 1e-9 + absolute
+  // floor for near-zero (e.g. constant-input stddev). Kept separate to avoid
+  // muddying the integer-family exact-equality contract.
 
   sealed trait FpAggKind
   case object FpAvg extends FpAggKind
@@ -478,10 +450,9 @@ class WindowSegmentTreePropertySuite extends SparkFunSuite
     }
 
   /**
-   * P4 Equivalence (FP family): for every generated (input, config, frame),
-   * segtree query result is within 1e-9 relative tolerance of the naive
-   * aggregate. Smaller minSuccessful (50) than P1 because Welford-merge
-   * is heavier than Min/Max/Sum/Count.
+   * P4 Equivalence (FP family): segtree avg/stddev within 1e-9 relative
+   * tolerance of naive oracle. Smaller minSuccessful (50) than P1 because
+   * Welford-merge is heavier than Min/Max/Sum/Count.
    */
   test("P4 fp equivalence: segtree avg/stddev within 1e-9 of naive oracle") {
     withTaskContext {

@@ -28,22 +28,15 @@ import org.apache.spark.util.SparkErrorUtils
 
 /**
  * End-to-end tests for the block-chunked segment-tree moving window frame.
- *
- * Coverage by section:
- *   - Coverage: various cases (basic aggregates), various cases (frame boundaries),
- *                min-partition-rows fallback, AggregateWindowFunction
- *                regression.
- *   - Coverage: various cases (NULL, NaN/Infinity), various cases
- *                (numeric / string / date-timestamp types), various cases
- *                (unsupported-merge / DISTINCT / feature-flag fallback).
- *
-  */
+ * Covers basic aggregates, frame boundaries, min-rows fallback, NULL/NaN,
+ * numeric/string/date-timestamp types, RANGE, Decimal/Binary merge, UDAF
+ * fallback, and frame lifecycle.
+ */
 class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
 
   import testImplicits._
 
-  // Common config: force the segment-tree path regardless of partition size
-  // (we exercise the fallback explicitly below).
+  // Force seg-tree path regardless of partition size (fallback exercised explicitly).
   private val enableSegTree: Map[String, String] = Map(
     SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
     SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1")
@@ -75,7 +68,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
   private def winSpec(lo: Int, hi: Int) =
     Window.partitionBy($"pk").orderBy($"id").rowsBetween(lo, hi)
 
-  // ---------------- A1: basic aggregate equivalence ----------------
+  // A1: basic aggregate equivalence
 
   test("MIN over ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING") {
     checkEquivalence(() =>
@@ -112,7 +105,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
         sum($"v").over(winSpec(-3, 3)).as("sm")))
   }
 
-  // ---------------- A2: frame-size boundaries ----------------
+  // A2: frame-size boundaries
 
   test("frame size = 1 (CURRENT ROW only)") {
     checkEquivalence(() =>
@@ -120,7 +113,6 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("frame spans full partition") {
-    // 40 rows per partition; use a wide symmetric window covering it.
     checkEquivalence(() =>
       baseDF.select($"id", $"pk", sum($"v").over(winSpec(-100, 100)).as("agg")))
   }
@@ -142,7 +134,6 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
       SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
       SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "10")
 
-    // 1. Result correctness against baseline.
     val baseline = withSQLConf(disableSegTree.toSeq: _*) {
       df.select($"id", sum($"v").over(winSpec(-1, 1)).as("s"))
         .collect().sortBy(_.toString)
@@ -153,7 +144,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
     }
     assert(actual.toSeq === baseline.toSeq)
 
-    // 2. Directly exercise the frame to confirm the fallback flag flips.
+    // Confirm the fallback flag actually flipped.
     withSQLConf(enabledConf.toSeq: _*) {
       SegmentTreeWindowTestHelpers.withSmallPartitionFrame(
         SQLConf.get, rows = 5) { frame =>
@@ -202,20 +193,11 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
     assert(withSegTree.toSeq === baseline.toSeq)
   }
 
-    // A3.*: NULL / NaN / Infinity handling
-  // A4.*: numeric / string / date-timestamp types
-  // various cases: unsupported-merge / DISTINCT / feature-flag fallback
-  //
-  // All tests use the same oracle strategy as the frame integration: run with
-  // `segmentTree.enabled=true` (forced via min-rows=1) and with `=false`,
-  // then assert bit-for-bit equal Row sequences. That gives us:
-  //   - Correctness: seg-tree output matches SlidingWindowFunctionFrame
-  //     (the community-validated baseline).
-  //   - Fallback paths: various cases exercise the `eligibleForSegTree` filter,
-  //     which must decline to drive the seg-tree path and hand off to the
-  //     sliding frame; equal rows prove the hand-off preserves semantics.
+  // A3: NULL/NaN/Infinity; A4: numeric/string/date-timestamp types.
+  // Unsupported-merge / DISTINCT / feature-flag fallback.
+  // Oracle: run with seg-tree enabled and disabled, assert equal Row sequences.
 
-  // ---------------- A3: NULL / special values ----------------
+  // A3: NULL / special values
 
   test("all-NULL column: MIN/MAX/SUM/AVG/COUNT") {
     val df = spark.range(0, 30).selectExpr(
@@ -244,9 +226,8 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Double NaN and +/-Infinity propagate correctly through MIN/MAX/SUM") {
-    // Spark's NaN ordering: NaN is treated as greater than +Inf for MIN/MAX.
-    // +Inf + -Inf = NaN for SUM. The seg-tree path uses DeclarativeAggregate's
-    // own merge, so behavior must match the baseline exactly.
+    // Trap: NaN > +Inf in Spark's MIN/MAX ordering; +Inf + -Inf = NaN in SUM.
+    // Seg-tree uses DeclarativeAggregate.merge; behavior must match baseline.
     val df = spark.range(0, 30).selectExpr(
       "id",
       "(id % 2) AS pk",
@@ -263,7 +244,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
         sum($"v").over(winSpec(-3, 3)).as("sm")))
   }
 
-  // ---------------- A4: data types ----------------
+  // A4: data types
 
   test("numeric types: Int / Long / Double / Decimal") {
     val df = spark.range(0, 60).selectExpr(
@@ -283,8 +264,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("String lexicographic MIN/MAX") {
-    // Deliberately non-monotone string values so that MIN/MAX actually
-    // exercise segment-tree merge rather than trivially matching the edge.
+    // Non-monotone values so MIN/MAX exercise the seg-tree merge (not edge).
     val df = spark.range(0, 40).selectExpr(
       "id",
       "(id % 2) AS pk",
@@ -312,18 +292,15 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
 
 
   test("collect_list falls back cleanly (non-DeclarativeAggregate)") {
-    // collect_list is a Collect(TypedImperativeAggregate) -- not a
-    // DeclarativeAggregate, so eligibleForSegTree must decline and the
-    // sliding frame must take over.
+    // collect_list is TypedImperativeAggregate; eligibleForSegTree must decline.
     checkEquivalence(() =>
       baseDF.select($"id", $"pk",
         collect_list($"v").over(winSpec(-2, 2)).as("lst")))
   }
 
   test("DISTINCT window aggregate is rejected by analyzer regardless of seg-tree flag") {
-    // Spark does not support DISTINCT window aggregates at all -- the analyzer
-    // throws DISTINCT_WINDOW_FUNCTION_UNSUPPORTED before we ever reach frame
-    // construction. The seg-tree feature flag must not alter this behavior.
+    // Analyzer throws DISTINCT_WINDOW_FUNCTION_UNSUPPORTED before frame
+    // construction; seg-tree flag must not alter this behavior.
     def run(): Unit = {
       baseDF.select($"id", $"pk",
         count_distinct($"v").over(winSpec(-3, 3)).as("cd")).collect()
@@ -339,16 +316,13 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("feature flag off: segmentTree.enabled=false yields baseline semantics") {
-    // Sanity check: disabling the flag on a workload the seg-tree path would
-    // otherwise handle (MIN, wide frame, partitions above the min-rows
-    // threshold) still produces the SlidingWindowFunctionFrame answer.
+    // Sanity: disabling the flag on a seg-tree-eligible workload still
+    // produces the SlidingWindowFunctionFrame answer.
     val df = baseDF
     val expected = withSQLConf(disableSegTree.toSeq: _*) {
       df.select($"id", $"pk", min($"v").over(winSpec(-3, 3)).as("mn"))
         .collect().sortBy(_.toString).toSeq
     }
-    // Explicit disable with the full-size partition config (no min-rows
-    // override). This exercises the flag-off branch of eligibleForSegTree.
     withSQLConf(
       SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "false",
       SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1024") {
@@ -358,16 +332,8 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-    // A5.*: RANGE frame equivalence between seg-tree path and sliding baseline.
-  //
-  // The factory (`eligibleForSegTree`) now admits RangeFrame when orderSpec
-  // has exactly one ordering expression. These tests exercise the
-  // frameType-aware admit/drop loops in SegmentTreeWindowFunctionFrame.
-  //
-  // All tests follow the same oracle pattern as NULL/NaN/collation coverage: run the same
-  // query twice (seg-tree on / off) and assert equal Row sequences.
-  // Aggregates are MIN/MAX (non-invertible) to guarantee the seg-tree
-  // code path is actually exercised rather than short-circuited.
+    // A5: RANGE frame equivalence (single-order-expr admission).
+  // MIN/MAX non-invertible, guaranteeing seg-tree path is exercised.
 
   /** Run `sql` twice (flag off / on) and checkAnswer equality. */
   private def checkRangeEquivalence(df: DataFrame, query: String): Unit = {
@@ -388,9 +354,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("-- RANGE INT offset basic (non-uniform gaps, MIN/MAX)") {
-    // Non-uniform k gaps (1, 3, 4, 4, 7, 10, 15, ...) so that the frame
-    // edges shift by variable amounts and admit/drop loops must consult
-    // the order-key comparator rather than just row count.
+    // Non-uniform gaps so admit/drop loops must consult the order-key comparator.
     val df = spark.range(0, 40).selectExpr(
       "CAST(id AS INT) AS id",
       "(CAST(id AS INT) % 2) AS pk",
@@ -408,8 +372,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("-- RANGE Timestamp with INTERVAL offset (MAX)") {
-    // Irregular gaps: 30min / 90min / 2h / 30min / ... so frame edges
-    // crossing the 1-hour bound must rely on the timestamp comparator.
+    // Irregular gaps force the timestamp comparator at the 1-hour boundary.
     val df = spark.range(0, 30).selectExpr(
       "CAST(id AS INT) AS id",
       "(CAST(id AS INT) % 2) AS pk",
@@ -427,11 +390,9 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("-- RANGE with tie (duplicate order keys) inclusion at boundary") {
-    // k = [1, 2, 2, 2, 3, 4, 5] repeated across partitions. A frame of
-    // `0 PRECEDING AND 0 FOLLOWING` must include the FULL tie group at
-    // the current row's k, not just the current row itself. If the
-    // seg-tree path confuses RANGE with ROWS the tie group of k=2 would
-    // return a per-row MIN/MAX rather than a group-level one.
+    // Trap: RANGE `0 PRECEDING AND 0 FOLLOWING` must include the FULL tie
+    // group at the current row's key, not just the current row. A ROWS-vs-
+    // RANGE confusion would return per-row MIN/MAX instead of group-level.
     val rows = (0 until 40).map { i =>
       val k = Seq(1, 2, 2, 2, 3, 4, 5)(i % 7)
       (i, i % 2, k, (i * 13) % 41)
@@ -447,9 +408,8 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("-- RANGE frame wider than partition (C4: admit/drop loops no-op)") {
-    // Partition size 5 rows, frame covers everything. Once the first
-    // batch is admitted, the admit/drop loops in the seg-tree frame must
-    // detect the effective frame is unchanged and skip work.
+    // Once the first batch is admitted, admit/drop must detect no change
+    // and skip work.
     val df = spark.range(0, 25).selectExpr(
       "CAST(id AS INT) AS id",
       "(CAST(id AS INT) / 5) AS pk",
@@ -465,10 +425,9 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("-- RANGE with NULL order key (NULLS FIRST / NULLS LAST)") {
-    // k = [NULL, NULL, 1, 2, 3, NULL] repeated. Spark groups all NULLs
-    // into a single equivalence class at head (NULLS FIRST) or tail
-    // (NULLS LAST). The seg-tree admit/drop loops must treat NULL as a
-    // tie group identically to the sliding baseline.
+    // Trap: Spark groups all NULLs into a single equivalence class at head
+    // (NULLS FIRST) or tail (NULLS LAST); seg-tree must treat NULL as a
+    // tie group identical to the sliding baseline.
     val rows = (0 until 36).map { i =>
       val kOpt: Option[Int] = (i % 6) match {
         case 0 | 1 | 5 => None
@@ -492,16 +451,9 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
         |FROM t""".stripMargin)
   }
 
-    // Decimal overflow across seg-tree block merge
-  // BinaryType MIN/MAX across seg-tree block merge
-  // UDAF (ScalaUDAF / ScalaAggregator) fallback
-  //
-  // All Decimal/Binary tests force blockSize=16 (the minimum the config
-  // allows) + window size > blockSize so the seg-tree path crosses at
-  // least one block boundary (exercises `mergeExpressions` rather than
-  // only `update`). Design doc asked for blockSize=4 but the SQLConf
-  // validator rejects anything below 16; scaling data/frame up preserves
-  // the merge-path coverage the doc intended.
+    // Decimal overflow / BinaryType MIN/MAX across block merge; UDAF fallback.
+  // Trap: blockSize=16 is SQLConf minimum; frame > blockSize ensures the
+  // seg-tree merge path is actually crossed.
 
   private val segTreeBlock: String = "16"
   private val segTreeFramePrec: Int = 17
@@ -514,11 +466,9 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
 
 
   /**
-   * 20 rows in a single partition, Decimal(38, 0) values near the type's
-   * upper bound. Frame of `segTreeFramePrec` PRECEDING..CURRENT ROW means
-   * any window with >= 2 such rows overflows the widened Sum buffer
-   * (Decimal(38,0) widened to Decimal(38,0); any addition above 1e38
-   * overflows). Block size 16 + frame 17 forces cross-block merge.
+   * 20 rows in one partition, Decimal(38, 0) values near the type's upper
+   * bound; frame of `segTreeFramePrec` PRECEDING..CURRENT ROW makes any
+   * >=2-row window overflow Sum. Block 16 + frame 17 forces cross-block merge.
    */
   private def decimalOverflowDF: DataFrame = {
     // 9e37 -- below Decimal(38,0) MAX (~9.99e37), but 2x overflows.
@@ -582,13 +532,10 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("c -- mid-window Decimal overflow slides past (seg-tree == sliding)") {
-    // 24 rows, blockSize=16. Frame ROWS BETWEEN 3 PRECEDING AND CURRENT ROW
-    // (size 4). Near-MAX values at ids 14,15,16,17 so any 4-row window
-    // containing >=2 of them overflows. Windows at:
-    //   id<14 or id>20   -> safe
-    //   id in [15..20]   -> overlaps >=2 big values -> NULL
-    // The big-value band (14..17) straddles the block boundary at id=16,
-    // guaranteeing cross-block merge paths see overflowing buffers.
+    // Big values at ids 14..17 straddle block boundary at id=16, so any
+    // 4-row window overlapping >=2 of them overflows (-> NULL when ANSI off)
+    // and cross-block merge sees overflowing buffers. Rows past id=20 slide
+    // clear and recover non-NULL.
     val big = "90000000000000000000000000000000000000"
     val df = spark.range(0, 24).selectExpr(
       "CAST(id AS INT) AS id",
@@ -608,8 +555,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
         val baseline = withSQLConf(disableSegTree.toSeq: _*) {
           spark.sql(sqlStr).collect().sortBy(_.toString)
         }
-        // Sanity: overflow fired on some rows AND window slides past to
-        // recover non-NULL on the tail rows.
+        // Sanity: overflow fired AND later rows recover non-NULL.
         assert(baseline.exists(_.isNullAt(2)),
           "baseline should contain NULL overflow rows")
         assert(baseline.exists(r => r.getInt(0) >= 21 && !r.isNullAt(2)),
@@ -624,11 +570,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  /**
-   * True iff the root cause of `t` is an [[ArithmeticException]] (ANSI overflow).
-   * Uses Spark's `SparkErrorUtils.getRootCause` rather than a bespoke
-   * cause-chain walk (per reviewer feedback).
-   */
+  /** True iff the root cause of `t` is an [[ArithmeticException]] (ANSI overflow). */
   private def hasArithmeticCause(t: Throwable): Boolean =
     Option(SparkErrorUtils.getRootCause(t)).exists(_.isInstanceOf[ArithmeticException])
 
@@ -651,9 +593,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("a -- BinaryType MIN/MAX cross-block merge") {
-    // 20 rows, one partition, varied lengths / content. Frame of
-    // segTreeFramePrec+1 rows against blockSize=16 guarantees the
-    // seg-tree merge path is hit.
+    // Varied lengths/content; frame > blockSize guarantees merge path hit.
     val df = binaryVariedRows.toDF("id", "v").selectExpr("id", "0 AS pk", "v")
     df.createOrReplaceTempView("t")
     try {
@@ -681,9 +621,8 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("b -- BinaryType empty/NULL/single-zero distinction") {
-    // 20 rows. Mix of empty array, single 0x00, NULL, and 2-byte arrays.
-    // Spark treats empty-array and NULL distinctly; seg-tree must respect
-    // that. Pattern cycles across the block boundary.
+    // Trap: Spark treats empty-array and NULL as distinct; seg-tree must
+    // respect that. Pattern cycles across the block boundary.
     val rows: Seq[(Int, Array[Byte])] = (0 until 20).map { i =>
       val arr: Array[Byte] = (i % 4) match {
         case 0 => Array[Byte](0x00)
@@ -720,9 +659,8 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("c -- BinaryType unsigned lexicographic ordering") {
-    // 0xFF (255 unsigned, -1 signed) must be greater than 0x01 (1); a
-    // signed-byte comparator would get this backwards. Spark's BinaryType
-    // comparator is unsigned; seg-tree must match.
+    // Trap: Spark's BinaryType comparator is unsigned (0xFF > 0x01); a
+    // signed-byte comparator would get this backwards. Seg-tree must match.
     val unsignedPattern: IndexedSeq[Array[Byte]] = IndexedSeq(
       Array[Byte](0xff.toByte),
       Array[Byte](0x01),
@@ -760,16 +698,9 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-    //
-  // ScalaUDAF extends ImperativeAggregate; ScalaAggregator extends
-  // TypedImperativeAggregate (also ImperativeAggregate). Both must be
-  // rejected by `eligibleForSegTree`'s guard (DeclarativeAggregate-only).
-  // The factory then hands off to SlidingWindowFunctionFrame.
-  //
-  // Assertions per block-boundary correctness analysis:
-  //   (a) flag ON must NOT throw (seg-tree merge on an ImperativeAggregate
-  //       would NPE / MatchError); surviving proves the guard fired.
-  //   (b) flag ON result equals flag OFF result bit-for-bit.
+    // ScalaUDAF/ScalaAggregator both extend ImperativeAggregate and must be
+  // rejected by `eligibleForSegTree`. Flag ON must not throw (segtree merge on
+  // ImperativeAggregate would NPE) and must match flag OFF bit-for-bit.
 
   test("a -- legacy ScalaUDAF falls back cleanly (no seg-tree merge)") {
     val udaf = new LegacySumUdaf
@@ -786,9 +717,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
         spark.sql(query).collect().sortBy(_.toString)
       }
       withSQLConf(enableSegTree.toSeq: _*) {
-        // (a) no exception (seg-tree merge would fail on ImperativeAggregate)
         val actual = spark.sql(query).collect().sortBy(_.toString)
-        // (b) identical to flag-off
         assert(actual.toSeq === baseline.toSeq,
           s"ScalaUDAF fallback result differs.\nExpected: ${baseline.toSeq}\n" +
             s"Actual:   ${actual.toSeq}")
@@ -824,15 +753,9 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-56546: LAG does not eagerly construct AggregateProcessor under segtree") {
-    // Pre-fix, `val processor` eagerly invoked `AggregateProcessor.apply` on any
-    // non-empty `functions`, which threw `INTERNAL_ERROR: Unsupported aggregate
-    // function: lag(...)` as soon as the routing hit the FRAME_LESS_OFFSET branch
-    // (Lag/Lead extend FrameLessOffsetWindowFunction and always match that case).
-    // The Spark SQL dialect rejects explicit ROWS/RANGE clauses on lag/lead at
-    // analysis time, so the HiveQL `lag(x, 1, x) OVER (... ROWS BETWEEN ...)`
-    // variant of this bug is guarded by Hive tests (windowing.q /
-    // windowing_navfn.q); the frameless form below is sufficient as the
-    // minimal reproducer.
+    // Pre-fix, `val processor` eagerly invoked AggregateProcessor.apply on any
+  // non-empty `functions`, throwing INTERNAL_ERROR for lag(...) when routing
+  // hit FRAME_LESS_OFFSET. Frameless lag below is the minimal repro.
     withSQLConf(enableSegTree.toSeq: _*) {
       val df = spark.range(10).select(
         col("id"),
@@ -842,27 +765,16 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  // ---------------- Frame lifecycle ----------------
-  //
-  // These tests pin the lifecycle contract of `SegmentTreeWindowFunctionFrame`
-  // when the same frame instance is reused across partitions that pick
-  // different paths (segtree vs. small-partition fallback to
-  // `SlidingWindowFunctionFrame`). Covers:
-  //   T1a: fallback is NOT allocated on a pure-segtree partition.
-  //   T1b: fallback IS allocated (lazily) on a small partition.
-  //   T1c: segtree->small partition reuses the same frame; fallback allocated once.
-  //   T1d: small->segtree transition drops the retained fallback reference so
-  //        its row-copy buffer is eligible for GC.
-  //   T2 : a throwing `fallback.prepare` must not flip `fallbackUsed`, so
-  //        the frame stays on its prior path. `SegmentTreeWindowFunctionFrame`
-  //        is `final`, so we cannot subclass to inject a throwing fallback;
-  //        we rely on the structural witness that `fallbackUsed` is set ONLY
-  //        after `fallback.prepare` returns normally (see
-  //        `SegmentTreeWindowFunctionFrame.prepare`, "Commit fallback path
-  //        only after `prepare` succeeded"). A regression of that ordering
-  //        would fail T1d, so this test just re-exercises the happy path and
-  //        documents the invariant.
-  //   T3 : close() after only a small partition (tree never built) is a no-op.
+  // Frame lifecycle
+  //   T1a: no fallback on pure-segtree partition.
+  //   T1b: fallback lazily allocated on small partition.
+  //   T1c: segtree->small reuses frame; fallback allocated once.
+  //   T1d: small->segtree drops retained fallback reference (GC-eligible).
+  //   T2 : throwing fallback.prepare must not flip `fallbackUsed` (frame is
+  //        `final` so we cannot inject a throwing fallback; we rely on the
+  //        structural witness that `fallbackUsed` is set ONLY after
+  //        `fallback.prepare` returns normally -- a regression would fail T1d).
+  //   T3 : close() after only small partition (tree never built) is a no-op.
 
   test("lifecycle: no fallback allocated on segtree-only partition") {
     val conf = new SQLConf
@@ -897,7 +809,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
       // Partition 1: segtree path (20 rows >= 10).
       frame.prepare(factory.newArray(rows = 20))
       assert(!frame.fallbackUsed && !frame.fallbackAllocated)
-      // Partition 2: small partition (5 rows < 10).
+      // Partition 2: small partition.
       frame.prepare(factory.newArray(rows = 5))
       assert(frame.fallbackUsed, "fallback path expected on small partition")
       assert(frame.fallbackAllocated, "fallback allocated on first small partition")
@@ -909,11 +821,10 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
     conf.setConfString(SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key, "10")
     SegmentTreeWindowTestHelpers.withFrameFactory(conf) { factory =>
       val frame = factory.newFrame()
-      // Partition 1: small partition -> fallback allocated.
+      // Partition 1: small -> fallback allocated.
       frame.prepare(factory.newArray(rows = 5))
       assert(frame.fallbackAllocated && frame.fallbackUsed)
-      // Partition 2: segtree path -> fallback must be dropped so its row-copy
-      // buffer is eligible for GC.
+      // Partition 2: segtree -> fallback must be dropped (row-copy buffer GC-eligible).
       frame.prepare(factory.newArray(rows = 20))
       assert(!frame.fallbackUsed, "segtree path expected")
       assert(!frame.fallbackAllocated,
@@ -922,24 +833,11 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("lifecycle: throwing fallback.prepare must leave fallbackUsed=false") {
-    // We assert behavioural invariants only -- (a) the exception propagates,
-    // and (b) `fallbackUsed` is NOT set on the path where `fallback.prepare`
-    // throws BEFORE the commit point. We do NOT assert "segtree state equals
-    // prior state" because `rowArray` is caller-owned and shared across
-    // partitions, so structural equality between rounds is not meaningful.
-    //
-    // We cannot subclass `SegmentTreeWindowFunctionFrame` (it is `final`) to
-    // inject a throwing fallback; widening that to non-final just for tests
-    // is out-of-scope for this PR. Instead we rely on the contract's
-    // structural witness: `prepare()` sets `fallbackUsed = true` ONLY on the
-    // line immediately AFTER `fallback.prepare(rows)` returns normally
-    // (see `SegmentTreeWindowFunctionFrame.prepare`, "Commit fallback path
-    // only after `prepare` succeeded"). If that ordering regressed, T1d
-    // would fail (a thrown `fallback.prepare` on partition 1 followed by
-    // a segtree partition 2 would observe `fallbackUsed == true` on the
-    // segtree round and the T1d assertion `!frame.fallbackUsed` would fire).
-    // This test therefore intentionally just re-exercises the happy path
-    // and documents the invariant.
+    // Structural-witness test: frame is `final`, can't inject a throwing
+    // fallback. `fallbackUsed = true` is set ONLY after `fallback.prepare`
+    // returns normally (see SegmentTreeWindowFunctionFrame.prepare). A
+    // regression of that ordering would fail T1d. This test re-exercises
+    // the happy path and documents the invariant.
     val conf = new SQLConf
     conf.setConfString(SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key, "100")
     SegmentTreeWindowTestHelpers.withFrameFactory(conf) { factory =>
@@ -956,17 +854,14 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
       val frame = factory.newFrame()
       frame.prepare(factory.newArray(rows = 5))
       assert(frame.fallbackUsed)
-      // Idempotent close: no tree was ever built on this frame.
+      // Idempotent: no tree was ever built.
       frame.close()
-      frame.close() // second call must be a no-op
+      frame.close()
     }
   }
 }
 
-/** Legacy `UserDefinedAggregateFunction` -- wrapped at analysis time as
- *  `ScalaUDAF`, which extends `ImperativeAggregate` and must be rejected
- *  by the seg-tree factory's guard.
- */
+/** Legacy UDAF wrapped as ScalaUDAF (ImperativeAggregate); rejected by segtree guard. */
 private class LegacySumUdaf extends UserDefinedAggregateFunction {
   override def inputSchema: StructType = new StructType().add("v", LongType)
   override def bufferSchema: StructType = new StructType().add("s", LongType)
@@ -986,10 +881,7 @@ private class LegacySumUdaf extends UserDefinedAggregateFunction {
   override def evaluate(buffer: Row): Any = buffer.getLong(0)
 }
 
-/** Typed `Aggregator` -- wrapped as `ScalaAggregator`, which extends
- *  `TypedImperativeAggregate` (itself an `ImperativeAggregate`) and must
- *  likewise be rejected by the seg-tree factory.
- */
+/** Typed Aggregator wrapped as ScalaAggregator (TypedImperativeAggregate); rejected. */
 private class LongSumAggregator extends Aggregator[Long, Long, Long] {
   override def zero: Long = 0L
   override def reduce(b: Long, a: Long): Long = b + a

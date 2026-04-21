@@ -32,75 +32,24 @@ import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * Block-chunked segment tree for range aggregate queries over window partitions.
+ * Block-chunked segment tree for moving-frame window aggregates. Partitions are
+ * split into blocks of `blockSize` rows; each block has its own small segtree
+ * (fanout `F`, height `h`). Block roots stay resident; internal nodes are cached
+ * in an LRU keyed by block index. Queries cost O(log W).
  *
- * === Why a segment tree ===
- *
- * For moving-frame window aggregates over a sorted partition, the classic
- * alternatives are:
- *
- *   - '''Add/remove with inverse''' (a.k.a. SlidingWindowFunctionFrame's O(1)
- *     path, and the approach SPARK-36844 explored): maintain a single running
- *     buffer, `add` on the advancing edge, `remove` on the retreating edge.
- *     Only works for '''invertible''' aggregates (SUM, COUNT, AVG) -- MIN/MAX
- *     have no inverse. Numerically problematic for floating-point STDDEV/VAR/
- *     FP-SUM: error '''accumulates across the whole partition''' and drifts
- *     monotonically over long partitions.
- *   - '''Monotonic deque''': O(1) amortized for MIN/MAX only; does not
- *     generalize.
- *
- * Segment-tree merges give up O(1) per row for O(log W) per row but preserve
- * two load-bearing properties:
- *
- *   1. '''No inverse required''' -- any aggregate whose `mergeExpressions`
- *      is associative works, including MIN/MAX and other non-invertible cases.
- *      The segment-tree path is therefore the single moving-frame strategy
- *      applicable to MIN/MAX at scale.
- *   2. '''Bounded FP error per query''' -- each output row performs
- *      O(log W) merges over independent block pre-aggregates with no
- *      cumulative state carried across rows. Rounding error is bounded per
- *      row rather than accumulating over the partition. This is the reason to
- *      prefer segtree for STDDEV/VAR/FP-SUM even though an inverse-based O(1)
- *      scheme looks cheaper on paper.
- *
- * Any future author considering an inverse-based optimization for the
- * aggregates in [[EligibleAggregates]] should verify both properties still
- * hold before replacing this path.
- *
- * === Layout ===
- *
- * The data layer references the caller-owned `ExternalAppendOnlyUnsafeRowArray`
- * (spillable) passed to `build`; the tree does not copy input rows. Each block
- * materializes its own small segment tree (levels 0..h). Internal nodes are
- * cached in an LRU keyed by block index; block root aggregates (block
- * pre-aggregates) stay resident for all blocks.
- * Leaves are materialized inside the per-block internal node arrays; a
- * future revision may drop leaf materialization and recompute leaves from
- * the spillable array on demand to reduce memory at the cost of CPU.
- *
- * === Memory accounting invariants ===
- *
- *  - I1: `SegTreeSpiller.spill()` must not call `acquireMemory` on its own
- *        [[MemoryConsumer]]. Doing so would deadlock against TMM's
- *        consumer-priority sort. All acquires happen on the hot path
- *        ([[ensureBlockLevels]]).
- *  - I2: `SegTreeSpiller.spill(_, trigger)` returns 0 when `trigger eq this`
- *        (self-trigger short-circuit) to prevent re-entrant eviction.
- *  - I3: The LRU's `removeEldestEntry` is disabled; eviction is driven
- *        explicitly from [[ensureBlockLevels]] (capacity overflow) or
- *        [[SegTreeSpiller.spill]] (TMM pressure).
+ * Memory accounting invariants:
+ *  - I1: `SegTreeSpiller.spill()` MUST NOT call `acquireMemory` on its own
+ *        consumer (would deadlock TMM's consumer-priority sort). All acquires
+ *        happen on the hot path ([[ensureBlockLevels]]).
+ *  - I2: `spill(_, trigger)` returns 0 when `trigger eq this` (self-trigger
+ *        short-circuit) to prevent re-entrant eviction.
+ *  - I3: LRU `removeEldestEntry` is disabled; eviction is driven explicitly
+ *        from [[ensureBlockLevels]] or [[SegTreeSpiller.spill]].
  *  - I4: Every successful [[acquireBlockMemory]] is paired with exactly one
- *        [[releaseBlockMemory]] -- on eviction, on [[close]], and on
- *        exception paths where block construction fails. [[close]] is
- *        idempotent.
- *  - I5: Bytes accounted per block are a conservative upper bound
- *        (`cachedSlotsPerBlock * bufferWidthBytes`): assumes a full block
- *        and per-field 16 byte cost. Tail blocks and cheaper types leave
- *        headroom rather than under-report to TMM.
- *  - I8: If the underlying `rowArray` has already spilled to disk,
- *        `SegTreeSpiller.spill` returns 0 (rebuild after eviction would
- *        O(blockStart)-scan the spill file); TMM falls through to another
- *        consumer.
+ *        [[releaseBlockMemory]]. [[close]] is idempotent.
+ *  - I5: Per-block bytes are a conservative upper bound (full block, 16 B/field).
+ *  - I8: If `rowArray` already spilled to disk, `spill` returns 0 (rebuild
+ *        would O(blockStart)-scan the spill file).
  *
  * @note Instances are not thread-safe.
  */
@@ -154,32 +103,25 @@ private[window] class WindowSegmentTree(
   private var rowArray: ExternalAppendOnlyUnsafeRowArray = _
   private var closed: Boolean = false
 
-  /** Always-resident per-block root aggregates. `blockAggregates(i)` =
+  /** Always-resident per-block root aggregates: `blockAggregates(i)` =
    *  merged buffer over all rows in block i. */
   private var blockAggregates: Array[InternalRow] = Array.empty
 
-  /** Rough byte width of one aggregate buffer row. Chosen at 16 B/field as a
-   *  conservative heap-overhead-aware lower bound for a
-   *  `SpecificInternalRow` slot: primitive `MutableValue` is 8 B, boxed
-   *  references and object headers push the effective footprint higher.
-   *  Tighter per-type sizing (real boxing cost, variable-length fields) is
-   *  intentionally out of scope here; TaskMemoryManager remains the hard
-   *  backstop via spill / OOM. */
+  /** Conservative byte width of one aggregate buffer row at 16 B/field:
+   *  primitive `MutableValue` is 8 B, boxed references and object headers
+   *  push the effective footprint higher. Tighter per-type sizing is out
+   *  of scope; TaskMemoryManager remains the hard backstop via spill / OOM. */
   private val bufferWidthBytes: Long = {
     val bytesPerField = 16L
     math.max(1L, bufferDataTypes.size.toLong * bytesPerField)
   }
 
-  /** Number of aggregate-buffer slots cached per block (see I5 in class doc).
+  /** Number of aggregate-buffer slots cached per block (see I5).
    *
-   *  Invariant: equals `sum over levels L of levels(L).length` for any
-   *  block materialized by [[buildBlockLevels]]. Level 0 holds `blockSize`
-   *  leaf buffers and each subsequent level holds `ceil(prev / fanout)`
-   *  parent buffers until a single root remains. The iterative ceiling
-   *  matches the allocation in [[buildBlockLevels]] for every
-   *  `(blockSize, fanout)` pair, including non-power-of-`fanout` cases.
-   *  For `blockSize == 1` the block is a single leaf with no parent
-   *  levels, so this returns 1. */
+   *  Invariant: equals `sum over levels L of levels(L).length` for any block
+   *  built by [[buildBlockLevels]]: level 0 holds `blockSize` leaves and each
+   *  next level holds `ceil(prev / fanout)` parents until a single root
+   *  remains. For `blockSize == 1` this is 1 (single leaf, no parents). */
   private val cachedSlotsPerBlock: Long = {
     var n = blockSize.toLong
     var sum = n
@@ -190,9 +132,8 @@ private[window] class WindowSegmentTree(
     sum
   }
 
-  /** Bytes accounted per cached block (see I5 in class doc). Conservative: assumes
-   *  every block is full; tail block (`numRows % blockSize != 0`) will
-   *  hold fewer leaves, giving a small headroom. */
+  /** Bytes accounted per cached block (see I5). Conservative: assumes every
+   *  block is full; tail block leaves a small headroom. */
   private[this] val blockBytes: Long =
     math.max(1L, cachedSlotsPerBlock * bufferWidthBytes)
 
@@ -216,14 +157,12 @@ private[window] class WindowSegmentTree(
     arr
   }
 
-  /** LRU cache of per-block internal node arrays. Key = blockIdx.
-   *  Value = `Array[Array[InternalRow]]` with levels(0..h). Auto-eviction via
-   *  `removeEldestEntry` is disabled (see I3 in class doc) -- eviction is driven
-   *  explicitly from [[ensureBlockLevels]] (capacity overflow) or
-   *  [[SegTreeSpiller.spill]] (TMM pressure). Each cache entry maps 1:1 to
-   *  one [[acquireBlockMemory]] accounting. Callers (e.g.
-   *  `SegmentTreeWindowFunctionFrame`) should pass a W-aware
-   *  value like `ceil(W / blockSize) + 2`. */
+  /** LRU cache of per-block internal node arrays. Key = blockIdx;
+   *  value = `Array[Array[InternalRow]]` with levels(0..h). Auto-eviction
+   *  via `removeEldestEntry` is disabled (I3) -- driven explicitly from
+   *  [[ensureBlockLevels]] or [[SegTreeSpiller.spill]]. Each entry maps 1:1
+   *  to one [[acquireBlockMemory]] accounting. Callers should pass a W-aware
+   *  `maxCachedBlocks` like `ceil(W / blockSize) + 2`. */
   private val blockLevelsCache: JLinkedHashMap[Integer, Array[Array[InternalRow]]] =
     new JLinkedHashMap[Integer, Array[Array[InternalRow]]](16, 0.75f, true) {
       override def removeEldestEntry(
@@ -233,30 +172,24 @@ private[window] class WindowSegmentTree(
   // ---------- Memory consumer ----------
 
   /**
-   * Private MemoryConsumer tracking cached block levels under TMM.
+   * Private MemoryConsumer tracking cached block levels under TMM. Heap-only
+   * (no Tungsten pages): uses [[MemoryConsumer.acquireMemory]] /
+   * [[MemoryConsumer.freeMemory]], which update the base class `used`
+   * AtomicLong so TMM's consumer-priority sort sees our pressure accurately.
    *
-   * Heap accounting only (no Tungsten pages): uses
-   * [[MemoryConsumer.acquireMemory]] / [[MemoryConsumer.freeMemory]]. The
-   * [[MemoryConsumer]] base class records `used` via an `AtomicLong` when
-   * we call these -- so TMM's consumer-priority sort in
-   * `acquireExecutionMemory` sees our pressure accurately.
-   *
-   * @note `spill()` MUST NOT call `acquireMemory` (see I1 in class doc).
+   * @note `spill()` MUST NOT call `acquireMemory` (see I1).
    */
   private final class SegTreeSpiller extends MemoryConsumer(
       taskMemoryManager,
       taskMemoryManager.pageSizeBytes(),
       taskMemoryManager.getTungstenMemoryMode()) {
     override def spill(size: Long, trigger: MemoryConsumer): Long = {
-      // Self-trigger short-circuit (I2): prevents re-entrant eviction when
-      // our own acquireMemory() triggers TMM to poll us.
+      // I2: self-trigger short-circuit (prevent re-entrant eviction).
       if (trigger eq this) return 0L
-      // rowArray spilled-to-disk detection (I8). If the rowArray has already
-      // spilled, evicting our cache is counter-productive (rebuild would
-      // O(blockStart)-scan the spill file). Return 0L to let TMM fall
-      // through to the next consumer. The current check uses `spillSize > 0`
-      // as the "has spilled" signal; a more precise check would consult
-      // `UnsafeExternalSorter.getSpillWriters` state, which is not public.
+      // I8: rowArray already spilled -- evicting our cache is counter-productive
+      // (rebuild would O(blockStart)-scan the spill file). `spillSize > 0` is
+      // the available "has spilled" signal (UnsafeExternalSorter state is not
+      // public).
       if (rowArray != null && rowArray.spillSize > 0) return 0L
       evictUntil(size)
     }
@@ -271,18 +204,15 @@ private[window] class WindowSegmentTree(
   /**
    * Build the tree against a caller-owned row array.
    *
-   * Ownership contract: the tree holds a reference to `rows` for its lifetime
-   * but does NOT own it -- the caller (typically
-   * `WindowPartitionEvaluator.buffer`) is responsible for `clear()`/lifetime
-   * management at partition boundaries. The tree's `close()` drops its
-   * reference without mutating the array.
+   * Ownership: the tree holds a reference to `rows` for its lifetime but does
+   * NOT own it -- the caller (typically `WindowPartitionEvaluator.buffer`)
+   * manages `clear()` / lifetime at partition boundaries. `close()` drops
+   * the reference without mutating the array.
    *
-   * Exception-safe: if aggregation throws, the previously built state (if
-   * any) is preserved.
+   * Exception-safe: if aggregation throws, previously built state is preserved.
    */
   def build(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
-    // rows.length is Int (bounded by Int.MaxValue by design); keep the
-    // check for clarity against any future widening of that contract.
+    // rows.length is Int by design; check guards against future widening.
     val n = rows.length
     if (n < 0) {
       throw SparkException.internalError(
@@ -296,8 +226,7 @@ private[window] class WindowSegmentTree(
     numRows = n
     numBlocks = nBlocks
     blockAggregates = newBlockAggs
-    // Rebuild invalidates cached block levels; release all acquired memory
-    // before dropping the cache entries (I4 pairing).
+    // Rebuild invalidates cached block levels; release accounting first (I4).
     releaseAllCachedBlocks()
   }
 
@@ -471,9 +400,7 @@ private[window] class WindowSegmentTree(
       if (!evictEldest()) return throwCacheEvictFailed(blockIdx)
     }
 
-    // Acquire memory accounting for this block before building. If TMM
-    // can't grant blockBytes up-front, try one manual evict-and-retry cycle
-    // before giving up.
+    // Acquire accounting; on partial grant, try one manual evict-and-retry.
     if (!acquireBlockMemory(blockIdx)) {
       if (!evictEldest() || !acquireBlockMemory(blockIdx)) {
         // scalastyle:off throwerror
@@ -483,7 +410,7 @@ private[window] class WindowSegmentTree(
       }
     }
 
-    // If buildBlockLevels throws, release the memory we just acquired (I4).
+    // If buildBlockLevels throws, release the just-acquired memory (I4).
     val levels =
       try buildBlockLevels(blockIdx)
       catch { case t: Throwable => releaseBlockMemory(); throw t }
@@ -599,8 +526,7 @@ private[window] class WindowSegmentTree(
   }
 
   private def closeRowArray(): Unit = {
-    // rowArray is caller-owned (see `build` docstring). Drop the reference
-    // only; the caller (WindowPartitionEvaluator.buffer) manages clear().
+    // rowArray is caller-owned (see `build` docstring); drop the reference only.
     rowArray = null
   }
 }
@@ -610,33 +536,25 @@ private[window] object WindowSegmentTree {
   val DefaultBlockSize: Int = 65536
 
   /**
-   * Explicit allowlist of [[DeclarativeAggregate]] subclasses that are safe to evaluate
-   * with the block-chunked segment tree.
-   *
-   * An aggregate is safe for segment-tree execution iff its combine semantics form a
-   * commutative monoid on the partial-buffer representation (associativity +
-   * compatibility with `mergeExpressions`). All nine entries below have been audited:
+   * Explicit allowlist of [[DeclarativeAggregate]] subclasses safe for
+   * segment-tree execution. Safe iff combine semantics form a commutative
+   * monoid on the partial-buffer representation (associativity +
+   * compatibility with `mergeExpressions`):
    *
    *   - [[Min]], [[Max]]: idempotent semilattice.
    *   - [[Sum]], [[Count]]: additive monoid.
    *   - [[Average]]: sum + count, both additive monoids.
    *   - [[StddevPop]], [[StddevSamp]], [[VariancePop]], [[VarianceSamp]]:
-   *     Welford online-update form (count, mean, M2) is associative -- see
+   *     Welford (count, mean, M2) is associative -- see
    *     CentralMomentAgg.mergeExpressions.
    *
-   * Aggregates intentionally NOT in the allowlist (tracked as follow-up):
-   *   - HyperLogLogPlusPlus / ApproxCountDistinct: sketch merge is associative but
-   *     buffer representation carries register arrays whose segment-tree interaction
-   *     has not been audited; kept fail-closed until dedicated coverage lands.
-   *   - First / Last: order-dependent, not associative.
-   *   - CollectList / CollectSet: unbounded buffer growth breaks segtree memory model.
-   *   - Percentile / ApproxPercentile: buffer is a sorted sketch; merge cost and
-   *     shape does not fit per-block pre-aggregates.
-   *   - Any ImperativeAggregate: excluded by the `DeclarativeAggregate` type check.
+   * Intentionally excluded (tracked as follow-up): HyperLogLogPlusPlus /
+   * ApproxCountDistinct (sketch-buffer interaction unaudited), First / Last
+   * (order-dependent), CollectList / CollectSet (unbounded buffer growth),
+   * Percentile / ApproxPercentile (sorted-sketch buffer), and any
+   * ImperativeAggregate (excluded by the type check).
    *
-   * Callers should use [[isEligible]] rather than inlining `contains` on this set so
-   * that future extensions (for example, eligibility predicates beyond the class) can
-   * be centralized here.
+   * Callers should use [[isEligible]] rather than `contains` directly.
    */
   val EligibleAggregates: Set[Class[_ <: DeclarativeAggregate]] = Set(
     classOf[Min],

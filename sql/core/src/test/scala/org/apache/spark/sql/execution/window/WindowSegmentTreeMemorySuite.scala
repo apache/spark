@@ -36,15 +36,12 @@ import org.apache.spark.sql.types.IntegerType
  *  - `evictUntil` LRU eviction driven by TMM pressure
  *  - `spill()` self-trigger short-circuit and rowArray-spilled fall-through
  *  - task completion / kill listener releasing all cached blocks
- *
- * Tests T5 (rowArray-spilled priority) and T8 (task-kill listener) are
- * intentionally left as `ignore`d stubs so the matrix stays visible;
- * each stub documents what additional infrastructure it needs before
- * it can run.
+ * T5 (rowArray-spilled priority) and T8 (task-kill listener) are kept as
+ * `ignore`d stubs so the matrix stays visible; each documents what it needs.
  */
 class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext {
 
-  // ---- common fixtures ----
+  // common fixtures
 
   private val inputAttr: AttributeReference =
     AttributeReference("v", IntegerType, nullable = true)()
@@ -57,12 +54,12 @@ class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext 
   private def minAgg: DeclarativeAggregate = Min(inputAttr)
 
   /**
-   * Construct a standalone `TaskMemoryManager` backed by `TestMemoryManager`
-   * (not routed through `SparkEnv`), install a matching `TaskContextImpl`,
-   * and run `body`. Restores the previous `TaskContext` on exit.
+   * Standalone `TaskMemoryManager` backed by `TestMemoryManager` (not routed
+   * through `SparkEnv`), with a matching `TaskContextImpl` installed.
+   * Restores the previous `TaskContext` on exit.
    *
-   * @param budget  initial available execution memory; use `Long.MaxValue`
-   *                for T2 and a tight value (e.g. 2 * blockBytes) for T3.
+   * @param budget  initial execution memory; `Long.MaxValue` for T2,
+   *                tight value (e.g. 2 * blockBytes) for T3.
    * @param offHeap when true, enables Tungsten off-heap mode (T9).
    */
   private def withTmm[T](budget: Long = Long.MaxValue, offHeap: Boolean = false)
@@ -122,7 +119,6 @@ class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext 
   private def naiveMin(vs: Seq[Int], lo: Int, hi: Int): Any =
     if (lo >= hi) null else vs.slice(lo, hi).min
 
-  // ---- T1 ----
   test("T1 constructor rejects null TaskMemoryManager") {
     val ex = intercept[IllegalArgumentException] {
       new WindowSegmentTree(
@@ -132,32 +128,29 @@ class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext 
     assert(ex.getMessage.contains("non-null TaskMemoryManager"))
   }
 
-  // ---- T2 ----
   test("T2 ample budget: query correctness and positive memory usage") {
     withTmm() { (tmm, _) =>
       val values = Seq(5, 2, 9, 1, 7, 3, 4, 8, 6, 0, 11, 12, 13, 14, 15, 16)
       val tree = buildTree(tmm, values, fanout = 4, blockSize = 4,
         maxCachedBlocks = Some(4))
       try {
-        // Force a couple of block-level queries so the LRU actually populates.
+        // Force block-level queries so the LRU actually populates.
         assert(queryMin(tree, 0, values.length) == values.min)
         assert(queryMin(tree, 1, 14) == naiveMin(values, 1, 14))
         assert(queryMin(tree, 5, 11) == naiveMin(values, 5, 11))
-        // Memory consumption strictly positive because at least one block
-        // level has been cached and the spiller acquired bytes for it.
+        // Positive consumption: at least one block level cached -> spiller acquired.
         assert(tmm.getMemoryConsumptionForThisTask > 0L,
           "Expected positive memory consumption after caching block levels")
       } finally tree.close()
-      // After close: all acquired bytes must be released.
+      // All bytes released after close.
       assert(tmm.getMemoryConsumptionForThisTask == 0L,
         "Memory consumption must return to 0 after close()")
     }
   }
 
-  // ---- T3 ----
   test("T3 tight budget forces spill: results still match baseline") {
     val values = (0 until 40).map(i => (i * 37 + 11) % 97)
-    // Collect the baseline under an ample budget.
+    // Baseline under ample budget.
     val baseline: Seq[Any] = {
       var captured: Seq[Any] = Seq.empty
       withTmm() { (tmm, _) =>
@@ -171,11 +164,9 @@ class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext 
       }
       captured
     }
-    // Tight budget: only ~1 block's worth of headroom. Any new block that
-    // needs levels will force the spiller to evict the prior block.
-    //
-    // Sizing: for (fanout=4, blockSize=4) the cached level shape is
-    // [4, 1] slots; at bufferWidth=16 B per slot blockBytes = 5 * 16 = 80 B.
+    // Tight budget: ~1 block headroom -> any new block-level load evicts the prior.
+    // Sizing: (fanout=4, blockSize=4) -> level shape [4, 1] slots;
+    // at bufferWidth=16 B/slot blockBytes = 5 * 16 = 80 B.
     // budget=128 B admits exactly one block and forces spill on the second.
     withTmm(budget = 128L) { (tmm, _) =>
       val tree = buildTree(tmm, values, fanout = 4, blockSize = 4,
@@ -189,7 +180,6 @@ class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext 
     }
   }
 
-  // ---- T4 ----
   test("T4 self-trigger: spill(_, this) returns 0 and does not evict") {
     withTmm() { (tmm, _) =>
       val tree = buildTree(tmm, (0 until 16), fanout = 4, blockSize = 4,
@@ -209,7 +199,6 @@ class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext 
     }
   }
 
-  // ---- T6 ----
   test("T6 close() is idempotent and releases all acquired bytes") {
     withTmm() { (tmm, _) =>
       val tree = buildTree(tmm, (0 until 20), fanout = 4, blockSize = 4,
@@ -220,27 +209,25 @@ class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext 
       tree.close()
       assert(tmm.getMemoryConsumptionForThisTask == 0L,
         "Memory must be fully released after first close()")
-      // Second close must be a no-op (no double-free, no throw).
+      // Second close must be a no-op.
       tree.close()
       assert(tmm.getMemoryConsumptionForThisTask == 0L,
         "Second close() must remain a no-op")
     }
   }
 
-  // ---- T7 ----
   test("T7 prepare mid-way failure releases all previously acquired blocks") {
-    // Inject failure by pre-setting consequentOOM to a moderate N so the
-    // spiller's acquireMemory returns 0 after the first few successful blocks.
+    // Inject failure by pre-setting consequentOOM to a moderate N so
+    // acquireMemory returns 0 after the first few successful blocks.
     withTmm() { (tmm, mm) =>
       val values = (0 until 40).map(i => 40 - i)
       val tree = buildTree(tmm, values, fanout = 4, blockSize = 4,
         maxCachedBlocks = Some(10))
       try {
-        // Warm up: query to populate a couple of cache entries.
+        // Warm up: populate cache entries.
         assert(queryMin(tree, 0, 40) == 1)
-        // Now force the *next* acquireMemory calls to fail, then trigger a
-        // cold-cache path by forcing evict + re-acquire. We release everything
-        // first so a subsequent query path must re-acquire.
+        // Force next acquireMemory calls to fail, then trigger cold-cache via
+        // evict + re-acquire. Release everything so the next query re-acquires.
         val spiller = tree.testOnlySpiller()
         spiller.spill(Long.MaxValue, new MemoryConsumer(tmm,
             tmm.pageSizeBytes(), MemoryMode.ON_HEAP) {
@@ -248,16 +235,15 @@ class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext 
         })
         assert(tmm.getMemoryConsumptionForThisTask == 0L,
           "after full spill, accounting must be zero")
-        // Force the next N acquireMemory calls to grant 0 bytes (hard OOM).
+        // Force next N acquireMemory calls to grant 0 bytes (hard OOM).
         // With maxCachedBlocks=10 and a cold cache, ensureBlockLevels will
-        // call acquireBlockMemory; both initial grant and post-evict retry
-        // will see 0 -> SparkOutOfMemoryError.
+        // call acquireBlockMemory; initial grant and post-evict retry both
+        // see 0 -> SparkOutOfMemoryError.
         mm.markConsequentOOM(10)
         val ex = intercept[SparkOutOfMemoryError](queryMin(tree, 0, 20))
         assert(ex.getMessage.contains("UNABLE_TO_ACQUIRE_MEMORY"),
           s"unexpected OOM message: ${ex.getMessage}")
-        // Critically: the failed acquire path must not have left any bytes
-        // accounted against the task.
+        // Failed acquire must not leak bytes against the task.
         assert(tmm.getMemoryConsumptionForThisTask == 0L,
           "After failed acquire, accounting must be zero (no partial leaks)")
       } finally tree.close()
@@ -265,7 +251,6 @@ class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext 
     }
   }
 
-  // ---- T9 ----
   test("T9 ON_HEAP path: spiller mode follows TMM tungsten mode") {
     withTmm(offHeap = false) { (tmm, _) =>
       val tree = buildTree(tmm, (0 until 16), fanout = 4, blockSize = 4,
@@ -290,19 +275,14 @@ class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext 
     }
   }
 
-  // ---- T10 ----
   test("T10 blockBytes oracle: hand-computed table + runtime-anchored cross-check") {
-    // Part A: hand-computed golden table. These values were derived by
-    // listing the cached level widths produced by buildBlockLevels and
-    // multiplying by the 16 B/field buffer width used below. They do NOT
-    // share a code path with production `cachedSlotsPerBlock` -- if the
-    // production loop regresses (e.g., fencepost off-by-one or drops a
-    // level) at least one of these cases flips, including:
-    //   - blockSize == 1   : single leaf, no parent levels (edge case).
-    //   - (F=3, B=5)       : non-power-of-fanout, asymmetric top levels.
-    //   - (F=4, B=7)       : non-power-of-fanout, typical tail-shape.
-    //   - (F=16, B=65536)  : deep tree, catches compounding fencepost.
-    // Level breakdown per case (leaves + parents + ... + root):
+    // Part A: hand-computed golden table. Values derived by listing the
+    // cached level widths from buildBlockLevels * 16 B/field. Independent of
+    // production `cachedSlotsPerBlock` -- fencepost or dropped-level
+    // regressions flip at least one case. Cases chosen to cover:
+    //   blockSize == 1    (single leaf, no parents), (F=3,B=5) and (F=4,B=7)
+    //   (non-power-of-fanout asymmetric tails), (F=16,B=65536) (deep tree).
+    // Level breakdown (leaves + parents + ... + root):
     //   (F=4,  B=1)     -> 1                              =    1 slot
     //   (F=4,  B=4)     -> 4 + 1                          =    5 slots
     //   (F=3,  B=5)     -> 5 + 2 + 1                      =    8 slots
@@ -324,7 +304,7 @@ class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext 
         val tree = buildTree(tmm, Seq(1, 2, 3, 4, 5, 6, 7, 8),
           fanout = fanout, blockSize = blockSize, maxCachedBlocks = Some(1))
         try {
-          // Min on a single IntegerType field -> 1 buffer field x 16 B.
+          // Min on one IntegerType field -> 1 buffer field x 16 B.
           val expected = math.max(1L, slots * 16L)
           assert(tree.peekBlockBytes == expected,
             s"blockBytes mismatch at (F=$fanout, blockSize=$blockSize): " +
@@ -333,18 +313,17 @@ class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext 
       }
     }
 
-    // Part B: runtime-anchored cross-check. Build a block, read back the
-    // *actual* cached level array lengths via peek hooks, and assert
-    // `blockBytes == sum(levels) * bufferWidth`. This guards against the
-    // formula and buildBlockLevels drifting apart without sharing a code
-    // path with either side.
+    // Part B: runtime-anchored cross-check. Build a block, read actual cached
+    // level array lengths via peek hooks, assert
+    // `blockBytes == sum(levels) * bufferWidth`. Guards against the formula
+    // and buildBlockLevels drifting apart.
     withTmm() { (tmm, _) =>
       val fanout = 4
       val blockSize = 8
       val tree = buildTree(tmm, (0 until blockSize),
         fanout = fanout, blockSize = blockSize, maxCachedBlocks = Some(1))
       try {
-        // Force block 0 to be materialized.
+        // Materialize block 0.
         assert(queryMin(tree, 0, blockSize) == 0)
         val levelCount = tree.peekLevelCount(0)
         var slotSum = 0L
@@ -361,19 +340,16 @@ class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext 
     }
   }
 
-  // ---- T5 (ignored stub) ----
   ignore("T5 rowArray-spilled short-circuit in SegTreeSpiller.spill -- ignored stub") {
     // Requires a controllable `hasSpilled` hook on
-    // ExternalAppendOnlyUnsafeRowArray, which the current public API does
-    // not expose. The production path uses a `spillSize > 0` heuristic in
-    // WindowSegmentTree; this cell is kept as an ignored stub so the T5
-    // row of the memory-manager matrix stays visible.
+    // ExternalAppendOnlyUnsafeRowArray (not in public API). Production uses
+    // a `spillSize > 0` heuristic; kept as ignored stub so the T5 matrix
+    // row stays visible.
   }
 
-  // ---- T8 (ignored stub) ----
   ignore("T8 task-kill completion listener triggers close -- ignored stub") {
     // Requires a SparkContext/DAGScheduler-driven task-kill path; covered
-    // implicitly by the frame-layer listener wiring. Kept as an ignored
-    // stub so the T8 row of the memory-manager matrix stays visible.
+    // implicitly by the frame-layer listener wiring. Kept as ignored stub
+    // so the T8 matrix row stays visible.
   }
 }

@@ -31,18 +31,13 @@ import org.apache.spark.sql.types.IntegerType
  * Shared helpers for segment-tree window-frame tests. Kept in the same
  * package so tests can reach `private[window]` hooks on
  * [[SegmentTreeWindowFunctionFrame]] (see contract Section 1.3).
- *
- * Extracted from `SegmentTreeWindowFunctionSuite` in helper extraction so the
- * upcoming property-based suite can share the same fake-TaskContext /
- * fixture-frame plumbing without duplication.
  */
 private[window] object SegmentTreeWindowTestHelpers {
 
   /**
-   * Shared plumbing for lifecycle tests: sets up a fake TaskContext, gives
-   * `body` a `newArray(rows)` builder and a `newFrame(arrayLength?)` builder
-   * (unprepared frame, caller drives `prepare()`/`write()`/`close()` as
-   * needed). Always closes any frames the caller registers via `registerClose`.
+   * Fake-TaskContext plumbing for lifecycle tests. Gives `body` a factory
+   * producing `newArray(rows)` and `newFrame()` (unprepared — caller drives
+   * prepare/write/close). Tracks frames so teardown always closes them.
    */
   def withFrameFactory(conf: SQLConf)
       (body: FrameFactory => Unit): Unit = {
@@ -124,11 +119,10 @@ private[window] object SegmentTreeWindowTestHelpers {
   }
 
   /**
-   * Build a small-partition [[SegmentTreeWindowFunctionFrame]] (Sum over a
-   * single IntegerType column, `rows` values = 0..rows-1, frame = -1..+1),
-   * drive it through all rows, and hand the frame to `body`. Manages a
-   * fake TaskContext if the caller didn't set one, and always closes the
-   * frame on exit.
+   * Build a small-partition [[SegmentTreeWindowFunctionFrame]] (Sum over one
+   * IntegerType column, values 0..rows-1, frame -1..+1), drive it through
+   * all rows, then hand it to `body`. Manages a fake TaskContext if needed
+   * and always closes the frame.
    */
   def withSmallPartitionFrame(conf: SQLConf, rows: Int)
       (body: SegmentTreeWindowFunctionFrame => Unit): Unit = {
@@ -146,17 +140,14 @@ private[window] object SegmentTreeWindowTestHelpers {
   }
 
   /**
-   * Build the given [[WindowSegmentTree]] from a caller-supplied row
-   * iterator. Tests historically called `tree.build(iter)` when the tree
-   * itself owned an internal buffer; after the ownership flip the caller
-   * (here, the helper) materialises an [[ExternalAppendOnlyUnsafeRowArray]],
-   * projects rows with [[UnsafeProjection]], and hands the backing array to
-   * the tree. The tree retains a reference to the array; the helper does
-   * not close it (close is idempotent via `tree.close()` / partition
-   * teardown).
+   * Build the given [[WindowSegmentTree]] from a row iterator. After the
+   * buffer-ownership flip the caller (this helper) materialises an
+   * [[ExternalAppendOnlyUnsafeRowArray]], projects rows via
+   * [[UnsafeProjection]], and hands it to the tree. The tree retains the
+   * array; close is idempotent via `tree.close()` / partition teardown.
    *
-   * `inMemoryThreshold` / `spillThreshold` tune the backing array so tests
-   * can exercise the spill path (see `WindowSegmentTreeSuite` D9).
+   * `inMemoryThreshold` / `spillThreshold` let tests exercise the spill
+   * path (see `WindowSegmentTreeSuite` D9).
    */
   def buildTreeFromIter(
       tree: WindowSegmentTree,

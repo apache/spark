@@ -28,15 +28,12 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * Coverage for the explicit segment-tree aggregate allowlist
- * ([[WindowSegmentTree.EligibleAggregates]]).
- *
- *   - allowlisted aggregates route to the segment-tree path (`numSegmentTreeFrames`
- *     bumps).
- *   - non-allowlisted aggregates fall through to the existing sliding path without
- *     crashing or producing wrong results (segment-tree counters stay at 0).
- *
- * This suite does NOT execute exhaustive semantic equivalence checks; those live in
- * [[SegmentTreeWindowFunctionSuite]]. The goal here is eligibility gating only.
+ * ([[WindowSegmentTree.EligibleAggregates]]):
+ *   - allowlisted aggregates route to segtree (`numSegmentTreeFrames` bumps).
+ *   - non-allowlisted aggregates fall through to the sliding path without
+ *     crashing or producing wrong results (segtree counters stay at 0).
+ * Eligibility gating only; exhaustive equivalence lives in
+ * [[SegmentTreeWindowFunctionSuite]].
  */
 class WindowSegmentTreeAllowlistSuite
     extends QueryTest with SharedSparkSession with SQLMetricsTestUtils {
@@ -73,7 +70,7 @@ class WindowSegmentTreeAllowlistSuite
       total("number of segment-tree fallback frames"))
   }
 
-  // ---------- Positive: allowlisted aggregates route to segtree ----------
+  // Positive: allowlisted aggregates route to segtree
 
   Seq(
     ("min", (c: org.apache.spark.sql.Column) => min(c)),
@@ -97,7 +94,7 @@ class WindowSegmentTreeAllowlistSuite
     }
   }
 
-  // ---------- Negative: non-allowlisted aggregates fall through ----------
+  // Negative: non-allowlisted aggregates fall through
 
   test("first_value falls through (order-dependent aggregate)") {
     withSQLConf(enableSegTree.toSeq: _*) {
@@ -149,7 +146,7 @@ class WindowSegmentTreeAllowlistSuite
     }
   }
 
-  // ---------- Mixed: ANY non-eligible aggregate disqualifies the group ----------
+  // Mixed: ANY non-eligible aggregate disqualifies the group
 
   test("mix of allowlisted + non-allowlisted aggregates falls through entirely") {
     withSQLConf(enableSegTree.toSeq: _*) {
@@ -157,8 +154,8 @@ class WindowSegmentTreeAllowlistSuite
         .withColumn("s", sum($"v").over(winSpec))
         .withColumn("fv", first($"v").over(winSpec))
       val (seg, _) = segTreeCounters(df)
-      // Both aggregates share the same Window node group; allowlist gating is
-      // `forall(isEligible)`, so the presence of `first_value` drops the whole group.
+      // Both aggregates share the same Window node; gating is forall(isEligible),
+      // so `first_value` drops the whole group.
       assert(seg == 0,
         s"Window group containing a non-allowlisted agg must fall through (got $seg)")
     }

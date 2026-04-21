@@ -29,8 +29,7 @@ import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType}
 
 class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
 
-  // ---- test harness ----
-
+  // test harness
   private val inputAttr: AttributeReference =
     AttributeReference("v", IntegerType, nullable = true)()
   private val inputSchema: Seq[Attribute] = Seq(inputAttr)
@@ -265,7 +264,7 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  // ---- D8 multi-aggregate ----
+  // D8 multi-aggregate
   test("D8 multi-aggregate: MIN + MAX + SUM on the same tree") {
     withTaskContext {
       val rnd = new Random(2024)
@@ -303,7 +302,7 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  // ---- D9 spill coverage ----
+  // D9 spill coverage
   test("D9 spill path: low thresholds still produce correct range aggregates") {
     withTaskContext {
       val rnd = new Random(909)
@@ -421,13 +420,12 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  // ---- STDDEV_SAMP regression ----
-  // Minimal repro for the STDDEV_SAMP digest mismatch seen in GHA run
-  // 24599916378 (WindowBenchmark Section A). MIN/MAX/SUM/COUNT/AVG all pass
-  // digest parity; STDDEV_SAMP is the first multi-buffer agg that uses
-  // CentralMomentAgg's Welford merge (n, avg, m2) *and* a non-trivial
-  // `evaluateExpression`. We exercise both the merge path (via `query`)
-  // and the evaluate path (via `queryInto` + `AggregateProcessor`).
+  // STDDEV_SAMP regression: minimal repro for the digest mismatch in GHA run
+  // 24599916378 (WindowBenchmark Section A). MIN/MAX/SUM/COUNT/AVG pass
+  // digest parity; STDDEV_SAMP is the first multi-buffer agg combining
+  // CentralMomentAgg's Welford merge (n, avg, m2) with a non-trivial
+  // `evaluateExpression`. Exercises both merge (`query`) and evaluate
+  // (`queryInto` + `AggregateProcessor`) paths.
   test("STDDEV_SAMP: segtree matches naive oracle on random doubles, W=21") {
     withTaskContext {
       val rnd = new Random(0x57DDEFL) // fixed seed
@@ -450,9 +448,9 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
         }
         SegmentTreeWindowTestHelpers.buildTreeFromIter(tree, rows, schema)
 
-        // Build an AggregateProcessor identical to what the Frame uses so
-        // `queryInto` exercises evaluateExpression (sqrt(m2/(n-1)) with
-        // the div-by-zero / n=1 guards in StddevSamp).
+        // AggregateProcessor identical to the Frame's, so `queryInto`
+        // exercises evaluateExpression (sqrt(m2/(n-1)) with n=1 / div-by-0
+        // guards in StddevSamp).
         val processor = AggregateProcessor(
           Array[Expression](agg),
           ordinal = 0,

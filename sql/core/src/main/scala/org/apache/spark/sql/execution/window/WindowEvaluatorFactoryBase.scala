@@ -294,12 +294,10 @@ trait WindowEvaluatorFactoryBase {
               val segFns = functions.map(_.asInstanceOf[DeclarativeAggregate])
               val cacheHint = estimateMaxCachedBlocks(lower, upper, frameType, blockSize)
               target: InternalRow => {
-                // Task-completion listener registration lives inside the
-                // frame constructor (one per frame instance) to avoid
-                // duplicate listeners when this closure fires multiple
-                // times per task. `TaskContext.get()` is only called at
-                // task-execution time (the closure runs per row-processor
-                // construction), never at driver planning.
+                // Task-completion listener registration lives inside the frame
+                // constructor (one per frame instance) to avoid duplicates when
+                // this closure fires multiple times per task. `TaskContext.get()`
+                // is only called at task-execution time, never at driver planning.
                 val tc = TaskContext.get()
                 if (tc == null) {
                   throw SparkException.internalError(
@@ -345,21 +343,21 @@ trait WindowEvaluatorFactoryBase {
   }
 
   /**
-   * Segment-tree path eligibility. The tree relies on `DeclarativeAggregate.mergeExpressions`,
-   * which [[AggregateWindowFunction]]s (e.g. NthValue, NTile, Rank, RowNumber, NullIndex) refuse
-   * with `mergeUnsupportedByWindowFunctionError`. They extend DeclarativeAggregate but are
-   * NOT merge-capable, so we must exclude them here even though the base-class check passes.
-   * Normal aggregate window expressions reach this code as the inner DeclarativeAggregate
-   * unwrapped from [[AggregateExpression]] (see `windowFrameExpressionFactoryPairs.collect`).
+   * Segment-tree path eligibility. The tree relies on
+   * `DeclarativeAggregate.mergeExpressions`, which [[AggregateWindowFunction]]s
+   * (NthValue, NTile, Rank, RowNumber, NullIndex) refuse via
+   * `mergeUnsupportedByWindowFunctionError`: they extend DeclarativeAggregate
+   * but are NOT merge-capable. Normal aggregate window expressions reach this
+   * code as the inner DeclarativeAggregate unwrapped from
+   * [[AggregateExpression]] (see `windowFrameExpressionFactoryPairs.collect`).
    */
   private def eligibleForSegTree(
       functions: Array[Expression],
       filters: Array[Option[Expression]],
       frameType: FrameType): Boolean = {
-    // RANGE is accepted only for single-column order specs. Multi-column
-    // RANGE with non-zero offset is already rejected by `createBoundOrdering`
-    // (see the `RangeFrame, _` internalError branch above), so gating here
-    // on `orderSpec.size == 1` matches the Sliding-path invariant exactly.
+    // RANGE accepted only for single-column order specs. Multi-column RANGE
+    // with non-zero offset is already rejected by `createBoundOrdering`, so
+    // gating here on `orderSpec.size == 1` matches the Sliding-path invariant.
     val frameTypeOk = frameType match {
       case RowFrame => true
       case RangeFrame => orderSpec.size == 1
@@ -379,16 +377,13 @@ trait WindowEvaluatorFactoryBase {
       upper: Expression,
       frameType: FrameType,
       blockSize: Int): Option[Int] = {
-    // Reached via the moving-frame branch after `eligibleForSegTree`, which
-    // now accepts RowFrame or RangeFrame (single-column order). The Frame
-    // constructor asserts the same. Under RANGE the frame width is
-    // data-dependent (defined by order-key distance, not row count), so no
-    // static width inference is possible; fall back to the default cache
-    // budget and rely on the runtime LRU + TMM spiller.
+    // Reached via the moving-frame branch after `eligibleForSegTree`. Under
+    // RANGE the frame width is data-dependent (defined by order-key distance,
+    // not row count), so no static width inference is possible; fall back to
+    // a default budget and rely on the runtime LRU + TMM spiller.
     assert(frameType == RowFrame || frameType == RangeFrame,
       s"estimateMaxCachedBlocks expects RowFrame or RangeFrame, got $frameType")
     if (frameType == RangeFrame) {
-      // RANGE width inferred at runtime -- use conservative default.
       return Some(8)
     }
     val w: Option[Int] = (lower, upper) match {
