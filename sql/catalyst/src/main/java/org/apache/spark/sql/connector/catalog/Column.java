@@ -173,8 +173,9 @@ public interface Column {
   /**
    * Returns the unique identifier for this column if column IDs are supported, null otherwise.
    * <p>
-   * Column IDs track column identity across schema evolution, so that a dropped and
-   * re-added column with the same name is recognized as a different column.
+   * Column IDs track column identity across schema changes such as column drops and
+   * renames, so that a dropped and re-added column with the same name is recognized
+   * as a different column.
    */
   @Nullable
   default String id() {
