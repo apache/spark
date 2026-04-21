@@ -50,7 +50,14 @@ case class ColumnImpl(
   }
 
   override def hashCode(): Int = {
-    Objects.hash(name, dataType, Boolean.box(nullable), comment,
-      defaultValue, generationExpression, identityColumnSpec, metadataInJSON)
+    Objects.hash(
+      name,
+      dataType,
+      Boolean.box(nullable),
+      comment,
+      defaultValue,
+      generationExpression,
+      identityColumnSpec,
+      metadataInJSON)
   }
 }
