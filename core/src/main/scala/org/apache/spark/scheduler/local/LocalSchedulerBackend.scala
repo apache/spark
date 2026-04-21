@@ -146,7 +146,7 @@ private[spark] class LocalSchedulerBackend(
     localEndpoint = rpcEnv.setupEndpoint("LocalSchedulerBackendEndpoint", executorEndpoint)
 
     // call this after localEndpoint is assigned
-    updateDelegationTokens()
+    setupDelegationTokenManager()
 
     listenerBus.post(SparkListenerExecutorAdded(
       System.currentTimeMillis,
@@ -201,7 +201,7 @@ private[spark] class LocalSchedulerBackend(
     localEndpoint.askSync[Option[ThreadStackTrace]](TaskThreadDump(taskId))
   }
 
-  private def updateDelegationTokens(): Unit = {
+  private def setupDelegationTokenManager(): Unit = {
     if (UserGroupInformation.isSecurityEnabled) {
       delegationTokenManager = Some(
         new HadoopDelegationTokenManager(conf, scheduler.sc.hadoopConfiguration, localEndpoint))
