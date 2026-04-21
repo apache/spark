@@ -345,8 +345,8 @@ private case class AccumulatorPartialVal[PARTIAL](
  *
  * Implementations must implement [[partialMergeVal]] and [[partialMerge]] methods operating on
  * [[PARTIAL]] type. In regular [[AccumulatorV2]] implementations, the [[AccumulatorV2]] object
- * itself holds the intermediate value of the accumulator, and [[AccumulatorV2.merge]] method is used
- * to merge these objects together. [[LastAttemptAccumulator]] needs to keep track of partial
+ * itself holds the intermediate value of the accumulator, and [[AccumulatorV2.merge]] method is
+ * used to merge these objects together. [[LastAttemptAccumulator]] needs to keep track of partial
  * values of every partition of every RDD that used the accumulator, and holding a full
  * [[AccumulatorV2]] object for each would have a high overhead. Therefore, an implementation should
  * be able to return [[PARTIAL]] value from [[partialMergeVal]] that represents an intermediate
