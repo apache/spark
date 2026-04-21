@@ -21,7 +21,7 @@ import java.util.{LinkedHashMap => JLinkedHashMap, Map => JMap}
 
 import scala.collection.mutable
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.SparkException
 import org.apache.spark.memory.{MemoryConsumer, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -262,16 +262,6 @@ private[window] class WindowSegmentTree(
   }
 
   private[this] val spiller: SegTreeSpiller = new SegTreeSpiller
-
-  // Task kill / completion fall-back: ensure cache is freed even if caller
-  // forgets close(). Frame already registers a listener too; double close is
-  // idempotent (I4).
-  {
-    val tc = TaskContext.get()
-    if (tc != null) {
-      tc.addTaskCompletionListener[Unit](_ => close())
-    }
-  }
 
   // ---------- Public API ----------
 
