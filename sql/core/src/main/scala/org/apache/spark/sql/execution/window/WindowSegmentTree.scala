@@ -25,7 +25,7 @@ import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.memory.{MemoryConsumer, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, Count, DeclarativeAggregate, Max, Min, StddevPop, StddevSamp, Sum, VariancePop, VarianceSamp}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
 import org.apache.spark.sql.types.DataType
@@ -564,4 +564,54 @@ private[window] class WindowSegmentTree(
 private[window] object WindowSegmentTree {
   val DefaultFanout: Int = 16
   val DefaultBlockSize: Int = 65536
+
+  /**
+   * Explicit allowlist of [[DeclarativeAggregate]] subclasses that are safe to evaluate
+   * with the block-chunked segment tree.
+   *
+   * An aggregate is safe for segment-tree execution iff its combine semantics form a
+   * commutative monoid on the partial-buffer representation (associativity +
+   * compatibility with `mergeExpressions`). All nine entries below have been audited:
+   *
+   *   - [[Min]], [[Max]]: idempotent semilattice.
+   *   - [[Sum]], [[Count]]: additive monoid.
+   *   - [[Average]]: sum + count, both additive monoids.
+   *   - [[StddevPop]], [[StddevSamp]], [[VariancePop]], [[VarianceSamp]]:
+   *     Welford online-update form (count, mean, M2) is associative -- see
+   *     CentralMomentAgg.mergeExpressions.
+   *
+   * Aggregates intentionally NOT in the allowlist (tracked as follow-up):
+   *   - HyperLogLogPlusPlus / ApproxCountDistinct: sketch merge is associative but
+   *     buffer representation carries register arrays whose segment-tree interaction
+   *     has not been audited; kept fail-closed until dedicated coverage lands.
+   *   - First / Last: order-dependent, not associative.
+   *   - CollectList / CollectSet: unbounded buffer growth breaks segtree memory model.
+   *   - Percentile / ApproxPercentile: buffer is a sorted sketch; merge cost and
+   *     shape does not fit per-block pre-aggregates.
+   *   - Any ImperativeAggregate: excluded by the `DeclarativeAggregate` type check.
+   *
+   * Callers should use [[isEligible]] rather than inlining `contains` on this set so
+   * that future extensions (for example, eligibility predicates beyond the class) can
+   * be centralized here.
+   */
+  val EligibleAggregates: Set[Class[_ <: DeclarativeAggregate]] = Set(
+    classOf[Min],
+    classOf[Max],
+    classOf[Sum],
+    classOf[Count],
+    classOf[Average],
+    classOf[StddevPop],
+    classOf[StddevSamp],
+    classOf[VariancePop],
+    classOf[VarianceSamp]
+  )
+
+  /**
+   * Returns true iff `f` is a [[DeclarativeAggregate]] on the explicit segment-tree
+   * allowlist. See [[EligibleAggregates]] for the rationale and excluded aggregates.
+   */
+  def isEligible(f: Expression): Boolean = f match {
+    case agg: DeclarativeAggregate => EligibleAggregates.contains(agg.getClass)
+    case _ => false
+  }
 }

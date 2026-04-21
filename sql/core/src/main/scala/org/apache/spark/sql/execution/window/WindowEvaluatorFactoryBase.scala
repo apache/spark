@@ -368,9 +368,7 @@ trait WindowEvaluatorFactoryBase {
     SQLConf.get.windowSegmentTreeEnabled &&
       frameTypeOk &&
       filters.forall(_.isEmpty) &&
-      functions.forall { f =>
-        f.isInstanceOf[DeclarativeAggregate] && !f.isInstanceOf[AggregateWindowFunction]
-      } &&
+      functions.forall(WindowSegmentTree.isEligible) &&
       !functions.exists {
         case ae: AggregateExpression => ae.isDistinct
         case _ => false
