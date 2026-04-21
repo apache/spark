@@ -1600,6 +1600,47 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  // With case-sensitive analysis, "salary" and "SALARY" are different columns.
+  // The column ID check skips (original "salary" not found in current table),
+  // and the schema check fires instead (column missing).
+  test("case-sensitive mode: different case column name triggers schema mismatch") {
+    val t = "testcat.ns1.ns2.tbl"
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      withTable(t) {
+        sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+        sql(s"INSERT INTO $t VALUES (1, 100)")
+        val df = spark.table(t)
+
+        sql(s"ALTER TABLE $t DROP COLUMN salary")
+        sql(s"ALTER TABLE $t ADD COLUMN SALARY INT")
+
+        checkError(
+          exception = intercept[AnalysisException] { df.collect() },
+          condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+          matchPVals = true,
+          parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+      }
+    }
+  }
+
+  test("drop+re-add column with mixed case type rejects stale DataFrame") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary InT")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
   test("column addition does not trigger column ID mismatch") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {

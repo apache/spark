@@ -21,14 +21,15 @@ import java.util
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * An [[InMemoryTableCatalog]] that shares table state across all instances.
- * This allows multiple [[SparkSession]]s (via [[newSession]]/[[cloneSession]]) to
- * read and write the same tables, simulating a real shared metastore.
+ * A [[NullTableIdInMemoryTableCatalog]] that shares table state across
+ * all instances. This allows multiple [[SparkSession]]s to read and
+ * write the same tables, simulating a real shared metastore.
  *
- * Use this catalog for multi-session concurrency tests where one session
- * writes and another session reads the same DSv2 table.
+ * Table IDs are null (inherited from [[NullTableIdInMemoryTableCatalog]]),
+ * so cross-session drop+recreate is detected via column IDs rather
+ * than table IDs.
  */
-class SharedInMemoryTableCatalog extends InMemoryTableCatalog {
+class SharedInMemoryTableCatalog extends NullTableIdInMemoryTableCatalog {
   override protected val tables: util.Map[Identifier, Table] =
     SharedInMemoryTableCatalog.sharedTables
   override protected val namespaces: util.Map[List[String], Map[String, String]] =
