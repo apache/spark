@@ -135,11 +135,11 @@ object WindowBenchmark extends SqlBasedBenchmark {
     //
     // HASH(double) is bit-sensitive, and HASH(ROUND(m, k)) is a trap at
     // scale: any row whose value sits within ~1 ULP of a rounding bin
-    // boundary rounds to a different k-decimal value across backends,
-    // producing two totally different HASH outputs that SUM propagates
-    // linearly. We hit this at N=2M on STDDEV_SAMP (0.2% digest diff even
-    // though per-row relative error is <1e-10). See
-    // spark-floating-point-digest-trap skill for details.
+    // boundary can round to a different k-decimal value across backends.
+    // Those rounded doubles then hash to unrelated values, and SUM of the
+    // hashes turns tiny floating-point differences into large digest drift.
+    // We hit this at N=2M on STDDEV_SAMP (0.2% digest diff even though
+    // per-row relative error is <1e-10).
     //
     // Instead use SUM(CAST(ROUND(m, 3) * 1000 AS BIGINT)): a single
     // boundary-crossing row only contributes +/-1 to the aggregate (vs.
