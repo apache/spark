@@ -23,8 +23,7 @@ import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, Ident
 import org.apache.spark.sql.types.DataType
 
 // The standard concrete implementation of data source V2 column.
-// Column ID is excluded from equals/hashCode because it is identity metadata
-// used for tracking column lineage across schema evolution, not a structural property.
+// Column ID is excluded from equals/hashCode.
 case class ColumnImpl(
     name: String,
     dataType: DataType,
