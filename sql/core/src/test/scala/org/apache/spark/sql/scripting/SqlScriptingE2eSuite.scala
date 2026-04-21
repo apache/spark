@@ -57,7 +57,7 @@ class SqlScriptingE2eSuite extends SharedSparkSession {
       val catalog = spark.sessionState.catalogManager
         .catalog(name)
         .asInstanceOf[InMemoryRowLevelOperationTableCatalog]
-      f(catalog)
+      try f(catalog) finally spark.sessionState.catalogManager.reset()
     }
   }
 
