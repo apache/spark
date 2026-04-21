@@ -25,14 +25,17 @@ import org.apache.spark.sql.{QueryTest, QueryTestBase, Row}
  * Kept as an empty alias of [[QueryTest]] for backward compatibility with existing subclasses.
  * New test suites should extend [[QueryTest]] directly.
  */
+@deprecated("Use QueryTest directly instead.", "4.2.0")
 private[sql] trait SQLTestUtils extends QueryTest
 
 /**
  * Kept as an empty alias of [[QueryTestBase]] for backward compatibility with existing subclasses.
  * New test suites should extend [[QueryTestBase]] directly.
  */
+@deprecated("Use QueryTestBase directly instead.", "4.2.0")
 private[sql] trait SQLTestUtilsBase extends QueryTestBase { self: Suite => }
 
+@deprecated("Use QueryTest.compareAnswers directly instead.", "4.2.0")
 private[sql] object SQLTestUtils {
 
   /**
