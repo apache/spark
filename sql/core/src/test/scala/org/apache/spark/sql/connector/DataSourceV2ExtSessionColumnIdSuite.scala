@@ -24,19 +24,28 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
- * Tests for cross-session and external-write scenarios where an external
- * [[SparkSession]] or direct table manipulation modifies a DSv2 table
- * while another session holds a stale [[DataFrame]].
+ * Tests for cross-session column ID detection where an external
+ * [[SparkSession]] modifies a DSv2 table while another session holds
+ * a stale [[DataFrame]].
  *
- * Uses [[SharedInMemoryTableCatalog]] so both sessions see the same
- * table data via a static map, simulating a real shared metastore.
+ * Each [[SparkSession]] has its own [[CacheManager]], so session1 does
+ * not know about session2's schema changes. When session1 executes a
+ * stale [[DataFrame]], the refresh logic calls [[catalog.loadTable]] to
+ * get the latest table metadata from the catalog and compares the
+ * captured column IDs against the current ones.
+ *
+ * [[SharedInMemoryTableCatalog]] makes this work by storing tables in
+ * a static [[ConcurrentHashMap]] that all catalog instances share,
+ * regardless of which session created them.
  */
-class DataSourceV2ExternalSessionSuite extends QueryTest with SharedSparkSession {
+class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSession {
 
   override protected def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.ANSI_ENABLED, true)
     .set("spark.sql.catalog.sharedcat",
       classOf[SharedInMemoryTableCatalog].getName)
+    // copyOnLoad: each loadTable returns a fresh copy, simulating a real
+    // catalog where metadata is reloaded from the metastore on each access
     .set("spark.sql.catalog.sharedcat.copyOnLoad", "true")
 
   after {
@@ -45,12 +54,20 @@ class DataSourceV2ExternalSessionSuite extends QueryTest with SharedSparkSession
   }
 
   /**
-   * Creates a [[SparkSession]] with a SEPARATE [[SharedState]] (separate
-   * [[CacheManager]] and relation cache) but the same [[SparkContext]] and
-   * catalog configs. [[SharedInMemoryTableCatalog]] tables are shared
-   * via the companion object's static map, so the external session
-   * sees the same table data. This simulates a truly external writer
-   * whose writes do NOT invalidate this session's [[CacheManager]].
+   * Creates a second [[SparkSession]] with its own [[CacheManager]] but
+   * sharing the same [[SparkContext]] (and therefore the same catalog
+   * configs like `spark.sql.catalog.sharedcat`).
+   *
+   * We clear the active/default session first so that
+   * [[SparkSession.builder().create()]] allocates a brand new
+   * [[SharedState]] instead of reusing the existing one. The
+   * `finally` block restores the original active/default session
+   * so the test's main session is not disrupted.
+   *
+   * This is not a true external process (same JVM), but it is
+   * sufficient: session1's [[CacheManager]] is unaware of session2's
+   * writes, and [[catalog.loadTable]] reads from the shared static
+   * map, returning the latest metadata.
    */
   private def extSession: SparkSession = {
     val savedActive = SparkSession.getActiveSession
@@ -89,6 +106,9 @@ class DataSourceV2ExternalSessionSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  // spark.table(T) captures column IDs at analysis time. When
+  // an external session drops and re-adds a column, the column gets
+  // a new ID. Session1's stale DataFrame detects the mismatch.
   test("external drop+re-add column detected by column ID") {
     withTable(T) {
       sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
@@ -97,51 +117,38 @@ class DataSourceV2ExternalSessionSuite extends QueryTest with SharedSparkSession
       val df = spark.table(T)
 
       // external session drops and re-adds column
-      val ext = extSession
-      ext.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
-      ext.sql(s"ALTER TABLE $T ADD COLUMN salary INT").collect()
+      extSession.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+      extSession.sql(s"ALTER TABLE $T ADD COLUMN salary INT").collect()
 
       // column ID changed, session1 detects it
       checkError(
         exception = intercept[AnalysisException] {
           df.collect()
         },
-        condition =
-          "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS" +
-            ".COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
         matchPVals = true,
         parameters = Map(
           "tableName" -> ".*", "errors" -> ".*"))
     }
   }
 
-  test("external drop+recreate table detected by table ID") {
+  test("external drop+recreate table detected by column ID") {
     withTable(T) {
       sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
       sql(s"INSERT INTO $T VALUES (1, 100)")
-
       val df = spark.table(T)
 
       // external session drops and recreates table
-      val ext = extSession
-      ext.sql(s"DROP TABLE $T").collect()
-      ext.sql(
-        s"CREATE TABLE $T (id INT, salary INT) USING foo"
-      ).collect()
+      extSession.sql(s"DROP TABLE $T").collect()
+      extSession.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
 
-      // table ID changed, session1 detects it
+      // table ID is null (SharedInMemoryTableCatalog extends
+      // NullTableIdInMemoryTableCatalog), so column ID check catches it
       checkError(
-        exception = intercept[AnalysisException] {
-          df.collect()
-        },
-        condition =
-          "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS" +
-            ".TABLE_ID_MISMATCH",
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
         matchPVals = true,
-        parameters = Map(
-          "tableName" -> ".*",
-          "capturedTableId" -> ".*",
-          "currentTableId" -> ".*"))
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
   }
 
