@@ -1979,7 +1979,8 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("connector with null column IDs: stale DataFrame reads after column addition without ID mismatch") {
+  test("connector with null column IDs: stale DataFrame reads after column addition " +
+      "without ID mismatch") {
     val t = "nullcolidcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")

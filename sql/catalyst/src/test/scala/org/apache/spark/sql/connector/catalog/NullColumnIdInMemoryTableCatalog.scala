@@ -24,39 +24,66 @@ import org.apache.spark.sql.internal.connector.ColumnImpl
  * ([[Column.id]] returns null). This simulates connectors that do not
  * support column identity tracking.
  *
- * When column IDs are null, [[validateCapturedColumnIds]] skips
- * validation entirely, meaning drop/re-add of a column is NOT
+ * Tables are stored as [[NullColumnIdInMemoryTable]] instances that
+ * override [[columns]] to strip IDs. Data and schema evolution are
+ * preserved by transferring data from the delegate table.
+ *
+ * When column IDs are null, [[V2TableUtil.validateCapturedColumnIds]]
+ * skips validation entirely, meaning drop/re-add of a column is NOT
  * detected via column IDs.
  */
 class NullColumnIdInMemoryTableCatalog extends InMemoryTableCatalog {
 
-  private def stripColumnIds(columns: Array[Column]): Array[Column] = {
-    columns.map(_.asInstanceOf[ColumnImpl].copy(id = null))
+  private def toNullColumnIdTable(table: InMemoryTable): NullColumnIdInMemoryTable = {
+    val wrapped = new NullColumnIdInMemoryTable(
+      name = table.name,
+      columns = table.columns(),
+      partitioning = table.partitioning,
+      properties = table.properties,
+      constraints = table.constraints)
+    wrapped.alterTableWithData(table.data, table.schema)
+    wrapped
   }
 
   override def createTable(
       ident: Identifier,
       info: TableInfo): Table = {
     val table = super.createTable(ident, info).asInstanceOf[InMemoryTable]
-    val nullColIdTable = new InMemoryTable(
-      table.name,
-      stripColumnIds(table.columns()),
-      table.partitioning,
-      table.properties,
-      table.constraints)
+    val nullColIdTable = toNullColumnIdTable(table)
     tables.put(ident, nullColIdTable)
     nullColIdTable
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
     val table = super.alterTable(ident, changes: _*).asInstanceOf[InMemoryTable]
-    val nullColIdTable = new InMemoryTable(
-      table.name,
-      stripColumnIds(table.columns()),
-      table.partitioning,
-      table.properties,
-      table.constraints)
+    val nullColIdTable = toNullColumnIdTable(table)
     tables.put(ident, nullColIdTable)
     nullColIdTable
+  }
+}
+
+/**
+ * An [[InMemoryTable]] whose [[columns]] method always returns null
+ * column IDs. Internally, column IDs are assigned by the
+ * [[InMemoryBaseTable]] constructor (needed for data operations), but
+ * they are stripped when [[columns]] is called, simulating a connector
+ * that does not support column identity tracking.
+ */
+class NullColumnIdInMemoryTable(
+    name: String,
+    columns: Array[Column],
+    partitioning: Array[org.apache.spark.sql.connector.expressions.Transform],
+    properties: java.util.Map[String, String],
+    constraints: Array[org.apache.spark.sql.connector.catalog.constraints.Constraint] =
+      Array.empty)
+  extends InMemoryTable(
+    name = name,
+    columns = columns,
+    partitioning = partitioning,
+    properties = properties,
+    constraints = constraints) {
+
+  override def columns(): Array[Column] = {
+    super.columns().map(_.asInstanceOf[ColumnImpl].copy(id = null))
   }
 }

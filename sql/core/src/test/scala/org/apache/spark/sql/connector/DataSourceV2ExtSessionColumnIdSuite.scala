@@ -69,10 +69,10 @@ class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSess
    * writes, and [[catalog.loadTable]] reads from the shared static
    * map, returning the latest metadata.
    */
-  private def extSession: SparkSession = {
+  private def withExtSession(f: SparkSession => Unit): Unit = {
     val savedActive = SparkSession.getActiveSession
     val savedDefault = SparkSession.getDefaultSession
-    try {
+    val session = try {
       SparkSession.clearActiveSession()
       SparkSession.clearDefaultSession()
       SparkSession.builder()
@@ -83,6 +83,11 @@ class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSess
         SparkSession.setDefaultSession(s))
       savedActive.foreach(s =>
         SparkSession.setActiveSession(s))
+    }
+    try {
+      f(session)
+    } finally {
+      session.close()
     }
   }
 
@@ -96,8 +101,8 @@ class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSess
       checkAnswer(spark.table(T), Seq(Row(1, 100)))
 
       // external session writes data
-      extSession.sql(
-        s"INSERT INTO $T VALUES (2, 200)").collect()
+      withExtSession(_.sql(
+        s"INSERT INTO $T VALUES (2, 200)").collect())
 
       // a fresh query from session1 picks up external write
       checkAnswer(
@@ -117,8 +122,10 @@ class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSess
       val df = spark.table(T)
 
       // external session drops and re-adds column
-      extSession.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
-      extSession.sql(s"ALTER TABLE $T ADD COLUMN salary INT").collect()
+      withExtSession { ext =>
+        ext.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+        ext.sql(s"ALTER TABLE $T ADD COLUMN salary INT").collect()
+      }
 
       // column ID changed, session1 detects it
       checkError(
@@ -139,8 +146,10 @@ class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSess
       val df = spark.table(T)
 
       // external session drops and recreates table
-      extSession.sql(s"DROP TABLE $T").collect()
-      extSession.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      withExtSession { ext =>
+        ext.sql(s"DROP TABLE $T").collect()
+        ext.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      }
 
       // table ID is null (SharedInMemoryTableCatalog extends
       // NullTableIdInMemoryTableCatalog), so column ID check catches it
