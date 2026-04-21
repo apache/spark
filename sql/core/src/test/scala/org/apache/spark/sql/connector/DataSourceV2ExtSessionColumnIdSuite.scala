@@ -48,9 +48,13 @@ class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSess
     // catalog where metadata is reloaded from the metastore on each access
     .set("spark.sql.catalog.sharedcat.copyOnLoad", "true")
 
-  after {
-    SharedInMemoryTableCatalog.reset()
-    spark.sessionState.catalogManager.reset()
+  override def afterEach(): Unit = {
+    try {
+      SharedInMemoryTableCatalog.reset()
+      spark.sessionState.catalogManager.reset()
+    } finally {
+      super.afterEach()
+    }
   }
 
   /**
