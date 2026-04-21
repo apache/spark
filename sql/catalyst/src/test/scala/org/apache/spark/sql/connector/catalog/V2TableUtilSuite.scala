@@ -777,8 +777,8 @@ class V2TableUtilSuite extends SparkFunSuite {
 
   private def validateCapturedColumnIds(
       table: Table,
-      originCols: Array[Column]): Seq[String] = {
-    V2TableUtil.validateCapturedColumnIds(table, originCols.toImmutableArraySeq)
+      originalCapturedCols: Array[Column]): Seq[String] = {
+    V2TableUtil.validateCapturedColumnIds(table, originalCapturedCols.toImmutableArraySeq)
   }
 
   private def col(name: String, dataType: DataType, nullable: Boolean): Column = {
