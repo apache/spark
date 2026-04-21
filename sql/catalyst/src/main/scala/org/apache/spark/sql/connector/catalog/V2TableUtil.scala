@@ -126,7 +126,7 @@ private[sql] object V2TableUtil extends SQLConfHelper {
   /**
    * Validates that column IDs have not changed for columns that still exist in the table.
    *
-   * Only validates columns where the original and current column both have IDs.
+   * Only validates columns where the original and current column both have non-null IDs.
    * If the connector does not support column IDs (returns null), this check is skipped.
    *
    * @param table the current table metadata
@@ -144,7 +144,7 @@ private[sql] object V2TableUtil extends SQLConfHelper {
   /**
    * Validates that column IDs have not changed for columns that still exist in the table.
    *
-   * Only validates columns where the original and current column both have IDs.
+   * Only validates columns where the original and current column both have non-null IDs.
    *
    * @param table the current table metadata
    * @param originCols the originally captured columns
