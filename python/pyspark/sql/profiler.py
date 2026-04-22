@@ -27,10 +27,10 @@ from typing import (
     Dict,
     Iterable,
     Literal,
-    NamedTuple,
     Optional,
     Tuple,
     Union,
+    TYPE_CHECKING,
     overload,
 )
 import warnings
@@ -50,19 +50,8 @@ from pyspark.profiler import (
     PStatsParam,
 )
 
-
-class ProfileResult(NamedTuple):
-    perf: Optional[pstats.Stats] = None
-    memory: Optional[CodeMapDict] = None
-
-    def __bool__(self) -> bool:
-        return self.perf is not None or self.memory is not None
-
-    def replace(self, **kwargs: Any) -> "ProfileResult":
-        return self._replace(**kwargs)
-
-
-ProfileResults = Dict[Union[int, str], ProfileResult]
+if TYPE_CHECKING:
+    from pyspark.sql._typing import ProfileResults
 
 
 class _ProfileResultsParam(AccumulatorParam["ProfileResults"]):
@@ -80,9 +69,16 @@ class _ProfileResultsParam(AccumulatorParam["ProfileResults"]):
             if key not in value1:
                 value1[key] = result
             else:
-                perf = PStatsParam.addInPlace(value1[key].perf, result.perf)
-                memory = MemUsageParam.addInPlace(value1[key].memory, result.memory)
-                value1[key] = ProfileResult(perf=perf, memory=memory)
+                perf = PStatsParam.addInPlace(
+                    value1[key].get("perf", None), result.get("perf", None)
+                )
+                if perf is not None:
+                    value1[key]["perf"] = perf
+                memory = MemUsageParam.addInPlace(
+                    value1[key].get("memory", None), result.get("memory", None)
+                )
+                if memory is not None:
+                    value1[key]["memory"] = memory
         return value1
 
 
@@ -112,7 +108,7 @@ class WorkerPerfProfiler:
         # make it picklable
         st.stream = None  # type: ignore[attr-defined]
         st.strip_dirs()
-        self._accumulator.add({self._result_key: ProfileResult(perf=st)})
+        self._accumulator.add({self._result_key: {"perf": st}})
 
     def __enter__(self) -> "WorkerPerfProfiler":
         self.start()
@@ -160,7 +156,7 @@ class WorkerMemoryProfiler:
             filename: list(line_iterator)
             for filename, line_iterator in self._profiler.code_map.items()
         }
-        self._accumulator.add({self._result_key: ProfileResult(memory=codemap_dict)})
+        self._accumulator.add({self._result_key: {"memory": codemap_dict}})
 
     def __enter__(self) -> "WorkerMemoryProfiler":
         self.start()
@@ -227,9 +223,9 @@ class ProfilerCollector(ABC):
     def _perf_profile_results(self) -> Dict[Union[int, str], pstats.Stats]:
         with self._lock:
             return {
-                result_id: result.perf
+                result_id: result["perf"]
                 for result_id, result in self._profile_results.items()
-                if result.perf is not None
+                if result.get("perf", None) is not None
             }
 
     def show_memory_profiles(self, id: Optional[Union[int, str]] = None) -> None:
@@ -273,9 +269,9 @@ class ProfilerCollector(ABC):
     def _memory_profile_results(self) -> Dict[Union[int, str], CodeMapDict]:
         with self._lock:
             return {
-                result_id: result.memory
+                result_id: result["memory"]
                 for result_id, result in self._profile_results.items()
-                if result.memory is not None
+                if result.get("memory", None) is not None
             }
 
     @property
@@ -369,12 +365,12 @@ class ProfilerCollector(ABC):
         with self._lock:
             if id is not None:
                 if id in self._profile_results:
-                    self._profile_results[id] = self._profile_results[id].replace(perf=None)
+                    self._profile_results[id].pop("perf", None)
                     if not self._profile_results[id]:
                         self._profile_results.pop(id)
             else:
                 for id in list(self._profile_results.keys()):
-                    self._profile_results[id] = self._profile_results[id].replace(perf=None)
+                    self._profile_results[id].pop("perf", None)
                     if not self._profile_results[id]:
                         self._profile_results.pop(id)
 
@@ -393,12 +389,12 @@ class ProfilerCollector(ABC):
         with self._lock:
             if id is not None:
                 if id in self._profile_results:
-                    self._profile_results[id] = self._profile_results[id].replace(memory=None)
+                    self._profile_results[id].pop("memory", None)
                     if not self._profile_results[id]:
                         self._profile_results.pop(id)
             else:
                 for id in list(self._profile_results.keys()):
-                    self._profile_results[id] = self._profile_results[id].replace(memory=None)
+                    self._profile_results[id].pop("memory", None)
                     if not self._profile_results[id]:
                         self._profile_results.pop(id)
 
