@@ -46,14 +46,18 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
 
   /** Build `f(conf)` twice (enabled / disabled) and assert equal results. */
   private def checkEquivalence(build: () => DataFrame): Unit = {
-    val baseline: Array[Row] = withSQLConf(disableSegTree.toSeq: _*) {
-      build().collect().sortBy(_.toString)
+    val baseline: Seq[Row] = withSQLConf(disableSegTree.toSeq: _*) {
+      build().collect().toSeq
     }
     withSQLConf(enableSegTree.toSeq: _*) {
-      val actual = build().collect().sortBy(_.toString)
-      assert(actual.toSeq === baseline.toSeq,
-        s"segment-tree output differs from baseline.\nExpected: ${baseline.toSeq}\n" +
-          s"Actual:   ${actual.toSeq}")
+      val actual = build().collect().toSeq
+      // Use QueryTest.sameRows (which normalizes Array[_] via prepareRow before
+      // sorting) instead of sortBy(_.toString): Row.toString on Array[Byte]
+      // and similar ref-typed values is address-based and can reorder baseline
+      // vs actual differently even when the multiset of rows is identical.
+      QueryTest.sameRows(baseline, actual, isSorted = false).foreach { err =>
+        fail(s"segment-tree output differs from baseline.\n$err")
+      }
     }
   }
 
@@ -606,13 +610,13 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
              |    ROWS BETWEEN $segTreeFramePrec PRECEDING AND CURRENT ROW) AS mx
              |FROM t""".stripMargin
         val baseline = withSQLConf(disableSegTree.toSeq: _*) {
-          spark.sql(sqlStr).collect().sortBy(_.toString)
+          spark.sql(sqlStr).collect().toSeq
         }
         withSQLConf(enableSegTree.toSeq: _*) {
-          val actual = spark.sql(sqlStr).collect().sortBy(_.toString)
-          assert(actual.toSeq === baseline.toSeq,
-            s"seg-tree binary MIN/MAX differs.\nExpected: ${baseline.toSeq}\n" +
-              s"Actual:   ${actual.toSeq}")
+          val actual = spark.sql(sqlStr).collect().toSeq
+          QueryTest.sameRows(baseline, actual, isSorted = false).foreach { err =>
+            fail(s"seg-tree binary MIN/MAX differs.\n$err")
+          }
         }
       }
     } finally {
@@ -644,13 +648,13 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
              |    ROWS BETWEEN $segTreeFramePrec PRECEDING AND CURRENT ROW) AS mx
              |FROM t""".stripMargin
         val baseline = withSQLConf(disableSegTree.toSeq: _*) {
-          spark.sql(sqlStr).collect().sortBy(_.toString)
+          spark.sql(sqlStr).collect().toSeq
         }
         withSQLConf(enableSegTree.toSeq: _*) {
-          val actual = spark.sql(sqlStr).collect().sortBy(_.toString)
-          assert(actual.toSeq === baseline.toSeq,
-            s"seg-tree empty/NULL binary differs.\nExpected: ${baseline.toSeq}\n" +
-              s"Actual:   ${actual.toSeq}")
+          val actual = spark.sql(sqlStr).collect().toSeq
+          QueryTest.sameRows(baseline, actual, isSorted = false).foreach { err =>
+            fail(s"seg-tree empty/NULL binary differs.\n$err")
+          }
         }
       }
     } finally {
@@ -684,13 +688,13 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
              |    ROWS BETWEEN $segTreeFramePrec PRECEDING AND CURRENT ROW) AS mx
              |FROM t""".stripMargin
         val baseline = withSQLConf(disableSegTree.toSeq: _*) {
-          spark.sql(sqlStr).collect().sortBy(_.toString)
+          spark.sql(sqlStr).collect().toSeq
         }
         withSQLConf(enableSegTree.toSeq: _*) {
-          val actual = spark.sql(sqlStr).collect().sortBy(_.toString)
-          assert(actual.toSeq === baseline.toSeq,
-            s"seg-tree unsigned binary ordering differs.\nExpected: ${baseline.toSeq}\n" +
-              s"Actual:   ${actual.toSeq}")
+          val actual = spark.sql(sqlStr).collect().toSeq
+          QueryTest.sameRows(baseline, actual, isSorted = false).foreach { err =>
+            fail(s"seg-tree unsigned binary ordering differs.\n$err")
+          }
         }
       }
     } finally {

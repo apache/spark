@@ -350,6 +350,11 @@ trait WindowEvaluatorFactoryBase {
    * but are NOT merge-capable. Normal aggregate window expressions reach this
    * code as the inner DeclarativeAggregate unwrapped from
    * [[AggregateExpression]] (see `windowFrameExpressionFactoryPairs.collect`).
+   *
+   * DISTINCT aggregate window expressions are already rejected earlier in
+   * analysis by `WindowResolution.checkWindowFunction`
+   * (error class `DISTINCT_WINDOW_FUNCTION_UNSUPPORTED`), so no explicit
+   * `isDistinct` gate is needed here.
    */
   private def eligibleForSegTree(
       functions: Array[Expression],
@@ -365,11 +370,7 @@ trait WindowEvaluatorFactoryBase {
     SQLConf.get.windowSegmentTreeEnabled &&
       frameTypeOk &&
       filters.forall(_.isEmpty) &&
-      functions.forall(WindowSegmentTree.isEligible) &&
-      !functions.exists {
-        case ae: AggregateExpression => ae.isDistinct
-        case _ => false
-      }
+      functions.forall(WindowSegmentTree.isEligible)
   }
 
   private def estimateMaxCachedBlocks(
