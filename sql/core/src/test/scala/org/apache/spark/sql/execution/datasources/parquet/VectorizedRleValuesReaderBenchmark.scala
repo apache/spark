@@ -158,6 +158,16 @@ object VectorizedRleValuesReaderBenchmark extends BenchmarkBase {
       val bytes = encodeRle(
         packedFriendlyBooleans(NUM_ROWS, trueRatio), bitWidth = 1)
 
+      // Pre-warm the cold-reader code path (fresh reader + initFromPage + readBooleans)
+      // so the class methods are fully JIT-compiled before benchmark.run() measures.
+      // The first case in a group otherwise pays for tiered-compilation transitions on
+      // sub-millisecond iterations, producing noise between runs.
+      (0 until 3).foreach { _ =>
+        val r = new VectorizedRleValuesReader(1, false)
+        r.initFromPage(NUM_ROWS, toInputStream(bytes))
+        r.readBooleans(NUM_ROWS, vec, 0)
+      }
+
       benchmark.addCase(f"cold reader, trueRatio=${trueRatio}%.1f") { _ =>
         val reader = new VectorizedRleValuesReader(1, false)
         reader.initFromPage(NUM_ROWS, toInputStream(bytes))
@@ -188,6 +198,13 @@ object VectorizedRleValuesReaderBenchmark extends BenchmarkBase {
       // PACKED cases (random values)
       val packedBytes = encodeRle(
         packedFriendlyDictIds(NUM_ROWS, bitWidth), bitWidth)
+
+      // See `runBooleanBenchmark` for why the cold-reader path is pre-warmed here.
+      (0 until 3).foreach { _ =>
+        val r = new VectorizedRleValuesReader(bitWidth, false)
+        r.initFromPage(NUM_ROWS, toInputStream(packedBytes))
+        r.readIntegers(NUM_ROWS, vec, 0)
+      }
 
       benchmark.addCase(s"PACKED cold, bitWidth=$bitWidth") { _ =>
         val reader = new VectorizedRleValuesReader(bitWidth, false)
