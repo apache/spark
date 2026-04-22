@@ -1440,8 +1440,8 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Create a [[DescribeColumn]] or [[DescribeRelation]] or [[DescribeRelationAsJsonCommand]]
-   * command.
+   * Create a [[DescribeColumn]], [[DescribeRelation]], [[DescribeTablePartition]], or
+   * [[DescribeRelationJsonCommand]] command.
    */
   override def visitDescribeRelation(ctx: DescribeRelationContext): LogicalPlan = withOrigin(ctx) {
     val isExtended = ctx.EXTENDED != null || ctx.FORMATTED != null
