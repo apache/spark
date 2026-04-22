@@ -21,6 +21,8 @@ import java.util
 
 import scala.collection.mutable.ArrayBuffer
 
+import InMemoryEnhancedRuntimePartitionFilterTable._
+
 import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
 import org.apache.spark.sql.connector.expressions.filter.{PartitionPredicate, Predicate}
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder, SupportsRuntimeV2Filtering}
@@ -69,28 +71,21 @@ class InMemoryEnhancedRuntimePartitionFilterTable(
 
     private val _allPushedPredicates = ArrayBuffer.empty[Predicate]
 
+    private val props = InMemoryEnhancedRuntimePartitionFilterTable.this.properties
+
     private val acceptV2Predicates =
-      InMemoryEnhancedRuntimePartitionFilterTable.this.properties
-        .getOrDefault(
-          InMemoryEnhancedRuntimePartitionFilterTable
-            .AcceptV2PredicatesKey, "false").toBoolean
+      props.getOrDefault(AcceptV2PredicatesKey, "false").toBoolean
 
     private val restrictedFilterAttrs: Option[Set[String]] =
-      Option(InMemoryEnhancedRuntimePartitionFilterTable.this
-        .properties.get(
-          InMemoryEnhancedRuntimePartitionFilterTable
-            .FilterAttributesKey))
-        .map(_.split(",").map(_.trim).toSet)
+      Option(props.get(FilterAttributesKey)).map(_.split(",").map(_.trim).toSet)
 
     def pushedPartitionPredicates: Seq[PartitionPredicate] =
-      _allPushedPredicates.collect {
-        case pp: PartitionPredicate => pp
-      }.toSeq
+      _allPushedPredicates.collect { case pp: PartitionPredicate => pp }.toSeq
 
-    override def pushedPredicates(): Array[Predicate] =
-      _allPushedPredicates.toArray
+    override def pushedPredicates(): Array[Predicate] = _allPushedPredicates.toArray
 
-    override def supportsIterativeFiltering(): Boolean = true
+    override def supportsIterativeFiltering(): Boolean =
+      props.getOrDefault(SupportsIterativeFilteringKey, "true").toBoolean
 
     override def filterAttributes(): Array[NamedReference] = {
       val scanFields = readSchema.fields.map(_.name).toSet
@@ -101,17 +96,12 @@ class InMemoryEnhancedRuntimePartitionFilterTable(
       }
     }
 
-    override def filter(filters: Array[Predicate]): Unit = {
-      filters.foreach {
-        case pp: PartitionPredicate =>
-          _allPushedPredicates += pp
-          data = data.filter { partition =>
-            pp.eval(
-              partition.asInstanceOf[BufferedRows].partitionKey())
-          }
-        case other =>
-          if (acceptV2Predicates) _allPushedPredicates += other
-      }
+    override def filter(filters: Array[Predicate]): Unit = filters.foreach {
+      case pp: PartitionPredicate =>
+        _allPushedPredicates += pp
+        data = data.filter(p => pp.eval(p.asInstanceOf[BufferedRows].partitionKey()))
+      case other =>
+        if (acceptV2Predicates) _allPushedPredicates += other
     }
   }
 }
@@ -128,4 +118,10 @@ object InMemoryEnhancedRuntimePartitionFilterTable {
    * filterAttributes(). Default: all partition columns.
    */
   private[catalog] val FilterAttributesKey = "filter-attributes"
+
+  /**
+   * Table property: when "false", supportsIterativeFiltering() returns false.
+   * Default: "true".
+   */
+  private[catalog] val SupportsIterativeFilteringKey = "supports-iterative-filtering"
 }

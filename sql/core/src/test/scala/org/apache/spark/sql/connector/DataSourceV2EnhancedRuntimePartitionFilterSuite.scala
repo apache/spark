@@ -401,27 +401,28 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
   }
 
   test("case 11: supportsIterativeFiltering is false -> no PartitionPredicate") {
-    val baseCatalog = "testv2filterNoIterative"
-    spark.conf.set(s"spark.sql.catalog.$baseCatalog",
-      classOf[catalog.InMemoryTableWithV2FilterCatalog].getName)
+    val noIterCatalog = "testNoIterativeFiltering"
+    withSQLConf(s"spark.sql.catalog.$noIterCatalog" ->
+      classOf[InMemoryTableEnhancedRuntimePartitionFilterCatalog].getName) {
+      val tbl = s"$noIterCatalog.tbl"
+      val dim = s"$noIterCatalog.dim"
+      withTable(tbl, dim) {
+        sql(s"CREATE TABLE $tbl (id INT, part INT) " +
+          s"USING $v2Source PARTITIONED BY (part) " +
+          s"TBLPROPERTIES('supports-iterative-filtering' = 'false')")
+        for (i <- 0 until 5) {
+          sql(s"INSERT INTO $tbl VALUES ($i, $i)")
+        }
+        sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
+        sql(s"INSERT INTO $dim VALUES (3)")
 
-    val tbl = s"$baseCatalog.tbl"
-    val dim = s"$baseCatalog.dim"
-    withTable(tbl, dim) {
-      sql(s"CREATE TABLE $tbl (id INT, part INT) " +
-        s"USING $v2Source PARTITIONED BY (part)")
-      for (i <- 0 until 5) {
-        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
+        val df = sql(
+          s"SELECT * FROM $tbl WHERE part = (SELECT max(val) FROM $dim)")
+        checkAnswer(df, Row(3, 3))
+
+        assertHasRuntimeFilters(df)
+        assertPushedPartitionPredicates(df, 0)
       }
-      sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
-      sql(s"INSERT INTO $dim VALUES (3)")
-
-      val df = sql(
-        s"SELECT * FROM $tbl WHERE part = (SELECT max(val) FROM $dim)")
-      checkAnswer(df, Row(3, 3))
-
-      assertHasRuntimeFilters(df)
-      assertPushedPartitionPredicates(df, 0)
     }
   }
 
@@ -448,6 +449,37 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
       checkAnswer(df, Seq(Row(1, 1, 10), Row(3, 2, 10)))
 
       assertPushedPartitionPredicates(df, 0)
+    }
+  }
+
+  // Regression test for a buggy connector that supports iterative filtering but
+  // does not correctly report first-pass filters in pushedPredicates().
+  // The second round should still push a PartitionPredicate and prune partitions.
+  test("pushedPredicates() omits first-pass filters -> second round still prunes") {
+    val tbl = s"$catalogName.tbl_nopushed"
+    val dim = s"$catalogName.dim_nopushed"
+    withTable(tbl, dim) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
+      for (i <- 0 until 5) {
+        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
+      }
+      sql(s"CREATE TABLE $dim (dim_id INT, dim_val STRING) USING $v2Source")
+      sql(s"INSERT INTO $dim VALUES (2, 'two')")
+
+      withDPPConf {
+        val df = sql(
+          s"""SELECT f.id, f.part FROM $tbl f JOIN $dim d
+             |ON f.part = d.dim_id WHERE d.dim_val = 'two'""".stripMargin)
+        checkAnswer(df, Row(2, 2))
+
+        assertDPPRuntimeFilters(df)
+        assertPushedPartitionPredicates(df, 1)
+        assertScanReturnsPartitionKeys(df, Set("2"))
+
+        val batchScan = collectBatchScan(df)
+        assert(batchScan.filteredPartitions.flatten.length < 5,
+          "Expected PartitionPredicate from second round to actually prune partitions")
+      }
     }
   }
 

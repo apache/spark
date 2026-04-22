@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, DynamicPruning, DynamicPruningExpression, Expression, ExpressionSet, GetStructField, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, DynamicPruning, DynamicPruningExpression, Expression, ExpressionSet, GetStructField, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -134,8 +134,9 @@ object PushDownUtils extends Logging {
   /**
    * Pushes runtime filters to a [[SupportsRuntimeV2Filtering]] scan. Translatable filters are
    * pushed first, followed by [[PartitionPredicate]] if the scan supports iterative filtering.
-   * Only runtime filters that were not already translated are used to derive PartitionPredicates
-   * in the second pass, avoiding duplicate pushdown.
+   * Only runtime filters whose translated form was not already accepted by the data source in
+   * the first pass are used to derive PartitionPredicates in the second pass, avoiding duplicate
+   * pushdown.
    *
    * @return true if any filters were pushed to the data source
    */
@@ -154,16 +155,17 @@ object PushDownUtils extends Logging {
           }).map(f -> _)
         }.toMap
 
-        if (filtersToTranslated.nonEmpty) {
+        val translatedFiltersPushed = filtersToTranslated.nonEmpty
+        if (translatedFiltersPushed) {
           filterableScan.filter(filtersToTranslated.values.toArray)
         }
 
         // If the scan supports iterative filtering, derive PartitionPredicates from runtime
         // filters whose translation was not already accepted in the first pass.  (See SPARK-55596)
         // Only candidates whose referenced columns are declared in filterAttributes() are eligible.
-        if (filterableScan.supportsIterativeFiltering()) {
-          val filterAttrs = AttributeSet(filterableScan.filterAttributes()
-            .flatMap(r => output.find(a => SQLConf.get.resolver(a.name, r.fieldNames.head))))
+        val partPredicatesPushed = filterableScan.supportsIterativeFiltering() && {
+          val filterAttrs = V2ExpressionUtils.resolveAttributeRefs(
+            filterableScan.filterAttributes(), output)
           val pushed = filterableScan.pushedPredicates().toSet
           val candidates = runtimeFilters.filter { f =>
             !filtersToTranslated.get(f).exists(pushed.contains) &&
@@ -175,9 +177,10 @@ object PushDownUtils extends Logging {
           if (partPredicates.nonEmpty) {
             filterableScan.filter(partPredicates.toArray)
           }
+          partPredicates.nonEmpty
         }
 
-        filterableScan.pushedPredicates().nonEmpty
+        translatedFiltersPushed || partPredicatesPushed
       case _ =>
         false
     }

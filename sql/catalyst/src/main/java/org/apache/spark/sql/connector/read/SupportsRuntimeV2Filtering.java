@@ -33,7 +33,9 @@ import org.apache.spark.sql.sources.Filter;
  * <p>
  * <b>Iterative filtering:</b> When {@link #supportsIterativeFiltering()} returns true,
  * {@link #filter(Predicate[])} may be called <i>multiple times</i> on the same
- * {@link Scan} instance with additional predicates (e.g. {@link PartitionPredicate}).
+ * {@link Scan} instance. The first call pushes translated V2 predicates; the second call
+ * pushes {@link PartitionPredicate} instances derived from runtime filters whose translated
+ * form was not already accepted (via {@link #pushedPredicates()}) in the first call.
  * The implementation must accumulate state across all calls, and
  * {@link #pushedPredicates()} must return predicates from all of them.
  * <p>
