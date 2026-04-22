@@ -23,7 +23,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 
 /**
- * A mix-in trait for SchedulerBackends that support delegation tokens.
+ * A mix-in trait for SchedulerBackend that supports delegation tokens.
  */
 private[spark] trait SupportsDelegationToken {
 
@@ -38,9 +38,7 @@ private[spark] trait SupportsDelegationToken {
   protected def createTokenManager(): Option[HadoopDelegationTokenManager] = None
 
   /**
-   * Called when a new set of delegation tokens is sent to the driver. Child classes can override
-   * this method but should always call this implementation, which handles token distribution to
-   * executors.
+   * Called when a new set of delegation tokens is sent to the driver.
    */
   protected def updateDelegationTokens(tokens: Array[Byte]): Unit
 
