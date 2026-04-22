@@ -21,7 +21,8 @@ import java.util.Collections
 
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.SparkRuntimeException
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{
   ChangelogProperties, Column, Identifier, InMemoryChangelogCatalog}
@@ -68,7 +69,7 @@ class ResolveChangelogTablePostProcessingSuite
       Array(
         Column.create("id", LongType),
         Column.create("name", StringType),
-        Column.create("row_commit_version", LongType)),
+        Column.create("row_commit_version", LongType, false)),
       Array.empty[Transform],
       Collections.emptyMap[String, String]())
   }
@@ -224,6 +225,71 @@ class ResolveChangelogTablePostProcessingSuite
   }
 
   // ===========================================================================
+  // Composite rowId: partitioning uses every rowId column
+  // ===========================================================================
+  //
+  // With a composite rowId such as Seq("id", "name"), the (rowId, _commit_version)
+  // window partition must include BOTH columns. A regression that drops one of the
+  // rowId columns would either falsely merge two different row identities into one
+  // partition (silently mislabeling unrelated delete/insert pairs as updates) or
+  // trip the UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION runtime guard.
+
+  test("update detection with composite rowId keeps different (id, name) tuples raw") {
+    catalog.setChangelogProperties(ident, ChangelogProperties(
+      representsUpdateAsDeleteAndInsert = true,
+      rowIdNames = Seq("id", "name"),
+      rowVersionName = Some("row_commit_version")))
+
+    // delete (1, Alice) and insert (1, Bob) at v2. These are DIFFERENT composite
+    // rowIds; they must NOT be relabeled as update.
+    catalog.addChangeRows(ident, Seq(
+      changeRow(1L, "Alice", "delete", 2L),
+      changeRow(1L, "Bob", "insert", 2L)))
+
+    val rows = sql(
+      s"SELECT id, name, _change_type FROM $catalogName.$testTableName " +
+      s"CHANGES FROM VERSION 2 TO VERSION 2 WITH (computeUpdates = 'true')")
+      .collect()
+
+    val descs = rows.map(r =>
+      s"${r.getLong(0)}:${r.getString(1)}:${r.getString(2)}").toSet
+
+    assert(descs == Set("1:Alice:delete", "1:Bob:insert"),
+      s"Composite rowId must keep different (id, name) tuples raw. Got: $descs")
+  }
+
+  test("carry-over removal with composite rowId removes pairs per (id, name) tuple") {
+    catalog.setChangelogProperties(ident, ChangelogProperties(
+      containsCarryoverRows = true,
+      rowIdNames = Seq("id", "name"),
+      rowVersionName = Some("row_commit_version")))
+
+    // Two independent carry-over pairs at v2, both with id=1 but different names.
+    // With correct composite-rowId partitioning, each pair lives in its own
+    // (id, name, _commit_version) partition, has _del_cnt=1 / _ins_cnt=1 and equal
+    // _min_rv / _max_rv, and gets dropped. With broken (id-only) partitioning, the
+    // four rows would collapse into one partition with _del_cnt=2 / _ins_cnt=2 and
+    // the carry-over filter (which requires =1) would keep them all.
+    catalog.addChangeRows(ident, Seq(
+      changeRow(1L, "Alice", "insert", 1L, rowCommitVersion = 1L),
+      changeRow(1L, "Bob", "insert", 1L, rowCommitVersion = 1L),
+      changeRow(1L, "Alice", "delete", 2L, rowCommitVersion = 1L),
+      changeRow(1L, "Alice", "insert", 2L, rowCommitVersion = 1L),
+      changeRow(1L, "Bob", "delete", 2L, rowCommitVersion = 1L),
+      changeRow(1L, "Bob", "insert", 2L, rowCommitVersion = 1L)))
+
+    val rows = sql(
+      s"SELECT id, name, _change_type, _commit_version " +
+      s"FROM $catalogName.$testTableName CHANGES FROM VERSION 2 TO VERSION 2")
+      .collect()
+
+    val descs = rows.map(r =>
+      s"${r.getLong(0)}:${r.getString(1)}:${r.getString(2)}")
+    assert(rows.isEmpty,
+      s"Both Alice and Bob carry-over pairs at v2 should be removed. Got: ${descs.mkString(",")}")
+  }
+
+  // ===========================================================================
   // No row identity: post-processing skipped
   // ===========================================================================
 
@@ -342,6 +408,148 @@ class ResolveChangelogTablePostProcessingSuite
     assert(rows.length == 2)
     assert(rows.forall(_.getString(1) == "insert"),
       s"Pure inserts must stay 'insert'. Got: ${rows.map(_.getString(1)).mkString(",")}")
+  }
+
+  // ===========================================================================
+  // Keep Carry-over Rows and deduplication flag tests
+  // ===========================================================================
+
+  test("computeUpdates with deduplicationMode=none is rejected on COW connector") {
+    catalog.setChangelogProperties(ident, ChangelogProperties(
+      containsCarryoverRows = true,
+      representsUpdateAsDeleteAndInsert = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    checkError(
+      intercept[AnalysisException] {
+        sql(s"SELECT * FROM $catalogName.$testTableName " +
+          s"CHANGES FROM VERSION 1 TO VERSION 2 " +
+          s"WITH (computeUpdates = 'true', deduplicationMode = 'none')")
+      },
+      condition = "INVALID_CDC_OPTION.UPDATE_DETECTION_REQUIRES_CARRY_OVER_REMOVAL",
+      parameters = Map("changelogName" -> s"$catalogName.${testTableName}_changelog"))
+  }
+
+  test("computeUpdates with deduplicationMode=none is allowed on non-COW connector") {
+    catalog.setChangelogProperties(ident, ChangelogProperties(
+      containsCarryoverRows = false,  // MOR-style: no carry-overs possible
+      representsUpdateAsDeleteAndInsert = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    catalog.addChangeRows(ident, Seq(
+      changeRow(1L, "Alice", "insert", 1L),
+      // v2: Alice -> Robert (delete old, insert new)
+      changeRow(1L, "Alice", "delete", 2L),
+      changeRow(1L, "Robert", "insert", 2L)))
+
+    val rows = sql(
+      s"SELECT id, name, _change_type FROM $catalogName.$testTableName " +
+      s"CHANGES FROM VERSION 1 TO VERSION 2 " +
+      s"WITH (computeUpdates = 'true', deduplicationMode = 'none')")
+      .collect()
+
+    val descs = rows.map(r =>
+      s"${r.getLong(0)}:${r.getString(1)}:${r.getString(2)}")
+    assert(descs.contains("1:Alice:update_preimage"),
+      s"Expected Alice update_preimage. Got: ${descs.mkString(",")}")
+    assert(descs.contains("1:Robert:update_postimage"),
+      s"Expected Robert update_postimage. Got: ${descs.mkString(",")}")
+  }
+
+  // ===========================================================================
+  // Contract enforcement: at most one delete + one insert per (rowId, version)
+  // ===========================================================================
+  //
+  // With `representsUpdateAsDeleteAndInsert = true` and `containsIntermediateChanges = false`,
+  // the `Changelog` contract guarantees at most one logical change per (rowId, _commit_version)
+  // partition. The update-relabel projection enforces this at runtime: if it sees more than one
+  // delete or more than one insert in a partition, it raises
+  // INVALID_CDC_OPTION.UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION instead of silently
+  // mislabeling extra rows as updates.
+
+  test("update detection raises on multiple inserts for same (rowId, _commit_version)") {
+    catalog.setChangelogProperties(ident, ChangelogProperties(
+      representsUpdateAsDeleteAndInsert = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    // Contract violation: 2 inserts for id=1 at v2.
+    catalog.addChangeRows(ident, Seq(
+      changeRow(1L, "Alice", "delete", 2L),
+      changeRow(1L, "Alice2", "insert", 2L),
+      changeRow(1L, "Alice3", "insert", 2L)))
+
+    checkError(
+      intercept[SparkRuntimeException] {
+        sql(s"SELECT * FROM $catalogName.$testTableName " +
+          s"CHANGES FROM VERSION 2 TO VERSION 2 WITH (computeUpdates = 'true')")
+          .collect()
+      },
+      condition = "INVALID_CDC_OPTION.UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION",
+      parameters = Map.empty)
+  }
+
+  test("update detection raises on multiple deletes for same (rowId, _commit_version)") {
+    catalog.setChangelogProperties(ident, ChangelogProperties(
+      representsUpdateAsDeleteAndInsert = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    // Contract violation: 2 deletes for id=1 at v2.
+    catalog.addChangeRows(ident, Seq(
+      changeRow(1L, "Alice", "delete", 2L),
+      changeRow(1L, "Alice2", "delete", 2L),
+      changeRow(1L, "Alice3", "insert", 2L)))
+
+    checkError(
+      intercept[SparkRuntimeException] {
+        sql(s"SELECT * FROM $catalogName.$testTableName " +
+          s"CHANGES FROM VERSION 2 TO VERSION 2 WITH (computeUpdates = 'true')")
+          .collect()
+      },
+      condition = "INVALID_CDC_OPTION.UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION",
+      parameters = Map.empty)
+  }
+
+  // ===========================================================================
+  // Net changes deduplication: not yet supported
+  // ===========================================================================
+  //
+  // `deduplicationMode = netChanges` collapses multiple changes per row identity into the
+  // net effect. It is not yet implemented in [[ResolveChangelogTable]].
+
+  test("deduplicationMode=netChanges is rejected when connector emits intermediate changes") {
+    catalog.setChangelogProperties(ident, ChangelogProperties(
+      containsIntermediateChanges = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    checkError(
+      intercept[AnalysisException] {
+        sql(s"SELECT * FROM $catalogName.$testTableName " +
+          s"CHANGES FROM VERSION 1 TO VERSION 2 " +
+          s"WITH (deduplicationMode = 'netChanges')")
+      },
+      condition = "INVALID_CDC_OPTION.NET_CHANGES_NOT_YET_SUPPORTED",
+      parameters = Map("changelogName" -> s"$catalogName.${testTableName}_changelog"))
+  }
+
+  test("deduplicationMode=netChanges is rejected even when connector has no intermediate changes") {
+    catalog.setChangelogProperties(ident, ChangelogProperties(
+      containsIntermediateChanges = false,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    checkError(
+      intercept[AnalysisException] {
+        sql(s"SELECT * FROM $catalogName.$testTableName " +
+          s"CHANGES FROM VERSION 1 TO VERSION 2 " +
+          s"WITH (deduplicationMode = 'netChanges')")
+      },
+      condition = "INVALID_CDC_OPTION.NET_CHANGES_NOT_YET_SUPPORTED",
+      parameters = Map("changelogName" -> s"$catalogName.${testTableName}_changelog"))
   }
 
   // ===========================================================================
@@ -583,7 +791,7 @@ class ResolveChangelogTablePostProcessingSuite
         Column.create("name", StringType),
         Column.create("score", DoubleType),
         Column.create("active", BooleanType),
-        Column.create("row_commit_version", LongType)),
+        Column.create("row_commit_version", LongType, false)),
       Array.empty[Transform],
       Collections.emptyMap[String, String]())
     cat.setChangelogProperties(mixedIdent, ChangelogProperties(
@@ -650,7 +858,7 @@ class ResolveChangelogTablePostProcessingSuite
       nestedIdent,
       Array(
         Column.create("payload", payloadType),
-        Column.create("row_commit_version", LongType)),
+        Column.create("row_commit_version", LongType, false)),
       Array.empty[Transform],
       Collections.emptyMap[String, String]())
 
@@ -711,7 +919,7 @@ class ResolveChangelogTablePostProcessingSuite
       Array(
         Column.create("id", LongType),
         Column.create("payload", BinaryType),
-        Column.create("row_commit_version", LongType)),
+        Column.create("row_commit_version", LongType, false)),
       Array.empty[Transform],
       Collections.emptyMap[String, String]())
     cat.setChangelogProperties(binIdent, ChangelogProperties(

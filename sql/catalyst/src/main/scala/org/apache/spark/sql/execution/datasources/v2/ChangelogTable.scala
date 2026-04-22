@@ -21,6 +21,7 @@ import java.util.{EnumSet => JEnumSet, Set => JSet}
 
 import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogInfo, Column, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, MICRO_BATCH_READ}
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, StringType, TimestampType}
@@ -68,5 +69,40 @@ object ChangelogTable {
     check("_change_type", StringType)
     check("_commit_version")           // connector-defined, any type accepted
     check("_commit_timestamp", TimestampType)
+
+    val needsRowId = cl.containsCarryoverRows() ||
+      cl.representsUpdateAsDeleteAndInsert() ||
+      cl.containsIntermediateChanges()
+    val needsRowVersion = cl.containsCarryoverRows() ||
+      cl.representsUpdateAsDeleteAndInsert()
+
+    if (needsRowId) {
+      val rowIds = try cl.rowId() catch {
+        case _: UnsupportedOperationException => Array.empty[NamedReference]
+      }
+      if (rowIds == null || rowIds.isEmpty) {
+        throw QueryCompilationErrors.changelogMissingRowIdError(cl.name)
+      }
+    }
+
+    if (needsRowVersion) {
+      val rowVersionRef = try Some(cl.rowVersion()) catch {
+        case _: UnsupportedOperationException => None
+      }
+      if (rowVersionRef.isEmpty) {
+        throw QueryCompilationErrors.changelogMissingRowVersionError(cl.name)
+      }
+      rowVersionRef.foreach { ref =>
+        val fieldNames = ref.fieldNames()
+        require(fieldNames.length == 1,
+          s"Nested rowVersion is not supported: ${fieldNames.mkString(".")}")
+        val columnName = fieldNames(0)
+        val col = byName.getOrElse(columnName,
+          throw QueryCompilationErrors.changelogMissingColumnError(cl.name, columnName))
+        if (col.nullable) {
+          throw QueryCompilationErrors.changelogNullableRowVersionError(cl.name, columnName)
+        }
+      }
+    }
   }
 }

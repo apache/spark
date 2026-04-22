@@ -23,8 +23,9 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogInfo}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, StringType}
 
 /**
  * Post-processes a resolved [[DataSourceV2Relation]] backed by a [[ChangelogTable]] to inject
@@ -45,6 +46,15 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
   private val CHANGELOG_TRANSFORMED_TAG =
     TreeNodeTag[Boolean]("changelog_transformed")
 
+  private object HelperColumn {
+    final val DelCnt = "_del_cnt"
+    final val InsCnt = "_ins_cnt"
+    final val MinRv = "_min_rv"
+    final val MaxRv = "_max_rv"
+
+    val all: Set[String] = Set(DelCnt, InsCnt, MinRv, MaxRv)
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (isAlreadyTransformed(plan)) return plan
     var updatedPlan = plan
@@ -57,6 +67,11 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
         val changelog = table.changelog
         val options = table.changelogInfo
 
+        // Net change computation is not yet implemented.
+        if (options.deduplicationMode() == ChangelogInfo.DeduplicationMode.NET_CHANGES) {
+          throw QueryCompilationErrors.cdcNetChangesNotYetSupported(changelog.name())
+        }
+
         val requiresCarryOverRemoval =
           options.deduplicationMode() != ChangelogInfo.DeduplicationMode.NONE &&
             changelog.containsCarryoverRows()
@@ -65,6 +80,15 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
         val requiresNetChanges =
           options.deduplicationMode() == ChangelogInfo.DeduplicationMode.NET_CHANGES &&
             changelog.containsIntermediateChanges()
+
+        // If carry-overs are surfaced and update detection is enabled, carry-overs will
+        // falsely be classified as updates, leading to false results. Hence we throw.
+        if (requiresUpdateDetection &&
+            changelog.containsCarryoverRows() &&
+            options.deduplicationMode() == ChangelogInfo.DeduplicationMode.NONE) {
+          throw QueryCompilationErrors.cdcUpdateDetectionRequiresCarryOverRemoval(
+            changelog.name())
+        }
 
         var updatedRel: LogicalPlan = rel
         if (requiresCarryOverRemoval || requiresUpdateDetection) {
@@ -92,93 +116,62 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
    *   - both active    -> Window(counts + rv bounds) -> Filter -> Project(relabel) -> Drop helpers
    *   - carry-over only -> Window(counts + rv bounds) -> Filter -> Drop helpers
    *   - update only    -> Window(counts only) -> Project(relabel) -> Drop helpers
-   *   - neither        -> plan is returned unchanged (caller guards this case)
+   *   - neither        -> not invoked (caller guards this case)
    */
   private def addRowLevelPostProcessing(
       plan: LogicalPlan,
       cl: Changelog,
       requiresCarryOverRemoval: Boolean,
       requiresUpdateDetection: Boolean): LogicalPlan = {
-    if (requiresCarryOverRemoval && requiresUpdateDetection) {
-      val planWithWindow = addWindowWithInsertAndDeleteCountsAndRowVersionBounds(plan, cl)
-      val planWithFilter = addCarryOverPairFilter(planWithWindow)
-      val planWithProjection = addUpdateRelabelProjection(planWithFilter)
-      removeHelperColumns(planWithProjection)
-    } else if (requiresCarryOverRemoval) {
-      val planWithWindow = addWindowWithInsertAndDeleteCountsAndRowVersionBounds(plan, cl)
-      val planWithFilter = addCarryOverPairFilter(planWithWindow)
-      removeHelperColumns(planWithFilter)
-    } else if (requiresUpdateDetection) {
-      val planWithWindow = addWindowWithInsertAndDeleteCountsOnly(plan, cl)
-      val planWithProjection = addUpdateRelabelProjection(planWithWindow)
-      removeHelperColumns(planWithProjection)
+    // Row-version bounds in the Window are needed iff we filter carry-over pairs.
+    var modifiedPlan = addPostProcessingWindow(plan, cl,
+      includeRowVersionBounds = requiresCarryOverRemoval)
+    if (requiresCarryOverRemoval) modifiedPlan = addCarryOverPairFilter(modifiedPlan)
+    if (requiresUpdateDetection) modifiedPlan = addUpdateRelabelProjection(modifiedPlan)
+    removeHelperColumns(modifiedPlan)
+  }
+
+  /**
+   * Adds a Window node partitioned by (rowId, _commit_version) that computes
+   * `_del_cnt` and `_ins_cnt` per partition, and, when `includeRowVersionBounds`
+   * is true, additionally `_min_rv` / `_max_rv` (min/max of `Changelog.rowVersion()`).
+   *
+   * `_del_cnt` / `_ins_cnt` drive update detection (1 each -> relabel as
+   * update_preimage / update_postimage). `_min_rv` / `_max_rv` drive carry-over
+   * detection (within a delete+insert pair, equal bounds signal a CoW carry-over).
+   */
+  private def addPostProcessingWindow(
+      plan: LogicalPlan,
+      cl: Changelog,
+      includeRowVersionBounds: Boolean): LogicalPlan = {
+    val changeTypeAttr = getAttribute(plan, "_change_type")
+    val rowIdExprs = V2ExpressionUtils.resolveRefs[NamedExpression](cl.rowId().toSeq, plan)
+    val commitVersionAttr = getAttribute(plan, "_commit_version")
+    val partitionByCols = rowIdExprs ++ Seq(commitVersionAttr)
+    val windowSpec = WindowSpecDefinition(partitionByCols, Nil, UnspecifiedFrame)
+
+    val insertIf = If(EqualTo(changeTypeAttr, Literal("insert")),
+      Literal(1), Literal(null, IntegerType))
+    val deleteIf = If(EqualTo(changeTypeAttr, Literal("delete")),
+      Literal(1), Literal(null, IntegerType))
+
+    val insCntAlias = Alias(WindowExpression(
+      Count(Seq(insertIf)).toAggregateExpression(), windowSpec), HelperColumn.InsCnt)()
+    val delCntAlias = Alias(WindowExpression(
+      Count(Seq(deleteIf)).toAggregateExpression(), windowSpec), HelperColumn.DelCnt)()
+    val baseAliases = Seq(delCntAlias, insCntAlias)
+    val rowVersionAliases = if (includeRowVersionBounds) {
+      val rowVersionExpr =
+        V2ExpressionUtils.resolveRef[NamedExpression](cl.rowVersion(), plan)
+      Seq(
+        Alias(WindowExpression(
+          Min(rowVersionExpr).toAggregateExpression(), windowSpec), HelperColumn.MinRv)(),
+        Alias(WindowExpression(
+          Max(rowVersionExpr).toAggregateExpression(), windowSpec), HelperColumn.MaxRv)())
     } else {
-      plan
+      Seq.empty
     }
-  }
-
-  /**
-   * Adds a Window node partitioned by (rowId, _commit_version) that computes
-   * `_del_cnt` (number of `delete` rows in the partition) and `_ins_cnt` (number of
-   * `insert` rows in the partition). These counts drive update detection: a partition
-   * with `_del_cnt >= 1 AND _ins_cnt >= 1` is relabeled as update_preimage /
-   * update_postimage.
-   */
-  private def addWindowWithInsertAndDeleteCountsOnly(
-      plan: LogicalPlan, cl: Changelog): LogicalPlan = {
-    val changeTypeAttr = getAttribute(plan, "_change_type")
-    val rowIdExprs = V2ExpressionUtils.resolveRefs[NamedExpression](cl.rowId().toSeq, plan)
-    val commitVersionAttr = getAttribute(plan, "_commit_version")
-    val partitionByCols = rowIdExprs ++ Seq(commitVersionAttr)
-    val windowSpec = WindowSpecDefinition(partitionByCols, Nil, UnspecifiedFrame)
-
-    val insertIf = If(EqualTo(changeTypeAttr, Literal("insert")),
-      Literal(1), Literal(null, IntegerType))
-    val deleteIf = If(EqualTo(changeTypeAttr, Literal("delete")),
-      Literal(1), Literal(null, IntegerType))
-
-    val insCntAlias = Alias(WindowExpression(
-      Count(Seq(insertIf)).toAggregateExpression(), windowSpec), "_ins_cnt")()
-    val delCntAlias = Alias(WindowExpression(
-      Count(Seq(deleteIf)).toAggregateExpression(), windowSpec), "_del_cnt")()
-
-    Window(Seq(delCntAlias, insCntAlias), partitionByCols, Nil, plan)
-  }
-
-  /**
-   * Adds a Window node partitioned by (rowId, _commit_version) that computes
-   * `_del_cnt` (number of `delete` rows in the partition), `_ins_cnt` (number of `insert`
-   * rows in the partition), `_min_rv` (minimum of the connector's `rowVersion()`
-   * expression in the partition) and `_max_rv` (maximum of `rowVersion()` in the
-   * partition). Used whenever carry-over detection is needed: within a delete+insert
-   * pair, `_min_rv == _max_rv` signals that both sides share the same rowVersion and
-   * the pair is a CoW carry-over.
-   */
-  private def addWindowWithInsertAndDeleteCountsAndRowVersionBounds(
-      plan: LogicalPlan, cl: Changelog): LogicalPlan = {
-    val changeTypeAttr = getAttribute(plan, "_change_type")
-    val rowIdExprs = V2ExpressionUtils.resolveRefs[NamedExpression](cl.rowId().toSeq, plan)
-    val commitVersionAttr = getAttribute(plan, "_commit_version")
-    val rowVersionExpr = V2ExpressionUtils.resolveRef[NamedExpression](cl.rowVersion(), plan)
-    val partitionByCols = rowIdExprs ++ Seq(commitVersionAttr)
-    val windowSpec = WindowSpecDefinition(partitionByCols, Nil, UnspecifiedFrame)
-
-    val insertIf = If(EqualTo(changeTypeAttr, Literal("insert")),
-      Literal(1), Literal(null, IntegerType))
-    val deleteIf = If(EqualTo(changeTypeAttr, Literal("delete")),
-      Literal(1), Literal(null, IntegerType))
-
-    val insCntAlias = Alias(WindowExpression(
-      Count(Seq(insertIf)).toAggregateExpression(), windowSpec), "_ins_cnt")()
-    val delCntAlias = Alias(WindowExpression(
-      Count(Seq(deleteIf)).toAggregateExpression(), windowSpec), "_del_cnt")()
-    val minRvAlias = Alias(WindowExpression(
-      Min(rowVersionExpr).toAggregateExpression(), windowSpec), "_min_rv")()
-    val maxRvAlias = Alias(WindowExpression(
-      Max(rowVersionExpr).toAggregateExpression(), windowSpec), "_max_rv")()
-
-    Window(Seq(delCntAlias, insCntAlias, minRvAlias, maxRvAlias),
-      partitionByCols, Nil, plan)
+    Window(baseAliases ++ rowVersionAliases, partitionByCols, Nil, plan)
   }
 
   /**
@@ -187,10 +180,10 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
    * A pair is a carry-over iff `_del_cnt = 1 AND _ins_cnt = 1 AND _min_rv = _max_rv`.
    */
   private def addCarryOverPairFilter(input: LogicalPlan): LogicalPlan = {
-    val delCnt = getAttribute(input, "_del_cnt")
-    val insCnt = getAttribute(input, "_ins_cnt")
-    val minRv = getAttribute(input, "_min_rv")
-    val maxRv = getAttribute(input, "_max_rv")
+    val delCnt = getAttribute(input, HelperColumn.DelCnt)
+    val insCnt = getAttribute(input, HelperColumn.InsCnt)
+    val minRv = getAttribute(input, HelperColumn.MinRv)
+    val maxRv = getAttribute(input, HelperColumn.MaxRv)
 
     val isCarryoverPair = And(
       And(EqualTo(delCnt, Literal(1L)), EqualTo(insCnt, Literal(1L))),
@@ -205,15 +198,21 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
    */
   private def addUpdateRelabelProjection(input: LogicalPlan): LogicalPlan = {
     val changeTypeAttr = getAttribute(input, "_change_type")
-    val delCnt = getAttribute(input, "_del_cnt")
-    val insCnt = getAttribute(input, "_ins_cnt")
+    val delCnt = getAttribute(input, HelperColumn.DelCnt)
+    val insCnt = getAttribute(input, HelperColumn.InsCnt)
 
     val isUpdate = And(
-      GreaterThanOrEqual(delCnt, Literal(1L)),
-      GreaterThanOrEqual(insCnt, Literal(1L)))
+      EqualTo(delCnt, Literal(1L)),
+      EqualTo(insCnt, Literal(1L)))
+    val isInvalid = Or(GreaterThan(delCnt, Literal(1L)), GreaterThan(insCnt, Literal(1L)))
     val updateType = If(EqualTo(changeTypeAttr, Literal("insert")),
       Literal("update_postimage"), Literal("update_preimage"))
-    val caseExpr = CaseWhen(Seq((isUpdate, updateType)), changeTypeAttr)
+
+    val raiseInvalid = RaiseError(
+      Literal("INVALID_CDC_OPTION.UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION"),
+      CreateMap(Nil),
+      StringType)
+    val caseExpr = CaseWhen(Seq(isInvalid -> raiseInvalid, isUpdate -> updateType), changeTypeAttr)
 
     val projectList = input.output.map { attr =>
       if (attr.name == "_change_type") Alias(caseExpr, "_change_type")()
@@ -233,8 +232,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
   private def injectNetChangeComputation(
       plan: LogicalPlan,
       cl: Changelog): LogicalPlan = {
-    throw new UnsupportedOperationException(
-      "Net change computation is not yet supported")
+        plan
   }
 
   // ---------------------------------------------------------------------------
@@ -250,14 +248,12 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
   }
 
   /**
-   * Removes any helper columns (`_del_cnt`, `_ins_cnt`, `_min_rv`, `_max_rv`) that
-   * earlier steps added to the plan. Helper columns not present in the input are
-   * silently ignored, so the same method works for all three branches in
-   * [[addRowLevelPostProcessing]].
+   * Removes any helper columns (see [[HelperColumn]]) that earlier steps added to the
+   * plan. Helper columns not present in the input are silently ignored, so this method
+   * can be applied unconditionally regardless of which post-processing steps ran.
    */
   private def removeHelperColumns(input: LogicalPlan): LogicalPlan = {
-    val helperNames = Set("_del_cnt", "_ins_cnt", "_min_rv", "_max_rv")
-    Project(input.output.filterNot(a => helperNames.contains(a.name)), input)
+    Project(input.output.filterNot(a => HelperColumn.all.contains(a.name)), input)
   }
 
   /**

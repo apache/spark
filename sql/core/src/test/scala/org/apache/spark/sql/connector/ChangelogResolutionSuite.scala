@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.ChangelogRange
-import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference, Transform}
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -217,8 +217,8 @@ class ChangelogResolutionSuite extends QueryTest with SharedSparkSession {
     false)
 
   private def cl(name: String, cols: (String, org.apache.spark.sql.types.DataType)*)
-      : BrokenChangelog = {
-    new BrokenChangelog(name, cols.map { case (n, t) => Column.create(n, t) }.toArray)
+      : TestChangelog = {
+    new TestChangelog(name, cols.map { case (n, t) => Column.create(n, t) }.toArray)
   }
 
   private def missing(columnName: String): Map[String, String] =
@@ -299,21 +299,64 @@ class ChangelogResolutionSuite extends QueryTest with SharedSparkSession {
         validChangeType, validVersion, validTimestamp),
       stubInfo())
   }
+
+  test("ChangelogTable - nullable rowVersion column fails") {
+    val cl = new TestChangelog(
+      "bad_cl",
+      Array(
+        Column.create("id", LongType, false),
+        Column.create("_change_type", StringType),
+        Column.create("_commit_version", LongType),
+        Column.create("_commit_timestamp", TimestampType),
+        Column.create("row_commit_version", LongType)),
+      carryoverRows = true,
+      rowIdRefs = Array(FieldReference.column("id")),
+      rowVersionRef = Some(FieldReference.column("row_commit_version")))
+    checkError(
+      intercept[AnalysisException] { ChangelogTable(cl, stubInfo()) },
+      condition = "INVALID_CHANGELOG_SCHEMA.NULLABLE_ROW_VERSION",
+      parameters = Map(
+        "changelogName" -> "bad_cl",
+        "columnName" -> "row_commit_version"))
+  }
+
+  test("ChangelogTable - non-nullable rowVersion column passes") {
+    val cl = new TestChangelog(
+      "good_cl",
+      Array(
+        Column.create("id", LongType, false),
+        Column.create("_change_type", StringType),
+        Column.create("_commit_version", LongType),
+        Column.create("_commit_timestamp", TimestampType),
+        Column.create("row_commit_version", LongType, false)),
+      carryoverRows = true,
+      rowIdRefs = Array(FieldReference.column("id")),
+      rowVersionRef = Some(FieldReference.column("row_commit_version")))
+    ChangelogTable(cl, stubInfo())
+  }
 }
 
 /**
  * Test-only [[Changelog]] implementation that returns a hand-crafted schema. Used to
  * exercise [[ChangelogTable]]'s schema validation without going through a real catalog.
+ *
+ * Defaults match a minimal connector with no post-processing capabilities. Tests opt
+ * into capability flags or `rowVersion()` overrides via constructor params.
  */
-private class BrokenChangelog(
+private class TestChangelog(
     nameArg: String,
-    cols: Array[Column]) extends Changelog {
+    cols: Array[Column],
+    carryoverRows: Boolean = false,
+    rowIdRefs: Array[NamedReference] = Array.empty,
+    rowVersionRef: Option[NamedReference] = None) extends Changelog {
   override def name(): String = nameArg
   override def columns(): Array[Column] = cols
-  override def containsCarryoverRows(): Boolean = false
+  override def containsCarryoverRows(): Boolean = carryoverRows
   override def containsIntermediateChanges(): Boolean = false
   override def representsUpdateAsDeleteAndInsert(): Boolean = false
-  override def rowId(): Array[NamedReference] = Array.empty
+  override def rowId(): Array[NamedReference] = rowIdRefs
+  override def rowVersion(): NamedReference =
+    rowVersionRef.getOrElse(super.rowVersion())
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     throw new UnsupportedOperationException("not needed for schema validation tests")
   }

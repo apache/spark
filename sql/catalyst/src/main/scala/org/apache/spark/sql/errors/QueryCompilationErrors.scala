@@ -3870,6 +3870,40 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "actualType" -> actualType))
   }
 
+  def changelogNullableRowVersionError(
+      changelogName: String, columnName: String): AnalysisException = {
+    new AnalysisException(
+      errorClass = "INVALID_CHANGELOG_SCHEMA.NULLABLE_ROW_VERSION",
+      messageParameters = Map(
+        "changelogName" -> changelogName,
+        "columnName" -> columnName))
+  }
+
+  def changelogMissingRowIdError(changelogName: String): AnalysisException = {
+    new AnalysisException(
+      errorClass = "INVALID_CHANGELOG_SCHEMA.MISSING_ROW_ID",
+      messageParameters = Map("changelogName" -> changelogName))
+  }
+
+  def changelogMissingRowVersionError(changelogName: String): AnalysisException = {
+    new AnalysisException(
+      errorClass = "INVALID_CHANGELOG_SCHEMA.MISSING_ROW_VERSION",
+      messageParameters = Map("changelogName" -> changelogName))
+  }
+
+  def cdcUpdateDetectionRequiresCarryOverRemoval(
+      changelogName: String): AnalysisException = {
+    new AnalysisException(
+      errorClass = "INVALID_CDC_OPTION.UPDATE_DETECTION_REQUIRES_CARRY_OVER_REMOVAL",
+      messageParameters = Map("changelogName" -> changelogName))
+  }
+
+  def cdcNetChangesNotYetSupported(changelogName: String): AnalysisException = {
+    new AnalysisException(
+      errorClass = "INVALID_CDC_OPTION.NET_CHANGES_NOT_YET_SUPPORTED",
+      messageParameters = Map("changelogName" -> changelogName))
+  }
+
   def invalidCdcOptionConflictingRangeTypes(): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_CDC_OPTION.CONFLICTING_RANGE_TYPES",
