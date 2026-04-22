@@ -165,5 +165,4 @@ class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSess
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
   }
-
 }
