@@ -76,7 +76,7 @@ class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSess
   private def withExtSession(f: SparkSession => Unit): Unit = {
     val savedActive = SparkSession.getActiveSession
     val savedDefault = SparkSession.getDefaultSession
-    val session = try {
+    val extSession = try {
       SparkSession.clearActiveSession()
       SparkSession.clearDefaultSession()
       SparkSession.builder()
@@ -89,9 +89,9 @@ class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSess
         SparkSession.setActiveSession(s))
     }
     try {
-      f(session)
+      f(extSession)
     } finally {
-      session.close()
+      extSession.close()
     }
   }
 
@@ -105,8 +105,9 @@ class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSess
       checkAnswer(spark.table(T), Seq(Row(1, 100)))
 
       // external session writes data
-      withExtSession(_.sql(
-        s"INSERT INTO $T VALUES (2, 200)").collect())
+      withExtSession { ext =>
+        ext.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+      }
 
       // a fresh query from session1 picks up external write
       checkAnswer(

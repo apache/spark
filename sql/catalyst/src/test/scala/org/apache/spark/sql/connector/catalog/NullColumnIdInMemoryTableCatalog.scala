@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.connector.ColumnImpl
 
 /**
@@ -25,24 +27,24 @@ import org.apache.spark.sql.internal.connector.ColumnImpl
  * support column identity tracking.
  *
  * Tables are stored as [[NullColumnIdInMemoryTable]] instances that
- * override [[columns]] to strip IDs. Data and schema evolution are
- * preserved by transferring data from the delegate table.
+ * override [[columns]] to strip IDs. Data is copied from the table
+ * created by the parent [[InMemoryTableCatalog]].
  *
- * When column IDs are null, [[V2TableUtil.validateCapturedColumnIds]]
+ * When column IDs are null, [[validateCapturedColumnIds]]
  * skips validation entirely, meaning drop/re-add of a column is NOT
  * detected via column IDs.
  */
 class NullColumnIdInMemoryTableCatalog extends InMemoryTableCatalog {
 
   private def toNullColumnIdTable(table: InMemoryTable): NullColumnIdInMemoryTable = {
-    val wrapped = new NullColumnIdInMemoryTable(
+    val nullColIdTable = new NullColumnIdInMemoryTable(
       name = table.name,
       columns = table.columns(),
       partitioning = table.partitioning,
       properties = table.properties,
       constraints = table.constraints)
-    wrapped.alterTableWithData(table.data, table.schema)
-    wrapped
+    nullColIdTable.alterTableWithData(table.data, table.schema)
+    nullColIdTable
   }
 
   override def createTable(
@@ -64,17 +66,15 @@ class NullColumnIdInMemoryTableCatalog extends InMemoryTableCatalog {
 
 /**
  * An [[InMemoryTable]] whose [[columns]] method always returns null
- * column IDs. Internally, column IDs are assigned by the
- * [[InMemoryBaseTable]] constructor (needed for data operations), but
- * they are stripped when [[columns]] is called, simulating a connector
- * that does not support column identity tracking.
+ * column IDs, simulating a connector that does not support column
+ * identity tracking.
  */
 class NullColumnIdInMemoryTable(
     name: String,
     columns: Array[Column],
-    partitioning: Array[org.apache.spark.sql.connector.expressions.Transform],
+    partitioning: Array[Transform],
     properties: java.util.Map[String, String],
-    constraints: Array[org.apache.spark.sql.connector.catalog.constraints.Constraint] =
+    constraints: Array[Constraint] =
       Array.empty)
   extends InMemoryTable(
     name = name,
