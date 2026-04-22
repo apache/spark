@@ -180,6 +180,20 @@ Your pipelines implemented with the Python API must import this module. It's rec
 from pyspark import pipelines as dp
 ```
 
+### The Spark Session in Python Pipelines
+
+The Spark session is automatically injected by the pipeline framework and is available as `spark` in every Python pipeline file — no initialization code is required. You can use `spark` directly without importing or constructing a `SparkSession`:
+
+```python
+from pyspark import pipelines as dp
+
+@dp.materialized_view
+def my_view():
+    return spark.range(10)
+```
+
+Previous versions of Declarative Pipelines required explicitly assigning the session with `spark = SparkSession.active()` at the top of each pipeline file. This is still allowed and continues to work correctly. However, if you do assign the session explicitly, `SparkSession.active()` is the only supported way to do so — any other method of obtaining or constructing a `SparkSession` is unsupported and may lead to unexpected behavior.
+
 ### Creating a Materialized View in Python
 
 The `@dp.materialized_view` decorator tells SDP to create a materialized view based on the results of a function that performs a batch read:
