@@ -158,7 +158,7 @@ class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSess
         exception = intercept[AnalysisException] { df.collect() },
         condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
         matchPVals = true,
-        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+        parameters = Map("tableName" -> ".*", "errors" -> "(?s).*"))
     }
   }
 }
