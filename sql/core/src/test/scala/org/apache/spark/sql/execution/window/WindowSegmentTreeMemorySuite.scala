@@ -251,26 +251,35 @@ class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext 
     }
   }
 
-  test("T9 ON_HEAP path: spiller mode follows TMM tungsten mode") {
+  test("T9 ON_HEAP Tungsten: spiller mode is ON_HEAP") {
     withTmm(offHeap = false) { (tmm, _) =>
       val tree = buildTree(tmm, (0 until 16), fanout = 4, blockSize = 4,
         maxCachedBlocks = Some(2))
       try {
         assert(queryMin(tree, 0, 16) == 0)
-        assert(tree.testOnlySpiller().getMode == tmm.getTungstenMemoryMode)
         assert(tree.testOnlySpiller().getMode == MemoryMode.ON_HEAP)
+        // In ON_HEAP Tungsten, our hardcoded mode also coincides with
+        // `tmm.getTungstenMemoryMode`, so segtree and rowArray share the
+        // pool and I8 (rowArray-spilled short-circuit) fires.
+        assert(tree.testOnlySpiller().getMode == tmm.getTungstenMemoryMode)
       } finally tree.close()
     }
   }
 
-  test("T9 OFF_HEAP path: spiller mode follows TMM tungsten mode") {
+  test("T9 OFF_HEAP Tungsten: spiller mode stays ON_HEAP (not OFF_HEAP)") {
     withTmm(offHeap = true) { (tmm, _) =>
       val tree = buildTree(tmm, (0 until 16), fanout = 4, blockSize = 4,
         maxCachedBlocks = Some(2))
       try {
         assert(queryMin(tree, 0, 16) == 0)
-        assert(tree.testOnlySpiller().getMode == tmm.getTungstenMemoryMode)
-        assert(tree.testOnlySpiller().getMode == MemoryMode.OFF_HEAP)
+        // Segtree's cache is JVM-heap (`SpecificInternalRow` /
+        // `Array[Array[InternalRow]]`), never Tungsten pages. The spiller
+        // must stay ON_HEAP regardless of `spark.memory.offHeap.enabled`,
+        // or `spill(n)` would phantom-credit the off-heap pool and
+        // violate TMM's same-pool spill contract. Mirrors `Spillable`.
+        assert(tree.testOnlySpiller().getMode == MemoryMode.ON_HEAP)
+        assert(tmm.getTungstenMemoryMode == MemoryMode.OFF_HEAP)
+        assert(tree.testOnlySpiller().getMode != tmm.getTungstenMemoryMode)
       } finally tree.close()
     }
   }

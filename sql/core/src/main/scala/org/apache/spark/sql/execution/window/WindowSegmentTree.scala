@@ -22,7 +22,7 @@ import java.util.{LinkedHashMap => JLinkedHashMap, Map => JMap}
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
-import org.apache.spark.memory.{MemoryConsumer, TaskMemoryManager}
+import org.apache.spark.memory.{MemoryConsumer, MemoryMode, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, Count, DeclarativeAggregate, Max, Min, StddevPop, StddevSamp, Sum, VariancePop, VarianceSamp}
@@ -177,12 +177,25 @@ private[window] class WindowSegmentTree(
    * [[MemoryConsumer.freeMemory]], which update the base class `used`
    * AtomicLong so TMM's consumer-priority sort sees our pressure accurately.
    *
+   * Hardcoded [[MemoryMode.ON_HEAP]] (not `tmm.getTungstenMemoryMode`): the
+   * cache holds plain JVM objects (`SpecificInternalRow` /
+   * `Array[Array[InternalRow]]`), never Tungsten pages. Under
+   * `spark.memory.offHeap.enabled=true`, enrolling as OFF_HEAP would let
+   * TMM pick us as a spill candidate for off-heap pressure; our `spill()`
+   * would then phantom-credit the off-heap pool without releasing any
+   * off-heap bytes, violating [[TaskMemoryManager#acquireExecutionMemory]]'s
+   * same-pool spill contract. Mirrors
+   * [[org.apache.spark.util.collection.Spillable]], which also hardcodes
+   * ON_HEAP for the same reason. Consequence under off-heap Tungsten: I8
+   * (below) degrades to a no-op because segtree and `rowArray` live in
+   * different pools -- a loss of optimization, not a correctness hazard.
+   *
    * @note `spill()` MUST NOT call `acquireMemory` (see I1).
    */
   private final class SegTreeSpiller extends MemoryConsumer(
       taskMemoryManager,
       taskMemoryManager.pageSizeBytes(),
-      taskMemoryManager.getTungstenMemoryMode()) {
+      MemoryMode.ON_HEAP) {
     override def spill(size: Long, trigger: MemoryConsumer): Long = {
       // I2: self-trigger short-circuit (prevent re-entrant eviction).
       if (trigger eq this) return 0L
