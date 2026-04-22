@@ -680,6 +680,80 @@ class GroupedAggArrowIterUDFPeakmemBench(_GroupedAggArrowIterBenchMixin, _Peakme
     pass
 
 
+# -- SQL_GROUPED_AGG_PANDAS_UDF ------------------------------------------------
+# UDF receives ``pd.Series`` columns per group, returns scalar.
+
+
+class _GroupedAggPandasBenchMixin:
+    """Provides _write_scenario for SQL_GROUPED_AGG_PANDAS_UDF."""
+
+    def _grouped_agg_pandas_sum(col):
+        """Sum a single Pandas Series."""
+        return col.sum()
+
+    def _grouped_agg_pandas_mean_multi(col0, col1):
+        """Mean of two Pandas Series combined."""
+        return (col0.mean() or 0) + (col1.mean() or 0)
+
+    _scenario_configs = {
+        "few_groups_sm": (50, 5_000, 5),
+        "few_groups_lg": (50, 50_000, 5),
+        "many_groups_sm": (2_000, 500, 5),
+        "many_groups_lg": (500, 10_000, 5),
+        "wide_cols": (200, 5_000, 20),
+    }
+
+    @staticmethod
+    def _build_scenario(name):
+        """Build a single scenario by name."""
+        np.random.seed(42)
+        num_groups, rows_per_group, n_cols = _GroupedAggPandasBenchMixin._scenario_configs[name]
+        return MockDataFactory.make_grouped_batches(
+            num_groups=num_groups,
+            num_rows=rows_per_group,
+            num_cols=n_cols,
+            spark_type_pool=MockDataFactory.NUMERIC_TYPES,
+            batch_size=rows_per_group,
+        )
+
+    _udfs = {
+        "sum_udf": _grouped_agg_pandas_sum,
+        "mean_multi_udf": _grouped_agg_pandas_mean_multi,
+    }
+    params = [list(_scenario_configs), list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        groups, _schema = self._build_scenario(scenario)
+        udf_func = self._udfs[udf_name]
+
+        # sum_udf uses 1 arg, mean_multi_udf uses 2 args
+        if "multi" in udf_name:
+            arg_offsets = [0, 1]
+        else:
+            arg_offsets = [0]
+
+        return_type = DoubleType()
+
+        def write_udf(b):
+            MockProtocolWriter.write_udf_payload(udf_func, return_type, arg_offsets, b)
+
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+            write_udf,
+            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, num_dfs=1, buf=b),
+            buf,
+        )
+
+
+class GroupedAggPandasUDFTimeBench(_GroupedAggPandasBenchMixin, _TimeBenchBase):
+    pass
+
+
+class GroupedAggPandasUDFPeakmemBench(_GroupedAggPandasBenchMixin, _PeakmemBenchBase):
+    pass
+
+
 # -- SQL_GROUPED_MAP_ARROW_UDF ------------------------------------------------
 # UDF receives ``pa.Table``, returns ``pa.Table``.
 
@@ -1165,6 +1239,42 @@ class ScalarPandasUDFTimeBench(_ScalarPandasBenchMixin, _TimeBenchBase):
 
 
 class ScalarPandasUDFPeakmemBench(_ScalarPandasBenchMixin, _PeakmemBenchBase):
+    pass
+
+
+# -- SQL_SCALAR_PANDAS_ITER_UDF ---------------------------------------------
+# UDF receives ``Iterator[pandas.Series]``, returns ``Iterator[pandas.Series]``.
+
+
+class _ScalarPandasIterBenchMixin(_ScalarPandasBenchMixin):
+    """Mixin for SQL_SCALAR_PANDAS_ITER_UDF benchmarks."""
+
+    def _identity_pandas_iter(it):
+        return (s for s in it)
+
+    def _sort_pandas_iter(it):
+        for s in it:
+            yield s.sort_values().reset_index(drop=True)
+
+    def _nullcheck_pandas_iter(it):
+        for s in it:
+            yield s.notna()
+
+    _eval_type = PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
+    _udfs = {
+        "identity_udf": (_identity_pandas_iter, None, [0]),
+        "sort_udf": (_sort_pandas_iter, None, [0]),
+        "nullcheck_udf": (_nullcheck_pandas_iter, BooleanType(), [0]),
+    }
+    params = [list(_ScalarPandasBenchMixin._scenario_configs), list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+
+class ScalarPandasIterUDFTimeBench(_ScalarPandasIterBenchMixin, _TimeBenchBase):
+    pass
+
+
+class ScalarPandasIterUDFPeakmemBench(_ScalarPandasIterBenchMixin, _PeakmemBenchBase):
     pass
 
 

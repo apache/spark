@@ -23,15 +23,14 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.TestUtils
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanInfo}
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SQLAppStatusStore}
 import org.apache.spark.sql.internal.SQLConf.WHOLESTAGE_CODEGEN_ENABLED
-import org.apache.spark.sql.test.SQLTestUtils
 
 
-trait SQLMetricsTestUtils extends SQLTestUtils {
+trait SQLMetricsTestUtils extends QueryTest {
   import testImplicits._
 
   protected def currentExecutionIds(): Set[Long] = {

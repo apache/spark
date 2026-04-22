@@ -349,6 +349,27 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * Create a [[SetPathCommand]] to set the session SQL path.
+   * Example SQL :
+   * {{{
+   *   SET PATH = spark_catalog.default, system.builtin;
+   *   SET PATH = DEFAULT_PATH;
+   *   SET PATH = SYSTEM_PATH, spark_catalog.myschema;
+   * }}}
+   */
+  override def visitSetPath(ctx: SetPathContext): LogicalPlan = withOrigin(ctx) {
+    val elements = ctx.pathElement().asScala.map { pe =>
+      if (pe.DEFAULT_PATH() != null) PathElement.DefaultPath
+      else if (pe.SYSTEM_PATH() != null) PathElement.SystemPath
+      else if (pe.PATH() != null) PathElement.PathRef
+      else if (pe.CURRENT_DATABASE() != null) PathElement.CurrentDatabase
+      else if (pe.CURRENT_SCHEMA() != null) PathElement.CurrentSchema
+      else PathElement.SchemaInPath(visitMultipartIdentifier(pe.multipartIdentifier()))
+    }.toSeq
+    SetPathCommand(elements)
+  }
+
+  /**
    * Create a [[SetCommand]] logical plan to set [[SQLConf.SESSION_LOCAL_TIMEZONE]]
    * Example SQL :
    * {{{

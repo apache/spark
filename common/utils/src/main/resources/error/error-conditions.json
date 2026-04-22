@@ -2061,6 +2061,12 @@
     ],
     "sqlState" : "42711"
   },
+  "DUPLICATE_SQL_PATH_ENTRY" : {
+    "message" : [
+      "Duplicate SQL path entry <pathEntry>. The session SQL path cannot contain the same namespace more than once (including after expanding shortcuts like DEFAULT_PATH or SYSTEM_PATH)."
+    ],
+    "sqlState" : "42732"
+  },
   "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE" : {
     "message" : [
       "Found duplicate variable <variableName> in the declare variable list. Please, remove one of them."
@@ -4474,6 +4480,12 @@
       "<plan>"
     ],
     "sqlState" : "XXKD0"
+  },
+  "INVALID_SQL_PATH_SCHEMA_REFERENCE" : {
+    "message" : [
+      "Invalid schema reference in SET PATH: <qualifiedName>. Use at least two name parts (catalog.schema); multi-level namespaces are allowed."
+    ],
+    "sqlState" : "42601"
   },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
@@ -7887,6 +7899,11 @@
       "SET_OPERATION_ON_VARIANT_TYPE" : {
         "message" : [
           "Cannot have VARIANT type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
+        ]
+      },
+      "SET_PATH_WHEN_DISABLED" : {
+        "message" : [
+          "SET PATH is disabled. Set <config> to true to enable it."
         ]
       },
       "SET_PROPERTIES_AND_DBPROPERTIES" : {

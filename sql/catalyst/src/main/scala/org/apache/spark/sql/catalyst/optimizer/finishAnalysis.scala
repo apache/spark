@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, con
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.{instantToNanosOfDay, truncateTimeToPrecision}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -156,13 +155,9 @@ case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[Logic
   def apply(plan: LogicalPlan): LogicalPlan = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     lazy val currentNamespace = catalogManager.currentNamespace.quoted
-    lazy val currentNamespaceSeq = catalogManager.currentNamespace.toSeq
     lazy val currentCatalog = catalogManager.currentCatalog.name()
     lazy val currentUser = CurrentUserContext.getCurrentUser
-    lazy val currentPathStr = {
-      val catalogPath = (currentCatalog +: currentNamespaceSeq).toSeq
-      SQLConf.get.resolutionSearchPath(catalogPath).map(_.quoted).mkString(",")
-    }
+    lazy val currentPathStr = catalogManager.currentPathString
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
       case CurrentDatabase() =>

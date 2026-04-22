@@ -25,6 +25,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.executor.{ShuffleWriteMetrics, TaskMetrics}
 import org.apache.spark.internal.config.MEMORY_FRACTION
+import org.apache.spark.internal.config.MEMORY_OFFHEAP_ENABLED
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.memory._
 import org.apache.spark.unsafe.Platform
@@ -132,6 +133,7 @@ class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext wi
       .set(IS_TESTING, true)
       .set(TEST_MEMORY, 1600L)
       .set(MEMORY_FRACTION, 0.9999)
+      .set(MEMORY_OFFHEAP_ENABLED, false)
 
     sc = new SparkContext(conf)
     val memoryManager = UnifiedMemoryManager(conf, 1)

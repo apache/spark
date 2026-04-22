@@ -24,11 +24,10 @@ import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.columnar.{DefaultCachedBatch, DefaultCachedBatchKryoSerializer}
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.storage.StorageLevel
 
 class CacheTableInKryoSuite extends QueryTest
-  with SQLTestUtils
   with SharedSparkSession {
 
   override def sparkConf: SparkConf = {
