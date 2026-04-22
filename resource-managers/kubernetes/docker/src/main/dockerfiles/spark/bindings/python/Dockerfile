@@ -31,7 +31,7 @@ USER 0
 RUN mkdir ${SPARK_HOME}/python
 RUN apt-get update && \
     apt install -y --no-install-recommends python3 python3-pip && \
-    pip3 install --no-cache-dir --upgrade pip setuptools && \
+    pip3 install --break-system-packages --no-cache-dir --upgrade setuptools && \
     apt-get clean && \
     rm -rf /var/cache/apt/* /var/lib/apt/lists/*
 
