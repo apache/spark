@@ -20,15 +20,12 @@ package org.apache.spark.scheduler.local
 import java.io.File
 import java.net.URL
 import java.nio.ByteBuffer
-
-import org.apache.hadoop.security.UserGroupInformation
-
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.executor.{Executor, ExecutorBackend}
-import org.apache.spark.internal.{config, Logging, LogKeys}
+import org.apache.spark.internal.{LogKeys, Logging, config}
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
@@ -116,7 +113,7 @@ private[spark] class LocalSchedulerBackend(
     conf: SparkConf,
     scheduler: TaskSchedulerImpl,
     val totalCores: Int)
-  extends SchedulerBackend with ExecutorBackend with Logging {
+  extends SchedulerBackend with ExecutorBackend with SupportsDelegationToken with Logging {
 
   private val appId = conf.get("spark.test.appId", "local-" + System.currentTimeMillis)
   private var localEndpoint: RpcEndpointRef = null
@@ -126,7 +123,14 @@ private[spark] class LocalSchedulerBackend(
     override def conf: SparkConf = LocalSchedulerBackend.this.conf
     override def onStopRequest(): Unit = stop(SparkAppHandle.State.KILLED)
   }
-  private var delegationTokenManager: Option[HadoopDelegationTokenManager] = None
+
+  override protected def createTokenManager(): Option[HadoopDelegationTokenManager] = {
+    Some(new HadoopDelegationTokenManager(conf, scheduler.sc.hadoopConfiguration, localEndpoint))
+  }
+
+  override protected def updateDelegationTokens(tokens: Array[Byte]): Unit = {
+    SparkHadoopUtil.get.addDelegationTokens(tokens, conf)
+  }
 
   /**
    * Returns a list of URLs representing the user classpath.
@@ -146,7 +150,7 @@ private[spark] class LocalSchedulerBackend(
     localEndpoint = rpcEnv.setupEndpoint("LocalSchedulerBackendEndpoint", executorEndpoint)
 
     // call this after localEndpoint is assigned
-    setupDelegationTokenManager()
+    setupTokenManager()
 
     listenerBus.post(SparkListenerExecutorAdded(
       System.currentTimeMillis,
@@ -188,8 +192,8 @@ private[spark] class LocalSchedulerBackend(
   }
 
   private def stop(finalState: SparkAppHandle.State): Unit = {
-    delegationTokenManager.foreach(_.stop())
     localEndpoint.ask(StopExecutor)
+    stopTokenManager()
     try {
       launcherBackend.setState(finalState)
     } finally {
@@ -199,29 +203,5 @@ private[spark] class LocalSchedulerBackend(
 
   override def getTaskThreadDump(taskId: Long, executorId: String): Option[ThreadStackTrace] = {
     localEndpoint.askSync[Option[ThreadStackTrace]](TaskThreadDump(taskId))
-  }
-
-  private def setupDelegationTokenManager(): Unit = {
-    if (UserGroupInformation.isSecurityEnabled) {
-      delegationTokenManager = Some(
-        new HadoopDelegationTokenManager(conf, scheduler.sc.hadoopConfiguration, localEndpoint))
-      delegationTokenManager.foreach { dtm =>
-        val ugi = UserGroupInformation.getCurrentUser
-        val tokens = if (dtm.renewalEnabled) {
-          dtm.start()
-        } else {
-          val creds = ugi.getCredentials
-          dtm.obtainDelegationTokens(creds)
-          if (creds.numberOfTokens() > 0 || creds.numberOfSecretKeys() > 0) {
-            SparkHadoopUtil.get.serialize(creds)
-          } else {
-            null
-          }
-        }
-        if (tokens != null) {
-          SparkHadoopUtil.get.addDelegationTokens(tokens, conf)
-        }
-      }
-    }
   }
 }
