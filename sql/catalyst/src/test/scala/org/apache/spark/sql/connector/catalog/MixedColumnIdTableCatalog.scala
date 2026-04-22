@@ -49,16 +49,7 @@ class MixedColumnIdTableCatalog extends InMemoryTableCatalog {
       constraints = table.constraints,
       id = table.id,
       nullIdNames = snapshot)
-    table.dataMap.synchronized {
-      table.dataMap.foreach { case (key, splits) =>
-        val copiedSplits = splits.map { bufferedRows =>
-          val copiedBufferedRows = new BufferedRows(bufferedRows.key, bufferedRows.schema)
-          copiedBufferedRows.rows ++= bufferedRows.rows.map(_.copy())
-          copiedBufferedRows
-        }
-        mixedTable.dataMap.put(key, copiedSplits)
-      }
-    }
+    mixedTable.alterTableWithData(table.data, table.schema)
     mixedTable
   }
 
@@ -129,14 +120,7 @@ class MixedColumnIdInMemoryTable(
       id,
       nullIdNames)
     dataMap.synchronized {
-      dataMap.foreach { case (key, splits) =>
-        val copiedSplits = splits.map { bufferedRows =>
-          val copiedBufferedRows = new BufferedRows(bufferedRows.key, bufferedRows.schema)
-          copiedBufferedRows.rows ++= bufferedRows.rows.map(_.copy())
-          copiedBufferedRows
-        }
-        copiedTable.dataMap.put(key, copiedSplits)
-      }
+      copiedTable.alterTableWithData(data, schema)
     }
     copiedTable
   }
