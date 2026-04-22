@@ -466,6 +466,7 @@ class Analyzer(
       ResolveOrdinalInOrderByAndGroupBy ::
       ExtractGenerator ::
       ResolveGenerate ::
+      ResolveCustomPredicates ::
       ResolveFunctions ::
       ResolveProcedures ::
       BindProcedures ::
@@ -2029,6 +2030,8 @@ class Analyzer(
   object LookupFunctions extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = {
       val externalFunctionNameSet = new mutable.HashSet[Seq[String]]()
+      // Collect custom predicate names from DSv2 tables so we don't reject them.
+      val customPredNames = collectCustomPredicateNames(plan)
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
         case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _) =>
@@ -2074,18 +2077,67 @@ class Analyzer(
                   throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), f)
 
                 case FunctionType.NotFound =>
-                  val catalogPath =
-                    catalogManager.currentCatalog.name +: catalogManager.currentNamespace
-                  val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
-                    .map(_.quoted)
-                  throw QueryCompilationErrors.unresolvedRoutineError(
-                    nameParts,
-                    searchPath,
-                    f.origin)
+                  // Check if this could be a custom predicate from a DSv2 table.
+                  // ResolveCustomPredicates will handle resolution in the Resolution batch.
+                  if (nameParts.length == 1 && customPredNames.contains(
+                      nameParts.head.toUpperCase(Locale.ROOT))) {
+                    f
+                  } else {
+                    val catalogPath =
+                      catalogManager.currentCatalog.name +: catalogManager.currentNamespace
+                    val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
+                      .map(_.quoted)
+                    throw QueryCompilationErrors.unresolvedRoutineError(
+                      nameParts,
+                      searchPath,
+                      f.origin)
+                  }
               }
             }
           }
       }
+    }
+
+    /**
+     * Collects custom predicate SQL names (upper-cased) from DSv2 tables reachable from
+     * the plan. LookupFunctions runs once in the "Simple Sanity Check" batch before
+     * relation resolution, so we inspect both [[UnresolvedRelation]]s (by looking up
+     * matching temp views) and any [[DataSourceV2Relation]]s that are already resolved
+     * (e.g., those produced by DataFrame APIs). Returns an empty set when the feature
+     * is disabled.
+     */
+    private def collectCustomPredicateNames(plan: LogicalPlan): Set[String] = {
+      if (!conf.extendedPredicatePushdownEnabled) return Set.empty
+
+      val names = mutable.Set.empty[String]
+      plan.foreach {
+        case u: UnresolvedRelation =>
+          // Temp views are the only unresolved relations that can be resolved
+          // synchronously here; catalog-backed relations are picked up during the
+          // Resolution batch where ResolveCustomPredicates runs directly.
+          relationResolution.lookupTempView(u.multipartIdentifier).foreach { tvr =>
+            tvr.plan.foreach(collectNamesFromPlan(_, names))
+          }
+        case r: DataSourceV2Relation =>
+          collectNamesFromTable(r.table, names)
+        case _ =>
+      }
+      names.toSet
+    }
+
+    private def collectNamesFromPlan(
+        plan: LogicalPlan, names: mutable.Set[String]): Unit = {
+      plan.foreach {
+        case r: DataSourceV2Relation => collectNamesFromTable(r.table, names)
+        case _ =>
+      }
+    }
+
+    private def collectNamesFromTable(
+        table: Table, names: mutable.Set[String]): Unit = table match {
+      case t: SupportsCustomPredicates =>
+        t.customPredicates().foreach(d => names += d.sqlName().toUpperCase(Locale.ROOT))
+      case _ =>
     }
 
     def normalizeFuncName(name: Seq[String]): Seq[String] = {

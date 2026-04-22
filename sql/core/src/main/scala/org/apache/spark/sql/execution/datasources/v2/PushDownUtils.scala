@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
@@ -27,7 +28,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.{IdentityTransform, SortOrder}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownPredicateCapabilities, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{PartitionPredicateField, PartitionPredicateImpl, SupportsPushDownCatalystFilters}
@@ -88,6 +89,17 @@ object PushDownUtils extends Logging {
           (postScanFilters ++ untranslatableExprs).toImmutableArraySeq)
 
       case r: SupportsPushDownV2Filters =>
+        // Query extra predicate capabilities once for this scan builder instance
+        val extraCaps: Set[String] = if (SQLConf.get.extendedPredicatePushdownEnabled) {
+          r match {
+            case caps: SupportsPushDownPredicateCapabilities =>
+              caps.supportedPredicateNames().asScala.toSet
+            case _ => Set.empty[String]
+          }
+        } else {
+          Set.empty[String]
+        }
+
         // Divide the filters into those translatable and untranslatable to data source filters.
         // For the translated filters, we will try to push them down to the data source,
         // and the data source will return the filters that it cannot guarantee to be true
@@ -99,7 +111,7 @@ object PushDownUtils extends Logging {
         for (filterExpr <- filters) {
           val translated =
             DataSourceV2Strategy.translateFilterV2WithMapping(
-              filterExpr, Some(translatedFilterToExpr))
+              filterExpr, Some(translatedFilterToExpr), extraCaps)
           if (translated.isEmpty) {
             untranslatableExprs += filterExpr
           } else {
