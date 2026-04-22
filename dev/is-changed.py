@@ -68,7 +68,7 @@ def main():
 
     rejected = [f for f in changed_files if f.endswith(".jar") or f.endswith(".class")]
     if rejected:
-        raise SystemExit(
+        sys.exit(
             "Cannot add .jar or .class files to the repository "
             f"({', '.join(rejected)}). "
             "Generate them dynamically at test time instead."
