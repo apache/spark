@@ -59,7 +59,8 @@ class TypeChangePreservesColIdTableCatalog extends InMemoryTableCatalog {
       newColsWithPreservedIds,
       alteredTable.partitioning,
       alteredTable.properties,
-      alteredTable.constraints)
+      alteredTable.constraints,
+      id = alteredTable.id)
     tableWithPreservedIds.alterTableWithData(alteredTable.data, alteredTable.schema)
     tables.put(ident, tableWithPreservedIds)
     tableWithPreservedIds

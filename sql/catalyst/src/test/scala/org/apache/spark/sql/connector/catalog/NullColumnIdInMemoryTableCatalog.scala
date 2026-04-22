@@ -42,7 +42,8 @@ class NullColumnIdInMemoryTableCatalog extends InMemoryTableCatalog {
       columns = table.columns(),
       partitioning = table.partitioning,
       properties = table.properties,
-      constraints = table.constraints)
+      constraints = table.constraints,
+      id = table.id)
     nullColIdTable.alterTableWithData(table.data, table.schema)
     nullColIdTable
   }
@@ -75,13 +76,16 @@ class NullColumnIdInMemoryTable(
     partitioning: Array[Transform],
     properties: java.util.Map[String, String],
     constraints: Array[Constraint] =
-      Array.empty)
+      Array.empty,
+    override val id: String =
+      java.util.UUID.randomUUID().toString)
   extends InMemoryTable(
     name = name,
     columns = columns,
     partitioning = partitioning,
     properties = properties,
-    constraints = constraints) {
+    constraints = constraints,
+    id = id) {
 
   override def columns(): Array[Column] = {
     super.columns().map(_.asInstanceOf[ColumnImpl].copy(id = null))
