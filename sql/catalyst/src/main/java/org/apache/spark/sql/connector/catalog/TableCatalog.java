@@ -89,10 +89,26 @@ public interface TableCatalog extends CatalogPlugin {
 
   /**
    * A reserved property to specify the view text of a general table that represents
-   * a SQL view. The identifiers must be fully qualified in the view text to be
-   * context-independent, otherwise the behavior is undefined.
+   * a SQL view. Unqualified identifiers in the view text are resolved against
+   * {@link #PROP_VIEW_CURRENT_CATALOG} and {@link #PROP_VIEW_CURRENT_NAMESPACE} at read time.
    */
   String PROP_VIEW_TEXT = "view_text";
+
+  /**
+   * A reserved property to specify the current catalog at the time the view was created.
+   * Unqualified identifiers in the view text are resolved relative to this catalog and
+   * {@link #PROP_VIEW_CURRENT_NAMESPACE}.
+   */
+  String PROP_VIEW_CURRENT_CATALOG = "view.currentCatalog";
+
+  /**
+   * A reserved property to specify the current namespace at the time the view was created.
+   * The value is a Spark multi-part identifier string (backtick-quoted parts joined with
+   * {@code "."}, e.g. {@code `db1`.`db2`}) and is parsed with
+   * {@code ParserInterface.parseMultipartIdentifier}. An absent or empty value means the
+   * view was created with no current namespace.
+   */
+  String PROP_VIEW_CURRENT_NAMESPACE = "view.currentNamespace";
 
   /**
    * A prefix used to specify the Spark SQL configurations for reading this view.

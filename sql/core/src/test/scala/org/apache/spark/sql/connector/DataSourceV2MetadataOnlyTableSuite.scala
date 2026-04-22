@@ -86,6 +86,41 @@ class DataSourceV2MetadataOnlyTableSuite extends QueryTest with SharedSparkSessi
       checkAnswer(spark.table("general_catalog.non_ansi.test_view"), Row("b", null))
     }
   }
+
+  test("general table as view with stored current catalog/namespace") {
+    withTable("spark_catalog.default.t") {
+      Seq("a", "b").toDF("col").write.saveAsTable("spark_catalog.default.t")
+      // View text uses the unqualified name `t`; it resolves via the stored
+      // current catalog / namespace properties.
+      checkAnswer(spark.table("general_catalog.ns.test_unqualified_view"), Row("b"))
+    }
+  }
+
+  test("view current catalog/namespace are serialized into table properties") {
+    val table = new MetadataOnlyTable.Builder(new StructType().add("col", "string"))
+      .withViewText("SELECT * FROM t")
+      .withCurrentCatalog("spark_catalog")
+      .withCurrentNamespace(Array("default"))
+      .build()
+    assert(table.properties().get(TableCatalog.PROP_VIEW_CURRENT_CATALOG) == "spark_catalog")
+    assert(table.properties().get(TableCatalog.PROP_VIEW_CURRENT_NAMESPACE) == "default")
+  }
+
+  test("view current namespace quotes multi-part names with dots") {
+    val table = new MetadataOnlyTable.Builder(new StructType().add("col", "string"))
+      .withViewText("SELECT * FROM t")
+      .withCurrentNamespace(Array("weird.db", "normal"))
+      .build()
+    assert(table.properties().get(TableCatalog.PROP_VIEW_CURRENT_NAMESPACE) == "`weird.db`.normal")
+  }
+
+  test("view with no current catalog/namespace omits the properties") {
+    val table = new MetadataOnlyTable.Builder(new StructType().add("col", "string"))
+      .withViewText("SELECT * FROM spark_catalog.default.t")
+      .build()
+    assert(!table.properties().containsKey(TableCatalog.PROP_VIEW_CURRENT_CATALOG))
+    assert(!table.properties().containsKey(TableCatalog.PROP_VIEW_CURRENT_NAMESPACE))
+  }
 }
 
 class TestingGeneralCatalog extends TableCatalog {
@@ -118,6 +153,12 @@ class TestingGeneralCatalog extends TableCatalog {
         new MetadataOnlyTable.Builder(new StructType().add("col", "string").add("i", "int"))
           .withViewText("SELECT col, col::int AS i FROM spark_catalog.default.t WHERE col = 'b'")
           .withTableProps(viewProps)
+          .build()
+      case "test_unqualified_view" =>
+        new MetadataOnlyTable.Builder(new StructType().add("col", "string"))
+          .withViewText("SELECT col FROM t WHERE col = 'b'")
+          .withCurrentCatalog("spark_catalog")
+          .withCurrentNamespace(Array("default"))
           .build()
       case _ => throw new NoSuchTableException(ident)
     }

@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.catalyst.util.QuotingUtils;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
 
@@ -50,6 +51,8 @@ public class MetadataOnlyTable implements Table {
     private String comment = null;
     private String collation = null;
     private String viewText = null;
+    private String currentCatalog = null;
+    private String[] currentNamespace = null;
     private String createVersion = "";
     private long createTime = 0;
     private Map<String, String> tableProps = Map.ofEntries();
@@ -106,6 +109,16 @@ public class MetadataOnlyTable implements Table {
       return this;
     }
 
+    public Builder withCurrentCatalog(String currentCatalog) {
+      this.currentCatalog = currentCatalog;
+      return this;
+    }
+
+    public Builder withCurrentNamespace(String[] currentNamespace) {
+      this.currentNamespace = currentNamespace;
+      return this;
+    }
+
     public Builder withCreateVersion(String createVersion) {
       this.createVersion = createVersion;
       return this;
@@ -159,6 +172,14 @@ public class MetadataOnlyTable implements Table {
     return builder.viewText;
   }
 
+  public String getCurrentCatalog() {
+    return builder.currentCatalog;
+  }
+
+  public String[] getCurrentNamespace() {
+    return builder.currentNamespace;
+  }
+
   public String getCreateVersion() {
     return builder.createVersion;
   }
@@ -199,6 +220,13 @@ public class MetadataOnlyTable implements Table {
     }
     if (getViewText() != null) {
       props.put(TableCatalog.PROP_VIEW_TEXT, getViewText());
+    }
+    if (getCurrentCatalog() != null) {
+      props.put(TableCatalog.PROP_VIEW_CURRENT_CATALOG, getCurrentCatalog());
+    }
+    if (getCurrentNamespace() != null && getCurrentNamespace().length > 0) {
+      props.put(TableCatalog.PROP_VIEW_CURRENT_NAMESPACE,
+          QuotingUtils.quoted(getCurrentNamespace()));
     }
     return props;
   }

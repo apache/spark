@@ -124,6 +124,22 @@ private[sql] object V1Table {
       .partition(_._1.startsWith(TableCatalog.OPTION_PREFIX))
     val tablePropsMap = tableProps.toMap
     val (partCols, bucketSpec, clusterBySpec) = t.partitioning().toSeq.convertTransforms
+    // For views, translate the V2 view context (currentCatalog / currentNamespace) into V1's
+    // viewCatalogAndNamespace properties so the V1 view resolution path can expand unqualified
+    // identifiers in the view text.
+    val viewContextProps = if (tableType == CatalogTableType.VIEW) {
+      val currentCatalog = Option(t.getCurrentCatalog())
+      val currentNamespace = Option(t.getCurrentNamespace()).map(_.toSeq).getOrElse(Seq.empty)
+      if (currentCatalog.isDefined || currentNamespace.nonEmpty) {
+        CatalogTable.catalogAndNamespaceToProps(
+          currentCatalog.getOrElse(catalog.name()),
+          currentNamespace)
+      } else {
+        Map.empty[String, String]
+      }
+    } else {
+      Map.empty[String, String]
+    }
     CatalogTable(
       identifier = TableIdentifier(
         table = ident.name(),
@@ -149,7 +165,9 @@ private[sql] object V1Table {
       viewOriginalText = viewText,
       comment = Option(t.getComment()),
       collation = Option(t.getCollation()),
-      properties = tablePropsMap ++ clusterBySpec.map(ClusterBySpec.toPropertyWithoutValidation)
+      properties = tablePropsMap ++
+        clusterBySpec.map(ClusterBySpec.toPropertyWithoutValidation) ++
+        viewContextProps
     )
   }
 }
