@@ -1031,9 +1031,16 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
   }
 
   test("SPARK-56032: FilterExec CSE preserves short-circuit across predicates") {
-    // CSE'd subexpressions in a *later* otherPred must not be hoisted above an *earlier*
-    // otherPred's short-circuit, otherwise rows the earlier predicate would have rejected
-    // still pay the cost of the later predicate's throw-prone expression.
+    // A CSE'd subexpression must not be hoisted above an earlier otherPred's short-circuit,
+    // otherwise rows an earlier otherPred would have rejected still pay the cost of the
+    // later predicate's throw-prone expression. Two shapes worth exercising:
+    //   - CSE within one conjunct: `x > 0 AND ((100 / x) > 0 OR (100 / x) < 1000)` --
+    //     `100 / x` appears twice inside otherPreds(1) only.
+    //   - CSE across two conjuncts: `x > 0 AND (100 / x) > 0 AND (100 / x) < 1000` --
+    //     `100 / x` is shared between otherPreds(1) and otherPreds(2); the precompute
+    //     must be emitted just before otherPreds(1), not at the top of the do { } block.
+    // In both shapes, hoisting to the top of the do { } block evaluates 100 / 0 on the
+    // x=0 row under ANSI and throws before x > 0 rejects.
     val schema = StructType(Seq(
       StructField("x", IntegerType, nullable = false)))
     val data = spark.sparkContext.parallelize(Seq(
@@ -1045,43 +1052,16 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
       SQLConf.ANSI_ENABLED.key -> "true") {
       val df = spark.createDataFrame(data, schema)
-      // Two otherPreds:
-      //   - x > 0: cheap, rejects the x=0 row.
-      //   - ((100 / x) > 0 OR (100 / x) < 1000): references `100 / x` twice, which CSE
-      //     will pull out. If the precompute is hoisted to the top of the do { } block,
-      //     it runs 100/0 on the x=0 row under ANSI and throws before x > 0 rejects.
-      val filtered = df.where("x > 0 AND ((100 / x) > 0 OR (100 / x) < 1000)")
-      val plan = filtered.queryExecution.executedPlan
-      assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
-        "Filter should be in whole-stage codegen")
-      checkAnswer(filtered, Seq(Row(2), Row(4)))
-    }
-  }
-
-  test("SPARK-56032: FilterExec CSE is placed at the first otherPred that references it") {
-    // Three separate conjuncts:
-    //   - x > 0: cheap guard, rejects x=0.
-    //   - (100 / x) > 0:  first user of `100 / x`.
-    //   - (100 / x) < 1000: second user of `100 / x`.
-    // `100 / x` is CSE'd across the two later conjuncts. The precompute must be emitted
-    // just before the first user (otherPreds(1)), NOT at the top of the do { } block --
-    // otherwise x=0 evaluates 100 / 0 under ANSI and throws before x > 0 rejects.
-    val schema = StructType(Seq(
-      StructField("x", IntegerType, nullable = false)))
-    val data = spark.sparkContext.parallelize(Seq(
-      Row(0), Row(2), Row(4)))
-
-    withSQLConf(
-      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
-      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
-      SQLConf.ANSI_ENABLED.key -> "true") {
-      val df = spark.createDataFrame(data, schema)
-      val filtered = df.where("x > 0 AND (100 / x) > 0 AND (100 / x) < 1000")
-      val plan = filtered.queryExecution.executedPlan
-      assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
-        "Filter should be in whole-stage codegen")
-      checkAnswer(filtered, Seq(Row(2), Row(4)))
+      Seq(
+        "x > 0 AND ((100 / x) > 0 OR (100 / x) < 1000)",
+        "x > 0 AND (100 / x) > 0 AND (100 / x) < 1000"
+      ).foreach { predicate =>
+        val filtered = df.where(predicate)
+        val plan = filtered.queryExecution.executedPlan
+        assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+          s"Filter should be in whole-stage codegen for: $predicate")
+        checkAnswer(filtered, Seq(Row(2), Row(4)))
+      }
     }
   }
 }
