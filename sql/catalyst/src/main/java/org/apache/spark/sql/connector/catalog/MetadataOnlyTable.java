@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 
@@ -64,7 +65,7 @@ public class MetadataOnlyTable implements Table {
 
   @Override
   public Map<String, String> properties() {
-    return info.properties();
+    return Collections.unmodifiableMap(info.properties());
   }
 
   @Override
