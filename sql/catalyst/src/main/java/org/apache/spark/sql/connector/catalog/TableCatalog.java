@@ -88,9 +88,9 @@ public interface TableCatalog extends CatalogPlugin {
   String PROP_OWNER = "owner";
 
   /**
-   * A reserved property to specify the view text of a general table that represents
-   * a SQL view. Unqualified identifiers in the view text are resolved against
-   * {@link #PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE} at read time.
+   * A reserved property that holds the SQL text of a view. Unqualified identifiers in the
+   * view text are resolved against {@link #PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE} at read
+   * time.
    */
   String PROP_VIEW_TEXT = "view_text";
 

@@ -1112,7 +1112,7 @@ class Analyzer(
           case CatalogAndIdentifier(catalog, ident) =>
             // Previously view-only lookups rejected non-session catalogs outright. With
             // `MetadataOnlyTable`, non-session catalogs can now expose views, so instead we
-            // let the lookup proceed and rely on the downstream match — a non-view result is
+            // let the lookup proceed and rely on the downstream match -- a non-view result is
             // converted into the standard `expectViewNotTableError` by UnresolvedView's caller.
             CatalogV2Util.loadTable(catalog, ident).map {
               case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&

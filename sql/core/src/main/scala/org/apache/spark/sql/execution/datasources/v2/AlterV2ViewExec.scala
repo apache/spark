@@ -21,10 +21,10 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, SchemaBinding, SchemaCompensation, SchemaEvolution, SchemaTypeEvolution, SchemaUnsupported, TableAlreadyExistsException, ViewSchemaMode}
-import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_SCHEMA_MODE
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, ResolvedIdentifier, TableAlreadyExistsException, ViewSchemaMode}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, TableCatalog, TableInfo}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, TableCatalog, TableInfo, V1Table}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{CommandUtils, ViewHelper}
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -32,9 +32,9 @@ import org.apache.spark.util.Utils
 
 /**
  * Shared bits for the v2 ALTER VIEW ... AS execs. Loads the existing view once via
- * `existingInfo` and uses its properties to preserve user-set properties, comment, collation,
+ * `existingTable` and uses its properties to preserve user-set properties, comment, collation,
  * and schema-binding mode when constructing the replacement `TableInfo`. A v2 identifier that
- * does not resolve to a [[MetadataOnlyTable]] is rejected — the connector contract for catalogs
+ * does not resolve to a [[MetadataOnlyTable]] is rejected -- the connector contract for catalogs
  * with `SUPPORTS_VIEW` is to round-trip `MetadataOnlyTable` from `loadTable`.
  *
  * `generateViewProperties` (invoked from `buildTableInfo`) strips the transient view keys
@@ -42,7 +42,7 @@ import org.apache.spark.util.Utils
  * re-emits them from the current session, matching v1 `AlterViewAsCommand.alterPermanentView`.
  */
 private[v2] trait V2AlterViewPreparation extends V2ViewPreparation {
-  protected lazy val existingInfo: TableInfo = {
+  protected lazy val existingTable: MetadataOnlyTable = {
     val table = try {
       catalog.loadTable(identifier)
     } catch {
@@ -50,7 +50,7 @@ private[v2] trait V2AlterViewPreparation extends V2ViewPreparation {
         throw QueryCompilationErrors.noSuchTableError(catalog.name(), identifier)
     }
     table match {
-      case mot: MetadataOnlyTable => mot.getTableInfo
+      case mot: MetadataOnlyTable => mot
       case other =>
         // SUPPORTS_VIEW requires catalogs to round-trip MetadataOnlyTable; getting
         // anything else back is a catalog contract violation.
@@ -59,6 +59,14 @@ private[v2] trait V2AlterViewPreparation extends V2ViewPreparation {
             s"got ${other.getClass.getName}")
     }
   }
+
+  protected lazy val existingInfo: TableInfo = existingTable.getTableInfo
+
+  // Translate once through V1Table so we can delegate semantics like viewSchemaMode to the
+  // same logic the v1 read path uses (honors viewSchemaBindingEnabled, same default when the
+  // property is absent).
+  protected lazy val existingCatalogTable: CatalogTable =
+    V1Table.toCatalogTable(catalog, identifier, existingTable)
 
   private def existingProp(key: String): Option[String] =
     Option(existingInfo.properties.get(key))
@@ -70,39 +78,31 @@ private[v2] trait V2AlterViewPreparation extends V2ViewPreparation {
   // Strip reserved keys; those become first-class `TableInfo` / `CatalogTable` fields or are
   // re-emitted by `buildTableInfo` (view text, current-catalog-namespace, comment, collation).
   // User TBLPROPERTIES and view.sqlConfig.* / view.query.out.* / view.referredTempNames /
-  // view.schemaMode pass through — generateViewProperties handles their cleanup + re-emit.
+  // view.schemaMode pass through -- generateViewProperties handles their cleanup + re-emit.
   override def userProperties: Map[String, String] =
     existingInfo.properties.asScala.toMap -- CatalogV2Util.TABLE_RESERVED_PROPERTIES
 
-  override def viewSchemaMode: ViewSchemaMode = {
-    existingProp(VIEW_SCHEMA_MODE) match {
-      case Some(s) if s == SchemaBinding.toString => SchemaBinding
-      case Some(s) if s == SchemaEvolution.toString => SchemaEvolution
-      case Some(s) if s == SchemaTypeEvolution.toString => SchemaTypeEvolution
-      case Some(s) if s == SchemaCompensation.toString => SchemaCompensation
-      case _ => SchemaUnsupported
-    }
-  }
+  override def viewSchemaMode: ViewSchemaMode = existingCatalogTable.viewSchemaMode
 }
 
 /**
  * Non-atomic ALTER VIEW for a plain [[TableCatalog]]: load existing, build replacement,
  * check cyclic reference, uncache, drop, create. Between drop and create the view does not
- * exist — catalogs that need atomicity should also implement [[StagingTableCatalog]].
+ * exist -- catalogs that need atomicity should also implement [[StagingTableCatalog]].
  */
 case class AlterV2ViewExec(
     catalog: TableCatalog,
     identifier: Identifier,
     originalText: String,
-    query: LogicalPlan,
-    referredTempFunctions: Seq[String]) extends V2AlterViewPreparation {
+    query: LogicalPlan) extends V2AlterViewPreparation {
 
   override protected def run(): Seq[InternalRow] = {
-    // Force the lazy to load before building; surfaces NoSuchTableException as a proper error.
-    val _ = existingInfo
+    // Force evaluation of the existingTable lazy val so NoSuchTableException surfaces before
+    // we do any other work.
+    val _ = existingTable
     val info = buildTableInfo()
     ViewHelper.checkCyclicViewReference(query, Seq(legacyName), legacyName)
-    CommandUtils.uncacheTableOrView(session, legacyName)
+    CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
     catalog.dropTable(identifier)
     try {
       catalog.createTable(identifier, info)
@@ -123,17 +123,16 @@ case class AtomicAlterV2ViewExec(
     catalog: StagingTableCatalog,
     identifier: Identifier,
     originalText: String,
-    query: LogicalPlan,
-    referredTempFunctions: Seq[String]) extends V2AlterViewPreparation {
+    query: LogicalPlan) extends V2AlterViewPreparation {
 
   override val metrics: Map[String, SQLMetric] =
     DataSourceV2Utils.commitMetrics(sparkContext, catalog)
 
   override protected def run(): Seq[InternalRow] = {
-    val _ = existingInfo
+    val _ = existingTable
     val info = buildTableInfo()
     ViewHelper.checkCyclicViewReference(query, Seq(legacyName), legacyName)
-    CommandUtils.uncacheTableOrView(session, legacyName)
+    CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
     val staged: StagedTable = try {
       catalog.stageReplace(identifier, info)
     } catch {

@@ -847,7 +847,7 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
  * Post-analysis check for v2 CREATE VIEW / ALTER VIEW: rejects permanent views that reference
  * temporary objects and rejects view bodies with auto-generated aliases. `referredTempFunctions`
  * is captured by the command's `markAsAnalyzed` before this rule runs. The v1 counterparts
- * [[CreateViewCommand]] and [[AlterViewAsCommand]] keep their existing exec-time checks —
+ * [[CreateViewCommand]] and [[AlterViewAsCommand]] keep their existing exec-time checks --
  * Dataset-built commands bypass the analyzer's re-capture path, so the exec-time safety net
  * must stay for v1.
  */

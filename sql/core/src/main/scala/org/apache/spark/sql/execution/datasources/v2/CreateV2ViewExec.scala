@@ -22,22 +22,23 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{SchemaEvolution, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, SchemaEvolution, TableAlreadyExistsException, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ViewSchemaMode}
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, QuotingUtils, SchemaUtils}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, QuotingUtils}
 import org.apache.spark.sql.connector.catalog.{Identifier, StagedTable, StagingTableCatalog, TableCatalog, TableInfo}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{CommandUtils, ViewHelper}
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.Utils
 
 /**
  * Shared validation + TableInfo construction for v2 CREATE VIEW execs.
  *
  * Mirrors the persistent-view portion of v1 [[ViewHelper.prepareTable]] + the execution-time
- * checks in [[CreateViewCommand.run]]. Any future addition on the v1 side — new view-specific
- * reserved property, new validation, new schema-mode handling — must be mirrored here.
+ * checks in [[CreateViewCommand.run]]. Any future addition on the v1 side -- new view-specific
+ * reserved property, new validation, new schema-mode handling -- must be mirrored here.
  * Post-analysis checks for temp-object references and auto-generated aliases run once for both
  * v1 and v2 in [[CheckViewReferences]].
  */
@@ -51,7 +52,6 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
   def originalText: String
   def query: LogicalPlan
   def viewSchemaMode: ViewSchemaMode
-  def referredTempFunctions: Seq[String]
 
   // Build a synthetic v1 TableIdentifier for error messages and for ViewHelper methods that
   // accept it purely for rendering. This carries no semantic weight - the v2 Identifier is the
@@ -133,8 +133,7 @@ case class CreateV2ViewExec(
     query: LogicalPlan,
     allowExisting: Boolean,
     replace: Boolean,
-    viewSchemaMode: ViewSchemaMode,
-    referredTempFunctions: Seq[String]) extends V2ViewPreparation {
+    viewSchemaMode: ViewSchemaMode) extends V2ViewPreparation {
 
   override protected def run(): Seq[InternalRow] = {
     val info = buildTableInfo()
@@ -145,7 +144,7 @@ case class CreateV2ViewExec(
       }
       if (!replace) throw viewAlreadyExists()
       ViewHelper.checkCyclicViewReference(query, Seq(legacyName), legacyName)
-      CommandUtils.uncacheTableOrView(session, legacyName)
+      CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
       catalog.dropTable(identifier)
     }
     // TOCTOU: if another writer creates the table between tableExists and createTable, a bare
@@ -175,8 +174,7 @@ case class AtomicCreateV2ViewExec(
     query: LogicalPlan,
     allowExisting: Boolean,
     replace: Boolean,
-    viewSchemaMode: ViewSchemaMode,
-    referredTempFunctions: Seq[String]) extends V2ViewPreparation {
+    viewSchemaMode: ViewSchemaMode) extends V2ViewPreparation {
 
   override val metrics: Map[String, SQLMetric] =
     DataSourceV2Utils.commitMetrics(sparkContext, catalog)
@@ -193,7 +191,7 @@ case class AtomicCreateV2ViewExec(
     val staged: StagedTable = if (replace) {
       if (catalog.tableExists(identifier)) {
         ViewHelper.checkCyclicViewReference(query, Seq(legacyName), legacyName)
-        CommandUtils.uncacheTableOrView(session, legacyName)
+        CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
       }
       catalog.stageCreateOrReplace(identifier, info)
     } else {

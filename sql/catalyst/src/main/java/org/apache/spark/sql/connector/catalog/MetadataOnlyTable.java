@@ -25,10 +25,9 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Transform;
 
 /**
- * A concrete {@code Table} implementation that only contains the table metadata without
- * implementing read/write directly. It represents a general Spark data source table or
- * a Spark view, and relies on Spark to interpret the table metadata, resolve the table
- * provider into a data source, or read it as a view.
+ * A concrete {@code Table} implementation that contains only table metadata, deferring
+ * read/write to Spark. It represents a general Spark data source table or a Spark view;
+ * Spark resolves the table provider into a data source or expands the view text at read time.
  * <p>
  * Catalogs build the metadata via {@link TableInfo.Builder} (which provides convenience
  * setters for reserved properties such as {@link TableCatalog#PROP_PROVIDER},
