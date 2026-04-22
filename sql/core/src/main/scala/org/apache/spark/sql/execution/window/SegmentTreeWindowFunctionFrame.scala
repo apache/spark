@@ -194,6 +194,13 @@ private[window] final class SegmentTreeWindowFunctionFrame(
     }
   }
 
+  // `writeRow`/`writeRange` mirror the `(lowerBound, upperBound)` monotone
+  // cursor invariant of `SlidingWindowFunctionFrame.write`, but run
+  // admit-then-drop (no buffer to maintain) instead of drop-then-admit.
+  // Any future fix to Sliding's boundary semantics must be mirrored here;
+  // equivalence is guarded by `SegmentTreeWindowFunctionSuite` flag-on/off
+  // tests (`checkRangeEquivalence`, `feature flag off ...`, fallback tests)
+  // which compare against the Sliding baseline.
   private def writeRow(index: Int, current: InternalRow): Unit = {
     var boundsChanged = index == 0
 
