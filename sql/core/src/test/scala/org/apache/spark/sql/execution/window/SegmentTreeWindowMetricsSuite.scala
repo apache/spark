@@ -52,8 +52,8 @@ class SegmentTreeWindowMetricsSuite
       fail(s"No Window node in plan:\n${df.queryExecution.executedPlan}")
     }
     val wanted = Set(
-      "number of segment-tree frames",
-      "number of segment-tree fallback frames")
+      "number of segment-tree frames prepared",
+      "number of segment-tree fallback frames prepared")
     windowNode.metrics.filter(m => wanted.contains(m.name)).map { m =>
       // UI value may be "3" or "total (min, med, max ...)"; first int run is the total.
       val raw = metricValues(m.accumulatorId)
@@ -79,9 +79,9 @@ class SegmentTreeWindowMetricsSuite
         min($"v").over(winSpec).as("mn"),
         max($"v").over(winSpec).as("mx"))
       val m = windowMetricValues(df)
-      assert(m("number of segment-tree frames") === 3L,
+      assert(m("number of segment-tree frames prepared") === 3L,
         s"expected 3 segtree frames (one per partition), got metrics = $m")
-      assert(m("number of segment-tree fallback frames") === 0L,
+      assert(m("number of segment-tree fallback frames prepared") === 0L,
         s"fallback counter must be 0 when all partitions take segtree path, got $m")
     }
   }
@@ -94,9 +94,9 @@ class SegmentTreeWindowMetricsSuite
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val df = baseDF.select($"id", min($"v").over(winSpec).as("mn"))
       val m = windowMetricValues(df)
-      assert(m("number of segment-tree fallback frames") === 3L,
+      assert(m("number of segment-tree fallback frames prepared") === 3L,
         s"expected 3 fallback frames (one per partition under threshold), got $m")
-      assert(m("number of segment-tree frames") === 0L,
+      assert(m("number of segment-tree frames prepared") === 0L,
         s"segtree counter must be 0 when all partitions fall back, got $m")
     }
   }
@@ -107,9 +107,9 @@ class SegmentTreeWindowMetricsSuite
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val df = baseDF.select($"id", min($"v").over(winSpec).as("mn"))
       val m = windowMetricValues(df)
-      assert(m("number of segment-tree frames") === 0L,
+      assert(m("number of segment-tree frames prepared") === 0L,
         s"segtree counter must be 0 when feature flag disabled, got $m")
-      assert(m("number of segment-tree fallback frames") === 0L,
+      assert(m("number of segment-tree fallback frames prepared") === 0L,
         s"fallback counter must be 0 when feature flag disabled, got $m")
     }
   }
@@ -135,9 +135,9 @@ class SegmentTreeWindowMetricsSuite
         .select($"id", min($"v").over(
           Window.partitionBy($"pk").orderBy($"id").rowsBetween(-3, 3)).as("mn"))
       val m = windowMetricValues(df)
-      assert(m("number of segment-tree frames") === 3L,
+      assert(m("number of segment-tree frames prepared") === 3L,
         s"expected 3 segtree frames (one per window partition), got $m")
-      assert(m("number of segment-tree fallback frames") === 0L, s"got $m")
+      assert(m("number of segment-tree fallback frames prepared") === 0L, s"got $m")
     }
   }
 
@@ -155,9 +155,9 @@ class SegmentTreeWindowMetricsSuite
         .select($"id", min($"v").over(
           Window.partitionBy($"pk").orderBy($"id").rowsBetween(-3, 3)).as("mn"))
       val m = windowMetricValues(df)
-      assert(m("number of segment-tree frames") === 2L,
+      assert(m("number of segment-tree frames prepared") === 2L,
         s"expected 2 segtree frames (one per key, both length 200), got $m")
-      assert(m("number of segment-tree fallback frames") === 0L, s"got $m")
+      assert(m("number of segment-tree fallback frames prepared") === 0L, s"got $m")
     }
   }
 
@@ -173,9 +173,9 @@ class SegmentTreeWindowMetricsSuite
         .select($"pk", min($"v").over(
           Window.partitionBy($"pk").orderBy($"pk").rowsBetween(-3, 3)).as("mn"))
       val m = windowMetricValues(df)
-      assert(m("number of segment-tree fallback frames") === 100L,
+      assert(m("number of segment-tree fallback frames prepared") === 100L,
         s"expected 100 fallback frames (one per unique-key partition), got $m")
-      assert(m("number of segment-tree frames") === 0L, s"got $m")
+      assert(m("number of segment-tree frames prepared") === 0L, s"got $m")
     }
   }
 
@@ -204,9 +204,9 @@ class SegmentTreeWindowMetricsSuite
         .select($"id", min($"v").over(
           Window.partitionBy($"pk").orderBy($"id").rowsBetween(-3, 3)).as("mn"))
       val m = windowMetricValues(df)
-      assert(m("number of segment-tree frames") === 2L,
+      assert(m("number of segment-tree frames prepared") === 2L,
         s"expected 2 segtree frames (k3, k4 @ 100 rows each), got $m")
-      assert(m("number of segment-tree fallback frames") === 2L,
+      assert(m("number of segment-tree fallback frames prepared") === 2L,
         s"expected 2 fallback frames (k1, k2 @ 50 rows each), got $m")
     }
   }

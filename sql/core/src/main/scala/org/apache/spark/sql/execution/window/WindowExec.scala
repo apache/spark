@@ -93,10 +93,10 @@ case class WindowExec(
   override lazy val metrics: Map[String, SQLMetric] = Map(
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
     "numSegmentTreeFrames" ->
-      SQLMetrics.createMetric(sparkContext, "number of segment-tree frames"),
+      SQLMetrics.createMetric(sparkContext, "number of segment-tree frames prepared"),
     "numSegmentTreeFallbackFrames" ->
       SQLMetrics.createMetric(sparkContext,
-        "number of segment-tree fallback frames")
+        "number of segment-tree fallback frames prepared")
   )
 
   protected override def doExecute(): RDD[InternalRow] = {

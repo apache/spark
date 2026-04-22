@@ -66,8 +66,8 @@ class WindowSegmentTreeAllowlistSuite
         "-?\\d+".r.findFirstIn(raw).map(_.toLong).getOrElse(0L)
       }.getOrElse(0L)
     }
-    (total("number of segment-tree frames"),
-      total("number of segment-tree fallback frames"))
+    (total("number of segment-tree frames prepared"),
+      total("number of segment-tree fallback frames prepared"))
   }
 
   // Positive: allowlisted aggregates route to segtree
