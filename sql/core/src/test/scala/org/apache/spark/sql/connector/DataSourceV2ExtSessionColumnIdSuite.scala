@@ -88,11 +88,7 @@ class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSess
       savedActive.foreach(s =>
         SparkSession.setActiveSession(s))
     }
-    try {
-      f(extSession)
-    } finally {
-      extSession.close()
-    }
+    f(extSession)
   }
 
   private val T = "sharedcat.ns.tbl"
