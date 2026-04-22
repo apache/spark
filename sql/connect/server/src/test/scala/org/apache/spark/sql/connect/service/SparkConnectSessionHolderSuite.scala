@@ -228,6 +228,72 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     }
   }
 
+  private def runPythonForeachBatchTerminationTestBody(): Unit = {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    try {
+      SparkConnectService.start(spark.sparkContext)
+
+      val pythonFn = dummyPythonFunction(sessionHolder)(streamingForeachBatchFunction)
+      val (fn1, cleaner1) =
+        StreamingForeachBatchHelper.pythonForeachBatchWrapper(pythonFn, sessionHolder)
+      val (fn2, cleaner2) =
+        StreamingForeachBatchHelper.pythonForeachBatchWrapper(pythonFn, sessionHolder)
+
+      val query1 = spark.readStream
+        .format("rate")
+        .load()
+        .writeStream
+        .format("memory")
+        .queryName("foreachBatch_termination_test_q1")
+        .foreachBatch(fn1)
+        .start()
+
+      val query2 = spark.readStream
+        .format("rate")
+        .load()
+        .writeStream
+        .format("memory")
+        .queryName("foreachBatch_termination_test_q2")
+        .foreachBatch(fn2)
+        .start()
+
+      sessionHolder.streamingForeachBatchRunnerCleanerCache
+        .registerCleanerForQuery(query1, cleaner1)
+      sessionHolder.streamingForeachBatchRunnerCleanerCache
+        .registerCleanerForQuery(query2, cleaner2)
+
+      val (runner1, runner2) =
+        (cleaner1.asInstanceOf[RunnerCleaner].runner, cleaner2.asInstanceOf[RunnerCleaner].runner)
+
+      // assert both python processes are running
+      assert(!runner1.isWorkerStopped().get)
+      assert(!runner2.isWorkerStopped().get)
+      // stop query1
+      query1.stop()
+      // assert query1's python process is not running
+      eventually(timeout(30.seconds)) {
+        assert(runner1.isWorkerStopped().get)
+        assert(!runner2.isWorkerStopped().get)
+      }
+
+      // stop query2
+      query2.stop()
+      eventually(timeout(30.seconds)) {
+        // assert query2's python process is not running
+        assert(runner2.isWorkerStopped().get)
+      }
+
+      assert(spark.streams.active.isEmpty) // no running query
+      assert(spark.streams.listListeners().length == 1) // only process termination listener
+    } finally {
+      SparkConnectService.stop()
+      // Wait for things to calm down.
+      Thread.sleep(4.seconds.toMillis)
+      // remove process termination listener
+      spark.streams.listListeners().foreach(spark.streams.removeListener)
+    }
+  }
+
   test("python foreachBatch process: process terminates after query is stopped") {
     // scalastyle:off assume
     assume(IntegratedUDFTestUtils.shouldTestPandasUDFs)
@@ -236,70 +302,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
 
     retry(n = 2) {
       failAfter(2.minutes) {
-        val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
-        try {
-          SparkConnectService.start(spark.sparkContext)
-
-          val pythonFn = dummyPythonFunction(sessionHolder)(streamingForeachBatchFunction)
-          val (fn1, cleaner1) =
-            StreamingForeachBatchHelper.pythonForeachBatchWrapper(pythonFn, sessionHolder)
-          val (fn2, cleaner2) =
-            StreamingForeachBatchHelper.pythonForeachBatchWrapper(pythonFn, sessionHolder)
-
-          val query1 = spark.readStream
-            .format("rate")
-            .load()
-            .writeStream
-            .format("memory")
-            .queryName("foreachBatch_termination_test_q1")
-            .foreachBatch(fn1)
-            .start()
-
-          val query2 = spark.readStream
-            .format("rate")
-            .load()
-            .writeStream
-            .format("memory")
-            .queryName("foreachBatch_termination_test_q2")
-            .foreachBatch(fn2)
-            .start()
-
-          sessionHolder.streamingForeachBatchRunnerCleanerCache
-            .registerCleanerForQuery(query1, cleaner1)
-          sessionHolder.streamingForeachBatchRunnerCleanerCache
-            .registerCleanerForQuery(query2, cleaner2)
-
-          val (runner1, runner2) =
-            (cleaner1.asInstanceOf[RunnerCleaner].runner,
-              cleaner2.asInstanceOf[RunnerCleaner].runner)
-
-          // assert both python processes are running
-          assert(!runner1.isWorkerStopped().get)
-          assert(!runner2.isWorkerStopped().get)
-          // stop query1
-          query1.stop()
-          // assert query1's python process is not running
-          eventually(timeout(30.seconds)) {
-            assert(runner1.isWorkerStopped().get)
-            assert(!runner2.isWorkerStopped().get)
-          }
-
-          // stop query2
-          query2.stop()
-          eventually(timeout(30.seconds)) {
-            // assert query2's python process is not running
-            assert(runner2.isWorkerStopped().get)
-          }
-
-          assert(spark.streams.active.isEmpty) // no running query
-          assert(spark.streams.listListeners().length == 1) // only process termination listener
-        } finally {
-          SparkConnectService.stop()
-          // Wait for things to calm down.
-          Thread.sleep(4.seconds.toMillis)
-          // remove process termination listener
-          spark.streams.listListeners().foreach(spark.streams.removeListener)
-        }
+        runPythonForeachBatchTerminationTestBody()
       }
     }
   }
