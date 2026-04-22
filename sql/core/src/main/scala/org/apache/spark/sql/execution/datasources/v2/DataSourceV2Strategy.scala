@@ -305,7 +305,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         collation, properties, originalText, child, allowExisting, replace, viewSchemaMode,
         _, referredTempFunctions) =>
       val tableCatalog = catalog.asTableCatalog
-      if (!tableCatalog.capabilities().contains(TableCatalogCapability.SUPPORTS_CREATE_VIEW)) {
+      if (!tableCatalog.capabilities().contains(TableCatalogCapability.SUPPORTS_VIEW)) {
         throw QueryCompilationErrors.missingCatalogViewsAbilityError(tableCatalog)
       }
       val sqlText = originalText.getOrElse {
@@ -327,7 +327,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val tableCatalog = catalog.asTableCatalog
       // Re-use the CREATE VIEW capability — a catalog able to create views via createTable
       // must also be able to replace them via dropTable+createTable or stageReplace.
-      if (!tableCatalog.capabilities().contains(TableCatalogCapability.SUPPORTS_CREATE_VIEW)) {
+      if (!tableCatalog.capabilities().contains(TableCatalogCapability.SUPPORTS_VIEW)) {
         throw QueryCompilationErrors.missingCatalogViewsAbilityError(tableCatalog)
       }
       tableCatalog match {

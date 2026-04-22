@@ -35,7 +35,7 @@ import org.apache.spark.util.Utils
  * `existingInfo` and uses its properties to preserve user-set properties, comment, collation,
  * and schema-binding mode when constructing the replacement `TableInfo`. A v2 identifier that
  * does not resolve to a [[MetadataOnlyTable]] is rejected — the connector contract for catalogs
- * with `SUPPORTS_CREATE_VIEW` is to round-trip `MetadataOnlyTable` from `loadTable`.
+ * with `SUPPORTS_VIEW` is to round-trip `MetadataOnlyTable` from `loadTable`.
  *
  * `generateViewProperties` (invoked from `buildTableInfo`) strips the transient view keys
  * (SQL configs, query column names, referred-temp names) from the inherited properties and
@@ -52,7 +52,7 @@ private[v2] trait V2AlterViewPreparation extends V2ViewPreparation {
     table match {
       case mot: MetadataOnlyTable => mot.getTableInfo
       case other =>
-        // SUPPORTS_CREATE_VIEW requires catalogs to round-trip MetadataOnlyTable; getting
+        // SUPPORTS_VIEW requires catalogs to round-trip MetadataOnlyTable; getting
         // anything else back is a catalog contract violation.
         throw SparkException.internalError(
           s"Expected MetadataOnlyTable from $catalog for $identifier, " +

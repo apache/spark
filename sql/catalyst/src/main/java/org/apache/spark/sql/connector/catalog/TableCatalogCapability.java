@@ -95,7 +95,7 @@ public enum TableCatalogCapability {
   SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS,
 
   /**
-   * Signals that the TableCatalog supports creating and altering views via
+   * Signals that the TableCatalog supports views. Views are created and altered via
    * {@link TableCatalog#createTable} by accepting a {@link TableInfo} whose properties include
    * {@link TableCatalog#PROP_VIEW_TEXT} (and related view keys:
    * {@link TableCatalog#PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE} and
@@ -110,5 +110,5 @@ public enum TableCatalogCapability {
    * and {@code ALTER VIEW} statements targeting the catalog up front rather than letting the
    * catalog silently persist a table entry that cannot be read as a view.
    */
-  SUPPORTS_CREATE_VIEW
+  SUPPORTS_VIEW
 }

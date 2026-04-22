@@ -174,7 +174,7 @@ class DataSourceV2MetadataOnlyTableSuite extends QueryTest with SharedSparkSessi
     }
   }
 
-  test("CREATE VIEW on a catalog without SUPPORTS_CREATE_VIEW fails") {
+  test("CREATE VIEW on a catalog without SUPPORTS_VIEW fails") {
     withSQLConf(
       "spark.sql.catalog.no_view_catalog" -> classOf[TestingTableOnlyCatalog].getName) {
       val ex = intercept[AnalysisException] {
@@ -337,7 +337,7 @@ class DataSourceV2MetadataOnlyTableSuite extends QueryTest with SharedSparkSessi
     }
   }
 
-  test("ALTER VIEW on a catalog without SUPPORTS_CREATE_VIEW fails") {
+  test("ALTER VIEW on a catalog without SUPPORTS_VIEW fails") {
     // An identifier the TestingTableOnlyCatalog can't find — we never get past the view
     // lookup stage, so the error here is the no-such-table / not-a-view path. The capability
     // gate in DataSourceV2Strategy is only reachable once the existing view is resolvable,
@@ -397,7 +397,7 @@ class TestingGeneralCatalog extends TableCatalog {
     new java.util.concurrent.ConcurrentHashMap[(Seq[String], String), TableInfo]()
 
   override def capabilities(): java.util.Set[TableCatalogCapability] =
-    java.util.Collections.singleton(TableCatalogCapability.SUPPORTS_CREATE_VIEW)
+    java.util.Collections.singleton(TableCatalogCapability.SUPPORTS_VIEW)
 
   override def loadTable(ident: Identifier): Table = {
     val key = (ident.namespace().toSeq, ident.name())
@@ -494,7 +494,7 @@ class TestingGeneralCatalog extends TableCatalog {
 
 /**
  * A minimal [[StagingTableCatalog]] used to drive `AtomicCreateV2ViewExec`. Views are stored
- * in a local map; staging commits write through, aborts discard. Supports SUPPORTS_CREATE_VIEW.
+ * in a local map; staging commits write through, aborts discard. Supports SUPPORTS_VIEW.
  */
 class TestingStagingCatalog extends StagingTableCatalog {
 
@@ -502,7 +502,7 @@ class TestingStagingCatalog extends StagingTableCatalog {
     new java.util.concurrent.ConcurrentHashMap[(Seq[String], String), TableInfo]()
 
   override def capabilities(): java.util.Set[TableCatalogCapability] =
-    java.util.Collections.singleton(TableCatalogCapability.SUPPORTS_CREATE_VIEW)
+    java.util.Collections.singleton(TableCatalogCapability.SUPPORTS_VIEW)
 
   private def keyOf(ident: Identifier): (Seq[String], String) =
     (ident.namespace().toSeq, ident.name())
@@ -557,7 +557,7 @@ private class RecordingStagedTable(
   override def abortStagedChanges(): Unit = onAbort()
 }
 
-/** A v2 catalog that does not declare SUPPORTS_CREATE_VIEW. Used to exercise the capability
+/** A v2 catalog that does not declare SUPPORTS_VIEW. Used to exercise the capability
   * gate in `DataSourceV2Strategy`. */
 class TestingTableOnlyCatalog extends TableCatalog {
   override def loadTable(ident: Identifier): Table = throw new NoSuchTableException(ident)
