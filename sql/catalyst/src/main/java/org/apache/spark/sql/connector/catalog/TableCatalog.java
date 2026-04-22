@@ -103,10 +103,11 @@ public interface TableCatalog extends CatalogPlugin {
 
   /**
    * A reserved property to specify the current namespace at the time the view was created.
-   * The value is a Spark multi-part identifier string (backtick-quoted parts joined with
-   * {@code "."}, e.g. {@code `db1`.`db2`}) and is parsed with
-   * {@code ParserInterface.parseMultipartIdentifier}. An absent or empty value means the
-   * view was created with no current namespace.
+   * The value is a Spark multi-part identifier string: parts are joined with {@code "."},
+   * and a part is backtick-quoted only when it is not a simple identifier (e.g. when it
+   * contains a {@code "."}). For example, {@code db1.db2} or {@code `weird.db`.normal}.
+   * The value is parsed with {@code ParserInterface.parseMultipartIdentifier}. An absent
+   * or empty value means the view was created with no current namespace.
    */
   String PROP_VIEW_CURRENT_NAMESPACE = "view.currentNamespace";
 
