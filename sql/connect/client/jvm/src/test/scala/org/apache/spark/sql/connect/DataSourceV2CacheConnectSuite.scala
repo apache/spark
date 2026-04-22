@@ -71,6 +71,7 @@ class DataSourceV2CacheConnectSuite
       withSession2 { session2 =>
         setupTable()
         spark.sql(s"CACHE TABLE $T")
+        assert(spark.catalog.isCached(T))
         checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
         // Session 2 writes to the same underlying table
@@ -78,6 +79,7 @@ class DataSourceV2CacheConnectSuite
 
         // Shared CacheManager: session 2's write triggers refreshCache(),
         // so session 1 sees the new data
+        assert(spark.catalog.isCached(T))
         checkAnswer(
           spark.sql(s"SELECT * FROM $T"),
           Seq(Row(1, 100), Row(2, 200)))
@@ -98,15 +100,18 @@ class DataSourceV2CacheConnectSuite
       withSession2 { session2 =>
         setupTable()
         spark.sql(s"CACHE TABLE $T")
+        assert(spark.catalog.isCached(T))
         checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
-        // Session 1 writes (invalidates cache)
+        // Session 1 writes (invalidates and recaches)
         spark.sql(s"INSERT INTO $T VALUES (2, 200)")
+        assert(spark.catalog.isCached(T))
 
         // Session 2 writes externally
         session2.sql(s"INSERT INTO $T VALUES (3, 300)").collect()
 
         // Both writes visible due to shared CacheManager
+        assert(spark.catalog.isCached(T))
         checkAnswer(
           spark.sql(s"SELECT * FROM $T"),
           Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
@@ -125,6 +130,7 @@ class DataSourceV2CacheConnectSuite
       withSession2 { session2 =>
         setupTable()
         spark.sql(s"CACHE TABLE $T")
+        assert(spark.catalog.isCached(T))
         checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
         // Session 2 adds a column and inserts
@@ -150,9 +156,10 @@ class DataSourceV2CacheConnectSuite
       withSession2 { session2 =>
         setupTable()
         spark.sql(s"CACHE TABLE $T")
+        assert(spark.catalog.isCached(T))
         checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
-        // Session 1 evolves schema
+        // Session 1 evolves schema (invalidates and recaches)
         spark.sql(s"ALTER TABLE $T ADD COLUMN new_col INT")
 
         // Session 2 inserts with new schema
@@ -177,6 +184,7 @@ class DataSourceV2CacheConnectSuite
       withSession2 { session2 =>
         setupTable()
         spark.sql(s"CACHE TABLE $T")
+        assert(spark.catalog.isCached(T))
         checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
         // Session 2 drops and recreates with same schema
@@ -184,6 +192,7 @@ class DataSourceV2CacheConnectSuite
         session2.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
 
         // Recreated table is empty; cache was invalidated by drop
+        assert(!spark.catalog.isCached(T))
         checkAnswer(
           spark.sql(s"SELECT * FROM $T"),
           Seq.empty)
@@ -200,6 +209,7 @@ class DataSourceV2CacheConnectSuite
       withSession2 { session2 =>
         setupTable()
         spark.sql(s"CACHE TABLE $T")
+        assert(spark.catalog.isCached(T))
         checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
         // Session 2 writes
@@ -207,6 +217,7 @@ class DataSourceV2CacheConnectSuite
 
         // Explicit REFRESH should pick up the external write
         spark.sql(s"REFRESH TABLE $T")
+        assert(spark.catalog.isCached(T))
         checkAnswer(
           spark.sql(s"SELECT * FROM $T"),
           Seq(Row(1, 100), Row(2, 200)))
@@ -223,6 +234,7 @@ class DataSourceV2CacheConnectSuite
       withSession2 { session2 =>
         setupTable()
         spark.sql(s"CACHE TABLE $T")
+        assert(spark.catalog.isCached(T))
         checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
         // Session 2 writes
@@ -230,6 +242,7 @@ class DataSourceV2CacheConnectSuite
 
         // Uncache and re-read
         spark.sql(s"UNCACHE TABLE IF EXISTS $T")
+        assert(!spark.catalog.isCached(T))
         checkAnswer(
           spark.sql(s"SELECT * FROM $T"),
           Seq(Row(1, 100), Row(2, 200)))
