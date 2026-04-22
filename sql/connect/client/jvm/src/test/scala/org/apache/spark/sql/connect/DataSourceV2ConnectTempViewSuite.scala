@@ -22,10 +22,10 @@ import org.apache.spark.sql.Row
 /**
  * Design doc Section [1] in Connect: Temp views with stored plans.
  *
- * In Connect, SQL temp views (CREATE OR REPLACE TEMP VIEW ... AS SELECT *)
- * re-analyze on each access. Column names captured at creation time constrain
- * which schema changes are tolerated: data writes and column additions succeed,
- * but column removal, rename, type change, and drop+add different type fail.
+ * In Connect, SQL temp views (CREATE OR REPLACE TEMP VIEW ... AS SELECT *) re-analyze on each
+ * access. Column names captured at creation time constrain which schema changes are tolerated:
+ * data writes and column additions succeed, but column removal, rename, type change, and drop+add
+ * different type fail.
  */
 class DataSourceV2ConnectTempViewSuite extends DataSourceV2RefreshConnectTestBase {
 
