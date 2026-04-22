@@ -5267,16 +5267,14 @@ case class ArrayInsert(
            |
            |  $allocation
            |  for (int $i = 0; $i < $arr.numElements(); $i ++) {
-           |    $adjustedAllocIdx =
-           |      $i + $baseOffset + (int) java.lang.Math.abs($posLong + $arr.numElements());
+           |    $adjustedAllocIdx = $i + $baseOffset + java.lang.Math.abs($pos + $arr.numElements());
            |    $assignment
            |  }
            |  ${CodeGenerator.setArrayElement(
              values, elementType, itemInsertionIndex, item, Some(insertedItemIsNull))}
            |
            |  for (int $j = ${if (legacyNegativeIndex) 0 else 1} + $pos + $arr.numElements(); $j < 0; $j ++) {
-           |    $values.setNullAt(
-           |      $j + $baseOffset + (int) java.lang.Math.abs($posLong + $arr.numElements()));
+           |    $values.setNullAt($j + $baseOffset + java.lang.Math.abs($pos + $arr.numElements()));
            |  }
            |
            |  ${ev.value} = $values;
