@@ -1057,4 +1057,31 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       checkAnswer(filtered, Seq(Row(2), Row(4)))
     }
   }
+
+  test("SPARK-56032: FilterExec CSE is placed at the first otherPred that references it") {
+    // Three separate conjuncts:
+    //   - x > 0: cheap guard, rejects x=0.
+    //   - (100 / x) > 0:  first user of `100 / x`.
+    //   - (100 / x) < 1000: second user of `100 / x`.
+    // `100 / x` is CSE'd across the two later conjuncts. The precompute must be emitted
+    // just before the first user (otherPreds(1)), NOT at the top of the do { } block --
+    // otherwise x=0 evaluates 100 / 0 under ANSI and throws before x > 0 rejects.
+    val schema = StructType(Seq(
+      StructField("x", IntegerType, nullable = false)))
+    val data = spark.sparkContext.parallelize(Seq(
+      Row(0), Row(2), Row(4)))
+
+    withSQLConf(
+      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      val df = spark.createDataFrame(data, schema)
+      val filtered = df.where("x > 0 AND (100 / x) > 0 AND (100 / x) < 1000")
+      val plan = filtered.queryExecution.executedPlan
+      assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+        "Filter should be in whole-stage codegen")
+      checkAnswer(filtered, Seq(Row(2), Row(4)))
+    }
+  }
 }

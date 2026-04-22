@@ -257,7 +257,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // Apply CSE to otherPreds. Two invariants we must preserve:
     //   (a) Short-circuit order: otherPreds are evaluated sequentially and each may
     //       `continue;` out of the row. A precomputation hoisted ahead of an earlier
-    //       otherPred would run for rows that predicate would have filtered out,
+    //       otherPred would run for rows an earlier otherPred would have filtered out,
     //       turning a filtered-out row into a thrown exception for any expression that
     //       can throw (overflow, error class, etc.). SPARK-56032's original placement of
     //       subExprsCode at the top of the `do { }` block broke this.
