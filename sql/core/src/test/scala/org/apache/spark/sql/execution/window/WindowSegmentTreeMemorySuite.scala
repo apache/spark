@@ -348,17 +348,4 @@ class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext 
       } finally tree.close()
     }
   }
-
-  ignore("T5 rowArray-spilled short-circuit in SegTreeSpiller.spill -- ignored stub") {
-    // Requires a controllable `hasSpilled` hook on
-    // ExternalAppendOnlyUnsafeRowArray (not in public API). Production uses
-    // a `spillSize > 0` heuristic; kept as ignored stub so the T5 matrix
-    // row stays visible.
-  }
-
-  ignore("T8 task-kill completion listener triggers close -- ignored stub") {
-    // Requires a SparkContext/DAGScheduler-driven task-kill path; covered
-    // implicitly by the frame-layer listener wiring. Kept as ignored stub
-    // so the T8 matrix row stays visible.
-  }
 }
