@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.connect
 
-
 /**
  * Design doc Section [4] in Connect: Version pinning in Dataset.
  *
- * KEY DIFFERENCE from classic: In Connect, collect() re-analyzes the plan
- * on the server, so there is NO stale QueryExecution. Both show() and
- * collect() always see the latest data and schema.
+ * KEY DIFFERENCE from classic: In Connect, collect() re-analyzes the plan on the server, so there
+ * is NO stale QueryExecution. Both show() and collect() always see the latest data and schema.
  */
 class DataSourceV2ConnectDataFramePinningSuite extends DataSourceV2RefreshConnectTestBase {
 
