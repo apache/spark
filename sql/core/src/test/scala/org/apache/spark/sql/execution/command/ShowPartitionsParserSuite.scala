@@ -18,10 +18,12 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedPartitionSpec, UnresolvedTable}
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.ShowPartitions
+import org.apache.spark.sql.test.SharedSparkSession
 
-class ShowPartitionsParserSuite extends AnalysisTest {
+class ShowPartitionsParserSuite extends SharedSparkSession with AnalysisTest {
+  private def parsePlan(statement: String) = spark.sessionState.sqlParser.parsePlan(statement)
+
   test("SHOW PARTITIONS") {
     val commandName = "SHOW PARTITIONS"
     Seq(
