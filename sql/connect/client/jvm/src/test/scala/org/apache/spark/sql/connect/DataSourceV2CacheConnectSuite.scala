@@ -25,24 +25,20 @@ import org.apache.spark.sql.connect.test.SparkConnectServerUtils
 /**
  * DSv2 CACHE TABLE tests for Spark Connect using two sessions.
  *
- * Uses [[SharedInMemoryTableCatalog]] (configured as "sharedcat") so that
- * both sessions share the same underlying table data via a static
- * ConcurrentHashMap. Session 1 caches and reads; session 2 acts as an
- * external writer.
+ * Uses [[SharedInMemoryTableCatalog]] (configured as "sharedcat") so that both sessions share the
+ * same underlying table data via a static ConcurrentHashMap. Session 1 caches and reads; session
+ * 2 acts as an external writer.
  *
- * All sessions on the same server share one CacheManager (via SharedState).
- * DSv2 writes trigger refreshCache() which recaches on the shared
- * CacheManager. These tests document the observable behavior for each
- * design doc CACHE scenario.
+ * All sessions on the same server share one CacheManager (via SharedState). DSv2 writes trigger
+ * refreshCache() which recaches on the shared CacheManager. These tests document the observable
+ * behavior for each design doc CACHE scenario.
  */
-class DataSourceV2CacheConnectSuite
-  extends QueryTest with RemoteSparkSession with SQLHelper {
+class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession with SQLHelper {
 
   private val T = "sharedcat.ns.tbl"
 
   private def assumeCanRun(): Unit = {
-    assume(spark != null && isAssemblyJarsDirExists,
-      "Spark Connect server not available")
+    assume(spark != null && isAssemblyJarsDirExists, "Spark Connect server not available")
   }
 
   private def setupTable(): Unit = {
@@ -80,9 +76,7 @@ class DataSourceV2CacheConnectSuite
         // Shared CacheManager: session 2's write triggers refreshCache(),
         // so session 1 sees the new data
         assert(spark.catalog.isCached(T))
-        checkAnswer(
-          spark.sql(s"SELECT * FROM $T"),
-          Seq(Row(1, 100), Row(2, 200)))
+        checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200)))
 
         spark.sql(s"UNCACHE TABLE IF EXISTS $T")
       }
@@ -112,9 +106,7 @@ class DataSourceV2CacheConnectSuite
 
         // Both writes visible due to shared CacheManager
         assert(spark.catalog.isCached(T))
-        checkAnswer(
-          spark.sql(s"SELECT * FROM $T"),
-          Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
+        checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
 
         spark.sql(s"UNCACHE TABLE IF EXISTS $T")
       }
@@ -138,9 +130,7 @@ class DataSourceV2CacheConnectSuite
         session2.sql(s"INSERT INTO $T VALUES (2, 200, -1)").collect()
 
         // Schema change + write visible via shared CacheManager
-        checkAnswer(
-          spark.sql(s"SELECT * FROM $T"),
-          Seq(Row(1, 100, null), Row(2, 200, -1)))
+        checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100, null), Row(2, 200, -1)))
 
         spark.sql(s"UNCACHE TABLE IF EXISTS $T")
       }
@@ -166,9 +156,7 @@ class DataSourceV2CacheConnectSuite
         session2.sql(s"INSERT INTO $T VALUES (2, 200, -1)").collect()
 
         // Both changes visible
-        checkAnswer(
-          spark.sql(s"SELECT * FROM $T"),
-          Seq(Row(1, 100, null), Row(2, 200, -1)))
+        checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100, null), Row(2, 200, -1)))
 
         spark.sql(s"UNCACHE TABLE IF EXISTS $T")
       }
@@ -193,9 +181,7 @@ class DataSourceV2CacheConnectSuite
 
         // Recreated table is empty; cache was invalidated by drop
         assert(!spark.catalog.isCached(T))
-        checkAnswer(
-          spark.sql(s"SELECT * FROM $T"),
-          Seq.empty)
+        checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq.empty)
 
         spark.sql(s"UNCACHE TABLE IF EXISTS $T")
       }
@@ -218,9 +204,7 @@ class DataSourceV2CacheConnectSuite
         // Explicit REFRESH should pick up the external write
         spark.sql(s"REFRESH TABLE $T")
         assert(spark.catalog.isCached(T))
-        checkAnswer(
-          spark.sql(s"SELECT * FROM $T"),
-          Seq(Row(1, 100), Row(2, 200)))
+        checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200)))
 
         spark.sql(s"UNCACHE TABLE IF EXISTS $T")
       }
@@ -243,9 +227,7 @@ class DataSourceV2CacheConnectSuite
         // Uncache and re-read
         spark.sql(s"UNCACHE TABLE IF EXISTS $T")
         assert(!spark.catalog.isCached(T))
-        checkAnswer(
-          spark.sql(s"SELECT * FROM $T"),
-          Seq(Row(1, 100), Row(2, 200)))
+        checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200)))
       }
     }
   }
