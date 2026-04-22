@@ -231,15 +231,19 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
 
   private def awaitTestBodyInNewThread(timeoutMillis: Long)(body: => Unit): Unit = {
     @volatile var error: Throwable = null
-    val worker = new Thread(new Runnable {
-      override def run(): Unit = try body catch { case t: Throwable => error = t }
-    }, s"${getClass.getSimpleName}-testBody-worker")
+    val runnable: Runnable = () => {
+      try {
+        body
+      } catch {
+        case t: Throwable => error = t
+      }
+    }
+    val worker = new Thread(runnable, s"${getClass.getSimpleName}-testBody-worker")
     worker.setDaemon(true)
     worker.start()
     worker.join(timeoutMillis)
     if (worker.isAlive) {
-      throw new TimeoutException(
-        s"Test body did not complete within ${timeoutMillis} ms")
+      throw new TimeoutException(s"Test body did not complete within ${timeoutMillis} ms")
     }
     if (error != null) throw error
   }
