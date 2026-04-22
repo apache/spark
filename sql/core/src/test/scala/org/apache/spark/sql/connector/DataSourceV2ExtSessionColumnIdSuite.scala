@@ -161,4 +161,71 @@ class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSess
         parameters = Map("tableName" -> ".*", "errors" -> "(?s).*"))
     }
   }
+
+  // Adding a column from an external session preserves existing column IDs.
+  // The stale DataFrame should still work because its captured column IDs
+  // match the current table's unchanged columns.
+  test("external add column does not trigger column ID mismatch") {
+    withTable(T) {
+      sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $T VALUES (1, 100)")
+
+      val df = spark.table(T)
+
+      // external session adds a new column
+      withExtSession { ext =>
+        ext.sql(s"ALTER TABLE $T ADD COLUMN bonus INT").collect()
+        ext.sql(s"INSERT INTO $T VALUES (2, 200, 50)").collect()
+      }
+
+      // session1's stale DataFrame still works: id and salary IDs unchanged
+      checkAnswer(df, Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  test("external drop+re-add multiple columns detected by column ID") {
+    withTable(T) {
+      sql(s"CREATE TABLE $T (id INT, salary INT, bonus INT) USING foo")
+      sql(s"INSERT INTO $T VALUES (1, 100, 10)")
+
+      val df = spark.table(T)
+
+      // external session drops and re-adds both salary and bonus
+      withExtSession { ext =>
+        ext.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+        ext.sql(s"ALTER TABLE $T DROP COLUMN bonus").collect()
+        ext.sql(s"ALTER TABLE $T ADD COLUMN salary INT").collect()
+        ext.sql(s"ALTER TABLE $T ADD COLUMN bonus INT").collect()
+      }
+
+      // both column ID mismatches are detected
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*",
+          "errors" -> "(?s).*salary.*bonus.*"))
+    }
+  }
+
+  test("external type widening detected as column ID mismatch") {
+    withTable(T) {
+      sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $T VALUES (1, 100)")
+
+      val df = spark.table(T)
+
+      // external session widens salary from INT to LONG
+      // SharedInMemoryTableCatalog assigns a new column ID when type changes
+      withExtSession { ext =>
+        ext.sql(s"ALTER TABLE $T ALTER COLUMN salary TYPE LONG").collect()
+      }
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
 }
