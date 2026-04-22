@@ -302,7 +302,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case CreateView(ResolvedIdentifier(catalog, ident), userSpecifiedColumns, comment,
-        collation, properties, originalText, child, allowExisting, replace, viewSchemaMode) =>
+        collation, properties, originalText, child, allowExisting, replace, viewSchemaMode,
+        _, referredTempFunctions) =>
       val tableCatalog = catalog.asTableCatalog
       if (!tableCatalog.capabilities().contains(TableCatalogCapability.SUPPORTS_CREATE_VIEW)) {
         throw QueryCompilationErrors.missingCatalogViewsAbilityError(tableCatalog)
@@ -313,10 +314,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       tableCatalog match {
         case staging: StagingTableCatalog =>
           AtomicCreateV2ViewExec(staging, ident, userSpecifiedColumns, comment, collation,
-            properties, sqlText, child, allowExisting, replace, viewSchemaMode) :: Nil
+            properties, sqlText, child, allowExisting, replace, viewSchemaMode,
+            referredTempFunctions) :: Nil
         case _ =>
           CreateV2ViewExec(tableCatalog, ident, userSpecifiedColumns, comment, collation,
-            properties, sqlText, child, allowExisting, replace, viewSchemaMode) :: Nil
+            properties, sqlText, child, allowExisting, replace, viewSchemaMode,
+            referredTempFunctions) :: Nil
       }
 
     case ReplaceTableAsSelect(ResolvedIdentifier(catalog, ident),

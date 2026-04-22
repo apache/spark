@@ -518,7 +518,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       AlterViewSchemaBindingCommand(ident, viewSchemaMode)
 
     case CreateView(CreateViewInSessionCatalog(ident), userSpecifiedColumns, comment,
-        collation, properties, originalText, child, allowExisting, replace, viewSchemaMode) =>
+        collation, properties, originalText, child, allowExisting, replace, viewSchemaMode,
+        _, _) =>
       CreateViewCommand(
         name = ident,
         userSpecifiedColumns = userSpecifiedColumns,

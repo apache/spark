@@ -197,7 +197,7 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
             collation = getCollationFromSchemaMetadata(catalog, identifier.namespace())))
 
         case createView@CreateView(ResolvedIdentifier(
-        catalog: SupportsNamespaces, identifier), _, _, _, _, _, _, _, _, _)
+        catalog: SupportsNamespaces, identifier), _, _, _, _, _, _, _, _, _, _, _)
           if createView.collation.isEmpty =>
           val newCreateView = CurrentOrigin.withOrigin(createView.origin) {
             createView.copy(
