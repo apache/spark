@@ -532,9 +532,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         viewType = PersistedView,
         viewSchemaMode = viewSchemaMode)
 
-    case CreateView(ResolvedIdentifier(catalog, _), _, _, _, _, _, _, _, _, _) =>
-      throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
-
     case ShowViews(ns: ResolvedNamespace, pattern, output) =>
       ns match {
         case ResolvedDatabaseInSessionCatalog(db) => ShowViewsCommand(db, pattern, output)

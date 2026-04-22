@@ -483,7 +483,9 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
       viewSchemaMode: ViewSchemaMode,
       tempViewNames: Seq[Seq[String]] = Seq.empty,
       tempFunctionNames: Seq[String] = Seq.empty,
-      tempVariableNames: Seq[Seq[String]] = Seq.empty): Map[String, String] = {
+      tempVariableNames: Seq[Seq[String]] = Seq.empty,
+      catalogAndNamespaceEncoder: (String, Seq[String]) => Map[String, String] =
+        catalogAndNamespaceToProps): Map[String, String] = {
 
     val conf = session.sessionState.conf
 
@@ -502,7 +504,7 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
     // Generate the view default catalog and namespace, as well as captured SQL configs.
     val manager = session.sessionState.catalogManager
     removeReferredTempNames(removeSQLConfigs(removeQueryColumnNames(properties))) ++
-      catalogAndNamespaceToProps(
+      catalogAndNamespaceEncoder(
         manager.currentCatalog.name, manager.currentNamespace.toImmutableArraySeq) ++
       sqlConfigsToProps(conf, VIEW_SQL_CONFIG_PREFIX) ++
       queryColumnNameProps ++

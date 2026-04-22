@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TruncatableTable, V1Table}
+import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableCatalogCapability, TruncatableTable, V1Table}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
@@ -299,6 +299,24 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case _ =>
           ReplaceTableExec(tableCatalog, ident, v2Columns, parts,
             qualifyLocInTableSpec(tableSpec), orCreate = orCreate, invalidateCache) :: Nil
+      }
+
+    case CreateView(ResolvedIdentifier(catalog, ident), userSpecifiedColumns, comment,
+        collation, properties, originalText, child, allowExisting, replace, viewSchemaMode) =>
+      val tableCatalog = catalog.asTableCatalog
+      if (!tableCatalog.capabilities().contains(TableCatalogCapability.SUPPORTS_CREATE_VIEW)) {
+        throw QueryCompilationErrors.missingCatalogViewsAbilityError(tableCatalog)
+      }
+      val sqlText = originalText.getOrElse {
+        throw QueryCompilationErrors.createPersistedViewFromDatasetAPINotAllowedError()
+      }
+      tableCatalog match {
+        case staging: StagingTableCatalog =>
+          AtomicCreateV2ViewExec(staging, ident, userSpecifiedColumns, comment, collation,
+            properties, sqlText, child, allowExisting, replace, viewSchemaMode) :: Nil
+        case _ =>
+          CreateV2ViewExec(tableCatalog, ident, userSpecifiedColumns, comment, collation,
+            properties, sqlText, child, allowExisting, replace, viewSchemaMode) :: Nil
       }
 
     case ReplaceTableAsSelect(ResolvedIdentifier(catalog, ident),
