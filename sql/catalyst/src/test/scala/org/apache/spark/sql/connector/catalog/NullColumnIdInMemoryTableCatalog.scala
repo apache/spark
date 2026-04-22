@@ -44,7 +44,16 @@ class NullColumnIdInMemoryTableCatalog extends InMemoryTableCatalog {
       properties = table.properties,
       constraints = table.constraints,
       id = table.id)
-    nullColIdTable.alterTableWithData(table.data, table.schema)
+    table.dataMap.synchronized {
+      table.dataMap.foreach { case (key, splits) =>
+        val copiedSplits = splits.map { bufferedRows =>
+          val copiedBufferedRows = new BufferedRows(bufferedRows.key, bufferedRows.schema)
+          copiedBufferedRows.rows ++= bufferedRows.rows.map(_.copy())
+          copiedBufferedRows
+        }
+        nullColIdTable.dataMap.put(key, copiedSplits)
+      }
+    }
     nullColIdTable
   }
 
@@ -100,7 +109,14 @@ class NullColumnIdInMemoryTable(
       constraints,
       id)
     dataMap.synchronized {
-      copiedTable.alterTableWithData(data, schema)
+      dataMap.foreach { case (key, splits) =>
+        val copiedSplits = splits.map { bufferedRows =>
+          val copiedBufferedRows = new BufferedRows(bufferedRows.key, bufferedRows.schema)
+          copiedBufferedRows.rows ++= bufferedRows.rows.map(_.copy())
+          copiedBufferedRows
+        }
+        copiedTable.dataMap.put(key, copiedSplits)
+      }
     }
     copiedTable
   }
