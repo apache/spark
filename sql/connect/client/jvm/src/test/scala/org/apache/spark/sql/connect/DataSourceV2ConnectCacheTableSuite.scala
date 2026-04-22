@@ -22,9 +22,9 @@ import org.apache.spark.sql.Row
 /**
  * Design doc Section [5] in Connect: CACHE TABLE.
  *
- * CACHE TABLE pins table state on the server side. In Connect, the plan
- * is re-analyzed but the server's CacheManager serves cached data.
- * Session writes invalidate the cache; external changes remain invisible.
+ * CACHE TABLE pins table state on the server side. In Connect, the plan is re-analyzed but the
+ * server's CacheManager serves cached data. Session writes invalidate the cache; external changes
+ * remain invisible.
  */
 class DataSourceV2ConnectCacheTableSuite extends DataSourceV2RefreshConnectTestBase {
 
