@@ -63,6 +63,9 @@ class DataSourceV2DataFrameSuite
     .set("spark.sql.catalog.preserveidcat",
       classOf[TypeChangePreservesColIdTableCatalog].getName)
     .set("spark.sql.catalog.preserveidcat.copyOnLoad", "true")
+    .set("spark.sql.catalog.mixedcolidcat",
+      classOf[MixedColumnIdTableCatalog].getName)
+    .set("spark.sql.catalog.mixedcolidcat.copyOnLoad", "true")
 
   after {
     spark.sessionState.catalogManager.reset()
@@ -2275,6 +2278,67 @@ class DataSourceV2DataFrameSuite
       sql(s"INSERT INTO $t VALUES (2, 200, 50)")
 
       checkAnswer(df, Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  // Column ID tests: Mixed null/non-null column IDs
+
+  test("mixed column IDs: original non-null ID, current null ID after drop+re-add not detected") {
+    val t = "mixedcolidcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      MixedColumnIdTableCatalog.reset()
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      // salary has a non-null column ID at analysis time
+      val salaryCol = catalog("mixedcolidcat").loadTable(ident).columns()
+        .find(_.name() == "salary").get
+      assert(salaryCol.id() != null, "salary should have a non-null ID initially")
+
+      val df = spark.table(t)
+
+      // make salary return null ID from now on
+      MixedColumnIdTableCatalog.nullIdColumnNames.add("salary")
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+
+      val newSalaryCol = catalog("mixedcolidcat").loadTable(ident).columns()
+        .find(_.name() == "salary").get
+      assert(newSalaryCol.id() == null, "salary should have a null ID after re-add")
+
+      // succeeds because current column ID is null, so validation is skipped
+      checkAnswer(df, Seq(Row(1, 100)))
+    }
+  }
+
+  test("mixed column IDs: original null ID, current non-null ID after drop+re-add not detected") {
+    val t = "mixedcolidcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      MixedColumnIdTableCatalog.reset()
+      MixedColumnIdTableCatalog.nullIdColumnNames.add("salary")
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      // salary has a null column ID at analysis time
+      val salaryCol = catalog("mixedcolidcat").loadTable(ident).columns()
+        .find(_.name() == "salary").get
+      assert(salaryCol.id() == null, "salary should have a null ID initially")
+
+      val df = spark.table(t)
+
+      // make salary return non-null ID from now on
+      MixedColumnIdTableCatalog.nullIdColumnNames.remove("salary")
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+
+      val newSalaryCol = catalog("mixedcolidcat").loadTable(ident).columns()
+        .find(_.name() == "salary").get
+      assert(newSalaryCol.id() != null, "salary should have a non-null ID after re-add")
+
+      // succeeds because original column ID is null, so validation is skipped
+      checkAnswer(df, Seq(Row(1, 100)))
     }
   }
 
