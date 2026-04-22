@@ -808,9 +808,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
 
       // Remap pushed filter attributes to the pruned output schema and drop filters
-      // whose references are no longer in the pruned output.
-      val remappedPushedFilters = sHolder.pushedFilterExpressions.map(projectionFunc)
-        .filter(_.references.subsetOf(AttributeSet(output)))
+      // whose references are no longer in the pruned output. Use Try because
+      // ProjectionOverSchema throws when a pushed filter references a nested struct
+      // field that was pruned from the schema.
+      val remappedPushedFilters = sHolder.pushedFilterExpressions.flatMap { filter =>
+        scala.util.Try(projectionFunc(filter)).toOption
+      }.filter(_.references.subsetOf(AttributeSet(output)))
       val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output,
         pushedFilters = remappedPushedFilters)
 

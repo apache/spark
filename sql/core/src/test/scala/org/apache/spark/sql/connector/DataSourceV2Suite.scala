@@ -1288,6 +1288,26 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       s"struct column in pushed filter should be pruned to struct<a> but was $prunedStructType")
   }
 
+  test("pushedFilters drops filters referencing pruned nested struct fields") {
+    // Disable constraint propagation so IsNotNull(s.a) is not added as a post-scan
+    // filter (it would keep field a alive in the struct).
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      val df = spark.read.format(classOf[NestedSchemaDataSourceV2].getName).load()
+      // Filter on s.a but select only s.b. Column pruning narrows s to struct<b>,
+      // so the pushed filter on s.a can't be remapped and should be dropped.
+      val q = df.filter($"s.a" > 3).select($"s.b")
+      checkAnswer(q, (4 until 10).map(i => Row(-i)))
+
+      val scanRelation = getScanRelation(q)
+      val referencedStructFields = scanRelation.pushedFilters.flatMap { filter =>
+        filter.collect { case a: AttributeReference if a.name == "s" => a }
+          .flatMap(_.dataType.asInstanceOf[StructType].fieldNames)
+      }
+      assert(!referencedStructFields.contains("a"),
+        "pushedFilters should not reference pruned nested field a")
+    }
+  }
+
   test("scan canonicalization with pushedFilters") {
     // Use SimpleDataSourceV2 whose scan implements equals, so canonicalization comparison works
     val table = new SimpleDataSourceV2().getTable(CaseInsensitiveStringMap.empty())
