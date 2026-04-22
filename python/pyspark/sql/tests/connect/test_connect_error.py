@@ -81,6 +81,17 @@ class SparkConnectErrorTests(ReusedConnectTestCase):
             cdf3 = cdf1.withColumn("a", F.lit(0))
             cdf3.select(cdf1.a).schema
 
+        # SPARK-56547: `df["id"]` references the original `id`, but `df2`'s `id` was shadowed
+        # by `withColumn`. Previously surfaced a misleading
+        # `UNRESOLVED_COLUMN.WITH_SUGGESTION` error suggesting the same column name.
+        df = self.spark.range(10)
+        df2 = df.withColumn("id", F.col("id") + 1)
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        ):
+            df2.select(df["id"]).schema
+
         # Can not find the target plan node by plan id
         with self.assertRaisesRegex(
             AnalysisException,
