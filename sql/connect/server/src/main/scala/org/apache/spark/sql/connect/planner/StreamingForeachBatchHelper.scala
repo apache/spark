@@ -20,6 +20,7 @@ import java.io.EOFException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentMap
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -27,13 +28,13 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.{PythonException, PythonWorkerUtils, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, PYTHON_EXEC, QUERY_ID, RUN_ID_STRING, SESSION_ID, USER_ID}
+import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, PYTHON_EXEC, QUERY_ID, RUN_ID_STRING, SESSION_ID, STREAM_ID, USER_ID}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders}
 import org.apache.spark.sql.connect.IllegalStateErrors
 import org.apache.spark.sql.connect.common.ForeachWriterPacket
 import org.apache.spark.sql.connect.config.Connect
-import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.connect.service.{SessionHolder, SessionKey}
 import org.apache.spark.sql.connect.service.SparkConnectService
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.streaming.StreamingQueryListener
@@ -46,47 +47,139 @@ object StreamingForeachBatchHelper extends Logging {
 
   type ForeachBatchFnType = (DataFrame, Long) => Unit
 
-  // Visible for testing.
-  /** An AutoClosable to clean up resources on query termination. Stops Python worker. */
-  private[connect] case class RunnerCleaner(runner: StreamingPythonRunner) extends AutoCloseable {
-    override def close(): Unit = {
-      try runner.stop()
-      catch {
-        case NonFatal(ex) => // Exception is not propagated.
-          logWarning("Error while stopping streaming Python worker", ex)
+  /**
+   * Wraps the per-stream cloned `SparkSession` produced by
+   * `StreamExecution.sparkSessionForStream` in its own `SessionHolder` and registers it with
+   * `SparkConnectSessionManager`. The cloned session id is pinned on the first batch and shared
+   * by all subsequent batches of the same streaming query, so the Python worker can resolve
+   * `CachedRemoteRelation` for the batch DataFrame against the cloned session rather than the
+   * root session.
+   *
+   * Lifecycle is driven by the query: created on first batch, closed on query termination via
+   * `ForeachBatchCleaner`. Not designed for concurrent batches (streaming runs them serially).
+   */
+  private[connect] class ForeachBatchSessionManager(rootSessionHolder: SessionHolder)
+      extends Logging {
+    @volatile private var _clonedSessionHolder: SessionHolder = null
+
+    def getOrCreateClonedSessionHolder(batchDf: DataFrame): SessionHolder = {
+      if (_clonedSessionHolder == null) {
+        synchronized {
+          if (_clonedSessionHolder == null) {
+            val clonedSession = batchDf.sparkSession
+              .asInstanceOf[org.apache.spark.sql.classic.SparkSession]
+            val clonedSessionId = UUID.randomUUID().toString
+            _clonedSessionHolder = SparkConnectService.sessionManager
+              .registerExistingSession(rootSessionHolder.userId, clonedSessionId, clonedSession)
+            logInfo(
+              log"[rootSession: ${MDC(SESSION_ID, rootSessionHolder.sessionId)}] " +
+                log"Registered cloned SessionHolder " +
+                log"${MDC(STREAM_ID, clonedSessionId)} for foreachBatch.")
+          }
+        }
+      }
+      _clonedSessionHolder
+    }
+
+    def close(): Unit = synchronized {
+      if (_clonedSessionHolder != null) {
+        val holder = _clonedSessionHolder
+        // Clear the reference before closing so a failure cannot leave a half-closed holder.
+        _clonedSessionHolder = null
+        try {
+          SparkConnectService.sessionManager.closeSession(
+            SessionKey(holder.userId, holder.sessionId))
+          logInfo(
+            log"[rootSession: ${MDC(SESSION_ID, rootSessionHolder.sessionId)}] " +
+              log"Closed cloned SessionHolder ${MDC(STREAM_ID, holder.sessionId)}.")
+        } catch {
+          case NonFatal(ex) =>
+            logWarning(
+              log"[rootSession: ${MDC(SESSION_ID, rootSessionHolder.sessionId)}] " +
+                log"Error closing cloned SessionHolder ${MDC(STREAM_ID, holder.sessionId)} " +
+                log"for foreachBatch; it may be leaked.",
+              ex)
+        }
       }
     }
   }
 
-  private case class FnArgsWithId(dfId: String, df: DataFrame, batchId: Long)
+  /**
+   * Composite cleaner that closes both the Python runner (if any) and the cloned SessionHolder.
+   * Registered with CleanerCache to clean up on query termination.
+   */
+  private[connect] case class ForeachBatchCleaner(
+      runner: Option[StreamingPythonRunner],
+      sessionManager: ForeachBatchSessionManager)
+      extends AutoCloseable {
+    override def close(): Unit = {
+      runner.foreach { r =>
+        try r.stop()
+        catch {
+          case NonFatal(ex) =>
+            logWarning("Error while stopping streaming Python worker", ex)
+        }
+      }
+      try sessionManager.close()
+      catch {
+        case NonFatal(_) => // already logged inside close()
+      }
+    }
+  }
+
+  private case class FnArgsWithId(
+      dfId: String,
+      df: DataFrame,
+      batchId: Long,
+      clonedSessionId: String)
 
   /**
    * Return a new ForeachBatch function that wraps `fn`. It sets up DataFrame cache so that the
    * user function can access it. The cache is cleared once ForeachBatch returns.
+   *
+   * On the first batch, lazily creates a cloned-session-level SessionHolder via sessionManager.
+   * Batch DataFrames are cached in the cloned SessionHolder rather than the root session.
    */
   private def dataFrameCachingWrapper(
       fn: FnArgsWithId => Unit,
-      sessionHolder: SessionHolder): ForeachBatchFnType = { (df: DataFrame, batchId: Long) =>
-    {
-      val dfId = UUID.randomUUID().toString
-      // TODO: Add query id to the log.
-      logInfo(
-        log"[session: ${MDC(SESSION_ID, sessionHolder.sessionId)}] " +
-          log"Caching DataFrame with id ${MDC(DATAFRAME_ID, dfId)}")
-
-      // TODO(SPARK-44462): Sanity check there is no other active DataFrame for this query.
-      //  The query id needs to be saved in the cache for this check.
-
-      sessionHolder.cacheDataFrameById(dfId, df)
-      try {
-        fn(FnArgsWithId(dfId, df, batchId))
-      } finally {
+      sessionManager: ForeachBatchSessionManager,
+      queryIdRef: AtomicReference[String]): ForeachBatchFnType = {
+    (df: DataFrame, batchId: Long) =>
+      {
+        val effectiveHolder = sessionManager.getOrCreateClonedSessionHolder(df)
+        val dfId = UUID.randomUUID().toString
         logInfo(
-          log"[session: ${MDC(SESSION_ID, sessionHolder.sessionId)}] " +
-            log"Removing DataFrame with id ${MDC(DATAFRAME_ID, dfId)} from the cache")
-        sessionHolder.removeCachedDataFrame(dfId)
+          log"[session: ${MDC(SESSION_ID, effectiveHolder.sessionId)}] " +
+            log"Caching DataFrame with id ${MDC(DATAFRAME_ID, dfId)}")
+
+        // Defensive: evict any stale dfId from a prior batch whose cleanup was skipped
+        // (e.g., async interruption). No-op on the happy path.
+        val queryId = queryIdRef.get()
+
+        effectiveHolder.cacheDataFrameById(dfId, df)
+        if (queryId != null) {
+          Option(effectiveHolder.dataFrameQueryIndex.put(queryId, dfId)).foreach { staleDfId =>
+            logWarning(
+              log"[session: ${MDC(SESSION_ID, effectiveHolder.sessionId)}] " +
+                log"[queryId: ${MDC(QUERY_ID, queryId)}] " +
+                log"Stale DataFrame ${MDC(DATAFRAME_ID, staleDfId)} found in cache. Removing it.")
+            effectiveHolder.removeCachedDataFrame(staleDfId)
+          }
+        }
+
+        try {
+          fn(FnArgsWithId(dfId, df, batchId, effectiveHolder.sessionId))
+        } finally {
+          logInfo(
+            log"[session: ${MDC(SESSION_ID, effectiveHolder.sessionId)}] " +
+              log"Removing DataFrame with id ${MDC(DATAFRAME_ID, dfId)} from the cache")
+          effectiveHolder.removeCachedDataFrame(dfId)
+          // Clean up query-to-dfId mapping.
+          if (queryId != null) {
+            effectiveHolder.dataFrameQueryIndex.remove(queryId, dfId)
+          }
+        }
       }
-    }
   }
 
   /**
@@ -94,18 +187,18 @@ object StreamingForeachBatchHelper extends Logging {
    * provided foreachBatch function `fn`.
    *
    * HACK ALERT: This version does not actually set up Spark Connect session. Directly passes the
-   * DataFrame, so the user code actually runs with legacy DataFrame and session..
+   * DataFrame, so the user code actually runs with legacy DataFrame and session. However, batch
+   * DataFrames are still cached in the cloned SessionHolder for correct session tracking.
    */
-  def scalaForeachBatchWrapper(
-      payloadBytes: Array[Byte],
-      sessionHolder: SessionHolder): ForeachBatchFnType = {
+  def scalaForeachBatchWrapper(payloadBytes: Array[Byte], sessionHolder: SessionHolder)
+      : (ForeachBatchFnType, AutoCloseable, AtomicReference[String]) = {
     val foreachBatchPkt =
       Utils.deserialize[ForeachWriterPacket](payloadBytes, Utils.getContextOrSparkClassLoader)
     val fn = foreachBatchPkt.foreachWriter.asInstanceOf[(Dataset[Any], Long) => Unit]
     val encoder = foreachBatchPkt.datasetEncoder.asInstanceOf[AgnosticEncoder[Any]]
-    // TODO(SPARK-44462): Set up Spark Connect session.
-    // Do we actually need this for the first version?
-    dataFrameCachingWrapper(
+    val sessionManager = new ForeachBatchSessionManager(sessionHolder)
+    val queryIdRef = new AtomicReference[String]()
+    val wrappedFn = dataFrameCachingWrapper(
       (args: FnArgsWithId) => {
         // dfId is not used, see hack comment above.
         try {
@@ -123,18 +216,20 @@ object StreamingForeachBatchHelper extends Logging {
             throw t
         }
       },
-      sessionHolder)
+      sessionManager,
+      queryIdRef)
+    (wrappedFn, ForeachBatchCleaner(None, sessionManager), queryIdRef)
   }
 
   /**
    * Starts up Python worker and initializes it with Python function. Returns a foreachBatch
-   * function that sets up the session and Dataframe cache and and interacts with the Python
-   * worker to execute user's function. In addition, it returns an AutoClosable. The caller must
-   * ensure it is closed so that worker process and related resources are released.
+   * function that sets up the session and DataFrame cache and interacts with the Python worker to
+   * execute user's function. In addition, it returns an AutoClosable and an AtomicReference for
+   * setting the query id. The caller must ensure it is closed so that worker process and related
+   * resources are released.
    */
-  def pythonForeachBatchWrapper(
-      pythonFn: SimplePythonFunction,
-      sessionHolder: SessionHolder): (ForeachBatchFnType, AutoCloseable) = {
+  def pythonForeachBatchWrapper(pythonFn: SimplePythonFunction, sessionHolder: SessionHolder)
+      : (ForeachBatchFnType, AutoCloseable, AtomicReference[String]) = {
 
     val port = SparkConnectService.localPort
     var connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
@@ -154,18 +249,16 @@ object StreamingForeachBatchHelper extends Logging {
 
     val (dataOut, dataIn) = runner.init()
 
+    val sessionManager = new ForeachBatchSessionManager(sessionHolder)
+    val queryIdRef = new AtomicReference[String]()
+
     val foreachBatchRunnerFn: FnArgsWithId => Unit = (args: FnArgsWithId) => {
 
-      // TODO(SPARK-44462): A new session id pointing to args.df.sparkSession needs to be created.
-      //     This is because MicroBatch execution clones the session during start.
-      //     The session attached to the foreachBatch dataframe is different from the one the one
-      //     the query was started with. `sessionHolder` here contains the latter.
-      //     Another issue with not creating new session id: foreachBatch worker keeps
-      //     the session alive. The session mapping at Connect server does not expire and query
-      //     keeps running even if the original client disappears. This keeps the query running.
-
+      // The cloned session id lets the worker resolve CachedRemoteRelation against the
+      // cloned session rather than the root one.
       PythonWorkerUtils.writeUTF(args.dfId, dataOut)
       dataOut.writeLong(args.batchId)
+      PythonWorkerUtils.writeUTF(args.clonedSessionId, dataOut)
       dataOut.flush()
 
       try {
@@ -201,7 +294,10 @@ object StreamingForeachBatchHelper extends Logging {
       }
     }
 
-    (dataFrameCachingWrapper(foreachBatchRunnerFn, sessionHolder), RunnerCleaner(runner))
+    (
+      dataFrameCachingWrapper(foreachBatchRunnerFn, sessionManager, queryIdRef),
+      ForeachBatchCleaner(Some(runner), sessionManager),
+      queryIdRef)
   }
 
   /**
@@ -236,6 +332,13 @@ object StreamingForeachBatchHelper extends Logging {
         case Some(_) =>
           throw IllegalStateErrors.cleanerAlreadySet(sessionHolder.key.toString, key.toString)
         case None => // Inserted. Normal.
+      }
+
+      // If the query already terminated before we registered (or before the listener was
+      // attached), onQueryTerminated may have already missed this cleaner. Close eagerly so
+      // the cloned SessionHolder (which never expires by inactivity) is not leaked.
+      if (!query.isActive) {
+        cleanupStreamingRunner(key)
       }
     }
 

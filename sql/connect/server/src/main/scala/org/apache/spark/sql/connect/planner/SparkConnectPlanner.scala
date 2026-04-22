@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect.planner
 
 import java.util.{HashMap, Properties, UUID}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -3509,22 +3510,28 @@ class SparkConnectPlanner(
       }
     }
 
-    // This is filled when a foreach batch runner started for Python.
+    // This is filled when a foreachBatch runner is started (Python or Scala).
     var foreachBatchRunnerCleaner: Option[AutoCloseable] = None
+    // Filled when foreachBatch is used, to set query id after query starts.
+    var foreachBatchQueryIdRef: Option[AtomicReference[String]] = None
 
     if (writeOp.hasForeachBatch) {
       val foreachBatchFn = writeOp.getForeachBatch.getFunctionCase match {
         case StreamingForeachFunction.FunctionCase.PYTHON_FUNCTION =>
           val pythonFn = transformPythonFunction(writeOp.getForeachBatch.getPythonFunction)
-          val (fn, cleaner) =
+          val (fn, cleaner, queryIdRef) =
             StreamingForeachBatchHelper.pythonForeachBatchWrapper(pythonFn, sessionHolder)
           foreachBatchRunnerCleaner = Some(cleaner)
+          foreachBatchQueryIdRef = Some(queryIdRef)
           fn
 
         case StreamingForeachFunction.FunctionCase.SCALA_FUNCTION =>
-          StreamingForeachBatchHelper.scalaForeachBatchWrapper(
+          val (fn, cleaner, queryIdRef) = StreamingForeachBatchHelper.scalaForeachBatchWrapper(
             writeOp.getForeachBatch.getScalaFunction.getPayload.toByteArray,
             sessionHolder)
+          foreachBatchRunnerCleaner = Some(cleaner)
+          foreachBatchQueryIdRef = Some(queryIdRef)
+          fn
 
         case other =>
           throw InvalidInputErrors.invalidOneOfField(
@@ -3557,7 +3564,9 @@ class SparkConnectPlanner(
       query,
       executeHolder.sparkSessionTags,
       executeHolder.operationId)
-    // Register the runner with the query if Python foreachBatch is enabled.
+    // Set the query id so the sanity check in dataFrameCachingWrapper can use it.
+    foreachBatchQueryIdRef.foreach(_.set(query.id.toString))
+    // Register the cleaner with the query if foreachBatch is used.
     foreachBatchRunnerCleaner.foreach { cleaner =>
       sessionHolder.streamingForeachBatchRunnerCleanerCache.registerCleanerForQuery(
         query,

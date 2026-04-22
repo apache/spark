@@ -124,6 +124,11 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[spark] lazy val dataFrameCache: ConcurrentMap[String, DataFrame] =
     new ConcurrentHashMap()
 
+  // Mapping from streaming query ID to the active cached DataFrame ID for that query.
+  // Used for foreachBatch to detect stale DataFrames from previous batches.
+  private[connect] lazy val dataFrameQueryIndex: ConcurrentMap[String, String] =
+    new ConcurrentHashMap()
+
   // ML model cache
   private[connect] lazy val mlCache = new MLCache(this)
 

@@ -35,6 +35,7 @@ class StreamingForeachBatchHelperSuite extends SharedSparkSession with MockitoSu
     val (queryId, runId) = (UUID.randomUUID(), UUID.randomUUID())
     when(query.id).thenReturn(queryId)
     when(query.runId).thenReturn(runId)
+    when(query.isActive).thenReturn(true)
     query
   }
 

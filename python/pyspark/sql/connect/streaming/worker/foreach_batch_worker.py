@@ -30,6 +30,7 @@ from pyspark.serializers import (
     CPickleSerializer,
 )
 from pyspark import worker
+from pyspark.errors import PySparkAssertionError
 from pyspark.sql.connect.session import SparkSession
 from pyspark.util import handle_worker_exception
 from typing import IO
@@ -47,13 +48,29 @@ def main(infile: IO, outfile: IO) -> None:
 
     log_name = "Streaming ForeachBatch worker"
 
-    def process(df_id, batch_id):  # type: ignore[no-untyped-def]
+    def process(df_id, batch_id, cloned_session_id):  # type: ignore[no-untyped-def]
         global spark
-        print(f"{log_name} Started batch {batch_id} with DF id {df_id} and session id {session_id}")
-        batch_df = spark_connect_session._create_remote_dataframe(df_id)
+        # Lazily create or switch the SparkSession when the cloned session changes.
+        # Use create() instead of getOrCreate() because the latter returns the cached
+        # active/default session, ignoring the cloned session ID in the URL.
+        if spark is None or spark.session_id != cloned_session_id:
+            cloned_url = connect_url + ";session_id=" + cloned_session_id
+            spark = SparkSession.builder.remote(cloned_url).create()
+            if spark.session_id != cloned_session_id:
+                raise PySparkAssertionError(
+                    f"Cloned session ID mismatch: expected {cloned_session_id}, "
+                    f"got {spark.session_id}"
+                )
+            print(f"{log_name} Created new session for cloned_session_id {cloned_session_id}")
+        print(
+            f"{log_name} Started batch {batch_id} with DF id {df_id} "
+            f"and session id {cloned_session_id}"
+        )
+        batch_df = spark._create_remote_dataframe(df_id)
         func(batch_df, batch_id)
         print(
-            f"{log_name} Completed batch {batch_id} with DF id {df_id} and session id {session_id}"
+            f"{log_name} Completed batch {batch_id} with DF id {df_id} "
+            f"and session id {cloned_session_id}"
         )
 
     try:
@@ -63,15 +80,20 @@ def main(infile: IO, outfile: IO) -> None:
         os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
 
         connect_url = os.environ["SPARK_CONNECT_LOCAL_URL"]
-        session_id = utf8_deserializer.loads(infile)
+        root_session_id = utf8_deserializer.loads(infile)
 
-        print(f"{log_name} is starting with url {connect_url} and sessionId {session_id}.")
+        print(f"{log_name} is starting with url {connect_url} and sessionId {root_session_id}.")
 
-        # To attach to the existing SparkSession, we're setting the session_id in the URL.
-        connect_url = connect_url + ";session_id=" + session_id
-        spark_connect_session = SparkSession.builder.remote(connect_url).getOrCreate()
-        assert spark_connect_session.session_id == session_id
-        spark = spark_connect_session
+        # Bootstrap SparkSession on the root session id: needed to unpickle the user's
+        # foreachBatch function before any batch (and the cloned session id) arrives.
+        # Per-batch work runs against the cloned session created in `process()`.
+        connect_url_init = connect_url + ";session_id=" + root_session_id
+        spark_connect_session = SparkSession.builder.remote(connect_url_init).getOrCreate()
+        if spark_connect_session.session_id != root_session_id:
+            raise PySparkAssertionError(
+                f"Root session ID mismatch: expected {root_session_id}, "
+                f"got {spark_connect_session.session_id}"
+            )
 
         func = worker.read_command(pickle_ser, infile)
         write_int(0, outfile)
@@ -80,9 +102,10 @@ def main(infile: IO, outfile: IO) -> None:
         while True:
             df_ref_id = utf8_deserializer.loads(infile)
             batch_id = read_long(infile)
-            # Handle errors inside Python worker. Write 0 to outfile if no errors and write -2 with
-            # traceback string if error occurs.
-            process(df_ref_id, int(batch_id))
+            cloned_session_id = utf8_deserializer.loads(infile)
+            # Handle errors inside Python worker. Write 0 to outfile if no errors and write -2
+            # with traceback string if error occurs.
+            process(df_ref_id, int(batch_id), cloned_session_id)
             write_int(0, outfile)
             outfile.flush()
     except Exception as e:

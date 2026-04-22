@@ -384,6 +384,49 @@ class SparkConnectSessionManager extends Logging {
   }
 
   /**
+   * Register an existing SparkSession under a new session ID. Unlike [[cloneSession]], this wraps
+   * the *exact* SparkSession instance (no cloning). Used for foreachBatch to register the
+   * stream-level SparkSession created by StreamExecution.
+   *
+   * The returned SessionHolder has `customInactiveTimeoutMs = Some(-1)` (never expire by
+   * inactivity); its lifecycle is managed by the streaming query termination.
+   */
+  private[connect] def registerExistingSession(
+      userId: String,
+      newSessionId: String,
+      existingSession: SparkSession): SessionHolder = {
+
+    // Validate UUID format.
+    try {
+      UUID.fromString(newSessionId).toString
+    } catch {
+      case _: IllegalArgumentException =>
+        throw new SparkSQLException(
+          errorClass = "INVALID_HANDLE.FORMAT",
+          messageParameters = Map("handle" -> newSessionId))
+    }
+
+    val key = SessionKey(userId, newSessionId)
+
+    // Validate that session with this key has not been already closed.
+    if (closedSessionsCache.getIfPresent(key) != null) {
+      throw new SparkSQLException(
+        errorClass = "INVALID_HANDLE.SESSION_CLOSED",
+        messageParameters = Map("handle" -> newSessionId))
+    }
+
+    schedulePeriodicChecks()
+    sessionStore.computeIfAbsent(
+      key,
+      _ => {
+        val h = SessionHolder(userId, newSessionId, existingSession)
+        h.initializeSession()
+        h.setCustomInactiveTimeoutMs(Some(-1L)) // Never expire; query manages lifetime.
+        h
+      })
+  }
+
+  /**
    * Used for testing
    */
   private[connect] def invalidateAllSessions(): Unit = {
