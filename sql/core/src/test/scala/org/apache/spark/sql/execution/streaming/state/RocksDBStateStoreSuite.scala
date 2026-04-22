@@ -1856,6 +1856,53 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
+  test("SPARK-56539: validate state row format in prefixScan") {
+    // Verify that prefixScan triggers validateStateRowFormat
+    // by calling it without get() first (isValidated = false, useColumnFamilies = false)
+    tryWithProviderResource(newStoreProvider(keySchema,
+      PrefixKeyScanStateEncoderSpec(keySchema, 1),
+      useColumnFamilies = false)) { provider =>
+      val store = provider.getStore(0)
+      try {
+        store.put(dataToKeyRow("a", 1), dataToValueRow(1))
+        store.put(dataToKeyRow("a", 2), dataToValueRow(2))
+        // Do NOT call get() - prefixScan must trigger validation itself
+        val result = store.prefixScan(dataToPrefixKeyRow("a")).map { kv =>
+          (keyRowToData(kv.key), valueRowToData(kv.value))
+        }.toSeq
+        assert(result.toSet === Set((("a", 1), 1), (("a", 2), 2)))
+        store.commit()
+      } finally {
+        if (!store.hasCommitted) store.abort()
+      }
+    }
+  }
+
+  test("SPARK-56539: validate state row format in rangeScan") {
+    // Verify that rangeScan triggers validateStateRowFormat
+    // by calling it without get() first (isValidated = false, useColumnFamilies = false)
+    tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
+      RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
+      useColumnFamilies = false)) { provider =>
+      val store = provider.getStore(0)
+      try {
+        store.put(dataToKeyRowWithRangeScan(10L, "a"), dataToValueRow(10))
+        store.put(dataToKeyRowWithRangeScan(20L, "a"), dataToValueRow(20))
+        store.put(dataToKeyRowWithRangeScan(30L, "a"), dataToValueRow(30))
+        // Do NOT call get() - rangeScan must trigger validation itself
+        val result = store.rangeScan(
+          Some(dataToKeyRowWithRangeScan(10L, "a")),
+          Some(dataToKeyRowWithRangeScan(25L, "a"))).map { kv =>
+          (kv.key.getLong(0), kv.value.getInt(0))
+        }.toSeq
+        assert(result === Seq((10L, 10), (20L, 20)))
+        store.commit()
+      } finally {
+        if (!store.hasCommitted) store.abort()
+      }
+    }
+  }
+
   testWithColumnFamiliesAndEncodingTypes(
     "rocksdb key and value schema encoders for column families",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>

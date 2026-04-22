@@ -516,6 +516,11 @@ private[sql] class RocksDBStateStoreProvider
       val iter = rocksDbIter.map { kv =>
         rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
           kvEncoder._2.decodeValue(kv.value))
+        if (!isValidated && rowPair.value != null && !useColumnFamilies) {
+          StateStoreProvider.validateStateRowFormat(
+            rowPair.key, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
+          isValidated = true
+        }
         rowPair
       }
 
@@ -575,6 +580,11 @@ private[sql] class RocksDBStateStoreProvider
       val iter = rocksDbIter.map { kv =>
         rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
           kvEncoder._2.decodeValue(kv.value))
+        if (!isValidated && rowPair.value != null && !useColumnFamilies) {
+          StateStoreProvider.validateStateRowFormat(
+            rowPair.key, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
+          isValidated = true
+        }
         rowPair
       }
 
