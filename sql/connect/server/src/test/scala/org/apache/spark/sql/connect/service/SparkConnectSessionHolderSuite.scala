@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect.service
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.util.concurrent.{TimeoutException, TimeUnit}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -228,6 +229,21 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     }
   }
 
+  private def awaitTestBodyInNewThread(timeoutMillis: Long)(body: => Unit): Unit = {
+    @volatile var error: Throwable = null
+    val worker = new Thread(new Runnable {
+      override def run(): Unit = try body catch { case t: Throwable => error = t }
+    }, s"${getClass.getSimpleName}-testBody-worker")
+    worker.setDaemon(true)
+    worker.start()
+    worker.join(timeoutMillis)
+    if (worker.isAlive) {
+      throw new TimeoutException(
+        s"Test body did not complete within ${timeoutMillis} ms")
+    }
+    if (error != null) throw error
+  }
+
   private def runPythonForeachBatchTerminationTestBody(): Unit = {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     try {
@@ -301,7 +317,11 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     // scalastyle:on assume
 
     retry(n = 2) {
-      failAfter(1.minute) {
+      // Run the body on a fresh daemon thread so the test thread can move on when the body
+      // hangs inside a non-interruptible socket read (failAfter's Thread.interrupt cannot
+      // unblock that). On timeout, the worker is leaked and dies with the JVM; each retry
+      // gets a new thread, so a pool cannot get starved.
+      awaitTestBodyInNewThread(TimeUnit.MINUTES.toMillis(1)) {
         runPythonForeachBatchTerminationTestBody()
       }
     }
