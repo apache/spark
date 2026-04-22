@@ -96,36 +96,36 @@ class DataSourceV2MetadataOnlyTableSuite extends QueryTest with SharedSparkSessi
     }
   }
 
-  test("view current catalog/namespace are serialized into table properties") {
+  test("view current catalog/namespace are serialized into a single property") {
     val info = new TableInfo.Builder()
       .withSchema(new StructType().add("col", "string"))
       .withViewText("SELECT * FROM t")
-      .withCurrentCatalog("spark_catalog")
-      .withCurrentNamespace(Array("default"))
+      .withCurrentCatalogAndNamespace("spark_catalog", Array("default"))
       .build()
     val table = new MetadataOnlyTable(info)
-    assert(table.properties().get(TableCatalog.PROP_VIEW_CURRENT_CATALOG) == "spark_catalog")
-    assert(table.properties().get(TableCatalog.PROP_VIEW_CURRENT_NAMESPACE) == "default")
+    assert(table.properties().get(TableCatalog.PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE) ==
+      "spark_catalog.default")
   }
 
-  test("view current namespace quotes multi-part names with dots") {
+  test("view current catalog/namespace quotes multi-part names with dots") {
     val info = new TableInfo.Builder()
       .withSchema(new StructType().add("col", "string"))
       .withViewText("SELECT * FROM t")
-      .withCurrentNamespace(Array("weird.db", "normal"))
+      .withCurrentCatalogAndNamespace("spark_catalog", Array("weird.db", "normal"))
       .build()
     val table = new MetadataOnlyTable(info)
-    assert(table.properties().get(TableCatalog.PROP_VIEW_CURRENT_NAMESPACE) == "`weird.db`.normal")
+    assert(table.properties().get(TableCatalog.PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE) ==
+      "spark_catalog.`weird.db`.normal")
   }
 
-  test("view with no current catalog/namespace omits the properties") {
+  test("view with no current catalog/namespace omits the property") {
     val info = new TableInfo.Builder()
       .withSchema(new StructType().add("col", "string"))
       .withViewText("SELECT * FROM spark_catalog.default.t")
       .build()
     val table = new MetadataOnlyTable(info)
-    assert(!table.properties().containsKey(TableCatalog.PROP_VIEW_CURRENT_CATALOG))
-    assert(!table.properties().containsKey(TableCatalog.PROP_VIEW_CURRENT_NAMESPACE))
+    assert(!table.properties().containsKey(
+      TableCatalog.PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE))
   }
 }
 
@@ -172,8 +172,7 @@ class TestingGeneralCatalog extends TableCatalog {
         val info = new TableInfo.Builder()
           .withSchema(new StructType().add("col", "string"))
           .withViewText("SELECT col FROM t WHERE col = 'b'")
-          .withCurrentCatalog("spark_catalog")
-          .withCurrentNamespace(Array("default"))
+          .withCurrentCatalogAndNamespace("spark_catalog", Array("default"))
           .build()
         new MetadataOnlyTable(info)
       case _ => throw new NoSuchTableException(ident)

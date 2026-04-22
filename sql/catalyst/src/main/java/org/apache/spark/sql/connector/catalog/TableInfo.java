@@ -135,22 +135,24 @@ public class TableInfo {
       return this;
     }
 
-    public Builder withCurrentCatalog(String currentCatalog) {
-      properties.put(TableCatalog.PROP_VIEW_CURRENT_CATALOG, currentCatalog);
-      return this;
-    }
-
     /**
-     * Sets the current namespace of a view, encoded as a quoted multi-part identifier string
-     * (see {@link TableCatalog#PROP_VIEW_CURRENT_NAMESPACE}). An empty array clears the property.
+     * Sets the current catalog and namespace at view creation time, encoded as a single quoted
+     * multi-part identifier string (see
+     * {@link TableCatalog#PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE}). The first part is the
+     * catalog; remaining parts are the namespace. Passing a null or empty catalog clears the
+     * property.
      */
-    public Builder withCurrentNamespace(String[] currentNamespace) {
-      if (currentNamespace != null && currentNamespace.length > 0) {
-        properties.put(TableCatalog.PROP_VIEW_CURRENT_NAMESPACE,
-            QuotingUtils.quoted(currentNamespace));
-      } else {
-        properties.remove(TableCatalog.PROP_VIEW_CURRENT_NAMESPACE);
+    public Builder withCurrentCatalogAndNamespace(String catalog, String[] namespace) {
+      if (catalog == null || catalog.isEmpty()) {
+        properties.remove(TableCatalog.PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE);
+        return this;
       }
+      String[] ns = namespace == null ? new String[0] : namespace;
+      String[] parts = new String[ns.length + 1];
+      parts[0] = catalog;
+      System.arraycopy(ns, 0, parts, 1, ns.length);
+      properties.put(TableCatalog.PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE,
+          QuotingUtils.quoted(parts));
       return this;
     }
 

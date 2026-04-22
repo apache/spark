@@ -97,8 +97,7 @@ public enum TableCatalogCapability {
   /**
    * Signals that the TableCatalog supports creating views via {@link TableCatalog#createTable}
    * by accepting a {@link TableInfo} whose properties include {@link TableCatalog#PROP_VIEW_TEXT}
-   * (and related view keys: {@link TableCatalog#PROP_VIEW_CURRENT_CATALOG},
-   * {@link TableCatalog#PROP_VIEW_CURRENT_NAMESPACE}, and
+   * (and related view keys: {@link TableCatalog#PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE} and
    * {@link TableCatalog#VIEW_CONF_PREFIX}-prefixed SQL configs).
    * <p>
    * Catalogs declaring this capability must round-trip those properties and return a

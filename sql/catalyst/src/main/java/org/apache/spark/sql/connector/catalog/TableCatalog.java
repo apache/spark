@@ -90,26 +90,20 @@ public interface TableCatalog extends CatalogPlugin {
   /**
    * A reserved property to specify the view text of a general table that represents
    * a SQL view. Unqualified identifiers in the view text are resolved against
-   * {@link #PROP_VIEW_CURRENT_CATALOG} and {@link #PROP_VIEW_CURRENT_NAMESPACE} at read time.
+   * {@link #PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE} at read time.
    */
   String PROP_VIEW_TEXT = "view_text";
 
   /**
-   * A reserved property to specify the current catalog at the time the view was created.
-   * Unqualified identifiers in the view text are resolved relative to this catalog and
-   * {@link #PROP_VIEW_CURRENT_NAMESPACE}.
+   * A reserved property that captures the current catalog and namespace at the time the view
+   * was created. The value is a Spark multi-part identifier string: parts are joined with
+   * {@code "."} and any part that isn't a simple identifier is backtick-quoted (see
+   * {@code QuotingUtils.quoted}). The first part is the catalog; the remaining parts are the
+   * namespace. For example, {@code my_catalog.db1.db2} or {@code my_catalog.`weird.db`.normal}.
+   * The value is parsed with {@code ParserInterface.parseMultipartIdentifier}. An absent or
+   * empty value means the view was created with no captured resolution context.
    */
-  String PROP_VIEW_CURRENT_CATALOG = "view.currentCatalog";
-
-  /**
-   * A reserved property to specify the current namespace at the time the view was created.
-   * The value is a Spark multi-part identifier string: parts are joined with {@code "."},
-   * and a part is backtick-quoted only when it is not a simple identifier (e.g. when it
-   * contains a {@code "."}). For example, {@code db1.db2} or {@code `weird.db`.normal}.
-   * The value is parsed with {@code ParserInterface.parseMultipartIdentifier}. An absent
-   * or empty value means the view was created with no current namespace.
-   */
-  String PROP_VIEW_CURRENT_NAMESPACE = "view.currentNamespace";
+  String PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE = "view.currentCatalogAndNamespace";
 
   /**
    * A prefix used to specify the Spark SQL configurations for reading this view.

@@ -130,21 +130,17 @@ private[sql] object V1Table {
       .partition(_._1.startsWith(TableCatalog.OPTION_PREFIX))
     val tablePropsMap = tableProps.toMap
     val (partCols, bucketSpec, clusterBySpec) = info.partitions.toSeq.convertTransforms
-    // For views, translate the V2 view context (currentCatalog / currentNamespace) into V1's
+    // For views, translate the V2 view context (PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE, a
+    // single quoted multi-part identifier whose first part is the catalog) into V1's numbered
     // viewCatalogAndNamespace properties so the V1 view resolution path can expand unqualified
     // identifiers in the view text.
     val viewContextProps = if (tableType == CatalogTableType.VIEW) {
-      val currentCatalog = props.get(TableCatalog.PROP_VIEW_CURRENT_CATALOG)
-      val currentNamespace = props.get(TableCatalog.PROP_VIEW_CURRENT_NAMESPACE) match {
-        case Some(s) if s.nonEmpty => CatalystSqlParser.parseMultipartIdentifier(s)
-        case _ => Seq.empty[String]
-      }
-      if (currentCatalog.isDefined || currentNamespace.nonEmpty) {
-        CatalogTable.catalogAndNamespaceToProps(
-          currentCatalog.getOrElse(catalog.name()),
-          currentNamespace)
-      } else {
-        Map.empty[String, String]
+      props.get(TableCatalog.PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE) match {
+        case Some(s) if s.nonEmpty =>
+          val parts = CatalystSqlParser.parseMultipartIdentifier(s)
+          CatalogTable.catalogAndNamespaceToProps(parts.head, parts.tail)
+        case _ =>
+          Map.empty[String, String]
       }
     } else {
       Map.empty[String, String]
