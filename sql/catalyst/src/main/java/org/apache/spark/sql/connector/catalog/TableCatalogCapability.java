@@ -95,16 +95,20 @@ public enum TableCatalogCapability {
   SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS,
 
   /**
-   * Signals that the TableCatalog supports creating views via {@link TableCatalog#createTable}
-   * by accepting a {@link TableInfo} whose properties include {@link TableCatalog#PROP_VIEW_TEXT}
-   * (and related view keys: {@link TableCatalog#PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE} and
+   * Signals that the TableCatalog supports creating and altering views via
+   * {@link TableCatalog#createTable} by accepting a {@link TableInfo} whose properties include
+   * {@link TableCatalog#PROP_VIEW_TEXT} (and related view keys:
+   * {@link TableCatalog#PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE} and
    * {@link TableCatalog#VIEW_CONF_PREFIX}-prefixed SQL configs).
    * <p>
    * Catalogs declaring this capability must round-trip those properties and return a
    * {@link MetadataOnlyTable} from {@link TableCatalog#loadTable} so Spark's view resolution
-   * path can expand the view text. Without this capability, Spark rejects {@code CREATE VIEW}
-   * statements targeting the catalog up front rather than letting the catalog silently persist
-   * a table entry that cannot be read as a view.
+   * path can expand the view text. {@code ALTER VIEW ... AS} is implemented as a
+   * {@code dropTable} + {@code createTable} on a plain {@code TableCatalog}, or as
+   * {@link StagingTableCatalog#stageReplace} when the catalog also implements
+   * {@link StagingTableCatalog}. Without this capability, Spark rejects {@code CREATE VIEW}
+   * and {@code ALTER VIEW} statements targeting the catalog up front rather than letting the
+   * catalog silently persist a table entry that cannot be read as a view.
    */
   SUPPORTS_CREATE_VIEW
 }

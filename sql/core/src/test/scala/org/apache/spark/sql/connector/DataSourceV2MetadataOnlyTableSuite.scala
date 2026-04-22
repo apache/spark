@@ -267,6 +267,90 @@ class DataSourceV2MetadataOnlyTableSuite extends QueryTest with SharedSparkSessi
       TableCatalog.PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE))
   }
 
+  test("ALTER VIEW ... AS updates the view body on a v2 catalog") {
+    withTable("spark_catalog.default.t") {
+      Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+      sql("CREATE VIEW general_catalog.default.v_alter AS " +
+        "SELECT x FROM spark_catalog.default.t WHERE x > 10")
+      checkAnswer(spark.table("general_catalog.default.v_alter"), Seq.empty[Row])
+
+      sql("ALTER VIEW general_catalog.default.v_alter AS " +
+        "SELECT x FROM spark_catalog.default.t WHERE x > 1")
+      checkAnswer(spark.table("general_catalog.default.v_alter"), Seq(Row(2), Row(3)))
+    }
+  }
+
+  test("ALTER VIEW on a missing view fails at analysis") {
+    // UnresolvedView resolves through lookupTableOrView and the missing view surfaces as an
+    // AnalysisException before we ever reach the v2 exec. The exact error condition (e.g.
+    // TABLE_OR_VIEW_NOT_FOUND) varies across Spark versions; we just assert we fail cleanly.
+    intercept[AnalysisException] {
+      sql("ALTER VIEW general_catalog.default.does_not_exist AS SELECT 1 AS x")
+    }
+  }
+
+  test("ALTER VIEW rejects reference to a temporary function") {
+    withTable("spark_catalog.default.t") {
+      Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+      sql("CREATE VIEW general_catalog.default.v_alter_tempfn AS " +
+        "SELECT x FROM spark_catalog.default.t")
+      spark.udf.register("temp_udf_alter", (i: Int) => i + 1)
+      val ex = intercept[AnalysisException] {
+        sql("ALTER VIEW general_catalog.default.v_alter_tempfn AS " +
+          "SELECT temp_udf_alter(x) FROM spark_catalog.default.t")
+      }
+      assert(ex.getMessage.toLowerCase.contains("temporary"))
+    }
+  }
+
+  test("ALTER VIEW preserves user-set TBLPROPERTIES") {
+    withTable("spark_catalog.default.t") {
+      Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+      sql("CREATE VIEW general_catalog.default.v_preserve " +
+        "TBLPROPERTIES ('mykey'='myvalue') AS " +
+        "SELECT x FROM spark_catalog.default.t")
+      sql("ALTER VIEW general_catalog.default.v_preserve AS " +
+        "SELECT x + 1 AS x FROM spark_catalog.default.t")
+
+      val catalog = spark.sessionState.catalogManager.catalog("general_catalog")
+        .asInstanceOf[TestingGeneralCatalog]
+      val info = catalog.getStoredView(Array("default"), "v_preserve")
+      assert(info.properties().get("mykey") == "myvalue")
+    }
+  }
+
+  test("ALTER VIEW on a StagingTableCatalog uses the atomic exec (stageReplace)") {
+    withSQLConf(
+      "spark.sql.catalog.staging_catalog" -> classOf[TestingStagingCatalog].getName) {
+      withTable("spark_catalog.default.t") {
+        Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+        sql("CREATE VIEW staging_catalog.default.v_atomic_alter AS " +
+          "SELECT x FROM spark_catalog.default.t WHERE x > 10")
+        checkAnswer(spark.table("staging_catalog.default.v_atomic_alter"), Seq.empty[Row])
+
+        sql("ALTER VIEW staging_catalog.default.v_atomic_alter AS " +
+          "SELECT x FROM spark_catalog.default.t WHERE x > 1")
+        checkAnswer(
+          spark.table("staging_catalog.default.v_atomic_alter"),
+          Seq(Row(2), Row(3)))
+      }
+    }
+  }
+
+  test("ALTER VIEW on a catalog without SUPPORTS_CREATE_VIEW fails") {
+    // An identifier the TestingTableOnlyCatalog can't find — we never get past the view
+    // lookup stage, so the error here is the no-such-table / not-a-view path. The capability
+    // gate in DataSourceV2Strategy is only reachable once the existing view is resolvable,
+    // which this catalog can't do; the capability rejection is already exercised by the
+    // CREATE VIEW test above.
+    withSQLConf(
+      "spark.sql.catalog.no_view_catalog" -> classOf[TestingTableOnlyCatalog].getName) {
+      intercept[AnalysisException] {
+        sql("ALTER VIEW no_view_catalog.default.v AS SELECT 1")
+      }
+    }
+  }
+
   test("CREATE VIEW on a StagingTableCatalog uses the atomic exec") {
     withSQLConf(
       "spark.sql.catalog.staging_catalog" -> classOf[TestingStagingCatalog].getName) {

@@ -511,7 +511,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         location) =>
       AlterTableSetLocationCommand(ident, Some(partitionSpec), location)
 
-    case AlterViewAs(ResolvedViewIdentifier(ident), originalText, query) =>
+    // The final `_, _` are AlterViewAs.isAnalyzed and referredTempFunctions. We drop both:
+    // AlterViewAsCommand is a separate AnalysisOnlyCommand and gets its own markAsAnalyzed pass
+    // from HandleSpecialCommand after this rewrite.
+    case AlterViewAs(ResolvedViewIdentifier(ident), originalText, query, _, _) =>
       AlterViewAsCommand(ident, originalText, query)
 
     case AlterViewSchemaBinding(ResolvedViewIdentifier(ident), viewSchemaMode) =>
@@ -767,9 +770,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   }
 
   object ResolvedViewIdentifier {
+    // Only matches session-catalog persistent views. Non-session-catalog persistent views
+    // (produced for `MetadataOnlyTable`) fall through so they can be picked up by v2 strategies
+    // rather than silently collapsed to a v1 `TableIdentifier`.
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
-      case ResolvedPersistentView(catalog, ident, _) =>
-        assert(isSessionCatalog(catalog))
+      case ResolvedPersistentView(catalog, ident, _) if isSessionCatalog(catalog) =>
         Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
 
       case ResolvedTempView(ident, _) =>

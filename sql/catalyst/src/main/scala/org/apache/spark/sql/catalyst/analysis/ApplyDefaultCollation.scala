@@ -209,7 +209,7 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
         // We match against ResolvedPersistentView because temporary views don't have a
         // schema/catalog.
         case alterViewAs@AlterViewAs(resolvedPersistentView@ResolvedPersistentView(
-        catalog: SupportsNamespaces, identifier, _), _, _)
+        catalog: SupportsNamespaces, identifier, _), _, _, _, _)
           if resolvedPersistentView.metadata.collation.isEmpty =>
           val newResolvedPersistentView = resolvedPersistentView.copy(
             metadata = resolvedPersistentView.metadata.copy(

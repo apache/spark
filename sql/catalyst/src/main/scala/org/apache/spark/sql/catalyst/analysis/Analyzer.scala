@@ -1110,9 +1110,10 @@ class Analyzer(
       }.orElse {
         relationResolution.expandIdentifier(identifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
-            if (viewOnly && !CatalogV2Util.isSessionCatalog(catalog)) {
-              throw QueryCompilationErrors.catalogOperationNotSupported(catalog, "views")
-            }
+            // Previously view-only lookups rejected non-session catalogs outright. With
+            // `MetadataOnlyTable`, non-session catalogs can now expose views, so instead we
+            // let the lookup proceed and rely on the downstream match — a non-view result is
+            // converted into the standard `expectViewNotTableError` by UnresolvedView's caller.
             CatalogV2Util.loadTable(catalog, ident).map {
               case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
                 v1Table.v1Table.tableType == CatalogTableType.VIEW =>

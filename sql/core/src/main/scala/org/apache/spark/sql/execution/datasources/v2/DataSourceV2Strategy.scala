@@ -322,6 +322,23 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             referredTempFunctions) :: Nil
       }
 
+    case AlterViewAs(ResolvedPersistentView(catalog, ident, _), originalText, query,
+        _, referredTempFunctions) =>
+      val tableCatalog = catalog.asTableCatalog
+      // Re-use the CREATE VIEW capability — a catalog able to create views via createTable
+      // must also be able to replace them via dropTable+createTable or stageReplace.
+      if (!tableCatalog.capabilities().contains(TableCatalogCapability.SUPPORTS_CREATE_VIEW)) {
+        throw QueryCompilationErrors.missingCatalogViewsAbilityError(tableCatalog)
+      }
+      tableCatalog match {
+        case staging: StagingTableCatalog =>
+          AtomicAlterV2ViewExec(
+            staging, ident, originalText, query, referredTempFunctions) :: Nil
+        case _ =>
+          AlterV2ViewExec(
+            tableCatalog, ident, originalText, query, referredTempFunctions) :: Nil
+      }
+
     case ReplaceTableAsSelect(ResolvedIdentifier(catalog, ident),
         parts, query, tableSpec: TableSpec, options, orCreate, true) =>
       catalog match {
