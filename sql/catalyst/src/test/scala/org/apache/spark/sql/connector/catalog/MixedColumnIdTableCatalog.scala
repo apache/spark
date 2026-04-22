@@ -34,17 +34,21 @@ import org.apache.spark.sql.internal.connector.ColumnImpl
  *
  * Tests manipulate [[MixedColumnIdTableCatalog.nullIdColumnNames]] between
  * operations to control which columns have null IDs at any given point.
+ * The set is snapshotted each time a table is created, altered, or copied,
+ * so changes to the set after that point do not affect existing table instances.
  */
 class MixedColumnIdTableCatalog extends InMemoryTableCatalog {
 
   private def toMixedIdTable(table: InMemoryTable): MixedColumnIdInMemoryTable = {
+    val snapshot = MixedColumnIdTableCatalog.nullIdColumnNames.toSet
     val mixedTable = new MixedColumnIdInMemoryTable(
       name = table.name,
       columns = table.columns(),
       partitioning = table.partitioning,
       properties = table.properties,
       constraints = table.constraints,
-      id = table.id)
+      id = table.id,
+      nullIdNames = snapshot)
     mixedTable.alterTableWithData(table.data, table.schema)
     mixedTable
   }
@@ -75,7 +79,7 @@ object MixedColumnIdTableCatalog {
 
 /**
  * An [[InMemoryTable]] that selectively strips column IDs for columns
- * whose names appear in [[MixedColumnIdTableCatalog.nullIdColumnNames]].
+ * whose names appear in the snapshotted [[nullIdNames]] set.
  */
 class MixedColumnIdInMemoryTable(
     name: String,
@@ -85,7 +89,8 @@ class MixedColumnIdInMemoryTable(
     constraints: Array[Constraint] =
       Array.empty,
     override val id: String =
-      java.util.UUID.randomUUID().toString)
+      java.util.UUID.randomUUID().toString,
+    nullIdNames: Set[String] = Set.empty)
   extends InMemoryTable(
     name = name,
     columns = columns,
@@ -97,8 +102,7 @@ class MixedColumnIdInMemoryTable(
   override def columns(): Array[Column] = {
     super.columns().map { col =>
       val impl = col.asInstanceOf[ColumnImpl]
-      if (MixedColumnIdTableCatalog.nullIdColumnNames
-          .contains(impl.name.toLowerCase(Locale.ROOT))) {
+      if (nullIdNames.contains(impl.name.toLowerCase(Locale.ROOT))) {
         impl.copy(id = null)
       } else {
         impl
@@ -113,7 +117,8 @@ class MixedColumnIdInMemoryTable(
       partitioning,
       properties,
       constraints,
-      id)
+      id,
+      nullIdNames)
     dataMap.synchronized {
       copiedTable.alterTableWithData(data, schema)
     }
